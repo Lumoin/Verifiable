@@ -13,15 +13,13 @@ namespace Verifiable.Json.Converters;
 /// typed accessors <see langword="null"/> after deserialization.
 /// </summary>
 /// <remarks>
-/// Read member value shapes match <see cref="DictionaryStringObjectJsonConverter"/> — a number becomes
-/// a <see cref="long"/> when integral, otherwise a <see cref="decimal"/>; <c>true</c>/<c>false</c>
-/// become <see cref="bool"/>; a nested object becomes a <see cref="System.Collections.Generic.Dictionary{TKey, TValue}"/>;
-/// an array becomes a <see cref="System.Collections.Generic.List{T}"/> — with one difference: a JSON
-/// string always becomes a CLR <see cref="string"/>, never a <see cref="DateTime"/>. A JWK member such
-/// as <c>kid</c> can hold text that happens to parse as a date (an ISO 8601 timestamp, or an all-digit
-/// string), and <see cref="DictionaryStringObjectJsonConverter"/> deliberately tries
-/// <see cref="Utf8JsonReader.TryGetDateTime(out DateTime)"/> before falling back to a plain string,
-/// which this converter does not repeat.
+/// Each member value is read by its own JSON shape: a JSON string becomes the CLR <see cref="string"/> of
+/// its text, whatever the text reads as (a <c>kid</c> that reads as a date included); a number becomes an
+/// <c>Int64</c> (<see cref="long"/>) when <see cref="Utf8JsonReader.TryGetInt64(out long)"/> reads it, otherwise a
+/// <see cref="decimal"/>, and a number no <c>Int64</c> and no <see cref="decimal"/> holds makes the
+/// JSON Web Key fail to decode; <c>true</c>/<c>false</c> become
+/// <see cref="bool"/>; a nested object becomes a <see cref="System.Collections.Generic.Dictionary{TKey, TValue}"/>;
+/// an array becomes a <see cref="System.Collections.Generic.List{T}"/>.
 /// </remarks>
 public sealed class JsonWebKeyJsonConverter: JsonConverter<JsonWebKey>
 {

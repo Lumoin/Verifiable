@@ -16,14 +16,13 @@ namespace Verifiable.Json;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <strong>Never the shared generic-dictionary converter (mirrors <see cref="JAdESProtectedHeaderJson"/>'s own
-/// rationale).</strong> <see cref="JwsParsing"/>'s own JSON-form methods decode the whole envelope through a
-/// caller-supplied <c>Dictionary&lt;string, object&gt;</c> deserializer — landmine-prone for JAdES content (the
-/// DateTime-sniff hazard) and, more fundamentally, incapable of preserving the <c>etsiU</c> array's own byte-exact
-/// wire TEXT once it has been decoded into boxed CLR objects. This type therefore walks the envelope
-/// directly via <see cref="JsonDocument"/>/<see cref="JsonElement"/> — <c>GetString()</c> never sniffs, and
-/// <c>GetRawText()</c> slices the ORIGINAL underlying buffer rather than re-serializing, so both hazards are
-/// avoided by construction, not by convention.
+/// <strong>The envelope is walked with <see cref="JsonDocument"/>/<see cref="JsonElement"/>, not a generic
+/// dictionary deserializer.</strong> <see cref="JwsParsing"/>'s own JSON-form methods decode the whole envelope
+/// through a caller-supplied <c>Dictionary&lt;string, object&gt;</c> deserializer, and a dictionary of boxed CLR
+/// objects holds no byte-exact wire TEXT of the <c>etsiU</c> array. This type therefore walks the envelope
+/// directly via <see cref="JsonDocument"/>/<see cref="JsonElement"/>: <c>GetString()</c> reads each string member
+/// as its text, and <c>GetRawText()</c> slices the ORIGINAL underlying buffer rather than re-serializing, so the
+/// <c>etsiU</c> elements keep their wire bytes by construction.
 /// </para>
 /// <para>
 /// <strong>Compact needs none of this.</strong> A JWS Compact serialization carries no unprotected header at
@@ -179,10 +178,14 @@ public static class JAdESMessageJson
     }
 
 
-    //Never consulted: JAdES validation reads the protected header's own JAdES-typed decode
-    //(JAdESProtectedHeaderJson.Decode) over the raw bytes UnverifiedJwsSignature.Protected carries, not this
-    //generic dictionary -- an empty result keeps JwsParsing.ParseCompact's own contract satisfied without
-    //re-introducing the DateTime-sniff hazard this file's remarks describe.
+    /// <summary>
+    /// The header deserializer <see cref="JwsParsing"/>'s <c>ParseCompact</c> takes, answering an empty
+    /// dictionary for every header. JAdES validation reads the protected header through its own typed decode,
+    /// <see cref="JAdESProtectedHeaderJson.Decode"/>, over the raw bytes <c>UnverifiedJwsSignature.Protected</c>
+    /// carries, so the header is decoded once, by that typed decode, and this generic dictionary is never read.
+    /// </summary>
+    /// <param name="headerJson">The protected header's JSON bytes; not read.</param>
+    /// <returns>An empty dictionary.</returns>
     private static IReadOnlyDictionary<string, object> InertHeaderDeserializer(ReadOnlySpan<byte> headerJson) =>
         new Dictionary<string, object>();
 

@@ -51,8 +51,36 @@ namespace Verifiable.Json.Converters
 
         /// <summary>
         /// Reads a JSON object into a <see cref="Dictionary{TKey, TValue}"/>, recursing into nested
-        /// objects and arrays and preserving primitive value shapes (string, number, boolean, null).
+        /// objects and arrays and keeping each primitive value's JSON type: a string as a
+        /// <see cref="string"/>, a number as a <see cref="long"/> or a <see cref="decimal"/>, a literal
+        /// name as a <see cref="bool"/> or <see langword="null"/>. A number neither holds makes the
+        /// document fail to decode.
         /// </summary>
+        /// <remarks>
+        /// <para>
+        /// A JSON string is always the <see cref="string"/> of its text, whatever the text reads as:
+        /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-3">RFC 8259 Section 3</see>: "A JSON
+        /// value MUST be an object, array, number, or string, or one of the following three literal names:
+        /// false null true". A date a specification carries as a JSON string stays that string, and its own
+        /// reader parses it. A NumericDate is a JSON number:
+        /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-2">RFC 7519 Section 2</see>: "A JSON
+        /// numeric value representing the number of seconds from 1970-01-01T00:00:00Z UTC until the
+        /// specified UTC date/time, ignoring leap seconds."
+        /// </para>
+        /// <para>
+        /// A JSON number is read as a <see cref="long"/> when
+        /// <see cref="Utf8JsonReader.TryGetInt64(out long)"/> answers <see langword="true"/>, otherwise as a
+        /// <see cref="decimal"/> when <see cref="Utf8JsonReader.TryGetDecimal(out decimal)"/> does; any
+        /// other number makes the document fail to decode with a <see cref="JsonException"/>.
+        /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-6">RFC 8259 Section 6</see>: "This
+        /// specification allows implementations to set limits on the range and precision of numbers
+        /// accepted." The limit of this reader is the range and the precision of a <see cref="decimal"/>: a
+        /// number inside the range is read rounded to the nearest value a <see cref="decimal"/> holds
+        /// (28 or 29 significant digits, and no place beyond the 28th after the decimal point), so a
+        /// number too small in magnitude to reach that place reads as zero, and a number outside the
+        /// range is refused.
+        /// </para>
+        /// </remarks>
         /// <param name="reader">The reader positioned at the JSON object's <c>StartObject</c> token.</param>
         /// <param name="typeToConvert">The type being converted; unused, since this converter always
         /// produces a <see cref="Dictionary{TKey, TValue}"/>.</param>
@@ -60,7 +88,8 @@ namespace Verifiable.Json.Converters
         /// nested value extraction.</param>
         /// <returns>The decoded dictionary.</returns>
         /// <exception cref="JsonException">
-        /// The object is not well-formed, or repeats a member name at this or any nested depth
+        /// The object is not well-formed, holds a number no <see cref="long"/> and no <see cref="decimal"/>
+        /// holds, or repeats a member name at this or any nested depth
         /// (<see href="https://www.rfc-editor.org/rfc/rfc8259#section-4">RFC 8259 §4</see>: "the behavior
         /// of software that receives such an object is unpredictable") — a producer showing one reader
         /// one value under a name and a differently-behaving reader another value under its repeat.
@@ -289,6 +318,23 @@ namespace Verifiable.Json.Converters
         }
 
 
+        /// <summary>
+        /// Maps the JSON token at the reader's position to its CLR value: a string to the
+        /// <see cref="string"/> of its text, a number through <see cref="ReadNumber(ref Utf8JsonReader)"/>
+        /// (a <see cref="long"/> or a <see cref="decimal"/>), <c>true</c> and <c>false</c> to a
+        /// <see cref="bool"/>, <c>null</c> to <see langword="null"/>, an object through
+        /// <see cref="Read(ref Utf8JsonReader, Type?, JsonSerializerOptions)"/> to a
+        /// <see cref="Dictionary{TKey, TValue}"/>, and an array through
+        /// <see cref="ExtractArray(ref Utf8JsonReader, JsonSerializerOptions)"/> to a
+        /// <see cref="List{T}"/>. The tokens that do not begin a value (none, end of object, end of
+        /// array, property name and comment) are refused.
+        /// </summary>
+        /// <param name="reader">The reader positioned at the token that begins the value.</param>
+        /// <param name="options">The active <see cref="JsonSerializerOptions"/>, passed through to
+        /// nested objects and arrays.</param>
+        /// <returns>The CLR value of the token, or <see langword="null"/> for a JSON <c>null</c>.</returns>
+        /// <exception cref="JsonException">The token does not begin a value, or the value is a number no
+        /// <see cref="long"/> and no <see cref="decimal"/> holds.</exception>
         [return: MaybeNull]
         private object? ExtractValue(ref Utf8JsonReader reader, JsonSerializerOptions options)
         {
@@ -301,8 +347,8 @@ namespace Verifiable.Json.Converters
                 JsonTokenType.EndArray => throw new JsonException($"Token '{reader.TokenType}' is not supported."),
                 JsonTokenType.PropertyName => throw new JsonException($"Token '{reader.TokenType}' is not supported."),
                 JsonTokenType.Comment => throw new JsonException($"Token '{reader.TokenType}' is not supported."),
-                JsonTokenType.String => reader.TryGetDateTime(out DateTime date) ? date : reader.GetString(),
-                JsonTokenType.Number => reader.TryGetInt64(out long result) ? (object)result : reader.GetDecimal(),
+                JsonTokenType.String => reader.GetString(),
+                JsonTokenType.Number => ReadNumber(ref reader),
                 JsonTokenType.True => true,
                 JsonTokenType.False => false,
                 JsonTokenType.Null => null,
@@ -311,6 +357,49 @@ namespace Verifiable.Json.Converters
         }
 
 
+        /// <summary>
+        /// Reads the JSON number at the reader's position as a <see cref="long"/> when
+        /// <see cref="Utf8JsonReader.TryGetInt64(out long)"/> answers <see langword="true"/>, otherwise as a
+        /// <see cref="decimal"/> when <see cref="Utf8JsonReader.TryGetDecimal(out decimal)"/> does, and
+        /// otherwise it refuses the number, so the document fails to decode.
+        /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-6">RFC 8259 Section 6</see>: "This
+        /// specification allows implementations to set limits on the range and precision of numbers
+        /// accepted." The limit of this reader is the range and the precision of a
+        /// <see cref="decimal"/>: a number inside the range is read rounded to the nearest value a
+        /// <see cref="decimal"/> holds (28 or 29 significant digits, and no place beyond the 28th after
+        /// the decimal point), so a number too small in magnitude to reach that place reads as zero, and
+        /// a number outside the range is refused.
+        /// </summary>
+        /// <param name="reader">The reader positioned at a <see cref="JsonTokenType.Number"/> token.</param>
+        /// <returns>The number boxed as a <see cref="long"/> or a <see cref="decimal"/>.</returns>
+        /// <exception cref="JsonException">No <see cref="long"/> and no <see cref="decimal"/> holds the number.</exception>
+        private static object ReadNumber(ref Utf8JsonReader reader)
+        {
+            if(reader.TryGetInt64(out long integer))
+            {
+                return integer;
+            }
+
+            if(reader.TryGetDecimal(out decimal value))
+            {
+                return value;
+            }
+
+            throw new JsonException("The JSON number is outside the range this reader holds: no Int64 or decimal holds it.");
+        }
+
+
+        /// <summary>
+        /// Reads the JSON array whose <c>StartArray</c> token the reader is at, mapping each element
+        /// through <see cref="ExtractValue(ref Utf8JsonReader, JsonSerializerOptions)"/>, and returns when
+        /// the matching <c>EndArray</c> token is reached.
+        /// </summary>
+        /// <param name="reader">The reader positioned at the array's <c>StartArray</c> token.</param>
+        /// <param name="options">The active <see cref="JsonSerializerOptions"/>, passed through to each
+        /// element's value extraction.</param>
+        /// <returns>The elements in document order.</returns>
+        /// <exception cref="JsonException">An element does not begin a value, or is a number no
+        /// <see cref="long"/> and no <see cref="decimal"/> holds.</exception>
         private List<object> ExtractArray(ref Utf8JsonReader reader, JsonSerializerOptions options)
         {
             var list = new List<object>();

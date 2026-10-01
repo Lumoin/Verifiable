@@ -27,14 +27,12 @@ namespace Verifiable.Json;
 /// which is exactly what a signer's own first encoding of a NEW header must do.
 /// </para>
 /// <para>
-/// <strong>Decode uses <see cref="JsonDocument"/>/<see cref="JsonElement"/> directly, not the shared
-/// <c>Dictionary&lt;string, object&gt;</c> generic-JSON-value converter.</strong> That converter's own
-/// <c>ExtractValue</c> auto-sniffs every JSON string token against <see cref="DateTime"/>
-/// (<c>reader.TryGetDateTime(...)</c>) before falling back to a plain string — a landmine for the several
-/// base64/base64url/opaque-identifier string members this header carries (a coincidentally date-shaped <c>kid</c>
-/// or digest string would silently become a <see cref="DateTime"/> instead of the string this codec needs).
-/// <see cref="JsonElement.GetString"/> never performs that sniff, so every decode helper in this file and in
-/// <see cref="JAdESUnsignedComponentJson"/> reads directly off <see cref="JsonElement"/>.
+/// <strong>Decode reads the header with <see cref="JsonDocument"/>/<see cref="JsonElement"/> directly.</strong>
+/// Each member this header carries has its own JSON shape and its own typed decode (a base64 or base64url
+/// value, an opaque key identifier, a signing time read as a string and parsed by its own decode), so every
+/// decode helper in this file and in <see cref="JAdESUnsignedComponentJson"/> reads each member it needs off
+/// <see cref="JsonElement"/> with the accessor of that member's shape (<see cref="JsonElement.GetString"/> for a
+/// string member), rather than going through a generic <c>Dictionary&lt;string, object&gt;</c> of boxed values.
 /// </para>
 /// <para>
 /// <strong>Fail-closed at the delegate boundary, not in every nested helper.</strong> <see cref="Decode"/> wraps

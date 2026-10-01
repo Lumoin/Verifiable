@@ -1,6 +1,9 @@
 using Microsoft.Extensions.Time.Testing;
+using System.Buffers;
 using Verifiable.Core.Assessment;
+using Verifiable.Cryptography;
 using Verifiable.JCose;
+using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Federation;
 using Verifiable.Tests.TestInfrastructure;
@@ -824,6 +827,78 @@ internal sealed class EntityStatementValidatorTests
         Claim kid = result.Claims.Single(c => c.Id.Code == WellKnownFederationClaimIds.KidPresent.Code);
         Assert.AreEqual(ClaimOutcome.Failure, kid.Outcome,
             "A header without a kid must fail KidPresent — Entity Statement JWTs MUST carry a kid per §3.1.");
+    }
+
+
+    /// <summary>
+    /// OpenID Federation 1.0
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-3">Section 3</see>: "Entity
+    /// Statement JWTs MUST include the kid (Key ID) header parameter with its value being the Key ID of the
+    /// signing key used.", and
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-3.1.1">Section 3.1.1</see>:
+    /// "Every JWK in the JWK Set MUST have a unique kid (Key ID) value." An Entity Configuration whose header
+    /// <c>kid</c> and whose <c>jwks</c> JSON Web Key <c>kid</c> are both the string <c>"2026-10-01"</c>, its
+    /// header and claims decoded from the signed compact JWS by <see cref="JwtPartJson.Default"/>, passes the
+    /// <c>kid</c> header check and the unique key identifier check, and the in-chain resolver selects that
+    /// JSON Web Key: the statement's signature verifies under the JSON Web Key it selects.
+    /// </summary>
+    [TestMethod]
+    public async Task DateShapedKidDecodedByThePartDecoderPassesTheKidChecksAndSelectsItsJsonWebKeyAsync()
+    {
+        DateTimeOffset issuedAt = TestClock.CanonicalEpoch;
+        using FederationTestRingNode generated = FederationTestRing.CreateNode(
+            new EntityIdentifier("https://example.test/date-shaped-kid"));
+        using FederationTestRingNode node = new(generated.Identifier, generated.SigningKey, "2026-10-01");
+
+        MintedStatement minted = await FederationTestRing.MintEntityConfigurationAsync(
+            node, issuedAt: issuedAt, expiresAt: issuedAt.AddHours(1),
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        string[] segments = minted.CompactJws.Split('.');
+        Assert.HasCount(3, segments);
+        UnverifiedJwtHeader header;
+        using(IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(segments[0], BaseMemoryPool.Shared))
+        {
+            header = new UnverifiedJwtHeader(JwtPartJson.Default(headerBytes.Memory.Span));
+        }
+
+        UnverifiedJwtPayload payload;
+        using(IMemoryOwner<byte> payloadBytes = TestSetup.Base64UrlDecoder(segments[1], BaseMemoryPool.Shared))
+        {
+            payload = new UnverifiedJwtPayload(JwtPartJson.Default(payloadBytes.Memory.Span));
+        }
+
+        EntityStatementParseResult parsed = EntityStatementParser.Parse(header, payload);
+        Assert.IsNotNull(parsed.Statement, $"The decoded statement must parse: {parsed.FailureReason}");
+
+        bool signatureVerified = await FederationTestRing.VerifyAsync(
+            node, minted.CompactJws, TestContext.CancellationToken).ConfigureAwait(false);
+        EntityStatementValidationContext context = new()
+        {
+            Header = header,
+            Statement = parsed.Statement,
+            SignatureVerified = signatureVerified,
+            Now = issuedAt,
+            ClockSkew = TimeSpan.FromMinutes(5),
+        };
+
+        ClaimIssueResult result = await EntityStatementValidator.Default(new FakeTimeProvider(TestClock.CanonicalEpoch)).ValidateAsync(
+            context, "test-correlation", TestContext.CancellationToken).ConfigureAwait(false);
+
+        Claim kidPresent = result.Claims.Single(c => c.Id.Code == WellKnownFederationClaimIds.KidPresent.Code);
+        Assert.AreEqual(ClaimOutcome.Success, kidPresent.Outcome);
+        Claim distinctKids = result.Claims.Single(c => c.Id.Code == WellKnownFederationClaimIds.JwksKeyIdsDistinct.Code);
+        Assert.AreEqual(ClaimOutcome.Success, distinctKids.Outcome);
+
+        ResolveEntityKeyDelegate resolver = FederationKeyResolver.BuildInChainResolver(
+            TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared);
+        using PublicKeyMemory? resolved = await resolver(
+            parsed.Statement, header, parsed.Statement, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsNotNull(resolved, "The in-chain resolver must select the JSON Web Key whose kid the header names.");
+
+        bool isVerifiedUnderSelectedJsonWebKey = await Jws.VerifyAsync(
+            minted.CompactJws, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, resolved, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(isVerifiedUnderSelectedJsonWebKey, "The statement's signature must verify under the selected JSON Web Key.");
     }
 
 

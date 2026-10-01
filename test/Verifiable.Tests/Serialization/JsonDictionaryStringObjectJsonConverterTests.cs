@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using Verifiable.Json;
 using Verifiable.Json.Converters;
@@ -136,6 +137,43 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         Assert.AreEqual(19.99m, result["price"]);
     }
 
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-6">RFC 8259 Section 6</see>: "This
+    /// specification allows implementations to set limits on the range and precision of numbers accepted."
+    /// and "A JSON number such as 1E400 or 3.141592653589793238462643383279 may indicate potential
+    /// interoperability problems, since it suggests that the software that created it expects receiving
+    /// software to have greater capabilities for numeric magnitude and precision than is widely available."
+    /// The limit of the reader is the range and the precision of a <see cref="decimal"/>: a number inside the
+    /// range is read rounded to the nearest value a <see cref="decimal"/> holds (28 or 29 significant digits,
+    /// and no place beyond the 28th after the decimal point), so a number too small in magnitude to reach
+    /// that place reads as zero, and a JSON number outside the range, one no <see cref="long"/> and no
+    /// <see cref="decimal"/> holds, makes the document fail to decode, through the serializer options with a <see cref="JsonException"/> that says
+    /// the number is outside the range the reader holds, and through <see cref="JwtPartJson.Default"/> with
+    /// a <see cref="FormatException"/> carrying that <see cref="JsonException"/>.
+    /// </summary>
+    /// <param name="number">The JSON number's text.</param>
+    [TestMethod]
+    [DataRow("1e30")]
+    [DataRow("-1e30")]
+    [DataRow("79228162514264337593543950336")]
+    [DataRow("1e400")]
+    [DataRow("-1e400")]
+    public void ANumberBeyondDecimalIsRefused(string number)
+    {
+        string json = $$"""{"value":{{number}}}""";
+        var options = CreateOptions();
+
+        JsonException throughOptions = Assert.ThrowsExactly<JsonException>(() =>
+            JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, options));
+        Assert.AreEqual("The JSON number is outside the range this reader holds: no Int64 or decimal holds it.", throughOptions.Message);
+
+        FormatException throughPartDecoder = Assert.ThrowsExactly<FormatException>(() =>
+            JwtPartJson.Default(Encoding.UTF8.GetBytes(json)));
+        JsonException inner = Assert.IsInstanceOfType<JsonException>(throughPartDecoder.InnerException);
+        Assert.AreEqual("The JSON number is outside the range this reader holds: no Int64 or decimal holds it.", inner.Message);
+    }
+
     [TestMethod]
     public void DeserializeDecimalValueSucceeds()
     {
@@ -160,20 +198,52 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         Assert.AreEqual(9223372036854775807L, result["bigNumber"]);
     }
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-3">RFC 8259 Section 3</see>: "A JSON value
+    /// MUST be an object, array, number, or string, or one of the following three literal names: false null
+    /// true". JSON has no date type, so a JSON string whose text reads as a date, or as a date and a time,
+    /// decodes as the <see cref="string"/> sent, the same text.
+    /// </summary>
+    /// <param name="text">The text of the JSON string.</param>
     [TestMethod]
-    public void DeserializeDateTimeStringAsDateTimeSucceeds()
+    [DataRow("2026-10-01")]
+    [DataRow("2026-10-01T12:00:00Z")]
+    [DataRow("2026-10-01T12:00:00+02:00")]
+    [DataRow("2026-10-01T12:00:00.000Z")]
+    [DataRow("2026-10-01T12:00")]
+    public void DateShapedStringDecodesAsString(string text)
     {
-        const string json = /*lang=json,strict*/ """{"timestamp":"2024-01-15T10:30:00Z"}""";
+        string json = $$"""{"value":"{{text}}"}""";
         var options = CreateOptions();
 
         var result = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, options);
 
         Assert.IsNotNull(result);
-        _ = Assert.IsInstanceOfType<DateTime>(result["timestamp"]);
-        var dateTime = (DateTime)result["timestamp"];
-        Assert.AreEqual(2024, dateTime.Year);
-        Assert.AreEqual(1, dateTime.Month);
-        Assert.AreEqual(15, dateTime.Day);
+        string decoded = Assert.IsInstanceOfType<string>(result["value"]);
+        Assert.AreEqual(text, decoded);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-3">RFC 8259 Section 3</see>: "A JSON value
+    /// MUST be an object, array, number, or string, or one of the following three literal names: false null
+    /// true", and <see href="https://www.rfc-editor.org/rfc/rfc8259#section-7">Section 7</see>: "A string
+    /// begins and ends with quotation marks." A JSON object whose member values and array element read as
+    /// dates decodes to strings that write back as the same JSON strings, so the UTF-8 text written equals
+    /// the text read byte for byte.
+    /// </summary>
+    [TestMethod]
+    public void DateShapedStringsRoundTripByteForByte()
+    {
+        byte[] input = Encoding.UTF8.GetBytes(/*lang=json,strict*/ """{"d":"2026-10-01","f":"2026-10-01T12:00:00.000Z","n":["2026-10-01T12:00"]}""");
+        var options = CreateOptions();
+
+        var dictionary = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(input, options);
+        Assert.IsNotNull(dictionary);
+        byte[] output = JsonSerializerExtensions.SerializeToUtf8Bytes(dictionary, options);
+
+        Assert.IsTrue(output.AsSpan().SequenceEqual(input),
+            $"The written text must equal the read text byte for byte; written: {Encoding.UTF8.GetString(output)}");
     }
 
     [TestMethod]

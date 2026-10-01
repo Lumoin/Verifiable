@@ -6,6 +6,7 @@ using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
+using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode.Server.States;
 using Verifiable.OAuth.Client;
@@ -1196,6 +1197,82 @@ internal sealed class TokenExchangeGrantTests
         Assert.AreEqual(JsonValueKind.Object, nested.ValueKind, "The nested act must be a JSON object.");
         Assert.AreEqual(PriorActorIdentity, nested.GetProperty("sub").GetString(),
             "The nested act.act.sub is the prior actor (the least recent is the most deeply nested).");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.1">RFC 8693 Section 4.1</see>: "The "act"
+    /// claim value is a JSON object, and members in the JSON object are claims that identify the actor." An
+    /// access token the authorization server issued with an <c>act</c> whose <c>sub</c> is the string
+    /// <c>"2026-10-01"</c> is presented as the subject token of a further delegation, its claims decoded by
+    /// <see cref="JwtPartJson.Default"/>. The token issued for that exchange nests the subject token's
+    /// <c>act</c> under the current actor, and its <c>act.act.sub</c> is the JSON string
+    /// <c>"2026-10-01"</c>, the text that identified the actor (a <c>sub</c> is a StringOrURI under
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.2">RFC 7519 Section 4.1.2</see>).
+    /// </summary>
+    [TestMethod]
+    public async Task ADateShapedActorSubjectInTheSubjectTokenStaysItsTextInTheIssuedActAsync()
+    {
+        const string DateShapedActor = "2026-10-01";
+        const string CurrentActorToken = "current-actor-token-opaque-blob";
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+
+        //The fixture's subject and actor tokens resolve to their claims; the current actor's token to the
+        //second actor; any other token is one this server issued, whose claims the seam decodes with the
+        //library's JWT part decoder and whose act it carries as the subject token's prior actor chain.
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(token switch
+                    {
+                        SubjectTokenValue => new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope },
+                        ActorTokenValue => new ValidatedSecurityToken { Subject = DateShapedActor },
+                        CurrentActorToken => new ValidatedSecurityToken { Subject = ActorIdentity },
+                        _ => DecodeIssuedSubjectToken(token)
+                    });
+            WirePermissivePolicy(candidateIntegration);
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        OutgoingFormFields firstForm = BuildRequest(new TokenExchangeBuilderOptions
+        {
+            SubjectToken = SubjectTokenValue,
+            SubjectTokenType = TokenType.AccessToken,
+            Actor = new TokenExchangeActor { Token = ActorTokenValue, TokenType = TokenType.AccessToken }
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+        using HttpResponseMessage firstResponse = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, firstForm, TestContext.CancellationToken).ConfigureAwait(false);
+        string firstBody = await firstResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)firstResponse.StatusCode, firstBody);
+
+        using JsonDocument firstDoc = JsonDocument.Parse(firstBody);
+        string firstToken = firstDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+
+        OutgoingFormFields secondForm = BuildRequest(new TokenExchangeBuilderOptions
+        {
+            SubjectToken = firstToken,
+            SubjectTokenType = TokenType.AccessToken,
+            Actor = new TokenExchangeActor { Token = CurrentActorToken, TokenType = TokenType.AccessToken }
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+        using HttpResponseMessage secondResponse = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, secondForm, TestContext.CancellationToken).ConfigureAwait(false);
+        string secondBody = await secondResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)secondResponse.StatusCode, secondBody);
+
+        using JsonDocument secondDoc = JsonDocument.Parse(secondBody);
+        using JsonDocument payload = DecodePayload(secondDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!);
+        JsonElement act = payload.RootElement.GetProperty(WellKnownJwtClaimNames.Act);
+        Assert.AreEqual(ActorIdentity, act.GetProperty("sub").GetString(), "The outermost act is the current actor.");
+        JsonElement priorSubject = act.GetProperty(WellKnownJwtClaimNames.Act).GetProperty("sub");
+        Assert.AreEqual(JsonValueKind.String, priorSubject.ValueKind);
+        Assert.AreEqual(DateShapedActor, priorSubject.GetString());
     }
 
 
@@ -5051,6 +5128,31 @@ internal sealed class TokenExchangeGrantTests
         byte[] payloadBytes = SecurityEventTestJson.DecodeSegment(segments[1], Pool);
 
         return JsonDocument.Parse(payloadBytes);
+    }
+
+
+    /// <summary>
+    /// Reads an access token this server issued as a validated subject token: its claims (the middle
+    /// compact-JWS segment) are decoded by <see cref="JwtPartJson.Default"/>, the JWT part decoder a
+    /// deployment wires, and its <c>sub</c> and <c>act</c> become the validated subject and the subject
+    /// token's prior actor chain
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.1">RFC 8693 Section 4.1</see>).
+    /// </summary>
+    /// <param name="compactJws">The issued access token, three dot-separated segments.</param>
+    /// <returns>The validated subject token.</returns>
+    private static ValidatedSecurityToken DecodeIssuedSubjectToken(string compactJws)
+    {
+        string[] segments = compactJws.Split('.');
+        Assert.HasCount(3, segments);
+        byte[] payloadBytes = SecurityEventTestJson.DecodeSegment(segments[1], Pool);
+        IReadOnlyDictionary<string, object> claims = JwtPartJson.Default(payloadBytes);
+
+        return new ValidatedSecurityToken
+        {
+            Subject = (string)claims[WellKnownJwtClaimNames.Sub],
+            Scope = GrantedScope,
+            Act = (IReadOnlyDictionary<string, object>)claims[WellKnownJwtClaimNames.Act]
+        };
     }
 
 

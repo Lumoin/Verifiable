@@ -19,9 +19,7 @@ namespace Verifiable.Json;
 /// <para>
 /// <strong>The array-level walk is a hand-rolled span scan, never <see cref="JsonDocument"/>.</strong> Detecting
 /// the whole-array duality and capturing a base64url-incorporated element's own wire TEXT byte-exact (/// "decode/re-encode never touches the imprint input") needs the RAW byte range of each top-level array
-/// element — <see cref="JsonDocument"/>'s own string decoding does not expose that range, and (per
-/// <see cref="JAdESProtectedHeaderJson"/>'s own remarks on the shared generic-dictionary converter) risks
-/// mis-sniffing a base64url string that happens to look like a date. <see cref="TryParse"/> therefore walks
+/// element, and <see cref="JsonDocument"/>'s own string decoding does not expose that range. <see cref="TryParse"/> therefore walks
 /// <c>etsiUJsonBytes</c> byte-by-byte — generalizing the <c>JwkJsonReader</c> span-reader discipline
 /// (contract: "the span-reader discipline generalizing JwkJsonReader for byte-range extraction") — classifying
 /// each element as a JSON string (base64url incorporation) or JSON object (clear-JSON incorporation) and
@@ -355,9 +353,17 @@ public static class JAdESEtsiUJson
     };
 
 
-    //Converts an arbitrary JsonElement into the plain Dictionary<string,object>/List<object>/primitive object
-    //graph Converters.DictionaryStringObjectJsonConverter already knows how to write -- deliberately WITHOUT
-    //that converter's own string->DateTime auto-sniff (see the type remarks on JAdESProtectedHeaderJson).
+    /// <summary>
+    /// Converts an arbitrary <see cref="JsonElement"/> into the plain <see cref="Dictionary{TKey, TValue}"/>,
+    /// <see cref="List{T}"/> and primitive object graph <see cref="Converters.DictionaryStringObjectJsonConverter"/>
+    /// writes: a JSON string becomes the <see cref="string"/> of its text, and a JSON number becomes a boxed
+    /// <see cref="double"/>. The number arm is a conditional expression whose two operands are a
+    /// <see cref="long"/> and a <see cref="double"/>, so its type is <see cref="double"/> and it boxes a
+    /// <see cref="double"/> for every JSON number, the integral ones included.
+    /// </summary>
+    /// <param name="element">The element to convert.</param>
+    /// <returns>The element as a dictionary, a list, a string, a boxed double, a boolean or <see langword="null"/>.</returns>
+    /// <exception cref="NotSupportedException">The element's <see cref="JsonValueKind"/> is not one this conversion knows.</exception>
     private static object? JsonElementToGenericValue(JsonElement element) => element.ValueKind switch
     {
         JsonValueKind.Object => EnumerateObjectToDictionary(element),

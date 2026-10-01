@@ -2609,6 +2609,62 @@ internal sealed class Oid4VpFlowIntegrationTests
     }
 
 
+    /// <summary>
+    /// OpenID for Verifiable Presentations 1.0
+    /// <see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-6.3">Section 6.3</see>:
+    /// <c>values</c> is "OPTIONAL A non-empty array of strings, integers or boolean values that specifies the
+    /// expected values of the claim. If the values property is present, the Wallet SHOULD return the claim
+    /// only if the type and value of the claim both match exactly for at least one of the elements in the
+    /// array." A Verifier's <c>dcql_query</c> whose claims query <c>values</c> holds the string
+    /// <c>"2026-10-01"</c> is served in the signed Request Object over the request URI; the Request Object
+    /// verified and parsed with the payload deserializer the authorization server wires carries that value
+    /// as the string <c>"2026-10-01"</c>, its type and text as the Verifier sent them.
+    /// </summary>
+    [TestMethod]
+    public async Task ADateShapedClaimsQueryValueReachesTheParsedRequestAsTheStringSentAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
+
+        //Start the in-process Kestrel so the request URI is fetched over real HTTP.
+        _ = await app.CreateOAuthClientAndRegistrationAsync(
+            verifierKeys.Registration,
+            "https://wallet.example.com/cb",
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        (Uri requestUri, _) = await app.HandleParAsync(
+            verifierKeys,
+            new TransactionNonce("nonce-date-shaped-value-01"),
+            DcqlFixtures.PidFamilyNameValueConstraintPrepared("2026-10-01"),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        using HttpResponseMessage jarResponse = await app.Host("default").SharedHttpClient!
+            .GetAsync(requestUri, TestContext.CancellationToken).ConfigureAwait(false);
+        _ = jarResponse.EnsureSuccessStatusCode();
+        string compactJar = await jarResponse.Content
+            .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        AuthorizationRequestObject parsedRequest = await JarExtensions.VerifyAndParseJarAsync(
+            compactJar,
+            verifierKeys.SigningPublicKey,
+            TestSetup.Base64UrlDecoder,
+            bytes => HeaderDeserializer(bytes),
+            bytes => PayloadDeserializer(bytes),
+            json => JsonSerializer.Deserialize<DcqlQuery>(json, TestSetup.DefaultSerializationOptions)!,
+            json => JsonSerializer.Deserialize<VerifierClientMetadata>(json, TestSetup.DefaultSerializationOptions)!,
+            StateParameterPolicy.Optional,
+            BaseMemoryPool.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsNotNull(parsedRequest.DcqlQuery, "The served Request Object must carry its dcql_query.");
+        IReadOnlyList<object>? values = parsedRequest.DcqlQuery!.Credentials![0].Claims![1].Values;
+        Assert.IsNotNull(values);
+        Assert.HasCount(1, values);
+        Assert.AreEqual("2026-10-01", Assert.IsInstanceOfType<string>(values[0]));
+    }
+
+
     //request_uri_method=post + wallet_nonce — OID4VP 1.0 §5.10.
     //
     //The Wallet POSTs to request_uri carrying wallet_nonce; the Verifier echoes
