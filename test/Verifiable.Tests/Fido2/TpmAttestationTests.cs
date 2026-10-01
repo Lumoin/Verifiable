@@ -89,6 +89,25 @@ internal sealed class TpmAttestationTests
     }
 
 
+    /// <summary>
+    /// A <c>pubArea</c> whose RSA modulus and stated exponent form no RSA public key — an all-zero modulus — cannot
+    /// be the credential's key: section 8.3 step 2 answers it with
+    /// <see cref="Fido2AttestationErrors.PublicAreaKeyMismatch"/>, an attestation outcome, where the shared RSA
+    /// public-key encoding's refusal would otherwise escape the verifier as an exception.
+    /// </summary>
+    [TestMethod]
+    public async Task PubAreaWhoseRsaParametersFormNoPublicKeyIsRejectedAsMismatch()
+    {
+        using Scenario scenario = await BuildConformantScenario().ConfigureAwait(false);
+        byte[] invalidRsaPubArea = TpmAttestationTestVectors.BuildRsaPubAreaBytes(new byte[256]);
+
+        Fido2AttestationError? error = await RunAndGetErrorAsync(scenario, pubAreaOverride: invalidRsaPubArea).ConfigureAwait(false);
+
+        Assert.IsNotNull(error);
+        Assert.AreEqual(Fido2AttestationErrors.PublicAreaKeyMismatch.Code, error.Code);
+    }
+
+
     /// <summary>An empty <c>x5c</c> array is rejected — <see cref="Fido2AttestationErrors.MalformedStatement"/> (the tpm format has no self-attestation branch).</summary>
     [TestMethod]
     public async Task EmptyX5cIsRejectedWithMalformedStatement()

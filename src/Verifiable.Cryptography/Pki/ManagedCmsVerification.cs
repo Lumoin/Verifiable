@@ -52,9 +52,6 @@ public static class ManagedCmsVerification
     /// <summary>The universal <c>SET OF</c> tag octet that replaces the signed attributes' implicit <c>[0]</c> tag for the signature (RFC 5652 §5.4).</summary>
     private const byte SetOfTag = 0x31;
 
-    /// <summary>The RSA public exponent 65537 the registered RSA verification seam assumes.</summary>
-    private static ReadOnlySpan<byte> Exponent65537 => [0x01, 0x00, 0x01];
-
     /// <summary>
     /// The smallest RSA modulus bit length an RSA signer is verified at.
     /// <see href="https://www.etsi.org/deliver/etsi_ts/119300_119399/119312/01.04.03_60/ts_119312v010403p.pdf">
@@ -153,7 +150,7 @@ public static class ManagedCmsVerification
     /// <para>
     /// This implements <see cref="VerifyDetachedCmsSignedDataDelegate"/> and is what that seam resolves to when
     /// a host registers nothing for it — the same RSA profile this file's encapsulated member accepts (see
-    /// <c>VerifyRsaAsync</c>: RSASSA-PKCS1-v1_5 with SHA-256, SHA-384 or SHA-512, exponent 65537, moduli of
+    /// <c>VerifyRsaAsync</c>: RSASSA-PKCS1-v1_5 with SHA-256, SHA-384 or SHA-512, valid public exponents, moduli of
     /// 2048 to 16384 bits), so a host whose material is outside that profile — RSASSA-PSS, say — registers a
     /// backend rather than being refused by one.
     /// </para>
@@ -425,7 +422,7 @@ public static class ManagedCmsVerification
     /// <summary>
     /// Verifies an RSA (RSASSA-PKCS1-v1_5) signature against the certificate's RSA public key through the
     /// hash-parameterized RSA verification seam. The accepted profile is RSASSA-PKCS1-v1_5 with SHA-256,
-    /// SHA-384 or SHA-512, public exponent 65537, and a modulus inside the
+    /// SHA-384 or SHA-512, a valid public exponent, and a modulus inside the
     /// <see cref="MinimumRsaModulusBitLength"/>–<see cref="MaximumRsaModulusBitLength"/> band — covering the
     /// algorithms and post-2025 key lengths of
     /// <see href="https://www.etsi.org/deliver/etsi_ts/119300_119399/119312/01.04.03_60/ts_119312v010403p.pdf">
@@ -462,11 +459,6 @@ public static class ManagedCmsVerification
             throw new CryptographicException($"The managed CMS verifier supports only RSASSA-PKCS1-v1_5 with SHA-256, SHA-384 or SHA-512 for RSA signers, with the digest algorithm agreeing with the signature algorithm (signature '{signer.SignatureAlgorithmOid}', digest '{signer.DigestAlgorithmOid}').");
         }
 
-        if(!signerCertificate.RsaExponent.Span.SequenceEqual(Exponent65537))
-        {
-            throw new CryptographicException("The managed CMS verifier supports only RSA public exponent 65537.");
-        }
-
         //A policy band replaces the former 2048-/4096-bit whitelist: any non-degenerate RSA public key from
         //MinimumRsaModulusBitLength to MaximumRsaModulusBitLength verifies, so a 3072-bit key — the natural
         //post-2025 choice under TS 119 312 V1.4.3 Table 10 — is inside the band rather than refused.
@@ -477,9 +469,9 @@ public static class ManagedCmsVerification
 
         VerificationDelegate verify = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(algorithm.Value, Purpose.Verification);
 
-        //The registered RSA seam takes the raw modulus and the RSA signature as-is (no re-encoding).
+        //The certificate parser retains and validates both RSA parameters in the DER public key.
         (bool isVerified, CryptoEvent? evt) = await verify(
-            signedMessage, signer.Signature, signerCertificate.RsaModulus, null, cancellationToken).ConfigureAwait(false);
+            signedMessage, signer.Signature, signerCertificate.SubjectPublicKeyBitStringContent, null, cancellationToken).ConfigureAwait(false);
 
         CryptographicKeyEvents.Emit(evt);
 

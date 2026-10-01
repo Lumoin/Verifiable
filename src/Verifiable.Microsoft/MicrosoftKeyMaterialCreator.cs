@@ -369,6 +369,7 @@ public static class MicrosoftKeyMaterialCreator
     }
 
 
+    /// <summary>Creates an RSA pair, retaining the generated public exponent in its DER public key.</summary>
     private static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateRsaKeys(
         int keySizeInBits,
         BaseMemoryPool memoryPool)
@@ -397,7 +398,7 @@ public static class MicrosoftKeyMaterialCreator
         using RSA key = RSA.Create(keySizeInBits);
         RSAParameters parameters = key.ExportParameters(includePrivateParameters: true);
 
-        byte[] derEncodedPublicKey = RsaUtilities.Encode(parameters.Modulus);
+        byte[] derEncodedPublicKey = RsaPublicKeyEncoding.Encode(parameters.Modulus, parameters.Exponent);
 
         var publicKeyMemory = new PublicKeyMemory(
             AsPooledMemory(derEncodedPublicKey, memoryPool, AllocationKind.Managed), publicKeyTag);

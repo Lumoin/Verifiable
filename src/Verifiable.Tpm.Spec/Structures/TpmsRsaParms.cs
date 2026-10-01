@@ -71,12 +71,22 @@ public readonly record struct TpmsRsaParms
     public uint Exponent { get; init; }
 
     /// <summary>
-    /// Gets the effective exponent value.
+    /// Gets the public exponent this structure states, its zero encoding resolved to the exponent it stands for.
     /// </summary>
     /// <remarks>
-    /// Returns the actual exponent, converting zero to the default value.
+    /// The TPM edge resolves the zero encoding here and nowhere else supplies a default exponent: every reader of
+    /// an RSA public area takes the exponent from this property, so a key built from the area carries exactly the
+    /// exponent the area states.
     /// </remarks>
-    public uint EffectiveExponent => Exponent == 0 ? DefaultExponent : Exponent;
+    public uint EffectiveExponent
+    {
+        get
+        {
+            //TPM 2.0 Library Part 2, clause 12.2.3.4, Table 228 (TPMS_RSA_PARMS), exponent: "When zero, indicates
+            //that the exponent is the default of 2^16 + 1".
+            return Exponent == 0 ? DefaultExponent : Exponent;
+        }
+    }
 
     /// <summary>
     /// Creates RSA parameters for an unrestricted key: <c>symmetric</c> NULL and the default exponent, the

@@ -6,7 +6,6 @@ using Org.BouncyCastle.X509;
 using Org.BouncyCastle.X509.Extension;
 using Org.BouncyCastle.X509.Store;
 using System.Buffers;
-using System.Formats.Asn1;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using BcAuthorityKeyIdentifier = Org.BouncyCastle.Asn1.X509.AuthorityKeyIdentifier;
@@ -546,8 +545,8 @@ public static class BouncyCastleX509Functions
     /// <summary>
     /// Encodes an RSA public key as a bare PKCS#1 <c>RSAPublicKey</c> DER SEQUENCE — not the full X.509
     /// SubjectPublicKeyInfo — matching the shape <c>BouncyCastleCryptographicFunctions.ParseRsaPublicKey</c>
-    /// reads and the shape the Microsoft backend produces via <c>RSA.ExportRSAPublicKey()</c> for the
-    /// same certificate, so the two backends' RSA leaf-key extraction is byte-identical.
+    /// reads. Both X.509 backends use <see cref="RsaPublicKeyEncoding"/> so the same certificate
+    /// yields byte-identical RSA leaf-key material with its actual public exponent.
     /// </summary>
     /// <param name="rsaKey">The RSA public key parameters read from the certificate.</param>
     /// <param name="pool">Memory pool for the returned key's carrier allocation.</param>
@@ -557,19 +556,8 @@ public static class BouncyCastleX509Functions
         Org.BouncyCastle.Crypto.Parameters.RsaKeyParameters rsaKey,
         BaseMemoryPool pool)
     {
-        //WriteIntegerUnsigned interprets its argument as an unsigned big-endian magnitude and
-        //itself prepends the 0x00 sign-guard byte a DER INTEGER needs when the magnitude's most
-        //significant bit is set — ToByteArrayUnsigned already strips any such guard byte BigInteger
-        //may carry internally, so the two compose into the same minimal DER encoding
-        //BouncyCastleCryptographicFunctions.ParseRsaPublicKey reads back with AsnReader.ReadInteger().
-        AsnWriter writer = new(AsnEncodingRules.DER);
-        using(writer.PushSequence())
-        {
-            writer.WriteIntegerUnsigned(rsaKey.Modulus.ToByteArrayUnsigned());
-            writer.WriteIntegerUnsigned(rsaKey.Exponent.ToByteArrayUnsigned());
-        }
-
-        byte[] rsaPublicKey = writer.Encode();
+        byte[] rsaPublicKey = RsaPublicKeyEncoding.Encode(
+            rsaKey.Modulus.ToByteArrayUnsigned(), rsaKey.Exponent.ToByteArrayUnsigned());
         IMemoryOwner<byte> owner = pool.Rent(rsaPublicKey.Length);
         rsaPublicKey.CopyTo(owner.Memory);
 

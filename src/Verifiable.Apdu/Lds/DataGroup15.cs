@@ -87,6 +87,7 @@ public sealed class DataGroup15: IDisposable
     /// <param name="pool">The memory pool for the public-key carrier.</param>
     /// <returns>The parsed <see cref="DataGroup15"/>. The caller disposes it.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the structure is not a well-formed DG15 or uses an unsupported key or curve.</exception>
+    /// <exception cref="RsaPublicKeyException">Thrown when the RSA public-key encoding or public exponent is invalid.</exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the public-key carrier transfers to the returned DataGroup15, which the caller disposes.")]
     public static DataGroup15 Parse(ReadOnlySpan<byte> dataGroup15, BaseMemoryPool pool)
     {
@@ -109,6 +110,7 @@ public sealed class DataGroup15: IDisposable
         if(algorithmOid.SequenceEqual(WellKnownOids.RsaEncryptionDerValue))
         {
             ReadOnlySpan<byte> derRsaPublicKey = ReadSubjectPublicKeyBitString(ref subjectPublicKeyInfo);
+            _ = RsaPublicKeyEncoding.Decode(derRsaPublicKey);
 
             return new DataGroup15(RsaPublicKey.FromBytes(derRsaPublicKey, pool));
         }

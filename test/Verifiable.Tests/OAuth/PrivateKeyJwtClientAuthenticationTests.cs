@@ -541,6 +541,116 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
 
 
     /// <summary>
+    /// A client assertion declaring RS256 but signed with ES256 must be refused. The signature
+    /// covers the RS256 header, so this is an algorithm-binding check rather than a tampered-signature
+    /// check. An authentication outcome cannot name the declared algorithm as verified evidence
+    /// unless the verifier binds that declaration to the operation it actually performs.
+    /// </summary>
+    [TestMethod]
+    public async Task AssertionWithRs256HeaderAndEs256SignatureIsRefused()
+    {
+        await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> clientKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            ClientRecord registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator();
+            string assertion = await SignAssertionAsync(
+                app.Server, registration.ClientId, registration.IssuerUri!.OriginalString, clientKeys.PrivateKey)
+                .ConfigureAwait(false);
+
+            bool originalAuthenticated = await validator(
+                null, BuildFields(assertion), registration, BuildContext(app.Server), TestContext.CancellationToken)
+                .ConfigureAwait(false);
+            Assert.IsTrue(originalAuthenticated, "The correctly declared ES256 assertion must authenticate.");
+
+            string[] segments = assertion.Split('.');
+            Assert.HasCount(3, segments);
+            Dictionary<string, string> header = new(StringComparer.Ordinal)
+            {
+                [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Rs256,
+                [WellKnownJwkMemberNames.Kid] = SigningKeyId,
+                [WellKnownJoseHeaderNames.Typ] = WellKnownJwkValues.TypeJwt
+            };
+            string headerSegment = TestSetup.Base64UrlEncoder(JsonSerializer.SerializeToUtf8Bytes(header));
+            byte[] signingInput = Encoding.ASCII.GetBytes($"{headerSegment}.{segments[1]}");
+            using Signature signature = await clientKeys.PrivateKey.SignAsync(signingInput, BaseMemoryPool.Shared)
+                .ConfigureAwait(false);
+            string signatureSegment = TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan());
+            string mismatchedAssertion = $"{headerSegment}.{segments[1]}.{signatureSegment}";
+
+            bool authenticated = await validator(
+                null, BuildFields(mismatchedAssertion), registration, BuildContext(app.Server), TestContext.CancellationToken)
+                .ConfigureAwait(false);
+
+            Assert.IsFalse(authenticated,
+                "The algorithm named by the assertion must be the algorithm that verifies its signature.");
+        }
+        finally
+        {
+            clientKeys.PublicKey.Dispose();
+            clientKeys.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// An RSA assertion must verify under the registered modulus AND public exponent. Changing only
+    /// the registered exponent leaves no registered key that verifies the original signature. A
+    /// success carrying that registration's kid would therefore misidentify the key that verified it.
+    /// </summary>
+    [TestMethod]
+    public async Task AssertionWithDifferentRegisteredRsaExponentIsRefused()
+    {
+        await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> clientKeys =
+            TestKeyMaterialProvider.CreateFreshRsa2048KeyMaterial();
+        try
+        {
+            ClientRecord registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator();
+            string assertion = await SignAssertionAsync(
+                app.Server, registration.ClientId, registration.IssuerUri!.OriginalString, clientKeys.PrivateKey)
+                .ConfigureAwait(false);
+
+            bool originalAuthenticated = await validator(
+                null, BuildFields(assertion), registration, BuildContext(app.Server), TestContext.CancellationToken)
+                .ConfigureAwait(false);
+            Assert.IsTrue(originalAuthenticated, "The assertion must authenticate under the original RSA key.");
+
+            Dictionary<string, string> changedJwk = new(JwkOf(clientKeys.PublicKey), StringComparer.Ordinal);
+            byte[] differentExponent = [0x03];
+            string encodedExponent = TestSetup.Base64UrlEncoder(differentExponent);
+            Assert.AreNotEqual(encodedExponent, changedJwk[WellKnownJwkMemberNames.E]);
+            changedJwk[WellKnownJwkMemberNames.E] = encodedExponent;
+            ClientRecord changedRegistration = registration with
+            {
+                ClientJwks = BuildJwksJson((changedJwk, SigningKeyId))
+            };
+
+            bool authenticated = await validator(
+                null, BuildFields(assertion), changedRegistration, BuildContext(app.Server), TestContext.CancellationToken)
+                .ConfigureAwait(false);
+
+            Assert.IsFalse(authenticated,
+                "The registered RSA exponent must participate in verification before its kid can be reported as evidence.");
+        }
+        finally
+        {
+            clientKeys.PublicKey.Dispose();
+            clientKeys.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
     /// RFC 7519 §4: "The JWT Claim Names within a Claims Set MUST be unique." An assertion whose
     /// Claims Set repeats <c>sub</c> — the attacker's value first, the honest client id last — is
     /// refused (401 <c>invalid_client</c> at the token endpoint this delegate feeds) rather than

@@ -1466,8 +1466,8 @@ internal sealed class TpmInHouseSimulatorSignSequenceCompleteSessionTests
     /// <summary>
     /// The RSA arm of the same shape: both slots as real HMAC sessions over an RSASSA signing key sign the SHA-256
     /// digest of the whole accumulated message, and the signature verifies off-TPM against a public key
-    /// reconstructed solely from the exported modulus — the RSA signing action framing its response over sessions
-    /// exactly as the ECC and HMAC arms do
+    /// reconstructed solely from the exported public area, its modulus with the exponent the area states — the RSA
+    /// signing action framing its response over sessions exactly as the ECC and HMAC arms do
     /// (<see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
     /// Specification</see>, Part 3: Commands, clause 20.6, Table 124; clause 20.1, Table 115's RSASSA row).
     /// </summary>
@@ -1508,12 +1508,14 @@ internal sealed class TpmInHouseSimulatorSignSequenceCompleteSessionTests
             using SignSequenceCompleteResponse completed = result.Value;
             Assert.AreEqual(TpmAlgIdConstants.TPM_ALG_RSASSA, completed.SignatureAlgorithm, "The framed TPMT_SIGNATURE must select the RSASSA member.");
 
-            ReadOnlyMemory<byte> modulus = key.OutPublic.PublicArea.Unique.GetRsaModulusMemory();
+            //The verifier reads the DER public key the exported public area projects to: its modulus with the
+            //exponent its parameters state.
+            using PublicKeyMemory publicKey = key.OutPublic.PublicArea.ToRsaPublicKeyMemory(CryptoTags.Rsa2048PublicKey, pool);
             VerificationDelegate verify = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(CryptoAlgorithm.RsaSha256, Purpose.Verification);
-            (bool isVerified, _) = await verify(wholeMessage, completed.Signature.RsaSignature.AsReadOnlyMemory(), modulus, context: null, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            (bool isVerified, _) = await verify(wholeMessage, completed.Signature.RsaSignature.AsReadOnlyMemory(), publicKey.AsReadOnlyMemory(), context: null, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsTrue(
                 isVerified,
-                "The session-authorized RSASSA signature must verify against the whole accumulated message under the exported modulus.");
+                "The session-authorized RSASSA signature must verify against the whole accumulated message under the public key the exported public area states.");
         }
         finally
         {

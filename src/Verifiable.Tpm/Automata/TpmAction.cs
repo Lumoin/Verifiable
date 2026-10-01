@@ -850,6 +850,7 @@ public sealed record TpmContextLoadAction(
 /// <param name="NewParentCurve">The new parent's ECC curve for the ECDH transport; meaningful only for an elliptic-curve new parent.</param>
 /// <param name="NewParentPublicPoint">The new parent's SEC1 uncompressed public point for the ECDH transport — a borrowed reference; empty for an RSA new parent.</param>
 /// <param name="NewParentModulus">The new parent's public modulus for the RSA-OAEP transport — a BORROWED reference to the durable state's carrier; the dispose-immune empty sentinel for an elliptic-curve new parent.</param>
+/// <param name="NewParentExponent">The new parent's public exponent for the RSA-OAEP transport, as its retained public area states it (<see cref="TpmsRsaParms.EffectiveExponent"/>); meaningful only for an RSA new parent.</param>
 public sealed record TpmDuplicateObjectAction(
     Tpm2bName ObjectName,
     TpmiAlgHash ObjectNameAlg,
@@ -861,7 +862,8 @@ public sealed record TpmDuplicateObjectAction(
     TpmiAlgPublic NewParentKeyType,
     TpmiEccCurve NewParentCurve,
     ReadOnlyMemory<byte> NewParentPublicPoint,
-    Tpm2bPublicKeyRsa NewParentModulus): TpmAction;
+    Tpm2bPublicKeyRsa NewParentModulus,
+    uint NewParentExponent): TpmAction;
 
 /// <summary>
 /// Declares that the simulator must rewrap a TPM-resident object's sensitive area under a new authorization
@@ -1741,11 +1743,13 @@ public sealed record TpmActivateCredentialAction(
 /// <param name="Credential">The secret to wrap (<c>TPM2B_DIGEST</c>, TPM 2.0 Library Part 2, clause 10.3.2, Table 90), the owned pooled carrier the request parsed; ownership rides this action into the effect, which is its terminal owner.</param>
 /// <param name="ObjectName">The attestation key's Name the credential is bound to (folded into the <c>KDFa</c> derivations and the outer HMAC) — an owned <c>TPM2B_NAME</c> carrier the transition transferred out of the request; the effect is its terminal owner and releases it in the <c>finally</c>.</param>
 /// <param name="CredentialKeyModulus">The credential key's exported public modulus (<c>TPM2B_PUBLIC_KEY_RSA</c>, TPM 2.0 Library Part 2, clause 11.2.4.6, Table 194), unsigned big-endian, the OAEP public-key input — a BORROW of the loaded object's own durable carrier, which outlives this command; the effect reads it and never releases it.</param>
+/// <param name="CredentialKeyExponent">The credential key's public exponent, the OAEP public-key input beside <paramref name="CredentialKeyModulus"/>, as the loaded object's retained public area states it (<see cref="TpmsRsaParms.EffectiveExponent"/>).</param>
 /// <param name="NameAlg">The credential key's Name algorithm, driving the seed size, the OAEP <c>lhash</c>/MGF1 digests (the credential key's scheme is <c>TPM_ALG_NULL</c> for every storage-parent template this simulator builds, so <c>lhash</c> coincides with nameAlg), and the <c>KDFa</c>/HMAC digests.</param>
 public sealed record TpmRsaMakeCredentialAction(
     Tpm2bDigest Credential,
     Tpm2bName ObjectName,
     Tpm2bPublicKeyRsa CredentialKeyModulus,
+    uint CredentialKeyExponent,
     TpmiAlgHash NameAlg): TpmAction;
 
 /// <summary>
