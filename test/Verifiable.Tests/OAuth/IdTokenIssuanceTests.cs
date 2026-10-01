@@ -362,33 +362,11 @@ internal sealed class IdTokenIssuanceTests
 
         using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
-        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
 
         //The pushed request, the authorize redirect and the code exchange each cross the loopback listener.
-        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, TestHostShell.MemoryPool);
-        List<KeyValuePair<string, string>> parFields =
-        [
-            new(OAuthRequestParameterNames.ResponseType, WellKnownResponseTypes.Code),
-            new(OAuthRequestParameterNames.ClientId, ClientId),
-            new(OAuthRequestParameterNames.CodeChallenge, pkce.EncodedChallenge),
-            new(OAuthRequestParameterNames.CodeChallengeMethod, WellKnownCodeChallengeMethods.S256),
-            new(OAuthRequestParameterNames.RedirectUri, RedirectUri.OriginalString),
-            new(OAuthRequestParameterNames.Scope, WellKnownScopes.OpenId)
-        ];
-        (int parStatusCode, string parBody, Uri? authorizeLocation, int authorizeStatusCode) =
-            await RawAuthCodeWirePushers.PushParAndAuthorizeAsync(
-                host, segment, ClientId, SubjectId, parFields, TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(201, parStatusCode, parBody);
-        Assert.AreEqual(302, authorizeStatusCode);
-        Assert.IsNotNull(authorizeLocation, "The authorize answer is a redirect carrying a Location header.");
-        string code = TestBrowser.ExtractQueryParam(authorizeLocation.OriginalString, OAuthRequestParameterNames.Code)!;
-
-        (int status, string body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
-            host,
-            segment,
-            RawAuthCodeWirePushers.BuildTokenFields(ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString),
-            TestContext.CancellationToken).ConfigureAwait(false);
+        (string code, string verifier) = await PushOpenIdAuthorizationAsync(host, segment).ConfigureAwait(false);
+        (int status, string body) = await RedeemOverTheWireAsync(host, segment, code, verifier).ConfigureAwait(false);
 
         //A 200 answer is rendered with the sub its id_token and its access_token carry, as JSON text, or absent.
         string idTokenSubject = "none";
@@ -407,6 +385,162 @@ internal sealed class IdTokenIssuanceTests
             "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}",
             body,
             record);
+    }
+
+
+    /// <summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-16#section-4.1.3">OAuth 2.1 draft-16
+    /// Section 4.1.3</see>: "If a second valid token request is made with the same authorization code as a previously
+    /// successful token request, the authorization server MUST deny the request". A redemption whose issuance walk
+    /// returns a failure because the application's subject resolver throws (the claim issuer records the failed
+    /// contribution, so the walk mints no token with a subject), before the step's first store write, issued nothing
+    /// and is not a successful token request: the first redemption over the wire is answered 500 with the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c>, and the
+    /// same code presented again with the resolver restored is answered 200 with an <c>access_token</c> and an
+    /// <c>id_token</c>. Releasing the claim of a walk that ended before the step's first store write is this
+    /// library's rule.
+    /// </summary>
+    [TestMethod]
+    public async Task ACodeSurvivesAWalkThatFailsBeforePersistenceAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        ResolveSubjectIdentifierDelegate resolver = host.Server.OAuth().ResolveSubjectIdentifierAsync!;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+            candidateIntegration.ResolveSubjectIdentifierAsync =
+                static (_, _, _, _) => throw new InvalidOperationException("The subject identifier store is unavailable."))
+            .ConfigureAwait(false);
+
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        (string code, string verifier) = await PushOpenIdAuthorizationAsync(host, segment).ConfigureAwait(false);
+        (int firstStatus, string firstBody) = await RedeemOverTheWireAsync(host, segment, code, verifier).ConfigureAwait(false);
+        Assert.AreEqual(500, firstStatus, firstBody);
+        Assert.AreEqual(
+            "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}",
+            firstBody);
+
+        //The resolver is restored under traffic; the code and its verifier are presented again unchanged.
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+            candidateIntegration.ResolveSubjectIdentifierAsync = resolver).ConfigureAwait(false);
+        (int status, string body) = await RedeemOverTheWireAsync(host, segment, code, verifier).ConfigureAwait(false);
+        Assert.AreEqual(200, status, body);
+
+        using JsonDocument answer = JsonDocument.Parse(body);
+        Assert.IsTrue(answer.RootElement.TryGetProperty(OAuthRequestParameterNames.AccessToken, out _), body);
+        Assert.IsTrue(answer.RootElement.TryGetProperty(OAuthRequestParameterNames.IdToken, out _), body);
+    }
+
+
+    /// <summary>
+    /// A rule of this library, stated here because the specification sets no order between a failed redemption and
+    /// the bookkeeping that follows it: when a redemption's issuance walk returns a failure before the step's first
+    /// store write, because the application's subject resolver throws and the claim issuer records the failed
+    /// contribution, and the release of its claim then throws before it removes the claim mark, the walk has no
+    /// exception of its own, so the release's exception is the request's fault, and the step stays claimed. The
+    /// redemption over the wire is answered 500 with the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c> that the
+    /// host writes for the release's fault, and the same code presented again with both seams restored is answered
+    /// 400 with the body
+    /// <c>{"error":"invalid_grant","error_description":"The authorization code is unknown, expired, or already used."}</c>.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-16#section-4.1.3">OAuth 2.1 draft-16
+    /// Section 4.1.3</see> requires the denial only for "a previously successful token request"; a code whose release
+    /// failed stays spent by this library's fail-closed rule.
+    /// </summary>
+    [TestMethod]
+    public async Task AReleaseThatThrowsAfterAReturnedFailureFailsTheRedemptionAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        ResolveSubjectIdentifierDelegate resolver = host.Server.OAuth().ResolveSubjectIdentifierAsync!;
+        ReleaseServerFlowStateDelegate originalRelease = host.Server.OAuth().ReleaseFlowStateAsync!;
+
+        //The subject resolver throws, so the walk returns a failure, and the release throws its own.
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveSubjectIdentifierAsync =
+                static (_, _, _, _) => throw new InvalidOperationException("The subject identifier store is unavailable.");
+            candidateIntegration.ReleaseFlowStateAsync =
+                static (_, _, _, _, _) => throw new InvalidOperationException("The claim store is unavailable.");
+        }).ConfigureAwait(false);
+
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        (string code, string verifier) = await PushOpenIdAuthorizationAsync(host, segment).ConfigureAwait(false);
+        (int failedStatus, string failedBody) = await RedeemOverTheWireAsync(host, segment, code, verifier).ConfigureAwait(false);
+        Assert.AreEqual(500, failedStatus, failedBody);
+        Assert.AreEqual(
+            "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}",
+            failedBody);
+        Exception fault = Assert.ContainsSingle(host.Host("default").ConsumeHttpFaults());
+        Assert.AreEqual(typeof(InvalidOperationException), fault.GetType(), fault.Message);
+        Assert.AreEqual("The claim store is unavailable.", fault.Message);
+
+        //Both seams are restored under traffic; the code and its verifier are presented again unchanged.
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveSubjectIdentifierAsync = resolver;
+            candidateIntegration.ReleaseFlowStateAsync = originalRelease;
+        }).ConfigureAwait(false);
+        (int status, string body) = await RedeemOverTheWireAsync(host, segment, code, verifier).ConfigureAwait(false);
+        Assert.AreEqual(400, status, body);
+        Assert.AreEqual(
+            "{\"error\":\"invalid_grant\",\"error_description\":\"The authorization code is unknown, expired, or already used.\"}",
+            body);
+    }
+
+
+    /// <summary>
+    /// Pushes a request that asks for <c>openid</c> and completes the authorize redirect over the loopback listener,
+    /// asserting the pushed request's 201 and the authorize answer's 302.
+    /// </summary>
+    /// <param name="host">The host serving the flow.</param>
+    /// <param name="segment">The tenant segment of the endpoint paths.</param>
+    /// <returns>The issued authorization code and the PKCE verifier that redeems it.</returns>
+    private async Task<(string Code, string Verifier)> PushOpenIdAuthorizationAsync(TestHostShell host, string segment)
+    {
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, TestHostShell.MemoryPool);
+        List<KeyValuePair<string, string>> parFields =
+        [
+            new(OAuthRequestParameterNames.ResponseType, WellKnownResponseTypes.Code),
+            new(OAuthRequestParameterNames.ClientId, ClientId),
+            new(OAuthRequestParameterNames.CodeChallenge, pkce.EncodedChallenge),
+            new(OAuthRequestParameterNames.CodeChallengeMethod, WellKnownCodeChallengeMethods.S256),
+            new(OAuthRequestParameterNames.RedirectUri, RedirectUri.OriginalString),
+            new(OAuthRequestParameterNames.Scope, WellKnownScopes.OpenId)
+        ];
+        (int parStatusCode, string parBody, Uri? authorizeLocation, int authorizeStatusCode) =
+            await RawAuthCodeWirePushers.PushParAndAuthorizeAsync(
+                host, segment, ClientId, SubjectId, parFields, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(201, parStatusCode, parBody);
+        Assert.AreEqual(302, authorizeStatusCode);
+        Assert.IsNotNull(authorizeLocation, "The authorize answer is a redirect carrying a Location header.");
+        string code = TestBrowser.ExtractQueryParam(authorizeLocation.OriginalString, OAuthRequestParameterNames.Code)!;
+
+        return (code, pkce.EncodedVerifier);
+    }
+
+
+    /// <summary>Presents an authorization code and its PKCE verifier at the token endpoint over the loopback listener.</summary>
+    /// <param name="host">The host serving the flow.</param>
+    /// <param name="segment">The tenant segment of the endpoint paths.</param>
+    /// <param name="code">The authorization code presented.</param>
+    /// <param name="verifier">The PKCE verifier presented with it.</param>
+    /// <returns>The token endpoint's status code and body.</returns>
+    private Task<(int StatusCode, string Body)> RedeemOverTheWireAsync(
+        TestHostShell host, string segment, string code, string verifier)
+    {
+
+        return RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host,
+            segment,
+            RawAuthCodeWirePushers.BuildTokenFields(ClientId, code, verifier, RedirectUri.OriginalString),
+            TestContext.CancellationToken);
     }
 
 

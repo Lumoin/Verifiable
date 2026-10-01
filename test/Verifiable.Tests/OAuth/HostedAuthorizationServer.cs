@@ -245,6 +245,7 @@ internal sealed class HostedAuthorizationServer: IClientRegistrationStore
         LoadServerFlowStateDelegate load = source.LoadFlowStateAsync!;
         SaveServerFlowStateDelegate save = source.SaveFlowStateAsync!;
         ClaimServerFlowStateDelegate claim = source.ClaimFlowStateAsync!;
+        ReleaseServerFlowStateDelegate release = source.ReleaseFlowStateAsync!;
         DeleteServerFlowStateDelegate delete = source.DeleteFlowStateAsync!;
         ResolveCorrelationKeyDelegate correlate = source.ResolveCorrelationKeyAsync!;
         LoadGrantFlowStatesDelegate loadGrant = source.LoadGrantFlowStatesAsync!;
@@ -272,6 +273,12 @@ internal sealed class HostedAuthorizationServer: IClientRegistrationStore
 
             return claim(tenant, key, step, ctx, ct);
         };
+        candidate.ReleaseFlowStateAsync = (tenant, key, step, ctx, ct) =>
+        {
+            StorageObservations.Enqueue((ctx, backend.Name, "release"));
+
+            return release(tenant, key, step, ctx, ct);
+        };
         candidate.DeleteFlowStateAsync = (tenant, key, ctx, ct) =>
         {
             StorageObservations.Enqueue((ctx, backend.Name, "delete"));
@@ -288,8 +295,8 @@ internal sealed class HostedAuthorizationServer: IClientRegistrationStore
 
 
     /// <summary>
-    /// Asserts that NO flow-state store operation of ANY kind — <c>correlate</c>, <c>load</c>,
-    /// <c>save</c>, <c>claim</c>, <c>delete</c>, and <c>load-grant</c> alike — was recorded on
+    /// Asserts that NO flow-state store operation of ANY kind (<c>correlate</c>, <c>load</c>,
+    /// <c>save</c>, <c>claim</c>, <c>release</c>, <c>delete</c> and <c>load-grant</c> alike) was recorded on
     /// <see cref="StorageObservations"/> since <paramref name="before"/>.
     /// </summary>
     /// <remarks>
@@ -313,7 +320,7 @@ internal sealed class HostedAuthorizationServer: IClientRegistrationStore
     {
         var ops = StorageObservations.Skip(before).Select(entry => entry.Operation).ToList();
         Assert.IsEmpty(ops,
-            $"{context} must touch no flow-state store operation of any kind (correlate/load/save/claim/delete/load-grant); observed: {string.Join(", ", ops)}.");
+            $"{context} must touch no flow-state store operation of any kind (correlate/load/save/claim/release/delete/load-grant); observed: {string.Join(", ", ops)}.");
     }
 
 
@@ -345,7 +352,8 @@ internal sealed class HostedAuthorizationServer: IClientRegistrationStore
     /// <c>(flowId, expectedStepCount)</c> succeeds for exactly one caller because
     /// <see cref="ConcurrentDictionary{TKey,TValue}.TryAdd"/> is itself the atomic operation —
     /// no read-modify-write over <see cref="FlowStates"/> is needed, so the claim never touches
-    /// (and cannot race with) the state or step count <see cref="FlowStates"/> holds.
+    /// (and cannot race with) the state or step count <see cref="FlowStates"/> holds. Backs
+    /// <see cref="ServerIntegration.ReleaseFlowStateAsync"/> too: a release removes the pair's mark.
     /// </summary>
     public ConcurrentDictionary<(string FlowId, int StepCount), byte> ClaimedFlowSteps { get; } = new();
     public ConcurrentDictionary<string, string> RequestUriTokenIndex { get; } = new();
@@ -1213,6 +1221,15 @@ internal sealed class HostedAuthorizationServer: IClientRegistrationStore
                     host.ClaimedFlowSteps.TryAdd((flowId, expectedStepCount), 0)
                     && host.FlowStates.TryGetValue(flowId, out var entry)
                     && entry.StepCount == expectedStepCount),
+
+            //The inverse of a won claim: removing the (flowId, expectedStepCount) mark makes the step
+            //claimable again; removing a mark that is absent does nothing.
+            ReleaseFlowStateAsync = (tenantId, flowId, expectedStepCount, ctx, ct) =>
+            {
+                _ = host.ClaimedFlowSteps.TryRemove((flowId, expectedStepCount), out _);
+
+                return ValueTask.CompletedTask;
+            },
 
             ResolveCorrelationKeyAsync = (tenantId, flowKind, externalHandle, ctx, ct) =>
             {

@@ -333,6 +333,8 @@ internal sealed class AuthorizationServerFeatureTests
                 ValueTask.FromResult<(FlowState?, int)>((null, 0)),
             ClaimFlowStateAsync = (tenantId, key, expectedStepCount, ctx, ct) =>
                 ValueTask.FromResult(true),
+            ReleaseFlowStateAsync = (tenantId, key, expectedStepCount, ctx, ct) =>
+                ValueTask.CompletedTask,
             ResolvePolicyAsync = (registration, ctx, ct) =>
                 PolicyProfiles.DefaultResolvePolicyAsync((ClientRecord)registration, ctx, ct),
             MemoryPool = BaseMemoryPool.Shared
@@ -369,6 +371,8 @@ internal sealed class AuthorizationServerFeatureTests
                 ValueTask.FromResult<(FlowState?, int)>((null, 0)),
             ClaimFlowStateAsync = (tenantId, key, expectedStepCount, ctx, ct) =>
                 ValueTask.FromResult(true),
+            ReleaseFlowStateAsync = (tenantId, key, expectedStepCount, ctx, ct) =>
+                ValueTask.CompletedTask,
             //ResolvePolicyAsync deliberately omitted.
             MemoryPool = BaseMemoryPool.Shared
         };
@@ -442,6 +446,8 @@ internal sealed class AuthorizationServerFeatureTests
                 ValueTask.FromResult<(FlowState?, int)>((null, 0)),
             ClaimFlowStateAsync = (tenantId, key, expectedStepCount, ctx, ct) =>
                 ValueTask.FromResult(true),
+            ReleaseFlowStateAsync = (tenantId, key, expectedStepCount, ctx, ct) =>
+                ValueTask.CompletedTask,
             //DeleteFlowStateAsync deliberately omitted.
             ResolvePolicyAsync = (registration, ctx, ct) =>
                 PolicyProfiles.DefaultResolvePolicyAsync((ClientRecord)registration, ctx, ct),
@@ -456,6 +462,49 @@ internal sealed class AuthorizationServerFeatureTests
             ex.Message,
             StringComparison.Ordinal,
             "Error must name DeleteFlowStateAsync.");
+        Assert.IsFalse(integration.IsValidated,
+            "IsValidated must remain false after a Validate() that threw.");
+    }
+
+
+    /// <summary>
+    /// The release of a claimed step is required beside the claim under
+    /// <see href="../../../documents/AuthorizationServerDesign.md#8-settled-architectural-decisions-promote-when-ready">Settled architectural decisions, section 8</see>,
+    /// the entry on the one-time step: a walk that ends before the step's first store write gives its claim back through
+    /// <see cref="ServerIntegration.ReleaseFlowStateAsync"/>, so an integration without it fails
+    /// <see cref="ServerIntegration.Validate"/> with the named configuration fault rather than at the first failed walk.
+    /// </summary>
+    [TestMethod]
+    public void IntegrationValidateThrowsWhenReleaseFlowStateAsyncIsMissing()
+    {
+        AuthorizationServerIntegration integration = new()
+        {
+            ExtractTenantIdAsync = (ctx, ct) =>
+                ValueTask.FromResult<TenantId?>(null),
+            LoadClientRegistrationAsync = (tenantId, ctx, ct) =>
+                ValueTask.FromResult<IRegistrationRecord?>(null),
+            SaveFlowStateAsync = (tenantId, key, state, stepCount, ctx, ct) =>
+                ValueTask.CompletedTask,
+            LoadFlowStateAsync = (tenantId, key, ctx, ct) =>
+                ValueTask.FromResult<(FlowState?, int)>((null, 0)),
+            ClaimFlowStateAsync = (tenantId, key, expectedStepCount, ctx, ct) =>
+                ValueTask.FromResult(true),
+            //ReleaseFlowStateAsync deliberately omitted.
+            DeleteFlowStateAsync = (tenantId, key, ctx, ct) =>
+                ValueTask.CompletedTask,
+            ResolvePolicyAsync = (registration, ctx, ct) =>
+                PolicyProfiles.DefaultResolvePolicyAsync((ClientRecord)registration, ctx, ct),
+            MemoryPool = BaseMemoryPool.Shared
+        };
+
+        InvalidOperationException ex =
+            Assert.ThrowsExactly<InvalidOperationException>(integration.Validate);
+
+        Assert.Contains(
+            nameof(ServerIntegration.ReleaseFlowStateAsync),
+            ex.Message,
+            StringComparison.Ordinal,
+            "Error must name ReleaseFlowStateAsync.");
         Assert.IsFalse(integration.IsValidated,
             "IsValidated must remain false after a Validate() that threw.");
     }
@@ -484,6 +533,8 @@ internal sealed class AuthorizationServerFeatureTests
                 ValueTask.FromResult<(FlowState?, int)>((null, 0)),
             ClaimFlowStateAsync = (tenantId, key, expectedStepCount, ctx, ct) =>
                 ValueTask.FromResult(true),
+            ReleaseFlowStateAsync = (tenantId, key, expectedStepCount, ctx, ct) =>
+                ValueTask.CompletedTask,
             DeleteFlowStateAsync = (tenantId, key, ctx, ct) =>
                 ValueTask.CompletedTask,
             //ResolveEndpointUriAsync deliberately omitted.

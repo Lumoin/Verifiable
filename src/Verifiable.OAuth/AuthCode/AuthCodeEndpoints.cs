@@ -4041,8 +4041,21 @@ public static class AuthCodeEndpoints
                 //already covered. A losing claim means another caller (or, on a strict replay, a
                 //later request against the resulting ServerTokenIssuedState — see
                 //HandleAuthorizationCodeReplayAsync) already redeemed this exact step.
+                //
+                //The claim precedes the issuance walk by design. A replayed or concurrently
+                //presented grant is refused here, after the request's verification and before any
+                //token is signed, the subject resolved or a producer run, so a party holding an
+                //already-spent grant cannot make the server pay the walk's cost by presenting it
+                //again. The claim is released when the walk ends before the step's first store
+                //write, so a fault of the application's seams does not spend the client's grant.
+                //From that write on the step stays claimed, whatever fails afterwards: this library
+                //fails closed once a persisted record of the step, such as a refresh token born of
+                //the grant, may already be live.
+                TenantId claimedTenantId = context.TenantId!.Value;
+                string claimedFlowId = context.FlowId!;
+                int claimedStepCount = context.FlowStepCount ?? 0;
                 bool isClaimed = await oauth.ClaimFlowStateAsync!(
-                    context.TenantId!.Value, context.FlowId!, context.FlowStepCount ?? 0, context, ct)
+                    claimedTenantId, claimedFlowId, claimedStepCount, context, ct)
                     .ConfigureAwait(false);
                 if(!isClaimed)
                 {
@@ -4057,71 +4070,75 @@ public static class AuthCodeEndpoints
                         OAuthErrors.InvalidGrant, CodeGrantNotFoundDescription));
                 }
 
-                IssuanceContext issuance = new()
+                //The window: a won claim is given back when the walk below ends before the step's first
+                //store write, whether by a failure it returns, an exception it throws or the request's
+                //cancellation (see ReleaseClaimedStepAsync for what a failing release does).
+                bool isReleaseDue = true;
+                try
                 {
-                    Registration = registration,
-                    Context = context,
-                    IssuerUri = issuerUri,
-                    Subject = codeState.SubjectId,
-                    Scope = codeState.Scope,
-                    ClientId = codeState.ClientId,
-                    GrantType = WellKnownGrantTypes.AuthorizationCode,
-                    IssuedAt = now,
-                    Nonce = string.IsNullOrEmpty(codeState.Nonce) ? null : codeState.Nonce,
-                    AuthTime = codeState.AuthTime,
-                    SessionId = codeState.SessionId,
-                    Acr = codeState.Acr,
-                    Confirmation = confirmation,
-                    Audience = effectiveResource is { Count: > 0 } ? effectiveResource : null
-                };
+                    IssuanceContext issuance = new()
+                    {
+                        Registration = registration,
+                        Context = context,
+                        IssuerUri = issuerUri,
+                        Subject = codeState.SubjectId,
+                        Scope = codeState.Scope,
+                        ClientId = codeState.ClientId,
+                        GrantType = WellKnownGrantTypes.AuthorizationCode,
+                        IssuedAt = now,
+                        Nonce = string.IsNullOrEmpty(codeState.Nonce) ? null : codeState.Nonce,
+                        AuthTime = codeState.AuthTime,
+                        SessionId = codeState.SessionId,
+                        Acr = codeState.Acr,
+                        Confirmation = confirmation,
+                        Audience = effectiveResource is { Count: > 0 } ? effectiveResource : null
+                    };
 
-                IReadOnlyList<TokenProducer> producers =
-                    oauth.TokenProducers.Count > 0 ? oauth.TokenProducers : DefaultTokenProducers;
+                    IReadOnlyList<TokenProducer> producers =
+                        oauth.TokenProducers.Count > 0 ? oauth.TokenProducers : DefaultTokenProducers;
 
-                //One-time OidcClaims resolution per request — every
-                //IdTokenTarget / UserInfoTarget built below in the producer
-                //loop reads from the same resolved instance so per-rule
-                //contributors don't each re-issue the resolver call.
-                OidcClaims? preResolvedOidcClaims = await PreResolveOidcClaimsAsync(
-                    server, issuance, ct).ConfigureAwait(false);
+                    //One-time OidcClaims resolution per request: every
+                    //IdTokenTarget / UserInfoTarget built below in the producer
+                    //loop reads from the same resolved instance so per-rule
+                    //contributors don't each re-issue the resolver call.
+                    OidcClaims? preResolvedOidcClaims = await PreResolveOidcClaimsAsync(
+                        server, issuance, ct).ConfigureAwait(false);
 
-                (TokenIssuanceResult? issuanceResult, ServerHttpResponse? issuanceFailure) =
-                    await IssueTokensAsync(
-                        server, registration, context, issuance, producers, preResolvedOidcClaims, now, ct)
+                    (TokenIssuanceResult? issuanceResult, ServerHttpResponse? issuanceFailure) =
+                        await IssueTokensAsync(
+                            server, registration, context, issuance, producers, preResolvedOidcClaims, now, ct)
+                            .ConfigureAwait(false);
+                    if(issuanceFailure is not null)
+                    {
+                        return (null, issuanceFailure);
+                    }
+
+                    TokenIssuanceResult issued = issuanceResult!;
+                    Dictionary<string, string> issuedTokens = issued.IssuedTokens;
+                    Dictionary<string, IssuedTokenAudit> issuedAudits = issued.IssuedAudits;
+                    DateTimeOffset latestExpiry = issued.LatestExpiry;
+
+                    if(issuedTokens.Count == 0)
+                    {
+                        return (null, ServerHttpResponse.ServerError(
+                            OAuthErrors.ServerError, "No applicable token producers."));
+                    }
+
+                    //RFC 6749 Section 6: issue a refresh token alongside the access
+                    //token. Refresh tokens are opaque random strings (not JWTs),
+                    //stored as ServerRefreshTokenIssuedState in flow storage.
+                    //RFC 9700 Section 2.2.2 names refresh token rotation; the
+                    //BuildRefreshToken endpoint rotates on every use when the
+                    //refresh is presented. The value is a bearer secret, so it
+                    //goes through the identifier seam like the authorization-code
+                    //value: the application owns the entropy source and its
+                    //provenance tracking; the library never fills from the OS
+                    //CSPRNG directly.
+                    string refreshToken = await oauth.GenerateIdentifierAsync!(
+                        WellKnownIdentifierPurposes.OAuthRefreshToken, context, ct)
                         .ConfigureAwait(false);
-                if(issuanceFailure is not null)
-                {
-                    return (null, issuanceFailure);
-                }
+                    DateTimeOffset refreshExpiresAt = now + context.RefreshTokenLifetime;
 
-                TokenIssuanceResult issued = issuanceResult!;
-                Dictionary<string, string> issuedTokens = issued.IssuedTokens;
-                Dictionary<string, IssuedTokenAudit> issuedAudits = issued.IssuedAudits;
-                DateTimeOffset latestExpiry = issued.LatestExpiry;
-
-                if(issuedTokens.Count == 0)
-                {
-                    return (null, ServerHttpResponse.ServerError(
-                        OAuthErrors.ServerError, "No applicable token producers."));
-                }
-
-                //RFC 6749 §6 — issue a refresh token alongside the access
-                //token. Refresh tokens are opaque random strings (not JWTs),
-                //stored as ServerRefreshTokenIssuedState in flow storage.
-                //RFC 9700 §2.2.2 requires rotation on every use; the
-                //BuildRefreshToken endpoint handles the rotation when the
-                //refresh is presented. The value is a bearer secret, so it
-                //goes through the identifier seam like the authorization-code
-                //value — the application owns the entropy source and its
-                //provenance tracking; the library never fills from the OS
-                //CSPRNG directly.
-                string refreshToken = await oauth.GenerateIdentifierAsync!(
-                    WellKnownIdentifierPurposes.OAuthRefreshToken, context, ct)
-                    .ConfigureAwait(false);
-                DateTimeOffset refreshExpiresAt = now + context.RefreshTokenLifetime;
-
-                if(oauth.SaveFlowStateAsync is not null)
-                {
                     string refreshFlowId = await oauth.GenerateIdentifierAsync!(
                         WellKnownIdentifierPurposes.OAuthRefreshFlowId, context, ct)
                         .ConfigureAwait(false);
@@ -4130,8 +4147,8 @@ public static class AuthCodeEndpoints
                         FlowId = refreshFlowId,
 
                         //The code flow's own id names the grant this refresh token is born
-                        //into — a later VALID replay of this code (OAuth 2.1 §7.5.3) or reuse of
-                        //this refresh token reads every record under this key in one call.
+                        //into: a later VALID replay of this code (OAuth 2.1 Section 7.5.3) or reuse of
+                        //this refresh token reads every record under this grant key in one call.
                         GrantFlowId = codeState.FlowId,
                         ExpectedIssuer = issuerUri.OriginalString,
                         EnteredAt = now,
@@ -4147,43 +4164,70 @@ public static class AuthCodeEndpoints
                         SessionId = codeState.SessionId,
                         Acr = codeState.Acr,
                         OriginatingGrantType = WellKnownGrantTypes.AuthorizationCode,
-                        //RFC 9396 §11.2: granted authorization_details are stored as part of the
-                        //grant so the refresh exchange can re-emit the §7 echo and §9.1 claim. The
+                        //RFC 9396 Section 11.2: granted authorization_details are stored as part of the
+                        //grant so the refresh exchange can re-emit the Section 7 echo and Section 9.1 claim. The
                         //baseline a later refresh narrows against is the resource owner's
-                        //authorization (§6.1: "the resource owner's previous authorization is
+                        //authorization (Section 6.1: "the resource owner's previous authorization is
                         //unchanged by such requests"), not a token-request-narrowed grant; when the
-                        //details entered at the token request alone (the §6.1.1 scope-authorized
+                        //details entered at the token request alone (the Section 6.1.1 scope-authorized
                         //selection), the granted result is that authorization.
                         AuthorizationDetails = codeState.AuthorizationDetails ?? grantedDetailsJson,
 
-                        //RFC 8707 §2.2: "any refresh token that is returned is bound to the full
-                        //original grant" — the FULL codeState.Resource, never the effectiveResource
+                        //RFC 8707 Section 2.2: "any refresh token that is returned is bound to the full
+                        //original grant": the FULL codeState.Resource, never the effectiveResource
                         //this response's access token may have been narrowed to.
                         Resource = codeState.Resource
                     };
-                    await oauth.SaveFlowStateAsync(
+
+                    //The step's first store write closes the window. From here on an effect may be
+                    //persisted, even by a write that then throws, so the claim is kept whatever fails
+                    //afterwards, and a walk that completes is never released: the state it returns is the
+                    //step's effect, which the dispatcher persists.
+                    isReleaseDue = false;
+                    await oauth.SaveFlowStateAsync!(
                         registration.TenantId, refreshFlowId, refreshState, stepCount: 0, context, ct)
                         .ConfigureAwait(false);
+
+                    issuedTokens[WellKnownTokenTypes.RefreshToken] = refreshToken;
+
+                    IssuedTokenSet tokenSet = new() { Tokens = issuedTokens };
+                    context.SetIssuedTokens(tokenSet);
+
+                    IssuedTokenAuditSet auditSet = new() { Audits = issuedAudits };
+
+                    return (new ServerTokenExchangeSucceeded(
+                        IssuedTokens: auditSet,
+                        IssuedAt: now,
+                        ExpiresAt: latestExpiry)
+                    {
+                        Confirmation = confirmation,
+                        ClientId = codeState.ClientId,
+                        RedirectUri = codeState.RedirectUri,
+                        CodeChallenge = codeState.CodeChallenge,
+                        CodeChallengeMethod = codeState.CodeChallengeMethod
+                    }, null);
                 }
-
-                issuedTokens[WellKnownTokenTypes.RefreshToken] = refreshToken;
-
-                IssuedTokenSet tokenSet = new() { Tokens = issuedTokens };
-                context.SetIssuedTokens(tokenSet);
-
-                IssuedTokenAuditSet auditSet = new() { Audits = issuedAudits };
-
-                return (new ServerTokenExchangeSucceeded(
-                    IssuedTokens: auditSet,
-                    IssuedAt: now,
-                    ExpiresAt: latestExpiry)
+                catch(Exception) when(isReleaseDue)
                 {
-                    Confirmation = confirmation,
-                    ClientId = codeState.ClientId,
-                    RedirectUri = codeState.RedirectUri,
-                    CodeChallenge = codeState.CodeChallenge,
-                    CodeChallengeMethod = codeState.CodeChallengeMethod
-                }, null);
+                    //The walk threw inside the window: the claim is released and the walk's own exception
+                    //propagates unchanged.
+                    isReleaseDue = false;
+                    await ReleaseClaimedStepAsync(
+                        oauth.ReleaseFlowStateAsync!, claimedTenantId, claimedFlowId, claimedStepCount, context,
+                        isWalkExceptionPropagating: true).ConfigureAwait(false);
+
+                    throw;
+                }
+                finally
+                {
+                    if(isReleaseDue)
+                    {
+                        //The walk returned a failure inside the window: the claim is released.
+                        await ReleaseClaimedStepAsync(
+                            oauth.ReleaseFlowStateAsync!, claimedTenantId, claimedFlowId, claimedStepCount, context,
+                            isWalkExceptionPropagating: false).ConfigureAwait(false);
+                    }
+                }
             },
             BuildResponse = static (state, flowKindName, context) =>
             {
@@ -5271,6 +5315,62 @@ public static class AuthCodeEndpoints
 
 
     /// <summary>
+    /// Releases the one-time step a token request claimed through
+    /// <see cref="ServerIntegration.ClaimFlowStateAsync"/>, for an issuance walk that ended before the step's first
+    /// store write, by calling <see cref="ServerIntegration.ReleaseFlowStateAsync"/> once for the won claim.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The release runs under <see cref="CancellationToken.None"/>: the request's own cancellation may be what ended
+    /// the walk, and a walk ended that way gives its claim back as well. The library sets no bound on the release; the
+    /// application bounds it inside its delegate.
+    /// </para>
+    /// <para>
+    /// A walk that threw keeps its own exception as the request's fault. When the release throws as well, the
+    /// release's exception is recorded on the request's activity when one is being recorded
+    /// (<see cref="System.Diagnostics.Activity.Current"/>) and is not rethrown here, so the caller rethrows the walk's
+    /// exception unchanged; an application that needs every release failure observes it inside its release delegate.
+    /// A walk that returned a failure has no exception of its own, so an exception of the release propagates.
+    /// </para>
+    /// <para>
+    /// The library does not retry a release and does not guess what the store did. A release that throws or times
+    /// out leaves the store's outcome to the store: a store that fails without removing its mark leaves the step
+    /// claimed, so the grant is spent and the server fails closed; a store whose release may remove the mark and then
+    /// throw documents that for its host.
+    /// </para>
+    /// </remarks>
+    /// <param name="release">The host's release seam, wired on the same store as the claim.</param>
+    /// <param name="tenantId">The tenant of the claimed step.</param>
+    /// <param name="flowId">The flow identifier the claim was made on.</param>
+    /// <param name="stepCount">The step count the claim was made at.</param>
+    /// <param name="context">The per-request context bag.</param>
+    /// <param name="isWalkExceptionPropagating">
+    /// <see langword="true"/> when the walk threw and its exception propagates from the caller;
+    /// <see langword="false"/> when the walk returned a failure.
+    /// </param>
+    /// <returns>A task that completes when the release has run.</returns>
+    private static async ValueTask ReleaseClaimedStepAsync(
+        ReleaseServerFlowStateDelegate release,
+        TenantId tenantId,
+        string flowId,
+        int stepCount,
+        ExchangeContext context,
+        bool isWalkExceptionPropagating)
+    {
+        try
+        {
+            await release(tenantId, flowId, stepCount, context, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch(Exception releaseException) when(isWalkExceptionPropagating)
+        {
+            //The walk's exception stays the request's fault; the release's own is recorded on the request's
+            //activity when one is being recorded, and the store's outcome is the store's.
+            _ = System.Diagnostics.Activity.Current?.AddException(releaseException);
+        }
+    }
+
+
+    /// <summary>
     /// Mints an opaque Refresh Token and writes the
     /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2">RFC 8693 §2.2</see> Token Exchange
     /// response that carries it, per draft-ietf-oauth-identity-assertion-authz-grant-04 §4.5 — the SAML 2.0
@@ -5325,56 +5425,53 @@ public static class AuthCodeEndpoints
             WellKnownIdentifierPurposes.OAuthRefreshToken, context, cancellationToken).ConfigureAwait(false);
         DateTimeOffset refreshExpiresAt = now + context.RefreshTokenLifetime;
 
-        if(oauth.SaveFlowStateAsync is not null)
+        string refreshFlowId = await oauth.GenerateIdentifierAsync!(
+            WellKnownIdentifierPurposes.OAuthRefreshFlowId, context, cancellationToken).ConfigureAwait(false);
+        ServerRefreshTokenIssuedState refreshState = new()
         {
-            string refreshFlowId = await oauth.GenerateIdentifierAsync!(
-                WellKnownIdentifierPurposes.OAuthRefreshFlowId, context, cancellationToken).ConfigureAwait(false);
-            ServerRefreshTokenIssuedState refreshState = new()
-            {
-                FlowId = refreshFlowId,
+            FlowId = refreshFlowId,
 
-                //This record is the grant's own root: no code precedes it, so its own flow id
-                //is the grant key every later rotation of it carries forward.
-                GrantFlowId = refreshFlowId,
-                ExpectedIssuer = issuerUri.OriginalString,
-                EnteredAt = now,
-                ExpiresAt = refreshExpiresAt,
-                Kind = FlowKind.AuthCodeServer,
-                ClientId = registration.ClientId,
-                RefreshToken = refreshToken,
-                IssuedAt = now,
-                SubjectId = authorization.Subject,
-                Scope = authorization.Scope,
-                OriginatingGrantType = WellKnownGrantTypes.TokenExchange,
+            //This record is the grant's own root: no code precedes it, so its own flow id
+            //is the grant key every later rotation of it carries forward.
+            GrantFlowId = refreshFlowId,
+            ExpectedIssuer = issuerUri.OriginalString,
+            EnteredAt = now,
+            ExpiresAt = refreshExpiresAt,
+            Kind = FlowKind.AuthCodeServer,
+            ClientId = registration.ClientId,
+            RefreshToken = refreshToken,
+            IssuedAt = now,
+            SubjectId = authorization.Subject,
+            Scope = authorization.Scope,
+            OriginatingGrantType = WellKnownGrantTypes.TokenExchange,
 
-                //RFC 8707 §2.2: the target(s) the authorization seam shaped this exchange for
-                //(TokenExchangeAuthorization.Audience — the request's resource/audience per §2.1.1)
-                //become the refresh token's own granted resource set, so a later refresh_token
-                //grant redeeming this token can narrow against the real grant via
-                //ResolveEffectiveResource instead of failing closed with "none were granted".
-                //Audience is RFC 8693's own field — a logical name (§2.1's audience parameter),
-                //not necessarily an RFC 8707 §2 absolute URI, and it MAY itself contain spaces
-                //(the authorization seam's own shaping, not this library's parsed indicators).
-                //Space-joining it into the space-delimited Resource slot unparsed would corrupt
-                //that slot: ParseResourceIndicators/ResolveEffectiveResource would later split a
-                //single spacey audience name into several bogus "indicators". The carry is
-                //therefore gated: it populates Resource ONLY when every audience entry parses as an
-                //absolute, whitespace-free URI with no fragment component (IsCarriedAudienceEntry).
-                //That is the carry rule, not the grammar ResourceIndicatorSyntax reads an incoming
-                //resource by: it admits entries that grammar refuses (a userinfo in an https value,
-                //a host that is not ASCII), and each entry is carried as the seam spelled it.
-                //Otherwise Resource stays null, the same fail-closed outcome as "nothing was
-                //granted", rather than a joined value the split would not return entry by entry.
-                Resource = authorization.Audience is { Count: > 0 } audienceEntries
-                    && audienceEntries.All(IsCarriedAudienceEntry)
-                    ? string.Join(' ', audienceEntries)
-                    : null,
+            //RFC 8707 Section 2.2: the target(s) the authorization seam shaped this exchange for
+            //(TokenExchangeAuthorization.Audience, the request's resource/audience per Section 2.1.1)
+            //become the refresh token's own granted resource set, so a later refresh_token
+            //grant redeeming this token can narrow against the real grant via
+            //ResolveEffectiveResource instead of failing closed with "none were granted".
+            //Audience is RFC 8693's own field, a logical name (Section 2.1's audience parameter),
+            //not necessarily an RFC 8707 Section 2 absolute URI, and it MAY itself contain spaces
+            //(the authorization seam's own shaping, not this library's parsed indicators).
+            //Space-joining it into the space-delimited Resource slot unparsed would corrupt
+            //that slot: ParseResourceIndicators/ResolveEffectiveResource would later split a
+            //single spacey audience name into several bogus "indicators". The carry is
+            //therefore gated: it populates Resource ONLY when every audience entry parses as an
+            //absolute, whitespace-free URI with no fragment component (IsCarriedAudienceEntry).
+            //That is the carry rule, not the grammar ResourceIndicatorSyntax reads an incoming
+            //resource by: it admits entries that grammar refuses (a userinfo in an https value,
+            //a host that is not ASCII), and each entry is carried as the seam spelled it.
+            //Otherwise Resource stays null, the same fail-closed outcome as "nothing was
+            //granted", rather than a joined value the split would not return entry by entry.
+            Resource = authorization.Audience is { Count: > 0 } audienceEntries
+                && audienceEntries.All(IsCarriedAudienceEntry)
+                ? string.Join(' ', audienceEntries)
+                : null,
 
-                Confirmation = confirmation
-            };
-            await oauth.SaveFlowStateAsync(
-                registration.TenantId, refreshFlowId, refreshState, stepCount: 0, context, cancellationToken).ConfigureAwait(false);
-        }
+            Confirmation = confirmation
+        };
+        await oauth.SaveFlowStateAsync!(
+            registration.TenantId, refreshFlowId, refreshState, stepCount: 0, context, cancellationToken).ConfigureAwait(false);
 
         int expiresIn = (int)context.RefreshTokenLifetime.TotalSeconds;
 
@@ -8235,8 +8332,21 @@ public static class AuthCodeEndpoints
                 //what makes rotation hold when the same refresh token is presented by N
                 //concurrent callers. A losing claim means another caller already rotated this
                 //exact presentation; this caller performs no effect and mints nothing.
+                //
+                //The claim precedes the issuance walk by design. A replayed or concurrently
+                //presented grant is refused here, after the request's verification and before any
+                //token is signed, the subject resolved or a producer run, so a party holding an
+                //already-spent grant cannot make the server pay the walk's cost by presenting it
+                //again. The claim is released when the walk ends before the step's first store
+                //write, so a fault of the application's seams does not spend the client's grant.
+                //From that write on the step stays claimed, whatever fails afterwards: this library
+                //fails closed once a persisted record of the step, such as a refresh token born of
+                //the grant, may already be live.
+                TenantId claimedTenantId = context.TenantId!.Value;
+                string claimedFlowId = context.FlowId!;
+                int claimedStepCount = context.FlowStepCount ?? 0;
                 bool isClaimed = await oauth.ClaimFlowStateAsync!(
-                    context.TenantId!.Value, context.FlowId!, context.FlowStepCount ?? 0, context, ct)
+                    claimedTenantId, claimedFlowId, claimedStepCount, context, ct)
                     .ConfigureAwait(false);
                 if(!isClaimed)
                 {
@@ -8244,86 +8354,85 @@ public static class AuthCodeEndpoints
                         OAuthErrors.InvalidGrant, RefreshTokenNotFoundDescription));
                 }
 
-                IssuanceContext issuance = new()
+                //The window: a won claim is given back when the walk below ends before the step's first
+                //store write, whether by a failure it returns, an exception it throws or the request's
+                //cancellation (see ReleaseClaimedStepAsync for what a failing release does).
+                bool isReleaseDue = true;
+                try
                 {
-                    Registration = registration,
-                    Context = context,
-                    IssuerUri = issuerUri,
-                    Subject = storedRefresh.SubjectId,
-                    Scope = effectiveScope,
-                    ClientId = storedRefresh.ClientId,
-                    GrantType = WellKnownGrantTypes.RefreshToken,
-                    IssuedAt = now,
-                    AuthTime = storedRefresh.AuthTime,
-                    SessionId = storedRefresh.SessionId,
-                    Acr = storedRefresh.Acr,
-                    Confirmation = confirmation,
-                    RefreshTokenOriginatingGrantType = storedRefresh.OriginatingGrantType,
-                    Audience = effectiveResource is { Count: > 0 } ? effectiveResource : null
-                };
+                    IssuanceContext issuance = new()
+                    {
+                        Registration = registration,
+                        Context = context,
+                        IssuerUri = issuerUri,
+                        Subject = storedRefresh.SubjectId,
+                        Scope = effectiveScope,
+                        ClientId = storedRefresh.ClientId,
+                        GrantType = WellKnownGrantTypes.RefreshToken,
+                        IssuedAt = now,
+                        AuthTime = storedRefresh.AuthTime,
+                        SessionId = storedRefresh.SessionId,
+                        Acr = storedRefresh.Acr,
+                        Confirmation = confirmation,
+                        RefreshTokenOriginatingGrantType = storedRefresh.OriginatingGrantType,
+                        Audience = effectiveResource is { Count: > 0 } ? effectiveResource : null
+                    };
 
-                IReadOnlyList<TokenProducer> producers =
-                    oauth.TokenProducers.Count > 0
-                        ? oauth.TokenProducers
-                        : DefaultTokenProducers;
+                    IReadOnlyList<TokenProducer> producers =
+                        oauth.TokenProducers.Count > 0
+                            ? oauth.TokenProducers
+                            : DefaultTokenProducers;
 
-                //One-time OidcClaims resolution per request — see BuildToken
-                //for rationale.
-                OidcClaims? preResolvedOidcClaims = await PreResolveOidcClaimsAsync(
-                    server, issuance, ct).ConfigureAwait(false);
+                    //One-time OidcClaims resolution per request: see BuildToken
+                    //for rationale.
+                    OidcClaims? preResolvedOidcClaims = await PreResolveOidcClaimsAsync(
+                        server, issuance, ct).ConfigureAwait(false);
 
-                (TokenIssuanceResult? issuanceResult, ServerHttpResponse? issuanceFailure) =
-                    await IssueTokensAsync(
-                        server, registration, context, issuance, producers, preResolvedOidcClaims, now, ct)
+                    (TokenIssuanceResult? issuanceResult, ServerHttpResponse? issuanceFailure) =
+                        await IssueTokensAsync(
+                            server, registration, context, issuance, producers, preResolvedOidcClaims, now, ct)
+                            .ConfigureAwait(false);
+                    if(issuanceFailure is not null)
+                    {
+                        return (null, issuanceFailure);
+                    }
+
+                    TokenIssuanceResult issued = issuanceResult!;
+                    Dictionary<string, string> issuedTokens = issued.IssuedTokens;
+                    Dictionary<string, IssuedTokenAudit> issuedAudits = issued.IssuedAudits;
+                    DateTimeOffset latestExpiry = issued.LatestExpiry;
+
+                    if(issuedTokens.Count == 0)
+                    {
+                        return (null, ServerHttpResponse.ServerError(
+                            OAuthErrors.ServerError, "No applicable token producers."));
+                    }
+
+                    //RFC 9700 Section 2.2.2 rotation: invalidate the presented refresh token by retiring its
+                    //flow record (see the "No explicit delete" remark below) and issue a fresh refresh
+                    //token under a new flow id. The value rides the identifier seam so the application
+                    //owns the entropy source and its provenance tracking.
+                    string newRefreshToken = await oauth.GenerateIdentifierAsync!(
+                        WellKnownIdentifierPurposes.OAuthRefreshToken, context, ct)
                         .ConfigureAwait(false);
-                if(issuanceFailure is not null)
-                {
-                    return (null, issuanceFailure);
-                }
+                    DateTimeOffset newRefreshExpiresAt = now + context.RefreshTokenLifetime;
 
-                TokenIssuanceResult issued = issuanceResult!;
-                Dictionary<string, string> issuedTokens = issued.IssuedTokens;
-                Dictionary<string, IssuedTokenAudit> issuedAudits = issued.IssuedAudits;
-                DateTimeOffset latestExpiry = issued.LatestExpiry;
+                    //The retired record this transition produces must outlive every token a later
+                    //reuse of THIS presentation could be asked to revoke, in particular the freshly
+                    //minted successor refresh token, whose own lifetime can exceed the just-issued
+                    //access token's. Using the access token's own latestExpiry alone (as the
+                    //code-grant issuance path does) would let EndpointServer.HandleCoreAsync's expiry
+                    //gate treat the retired record as gone the moment the access token expires,
+                    //silently disabling reuse detection for the rest of the successor's lifetime.
+                    DateTimeOffset retiredRecordExpiresAt =
+                        latestExpiry > newRefreshExpiresAt ? latestExpiry : newRefreshExpiresAt;
 
-                if(issuedTokens.Count == 0)
-                {
-                    return (null, ServerHttpResponse.ServerError(
-                        OAuthErrors.ServerError, "No applicable token producers."));
-                }
-
-                //RFC 9700 §2.2.2 rotation: invalidate the presented refresh token by retiring its
-                //flow record (see the "No explicit delete" remark below) and issue a fresh refresh
-                //token under a new flow id. The value rides the identifier seam so the application
-                //owns the entropy source and its provenance tracking.
-                string newRefreshToken = await oauth.GenerateIdentifierAsync!(
-                    WellKnownIdentifierPurposes.OAuthRefreshToken, context, ct)
-                    .ConfigureAwait(false);
-                DateTimeOffset newRefreshExpiresAt = now + context.RefreshTokenLifetime;
-
-                //The retired record this transition produces must outlive every token a later
-                //reuse of THIS presentation could be asked to revoke — in particular the freshly
-                //minted successor refresh token, whose own lifetime can exceed the just-issued
-                //access token's. Using the access token's own latestExpiry alone (as the
-                //code-grant issuance path does) would let EndpointServer.HandleCoreAsync's expiry
-                //gate treat the retired record as gone the moment the access token expires,
-                //silently disabling reuse detection for the rest of the successor's lifetime.
-                DateTimeOffset retiredRecordExpiresAt =
-                    latestExpiry > newRefreshExpiresAt ? latestExpiry : newRefreshExpiresAt;
-
-                //Threaded onto ServerTokenExchangeSucceeded.SuccessorRefreshFlowId below so the
-                //retired ServerTokenIssuedState this transition produces carries the family link a
-                //later reuse of THIS presentation's refresh token walks (HandleRefreshTokenReuseAsync).
-                //Remains null when no new refresh state is saved (oauth.SaveFlowStateAsync unwired),
-                //in which case a reuse of the retired token has no successor to revoke.
-                string? successorRefreshFlowId = null;
-
-                if(oauth.SaveFlowStateAsync is not null)
-                {
+                    //The successor's flow id is threaded onto ServerTokenExchangeSucceeded.SuccessorRefreshFlowId
+                    //below, so the retired ServerTokenIssuedState this transition produces carries the family link
+                    //a later reuse of THIS presentation's refresh token walks (HandleRefreshTokenReuseAsync).
                     string newRefreshFlowId = await oauth.GenerateIdentifierAsync!(
                         WellKnownIdentifierPurposes.OAuthRefreshFlowId, context, ct)
                         .ConfigureAwait(false);
-                    successorRefreshFlowId = newRefreshFlowId;
                     ServerRefreshTokenIssuedState newRefreshState = new()
                     {
                         FlowId = newRefreshFlowId,
@@ -8345,53 +8454,80 @@ public static class AuthCodeEndpoints
                         SessionId = storedRefresh.SessionId,
                         Acr = storedRefresh.Acr,
 
-                        //Propagated verbatim, never re-stamped to refresh_token — the field
+                        //Propagated verbatim, never re-stamped to refresh_token: the field
                         //tracks the chain's originating grant across every rotation so a later
-                        //redemption can still tell whether an End-User authentication backs it.
+                        //redemption can tell whether an End-User authentication backs it.
                         OriginatingGrantType = storedRefresh.OriginatingGrantType,
 
-                        //RFC 9396 §6.1: the authorization details ride rotation unchanged — a
+                        //RFC 9396 Section 6.1: the authorization details ride rotation unchanged: a
                         //narrowing refresh reduces only the access token it mints, "but the
-                        //resource owner's previous authorization is unchanged by such requests" —
+                        //resource owner's previous authorization is unchanged by such requests",
                         //exactly as the scope above rides rotation from the stored grant. A
                         //detail-less grant keeps a null slot.
                         AuthorizationDetails = storedRefresh.AuthorizationDetails,
 
-                        //RFC 8707 §2.2: the refresh token stays bound to the FULL original grant
-                        //across every rotation — never the effectiveResource this exchange's
+                        //RFC 8707 Section 2.2: the refresh token stays bound to the FULL original grant
+                        //across every rotation, never the effectiveResource this exchange's
                         //access token may have been narrowed to.
                         Resource = storedRefresh.Resource
                     };
-                    await oauth.SaveFlowStateAsync(
+
+                    //The rotation's first store write closes the window. From here on an effect may be
+                    //persisted, even by a write that then throws, so the claim is kept whatever fails
+                    //afterwards, and a walk that completes is never released: the state it returns is the
+                    //step's effect, which the dispatcher persists.
+                    isReleaseDue = false;
+                    await oauth.SaveFlowStateAsync!(
                         registration.TenantId, newRefreshFlowId, newRefreshState, stepCount: 0, context, ct)
                         .ConfigureAwait(false);
+
+                    //No explicit delete of the old refresh state: the dispatcher's own unconditional
+                    //save (EndpointServer.HandleCoreAsync step 8) overwrites this exact flowId with the
+                    //ServerTokenIssuedState the PDA transition below produces, carrying
+                    //SuccessorRefreshFlowId forward, the moment this handler returns. Deleting it here
+                    //first would be redundant AND would defeat reuse detection: whatever secondary index
+                    //an application's DeleteServerFlowStateDelegate prunes as a side effect of removing a
+                    //flow record (see HandleRefreshTokenReuseAsync's remarks) must resolve THIS
+                    //flowId so a later presentation of the just-retired token reaches the retired state
+                    //rather than a generic "not found."
+
+                    issuedTokens[WellKnownTokenTypes.RefreshToken] = newRefreshToken;
+
+                    IssuedTokenSet tokenSet = new() { Tokens = issuedTokens };
+                    context.SetIssuedTokens(tokenSet);
+
+                    IssuedTokenAuditSet auditSet = new() { Audits = issuedAudits };
+
+                    return (new ServerTokenExchangeSucceeded(
+                        IssuedTokens: auditSet,
+                        IssuedAt: now,
+                        ExpiresAt: retiredRecordExpiresAt)
+                    {
+                        Confirmation = confirmation,
+                        SuccessorRefreshFlowId = newRefreshFlowId
+                    }, null);
                 }
-
-                //No explicit delete of the old refresh state: the dispatcher's own unconditional
-                //save (EndpointServer.HandleCoreAsync step 8) overwrites this exact flowId with the
-                //ServerTokenIssuedState the PDA transition below produces — carrying
-                //SuccessorRefreshFlowId forward — the moment this handler returns. Deleting it here
-                //first would be redundant AND would defeat reuse detection: whatever secondary index
-                //an application's DeleteServerFlowStateDelegate prunes as a side effect of removing a
-                //flow record (see HandleRefreshTokenReuseAsync's remarks) must still resolve THIS
-                //flowId so a later presentation of the just-retired token reaches the retired state
-                //rather than a generic "not found."
-
-                issuedTokens[WellKnownTokenTypes.RefreshToken] = newRefreshToken;
-
-                IssuedTokenSet tokenSet = new() { Tokens = issuedTokens };
-                context.SetIssuedTokens(tokenSet);
-
-                IssuedTokenAuditSet auditSet = new() { Audits = issuedAudits };
-
-                return (new ServerTokenExchangeSucceeded(
-                    IssuedTokens: auditSet,
-                    IssuedAt: now,
-                    ExpiresAt: retiredRecordExpiresAt)
+                catch(Exception) when(isReleaseDue)
                 {
-                    Confirmation = confirmation,
-                    SuccessorRefreshFlowId = successorRefreshFlowId
-                }, null);
+                    //The walk threw inside the window: the claim is released and the walk's own exception
+                    //propagates unchanged.
+                    isReleaseDue = false;
+                    await ReleaseClaimedStepAsync(
+                        oauth.ReleaseFlowStateAsync!, claimedTenantId, claimedFlowId, claimedStepCount, context,
+                        isWalkExceptionPropagating: true).ConfigureAwait(false);
+
+                    throw;
+                }
+                finally
+                {
+                    if(isReleaseDue)
+                    {
+                        //The walk returned a failure inside the window: the claim is released.
+                        await ReleaseClaimedStepAsync(
+                            oauth.ReleaseFlowStateAsync!, claimedTenantId, claimedFlowId, claimedStepCount, context,
+                            isWalkExceptionPropagating: false).ConfigureAwait(false);
+                    }
+                }
             },
 
             BuildResponse = static (state, flowKindName, context) =>

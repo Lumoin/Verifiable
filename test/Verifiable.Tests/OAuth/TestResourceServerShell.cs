@@ -256,6 +256,9 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
             //Stateless metadata dispatch never claims a flow; wired only to satisfy Validate().
             ClaimFlowStateAsync = (tenantId, flowId, expectedStepCount, ctx, ct) =>
                 ValueTask.FromResult(true),
+            //A claim that holds no mark has none to remove; wired only to satisfy Validate().
+            ReleaseFlowStateAsync = (tenantId, flowId, expectedStepCount, ctx, ct) =>
+                ValueTask.CompletedTask,
             //Stateless metadata dispatch never deletes a flow record either; wired only to satisfy
             //AuthorizationServerIntegration.Validate(), which requires it unconditionally for the
             //Authorization Code lifecycle's revocation paths even though this resource-server-only

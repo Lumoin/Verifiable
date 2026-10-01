@@ -113,9 +113,9 @@ public class ServerIntegration: WiringComponent
     /// Delegate targets own synchronization of mutable application state.
     /// </para>
     /// <para>
-    /// The drain quiesces requests, not persisted flows. Publish load, claim, delete, save and
-    /// correlation operations together. The host must migrate or forward retained flow state
-    /// before replacing its backend, and retire resources only after their users finish.
+    /// The drain quiesces requests, not persisted flows. Publish load, claim, release, delete,
+    /// save and correlation operations together. The host must migrate or forward retained flow
+    /// state before replacing its backend, and retire resources only after their users finish.
     /// </para>
     /// </remarks>
     public SaveServerFlowStateDelegate? SaveFlowStateAsync
@@ -145,9 +145,9 @@ public class ServerIntegration: WiringComponent
     /// Delegate targets own synchronization of mutable application state.
     /// </para>
     /// <para>
-    /// The drain quiesces requests, not persisted flows. Publish load, claim, delete, save and
-    /// correlation operations together. The host must migrate or forward retained flow state
-    /// before replacing its backend, and retire resources only after their users finish.
+    /// The drain quiesces requests, not persisted flows. Publish load, claim, release, delete,
+    /// save and correlation operations together. The host must migrate or forward retained flow
+    /// state before replacing its backend, and retire resources only after their users finish.
     /// </para>
     /// </remarks>
     public DeleteServerFlowStateDelegate? DeleteFlowStateAsync
@@ -178,9 +178,9 @@ public class ServerIntegration: WiringComponent
     /// Delegate targets own synchronization of mutable application state.
     /// </para>
     /// <para>
-    /// The drain quiesces requests, not persisted flows. Publish load, claim, delete, save and
-    /// correlation operations together. The host must migrate or forward retained flow state
-    /// before replacing its backend, and retire resources only after their users finish.
+    /// The drain quiesces requests, not persisted flows. Publish load, claim, release, delete,
+    /// save and correlation operations together. The host must migrate or forward retained flow
+    /// state before replacing its backend, and retire resources only after their users finish.
     /// </para>
     /// </remarks>
     public LoadServerFlowStateDelegate? LoadFlowStateAsync
@@ -211,12 +211,51 @@ public class ServerIntegration: WiringComponent
     /// Delegate targets own synchronization of mutable application state.
     /// </para>
     /// <para>
-    /// The drain quiesces requests, not persisted flows. Publish load, claim, delete, save and
-    /// correlation operations together. The host must migrate or forward retained flow state
-    /// before replacing its backend, and retire resources only after their users finish.
+    /// The drain quiesces requests, not persisted flows. Publish load, claim, release, delete,
+    /// save and correlation operations together. The host must migrate or forward retained flow
+    /// state before replacing its backend, and retire resources only after their users finish.
     /// </para>
     /// </remarks>
     public ClaimServerFlowStateDelegate? ClaimFlowStateAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
+
+    /// <summary>
+    /// Makes a step claimed through <see cref="ClaimFlowStateAsync"/> claimable again when the walk
+    /// that followed the claim ended before the step's first store write. Required, as the claim is.
+    /// See <see cref="ReleaseServerFlowStateDelegate"/> for when a release follows a claim and the
+    /// store guidance.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A host wires the release of the same store it wires <see cref="ClaimFlowStateAsync"/> on,
+    /// so that the release removes exactly the mark the claim made. A store whose claim always
+    /// succeeds, such as one behind a host that never claims a step, releases as a no-op.
+    /// </para>
+    /// <para>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </para>
+    /// <para>
+    /// The drain quiesces requests, not persisted flows. Publish load, claim, release, delete,
+    /// save and correlation operations together. The host must migrate or forward retained flow
+    /// state before replacing its backend, and retire resources only after their users finish.
+    /// </para>
+    /// </remarks>
+    public ReleaseServerFlowStateDelegate? ReleaseFlowStateAsync
     {
         get;
         set
@@ -244,9 +283,9 @@ public class ServerIntegration: WiringComponent
     /// Delegate targets own synchronization of mutable application state.
     /// </para>
     /// <para>
-    /// The drain quiesces requests, not persisted flows. Publish load, claim, delete, save and
-    /// correlation operations together. The host must migrate or forward retained flow state
-    /// before replacing its backend, and retire resources only after their users finish.
+    /// The drain quiesces requests, not persisted flows. Publish load, claim, release, delete,
+    /// save and correlation operations together. The host must migrate or forward retained flow
+    /// state before replacing its backend, and retire resources only after their users finish.
     /// </para>
     /// </remarks>
     public ResolveCorrelationKeyDelegate? ResolveCorrelationKeyAsync
@@ -575,6 +614,7 @@ public class ServerIntegration: WiringComponent
         if(SaveFlowStateAsync is null) { missing.Add(nameof(SaveFlowStateAsync)); }
         if(LoadFlowStateAsync is null) { missing.Add(nameof(LoadFlowStateAsync)); }
         if(ClaimFlowStateAsync is null) { missing.Add(nameof(ClaimFlowStateAsync)); }
+        if(ReleaseFlowStateAsync is null) { missing.Add(nameof(ReleaseFlowStateAsync)); }
         if(DeleteFlowStateAsync is null) { missing.Add(nameof(DeleteFlowStateAsync)); }
         if(ResolvePolicyAsync is null) { missing.Add(nameof(ResolvePolicyAsync)); }
         if(ResolveCapabilitiesAsync is null) { missing.Add(nameof(ResolveCapabilitiesAsync)); }

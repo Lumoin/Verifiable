@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.JCose;
@@ -933,6 +934,418 @@ internal sealed class RefreshGrantTests
         using JsonDocument payload = JwtPayloadDecoding.DecodePayload(accessToken, BaseMemoryPool.Shared);
         Assert.AreEqual(WellKnownScopes.Profile, payload.RootElement.GetProperty(WellKnownJwtClaimNames.Scope).GetString(),
             "The narrowed access token must still carry exactly the requested (openid-excluded) scope.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9700#section-2.2.2">RFC 9700 Section 2.2.2</see>: "Refresh tokens
+    /// for public clients MUST be sender-constrained or use refresh token rotation as described in Section 4.14." A
+    /// refresh whose issuance walk returns a failure because the application's subject resolver throws (the claim
+    /// issuer records the failed contribution), before the rotation's first store write, issued nothing and rotated
+    /// nothing, so the presented refresh token is not spent: the first refresh over the wire is answered 500 with the
+    /// body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c>, and the
+    /// same refresh token presented again with the resolver restored is answered 200 with a rotated
+    /// <c>refresh_token</c> that differs from the one presented. Releasing the claim of a walk that ended before the
+    /// rotation's first store write is this library's rule.
+    /// </summary>
+    [TestMethod]
+    public async Task ARefreshTokenSurvivesAWalkThatFailsBeforePersistenceAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        (_, string refreshToken) = await DriveInitialIssuance(host, material).ConfigureAwait(false);
+
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        ResolveSubjectIdentifierDelegate resolver = host.Server.OAuth().ResolveSubjectIdentifierAsync!;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+            candidateIntegration.ResolveSubjectIdentifierAsync =
+                static (_, _, _, _) => throw new InvalidOperationException("The subject identifier store is unavailable."))
+            .ConfigureAwait(false);
+
+        (int failedStatus, string failedBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, refreshToken),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(500, failedStatus, failedBody);
+        Assert.AreEqual(
+            "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}",
+            failedBody);
+
+        //The resolver is restored under traffic; the same refresh token is presented again.
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+            candidateIntegration.ResolveSubjectIdentifierAsync = resolver).ConfigureAwait(false);
+        (int status, string body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, refreshToken),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, status, body);
+
+        using JsonDocument answer = JsonDocument.Parse(body);
+        string rotatedRefreshToken = answer.RootElement.GetProperty(OAuthRequestParameterNames.RefreshToken).GetString()!;
+        Assert.AreNotEqual(refreshToken, rotatedRefreshToken, body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9700#section-2.2.2">RFC 9700 Section 2.2.2</see>: "Refresh tokens
+    /// for public clients MUST be sender-constrained or use refresh token rotation as described in Section 4.14." A
+    /// refresh whose issuance walk throws out of the application's identifier seam, at the draw of the successor
+    /// refresh token's value and before the rotation's first store write, issued nothing and rotated nothing, so the
+    /// presented refresh token is not spent: the first refresh over the wire is answered 500 with the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c> that the
+    /// host writes for the fault, and the same refresh token presented again with the seam restored is answered 200
+    /// with a rotated <c>refresh_token</c> that differs from the one presented. Releasing the claim of a walk that
+    /// ended before the rotation's first store write is this library's rule.
+    /// </summary>
+    [TestMethod]
+    public async Task ARefreshTokenSurvivesAWalkThatThrowsBeforePersistenceAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        (_, string refreshToken) = await DriveInitialIssuance(host, material).ConfigureAwait(false);
+
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        //The identifier seam throws when the walk draws the successor refresh token's value.
+        GenerateIdentifierDelegate originalIdentifier = host.Server.OAuth().GenerateIdentifierAsync!;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+            candidateIntegration.GenerateIdentifierAsync = (purpose, ctx, ct) =>
+                purpose.Equals(WellKnownIdentifierPurposes.OAuthRefreshToken)
+                    ? throw new InvalidOperationException("The identifier source is unavailable.")
+                    : originalIdentifier(purpose, ctx, ct)).ConfigureAwait(false);
+
+        (int failedStatus, string failedBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, refreshToken),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(500, failedStatus, failedBody);
+        Assert.AreEqual(
+            "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}",
+            failedBody);
+        Exception fault = Assert.ContainsSingle(host.Host("default").ConsumeHttpFaults());
+        Assert.AreEqual("The identifier source is unavailable.", fault.Message, failedBody);
+
+        //The seam is restored under traffic; the same refresh token is presented again.
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+            candidateIntegration.GenerateIdentifierAsync = originalIdentifier).ConfigureAwait(false);
+        (int status, string body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, refreshToken),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, status, body);
+
+        using JsonDocument answer = JsonDocument.Parse(body);
+        string rotatedRefreshToken = answer.RootElement.GetProperty(OAuthRequestParameterNames.RefreshToken).GetString()!;
+        Assert.AreNotEqual(refreshToken, rotatedRefreshToken, body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9700#section-2.2.2">RFC 9700 Section 2.2.2</see>: "Refresh tokens
+    /// for public clients MUST be sender-constrained or use refresh token rotation as described in Section 4.14." A
+    /// refresh whose issuance walk is ended by the request's own cancellation, while the walk draws the successor
+    /// refresh token's value and before the rotation's first store write, issued nothing and rotated nothing, so the
+    /// presented refresh token is not spent: the client's cancelled refresh over the wire ends with a
+    /// <see cref="TaskCanceledException"/>, its claim is released once under a cancellation token that cannot be
+    /// cancelled, and the same refresh token presented again is answered 200 with a rotated <c>refresh_token</c> that
+    /// differs from the one presented. Releasing the claim of a walk that ended before the rotation's first store
+    /// write, the request's own cancellation included, is this library's rule.
+    /// </summary>
+    [TestMethod]
+    public async Task ARefreshTokenSurvivesAWalkThatTheRequestsCancellationEndsAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        (_, string refreshToken) = await DriveInitialIssuance(host, material).ConfigureAwait(false);
+
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        //The first draw of the successor's value cancels the client's side of the refresh and holds the walk until
+        //the server observes that as the request's own cancellation, which then ends the walk.
+        using CancellationTokenSource cancelledRefreshSource =
+            CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
+        int refreshValueDraws = 0;
+        int releaseCalls = 0;
+        int cancellableReleaseTokens = 0;
+        GenerateIdentifierDelegate originalIdentifier = host.Server.OAuth().GenerateIdentifierAsync!;
+        ReleaseServerFlowStateDelegate originalRelease = host.Server.OAuth().ReleaseFlowStateAsync!;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.GenerateIdentifierAsync = async (purpose, ctx, ct) =>
+            {
+                if(purpose.Equals(WellKnownIdentifierPurposes.OAuthRefreshToken)
+                    && Interlocked.Increment(ref refreshValueDraws) == 1)
+                {
+                    TaskCompletionSource requestCancelled = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                    using CancellationTokenRegistration onRequestCancelled = ct.Register(() => requestCancelled.TrySetResult());
+                    await cancelledRefreshSource.CancelAsync().ConfigureAwait(false);
+                    await requestCancelled.Task.WaitAsync(TestContext.CancellationToken).ConfigureAwait(false);
+                    ct.ThrowIfCancellationRequested();
+                }
+
+                return await originalIdentifier(purpose, ctx, ct).ConfigureAwait(false);
+            };
+
+            //The release records whether the token it receives can be cancelled, then forwards to the store.
+            candidateIntegration.ReleaseFlowStateAsync = (tenantId, flowKey, stepCount, ctx, ct) =>
+            {
+                _ = Interlocked.Increment(ref releaseCalls);
+                if(ct.CanBeCanceled)
+                {
+                    _ = Interlocked.Increment(ref cancellableReleaseTokens);
+                }
+
+                return originalRelease(tenantId, flowKey, stepCount, ctx, ct);
+            };
+        }).ConfigureAwait(false);
+
+        Task<(int StatusCode, string Body)> cancelledRefresh = RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, refreshToken),
+            cancelledRefreshSource.Token);
+        _ = await Assert.ThrowsExactlyAsync<TaskCanceledException>(
+            () => cancelledRefresh, "The refresh whose walk is cancelled ends on the client's side.").ConfigureAwait(false);
+
+        //The host admits a second request of the same grant only after the first request has finished, its walk and
+        //its release included (HostedAuthorizationServer.EnterGrantOrderGateAsync).
+        (int status, string body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, refreshToken),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(1, Volatile.Read(ref releaseCalls), "The cancelled walk's claim is released once.");
+        Assert.AreEqual(0, Volatile.Read(ref cancellableReleaseTokens), "The release receives a token that cannot be cancelled.");
+        Assert.AreEqual(200, status, body);
+
+        using JsonDocument answer = JsonDocument.Parse(body);
+        string rotatedRefreshToken = answer.RootElement.GetProperty(OAuthRequestParameterNames.RefreshToken).GetString()!;
+        Assert.AreNotEqual(refreshToken, rotatedRefreshToken, body);
+    }
+
+
+    /// <summary>
+    /// A rule of this library, stated here because the specification sets no order between a failed refresh and the
+    /// bookkeeping that follows it: when a refresh's issuance walk throws before the rotation's first store write and
+    /// the release of its claim then throws as well, the walk's exception is the request's fault, the release's
+    /// exception is recorded on the request's trace as an <c>exception</c> event, and the presented refresh token
+    /// stays claimed. The refresh over the wire is answered 500 with the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c> that the
+    /// host writes for the walk's fault, and the same refresh token presented again with both seams restored is
+    /// answered 400 with the body
+    /// <c>{"error":"invalid_grant","error_description":"The refresh token is unknown, expired, or has been revoked."}</c>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9700#section-2.2.2">RFC 9700 Section 2.2.2</see>: "Refresh tokens
+    /// for public clients MUST be sender-constrained or use refresh token rotation as described in Section 4.14." The
+    /// clause sets no rule for a failed release; a refresh token whose release failed stays spent by this library's
+    /// fail-closed rule.
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize]
+    public async Task TheWalksExceptionStaysPrimaryWhenTheRefreshReleaseThrowsAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        (_, string refreshToken) = await DriveInitialIssuance(host, material).ConfigureAwait(false);
+
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        //The identifier seam throws when the walk draws the successor's value, and the release throws its own.
+        GenerateIdentifierDelegate originalIdentifier = host.Server.OAuth().GenerateIdentifierAsync!;
+        ReleaseServerFlowStateDelegate originalRelease = host.Server.OAuth().ReleaseFlowStateAsync!;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.GenerateIdentifierAsync = (purpose, ctx, ct) =>
+                purpose.Equals(WellKnownIdentifierPurposes.OAuthRefreshToken)
+                    ? throw new InvalidOperationException("The identifier source is unavailable.")
+                    : originalIdentifier(purpose, ctx, ct);
+            candidateIntegration.ReleaseFlowStateAsync =
+                static (_, _, _, _, _) => throw new InvalidOperationException("The claim store is unavailable.");
+        }).ConfigureAwait(false);
+
+        using TraceTreeCapture capture = new();
+        using Activity root = new(nameof(TheWalksExceptionStaysPrimaryWhenTheRefreshReleaseThrowsAsync));
+        _ = root.Start();
+        (int failedStatus, string failedBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, refreshToken),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        root.Stop();
+
+        Assert.AreEqual(500, failedStatus, failedBody);
+        Assert.AreEqual(
+            "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}",
+            failedBody);
+        Exception fault = Assert.ContainsSingle(host.Host("default").ConsumeHttpFaults());
+        Assert.AreEqual(typeof(InvalidOperationException), fault.GetType(), fault.Message);
+        Assert.AreEqual("The identifier source is unavailable.", fault.Message);
+
+        //The release's exception is an event of this request's own trace.
+        ActivityEvent[] exceptionEvents = [.. TraceTreeAssertions.FilterByTrace(capture.StoppedActivities, root.TraceId)
+            .SelectMany(activity => activity.Events)
+            .Where(activityEvent => string.Equals(activityEvent.Name, "exception", StringComparison.Ordinal))];
+        _ = Assert.ContainsSingle(
+            activityEvent => activityEvent.Tags.Any(tag => string.Equals(tag.Key, "exception.type", StringComparison.Ordinal)
+                    && string.Equals(tag.Value as string, "System.InvalidOperationException", StringComparison.Ordinal))
+                && activityEvent.Tags.Any(tag => string.Equals(tag.Key, "exception.message", StringComparison.Ordinal)
+                    && string.Equals(tag.Value as string, "The claim store is unavailable.", StringComparison.Ordinal)),
+            exceptionEvents,
+            $"The release's exception must be recorded on the request's trace. Events: {exceptionEvents.Length}");
+
+        //Both seams are restored under traffic; the same refresh token is presented again.
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.GenerateIdentifierAsync = originalIdentifier;
+            candidateIntegration.ReleaseFlowStateAsync = originalRelease;
+        }).ConfigureAwait(false);
+        (int status, string body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, refreshToken),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, status, body);
+        Assert.AreEqual(
+            "{\"error\":\"invalid_grant\",\"error_description\":\"The refresh token is unknown, expired, or has been revoked.\"}",
+            body);
+    }
+
+
+    /// <summary>
+    /// A rule of this library, stated here because the specification sets no order between a failed refresh and the
+    /// bookkeeping that follows it: when a refresh's issuance walk returns a failure before the rotation's first store
+    /// write, because the application's subject resolver throws and the claim issuer records the failed contribution,
+    /// and the release of its claim then throws before it removes the claim mark, the walk has no exception of its
+    /// own, so the release's exception is the request's fault, and the presented refresh token stays claimed. The
+    /// refresh over the wire is answered 500 with the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c> that the
+    /// host writes for the release's fault, and the same refresh token presented again with both seams restored is
+    /// answered 400 with the body
+    /// <c>{"error":"invalid_grant","error_description":"The refresh token is unknown, expired, or has been revoked."}</c>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9700#section-2.2.2">RFC 9700 Section 2.2.2</see>: "Refresh tokens
+    /// for public clients MUST be sender-constrained or use refresh token rotation as described in Section 4.14." The
+    /// clause sets no rule for a failed release; a refresh token whose release failed stays spent by this library's
+    /// fail-closed rule.
+    /// </summary>
+    [TestMethod]
+    public async Task AReleaseThatThrowsAfterAReturnedFailureFailsTheRefreshAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        (_, string refreshToken) = await DriveInitialIssuance(host, material).ConfigureAwait(false);
+
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        //The subject resolver throws, so the walk returns a failure, and the release throws its own.
+        ResolveSubjectIdentifierDelegate resolver = host.Server.OAuth().ResolveSubjectIdentifierAsync!;
+        ReleaseServerFlowStateDelegate originalRelease = host.Server.OAuth().ReleaseFlowStateAsync!;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveSubjectIdentifierAsync =
+                static (_, _, _, _) => throw new InvalidOperationException("The subject identifier store is unavailable.");
+            candidateIntegration.ReleaseFlowStateAsync =
+                static (_, _, _, _, _) => throw new InvalidOperationException("The claim store is unavailable.");
+        }).ConfigureAwait(false);
+
+        (int failedStatus, string failedBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, refreshToken),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(500, failedStatus, failedBody);
+        Assert.AreEqual(
+            "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}",
+            failedBody);
+        Exception fault = Assert.ContainsSingle(host.Host("default").ConsumeHttpFaults());
+        Assert.AreEqual(typeof(InvalidOperationException), fault.GetType(), fault.Message);
+        Assert.AreEqual("The claim store is unavailable.", fault.Message);
+
+        //Both seams are restored under traffic; the same refresh token is presented again.
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveSubjectIdentifierAsync = resolver;
+            candidateIntegration.ReleaseFlowStateAsync = originalRelease;
+        }).ConfigureAwait(false);
+        (int status, string body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, refreshToken),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, status, body);
+        Assert.AreEqual(
+            "{\"error\":\"invalid_grant\",\"error_description\":\"The refresh token is unknown, expired, or has been revoked.\"}",
+            body);
+    }
+
+
+    /// <summary>
+    /// A rule of this library: the window in which a claim is released ends at the rotation's first store write, the
+    /// write itself included. A refresh whose first store write, the save of the successor refresh token's record,
+    /// takes effect and then throws may have left a live successor, so its claim is never released: the refresh over
+    /// the wire is answered 500 with the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c> that the
+    /// host writes for the fault, the release is not called, and the same refresh token presented again with the store
+    /// restored is answered 400 with the body
+    /// <c>{"error":"invalid_grant","error_description":"The refresh token is unknown, expired, or has been revoked."}</c>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9700#section-2.2.2">RFC 9700 Section 2.2.2</see>: "Refresh tokens
+    /// for public clients MUST be sender-constrained or use refresh token rotation as described in Section 4.14." A
+    /// rotation whose successor may be live is read as a use of the presented refresh token.
+    /// </summary>
+    [TestMethod]
+    public async Task AFirstStoreWriteThatTakesEffectAndThrowsLeavesTheRefreshTokenSpentAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        (_, string refreshToken) = await DriveInitialIssuance(host, material).ConfigureAwait(false);
+
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        //The first save of a refresh token's record is written and then throws; every release is counted.
+        int refreshRecordSaves = 0;
+        int releaseCalls = 0;
+        SaveServerFlowStateDelegate originalSave = host.Server.OAuth().SaveFlowStateAsync!;
+        ReleaseServerFlowStateDelegate originalRelease = host.Server.OAuth().ReleaseFlowStateAsync!;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.SaveFlowStateAsync = async (tenantId, flowKey, state, stepCount, ctx, ct) =>
+            {
+                await originalSave(tenantId, flowKey, state, stepCount, ctx, ct).ConfigureAwait(false);
+                if(state is ServerRefreshTokenIssuedState && Interlocked.Increment(ref refreshRecordSaves) == 1)
+                {
+                    throw new InvalidOperationException("The flow store failed after writing.");
+                }
+            };
+            candidateIntegration.ReleaseFlowStateAsync = (tenantId, flowKey, stepCount, ctx, ct) =>
+            {
+                _ = Interlocked.Increment(ref releaseCalls);
+
+                return originalRelease(tenantId, flowKey, stepCount, ctx, ct);
+            };
+        }).ConfigureAwait(false);
+
+        (int failedStatus, string failedBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, refreshToken),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(500, failedStatus, failedBody);
+        Assert.AreEqual(
+            "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}",
+            failedBody);
+        Exception fault = Assert.ContainsSingle(host.Host("default").ConsumeHttpFaults());
+        Assert.AreEqual("The flow store failed after writing.", fault.Message, failedBody);
+        Assert.AreEqual(0, Volatile.Read(ref releaseCalls), "A claim is never released once the rotation's first store write began.");
+
+        //The store is restored under traffic; the same refresh token is presented again.
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+            candidateIntegration.SaveFlowStateAsync = originalSave).ConfigureAwait(false);
+        (int status, string body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, refreshToken),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, status, body);
+        Assert.AreEqual(
+            "{\"error\":\"invalid_grant\",\"error_description\":\"The refresh token is unknown, expired, or has been revoked.\"}",
+            body);
     }
 
 

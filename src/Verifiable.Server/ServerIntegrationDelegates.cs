@@ -144,6 +144,15 @@ public delegate ValueTask<(FlowState? State, int StepCount)> LoadServerFlowState
 /// consumed step again: implementations retain the claim or atomically reject absent and
 /// obsolete flow versions.
 /// </para>
+/// <para>
+/// The claim precedes the costly effects of a step, not only its irreversible ones. The one-time
+/// step of a grant, an authorization code or a refresh token, is claimed before the issuance walk,
+/// so a replayed or concurrently presented grant is refused after the request's verification and
+/// before any token is signed, the subject resolved or a producer run, and a party holding an
+/// already-spent grant cannot make the server pay the walk's cost by presenting it again.
+/// <see cref="ReleaseServerFlowStateDelegate"/> is the inverse of a won claim for a walk that ends
+/// before the step's first store write.
+/// </para>
 /// </remarks>
 /// <param name="tenantId">The tenant the flow belongs to.</param>
 /// <param name="correlationKey">The internal flow identifier being claimed.</param>
@@ -155,6 +164,84 @@ public delegate ValueTask<(FlowState? State, int StepCount)> LoadServerFlowState
 /// <param name="context">The per-request context bag.</param>
 /// <param name="cancellationToken">Cancellation token.</param>
 public delegate ValueTask<bool> ClaimServerFlowStateDelegate(
+    TenantId tenantId,
+    string correlationKey,
+    int expectedStepCount,
+    ExchangeContext context,
+    CancellationToken cancellationToken);
+
+
+/// <summary>
+/// Makes one claimed step of a flow claimable again: the inverse of a
+/// <see cref="ClaimServerFlowStateDelegate"/> call that returned <see langword="true"/>, for a
+/// step whose walk ended before the step's first store write.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Called only by the caller that won the claim of this
+/// <c>(tenant, correlationKey, expectedStepCount)</c>, at most once per won claim, and only when the
+/// issuance walk that follows the claim of an authorization code or a refresh token returned a
+/// failure, threw or was cancelled before the step's first store write made by the library. The
+/// release keeps a fault of the application's own seams during that walk from spending the client's
+/// grant, so the same grant presented again can complete. Since the library releases at most once per
+/// won claim, a store need not track which caller holds a mark.
+/// </para>
+/// <para>
+/// The window is bounded by the library's first store write of the step; the library does not see
+/// what the application's seams persist. The seams the walk calls (the token producers, the claim
+/// contributors, the resolvers and the identifier seam) run again when a released grant is presented
+/// again, so they keep no effect that a repeated walk would duplicate, or the application reconciles
+/// such effects itself.
+/// </para>
+/// <para>
+/// A walk ended by the request's cancellation is released as well, so the
+/// <paramref name="cancellationToken"/> the library passes cannot be cancelled. The application bounds
+/// its release inside this delegate, for example by its store's own timeout: a release that does not
+/// complete holds the request, and with it the drain of an alteration that waits for the request.
+/// </para>
+/// <para>
+/// When the walk threw, the walk's exception stays the request's fault and the release's exception is
+/// recorded on the request's activity when one is being recorded; an application that needs every
+/// release failure observes it inside this delegate. When the walk returned a failure, the release's
+/// exception propagates as the request's fault.
+/// </para>
+/// <para>
+/// The library does not retry a release, so a release that throws or times out leaves the store's
+/// outcome to the store. A store that fails without removing its mark leaves the step claimed, so the
+/// grant is spent and the server fails closed. A store whose release may remove the mark and then throw
+/// documents that for its host, since the grant can then be presented again.
+/// </para>
+/// <para>
+/// The release is required wherever the claim is: a host wires it on the same store as
+/// <see cref="ClaimServerFlowStateDelegate"/>, and a store whose claim always succeeds releases as
+/// a no-op.
+/// </para>
+/// <para>
+/// From the step's first store write on, no release follows, whatever fails afterwards, the write
+/// itself included. This is the library's own fail-closed rule: the write may have taken effect, and a
+/// persisted record of the step, such as a refresh token born of the grant, may already be live.
+/// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-16#section-4.1.3">OAuth 2.1
+/// draft-16 Section 4.1.3</see> requires the denial of a second valid token request made with the same
+/// code as "a previously successful token request"; the library reads a step whose record may be live
+/// as used, whether or not the request that wrote it succeeded.
+/// </para>
+/// <para>
+/// An in-memory store removes the claim mark (for example
+/// <see cref="System.Collections.Concurrent.ConcurrentDictionary{TKey,TValue}.TryRemove(TKey, out TValue)"/>);
+/// a distributed store deletes the conditional-write mark or reverts the compare-and-swap its
+/// claim made. The release is idempotent: releasing a pair that is not claimed does nothing. The
+/// store does not step, save or delete the flow record itself.
+/// </para>
+/// </remarks>
+/// <param name="tenantId">The tenant the flow belongs to.</param>
+/// <param name="correlationKey">The internal flow identifier whose claim is released.</param>
+/// <param name="expectedStepCount">
+/// The step count the caller claimed: the same value it passed to
+/// <see cref="ClaimServerFlowStateDelegate"/>.
+/// </param>
+/// <param name="context">The per-request context bag.</param>
+/// <param name="cancellationToken">Cancellation token.</param>
+public delegate ValueTask ReleaseServerFlowStateDelegate(
     TenantId tenantId,
     string correlationKey,
     int expectedStepCount,

@@ -507,6 +507,7 @@ internal sealed class JtiReplayGuardStoreProofTests
             SaveFlowStateAsync = store.SaveAsync,
             ResolveCorrelationKeyAsync = store.ResolveAsync,
             ClaimFlowStateAsync = isClaimWired ? store.ClaimAsync : null,
+            ReleaseFlowStateAsync = store.ReleaseAsync,
             GenerateIdentifierAsync = DefaultIdentifierGenerator.For(TimeProvider, TestEntropy.NewCounterStream(), BaseMemoryPool.Shared),
             MemoryPool = BaseMemoryPool.Shared
         };
@@ -716,6 +717,32 @@ internal sealed class JtiReplayGuardStoreProofTests
             }
 
             return ValueTask.FromResult(isClaimed);
+        }
+
+        /// <summary>
+        /// Releases one claimed step, the inverse of <see cref="ClaimAsync"/>: removing the
+        /// <c>(flow id, step)</c> pair makes it claimable again, and removing a pair that is not claimed
+        /// does nothing. The saved records are not touched.
+        /// </summary>
+        /// <param name="tenantId">The tenant; accepted to match the delegate shape.</param>
+        /// <param name="flowId">The record's flow id.</param>
+        /// <param name="expectedStepCount">The step released.</param>
+        /// <param name="context">The request context; accepted to match the delegate shape.</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        /// <returns>A task that completes when the claim is released.</returns>
+        public ValueTask ReleaseAsync(
+            TenantId tenantId,
+            string flowId,
+            int expectedStepCount,
+            ExchangeContext context,
+            CancellationToken cancellationToken)
+        {
+            lock(Gate)
+            {
+                _ = ClaimedSteps.Remove((flowId, expectedStepCount));
+            }
+
+            return ValueTask.CompletedTask;
         }
     }
 }

@@ -189,11 +189,12 @@ internal sealed class WebFingerHttpApplication
 
             //The WebFinger query endpoint is StatelessFlowKind.Instance: EndpointServer.HandleCoreAsync
             //short-circuits on BuildInputAsync's response before any flow-state or identifier seam is
-            //reached. These five are wired only to satisfy ServerIntegration.Validate() and are never
+            //reached. These six are wired only to satisfy ServerIntegration.Validate() and are never
             //actually invoked by a WebFinger dispatch.
             SaveFlowStateAsync = static (tenantId, key, state, stepCount, ctx, ct) => ValueTask.CompletedTask,
             LoadFlowStateAsync = static (tenantId, key, ctx, ct) => ValueTask.FromResult<(FlowState?, int)>((null, 0)),
             ClaimFlowStateAsync = static (tenantId, key, expectedStepCount, ctx, ct) => ValueTask.FromResult(true),
+            ReleaseFlowStateAsync = static (tenantId, key, expectedStepCount, ctx, ct) => ValueTask.CompletedTask,
             DeleteFlowStateAsync = static (tenantId, key, ctx, ct) => ValueTask.CompletedTask,
             GenerateIdentifierAsync = static (purpose, ctx, ct) => ValueTask.FromResult(Guid.NewGuid().ToString("N")),
 

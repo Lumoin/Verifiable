@@ -2302,6 +2302,373 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
 
     /// <summary>
+    /// A rule of this library: no release follows a walk that completed. A redemption whose issuance walk completed,
+    /// its first store write made and its tokens minted, and whose dispatcher's save of the resulting state then
+    /// throws keeps its claim, since a persisted record of the step, the refresh token born of the code, may already
+    /// be live: the redemption over the wire is answered 500 with the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c> that the
+    /// host writes for the fault, and the same code presented again with the store restored is answered 400 with the
+    /// body
+    /// <c>{"error":"invalid_grant","error_description":"The authorization code is unknown, expired, or already used."}</c>.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-16#section-4.1.3">OAuth 2.1 draft-16
+    /// Section 4.1.3</see> requires the denial for "a previously successful token request"; this library keeps the code
+    /// spent from the step's first store write on, whether or not the request that made it succeeded.
+    /// </summary>
+    [TestMethod]
+    public async Task AFailureAfterPersistenceBeganLeavesTheCodeSpentAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string code = await DriveRawParAndAuthorizeAsync(
+            host, segment, pkce.EncodedChallenge, WellKnownCodeChallengeMethods.S256,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Dictionary<string, string> tokenFields = RawAuthCodeWirePushers.BuildTokenFields(
+            ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString);
+
+        //Every save the redemption makes is recorded by the type of the state saved; the second one throws.
+        ConcurrentQueue<string> savedStates = new();
+        int saveCount = 0;
+        SaveServerFlowStateDelegate originalSave = host.Server.OAuth().SaveFlowStateAsync!;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+            candidateIntegration.SaveFlowStateAsync = (tenantId, key, state, stepCount, ctx, ct) =>
+            {
+                savedStates.Enqueue(state.GetType().Name);
+                if(Interlocked.Increment(ref saveCount) == 2)
+                {
+                    throw new InvalidOperationException("The flow store is unavailable.");
+                }
+
+                return originalSave(tenantId, key, state, stepCount, ctx, ct);
+            }).ConfigureAwait(false);
+
+        (int failedStatus, string failedBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, tokenFields, TestContext.CancellationToken).ConfigureAwait(false);
+        string savedRecord = string.Join(", ", savedStates);
+        Assert.AreEqual(500, failedStatus, $"{failedBody} saves: {savedRecord}");
+        Assert.AreEqual(
+            "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}",
+            failedBody);
+        Assert.AreEqual(nameof(ServerRefreshTokenIssuedState), savedStates.First(),
+            $"The first store write of the redemption precedes the failure. Saves: {savedRecord}");
+        Exception fault = Assert.ContainsSingle(host.Host("default").ConsumeHttpFaults());
+        Assert.AreEqual("The flow store is unavailable.", fault.Message, failedBody);
+
+        //The store is restored under traffic; the same code and verifier are presented again.
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+            candidateIntegration.SaveFlowStateAsync = originalSave).ConfigureAwait(false);
+        (int status, string body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, tokenFields, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, status, body);
+        Assert.AreEqual(
+            "{\"error\":\"invalid_grant\",\"error_description\":\"The authorization code is unknown, expired, or already used.\"}",
+            body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-16#section-4.1.3">OAuth 2.1 draft-16
+    /// Section 4.1.3</see>: "If a second valid token request is made with the same authorization code as a previously
+    /// successful token request, the authorization server MUST deny the request". A redemption whose issuance walk
+    /// throws out of the application's identifier seam, at the draw of the refresh token's value and before the step's
+    /// first store write, issued nothing and is not a successful token request: the redemption over the wire is answered
+    /// 500 with the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c> that the
+    /// host writes for the fault, and the same code presented again with the seam restored is answered 200 with an
+    /// <c>access_token</c> and a <c>refresh_token</c>. Releasing the claim of a walk that ended before the step's first
+    /// store write is this library's rule.
+    /// </summary>
+    [TestMethod]
+    public async Task ACodeSurvivesAWalkThatThrowsBeforePersistenceAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string code = await DriveRawParAndAuthorizeAsync(
+            host, segment, pkce.EncodedChallenge, WellKnownCodeChallengeMethods.S256,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Dictionary<string, string> tokenFields = RawAuthCodeWirePushers.BuildTokenFields(
+            ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString);
+
+        //The identifier seam throws when the walk draws the refresh token's value.
+        GenerateIdentifierDelegate originalIdentifier = host.Server.OAuth().GenerateIdentifierAsync!;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+            candidateIntegration.GenerateIdentifierAsync = (purpose, ctx, ct) =>
+                purpose.Equals(WellKnownIdentifierPurposes.OAuthRefreshToken)
+                    ? throw new InvalidOperationException("The identifier source is unavailable.")
+                    : originalIdentifier(purpose, ctx, ct)).ConfigureAwait(false);
+
+        (int failedStatus, string failedBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, tokenFields, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(500, failedStatus, failedBody);
+        Assert.AreEqual(
+            "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}",
+            failedBody);
+        Exception fault = Assert.ContainsSingle(host.Host("default").ConsumeHttpFaults());
+        Assert.AreEqual("The identifier source is unavailable.", fault.Message, failedBody);
+
+        //The seam is restored under traffic; the same code and verifier are presented again.
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+            candidateIntegration.GenerateIdentifierAsync = originalIdentifier).ConfigureAwait(false);
+        (int status, string body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, tokenFields, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, status, body);
+
+        using JsonDocument answer = JsonDocument.Parse(body);
+        Assert.IsTrue(answer.RootElement.TryGetProperty(OAuthRequestParameterNames.AccessToken, out _), body);
+        Assert.IsTrue(answer.RootElement.TryGetProperty(OAuthRequestParameterNames.RefreshToken, out _), body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-16#section-4.1.3">OAuth 2.1 draft-16
+    /// Section 4.1.3</see>: "If a second valid token request is made with the same authorization code as a previously
+    /// successful token request, the authorization server MUST deny the request". A redemption whose issuance walk is
+    /// ended by the request's own cancellation, while the walk draws the refresh token's value and before the step's
+    /// first store write, issued nothing and is not a successful token request: the client's cancelled redemption over
+    /// the wire ends with a <see cref="TaskCanceledException"/>, its claim is released once under a cancellation token
+    /// that cannot be cancelled, and the same code presented again is answered 200 with an <c>access_token</c> and a
+    /// <c>refresh_token</c>. Releasing the claim of a walk that ended before the step's first store write, the
+    /// request's own cancellation included, is this library's rule.
+    /// </summary>
+    [TestMethod]
+    public async Task ACodeSurvivesAWalkThatTheRequestsCancellationEndsAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string code = await DriveRawParAndAuthorizeAsync(
+            host, segment, pkce.EncodedChallenge, WellKnownCodeChallengeMethods.S256,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Dictionary<string, string> tokenFields = RawAuthCodeWirePushers.BuildTokenFields(
+            ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString);
+
+        //The first draw of the refresh token's value cancels the client's side of the redemption and holds the walk
+        //until the server observes that as the request's own cancellation, which then ends the walk.
+        using CancellationTokenSource cancelledRedemptionSource =
+            CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
+        int refreshValueDraws = 0;
+        int releaseCalls = 0;
+        int cancellableReleaseTokens = 0;
+        GenerateIdentifierDelegate originalIdentifier = host.Server.OAuth().GenerateIdentifierAsync!;
+        ReleaseServerFlowStateDelegate originalRelease = host.Server.OAuth().ReleaseFlowStateAsync!;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.GenerateIdentifierAsync = async (purpose, ctx, ct) =>
+            {
+                if(purpose.Equals(WellKnownIdentifierPurposes.OAuthRefreshToken)
+                    && Interlocked.Increment(ref refreshValueDraws) == 1)
+                {
+                    TaskCompletionSource requestCancelled = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                    using CancellationTokenRegistration onRequestCancelled = ct.Register(() => requestCancelled.TrySetResult());
+                    await cancelledRedemptionSource.CancelAsync().ConfigureAwait(false);
+                    await requestCancelled.Task.WaitAsync(TestContext.CancellationToken).ConfigureAwait(false);
+                    ct.ThrowIfCancellationRequested();
+                }
+
+                return await originalIdentifier(purpose, ctx, ct).ConfigureAwait(false);
+            };
+
+            //The release records whether the token it receives can be cancelled, then forwards to the store.
+            candidateIntegration.ReleaseFlowStateAsync = (tenantId, flowKey, stepCount, ctx, ct) =>
+            {
+                _ = Interlocked.Increment(ref releaseCalls);
+                if(ct.CanBeCanceled)
+                {
+                    _ = Interlocked.Increment(ref cancellableReleaseTokens);
+                }
+
+                return originalRelease(tenantId, flowKey, stepCount, ctx, ct);
+            };
+        }).ConfigureAwait(false);
+
+        Task<(int StatusCode, string Body)> cancelledRedemption = RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, tokenFields, cancelledRedemptionSource.Token);
+        _ = await Assert.ThrowsExactlyAsync<TaskCanceledException>(
+            () => cancelledRedemption, "The redemption whose walk is cancelled ends on the client's side.").ConfigureAwait(false);
+
+        //The host admits a second request of the same grant only after the first request has finished, its walk and
+        //its release included (HostedAuthorizationServer.EnterGrantOrderGateAsync).
+        (int status, string body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, tokenFields, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(1, Volatile.Read(ref releaseCalls), "The cancelled walk's claim is released once.");
+        Assert.AreEqual(0, Volatile.Read(ref cancellableReleaseTokens), "The release receives a token that cannot be cancelled.");
+        Assert.AreEqual(200, status, body);
+
+        using JsonDocument answer = JsonDocument.Parse(body);
+        Assert.IsTrue(answer.RootElement.TryGetProperty(OAuthRequestParameterNames.AccessToken, out _), body);
+        Assert.IsTrue(answer.RootElement.TryGetProperty(OAuthRequestParameterNames.RefreshToken, out _), body);
+    }
+
+
+    /// <summary>
+    /// A rule of this library, stated here because the specification sets no order between a failed redemption and
+    /// the bookkeeping that follows it: when a redemption's issuance walk throws before the step's first store write
+    /// and the release of its claim then throws as well, the walk's exception is the request's fault, the release's
+    /// exception is recorded on the request's trace as an <c>exception</c> event, and the step stays claimed. The
+    /// redemption over the wire is answered 500 with the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c> that the
+    /// host writes for the walk's fault, and the same code presented again with both seams restored is answered 400
+    /// with the body
+    /// <c>{"error":"invalid_grant","error_description":"The authorization code is unknown, expired, or already used."}</c>.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-16#section-4.1.3">OAuth 2.1 draft-16
+    /// Section 4.1.3</see> requires the denial only for "a previously successful token request"; a code whose release
+    /// failed stays spent by this library's fail-closed rule.
+    /// </summary>
+    [TestMethod]
+    [DoNotParallelize]
+    public async Task TheWalksExceptionStaysPrimaryWhenTheCodesReleaseThrowsAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string code = await DriveRawParAndAuthorizeAsync(
+            host, segment, pkce.EncodedChallenge, WellKnownCodeChallengeMethods.S256,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Dictionary<string, string> tokenFields = RawAuthCodeWirePushers.BuildTokenFields(
+            ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString);
+
+        //The identifier seam throws when the walk draws the refresh token's value, and the release throws its own.
+        GenerateIdentifierDelegate originalIdentifier = host.Server.OAuth().GenerateIdentifierAsync!;
+        ReleaseServerFlowStateDelegate originalRelease = host.Server.OAuth().ReleaseFlowStateAsync!;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.GenerateIdentifierAsync = (purpose, ctx, ct) =>
+                purpose.Equals(WellKnownIdentifierPurposes.OAuthRefreshToken)
+                    ? throw new InvalidOperationException("The identifier source is unavailable.")
+                    : originalIdentifier(purpose, ctx, ct);
+            candidateIntegration.ReleaseFlowStateAsync =
+                static (_, _, _, _, _) => throw new InvalidOperationException("The claim store is unavailable.");
+        }).ConfigureAwait(false);
+
+        using TraceTreeCapture capture = new();
+        using Activity root = new(nameof(TheWalksExceptionStaysPrimaryWhenTheCodesReleaseThrowsAsync));
+        _ = root.Start();
+        (int failedStatus, string failedBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, tokenFields, TestContext.CancellationToken).ConfigureAwait(false);
+        root.Stop();
+
+        Assert.AreEqual(500, failedStatus, failedBody);
+        Assert.AreEqual(
+            "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}",
+            failedBody);
+        Exception fault = Assert.ContainsSingle(host.Host("default").ConsumeHttpFaults());
+        Assert.AreEqual(typeof(InvalidOperationException), fault.GetType(), fault.Message);
+        Assert.AreEqual("The identifier source is unavailable.", fault.Message);
+
+        //The release's exception is an event of this request's own trace.
+        ActivityEvent[] exceptionEvents = [.. TraceTreeAssertions.FilterByTrace(capture.StoppedActivities, root.TraceId)
+            .SelectMany(activity => activity.Events)
+            .Where(activityEvent => string.Equals(activityEvent.Name, "exception", StringComparison.Ordinal))];
+        _ = Assert.ContainsSingle(
+            activityEvent => activityEvent.Tags.Any(tag => string.Equals(tag.Key, "exception.type", StringComparison.Ordinal)
+                    && string.Equals(tag.Value as string, "System.InvalidOperationException", StringComparison.Ordinal))
+                && activityEvent.Tags.Any(tag => string.Equals(tag.Key, "exception.message", StringComparison.Ordinal)
+                    && string.Equals(tag.Value as string, "The claim store is unavailable.", StringComparison.Ordinal)),
+            exceptionEvents,
+            $"The release's exception must be recorded on the request's trace. Events: {exceptionEvents.Length}");
+
+        //Both seams are restored under traffic; the same code and verifier are presented again.
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.GenerateIdentifierAsync = originalIdentifier;
+            candidateIntegration.ReleaseFlowStateAsync = originalRelease;
+        }).ConfigureAwait(false);
+        (int status, string body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, tokenFields, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, status, body);
+        Assert.AreEqual(
+            "{\"error\":\"invalid_grant\",\"error_description\":\"The authorization code is unknown, expired, or already used.\"}",
+            body);
+    }
+
+
+    /// <summary>
+    /// A rule of this library: the window in which a claim is released ends at the step's first store write, the
+    /// write itself included. A redemption whose first store write, the save of the issued refresh token's record,
+    /// takes effect and then throws may have left a live record of the step, so its claim is never released: the
+    /// redemption over the wire is answered 500 with the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c> that the
+    /// host writes for the fault, the release is not called, and the same code presented again with the store
+    /// restored is answered 400 with the body
+    /// <c>{"error":"invalid_grant","error_description":"The authorization code is unknown, expired, or already used."}</c>.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-16#section-4.1.3">OAuth 2.1 draft-16
+    /// Section 4.1.3</see> requires the denial for "a previously successful token request"; this library keeps the code
+    /// spent from the step's first store write on, whether or not the request that made it succeeded.
+    /// </summary>
+    [TestMethod]
+    public async Task AFirstStoreWriteThatTakesEffectAndThrowsLeavesTheCodeSpentAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string code = await DriveRawParAndAuthorizeAsync(
+            host, segment, pkce.EncodedChallenge, WellKnownCodeChallengeMethods.S256,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Dictionary<string, string> tokenFields = RawAuthCodeWirePushers.BuildTokenFields(
+            ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString);
+
+        //The first save of a refresh token's record is written and then throws; every release is counted.
+        int refreshRecordSaves = 0;
+        int releaseCalls = 0;
+        SaveServerFlowStateDelegate originalSave = host.Server.OAuth().SaveFlowStateAsync!;
+        ReleaseServerFlowStateDelegate originalRelease = host.Server.OAuth().ReleaseFlowStateAsync!;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.SaveFlowStateAsync = async (tenantId, flowKey, state, stepCount, ctx, ct) =>
+            {
+                await originalSave(tenantId, flowKey, state, stepCount, ctx, ct).ConfigureAwait(false);
+                if(state is ServerRefreshTokenIssuedState && Interlocked.Increment(ref refreshRecordSaves) == 1)
+                {
+                    throw new InvalidOperationException("The flow store failed after writing.");
+                }
+            };
+            candidateIntegration.ReleaseFlowStateAsync = (tenantId, flowKey, stepCount, ctx, ct) =>
+            {
+                _ = Interlocked.Increment(ref releaseCalls);
+
+                return originalRelease(tenantId, flowKey, stepCount, ctx, ct);
+            };
+        }).ConfigureAwait(false);
+
+        (int failedStatus, string failedBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, tokenFields, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(500, failedStatus, failedBody);
+        Assert.AreEqual(
+            "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}",
+            failedBody);
+        Exception fault = Assert.ContainsSingle(host.Host("default").ConsumeHttpFaults());
+        Assert.AreEqual("The flow store failed after writing.", fault.Message, failedBody);
+        Assert.AreEqual(0, Volatile.Read(ref releaseCalls), "A claim is never released once the step's first store write began.");
+
+        //The store is restored under traffic; the same code and verifier are presented again.
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+            candidateIntegration.SaveFlowStateAsync = originalSave).ConfigureAwait(false);
+        (int status, string body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, tokenFields, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, status, body);
+        Assert.AreEqual(
+            "{\"error\":\"invalid_grant\",\"error_description\":\"The authorization code is unknown, expired, or already used.\"}",
+            body);
+    }
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2">RFC 6749 §4.1.2</see>:
     /// "the authorization server MUST deny the request and SHOULD revoke (when possible)"
     /// when the code is presented more than once. A SEQUENTIAL second token request presenting the identical, still-valid parameters

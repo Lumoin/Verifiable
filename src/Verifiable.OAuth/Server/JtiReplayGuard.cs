@@ -313,13 +313,13 @@ public static class JtiReplayGuard
             return JtiReplayOutcome.Unacceptable;
         }
 
-        //The store is the (purpose, issuer, jti)-keyed correlation index. The read delegate, the
-        //write delegate and the id generator the write needs must ALL be present for the defense
-        //to actually record — a read-only half-wiring would never trip, so the three are treated
-        //as one indivisible capability whose absence is the store's absence.
+        //The store is the (purpose, issuer, jti)-keyed correlation index. The check reads the
+        //correlation read, which an integration may leave unwired, and the id generator the record's
+        //write draws its flow id from: a write without the read could record but never find, so
+        //either one missing is the store's absence. The save is not read here, since it is a
+        //required seam of every validated integration (ServerIntegration.Validate).
         bool isStorePresent =
             oauth.ResolveCorrelationKeyAsync is not null
-            && oauth.SaveFlowStateAsync is not null
             && oauth.GenerateIdentifierAsync is not null;
         if(!isStorePresent)
         {
