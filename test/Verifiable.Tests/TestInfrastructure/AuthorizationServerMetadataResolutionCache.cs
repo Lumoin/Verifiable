@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Verifiable.Core;
 using Verifiable.Core.Outbound;
+using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Server;
@@ -22,7 +23,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// resolutions. A stale entry whose re-attempt fails is therefore DROPPED rather than served — RFC
 /// 9111 §4.2.4 forbids generating a stale response without permission neither the client nor the
 /// origin granted here — and the non-resolved resolution is returned as a value, letting the caller
-/// inspect <see cref="AuthorizationServerMetadataResolution.Outcome"/> without catching an exception.
+/// pattern-match <see cref="AuthorizationServerMetadataResolution"/> without catching an exception.
 /// This is what an application starts from, swapping the store for whatever its own call sites
 /// expect (a distributed cache, a grain).
 /// </para>
@@ -101,30 +102,32 @@ internal sealed class AuthorizationServerMetadataResolutionCache
 
         if(Documents.TryGetValue(cacheKey, out CacheEntry? cached) && cached.FreshUntil > now)
         {
-            return new AuthorizationServerMetadataResolution
+            //A cache hit preserves document evidence without advertising the original response's
+            //freshness lifetime as a new lifetime starting at this hit.
+            return new AuthorizationServerMetadataResolved
             {
-                Outcome = AuthorizationServerMetadataResolutionOutcome.Resolved,
-                Metadata = cached.Metadata
+                Metadata = cached.Resolution.Metadata,
+                MetadataLocation = cached.Resolution.MetadataLocation
             };
         }
 
         AuthorizationServerMetadataResolution resolution = await AuthorizationServerMetadataDocuments.ResolveAsync(
-            issuer, WellKnownPath, context, Transport, Options, cancellationToken).ConfigureAwait(false);
+            issuer, WellKnownPath, context, Transport, AuthorizationServerMetadataJson.Parse, Options, cancellationToken).ConfigureAwait(false);
 
-        if(!resolution.IsResolved)
+        if(resolution is not AuthorizationServerMetadataResolved resolved)
         {
             _ = Documents.TryRemove(cacheKey, out _);
 
             return resolution;
         }
 
-        TimeSpan lifetime = resolution.Freshness.IsStorable && !resolution.Freshness.MustRevalidate
-            ? resolution.Freshness.Clamp(MinimumCacheLifetime, MaximumCacheLifetime)
+        TimeSpan lifetime = resolved.Freshness.IsStorable && !resolved.Freshness.MustRevalidate
+            ? resolved.Freshness.Clamp(MinimumCacheLifetime, MaximumCacheLifetime)
             : TimeSpan.Zero;
 
         if(lifetime > TimeSpan.Zero)
         {
-            Documents[cacheKey] = new CacheEntry(resolution.Metadata!, now + lifetime);
+            Documents[cacheKey] = new CacheEntry(resolved, now + lifetime);
         }
         else
         {
@@ -136,7 +139,7 @@ internal sealed class AuthorizationServerMetadataResolutionCache
 
 
     /// <summary>A cached document and when it goes stale.</summary>
-    /// <param name="Metadata">The cached, previously resolved metadata.</param>
+    /// <param name="Resolution">The cached document, published issuer, location, and freshness evidence.</param>
     /// <param name="FreshUntil">The instant this entry stops being served without re-fetching.</param>
-    private sealed record CacheEntry(AuthorizationServerMetadata Metadata, DateTimeOffset FreshUntil);
+    private sealed record CacheEntry(AuthorizationServerMetadataResolved Resolution, DateTimeOffset FreshUntil);
 }

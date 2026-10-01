@@ -713,9 +713,9 @@ internal sealed class OAuthAttackMitigationTests
             parseRegistrationResponseAsync: (body, ct) =>
                 throw new NotImplementedException("OAuthAttackMitigationTests does not exercise dynamic registration."),
             resolveAuthorizationServerMetadataAsync: (issuer, context, ct) =>
-                ValueTask.FromResult(new AuthorizationServerMetadataResolution
+                ValueTask.FromResult<AuthorizationServerMetadataResolution>(new AuthorizationServerMetadataResolved
                 {
-                    Outcome = AuthorizationServerMetadataResolutionOutcome.Resolved,
+                    MetadataLocation = WellKnownPaths.OAuthAuthorizationServer.ComputeUri(metadata.Issuer.OriginalString),
                     Metadata = metadata
                 }),
             resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,

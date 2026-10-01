@@ -135,13 +135,9 @@ public static class OAuthEventNames
         "oauth.client.authorization_server_metadata_resolution_failed"u8;
 
     /// <summary>
-    /// A client flow's <c>ResolveAuthorizationServerMetadataAsync</c> call ended with a
-    /// non-<c>Resolved</c> outcome. The flow's own wire response never names the outcome or the
-    /// resolver's internal defect text, since the metadata document a defect quotes from is served
-    /// from a URL the authorization server itself controls; both ride this event's
-    /// <see cref="AuthorizationServerMetadataResolutionOutcomeTagName"/> and
-    /// <see cref="AuthorizationServerMetadataResolutionDefectTagName"/> tags instead, for
-    /// deployments that want the detail in their own traces.
+    /// A client flow's metadata resolution failed. The outcome type name rides the
+    /// <see cref="AuthorizationServerMetadataResolutionOutcomeTagName"/> tag; evidence controlled
+    /// by the responding server is not copied into the flow's wire response.
     /// </summary>
     public static string AuthorizationServerMetadataResolutionFailed { get; } =
         Utf8Constants.ToInternedString(AuthorizationServerMetadataResolutionFailedUtf8);
@@ -152,14 +148,6 @@ public static class OAuthEventNames
     /// </summary>
     public static string AuthorizationServerMetadataResolutionOutcomeTagName { get; } =
         "oauth.client.authorization_server_metadata_resolution_outcome";
-
-    /// <summary>
-    /// The <see cref="System.Diagnostics.ActivityTagsCollection"/> key carrying the resolver's
-    /// internal defect text for an <see cref="AuthorizationServerMetadataResolutionFailed"/> event.
-    /// Recorded only when the resolution supplied one.
-    /// </summary>
-    public static string AuthorizationServerMetadataResolutionDefectTagName { get; } =
-        "oauth.client.authorization_server_metadata_resolution_defect";
 
     /// <summary>The UTF-8 source literal of <see cref="OutboundFetchPolicyDenied"/>.</summary>
     public static ReadOnlySpan<byte> OutboundFetchPolicyDeniedUtf8 =>

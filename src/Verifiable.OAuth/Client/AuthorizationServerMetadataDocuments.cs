@@ -1,4 +1,3 @@
-using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.Outbound;
 using Verifiable.JCose;
@@ -38,21 +37,19 @@ public static class AuthorizationServerMetadataDocuments
     /// <see cref="Verifiable.OAuth"/> takes no <c>System.Net.Http</c> dependency, so the network
     /// primitive is injected.
     /// </param>
+    /// <param name="parseDocument">The complete-document parser supplied by the serialization adapter.</param>
     /// <param name="options">The resolver's byte cap.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>
-    /// The typed outcome and, for a <see cref="AuthorizationServerMetadataResolutionOutcome.Resolved"/>
-    /// answer, the <see cref="HttpCacheFreshness"/> the document response headers imply. Every other
-    /// outcome leaves <see cref="AuthorizationServerMetadataResolution.Freshness"/> at its default
-    /// value, which reports nothing storable — storing a resolved document, and deciding what
-    /// follows a failure, is the caller's own <see cref="ResolveAuthorizationServerMetadataDelegate"/>
-    /// implementation's concern.
+    /// A closed outcome carrying its evidence. Only a resolved document carries cache freshness;
+    /// storage and retry decisions belong to the caller's resolver implementation.
     /// </returns>
     public static async ValueTask<AuthorizationServerMetadataResolution> ResolveAsync(
         Uri issuer,
         WellKnownPath wellKnownPath,
         ExchangeContext context,
         OutboundTransportDelegate transport,
+        ParseAuthorizationServerMetadataDelegate parseDocument,
         AuthorizationServerMetadataResolverOptions options,
         CancellationToken cancellationToken)
     {
@@ -60,6 +57,7 @@ public static class AuthorizationServerMetadataDocuments
         ArgumentNullException.ThrowIfNull(wellKnownPath);
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(transport);
+        ArgumentNullException.ThrowIfNull(parseDocument);
         ArgumentNullException.ThrowIfNull(options);
 
         //RFC 8414 §2: "REQUIRED. The authorization server's issuer identifier, which is a URL that
@@ -70,11 +68,7 @@ public static class AuthorizationServerMetadataDocuments
             || !string.IsNullOrEmpty(issuer.Query)
             || !string.IsNullOrEmpty(issuer.Fragment))
         {
-            return new AuthorizationServerMetadataResolution
-            {
-                Outcome = AuthorizationServerMetadataResolutionOutcome.InvalidIssuer,
-                Defect = "The issuer identifier is not an absolute https URL, or carries a query or fragment component."
-            };
+            return new AuthorizationServerMetadataInvalidIssuer { Issuer = issuer };
         }
 
         Uri metadataUri = wellKnownPath.ComputeUri(issuer.OriginalString);
@@ -82,7 +76,7 @@ public static class AuthorizationServerMetadataDocuments
         OutboundRequest request = new()
         {
             Target = metadataUri,
-            Method = "GET",
+            Method = WellKnownHttpMethods.Get,
             MaxResponseBytes = options.MaximumDocumentBytes
         };
 
@@ -96,24 +90,23 @@ public static class AuthorizationServerMetadataDocuments
         {
             throw;
         }
-        catch
+        catch(Exception exception)
         {
-            return new AuthorizationServerMetadataResolution
+            return new AuthorizationServerMetadataUnreachable { FailureKind = exception.GetType() };
+        }
+
+        if(fetch.RefusedRedirect is OutboundRedirectRefusal redirect)
+        {
+            return new AuthorizationServerMetadataRedirectRefused
             {
-                Outcome = AuthorizationServerMetadataResolutionOutcome.FetchFailed,
-                Defect = "Transport failure while fetching the authorization server metadata document."
+                StatusCode = redirect.StatusCode,
+                Location = redirect.Location
             };
         }
 
         if(!fetch.IsFetched || fetch.Response is null)
         {
-            return new AuthorizationServerMetadataResolution
-            {
-                Outcome = fetch.Outcome == OutboundFetchOutcome.DeniedByPolicy
-                    ? AuthorizationServerMetadataResolutionOutcome.PolicyDenied
-                    : AuthorizationServerMetadataResolutionOutcome.FetchFailed,
-                Defect = fetch.DenyReason
-            };
+            return new AuthorizationServerMetadataPolicyDenied { Target = fetch.FinalUri };
         }
 
         OutboundResponse response = fetch.Response;
@@ -121,11 +114,7 @@ public static class AuthorizationServerMetadataDocuments
         //RFC 8414 §3.2: "A successful response MUST use the 200 OK HTTP status code."
         if(response.StatusCode != 200)
         {
-            return new AuthorizationServerMetadataResolution
-            {
-                Outcome = AuthorizationServerMetadataResolutionOutcome.FetchFailed,
-                Defect = $"The document fetch returned HTTP status {response.StatusCode}."
-            };
+            return new AuthorizationServerMetadataNotAnswered { StatusCode = response.StatusCode };
         }
 
         //RFC 8414 §3.2: "return a JSON object using the 'application/json' content type" — exactly
@@ -133,39 +122,25 @@ public static class AuthorizationServerMetadataDocuments
         _ = response.Headers.TryGetValue(WellKnownHttpHeaderNames.ContentType, out string? contentType);
         if(!IsAcceptableContentType(contentType))
         {
-            return new AuthorizationServerMetadataResolution
-            {
-                Outcome = AuthorizationServerMetadataResolutionOutcome.InvalidDocument,
-                Defect = $"The document content type '{contentType}' is not application/json."
-            };
+            return new AuthorizationServerMetadataUnsupportedMediaType { ContentType = contentType };
         }
 
         //The authoritative post-read size check — MaxResponseBytes above is only a transport hint a
         //hostile or non-conforming transport may not honor.
         if(response.Body.Length > options.MaximumDocumentBytes)
         {
-            return new AuthorizationServerMetadataResolution
+            return new AuthorizationServerMetadataTooLarge
             {
-                Outcome = AuthorizationServerMetadataResolutionOutcome.FetchFailed,
-                Defect = "The document exceeds the configured maximum size."
+                Limit = options.MaximumDocumentBytes,
+                LengthSeen = response.Body.Length
             };
         }
 
-        HttpResponseData responseData = new()
-        {
-            Body = Encoding.UTF8.GetString(response.Body.Span),
-            StatusCode = response.StatusCode
-        };
-
-        Result<AuthorizationServerMetadata, OAuthParseError> parsed =
-            OAuthResponseParsers.ParseAuthorizationServerMetadata(responseData);
+        Result<AuthorizationServerMetadata, AuthorizationServerMetadataParseError> parsed =
+            parseDocument(response.Body.Memory);
         if(!parsed.IsSuccess)
         {
-            return new AuthorizationServerMetadataResolution
-            {
-                Outcome = AuthorizationServerMetadataResolutionOutcome.InvalidDocument,
-                Defect = $"The document has conformance defects: {parsed.Error}."
-            };
+            return new AuthorizationServerMetadataUnreadable { Error = parsed.Error };
         }
 
         AuthorizationServerMetadata metadata = parsed.Value;
@@ -173,20 +148,21 @@ public static class AuthorizationServerMetadataDocuments
         //RFC 8414 §3.3: "The 'issuer' value returned MUST be identical to the authorization server's
         //issuer identifier value into which the well-known URI string was inserted to create the URL
         //used to retrieve the metadata. If these values are not identical, the data contained in the
-        //response MUST NOT be used." A distinct outcome from InvalidDocument — the document itself
+        //response MUST NOT be used." A distinct outcome from Unreadable — the document itself
         //parsed cleanly; only its trustworthiness for THIS issuer failed.
         if(!AuthorizationServerMetadataValidation.IsIssuerMatch(metadata, issuer))
         {
-            return new AuthorizationServerMetadataResolution
+            return new AuthorizationServerMetadataIssuerMismatch
             {
-                Outcome = AuthorizationServerMetadataResolutionOutcome.IssuerMismatch,
-                Defect = "The document's issuer does not match the issuer identifier the metadata URL was derived from."
+                RequestedIssuer = issuer,
+                PublishedIssuer = metadata.Issuer.OriginalString,
+                MetadataLocation = fetch.FinalUri
             };
         }
 
-        return new AuthorizationServerMetadataResolution
+        return new AuthorizationServerMetadataResolved
         {
-            Outcome = AuthorizationServerMetadataResolutionOutcome.Resolved,
+            MetadataLocation = fetch.FinalUri,
             Metadata = metadata,
             Freshness = HttpCacheFreshness.Compute(response)
         };

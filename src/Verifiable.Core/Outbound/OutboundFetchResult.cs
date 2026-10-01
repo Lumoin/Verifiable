@@ -40,6 +40,12 @@ public sealed record OutboundFetchResult
     /// <summary>A diagnostic reason for a non-fetched outcome. Do not surface verbatim to untrusted callers.</summary>
     public string? DenyReason { get; init; }
 
+    /// <summary>
+    /// The redirect response whose hop was refused, including a next-hop policy denial.
+    /// Null for an initial-target denial or a terminal response.
+    /// </summary>
+    public OutboundRedirectRefusal? RefusedRedirect { get; init; }
+
     /// <summary>The URL originally requested.</summary>
     public required Uri RequestedUri { get; init; }
 
@@ -53,3 +59,9 @@ public sealed record OutboundFetchResult
     /// <summary>Whether a terminal response was obtained.</summary>
     public bool IsFetched => Outcome == OutboundFetchOutcome.Fetched;
 }
+
+
+/// <summary>The response evidence retained when a guarded fetch refuses a redirect.</summary>
+/// <param name="StatusCode">The redirect response's HTTP status.</param>
+/// <param name="Location">The Location header exactly as received, without URI normalization.</param>
+public sealed record OutboundRedirectRefusal(int StatusCode, string Location);

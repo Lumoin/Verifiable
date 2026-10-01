@@ -18,7 +18,7 @@ public enum JwtVcIssuerMetadataResolutionOutcome
     /// SD-JWT VC draft-19, Section 4: "The iss MUST be a case-sensitive URL using the HTTPS scheme
     /// that contains scheme, host and, optionally, port number and path components as defined in
     /// [RFC3986], but no query or fragment components." A shape defect here never contacts the
-    /// network, mirroring <see cref="Verifiable.OAuth.Client.AuthorizationServerMetadataResolutionOutcome.InvalidIssuer"/>.
+    /// network, mirroring <see cref="Verifiable.OAuth.Client.AuthorizationServerMetadataInvalidIssuer"/>.
     /// </summary>
     InvalidIssuer,
 

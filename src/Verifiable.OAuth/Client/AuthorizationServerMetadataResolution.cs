@@ -3,92 +3,117 @@ using Verifiable.Core.Outbound;
 namespace Verifiable.OAuth.Client;
 
 /// <summary>
-/// Why a <see cref="ResolveAuthorizationServerMetadataDelegate"/> call ended.
+/// The closed set of metadata resolution results. Pattern-match the concrete outcome to read its
+/// evidence; failures never carry a usable metadata document.
 /// </summary>
-public enum AuthorizationServerMetadataResolutionOutcome
+public abstract class AuthorizationServerMetadataResolution
 {
-    /// <summary>
-    /// The document was fetched, parsed, and its issuer matched the identifier the metadata URL was
-    /// derived from; <see cref="AuthorizationServerMetadataResolution.Metadata"/> is set.
-    /// </summary>
-    Resolved = 0,
-
-    /// <summary>
-    /// The issuer identifier supplied to <see cref="AuthorizationServerMetadataDocuments.ResolveAsync"/>
-    /// fails <see href="https://www.rfc-editor.org/rfc/rfc8414#section-2">RFC 8414 §2</see>'s shape
-    /// rule before any network contact — not an absolute <c>https</c> URL, or carrying a query or
-    /// fragment component.
-    /// </summary>
-    InvalidIssuer,
-
-    /// <summary>
-    /// The outbound-fetch policy denied the target (or a redirect hop) before any terminal response
-    /// was obtained — an SSRF-relevant refusal.
-    /// </summary>
-    PolicyDenied,
-
-    /// <summary>
-    /// The document could not be fetched: a non-200 status, an unfollowed or excessive redirect
-    /// chain, an oversized response, or a transport failure.
-    /// </summary>
-    FetchFailed,
-
-    /// <summary>
-    /// The fetched response was not a usable authorization server metadata document: an unacceptable
-    /// content type, or a body <see cref="Verifiable.OAuth.OAuthResponseParsers.ParseAuthorizationServerMetadata"/>
-    /// refused.
-    /// </summary>
-    InvalidDocument,
-
-    /// <summary>
-    /// The document parsed, but its <c>issuer</c> member did not match the issuer identifier the
-    /// metadata URL was derived from — <see href="https://www.rfc-editor.org/rfc/rfc8414#section-3.3">
-    /// RFC 8414 §3.3</see>: "If these values are not identical, the data contained in the response
-    /// MUST NOT be used." A distinct outcome from <see cref="InvalidDocument"/> because the document
-    /// itself is well-formed; only its trustworthiness for THIS issuer failed.
-    /// </summary>
-    IssuerMismatch
+    /// <summary>Restricts derivation to this assembly's sealed outcomes.</summary>
+    private protected AuthorizationServerMetadataResolution()
+    {
+    }
 }
 
 
-/// <summary>
-/// The result of a <see cref="ResolveAuthorizationServerMetadataDelegate"/> call.
-/// </summary>
-/// <remarks>
-/// Only a <see cref="AuthorizationServerMetadataResolutionOutcome.Resolved"/> result carries
-/// <see cref="Metadata"/>; every other outcome leaves it <see langword="null"/> and
-/// <see cref="Defect"/> carries internal diagnostics for logs and traces — never surface it in a
-/// wire response, since the document is served from a URL the authorization server itself controls.
-/// </remarks>
-public sealed record AuthorizationServerMetadataResolution
+/// <summary>A parsed document whose published issuer matches the requested identifier.</summary>
+public sealed class AuthorizationServerMetadataResolved: AuthorizationServerMetadataResolution
 {
-    /// <summary>Why this resolution ended.</summary>
-    public required AuthorizationServerMetadataResolutionOutcome Outcome { get; init; }
+    /// <summary>The parsed, issuer-matched document.</summary>
+    public required AuthorizationServerMetadata Metadata { get; init; }
 
-    /// <summary>
-    /// The parsed, issuer-matched metadata when <see cref="Outcome"/> is
-    /// <see cref="AuthorizationServerMetadataResolutionOutcome.Resolved"/>; otherwise <see langword="null"/>.
-    /// </summary>
-    public AuthorizationServerMetadata? Metadata { get; init; }
+    /// <summary>The JSON-decoded issuer, without URI normalization.</summary>
+    public string PublishedIssuer => Metadata.Issuer.OriginalString;
 
-    /// <summary>
-    /// Internal diagnostic detail for a non-<see cref="AuthorizationServerMetadataResolutionOutcome.Resolved"/>
-    /// outcome. For logs and traces only — never surface this text in a wire response.
-    /// </summary>
-    public string? Defect { get; init; }
+    /// <summary>The location that supplied the document, after any permitted redirects.</summary>
+    public required Uri MetadataLocation { get; init; }
 
-    /// <summary>
-    /// The freshness <see cref="AuthorizationServerMetadataDocuments.ResolveAsync"/>'s document
-    /// response headers imply, per
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see>, when
-    /// <see cref="Outcome"/> is <see cref="AuthorizationServerMetadataResolutionOutcome.Resolved"/>.
-    /// Every other outcome leaves this at its default value — not storable, zero lifetime — so a
-    /// caller cannot infer a cacheable lifetime from a fetch that never produced a trustworthy
-    /// document.
-    /// </summary>
+    /// <summary>The storage permission and lifetime implied by the response headers.</summary>
     public HttpCacheFreshness Freshness { get; init; }
+}
 
 
-    /// <summary>Whether <see cref="Outcome"/> is <see cref="AuthorizationServerMetadataResolutionOutcome.Resolved"/>.</summary>
-    public bool IsResolved => Outcome == AuthorizationServerMetadataResolutionOutcome.Resolved;
+/// <summary>A readable document publishing a different issuer; its metadata must not be used.</summary>
+public sealed class AuthorizationServerMetadataIssuerMismatch: AuthorizationServerMetadataResolution
+{
+    /// <summary>The identifier the caller asked to resolve.</summary>
+    public required Uri RequestedIssuer { get; init; }
+
+    /// <summary>The JSON-decoded identifier the server published, without URI normalization.</summary>
+    public required string PublishedIssuer { get; init; }
+
+    /// <summary>The location that supplied the document.</summary>
+    public required Uri MetadataLocation { get; init; }
+}
+
+
+/// <summary>The transport failed before returning a response.</summary>
+public sealed class AuthorizationServerMetadataUnreachable: AuthorizationServerMetadataResolution
+{
+    /// <summary>
+    /// The transport exception's concrete type. The application-supplied transport's failure
+    /// taxonomy is preserved without copying exception messages or retaining exceptions.
+    /// </summary>
+    public required Type FailureKind { get; init; }
+}
+
+
+/// <summary>The terminal response did not have the required HTTP 200 status.</summary>
+public sealed class AuthorizationServerMetadataNotAnswered: AuthorizationServerMetadataResolution
+{
+    /// <summary>The status the server returned.</summary>
+    public required int StatusCode { get; init; }
+}
+
+
+/// <summary>The guarded fetch refused to follow a redirect.</summary>
+public sealed class AuthorizationServerMetadataRedirectRefused: AuthorizationServerMetadataResolution
+{
+    /// <summary>The redirect response's status.</summary>
+    public required int StatusCode { get; init; }
+
+    /// <summary>The refused Location header exactly as received, including relative or invalid values.</summary>
+    public required string Location { get; init; }
+}
+
+
+/// <summary>The body exceeded the configured byte cap.</summary>
+public sealed class AuthorizationServerMetadataTooLarge: AuthorizationServerMetadataResolution
+{
+    /// <summary>The configured maximum number of document bytes.</summary>
+    public required long Limit { get; init; }
+
+    /// <summary>The number of body bytes returned by the transport.</summary>
+    public required long LengthSeen { get; init; }
+}
+
+
+/// <summary>The parser could not decode a metadata document.</summary>
+public sealed class AuthorizationServerMetadataUnreadable: AuthorizationServerMetadataResolution
+{
+    /// <summary>The parser's typed failure, including the member name when applicable.</summary>
+    public required AuthorizationServerMetadataParseError Error { get; init; }
+}
+
+
+/// <summary>The requested identifier failed RFC 8414 section 2 before any transport call.</summary>
+public sealed class AuthorizationServerMetadataInvalidIssuer: AuthorizationServerMetadataResolution
+{
+    /// <summary>The identifier that was refused.</summary>
+    public required Uri Issuer { get; init; }
+}
+
+
+/// <summary>The initial metadata target was denied by the outbound-fetch policy.</summary>
+public sealed class AuthorizationServerMetadataPolicyDenied: AuthorizationServerMetadataResolution
+{
+    /// <summary>The target the policy refused before contacting the transport.</summary>
+    public required Uri Target { get; init; }
+}
+
+
+/// <summary>The response did not declare application/json as required by RFC 8414 section 3.2.</summary>
+public sealed class AuthorizationServerMetadataUnsupportedMediaType: AuthorizationServerMetadataResolution
+{
+    /// <summary>The received Content-Type header, or null when absent.</summary>
+    public required string? ContentType { get; init; }
 }

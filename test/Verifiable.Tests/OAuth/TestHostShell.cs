@@ -1350,9 +1350,9 @@ internal sealed class TestHostShell: IAsyncDisposable
             parseRegistrationResponseAsync: (body, ct) =>
                 throw new NotImplementedException("Phase 2 does not exercise dynamic registration."),
             resolveAuthorizationServerMetadataAsync: (issuer, context, ct) =>
-                ValueTask.FromResult(new AuthorizationServerMetadataResolution
+                ValueTask.FromResult<AuthorizationServerMetadataResolution>(new AuthorizationServerMetadataResolved
                 {
-                    Outcome = AuthorizationServerMetadataResolutionOutcome.Resolved,
+                    MetadataLocation = WellKnownPaths.OAuthAuthorizationServer.ComputeUri(metadata.Issuer.OriginalString),
                     Metadata = metadata
                 }),
             resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
@@ -1452,9 +1452,9 @@ internal sealed class TestHostShell: IAsyncDisposable
             parseRegistrationResponseAsync: (body, ct) =>
                 throw new NotImplementedException("HTTP-backed factory does not exercise dynamic registration parse."),
             resolveAuthorizationServerMetadataAsync: (issuer, context, ct) =>
-                ValueTask.FromResult(new AuthorizationServerMetadataResolution
+                ValueTask.FromResult<AuthorizationServerMetadataResolution>(new AuthorizationServerMetadataResolved
                 {
-                    Outcome = AuthorizationServerMetadataResolutionOutcome.Resolved,
+                    MetadataLocation = WellKnownPaths.OAuthAuthorizationServer.ComputeUri(metadata.Issuer.OriginalString),
                     Metadata = metadata
                 }),
             resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
@@ -2018,9 +2018,9 @@ internal sealed class TestHostShell: IAsyncDisposable
             parseTokenResponseAsync: OAuthResponseParsers.ParseTokenResponse,
             parseRegistrationResponseAsync: (body, ct) => ParseRegistrationResponseJson(body),
             resolveAuthorizationServerMetadataAsync: (issuer, context, ct) =>
-                ValueTask.FromResult(new AuthorizationServerMetadataResolution
+                ValueTask.FromResult<AuthorizationServerMetadataResolution>(new AuthorizationServerMetadataResolved
                 {
-                    Outcome = AuthorizationServerMetadataResolutionOutcome.Resolved,
+                    MetadataLocation = WellKnownPaths.OAuthAuthorizationServer.ComputeUri(metadata.Issuer.OriginalString),
                     Metadata = metadata
                 }),
             resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
@@ -4091,9 +4091,9 @@ internal sealed class TestHostShell: IAsyncDisposable
             parseRegistrationResponseAsync: (body, ct) =>
                 throw new NotImplementedException("DPoP gate test does not exercise dynamic registration."),
             resolveAuthorizationServerMetadataAsync: (issuer, context, ct) =>
-                ValueTask.FromResult(new AuthorizationServerMetadataResolution
+                ValueTask.FromResult<AuthorizationServerMetadataResolution>(new AuthorizationServerMetadataResolved
                 {
-                    Outcome = AuthorizationServerMetadataResolutionOutcome.Resolved,
+                    MetadataLocation = WellKnownPaths.OAuthAuthorizationServer.ComputeUri(metadata.Issuer.OriginalString),
                     Metadata = metadata
                 }),
             resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
@@ -4207,9 +4207,9 @@ internal sealed class TestHostShell: IAsyncDisposable
             parseRegistrationResponseAsync: (body, ct) =>
                 throw new NotImplementedException("HTTP-backed DPoP factory does not exercise dynamic registration parse."),
             resolveAuthorizationServerMetadataAsync: (issuer, context, ct) =>
-                ValueTask.FromResult(new AuthorizationServerMetadataResolution
+                ValueTask.FromResult<AuthorizationServerMetadataResolution>(new AuthorizationServerMetadataResolved
                 {
-                    Outcome = AuthorizationServerMetadataResolutionOutcome.Resolved,
+                    MetadataLocation = WellKnownPaths.OAuthAuthorizationServer.ComputeUri(metadata.Issuer.OriginalString),
                     Metadata = metadata
                 }),
             resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,

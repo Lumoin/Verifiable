@@ -63,13 +63,14 @@ public static class OutboundFetch
         Uri requested = request.Target;
         OutboundRequest current = request;
         int hops = 0;
+        OutboundRedirectRefusal? redirect = null;
 
         while(true)
         {
             OutboundFetchDecision decision = policy.Evaluate(current.Target);
             if(!decision.IsAllowed)
             {
-                return Stopped(OutboundFetchOutcome.DeniedByPolicy, decision.DenyReason, requested, current.Target, hops);
+                return Stopped(OutboundFetchOutcome.DeniedByPolicy, decision.DenyReason, requested, current.Target, hops, redirect);
             }
 
             OutboundResponse response = await transport(current, context, cancellationToken).ConfigureAwait(false);
@@ -89,29 +90,32 @@ public static class OutboundFetch
                 };
             }
 
+            //Retain the response facts if this redirect or its target is refused.
+            redirect = new OutboundRedirectRefusal(response.StatusCode, location);
+
             //It is a redirect.
             if(policy.Redirects == RedirectMode.None)
             {
                 return Stopped(OutboundFetchOutcome.RedirectNotFollowed,
-                    "Redirect not followed (RedirectMode.None).", requested, current.Target, hops);
+                    "Redirect not followed (RedirectMode.None).", requested, current.Target, hops, redirect);
             }
 
             if(hops >= policy.MaxRedirects)
             {
                 return Stopped(OutboundFetchOutcome.TooManyRedirects,
-                    $"Exceeded MaxRedirects ({policy.MaxRedirects}).", requested, current.Target, hops);
+                    $"Exceeded MaxRedirects ({policy.MaxRedirects}).", requested, current.Target, hops, redirect);
             }
 
             if(!Uri.TryCreate(current.Target, location, out Uri? next) || !next.IsAbsoluteUri)
             {
                 return Stopped(OutboundFetchOutcome.DeniedByPolicy,
-                    "Redirect Location is not a valid absolute URL.", requested, current.Target, hops);
+                    "Redirect Location is not a valid absolute URL.", requested, current.Target, hops, redirect);
             }
 
             if(policy.Redirects == RedirectMode.SameOrigin && !SameOrigin(current.Target, next))
             {
                 return Stopped(OutboundFetchOutcome.DeniedByPolicy,
-                    "Redirect crosses origin (RedirectMode.SameOrigin).", requested, next, hops);
+                    "Redirect crosses origin (RedirectMode.SameOrigin).", requested, next, hops, redirect);
             }
 
             //A 301/302/303 rewrites to GET and DROPS the body; silently turning a body-bearing request (e.g. a
@@ -121,7 +125,7 @@ public static class OutboundFetch
             if(current.Body is not null && response.StatusCode is not (307 or 308))
             {
                 return Stopped(OutboundFetchOutcome.DeniedByPolicy,
-                    "Redirect would drop the request body (only 307/308 may redirect a body-bearing request).", requested, next, hops);
+                    "Redirect would drop the request body (only 307/308 may redirect a body-bearing request).", requested, next, hops, redirect);
             }
 
             current = RewriteForRedirect(current, next, response.StatusCode);
@@ -131,12 +135,14 @@ public static class OutboundFetch
     }
 
 
+    /// <summary>Retains refusal provenance and any redirect response that led to the refusal.</summary>
     private static OutboundFetchResult Stopped(
-        OutboundFetchOutcome outcome, string? reason, Uri requested, Uri final, int hops) =>
+        OutboundFetchOutcome outcome, string? reason, Uri requested, Uri final, int hops, OutboundRedirectRefusal? redirect) =>
         new()
         {
             Outcome = outcome,
             DenyReason = reason,
+            RefusedRedirect = redirect,
             RequestedUri = requested,
             FinalUri = final,
             RedirectCount = hops,
