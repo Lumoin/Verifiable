@@ -63,10 +63,8 @@ public static class AuthorizationServerMetadataDocuments
         //RFC 8414 §2: "REQUIRED. The authorization server's issuer identifier, which is a URL that
         //uses the 'https' scheme and has no query or fragment components." A MUST-tier shape defect
         //never contacts the network, mirroring ClientIdMetadataDocuments.ResolveAsync's Step 1.
-        if(!issuer.IsAbsoluteUri
-            || !string.Equals(issuer.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal)
-            || !string.IsNullOrEmpty(issuer.Query)
-            || !string.IsNullOrEmpty(issuer.Fragment))
+        Result<IssuerIdentifier, IssuerIdentifierFault> expectedIssuer = IssuerIdentifier.Parse(issuer.OriginalString);
+        if(!expectedIssuer.IsSuccess)
         {
             return new AuthorizationServerMetadataInvalidIssuer { Issuer = issuer };
         }
@@ -150,7 +148,8 @@ public static class AuthorizationServerMetadataDocuments
         //used to retrieve the metadata. If these values are not identical, the data contained in the
         //response MUST NOT be used." A distinct outcome from Unreadable — the document itself
         //parsed cleanly; only its trustworthiness for THIS issuer failed.
-        if(!AuthorizationServerMetadataValidation.IsIssuerMatch(metadata, issuer))
+        Result<IssuerIdentifier, IssuerIdentifierFault> publishedIssuer = IssuerIdentifier.Parse(metadata.Issuer.OriginalString);
+        if(!publishedIssuer.IsSuccess || publishedIssuer.Value != expectedIssuer.Value)
         {
             return new AuthorizationServerMetadataIssuerMismatch
             {

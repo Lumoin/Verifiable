@@ -1,3 +1,4 @@
+using Verifiable.Core;
 
 namespace Verifiable.OAuth.Client;
 
@@ -34,7 +35,8 @@ public static class AuthorizationServerIssuerValidation
     /// to. Shares the ordinal comparison rule with
     /// <see cref="AuthorizationServerMetadataValidation.IsIssuerMatch"/>. This composes with, rather than
     /// replaces, the per-flow callback issuer check already performed against a single flow's recorded
-    /// issuer; it additionally requires the issuer to be a positively KNOWN, uniquely-claimed
+    /// issuer; both spellings must first pass <see cref="IssuerIdentifier.Parse"/>. It additionally
+    /// requires the issuer to be a positively KNOWN, uniquely-claimed
     /// authorization server, closing the case where the application's own configuration is the source of
     /// a shared issuer identifier.
     /// </summary>
@@ -59,8 +61,11 @@ public static class AuthorizationServerIssuerValidation
         ArgumentNullException.ThrowIfNull(expectedIssuer);
         ArgumentNullException.ThrowIfNull(isKnownAuthorizationServerIssuer);
 
-        return !string.IsNullOrWhiteSpace(responseIssuer)
-            && isKnownAuthorizationServerIssuer(responseIssuer)
-            && AuthorizationServerMetadataValidation.IsIssuerIdentifierMatch(responseIssuer, expectedIssuer);
+        Result<IssuerIdentifier, IssuerIdentifierFault> response = IssuerIdentifier.Parse(responseIssuer);
+        Result<IssuerIdentifier, IssuerIdentifierFault> expected = IssuerIdentifier.Parse(expectedIssuer.OriginalString);
+
+        return response.IsSuccess && expected.IsSuccess
+            && isKnownAuthorizationServerIssuer(response.Value.OriginalString)
+            && response.Value == expected.Value;
     }
 }

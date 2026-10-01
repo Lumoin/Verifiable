@@ -93,38 +93,42 @@ internal sealed class ResolveIssuerDelegateTests
 
 
     //RFC 9207 §2: "Its value MUST be a URL that uses the https scheme
-    //without any query or fragment components." IssuerIdentifierValidation is the
+    //without any query or fragment components." IssuerIdentifier.Parse is the
     //pure shape check; DefaultIssuerResolver wires it in below so every default-path
     //consumer (discovery issuer, Authorize-redirect iss) enforces it.
 
+    /// <summary>RFC 9207 section 2 forbids a query in an issuer identifier.</summary>
     [TestMethod]
-    public void IssuerIdentifierValidationRejectsHttpsWithQuery()
+    public void IssuerIdentifierParseRejectsHttpsWithQuery()
     {
-        Assert.IsFalse(IssuerIdentifierValidation.IsValidIssuerShape(new Uri("https://as.example.com?tenant=a")),
+        Assert.IsFalse(IssuerIdentifier.Parse("https://as.example.com?tenant=a").IsSuccess,
             "An issuer identifier with a query component must be rejected per RFC 9207 §2.");
     }
 
 
+    /// <summary>RFC 9207 section 2 forbids a fragment in an issuer identifier.</summary>
     [TestMethod]
-    public void IssuerIdentifierValidationRejectsFragment()
+    public void IssuerIdentifierParseRejectsFragment()
     {
-        Assert.IsFalse(IssuerIdentifierValidation.IsValidIssuerShape(new Uri("https://as.example.com/tenant#frag")),
+        Assert.IsFalse(IssuerIdentifier.Parse("https://as.example.com/tenant#frag").IsSuccess,
             "An issuer identifier with a fragment component must be rejected per RFC 9207 §2.");
     }
 
 
+    /// <summary>RFC 9207 section 2 requires the HTTPS scheme.</summary>
     [TestMethod]
-    public void IssuerIdentifierValidationRejectsHttp()
+    public void IssuerIdentifierParseRejectsHttp()
     {
-        Assert.IsFalse(IssuerIdentifierValidation.IsValidIssuerShape(new Uri("http://as.example.com")),
+        Assert.IsFalse(IssuerIdentifier.Parse("http://as.example.com").IsSuccess,
             "An issuer identifier that does not use the https scheme must be rejected per RFC 9207 §2.");
     }
 
 
+    /// <summary>An HTTPS issuer with a path and no query or fragment is accepted.</summary>
     [TestMethod]
-    public void IssuerIdentifierValidationAcceptsCleanHttps()
+    public void IssuerIdentifierParseAcceptsCleanHttps()
     {
-        Assert.IsTrue(IssuerIdentifierValidation.IsValidIssuerShape(new Uri("https://as.example.com/tenant-a")),
+        Assert.IsTrue(IssuerIdentifier.Parse("https://as.example.com/tenant-a").IsSuccess,
             "A clean https URL with no query or fragment must be accepted.");
     }
 
@@ -143,6 +147,26 @@ internal sealed class ResolveIssuerDelegateTests
         Assert.Contains("RFC 9207", thrown.Message,
             "A shape-invalid configured issuer must fail with an RFC 9207-attributed message, " +
             "distinct from the not-configured case.");
+    }
+
+
+    /// <summary>Neither issuer source may hide a malformed original spelling behind URI repairs.</summary>
+    /// <param name="fromRegistration">Whether the issuer comes from the registration or the request context.</param>
+    [TestMethod]
+    [DataRow(true)]
+    [DataRow(false)]
+    public async Task DefaultIssuerResolverRefusesMalformedOriginalSpelling(bool fromRegistration)
+    {
+        Uri issuer = new("https://as.example.com/tenant name");
+        ClientRecord registration = BuildRegistration(issuerUri: fromRegistration ? issuer : null);
+        ExchangeContext context = [];
+        context.SetIssuer(issuer);
+
+        InvalidOperationException thrown = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
+            async () => await DefaultIssuerResolver.ResolveAsync(
+                registration, context, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+
+        Assert.Contains("RFC 8414", thrown.Message);
     }
 
 

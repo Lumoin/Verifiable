@@ -60,10 +60,8 @@ public static class JwtVcIssuerMetadataDocuments
         //and, optionally, port number and path components as defined in [RFC3986], but no query or
         //fragment components." A shape defect here never contacts the network, mirroring
         //AuthorizationServerMetadataDocuments.ResolveAsync's own pre-fetch shape check.
-        if(!issuer.IsAbsoluteUri
-            || !string.Equals(issuer.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal)
-            || !string.IsNullOrEmpty(issuer.Query)
-            || !string.IsNullOrEmpty(issuer.Fragment))
+        Result<IssuerIdentifier, IssuerIdentifierFault> expectedIssuer = IssuerIdentifier.Parse(issuer.OriginalString);
+        if(!expectedIssuer.IsSuccess)
         {
             return new JwtVcIssuerMetadataResolution
             {
@@ -158,8 +156,8 @@ public static class JwtVcIssuerMetadataDocuments
         //§4.3: "The issuer value returned MUST be identical to the iss value of the Issuer-signed
         //JWT. If these values are not identical, the data contained in the response MUST NOT be
         //used." Reuses the code-point-by-code-point comparison RFC 8414 §3.3 metadata already applies.
-        if(!AuthorizationServerMetadataValidation.IsIssuerIdentifierMatch(documentIssuer ?? string.Empty, issuer)
-            || documentIssuer is null)
+        Result<IssuerIdentifier, IssuerIdentifierFault> publishedIssuer = IssuerIdentifier.Parse(documentIssuer);
+        if(!publishedIssuer.IsSuccess || publishedIssuer.Value != expectedIssuer.Value)
         {
             return new JwtVcIssuerMetadataResolution
             {
