@@ -65,12 +65,23 @@ public static class JwksUriResolver
         {
             throw;
         }
-        catch
+        catch(Exception exception)
+        {
+            WrappedCancellation.ThrowIfCarried(exception);
+            return new JwksUriResolution
+            {
+                Outcome = JwksUriResolutionOutcome.Unreachable,
+                FailureKind = exception.GetType(),
+                Defect = "Transport failure while fetching the JWK Set."
+            };
+        }
+
+        if(fetch.TooLarge is OutboundResponseTooLarge tooLarge)
         {
             return new JwksUriResolution
             {
-                Outcome = JwksUriResolutionOutcome.FetchFailed,
-                Defect = "Transport failure while fetching the JWK Set."
+                Outcome = JwksUriResolutionOutcome.TooLarge,
+                TooLarge = tooLarge
             };
         }
 
@@ -93,15 +104,6 @@ public static class JwksUriResolver
             {
                 Outcome = JwksUriResolutionOutcome.FetchFailed,
                 Defect = $"The JWK Set fetch returned HTTP status {response.StatusCode}."
-            };
-        }
-
-        if(response.Body.Length > options.MaximumDocumentBytes)
-        {
-            return new JwksUriResolution
-            {
-                Outcome = JwksUriResolutionOutcome.FetchFailed,
-                Defect = "The JWK Set exceeds the configured maximum size."
             };
         }
 

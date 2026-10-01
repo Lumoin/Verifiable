@@ -121,10 +121,10 @@ internal sealed class Oid4VciWalletOfferTests
         OutboundTransportDelegate innerTransport =
             GuardedHttpClientTransport.BuildSingleHopTransport(host.Host("default").SharedHttpClient!);
         Oid4VciWalletClient walletClient = BuildWalletClient(
-            fetchCredentialOffer: async (request, context, ct) =>
+            fetchCredentialOffer: async (request, context, readResponse, ct) =>
             {
-                OutboundResponse response = await innerTransport(request, context, ct).ConfigureAwait(false);
-                _ = response.Headers.TryGetValue(WellKnownHttpHeaderNames.ContentType, out observedContentType);
+                OutboundTransportResult response = await innerTransport(request, context, readResponse, ct).ConfigureAwait(false);
+                observedContentType = response.Response?.Headers.ContentType;
 
                 return response;
             });

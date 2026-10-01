@@ -87,6 +87,12 @@ public static class WellKnownHttpHeaderNames
     /// </summary>
     public static string ContentLanguage { get; } = Utf8Constants.ToInternedString(ContentLanguageUtf8);
 
+    /// <summary>The UTF-8 source literal of <see cref="ContentLength"/>.</summary>
+    public static ReadOnlySpan<byte> ContentLengthUtf8 => "Content-Length"u8;
+
+    /// <summary>The declared representation length in bytes, per RFC 9110 section 8.6.</summary>
+    public static string ContentLength { get; } = Utf8Constants.ToInternedString(ContentLengthUtf8);
+
     /// <summary>The UTF-8 source literal of <see cref="ContentType"/>.</summary>
     public static ReadOnlySpan<byte> ContentTypeUtf8 => "Content-Type"u8;
 
@@ -337,6 +343,9 @@ public static class WellKnownHttpHeaderNames
     /// </summary>
     public static bool IsContentType(string name) => Equals(name, ContentType);
 
+    /// <summary>Whether the name is Content-Length under the case-insensitive header comparison.</summary>
+    public static bool IsContentLength(string name) => Equals(name, ContentLength);
+
     /// <summary>
     /// Returns <see langword="true"/> when <paramref name="name"/> is the
     /// <c>DPoP</c> header.
@@ -455,6 +464,7 @@ public static class WellKnownHttpHeaderNames
         var n when IsAcceptLanguage(n) => AcceptLanguage,
         var n when IsContentLanguage(n) => ContentLanguage,
         var n when IsContentType(n) => ContentType,
+        string n when IsContentLength(n) => ContentLength,
         var n when IsDPoP(n) => DPoP,
         var n when IsDPoPNonce(n) => DPoPNonce,
         var n when IsCacheControl(n) => CacheControl,

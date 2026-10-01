@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Verifiable.Core.Outbound;
 
 namespace Verifiable.Core.Resolvers;
 
@@ -55,6 +56,9 @@ public sealed record DidProblemDetails(
     /// </summary>
     public string Code => DidErrorTypes.ToErrorCode(Type);
 
+    /// <summary>The typed retrieval failure refining the protocol's not-found or invalid-DID error.</summary>
+    public DidRetrievalFailure? RetrievalFailure { get; init; }
+
 
     /// <summary>
     /// Equality is on <see cref="Type"/> alone, so a pre-built <see cref="DidResolutionErrors"/> instance
@@ -79,3 +83,21 @@ public sealed record DidProblemDetails(
         return StringComparer.Ordinal.GetHashCode(Type.AbsoluteUri);
     }
 }
+
+
+/// <summary>The closed set of retrieval failures whose evidence a DID resolution retains.</summary>
+public abstract record DidRetrievalFailure
+{
+    /// <summary>Restricts derivation to the library's retrieval outcomes.</summary>
+    private protected DidRetrievalFailure()
+    {
+    }
+}
+
+/// <summary>A DID resource was refused by the guarded fetch's response-size limit.</summary>
+/// <param name="Evidence">The limit and declared or observed length.</param>
+public sealed record DidRetrievalTooLarge(OutboundResponseTooLarge Evidence): DidRetrievalFailure;
+
+/// <summary>A DID resource could not be reached for a reason unrelated to size.</summary>
+/// <param name="FailureKind">The concrete transport exception type.</param>
+public sealed record DidRetrievalUnreachable(Type FailureKind): DidRetrievalFailure;

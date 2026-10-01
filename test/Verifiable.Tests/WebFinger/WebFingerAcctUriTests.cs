@@ -2,6 +2,7 @@ using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.Outbound;
 using Verifiable.Json;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.WebFinger;
 
 namespace Verifiable.Tests.WebFinger;
@@ -80,12 +81,13 @@ internal sealed class WebFingerAcctUriTests
         //the shape REF-3's comparison rule would govern IF this library ever compared subject to resource.
         const string jrdJson = """{"subject":"acct:Alice%40Example.COM@Example.com"}""";
 
-        static ValueTask<OutboundResponse> transport(OutboundRequest request, ExchangeContext context, CancellationToken cancellationToken)
+        //Selects the scripted JRD response by the composed WebFinger target.
+        static ValueTask<OutboundTransportResult> transport(OutboundRequest request, ExchangeContext context, OutboundResponseReaderDelegate readResponse, CancellationToken cancellationToken)
         {
             int status = string.Equals(request.Target.AbsoluteUri, queryUrl, StringComparison.Ordinal) ? 200 : 404;
             TaggedMemory<byte> body = new(Encoding.UTF8.GetBytes(jrdJson), BufferTags.Json);
 
-            return ValueTask.FromResult(new OutboundResponse { StatusCode = status, Body = body });
+            return ScriptedOutboundTransport.ReadAsync(readResponse, new OutboundResponse { StatusCode = status, Body = body }, cancellationToken);
         }
 
         ExchangeContext context = [];

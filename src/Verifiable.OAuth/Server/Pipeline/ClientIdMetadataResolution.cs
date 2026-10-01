@@ -24,7 +24,7 @@ public enum ClientIdMetadataResolutionOutcome
 
     /// <summary>
     /// The document could not be fetched: a non-200 status, an unfollowed or excessive
-    /// redirect chain, an oversized response, or a transport failure.
+    /// redirect chain.
     /// </summary>
     FetchFailed,
 
@@ -33,7 +33,13 @@ public enum ClientIdMetadataResolutionOutcome
     /// content type, a parse or conformance defect, a <c>client_id</c> mismatch, or rejection
     /// by <see cref="ClientIdMetadataDocumentResolverOptions.AdditionalDocumentValidation"/>.
     /// </summary>
-    InvalidDocument
+    InvalidDocument,
+
+    /// <summary>The guarded fetch refused a declared or observed response length.</summary>
+    TooLarge,
+
+    /// <summary>The transport failed for a reason unrelated to size.</summary>
+    Unreachable
 }
 
 
@@ -50,6 +56,12 @@ public sealed record ClientIdMetadataResolution
 {
     /// <summary>Why this resolution ended.</summary>
     public required ClientIdMetadataResolutionOutcome Outcome { get; init; }
+
+    /// <summary>The guarded fetch's size evidence when the outcome is TooLarge.</summary>
+    public OutboundResponseTooLarge? TooLarge { get; init; }
+
+    /// <summary>The concrete transport exception type when the outcome is Unreachable.</summary>
+    public Type? FailureKind { get; init; }
 
     /// <summary>
     /// The parsed, conformant client metadata when <see cref="Outcome"/> is
@@ -81,6 +93,15 @@ public sealed record ClientIdMetadataResolution
     /// draft-ietf-oauth-client-id-metadata-document-02 Section 8.8</see>.
     /// </summary>
     public ReadOnlyMemory<byte>? PrefetchedLogo { get; init; }
+
+    /// <summary>The size refusal from an optional logo prefetch, which does not invalidate the document.</summary>
+    public OutboundResponseTooLarge? LogoTooLarge { get; init; }
+
+    /// <summary>The failure kind of an optional logo prefetch.</summary>
+    public Type? LogoFailureKind { get; init; }
+
+    /// <summary>The key-set attempt, including any typed refusal, when key discovery was requested.</summary>
+    public JwksUriResolution? KeySetResolution { get; init; }
 
     /// <summary>The <c>Content-Type</c> the logo host reported, when <see cref="PrefetchedLogo"/> is set.</summary>
     public string? PrefetchedLogoContentType { get; init; }

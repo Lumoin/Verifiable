@@ -150,7 +150,7 @@ internal static class GuardedHttpClientTransport
     {
         ArgumentNullException.ThrowIfNull(httpClient);
 
-        return async (request, context, cancellationToken) =>
+        return async (request, context, readResponse, cancellationToken) =>
         {
             using HttpRequestMessage httpRequest = new(new HttpMethod(request.Method), request.Target);
 
@@ -172,7 +172,7 @@ internal static class GuardedHttpClientTransport
             }
 
             using HttpResponseMessage httpResponse = await httpClient
-                .SendAsync(httpRequest, HttpCompletionOption.ResponseContentRead, cancellationToken)
+                .SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
                 .ConfigureAwait(false);
 
             //Repeated field lines (RFC 9110 §5.3) are kept in received order, never comma-joined;
@@ -196,16 +196,12 @@ internal static class GuardedHttpClientTransport
                 }
             }
 
-            byte[] responseBody = await httpResponse.Content
-                .ReadAsByteArrayAsync(cancellationToken)
-                .ConfigureAwait(false);
+            using Stream responseBody = await httpResponse.Content
+                .ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
 
-            return new OutboundResponse
-            {
-                StatusCode = (int)httpResponse.StatusCode,
-                Headers = HttpHeaderSet.FromReceived(responsePairs),
-                Body = new TaggedMemory<byte>(responseBody, Tag.Empty)
-            };
+            return await readResponse(
+                (int)httpResponse.StatusCode, HttpHeaderSet.FromReceived(responsePairs), responseBody,
+                cancellationToken).ConfigureAwait(false);
         };
     }
 }

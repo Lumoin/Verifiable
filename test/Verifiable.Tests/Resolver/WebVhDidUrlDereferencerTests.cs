@@ -778,7 +778,7 @@ internal sealed class WebVhDidUrlDereferencerTests
 
         return DidResolverComposition.Build(
             BaseMemoryPool.Shared,
-            static (request, context, cancellationToken) => ValueTask.FromResult(new OutboundResponse { StatusCode = 404, Body = TaggedMemory<byte>.Empty }),
+            static (request, context, readResponse, cancellationToken) => ScriptedOutboundTransport.ReadAsync(readResponse, new OutboundResponse { StatusCode = 404, Body = TaggedMemory<byte>.Empty }, cancellationToken),
             static jsonUtf8 => null,
             static jsonUtf8 => null,
             dereferencerSelector: DidMethodSelectors.FromDereferencers(
@@ -862,7 +862,7 @@ internal sealed class WebVhDidUrlDereferencerTests
 
 
         /// <summary>The transport delegate answering from <see cref="Routes"/>.</summary>
-        public OutboundTransportDelegate Delegate => (request, context, cancellationToken) =>
+        public OutboundTransportDelegate Delegate => (request, context, readResponse, cancellationToken) =>
         {
             if(!Routes.TryGetValue(request.Target.AbsoluteUri, out (int Status, byte[]? Body, string? ContentType) route))
             {
@@ -884,7 +884,7 @@ internal sealed class WebVhDidUrlDereferencerTests
                     (WellKnownHttpHeaderNames.ContentType, contentType), (WellKnownHttpHeaderNames.CacheControl, cacheControl!))
             };
 
-            return ValueTask.FromResult(new OutboundResponse { StatusCode = route.Status, Body = body, Headers = headers });
+            return ScriptedOutboundTransport.ReadAsync(readResponse, new OutboundResponse { StatusCode = route.Status, Body = body, Headers = headers }, cancellationToken);
         };
     }
 }

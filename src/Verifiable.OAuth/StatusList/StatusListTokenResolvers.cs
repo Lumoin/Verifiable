@@ -105,14 +105,6 @@ public static class StatusListTokenResolvers
                     (fetch.DenyReason is not null ? $": {fetch.DenyReason}" : "."));
             }
 
-            //OutboundRequest.MaxResponseBytes is a hint the transport MAY ignore, so the bound is
-            //re-checked here on the bytes actually returned before anything is decoded from them.
-            if(fetch.Body.Length > maxResponseBytes)
-            {
-                throw new StatusListResolutionException(
-                    uri, $"The Status List Token fetch for '{uri}' returned {fetch.Body.Length} bytes, over the {maxResponseBytes}-byte bound.");
-            }
-
             if(fetch.Body.Length == 0)
             {
                 throw new StatusListResolutionException(uri, $"The Status Provider answered '{uri}' with no token.");

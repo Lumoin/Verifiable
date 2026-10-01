@@ -73,7 +73,7 @@ internal sealed class ClientIdMetadataDocumentsResolvingTests
 
     /// <summary>A response larger than the configured cap is a fetch failure (CIMD-059), regardless of what the transport reports.</summary>
     [TestMethod]
-    public async Task OversizedBodyIsFetchFailed()
+    public async Task OversizedBodyRetainsSizeEvidence()
     {
         ScriptedTransport transport = new();
         string oversizedBody = $$"""{"client_id":"{{ClientMetadataUrl}}","client_name":"{{new string('x', 200)}}"}""";
@@ -83,7 +83,8 @@ internal sealed class ClientIdMetadataDocumentsResolvingTests
             ClientMetadataUrl, transport, options: new ClientIdMetadataDocumentResolverOptions { MaximumDocumentBytes = 32 })
             .ConfigureAwait(false);
 
-        Assert.AreEqual(ClientIdMetadataResolutionOutcome.FetchFailed, resolution.Outcome);
+        Assert.AreEqual(ClientIdMetadataResolutionOutcome.TooLarge, resolution.Outcome);
+        Assert.AreEqual(new OutboundResponseTooLarge(32, 33, OutboundResponseLengthKind.Observed), resolution.TooLarge);
     }
 
 
@@ -1040,7 +1041,7 @@ internal sealed class ClientIdMetadataDocumentsResolvingTests
         }
 
 
-        public OutboundTransportDelegate Delegate => (request, context, cancellationToken) =>
+        public OutboundTransportDelegate Delegate => (request, context, readResponse, cancellationToken) =>
         {
             Calls.Add(request);
 
@@ -1067,12 +1068,12 @@ internal sealed class ClientIdMetadataDocumentsResolvingTests
                 _ = headerBuilder.Add(header.Key, header.Value);
             }
 
-            return ValueTask.FromResult(new OutboundResponse
+            return ScriptedOutboundTransport.ReadAsync(readResponse, new OutboundResponse
             {
                 StatusCode = response.Status,
                 Headers = headerBuilder.Build(),
                 Body = responseBody
-            });
+            }, cancellationToken);
         };
 
 

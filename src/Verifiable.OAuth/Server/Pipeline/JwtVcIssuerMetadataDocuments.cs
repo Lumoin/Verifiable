@@ -89,12 +89,23 @@ public static class JwtVcIssuerMetadataDocuments
         {
             throw;
         }
-        catch
+        catch(Exception exception)
+        {
+            WrappedCancellation.ThrowIfCarried(exception);
+            return new JwtVcIssuerMetadataResolution
+            {
+                Outcome = JwtVcIssuerMetadataResolutionOutcome.Unreachable,
+                FailureKind = exception.GetType(),
+                Defect = "Transport failure while fetching the JWT VC Issuer Metadata."
+            };
+        }
+
+        if(fetch.TooLarge is OutboundResponseTooLarge tooLarge)
         {
             return new JwtVcIssuerMetadataResolution
             {
-                Outcome = JwtVcIssuerMetadataResolutionOutcome.FetchFailed,
-                Defect = "Transport failure while fetching the JWT VC Issuer Metadata."
+                Outcome = JwtVcIssuerMetadataResolutionOutcome.TooLarge,
+                TooLarge = tooLarge
             };
         }
 
@@ -129,15 +140,6 @@ public static class JwtVcIssuerMetadataDocuments
             {
                 Outcome = JwtVcIssuerMetadataResolutionOutcome.InvalidDocument,
                 Defect = $"The document content type '{contentType}' is not application/json."
-            };
-        }
-
-        if(response.Body.Length > options.MaximumDocumentBytes)
-        {
-            return new JwtVcIssuerMetadataResolution
-            {
-                Outcome = JwtVcIssuerMetadataResolutionOutcome.FetchFailed,
-                Defect = "The JWT VC Issuer Metadata document exceeds the configured maximum size."
             };
         }
 

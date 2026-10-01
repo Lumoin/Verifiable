@@ -205,7 +205,9 @@ internal sealed class WebVhDidResolverResolvingTests
 
         bool pinned = false;
         bool dialed = false;
-        async ValueTask<OutboundResponse> pinningTransport(OutboundRequest request, ExchangeContext context, CancellationToken cancellationToken)
+
+        //Validates the resolved address before offering the scripted body to the reader.
+        async ValueTask<OutboundTransportResult> pinningTransport(OutboundRequest request, ExchangeContext context, OutboundResponseReaderDelegate readResponse, CancellationToken cancellationToken)
         {
             pinned = true;
             try
@@ -216,12 +218,12 @@ internal sealed class WebVhDidResolverResolvingTests
             {
                 //Blocked before the dial: surface a non-fetch so the resolver fail-closes to NotFound rather
                 //than serving content from a loopback-rebound address.
-                return new OutboundResponse { StatusCode = 404 };
+                return await ScriptedOutboundTransport.ReadAsync(readResponse, new OutboundResponse { StatusCode = 404 }, cancellationToken).ConfigureAwait(false);
             }
 
             dialed = true;
 
-            return new OutboundResponse { StatusCode = 200, Body = new TaggedMemory<byte>(Encoding.UTF8.GetBytes(string.Join('\n', log.Lines)), BufferTags.Json) };
+            return await ScriptedOutboundTransport.ReadAsync(readResponse, new OutboundResponse { StatusCode = 200, Body = new TaggedMemory<byte>(Encoding.UTF8.GetBytes(string.Join('\n', log.Lines)), BufferTags.Json) }, cancellationToken).ConfigureAwait(false);
         }
 
         var context = new ExchangeContext();
@@ -342,7 +344,7 @@ internal sealed class WebVhDidResolverResolvingTests
 
         DidResolver composed = DidResolverComposition.Build(
             BaseMemoryPool.Shared,
-            static (request, context, cancellationToken) => ValueTask.FromResult(new OutboundResponse { StatusCode = 404, Body = TaggedMemory<byte>.Empty }),
+            static (request, context, readResponse, cancellationToken) => ScriptedOutboundTransport.ReadAsync(readResponse, new OutboundResponse { StatusCode = 404, Body = TaggedMemory<byte>.Empty }, cancellationToken),
             static jsonUtf8 => null,
             static jsonUtf8 => null,
             additionalMethods: [(WellKnownDidMethodPrefixes.WebVhDidMethodPrefix, webVh)]);
@@ -1084,7 +1086,7 @@ internal sealed class WebVhDidResolverResolvingTests
         //reached, so the size guard alone rejects it.
         string oversized = string.Join('\n', log.Lines) + "\n" + new string(' ', 9 * 1024 * 1024);
 
-        var transport = new RoutingTransport(new Dictionary<string, (int, string?)>(StringComparer.Ordinal)
+        RoutingTransport transport = new(new Dictionary<string, (int, string?)>(StringComparer.Ordinal)
         {
             [WebVhDidResolver.Resolve(log.Did)] = (200, oversized)
         });
@@ -1092,7 +1094,10 @@ internal sealed class WebVhDidResolverResolvingTests
         DidResolutionResult result = await ResolveAsync(log.Did, transport).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSuccessful, "An oversized did:webvh DID Log MUST NOT resolve.");
-        Assert.AreEqual(DidResolutionErrors.InvalidDid, result.ResolutionMetadata.Error);
+        Assert.AreEqual(DidResolutionErrors.NotFound, result.ResolutionMetadata.Error);
+        DidRetrievalTooLarge refusal = Assert.IsInstanceOfType<DidRetrievalTooLarge>(result.ResolutionMetadata.Error!.RetrievalFailure);
+        Assert.AreEqual(new OutboundResponseTooLarge(OutboundFetchPolicy.DefaultMaxResponseBytes,
+            OutboundFetchPolicy.DefaultMaxResponseBytes + 1, OutboundResponseLengthKind.Observed), refusal.Evidence);
     }
 
 
@@ -1196,7 +1201,8 @@ internal sealed class WebVhDidResolverResolvingTests
 
         const string DistinctiveTransportMarker = "wvh-transport-marker-4f21a9";
 
-        static ValueTask<OutboundResponse> throwingTransport(OutboundRequest request, ExchangeContext context, CancellationToken cancellationToken) =>
+        //Raises the unrelated transport failure exercised by this resolution row.
+        static ValueTask<OutboundTransportResult> throwingTransport(OutboundRequest request, ExchangeContext context, OutboundResponseReaderDelegate readResponse, CancellationToken cancellationToken) =>
             throw new IOException(DistinctiveTransportMarker);
 
         DidResolutionResult result = await ResolveAsync(log.Did, throwingTransport).ConfigureAwait(false);
@@ -1253,7 +1259,8 @@ internal sealed class WebVhDidResolverResolvingTests
         using WebVhController controller = WebVhController.Create();
         WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime).ConfigureAwait(false);
 
-        static ValueTask<OutboundResponse> unreachedTransport(OutboundRequest request, ExchangeContext context, CancellationToken cancellationToken) =>
+        //Rejects any unexpected transport invocation after a policy refusal.
+        static ValueTask<OutboundTransportResult> unreachedTransport(OutboundRequest request, ExchangeContext context, OutboundResponseReaderDelegate readResponse, CancellationToken cancellationToken) =>
             throw new InvalidOperationException("The outbound-fetch policy MUST deny the DID Log host before any transport call.");
 
         ExchangeContext context = [];
@@ -1788,7 +1795,7 @@ internal sealed class WebVhDidResolverResolvingTests
         /// The transport delegate the resolver under test fetches through: it answers each request with the route
         /// registered for its absolute URL and that URL's headers.
         /// </summary>
-        public OutboundTransportDelegate Delegate => (request, context, cancellationToken) =>
+        public OutboundTransportDelegate Delegate => (request, context, readResponse, cancellationToken) =>
         {
             if(!Routes.TryGetValue(request.Target.AbsoluteUri, out (int Status, string? Body) route))
             {
@@ -1803,7 +1810,7 @@ internal sealed class WebVhDidResolverResolvingTests
                 ? configuredHeaders
                 : HttpHeaderSet.Empty;
 
-            return ValueTask.FromResult(new OutboundResponse { StatusCode = route.Status, Body = body, Headers = headers });
+            return ScriptedOutboundTransport.ReadAsync(readResponse, new OutboundResponse { StatusCode = route.Status, Body = body, Headers = headers }, cancellationToken);
         };
     }
 }

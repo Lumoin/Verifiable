@@ -326,7 +326,8 @@ internal sealed class StatusListTokenResolversTests
         using PublicKeyMemory issuerPublic = issuerKeys.PublicKey;
         using PrivateKeyMemory issuerPrivate = issuerKeys.PrivateKey;
 
-        static ValueTask<OutboundResponse> failing(OutboundRequest request, Verifiable.Core.ExchangeContext context, CancellationToken cancellationToken) =>
+        //Raises the transport failure the existing resolver reports as a resolution exception.
+        static ValueTask<OutboundTransportResult> failing(OutboundRequest request, Verifiable.Core.ExchangeContext context, OutboundResponseReaderDelegate readResponse, CancellationToken cancellationToken) =>
             throw new InvalidOperationException("The Status Provider refused the connection.");
         ResolveVerifiedStatusListTokenDelegate resolve = ResolverOver(failing, KeyOf(issuerPublic), Clock());
 
@@ -586,9 +587,8 @@ internal sealed class StatusListTokenResolversTests
 
 
     /// <summary>
-    /// <see cref="Verifiable.Core.Outbound.OutboundRequest.MaxResponseBytes"/>'s own doc: the transport MAY ignore
-    /// the hint, so a response body over the bound is re-checked once the fetch returns rather than trusted to
-    /// have been enforced upstream.
+    /// Records the existing exception-only resolution boundary. The guarded fetch now returns size
+    /// evidence, but this delegate still discards that evidence when it raises a resolution exception.
     /// </summary>
     [TestMethod]
     public async Task ABodyOverTheBoundIsAResolutionFailureNamingTheUri()
@@ -598,7 +598,7 @@ internal sealed class StatusListTokenResolversTests
         using PrivateKeyMemory issuerPrivate = issuerKeys.PrivateKey;
 
         using StatusListType published = PublishedList();
-        var token = new StatusListToken(ListUrl, TestClock.CanonicalEpoch, published);
+        StatusListToken token = new(ListUrl, TestClock.CanonicalEpoch, published);
         string compactJws = await StatusListTokenJwtFixtures.IssueJwtAsync(
             token, issuerPrivate, KeyId, TestContext.CancellationToken).ConfigureAwait(false);
 

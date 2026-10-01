@@ -577,7 +577,7 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
     {
         AuthorizationServerMetadataResolution resolution = await AuthorizationServerMetadataDocuments.ResolveAsync(
             new Uri(Issuer), WellKnownPaths.OAuthAuthorizationServer, NewContext(),
-            static (_, _, _) => throw new IOException("Scripted transport failure."),
+            static (_, _, _, _) => throw new IOException("Scripted transport failure."),
             AuthorizationServerMetadataJson.Parse, new AuthorizationServerMetadataResolverOptions(),
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -597,7 +597,7 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
         _ = await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
             await AuthorizationServerMetadataDocuments.ResolveAsync(
                 new Uri(Issuer), WellKnownPaths.OAuthAuthorizationServer, NewContext(),
-                static (_, _, token) => throw new OperationCanceledException(token),
+                static (_, _, _, token) => throw new OperationCanceledException(token),
                 AuthorizationServerMetadataJson.Parse, new AuthorizationServerMetadataResolverOptions(),
                 cancellation.Token).ConfigureAwait(false)).ConfigureAwait(false);
     }
@@ -676,7 +676,7 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
     }
 
 
-    /// <summary>The authoritative post-read size check reports both the cap and the observed length.</summary>
+    /// <summary>The guarded reader reports both the cap and the observed length.</summary>
     [TestMethod]
     public async Task OversizedBodyReportsLimitAndLengthSeen()
     {
@@ -862,7 +862,7 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
 
 
         /// <summary>The single-hop playback transport.</summary>
-        public OutboundTransportDelegate Delegate => (request, context, cancellationToken) =>
+        public OutboundTransportDelegate Delegate => (request, context, readResponse, cancellationToken) =>
         {
             Calls.Add(request);
 
@@ -889,12 +889,12 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
                 _ = headerBuilder.Add(header.Key, header.Value);
             }
 
-            return ValueTask.FromResult(new OutboundResponse
+            return ScriptedOutboundTransport.ReadAsync(readResponse, new OutboundResponse
             {
                 StatusCode = response.Status,
                 Headers = headerBuilder.Build(),
                 Body = responseBody
-            });
+            }, cancellationToken);
         };
 
 

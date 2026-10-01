@@ -43,7 +43,10 @@ public enum AttachmentResolutionError
     FetchDenied,
 
     /// <summary>Each <c>links</c> location was reachable but none yielded a fetched, size-bounded, hash-verified body.</summary>
-    AllLinksFailed
+    AllLinksFailed,
+
+    /// <summary>No link succeeded and a response exceeded the guarded byte limit.</summary>
+    TooLarge
 }
 
 
@@ -126,6 +129,9 @@ public sealed class AttachmentResolutionResult: IDisposable
     /// <summary>The reason resolution failed, or <see cref="AttachmentResolutionError.None"/> when it succeeded.</summary>
     public AttachmentResolutionError Error { get; }
 
+    /// <summary>The first size refusal when no alternative link resolved the attachment.</summary>
+    public OutboundResponseTooLarge? TooLarge { get; private init; }
+
     /// <summary>
     /// The freshness the fetched body's response headers imply, per
     /// <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see>, when
@@ -184,6 +190,14 @@ public sealed class AttachmentResolutionResult: IDisposable
             error,
             freshness: default);
     }
+
+
+    /// <summary>Creates a size refusal retaining the guarded fetch's evidence.</summary>
+    internal static AttachmentResolutionResult ResponseTooLarge(OutboundResponseTooLarge evidence) =>
+        new(false, null, 0, AttachmentResolutionSource.Fetched, null, AttachmentResolutionError.TooLarge, default)
+        {
+            TooLarge = evidence
+        };
 
 
     /// <inheritdoc/>

@@ -159,10 +159,9 @@ public sealed record Oid4VciWalletConfiguration
 
     /// <summary>
     /// The upper bound, in bytes, the §4.1.3 Credential Offer GET accepts — threaded onto
-    /// <see cref="Verifiable.Core.Outbound.OutboundRequest.MaxResponseBytes"/> as the transport
-    /// hint and re-checked authoritatively after the read, the same two-layer shape
-    /// <see cref="Client.AuthorizationServerMetadataDocuments.ResolveAsync"/> applies to its own
-    /// document fetch. A Credential Offer object is a handful of parameters, so the default is
+    /// <see cref="Verifiable.Core.Outbound.OutboundRequest.MaxResponseBytes"/> and enforced once
+    /// by the guarded reader, as for authorization-server metadata.
+    /// A Credential Offer object is a handful of parameters, so the default is
     /// generous relative to any conforming offer while still bounding a hostile or misbehaving
     /// Issuer's response.
     /// </summary>

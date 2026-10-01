@@ -29,9 +29,15 @@ namespace Verifiable.Core.Outbound;
 /// </remarks>
 /// <param name="request">The single request to perform.</param>
 /// <param name="context">The per-call exchange context.</param>
+/// <param name="readResponse">
+/// The library-owned reader. Hand it the headers and live body stream without buffering or deciding
+/// size, await it exactly once, dispose the response, and return its typed result unchanged. An early
+/// size refusal is a result, never a transport exception. See <see cref="OutboundResponseReaderDelegate"/>.
+/// </param>
 /// <param name="cancellationToken">Cancellation token.</param>
-/// <returns>The single-hop response (a 3xx is returned, not followed).</returns>
-public delegate ValueTask<OutboundResponse> OutboundTransportDelegate(
+/// <returns>The reader's single-hop result (a 3xx is returned, not followed).</returns>
+public delegate ValueTask<OutboundTransportResult> OutboundTransportDelegate(
     OutboundRequest request,
     ExchangeContext context,
+    OutboundResponseReaderDelegate readResponse,
     CancellationToken cancellationToken);

@@ -25,8 +25,7 @@ public enum JwksUriResolutionOutcome
 
     /// <summary>
     /// The key set could not be fetched: a non-200 status, an unfollowed or excessive redirect chain,
-    /// a response exceeding <see cref="JwksUriResolverOptions.MaximumDocumentBytes"/>, or a transport
-    /// failure.
+    /// or other failure to obtain a terminal response.
     /// </summary>
     FetchFailed,
 
@@ -44,7 +43,13 @@ public enum JwksUriResolutionOutcome
     /// already provided in place. <see cref="JwksUriResolver.ResolveAsync"/> never produces this
     /// outcome — only an application's own caching implementation of the delegate does.
     /// </summary>
-    NotRefreshed
+    NotRefreshed,
+
+    /// <summary>The guarded fetch refused a declared or observed response length.</summary>
+    TooLarge,
+
+    /// <summary>The transport failed for a reason unrelated to size.</summary>
+    Unreachable
 }
 
 
@@ -61,6 +66,12 @@ public sealed record JwksUriResolution
 {
     /// <summary>Why this resolution ended.</summary>
     public required JwksUriResolutionOutcome Outcome { get; init; }
+
+    /// <summary>The guarded fetch's size evidence when the outcome is TooLarge.</summary>
+    public OutboundResponseTooLarge? TooLarge { get; init; }
+
+    /// <summary>The concrete transport exception type when the outcome is Unreachable.</summary>
+    public Type? FailureKind { get; init; }
 
     /// <summary>
     /// The fetched JWK Set as opaque JSON text when <see cref="Outcome"/> is

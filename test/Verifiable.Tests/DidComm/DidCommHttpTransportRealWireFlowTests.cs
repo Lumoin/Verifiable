@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Net.Http.Headers;
 using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.Outbound;
@@ -250,33 +249,7 @@ internal sealed class DidCommHttpTransportRealWireFlowTests
     }
 
 
-    /// <summary>
-    /// A single-hop <see cref="HttpClient"/> transport for the POST: it carries the body and Content-Type
-    /// and does not follow redirects (<c>OutboundFetch</c> owns the redirect loop). Test glue — the library
-    /// carries no <c>System.Net</c>. The request body is sent straight from the message's pooled memory
-    /// (<see cref="ReadOnlyMemoryContent"/>, no array copy).
-    /// </summary>
-    private static OutboundTransportDelegate BuildPostTransport(HttpClient httpClient)
-    {
-        return async (request, context, cancellationToken) =>
-        {
-            using var httpRequest = new HttpRequestMessage(new HttpMethod(request.Method), request.Target);
-            if(request.Body is { } body)
-            {
-                var content = new ReadOnlyMemoryContent(body.Memory);
-                if(request.Headers.TryGetValue("Content-Type", out string? contentType))
-                {
-                    content.Headers.ContentType = MediaTypeHeaderValue.Parse(contentType);
-                }
-
-                httpRequest.Content = content;
-            }
-
-            using HttpResponseMessage httpResponse = await httpClient
-                .SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
-                .ConfigureAwait(false);
-
-            return new OutboundResponse { StatusCode = (int)httpResponse.StatusCode };
-        };
-    }
+    /// <summary>Uses the shared single-hop adapter to hand live response bytes to the guarded reader.</summary>
+    private static OutboundTransportDelegate BuildPostTransport(HttpClient httpClient) =>
+        GuardedHttpClientTransport.BuildSingleHopTransport(httpClient);
 }

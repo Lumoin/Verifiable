@@ -1,3 +1,4 @@
+using System.Globalization;
 using Verifiable.Core.Transport;
 
 namespace Verifiable.Core.Outbound;
@@ -35,11 +36,13 @@ namespace Verifiable.Core.Outbound;
 /// </remarks>
 public static class OutboundFetch
 {
+    /// <summary>The redirect statuses whose next hop is governed by the fetch policy.</summary>
     private static HashSet<int> RedirectStatusCodes { get; } = [301, 302, 303, 307, 308];
 
 
     /// <summary>
-    /// Performs a policy-guarded fetch, following redirects per the policy.
+    /// Performs a policy-guarded fetch, following redirects per the policy and enforcing the response size
+    /// on every hop. A declared or observed excess returns typed evidence without a partial body.
     /// Fail-closed by return: a denied target/hop or an over-long chain yields a
     /// non-<see cref="OutboundFetchOutcome.Fetched"/> result, never a thrown
     /// policy error. The transport is invoked only after the target passes the
@@ -59,6 +62,14 @@ public static class OutboundFetch
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(transport);
 
+        if(request.MaxResponseBytes is long limit)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(limit);
+        }
+
+        ValueTask<OutboundTransportResult> ReadHopResponseAsync(int statusCode, HttpHeaderSet headers, Stream body, CancellationToken token) =>
+            ReadResponseAsync(statusCode, headers, body, request.MaxResponseBytes, token);
+
         OutboundFetchPolicy policy = context.OutboundFetchPolicy;
         Uri requested = request.Target;
         OutboundRequest current = request;
@@ -73,7 +84,20 @@ public static class OutboundFetch
                 return Stopped(OutboundFetchOutcome.DeniedByPolicy, decision.DenyReason, requested, current.Target, hops, redirect);
             }
 
-            OutboundResponse response = await transport(current, context, cancellationToken).ConfigureAwait(false);
+            OutboundTransportResult received = await transport(current, context, ReadHopResponseAsync, cancellationToken).ConfigureAwait(false);
+            if(received.TooLarge is OutboundResponseTooLarge tooLarge)
+            {
+                return new OutboundFetchResult
+                {
+                    Outcome = OutboundFetchOutcome.TooLarge,
+                    TooLarge = tooLarge,
+                    RequestedUri = requested,
+                    FinalUri = current.Target,
+                    RedirectCount = hops
+                };
+            }
+
+            OutboundResponse response = received.Response!;
 
             if(!RedirectStatusCodes.Contains(response.StatusCode)
                 || !response.Headers.TryGetValue(WellKnownHttpHeaderNames.Location, out string? location)
@@ -149,12 +173,14 @@ public static class OutboundFetch
         };
 
 
+    /// <summary>Compares the scheme, host, and effective port of two redirect targets.</summary>
     private static bool SameOrigin(Uri a, Uri b) =>
         string.Equals(a.Scheme, b.Scheme, StringComparison.OrdinalIgnoreCase)
         && string.Equals(a.Host, b.Host, StringComparison.OrdinalIgnoreCase)
         && a.Port == b.Port;
 
 
+    /// <summary>Preserves a 307/308 request and rewrites other allowed redirects to a bodyless GET.</summary>
     //HTTP redirect method/body rewrite: 307/308 preserve the method and body;
     //303 (and the universal browser handling of 301/302) fall back to GET and
     //drop the body. Falling back to GET is the safe choice — it never re-sends a
@@ -165,5 +191,63 @@ public static class OutboundFetch
         return preserve
             ? current with { Target = next }
             : current with { Target = next, Method = "GET", Body = null };
+    }
+
+
+    /// <summary>
+    /// The sole response-size decision: rejects a declared excess before reading, or stops at the first
+    /// observed byte over the limit. An exact-limit body needs an EOF read and remains acceptable.
+    /// </summary>
+    private static async ValueTask<OutboundTransportResult> ReadResponseAsync(
+        int statusCode, HttpHeaderSet headers, Stream body, long? limit, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(headers);
+        ArgumentNullException.ThrowIfNull(body);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if(limit is long maximum)
+        {
+            foreach(string value in headers.GetValues(WellKnownHttpHeaderNames.ContentLength))
+            {
+                if(long.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out long declared)
+                    && declared > maximum)
+                {
+                    return new OutboundTransportResult(new OutboundResponseTooLarge(
+                        maximum, declared, OutboundResponseLengthKind.Declared));
+                }
+            }
+        }
+
+        using MemoryStream buffered = new();
+        byte[] buffer = new byte[8192];
+        long observed = 0;
+        while(true)
+        {
+            int count = buffer.Length;
+            if(limit is long bound && bound - observed < count)
+            {
+                count = (int)(bound - observed) + 1;
+            }
+
+            int read = await body.ReadAsync(buffer.AsMemory(0, count), cancellationToken).ConfigureAwait(false);
+            if(read == 0)
+            {
+                return new OutboundTransportResult(new OutboundResponse
+                {
+                    StatusCode = statusCode,
+                    Headers = headers,
+                    Body = new TaggedMemory<byte>(buffered.ToArray(), Tag.Empty)
+                });
+            }
+
+            observed += read;
+            if(limit is long maximumBytes && observed > maximumBytes)
+            {
+                return new OutboundTransportResult(new OutboundResponseTooLarge(
+                    maximumBytes, observed, OutboundResponseLengthKind.Observed));
+            }
+
+            await buffered.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+        }
     }
 }

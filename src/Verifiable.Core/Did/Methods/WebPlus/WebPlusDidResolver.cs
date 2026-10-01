@@ -251,18 +251,11 @@ public static class WebPlusDidResolver
                 return DidResolutionResult.Failure(DidResolutionErrors.InvalidDid);
             }
 
-            OutboundResponse? microledgerResponse = await TryFetchMicroledgerAsync(target, transport, context, cancellationToken).ConfigureAwait(false);
+            (OutboundResponse? microledgerResponse, DidProblemDetails? fetchError) =
+                await TryFetchMicroledgerAsync(target, transport, context, cancellationToken).ConfigureAwait(false);
             if(microledgerResponse is null)
             {
-                return DidResolutionResult.Failure(DidResolutionErrors.NotFound);
-            }
-
-            //Bound the fetched microledger so an oversized payload is rejected before it is parsed, rather than
-            //driving unbounded allocation and CPU through the entry parser: verifying every document is a JCS
-            //canonicalization, a hash and a signature check per proof.
-            if(microledgerResponse.Body.Memory.Length > OutboundFetchPolicy.DefaultMaxResponseBytes)
-            {
-                return DidResolutionResult.Failure(InvalidDid("The did:webplus microledger exceeds the maximum permitted size."));
+                return DidResolutionResult.Failure(fetchError!);
             }
 
             List<LogEntry<WebPlusRawEntry, string>> entries;
@@ -457,7 +450,7 @@ public static class WebPlusDidResolver
 
     /// <summary>
     /// Drives one guarded fetch for the microledger, returning the response only on a successful 200, or
-    /// <see langword="null"/> on a transport failure or any non-200 status. Cancellation is always propagated, bare or
+    /// typed problem details on a refusal, transport failure, or non-200 status. Cancellation is always propagated, bare or
     /// carried inside the transport's own exception (<see cref="WrappedCancellation"/>), so the caller can tell its own
     /// cancellation from a fetch that ended on its own budget.
     /// </summary>
@@ -465,8 +458,8 @@ public static class WebPlusDidResolver
     /// <param name="transport">The single-hop transport the guarded fetch drives.</param>
     /// <param name="context">The per-operation context carrying the SSRF outbound-fetch policy.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>The successful response, or <see langword="null"/> when the fetch did not yield a 200.</returns>
-    private static async ValueTask<OutboundResponse?> TryFetchMicroledgerAsync(
+    /// <returns>The successful response, or problem details retaining any size or transport failure evidence.</returns>
+    private static async ValueTask<(OutboundResponse? Response, DidProblemDetails? Error)> TryFetchMicroledgerAsync(
         Uri target,
         OutboundTransportDelegate transport,
         ExchangeContext context,
@@ -490,10 +483,16 @@ public static class WebPlusDidResolver
             //cancellation, as a bare one does.
             WrappedCancellation.ThrowIfCarried(exception);
 
-            return null;
+            return (null, DidResolutionErrors.NotFound with { RetrievalFailure = new DidRetrievalUnreachable(exception.GetType()) });
         }
 
-        return fetch is { IsFetched: true, Response: { StatusCode: 200 } response } ? response : null;
+        if(fetch.TooLarge is OutboundResponseTooLarge tooLarge)
+        {
+            return (null, DidResolutionErrors.NotFound with { RetrievalFailure = new DidRetrievalTooLarge(tooLarge) });
+        }
+
+        return fetch is { IsFetched: true, Response: { StatusCode: 200 } response }
+            ? (response, null) : (null, DidResolutionErrors.NotFound);
     }
 
 

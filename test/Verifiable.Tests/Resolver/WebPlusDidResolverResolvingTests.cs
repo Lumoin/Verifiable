@@ -242,7 +242,7 @@ internal sealed class WebPlusDidResolverResolvingTests
     {
         string oversized = WebPlusWorkedExamples.ToMicroledger(WebPlusWorkedExamples.Example1Root) + "\n" + new string(' ', 9 * 1024 * 1024);
 
-        var transport = new RoutingTransport(new Dictionary<string, (int, string?)>(StringComparer.Ordinal)
+        RoutingTransport transport = new(new Dictionary<string, (int, string?)>(StringComparer.Ordinal)
         {
             [WebPlusDidResolver.Resolve(WebPlusWorkedExamples.Example1Did)] = (200, oversized)
         });
@@ -250,7 +250,10 @@ internal sealed class WebPlusDidResolverResolvingTests
         DidResolutionResult result = await WebPlusTestResolver.ResolveAsync(WebPlusWorkedExamples.Example1Did, transport, options: null, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSuccessful, "An oversized did:webplus microledger MUST NOT resolve.");
-        Assert.AreEqual(DidResolutionErrors.InvalidDid, result.ResolutionMetadata.Error);
+        Assert.AreEqual(DidResolutionErrors.NotFound, result.ResolutionMetadata.Error);
+        DidRetrievalTooLarge refusal = Assert.IsInstanceOfType<DidRetrievalTooLarge>(result.ResolutionMetadata.Error!.RetrievalFailure);
+        Assert.AreEqual(new OutboundResponseTooLarge(OutboundFetchPolicy.DefaultMaxResponseBytes,
+            OutboundFetchPolicy.DefaultMaxResponseBytes + 1, OutboundResponseLengthKind.Observed), refusal.Evidence);
     }
 
 
@@ -269,7 +272,7 @@ internal sealed class WebPlusDidResolverResolvingTests
 
         DidResolver composed = DidResolverComposition.Build(
             BaseMemoryPool.Shared,
-            static (request, context, cancellationToken) => ValueTask.FromResult(new OutboundResponse { StatusCode = 404, Body = TaggedMemory<byte>.Empty }),
+            static (request, context, readResponse, cancellationToken) => ScriptedOutboundTransport.ReadAsync(readResponse, new OutboundResponse { StatusCode = 404, Body = TaggedMemory<byte>.Empty }, cancellationToken),
             static jsonUtf8 => null,
             static jsonUtf8 => null,
             additionalMethods: [(WellKnownDidMethodPrefixes.WebPlusDidMethodPrefix, webPlus)]);

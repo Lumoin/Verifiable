@@ -15,7 +15,10 @@ public enum OutboundFetchOutcome
     RedirectNotFollowed,
 
     /// <summary>The redirect chain exceeded <see cref="OutboundFetchPolicy.MaxRedirects"/>.</summary>
-    TooManyRedirects
+    TooManyRedirects,
+
+    /// <summary>The response reader stopped because a declared or observed length exceeded the byte limit.</summary>
+    TooLarge
 }
 
 
@@ -23,7 +26,7 @@ public enum OutboundFetchOutcome
 /// The outcome of a guarded <see cref="OutboundFetch"/>. Fail-closed by return,
 /// not by exception: a denied or over-long fetch yields a non-<see cref="OutboundFetchOutcome.Fetched"/>
 /// outcome with a diagnostic <see cref="DenyReason"/>, never a thrown policy
-/// error. Carries provenance (requested vs final URL, hop count) suitable for an
+/// error. A size refusal carries <see cref="TooLarge"/> instead of a partial response. Carries provenance (requested vs final URL, hop count) suitable for an
 /// audit/trust log.
 /// </summary>
 public sealed record OutboundFetchResult
@@ -36,6 +39,9 @@ public sealed record OutboundFetchResult
     /// <see cref="OutboundFetchOutcome.Fetched"/>; otherwise <see langword="null"/>.
     /// </summary>
     public OutboundResponse? Response { get; init; }
+
+    /// <summary>The size refusal evidence when the outcome is <see cref="OutboundFetchOutcome.TooLarge"/>.</summary>
+    public OutboundResponseTooLarge? TooLarge { get; init; }
 
     /// <summary>A diagnostic reason for a non-fetched outcome. Do not surface verbatim to untrusted callers.</summary>
     public string? DenyReason { get; init; }

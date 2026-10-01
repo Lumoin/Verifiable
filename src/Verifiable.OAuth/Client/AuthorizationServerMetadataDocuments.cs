@@ -90,7 +90,13 @@ public static class AuthorizationServerMetadataDocuments
         }
         catch(Exception exception)
         {
+            WrappedCancellation.ThrowIfCarried(exception);
             return new AuthorizationServerMetadataUnreachable { FailureKind = exception.GetType() };
+        }
+
+        if(fetch.TooLarge is OutboundResponseTooLarge tooLarge)
+        {
+            return new AuthorizationServerMetadataTooLarge { Evidence = tooLarge };
         }
 
         if(fetch.RefusedRedirect is OutboundRedirectRefusal redirect)
@@ -121,17 +127,6 @@ public static class AuthorizationServerMetadataDocuments
         if(!IsAcceptableContentType(contentType))
         {
             return new AuthorizationServerMetadataUnsupportedMediaType { ContentType = contentType };
-        }
-
-        //The authoritative post-read size check — MaxResponseBytes above is only a transport hint a
-        //hostile or non-conforming transport may not honor.
-        if(response.Body.Length > options.MaximumDocumentBytes)
-        {
-            return new AuthorizationServerMetadataTooLarge
-            {
-                Limit = options.MaximumDocumentBytes,
-                LengthSeen = response.Body.Length
-            };
         }
 
         Result<AuthorizationServerMetadata, AuthorizationServerMetadataParseError> parsed =

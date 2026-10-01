@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Verifiable.Core.Outbound;
 
 namespace Verifiable.OAuth.Oid4Vci.Wallet;
 
@@ -17,6 +18,12 @@ public sealed record Oid4VciRequestFailure
 
     /// <summary>The endpoint the failing request addressed.</summary>
     public required Uri Endpoint { get; init; }
+
+    /// <summary>The guarded fetch's size evidence for a TooLarge outcome.</summary>
+    public OutboundResponseTooLarge? TooLarge { get; init; }
+
+    /// <summary>The transport exception type for an Unreachable outcome.</summary>
+    public Type? FailureKind { get; init; }
 
     /// <summary>
     /// The HTTP status code the endpoint answered with, or <see langword="null"/> when
@@ -44,7 +51,7 @@ public sealed record Oid4VciRequestFailure
 
 
 /// <summary>
-/// The three ways an <see cref="Oid4VciWalletClient"/> request fails on input the Wallet does not
+/// The ways an <see cref="Oid4VciWalletClient"/> request fails on input the Wallet does not
 /// control.
 /// </summary>
 public enum Oid4VciRequestFailureKind
@@ -66,7 +73,7 @@ public enum Oid4VciRequestFailureKind
     ErrorResponse,
 
     /// <summary>
-    /// The endpoint answered a success status, but the body, content type, or size breaks a rule
+    /// The endpoint answered a success status, but the body or content type breaks a rule
     /// the section names; <see cref="Oid4VciRequestFailure.ErrorDescription"/> names which one.
     /// </summary>
     MalformedResponse,
@@ -75,5 +82,11 @@ public enum Oid4VciRequestFailureKind
     /// The outbound-fetch policy refused the endpoint, or refused a redirect hop, before any dial
     /// reached it.
     /// </summary>
-    OutboundPolicyDenied
+    OutboundPolicyDenied,
+
+    /// <summary>The guarded fetch refused the response's declared or observed size.</summary>
+    TooLarge,
+
+    /// <summary>The transport failed for a reason unrelated to size.</summary>
+    Unreachable
 }

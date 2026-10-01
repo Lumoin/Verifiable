@@ -330,18 +330,20 @@ internal sealed class WebDidResolverResolvingTests
     {
         long? requestedBound = null;
         System.Buffers.IMemoryOwner<byte>? oversizedBody = null;
-        ValueTask<OutboundResponse> ServeBodyOverTheBoundAsync(OutboundRequest request, ExchangeContext context, CancellationToken cancellationToken)
+
+        //Supplies an oversized body to the guarded reader without making a size decision.
+        ValueTask<OutboundTransportResult> ServeBodyOverTheBoundAsync(OutboundRequest request, ExchangeContext context, OutboundResponseReaderDelegate readResponse, CancellationToken cancellationToken)
         {
             requestedBound = request.MaxResponseBytes;
             if(requestedBound is not { } bound)
             {
                 //No bound requested: serve an ordinary document, which then resolves.
-                return ValueTask.FromResult(new OutboundResponse
+                return ScriptedOutboundTransport.ReadAsync(readResponse, new OutboundResponse
                 {
                     StatusCode = 200,
                     Body = new TaggedMemory<byte>(Encoding.UTF8.GetBytes(DidDocumentJson(AliceDid)), BufferTags.Json),
                     Headers = HttpHeaderSet.Empty
-                });
+                }, cancellationToken);
             }
 
             //One byte more than the bound the resolver asked the transport to enforce.
@@ -349,12 +351,12 @@ internal sealed class WebDidResolverResolvingTests
             oversizedBody = BaseMemoryPool.Shared.Rent(size);
             oversizedBody.Memory.Span[..size].Fill((byte)' ');
 
-            return ValueTask.FromResult(new OutboundResponse
+            return ScriptedOutboundTransport.ReadAsync(readResponse, new OutboundResponse
             {
                 StatusCode = 200,
                 Body = new TaggedMemory<byte>(oversizedBody.Memory[..size], BufferTags.Json),
                 Headers = HttpHeaderSet.Empty
-            });
+            }, cancellationToken);
         }
 
         bool hasDeserialized = false;
@@ -723,7 +725,7 @@ internal sealed class WebDidResolverResolvingTests
         /// The transport delegate the resolver under test fetches through: it records each request in
         /// <see cref="Calls"/> and answers with the route registered for the request's absolute URL.
         /// </summary>
-        public OutboundTransportDelegate Delegate => (request, context, cancellationToken) =>
+        public OutboundTransportDelegate Delegate => (request, context, readResponse, cancellationToken) =>
         {
             Calls.Add(request);
 
@@ -740,7 +742,7 @@ internal sealed class WebDidResolverResolvingTests
                 ? configuredHeaders
                 : HttpHeaderSet.Empty;
 
-            return ValueTask.FromResult(new OutboundResponse { StatusCode = route.Status, Body = body, Headers = headers });
+            return ScriptedOutboundTransport.ReadAsync(readResponse, new OutboundResponse { StatusCode = route.Status, Body = body, Headers = headers }, cancellationToken);
         };
     }
 }

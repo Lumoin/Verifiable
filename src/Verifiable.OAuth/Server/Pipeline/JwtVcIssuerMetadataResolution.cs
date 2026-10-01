@@ -30,7 +30,7 @@ public enum JwtVcIssuerMetadataResolutionOutcome
 
     /// <summary>
     /// The document could not be fetched: a non-200 status, an unfollowed or excessive redirect
-    /// chain, an oversized response, or a transport failure.
+    /// chain.
     /// </summary>
     FetchFailed,
 
@@ -47,7 +47,13 @@ public enum JwtVcIssuerMetadataResolutionOutcome
     /// Issuer-signed JWT. If these values are not identical, the data contained in the response MUST
     /// NOT be used." Includes a document that carries no <c>issuer</c> member at all.
     /// </summary>
-    IssuerMismatch
+    IssuerMismatch,
+
+    /// <summary>The guarded fetch refused a declared or observed response length.</summary>
+    TooLarge,
+
+    /// <summary>The transport failed for a reason unrelated to size.</summary>
+    Unreachable
 }
 
 
@@ -65,6 +71,12 @@ public sealed record JwtVcIssuerMetadataResolution
 {
     /// <summary>Why this resolution ended.</summary>
     public required JwtVcIssuerMetadataResolutionOutcome Outcome { get; init; }
+
+    /// <summary>The guarded fetch's size evidence when the outcome is TooLarge.</summary>
+    public OutboundResponseTooLarge? TooLarge { get; init; }
+
+    /// <summary>The concrete transport exception type when the outcome is Unreachable.</summary>
+    public Type? FailureKind { get; init; }
 
     /// <summary>
     /// The document's <c>issuer</c> member value, when the document was parsed far enough to extract

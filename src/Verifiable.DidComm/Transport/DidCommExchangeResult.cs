@@ -1,3 +1,4 @@
+using Verifiable.Core.Outbound;
 using Verifiable.Foundation;
 
 namespace Verifiable.DidComm.Transport;
@@ -62,6 +63,12 @@ public sealed class DidCommExchangeResult: IDisposable
     /// <summary>The reason the exchange did not succeed, or <see cref="DidCommTransmitError.None"/> when it was accepted.</summary>
     public DidCommTransmitError Error { get; }
 
+    /// <summary>The guarded fetch's evidence when Error is TooLarge.</summary>
+    public OutboundResponseTooLarge? TooLarge { get; private init; }
+
+    /// <summary>The concrete transport exception type when available.</summary>
+    public Type? FailureKind { get; private init; }
+
     /// <summary>The reply bytes carried back on the same connection, owned by this result, or <see cref="PooledMemory.Empty"/> when none arrived.</summary>
     public PooledMemory ReplyBody { get; }
 
@@ -116,7 +123,23 @@ public sealed class DidCommExchangeResult: IDisposable
     }
 
 
-    /// <summary>Mints an outcome for a transport-level delivery failure (socket/DNS/connection error, no response, or a reply that exceeded the caller's accepted size bound).</summary>
+    /// <summary>Creates a size refusal with the evidence from the guarded reader.</summary>
+    public static DidCommExchangeResult ResponseTooLarge(OutboundResponseTooLarge evidence)
+    {
+        ArgumentNullException.ThrowIfNull(evidence);
+        return new DidCommExchangeResult(false, null, DidCommTransmitError.TooLarge, PooledMemory.Empty, null) { TooLarge = evidence };
+    }
+
+
+    /// <summary>Creates a transport failure retaining its concrete kind.</summary>
+    public static DidCommExchangeResult Unreachable(Type failureKind)
+    {
+        ArgumentNullException.ThrowIfNull(failureKind);
+        return new DidCommExchangeResult(false, null, DidCommTransmitError.TransportFailed, PooledMemory.Empty, null) { FailureKind = failureKind };
+    }
+
+
+    /// <summary>Mints an outcome for a transport-level delivery failure (socket/DNS/connection error or no response).</summary>
     /// <returns>A transport-failure result.</returns>
     public static DidCommExchangeResult TransportFailed()
     {

@@ -118,7 +118,7 @@ internal sealed class RoutingTransport
 
 
     /// <summary>The transport delegate dispatching each request by its absolute URL.</summary>
-    public OutboundTransportDelegate Delegate => (request, context, cancellationToken) =>
+    public OutboundTransportDelegate Delegate => (request, context, readResponse, cancellationToken) =>
     {
         if(!Routes.TryGetValue(request.Target.AbsoluteUri, out (int Status, string? Body) route))
         {
@@ -133,6 +133,6 @@ internal sealed class RoutingTransport
             ? configuredHeaders
             : HttpHeaderSet.Empty;
 
-        return ValueTask.FromResult(new OutboundResponse { StatusCode = route.Status, Body = body, Headers = headers });
+        return ScriptedOutboundTransport.ReadAsync(readResponse, new OutboundResponse { StatusCode = route.Status, Body = body, Headers = headers }, cancellationToken);
     };
 }

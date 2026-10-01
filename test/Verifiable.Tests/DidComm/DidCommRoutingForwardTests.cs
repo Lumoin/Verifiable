@@ -1,4 +1,3 @@
-using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Verifiable.BouncyCastle;
@@ -539,7 +538,7 @@ internal sealed class DidCommRoutingForwardTests
 
         public List<OutboundRequest> Calls { get; } = [];
 
-        public OutboundTransportDelegate Delegate => (request, context, cancellationToken) =>
+        public OutboundTransportDelegate Delegate => (request, context, readResponse, cancellationToken) =>
         {
             Calls.Add(request);
 
@@ -548,11 +547,11 @@ internal sealed class DidCommRoutingForwardTests
                 route = (404, []);
             }
 
-            return ValueTask.FromResult(new OutboundResponse
+            return ScriptedOutboundTransport.ReadAsync(readResponse, new OutboundResponse
             {
                 StatusCode = route.Status,
                 Body = new TaggedMemory<byte>(route.Body, Tag.Empty)
-            });
+            }, cancellationToken);
         };
     }
 
@@ -657,33 +656,9 @@ internal sealed class DidCommRoutingForwardTests
     }
 
 
-    //A single-hop HttpClient transport for the POST: it carries the body and Content-Type and does not follow
-    //redirects (OutboundFetch owns the redirect loop). Test glue — the library carries no System.Net. The request
-    //body is sent straight from the message's pooled memory (ReadOnlyMemoryContent, no array copy), and the response
-    //body is never read into a buffer — a DIDComm POST is one-way, so only the status matters (§HTTPS).
-    private static OutboundTransportDelegate BuildPostTransport(HttpClient httpClient)
-    {
-        return async (request, context, cancellationToken) =>
-        {
-            using var httpRequest = new HttpRequestMessage(new HttpMethod(request.Method), request.Target);
-            if(request.Body is { } body)
-            {
-                var content = new ReadOnlyMemoryContent(body.Memory);
-                if(request.Headers.TryGetValue("Content-Type", out string? contentType))
-                {
-                    content.Headers.ContentType = MediaTypeHeaderValue.Parse(contentType);
-                }
-
-                httpRequest.Content = content;
-            }
-
-            using HttpResponseMessage httpResponse = await httpClient
-                .SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
-                .ConfigureAwait(false);
-
-            return new OutboundResponse { StatusCode = (int)httpResponse.StatusCode };
-        };
-    }
+    /// <summary>Uses the shared single-hop adapter to hand live response bytes to the guarded reader.</summary>
+    private static OutboundTransportDelegate BuildPostTransport(HttpClient httpClient) =>
+        GuardedHttpClientTransport.BuildSingleHopTransport(httpClient);
 
 
     //Packs an authcrypt message from Alice for Bob, resolving Bob's recipient key from his peer document.

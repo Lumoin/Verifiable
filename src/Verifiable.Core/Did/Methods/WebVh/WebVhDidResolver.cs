@@ -330,19 +330,11 @@ public static class WebVhDidResolver
             //from them exactly as it would the primary (did:webvh v1.0, Read: L886). A successful fetch from
             //any source is used; if none succeed, the DID is notFound, with a Detail naming which of the three
             //retrieval causes the primary hit.
-            (OutboundResponse? logResponse, string? logFetchDetail) =
+            (OutboundResponse? logResponse, DidProblemDetails? logFetchError) =
                 await FetchDidLogAsync(target, options, transport, context, cancellationToken).ConfigureAwait(false);
             if(logResponse is null)
             {
-                return DidResolutionResult.Failure(NotFound(logFetchDetail));
-            }
-
-            //Bound the fetched DID Log so an oversized payload is rejected before it is parsed, rather than
-            //driving unbounded allocation through the entry parser (did:webvh v1.0: guard retrieval against
-            //resource exhaustion).
-            if(logResponse.Body.Memory.Length > OutboundFetchPolicy.DefaultMaxResponseBytes)
-            {
-                return DidResolutionResult.Failure(InvalidDid("The did:webvh DID Log exceeds the maximum permitted size."));
+                return DidResolutionResult.Failure(logFetchError!);
             }
 
             List<LogEntry<WebVhRawEntry, WebVhProof>> entries;
@@ -579,7 +571,7 @@ public static class WebVhDidResolver
 
 
     /// <summary>
-    /// The three ways a guarded fetch can fail to yield a usable response, told apart so a resolution result's
+    /// The ways a guarded fetch can fail to yield a usable response, told apart so a resolution result's
     /// <c>Detail</c> can say which one it was without ever publishing the application transport's own exception
     /// message or the outbound-fetch policy's diagnostic <see cref="OutboundFetchResult.DenyReason"/>.
     /// </summary>
@@ -592,7 +584,10 @@ public static class WebVhDidResolver
         PolicyRefused,
 
         /// <summary>A terminal response was obtained but its status was not 200.</summary>
-        UnsuccessfulStatus
+        UnsuccessfulStatus,
+
+        /// <summary>The guarded reader refused the response size.</summary>
+        TooLarge
     }
 
 
@@ -605,7 +600,11 @@ public static class WebVhDidResolver
     /// The status the server answered with, when <paramref name="Cause"/> is
     /// <see cref="WebVhFetchFailureCause.UnsuccessfulStatus"/>; otherwise <c>0</c>.
     /// </param>
-    private sealed record WebVhFetchOutcome(OutboundResponse? Response, WebVhFetchFailureCause? Cause, int StatusCode);
+    private sealed record WebVhFetchOutcome(OutboundResponse? Response, WebVhFetchFailureCause? Cause, int StatusCode)
+    {
+        /// <summary>The retrieval evidence retained through fallback and witness verification.</summary>
+        public DidRetrievalFailure? Failure { get; init; }
+    }
 
 
     /// <summary>
@@ -623,7 +622,7 @@ public static class WebVhDidResolver
     /// <param name="context">The per-operation context carrying the SSRF outbound-fetch policy.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The first successful response, or <see langword="null"/> with the not-found <c>Detail</c>.</returns>
-    private static async ValueTask<(OutboundResponse? Response, string? Detail)> FetchDidLogAsync(
+    private static async ValueTask<(OutboundResponse? Response, DidProblemDetails? Error)> FetchDidLogAsync(
         Uri primaryTarget,
         DidResolutionOptions options,
         OutboundTransportDelegate transport,
@@ -636,11 +635,11 @@ public static class WebVhDidResolver
             return (primary.Response, null);
         }
 
-        string primaryDetail = DescribeFetchFailure(primary.Cause!.Value, primary.StatusCode);
+        DidProblemDetails primaryError = NotFound(DescribeFetchFailure(primary.Cause!.Value, primary.StatusCode)) with { RetrievalFailure = primary.Failure };
 
         if(options.WatcherUrls is not { Count: > 0 } watcherUrls)
         {
-            return (null, primaryDetail);
+            return (null, primaryError);
         }
 
         foreach(string watcherUrl in watcherUrls)
@@ -657,7 +656,7 @@ public static class WebVhDidResolver
             }
         }
 
-        return (null, $"{primaryDetail} No alternative source yielded the log.");
+        return (null, primaryError with { Detail = $"{primaryError.Detail} No alternative source yielded the log." });
     }
 
 
@@ -678,10 +677,8 @@ public static class WebVhDidResolver
 
 
     /// <summary>
-    /// Drives one guarded fetch, telling apart the three ways it can fail to yield a usable response: the
-    /// application transport threw (an application transport that enforces <paramref name="maxResponseBytes"/>
-    /// while streaming reports it this way), the outbound-fetch policy refused the target (or a redirect hop)
-    /// before any terminal response, or a terminal response was obtained whose status was not 200. Cancellation
+    /// Drives one guarded fetch, distinguishing a size refusal, a transport failure, a policy refusal,
+    /// and a terminal response whose status was not 200. Size and transport failures retain their evidence. Cancellation
     /// is always propagated, never turned into a failure cause, and so is one the transport carries inside an
     /// exception of its own (<see cref="WrappedCancellation"/>), so the caller can tell its own cancellation from a
     /// fetch that ended on its own budget.
@@ -712,14 +709,21 @@ public static class WebVhDidResolver
         }
         catch(Exception exception)
         {
-            //An application transport that enforces maxResponseBytes while streaming reports an oversized or
-            //otherwise failed fetch by throwing; the exception's own message and type are the application
-            //transport's, not the library's to publish, so only the cause is recorded here, cancellation
-            //excepted above. A cancellation the transport carries inside its own exception propagates as that
-            //cancellation, as a bare one does.
+            //Keep the transport failure kind without publishing its message. Carried cancellation propagates.
             WrappedCancellation.ThrowIfCarried(exception);
 
-            return new WebVhFetchOutcome(Response: null, Cause: WebVhFetchFailureCause.TransportFailed, StatusCode: 0);
+            return new WebVhFetchOutcome(Response: null, Cause: WebVhFetchFailureCause.TransportFailed, StatusCode: 0)
+            {
+                Failure = new DidRetrievalUnreachable(exception.GetType())
+            };
+        }
+
+        if(fetch.TooLarge is OutboundResponseTooLarge tooLarge)
+        {
+            return new WebVhFetchOutcome(Response: null, Cause: WebVhFetchFailureCause.TooLarge, StatusCode: 0)
+            {
+                Failure = new DidRetrievalTooLarge(tooLarge)
+            };
         }
 
         if(!fetch.IsFetched)
@@ -749,6 +753,7 @@ public static class WebVhDidResolver
     /// <returns>The one-sentence detail.</returns>
     private static string DescribeFetchFailure(WebVhFetchFailureCause cause, int statusCode) => cause switch
     {
+        WebVhFetchFailureCause.TooLarge => "The DID Log exceeds the maximum permitted size.",
         WebVhFetchFailureCause.TransportFailed => "The transport failed to retrieve the DID Log.",
         WebVhFetchFailureCause.PolicyRefused => "The outbound policy refused the fetch of the DID Log.",
         WebVhFetchFailureCause.UnsuccessfulStatus => $"The server answered with status {statusCode}.",
@@ -766,6 +771,7 @@ public static class WebVhDidResolver
     /// <returns>The one-sentence detail.</returns>
     private static string DescribeWitnessFetchFailure(WebVhFetchFailureCause cause, int statusCode) => cause switch
     {
+        WebVhFetchFailureCause.TooLarge => "The did-witness.json exceeds the maximum permitted size.",
         WebVhFetchFailureCause.TransportFailed => "Witnesses are active but the transport failed to retrieve the did-witness.json file.",
         WebVhFetchFailureCause.PolicyRefused => "Witnesses are active but the outbound policy refused the fetch of the did-witness.json file.",
         WebVhFetchFailureCause.UnsuccessfulStatus => $"Witnesses are active but the server answered with status {statusCode} for the did-witness.json file.",
@@ -803,12 +809,12 @@ public static class WebVhDidResolver
         }
 
         //Witnesses are active, so an absent or unsuccessful did-witness.json fails resolution closed: the
-        //entries requiring witnessing cannot be confirmed without it. The three ways the fetch can fail are
+        //entries requiring witnessing cannot be confirmed without it. The fetch failure causes are
         //told apart in the Detail exactly as the primary DID Log fetch tells them apart.
         WebVhFetchOutcome witnessFetch = await TryFetchAsync(witnessTarget, OutboundFetchPolicy.DefaultMaxResponseBytes, transport, context, cancellationToken).ConfigureAwait(false);
         if(witnessFetch.Response is not { } fetchedWitnessResponse)
         {
-            return InvalidDid(DescribeWitnessFetchFailure(witnessFetch.Cause!.Value, witnessFetch.StatusCode));
+            return InvalidDid(DescribeWitnessFetchFailure(witnessFetch.Cause!.Value, witnessFetch.StatusCode)) with { RetrievalFailure = witnessFetch.Failure };
         }
 
         //The did-witness.json media type SHOULD be application/json (did:webvh v1.0, The Witness Proofs File).
@@ -822,15 +828,6 @@ public static class WebVhDidResolver
 
         ReadOnlyMemory<byte> body = fetchedWitnessResponse.Body.Memory;
         int length = body.Length;
-
-        //Bound the witness file like the DID Log before any allocation or verification, so an oversized or MITM'd
-        //did-witness.json is rejected rather than driving unbounded memory and CPU: verifying every entry and proof is
-        //a JCS canonicalization, two SHA-256 digests and an Ed25519 check, and the size bound caps the proof count too,
-        //since each proof costs bytes.
-        if(length > OutboundFetchPolicy.DefaultMaxResponseBytes)
-        {
-            return InvalidDid("The did:webvh did-witness.json exceeds the maximum permitted size.");
-        }
 
         //The fetched body is a GC-managed transport buffer; copy it into a pooled, owned buffer so the witness
         //JSON is tracked and reclaimed like the other did:webvh working buffers. Ownership transfers to the

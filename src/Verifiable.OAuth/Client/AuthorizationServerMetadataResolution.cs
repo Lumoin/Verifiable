@@ -79,11 +79,18 @@ public sealed class AuthorizationServerMetadataRedirectRefused: AuthorizationSer
 /// <summary>The body exceeded the configured byte cap.</summary>
 public sealed class AuthorizationServerMetadataTooLarge: AuthorizationServerMetadataResolution
 {
-    /// <summary>The configured maximum number of document bytes.</summary>
-    public required long Limit { get; init; }
+    /// <summary>The guarded fetch's declared or observed size evidence.</summary>
+    public required OutboundResponseTooLarge Evidence { get; init; }
 
-    /// <summary>The number of body bytes returned by the transport.</summary>
-    public required long LengthSeen { get; init; }
+    /// <summary>The configured maximum number of document bytes.</summary>
+    public long Limit => Evidence.Limit;
+
+    /// <summary>The declared length or the observed lower bound, as identified by LengthKind.</summary>
+    public long LengthSeen => Evidence.Length;
+
+    /// <summary>Whether LengthSeen was declared or actually read.</summary>
+    public OutboundResponseLengthKind LengthKind => Evidence.LengthKind;
+
 }
 
 

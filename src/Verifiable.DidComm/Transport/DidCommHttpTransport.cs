@@ -49,14 +49,10 @@ namespace Verifiable.DidComm.Transport;
 /// </remarks>
 public static class DidCommHttpTransport
 {
-    //A one-way DIDComm POST expects only a small status receipt; the response body is never read (§HTTPS L1124),
-    //so a tight cap lets a cooperating transport abort an oversized reply rather than buffering it (the M3
-    //response-size bound, extended to the transmit path).
+    /// <summary>The guarded reader bounds a one-way POST receipt before its body is discarded.</summary>
     private static long MaxAcceptResponseBytes => 8 * 1024;
 
-    //Default cap on an exchange reply — sized for a Message Pickup 3.0 `delivery` batch; a caller expecting
-    //larger batches raises it via CreateExchangeDelegate's maxReplyBytes parameter. A compile-time constant
-    //so it can serve as the parameter's default value.
+    /// <summary>The default response bound for a Message Pickup 3.0 delivery batch.</summary>
     private const long MaxDefaultExchangeReplyBytes = 2 * 1024 * 1024;
 
 
@@ -78,11 +74,12 @@ public static class DidCommHttpTransport
     }
 
 
+    /// <summary>Posts a borrowed message body and maps the guarded fetch outcome to a transmission result.</summary>
     //Builds the HTTPS POST request (Content-Type = the message media type, body = the message bytes), sends it through
     //the SSRF-policed OutboundFetch, and maps the outcome to a typed result. The body wraps the message's memory as a
     //BORROWED view (no copy), valid only for the duration of this call — the message is alive throughout, and the
     //transport consumes the request synchronously within the await, so the transport MUST NOT retain the body past its
-    //returned task. The HTTP response body is not read — DIDComm POST is one-way (DIDComm v2.1 §HTTPS L1124).
+    //returned task. The guarded reader bounds the receipt; this one-way binding discards its body.
     private static async ValueTask<DidCommTransmitResult> TransmitCoreAsync(
         ReadOnlyMemory<byte> body,
         string mediaType,
@@ -95,7 +92,7 @@ public static class DidCommHttpTransport
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(transport);
 
-        var request = new OutboundRequest
+        OutboundRequest request = new()
         {
             Target = endpoint,
             Method = "POST",
@@ -113,10 +110,15 @@ public static class DidCommHttpTransport
         {
             throw;
         }
-        catch
+        catch(Exception exception)
         {
             //A transport-level failure (socket/DNS/connection) is fail-soft: the sender may fail over or retry.
-            return DidCommTransmitResult.TransportFailed();
+            return DidCommTransmitResult.Unreachable(exception.GetType());
+        }
+
+        if(fetch.TooLarge is OutboundResponseTooLarge tooLarge)
+        {
+            return DidCommTransmitResult.ResponseTooLarge(tooLarge);
         }
 
         if(fetch.Outcome == OutboundFetchOutcome.DeniedByPolicy)
@@ -149,11 +151,9 @@ public static class DidCommHttpTransport
     /// <param name="transport">The application's single-hop HTTP transport.</param>
     /// <param name="pool">The pool a non-empty reply is copied into (<see cref="PooledMemory.FromBytes(ReadOnlySpan{byte}, BaseMemoryPool, Tag)"/>); the returned <see cref="DidCommExchangeResult"/> owns and disposes that copy.</param>
     /// <param name="maxReplyBytes">
-    /// The upper bound, in bytes, the caller accepts for the reply — ENFORCED here, not merely requested: it
-    /// is applied as <see cref="OutboundRequest.MaxResponseBytes"/> (a HINT a cooperating transport uses to
-    /// abort an oversized reply mid-read) AND checked again against the read-back <c>Response.Body</c> as the
-    /// authoritative backstop, so a transport that ignores the hint still cannot smuggle an oversized reply
-    /// through. Defaults to <see cref="MaxDefaultExchangeReplyBytes"/>, sized for a Message Pickup 3.0
+    /// The upper bound, in bytes, enforced by the guarded reader through
+    /// <see cref="OutboundRequest.MaxResponseBytes"/>. An excess returns a typed size refusal with evidence.
+    /// Defaults to <see cref="MaxDefaultExchangeReplyBytes"/>, sized for a Message Pickup 3.0
     /// <c>delivery</c> batch; a caller expecting larger batches raises it.
     /// </param>
     /// <returns>An exchange delegate that POSTs a DIDComm request over HTTPS and returns any same-response reply.</returns>
@@ -170,9 +170,7 @@ public static class DidCommHttpTransport
     }
 
 
-    //Builds the HTTPS POST request the same way TransmitCoreAsync does, but additionally caps and reads the
-    //response body: an exchange delegate exists precisely to surface a same-response reply, unlike the
-    //one-way send path which never reads it.
+    /// <summary>Posts a borrowed message body and retains an accepted reply in the caller's pool.</summary>
     private static async ValueTask<DidCommExchangeResult> ExchangeCoreAsync(
         ReadOnlyMemory<byte> body,
         string mediaType,
@@ -187,7 +185,7 @@ public static class DidCommHttpTransport
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(transport);
 
-        var request = new OutboundRequest
+        OutboundRequest request = new()
         {
             Target = endpoint,
             Method = "POST",
@@ -205,10 +203,15 @@ public static class DidCommHttpTransport
         {
             throw;
         }
-        catch
+        catch(Exception exception)
         {
             //A transport-level failure (socket/DNS/connection) is fail-soft: the caller may fail over or retry.
-            return DidCommExchangeResult.TransportFailed();
+            return DidCommExchangeResult.Unreachable(exception.GetType());
+        }
+
+        if(fetch.TooLarge is OutboundResponseTooLarge tooLarge)
+        {
+            return DidCommExchangeResult.ResponseTooLarge(tooLarge);
         }
 
         if(fetch.Outcome == OutboundFetchOutcome.DeniedByPolicy)
@@ -226,17 +229,6 @@ public static class DidCommHttpTransport
         if(response.StatusCode is < 200 or > 299)
         {
             return DidCommExchangeResult.Rejected(response.StatusCode);
-        }
-
-        //The authoritative post-read size check: MaxResponseBytes on the outbound request above is only a
-        //transport HINT a hostile or non-conforming transport may not honor (OutboundRequest.MaxResponseBytes
-        //never forces OutboundFetch to abort mid-read). This backstop holds regardless of transport
-        //cooperation, mirroring ClientIdMetadataDocuments's post-fetch size check — and lands on the same
-        //outcome a cooperating transport's mid-read abort already produces (an exception maps to
-        //TransportFailed too), so the caller sees one outcome for an oversized reply either way.
-        if(response.Body.Length > maxReplyBytes)
-        {
-            return DidCommExchangeResult.TransportFailed();
         }
 
         //Content-Type is passed through verbatim, whatever the endpoint reported (or none) — no interpretation.

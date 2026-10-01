@@ -133,10 +133,8 @@ public static class WebDidResolver
     /// </para>
     /// <para>
     /// The fetch is bounded by <see cref="OutboundFetchPolicy.DefaultMaxResponseBytes"/>: the request carries it as
-    /// <see cref="OutboundRequest.MaxResponseBytes"/> for a transport that stops reading once a response exceeds it,
-    /// and a response body over it is not parsed at all but reported as not retrieved, like a transport that
-    /// abandoned the read, so a hostile or misconfigured host cannot make resolution buffer or parse an unbounded
-    /// document.
+    /// <see cref="OutboundRequest.MaxResponseBytes"/> for the guarded reader. An excess is not parsed;
+    /// the resolution retains a <see cref="DidRetrievalTooLarge"/> with the declared or observed length.
     /// </para>
     /// <para>
     /// A readable document is checked for conformance before its <c>id</c> is compared with the requested DID,
@@ -198,17 +196,21 @@ public static class WebDidResolver
                 //transport carries inside its own exception propagates as that cancellation, as a bare one does.
                 WrappedCancellation.ThrowIfCarried(exception);
 
-                return DidResolutionResult.Failure(DidResolutionErrors.NotFound);
+                return DidResolutionResult.Failure(DidResolutionErrors.NotFound with
+                {
+                    RetrievalFailure = new DidRetrievalUnreachable(exception.GetType())
+                });
+            }
+
+            if(fetch.TooLarge is OutboundResponseTooLarge tooLarge)
+            {
+                return DidResolutionResult.Failure(DidResolutionErrors.NotFound with
+                {
+                    RetrievalFailure = new DidRetrievalTooLarge(tooLarge)
+                });
             }
 
             if(!fetch.IsFetched || fetch.Response is null || fetch.Response.StatusCode != 200)
-            {
-                return DidResolutionResult.Failure(DidResolutionErrors.NotFound);
-            }
-
-            //The authoritative size check: MaxResponseBytes on the request is a hint a transport may not honour, so a
-            //body over the bound is refused here, before the deserializer ever reads it.
-            if(fetch.Response.Body.Memory.Length > OutboundFetchPolicy.DefaultMaxResponseBytes)
             {
                 return DidResolutionResult.Failure(DidResolutionErrors.NotFound);
             }

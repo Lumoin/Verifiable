@@ -42,7 +42,7 @@ internal static class CarriedCancellationFixtures
     /// <param name="caller">The caller's token source, cancelled as the fetch starts, or <see langword="null"/> to leave it live.</param>
     /// <returns>The transport delegate.</returns>
     public static OutboundTransportDelegate CreateTransport(string cancellationShape, CancellationTokenSource? caller) =>
-        async (request, context, cancellationToken) =>
+        async (request, context, readResponse, cancellationToken) =>
         {
             if(caller is not null)
             {

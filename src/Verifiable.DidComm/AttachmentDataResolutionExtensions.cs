@@ -321,6 +321,7 @@ public static class AttachmentDataResolutionExtensions
 
         int fetchAttempts = 0;
         bool anyContacted = false;
+        OutboundResponseTooLarge? tooLarge = null;
         foreach(string link in attachmentData.Links!)
         {
             if(string.IsNullOrWhiteSpace(link) || !Uri.TryCreate(link, UriKind.Absolute, out Uri? target))
@@ -362,6 +363,13 @@ public static class AttachmentDataResolutionExtensions
                 continue;
             }
 
+            if(fetch.TooLarge is OutboundResponseTooLarge excess)
+            {
+                anyContacted = true;
+                tooLarge ??= excess;
+                continue;
+            }
+
             if(!fetch.IsFetched)
             {
                 //A non-fetched outcome (DeniedByPolicy / RedirectNotFollowed / TooManyRedirects) never reached
@@ -379,13 +387,7 @@ public static class AttachmentDataResolutionExtensions
 
             anyContacted = true;
 
-            //Bound the fetched body length BEFORE accepting it — the policy bounds nothing.
             ReadOnlySpan<byte> body = response.Body.Memory.Span;
-            if(body.Length > MaximumFetchedAttachmentLength)
-            {
-                continue;
-            }
-
             HashVerification verification = VerifyMultihash(hash, body, base64UrlDecoder, hashBase58Decoder, hashFunctionSelector, memoryPool);
             if(verification != HashVerification.Match)
             {
@@ -400,6 +402,11 @@ public static class AttachmentDataResolutionExtensions
             body.CopyTo(owned.Memory.Span);
 
             return AttachmentResolutionResult.ResolvedFetched(owned, body.Length, target, HttpCacheFreshness.Compute(response));
+        }
+
+        if(tooLarge is not null)
+        {
+            return AttachmentResolutionResult.ResponseTooLarge(tooLarge);
         }
 
         //No link verified. If not one link was even contacted (every absolute link was denied by policy, or

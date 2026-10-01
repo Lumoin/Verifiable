@@ -410,7 +410,8 @@ internal sealed class StatusListTokenFetchTests
     [TestMethod]
     public async Task ATransportFailureIsReportedRatherThanThrown()
     {
-        static ValueTask<OutboundResponse> failing(OutboundRequest request, ExchangeContext context, CancellationToken cancellationToken) =>
+        //Raises a transport failure before a response is available.
+        static ValueTask<OutboundTransportResult> failing(OutboundRequest request, ExchangeContext context, OutboundResponseReaderDelegate readResponse, CancellationToken cancellationToken) =>
             throw new InvalidOperationException("The Status Provider refused the connection.");
 
         StatusListTokenFetchResult result = await StatusListTokenFetch.FetchAsync(
@@ -433,7 +434,8 @@ failing, MaxResponseBytes, TestContext.CancellationToken).ConfigureAwait(false);
     [TestMethod]
     public async Task CancellationPropagatesInsteadOfBecomingATransportFailure()
     {
-        static ValueTask<OutboundResponse> cancelling(OutboundRequest request, ExchangeContext context, CancellationToken cancellationToken) =>
+        //Propagates cancellation before a response is available.
+        static ValueTask<OutboundTransportResult> cancelling(OutboundRequest request, ExchangeContext context, OutboundResponseReaderDelegate readResponse, CancellationToken cancellationToken) =>
             throw new OperationCanceledException("The caller cancelled the Status List Token fetch.");
 
         _ = await Assert.ThrowsExactlyAsync<OperationCanceledException>(

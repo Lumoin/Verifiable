@@ -37,7 +37,10 @@ public enum StatusListTokenFetchOutcome
     UnsuccessfulStatus,
 
     /// <summary>The terminal response's <c>Content-Type</c> does not match the requested format's media type.</summary>
-    ContentTypeMismatch
+    ContentTypeMismatch,
+
+    /// <summary>The guarded response reader refused a declared or observed length.</summary>
+    TooLarge
 }
 
 
@@ -48,6 +51,12 @@ public sealed record StatusListTokenFetchResult
 {
     /// <summary>Why the fetch ended.</summary>
     public required StatusListTokenFetchOutcome Outcome { get; init; }
+
+    /// <summary>The guarded fetch's size evidence when the outcome is TooLarge.</summary>
+    public OutboundResponseTooLarge? TooLarge { get; init; }
+
+    /// <summary>The concrete exception type when the transport failed.</summary>
+    public Type? FailureKind { get; init; }
 
     /// <summary>
     /// The raw Status List Token body — "the JWS Compact Serialization form" for
@@ -161,11 +170,12 @@ public static class StatusListTokenFetch
         {
             throw;
         }
-        catch
+        catch(Exception exception)
         {
             return new StatusListTokenFetchResult
             {
                 Outcome = StatusListTokenFetchOutcome.TransportFailed,
+                FailureKind = exception.GetType(),
                 DenyReason = "Transport failure while fetching the Status List Token.",
                 FinalUri = statusListUri
             };
@@ -175,6 +185,7 @@ public static class StatusListTokenFetch
         {
             StatusListTokenFetchOutcome outcome = fetch.Outcome switch
             {
+                OutboundFetchOutcome.TooLarge => StatusListTokenFetchOutcome.TooLarge,
                 OutboundFetchOutcome.DeniedByPolicy => StatusListTokenFetchOutcome.PolicyDenied,
                 OutboundFetchOutcome.RedirectNotFollowed or OutboundFetchOutcome.TooManyRedirects
                     => StatusListTokenFetchOutcome.RedirectNotFollowed,
@@ -190,6 +201,7 @@ public static class StatusListTokenFetch
             return new StatusListTokenFetchResult
             {
                 Outcome = outcome,
+                TooLarge = fetch.TooLarge,
                 DenyReason = fetch.DenyReason,
                 FinalUri = fetch.FinalUri,
                 RedirectCount = fetch.RedirectCount
