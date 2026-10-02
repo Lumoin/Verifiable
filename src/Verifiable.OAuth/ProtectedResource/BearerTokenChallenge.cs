@@ -78,6 +78,25 @@ public static class BearerTokenChallenge
     /// <c>Bearer realm="…", error="…", error_description="…", scope="…", resource_metadata="…"</c>.
     /// A <see langword="null"/> or empty string is treated as absent.
     /// </summary>
+    /// <remarks>
+    /// A caller that names an issuer as the <paramref name="realm"/> derives the realm from the issuer
+    /// first, since an issuer may hold text outside the HTAB, SP and visible US-ASCII an
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.6.4">RFC 9110 Section 5.6.4</see>
+    /// quoted-string carries: it writes the issuer in its URI form as
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3987#section-3.1">RFC 3987 Section 3.1</see> maps an
+    /// IRI. The host is written in its IDNA ASCII form (<see cref="Uri.IdnHost"/>), the conversion of the
+    /// ireg-name the section permits a system accepting IRIs to apply before its step 2: "Replace the
+    /// ireg-name part of the IRI by the part converted using the ToASCII operation specified in section 4.1
+    /// of [RFC3490] on each dot-separated label, and by using U+002E (FULL STOP) as a label separator, with
+    /// the flag UseSTD3ASCIIRules set to TRUE, and with the flag AllowUnassigned set to FALSE for creating
+    /// IRIs and set to TRUE otherwise." Every other character outside ASCII is written as the
+    /// percent-encoding of its UTF-8 octets, the section's steps 2.1 and 2.2: "Convert the character to a
+    /// sequence of one or more octets using UTF-8 [RFC3629]." and "Convert each octet to %HH, where HH is
+    /// the hexadecimal notation of the octet value." The library's own
+    /// realms are derived by that mapping, so no refusal the library composes reaches the throw below; the
+    /// throw stays for a value the caller supplies, a defect of the caller's composition that this method
+    /// refuses rather than emit a challenge a client cannot read.
+    /// </remarks>
     /// <param name="realm">The protection-space identifier (§3); any content representable in an RFC 9110 §5.6.4 quoted-string.</param>
     /// <param name="error">The §3.1 error code, e.g. <see cref="OAuthErrors.InvalidToken"/>; characters in %x20-21 / %x23-5B / %x5D-7E.</param>
     /// <param name="errorDescription">The developer-readable explanation (§3); characters in %x20-21 / %x23-5B / %x5D-7E.</param>

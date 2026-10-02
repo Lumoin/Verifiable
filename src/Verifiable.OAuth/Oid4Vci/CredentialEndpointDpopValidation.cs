@@ -301,16 +301,20 @@ internal static class CredentialEndpointDpopValidation
     /// %x23-5B / %x5D-7E / obs-text", <c>"</c> and <c>\</c> through quoted-pair), while an issuer accepted by
     /// <see cref="IssuerIdentifierValidation.IsValidIssuerShape"/> may hold Unicode text. An issuer written
     /// in that repertoire is used as written. Otherwise it is mapped to its URI form as
-    /// <see href="https://www.rfc-editor.org/rfc/rfc3987#section-3.1">RFC 3987 §3.1</see> maps an IRI: a
-    /// non-ASCII host is written in its IDNA ASCII form ("Replace the ireg-name part of the IRI by the
-    /// part converted using the ToASCII operation specified in section 4.1 of [RFC3490] on each
-    /// dot-separated label"), and every other non-ASCII character is written as the percent-encoding of
-    /// its UTF-8 octets ("Convert the character to a sequence of one or more octets using UTF-8" and
-    /// "Convert each octet to %HH, where HH is the hexadecimal notation of the octet value").
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3987#section-3.1">RFC 3987 Section 3.1</see> maps an IRI. A
+    /// non-ASCII host is written in its IDNA ASCII form, the conversion of the ireg-name the section
+    /// permits a system accepting IRIs to apply before its step 2: "Replace the ireg-name part of the IRI
+    /// by the part converted using the ToASCII operation specified in section 4.1 of [RFC3490] on each
+    /// dot-separated label, and by using U+002E (FULL STOP) as a label separator, with the flag
+    /// UseSTD3ASCIIRules set to TRUE, and with the flag AllowUnassigned set to FALSE for creating IRIs and
+    /// set to TRUE otherwise." Every other non-ASCII character is written as the percent-encoding of its
+    /// UTF-8 octets, the section's steps 2.1 and 2.2: "Convert the character to a sequence of one or more
+    /// octets using UTF-8 [RFC3629]." and "Convert each octet to %HH, where HH is the hexadecimal notation
+    /// of the octet value."
     /// </summary>
     /// <param name="issuerUri">The issuer the request is served under.</param>
     /// <returns>The issuer text, in visible US-ASCII.</returns>
-    private static string HeaderSafeIssuer(Uri issuerUri)
+    internal static string HeaderSafeIssuer(Uri issuerUri)
     {
         string original = issuerUri.OriginalString;
         if(IsVisibleAscii(original))
@@ -329,7 +333,7 @@ internal static class CredentialEndpointDpopValidation
     /// <summary>Whether every character of <paramref name="value"/> is a visible US-ASCII character (%x21-7E).</summary>
     /// <param name="value">The text.</param>
     /// <returns><see langword="true"/> when the text holds visible US-ASCII only.</returns>
-    private static bool IsVisibleAscii(string value)
+    internal static bool IsVisibleAscii(string value)
     {
         foreach(char c in value)
         {
@@ -412,14 +416,16 @@ internal static class CredentialEndpointDpopValidation
     /// <summary>
     /// Resolves the issuer the request is served under, through the application's
     /// <c>ResolveIssuerAsync</c> seam when wired and the default resolver otherwise; its authority is
-    /// the one the proof's <c>htu</c> is compared against.
+    /// the one the proof's <c>htu</c> is compared against, and its <see cref="HeaderSafeIssuer"/> form is
+    /// the <c>realm</c> of the challenges this class and
+    /// <see cref="Logout.GlobalTokenRevocationEndpoints"/> answer with.
     /// </summary>
     /// <param name="server">The authorization server holding the resolver seam.</param>
     /// <param name="registration">The client (tenant) the request belongs to.</param>
     /// <param name="context">The per-request context.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The issuer.</returns>
-    private static async ValueTask<Uri> ResolveIssuerAsync(
+    internal static async ValueTask<Uri> ResolveIssuerAsync(
         EndpointServer server,
         ClientRecord registration,
         ExchangeContext context,

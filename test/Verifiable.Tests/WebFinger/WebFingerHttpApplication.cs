@@ -230,8 +230,12 @@ internal sealed class WebFingerHttpApplication
     }
 
 
-    /// <summary>A minimal <see cref="IRegistrationRecord"/> carrying only the host-generic projection the dispatcher reads — no OAuth vocabulary.</summary>
-    private sealed record PlainRegistration: IRegistrationRecord
+    /// <summary>
+    /// A minimal <see cref="IRegistrationRecord"/> carrying only the host-generic projection the dispatcher reads, with no
+    /// OAuth vocabulary. A family's row that needs a registration the family cannot use (a record that is not its own
+    /// registration type) builds one of these.
+    /// </summary>
+    internal sealed record PlainRegistration: IRegistrationRecord
     {
         /// <summary>The stable client identifier surfaced on dispatch telemetry.</summary>
         public required string ClientId { get; init; }
