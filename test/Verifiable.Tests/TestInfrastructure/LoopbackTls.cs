@@ -1,5 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
+using System.Net.Security;
+using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
@@ -10,7 +12,8 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// shares: minting an ephemeral, in-memory self-signed server certificate for an
 /// <c>https://127.0.0.1:{port}</c> listener (<see cref="CreateServerCertificate"/>), and building the
 /// byte-exact pinned <see cref="HttpClient"/> that dials it (<see cref="CreatePinnedHandler(X509Certificate2)"/>,
-/// <see cref="CreatePinnedHttpClient(X509Certificate2, Uri?)"/>). <see cref="X509Certificate2"/> here is TLS transport
+/// <see cref="CreatePinnedHttpClient(X509Certificate2, Uri?)"/>), whose TCP connections open through
+/// <see cref="LoopbackConnect"/>. <see cref="X509Certificate2"/> here is TLS transport
 /// infrastructure for test hosts, not project cryptography — it never touches the
 /// <c>Verifiable.Cryptography</c> key-material surface.
 /// </summary>
@@ -111,15 +114,16 @@ internal static class LoopbackTls
 
 
     /// <summary>
-    /// Builds an <see cref="HttpClientHandler"/> whose TLS validation pins to
-    /// <paramref name="pinnedCertificate"/> byte-for-byte rather than trusting a certificate authority.
+    /// Builds a <see cref="SocketsHttpHandler"/> whose TLS validation pins to
+    /// <paramref name="pinnedCertificate"/> byte-for-byte rather than trusting a certificate authority,
+    /// and whose TCP connections open through <see cref="LoopbackConnect.ConnectAsync(EndPoint, CancellationToken)"/>.
     /// There is no CA in this loopback test topology, and validation is never disabled: the callback
     /// always runs and answers strictly from the pinned certificate's raw bytes
     /// (<see cref="CryptographicOperations.FixedTimeEquals(ReadOnlySpan{byte}, ReadOnlySpan{byte})"/>),
     /// never from <c>sslPolicyErrors</c>.
     /// </summary>
     /// <param name="pinnedCertificate">The exact certificate the loopback listener presents.</param>
-    internal static HttpClientHandler CreatePinnedHandler(X509Certificate2 pinnedCertificate)
+    internal static SocketsHttpHandler CreatePinnedHandler(X509Certificate2 pinnedCertificate)
     {
         ArgumentNullException.ThrowIfNull(pinnedCertificate);
 
@@ -128,38 +132,108 @@ internal static class LoopbackTls
 
 
     /// <summary>
-    /// Builds an <see cref="HttpClientHandler"/> whose TLS validation pins to any ONE of
-    /// <paramref name="pinnedCertificates"/> byte-for-byte — the multi-party counterpart to
+    /// Builds a <see cref="SocketsHttpHandler"/> whose TLS validation pins to any ONE of
+    /// <paramref name="pinnedCertificates"/> byte-for-byte, the multi-party counterpart to
     /// <see cref="CreatePinnedHandler(X509Certificate2)"/> for a single test-side client that dials
     /// several distinct loopback listeners, each presenting its own leaf certificate. Every candidate
-    /// is still checked by exact byte comparison; no CA and no disabled validation, exactly like the
-    /// single-certificate overload.
+    /// is checked by exact byte comparison; no CA and no disabled validation, exactly like the
+    /// single-certificate overload. The handler's <see cref="SocketsHttpHandler.ConnectCallback"/> opens
+    /// each connection through <see cref="ConnectThroughLoopbackAsync"/> with
+    /// <see cref="LoopbackConnect.DefaultMaxAttempts"/>, no preparation and
+    /// <see cref="LoopbackKestrelDiagnostics.Provider"/>: a listener port and a local port are both reused
+    /// within the operating system's TIME_WAIT period, so a connect can meet a four-tuple that rests in
+    /// it, and <see cref="LoopbackConnect"/> answers that with an immediate attempt on a fresh socket.
+    /// Every other setting is the handler's default.
     /// </summary>
     /// <param name="pinnedCertificates">The exact certificates the loopback listeners present.</param>
-    internal static HttpClientHandler CreatePinnedHandler(IReadOnlyCollection<X509Certificate2> pinnedCertificates)
+    internal static SocketsHttpHandler CreatePinnedHandler(IReadOnlyCollection<X509Certificate2> pinnedCertificates) =>
+        CreatePinnedHandler(pinnedCertificates, LoopbackConnect.DefaultMaxAttempts, prepareConnectAttempt: null, LoopbackKestrelDiagnostics.Provider);
+
+
+    /// <summary>
+    /// The one body of every pinned handler this class builds: a <see cref="SocketsHttpHandler"/> whose
+    /// TLS validation pins to any ONE of <paramref name="pinnedCertificates"/> byte-for-byte and whose
+    /// <see cref="SocketsHttpHandler.ConnectCallback"/> opens each TCP connection through
+    /// <see cref="LoopbackConnect.ConnectAsync(EndPoint, int, Action{Socket, int}?, LoopbackKestrelDiagnostics, CancellationToken)"/>
+    /// with the given connect options. <see cref="CreatePinnedHandler(IReadOnlyCollection{X509Certificate2})"/>
+    /// passes <see cref="LoopbackConnect.DefaultMaxAttempts"/>, no preparation and
+    /// <see cref="LoopbackKestrelDiagnostics.Provider"/>; a row that proves the handler's connect passes
+    /// its own attempt count, a preparation that binds an attempt's socket, and an isolated
+    /// <see cref="LoopbackKestrelDiagnostics"/> it reads back. The pinning rule is the same for every
+    /// option: a missing certificate fails, a byte-exact match against a pinned leaf passes, and
+    /// <c>sslPolicyErrors</c> is never read.
+    /// </summary>
+    /// <param name="pinnedCertificates">The exact certificates the loopback listeners present.</param>
+    /// <param name="maxConnectAttempts">The number of attempts each connect makes, at least one.</param>
+    /// <param name="prepareConnectAttempt">
+    /// Prepares an attempt's socket before its connect, given the socket and the one-based attempt
+    /// number; <see langword="null"/> prepares nothing.
+    /// </param>
+    /// <param name="connectDiagnostics">Receives the line each connect retry writes.</param>
+    internal static SocketsHttpHandler CreatePinnedHandler(
+        IReadOnlyCollection<X509Certificate2> pinnedCertificates,
+        int maxConnectAttempts,
+        Action<Socket, int>? prepareConnectAttempt,
+        LoopbackKestrelDiagnostics connectDiagnostics)
     {
         ArgumentNullException.ThrowIfNull(pinnedCertificates);
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxConnectAttempts, 1);
+        ArgumentNullException.ThrowIfNull(connectDiagnostics);
 
-        return new HttpClientHandler
+        return new SocketsHttpHandler
         {
-            ServerCertificateCustomValidationCallback = (requestMessage, certificate, chain, sslPolicyErrors) =>
+            ConnectCallback = (context, cancellationToken) =>
+                ConnectThroughLoopbackAsync(context, maxConnectAttempts, prepareConnectAttempt, connectDiagnostics, cancellationToken),
+            SslOptions = new SslClientAuthenticationOptions
             {
-                if(certificate is null)
+                RemoteCertificateValidationCallback = (sender, certificate, chain, sslPolicyErrors) =>
                 {
+                    if(certificate is null)
+                    {
+                        return false;
+                    }
+
+                    byte[] presentedBytes = certificate.GetRawCertData();
+                    foreach(X509Certificate2 pinnedCertificate in pinnedCertificates)
+                    {
+                        if(CryptographicOperations.FixedTimeEquals(presentedBytes, pinnedCertificate.RawData))
+                        {
+                            return true;
+                        }
+                    }
+
                     return false;
                 }
-
-                foreach(X509Certificate2 pinnedCertificate in pinnedCertificates)
-                {
-                    if(CryptographicOperations.FixedTimeEquals(certificate.RawData, pinnedCertificate.RawData))
-                    {
-                        return true;
-                    }
-                }
-
-                return false;
             }
         };
+    }
+
+
+    /// <summary>
+    /// The <see cref="SocketsHttpHandler.ConnectCallback"/> of every handler
+    /// <see cref="CreatePinnedHandler(IReadOnlyCollection{X509Certificate2}, int, Action{Socket, int}?, LoopbackKestrelDiagnostics)"/>
+    /// builds: opens the TCP connection to the request's <see cref="SocketsHttpConnectionContext.DnsEndPoint"/>
+    /// through <see cref="LoopbackConnect.ConnectAsync(EndPoint, int, Action{Socket, int}?, LoopbackKestrelDiagnostics, CancellationToken)"/>
+    /// with the handler's connect options and hands the handler a <see cref="NetworkStream"/> that owns
+    /// the socket, which is what the handler builds itself when no callback is set.
+    /// </summary>
+    /// <param name="context">The connection's context, carrying the destination.</param>
+    /// <param name="maxConnectAttempts">The number of attempts the connect makes.</param>
+    /// <param name="prepareConnectAttempt">Prepares an attempt's socket before its connect, or <see langword="null"/>.</param>
+    /// <param name="connectDiagnostics">Receives the line each retry writes.</param>
+    /// <param name="cancellationToken">Cancels the connect.</param>
+    /// <returns>The stream over the connected socket.</returns>
+    private static async ValueTask<Stream> ConnectThroughLoopbackAsync(
+        SocketsHttpConnectionContext context,
+        int maxConnectAttempts,
+        Action<Socket, int>? prepareConnectAttempt,
+        LoopbackKestrelDiagnostics connectDiagnostics,
+        CancellationToken cancellationToken)
+    {
+        Socket socket = await LoopbackConnect.ConnectAsync(
+            context.DnsEndPoint, maxConnectAttempts, prepareConnectAttempt, connectDiagnostics, cancellationToken).ConfigureAwait(false);
+
+        return new NetworkStream(socket, ownsSocket: true);
     }
 
 
@@ -198,7 +272,7 @@ internal static class LoopbackTls
         Justification = "HttpClient takes ownership of the handler (default disposeHandler: true) and disposes it when the returned client is disposed.")]
     internal static HttpClient CreateSingleHopPinnedHttpClient(X509Certificate2 pinnedCertificate)
     {
-        HttpClientHandler handler = CreatePinnedHandler(pinnedCertificate);
+        SocketsHttpHandler handler = CreatePinnedHandler(pinnedCertificate);
         handler.AllowAutoRedirect = false;
 
         return new HttpClient(handler);
@@ -212,10 +286,29 @@ internal static class LoopbackTls
     /// multi-server flow), each presenting its own leaf certificate.
     /// </summary>
     /// <param name="pinnedCertificates">The exact certificates the loopback listeners present.</param>
+    internal static HttpClient CreatePinnedHttpClient(IReadOnlyCollection<X509Certificate2> pinnedCertificates) =>
+        CreatePinnedHttpClient(pinnedCertificates, LoopbackConnect.DefaultMaxAttempts, prepareConnectAttempt: null, LoopbackKestrelDiagnostics.Provider);
+
+
+    /// <summary>
+    /// Builds an <see cref="HttpClient"/> over
+    /// <see cref="CreatePinnedHandler(IReadOnlyCollection{X509Certificate2}, int, Action{Socket, int}?, LoopbackKestrelDiagnostics)"/>,
+    /// pinned to any ONE of <paramref name="pinnedCertificates"/> and connecting with the given connect
+    /// options; <see cref="CreatePinnedHttpClient(IReadOnlyCollection{X509Certificate2})"/> calls it with
+    /// the defaults.
+    /// </summary>
+    /// <param name="pinnedCertificates">The exact certificates the loopback listeners present.</param>
+    /// <param name="maxConnectAttempts">The number of attempts each connect makes, at least one.</param>
+    /// <param name="prepareConnectAttempt">Prepares an attempt's socket before its connect, or <see langword="null"/>.</param>
+    /// <param name="connectDiagnostics">Receives the line each connect retry writes.</param>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "HttpClient takes ownership of the handler (default disposeHandler: true) and disposes it when the returned client is disposed.")]
-    internal static HttpClient CreatePinnedHttpClient(IReadOnlyCollection<X509Certificate2> pinnedCertificates) =>
-        new(CreatePinnedHandler(pinnedCertificates));
+    internal static HttpClient CreatePinnedHttpClient(
+        IReadOnlyCollection<X509Certificate2> pinnedCertificates,
+        int maxConnectAttempts,
+        Action<Socket, int>? prepareConnectAttempt,
+        LoopbackKestrelDiagnostics connectDiagnostics) =>
+        new(CreatePinnedHandler(pinnedCertificates, maxConnectAttempts, prepareConnectAttempt, connectDiagnostics));
 
 
     /// <summary>
@@ -231,7 +324,7 @@ internal static class LoopbackTls
         Justification = "HttpClient takes ownership of the handler (default disposeHandler: true) and disposes it when the returned client is disposed.")]
     internal static HttpClient CreateSingleHopPinnedHttpClient(IReadOnlyCollection<X509Certificate2> pinnedCertificates)
     {
-        HttpClientHandler handler = CreatePinnedHandler(pinnedCertificates);
+        SocketsHttpHandler handler = CreatePinnedHandler(pinnedCertificates);
         handler.AllowAutoRedirect = false;
 
         return new HttpClient(handler);

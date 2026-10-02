@@ -12,7 +12,11 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// formats every Warning-or-above log call into one line and writes it to <see cref="Console.Out"/>,
 /// which the test runner's captured console output records for the run — a server-side abort therefore
 /// names its reason in the run capture — and appends the line to <see cref="Captured"/>, the provider's
-/// own testable observation surface.
+/// own testable observation surface. The console write runs on a thread-pool work item that does not
+/// carry the caller's <see cref="ExecutionContext"/>: the runner keeps a line written inside a test's
+/// own flow (a test client's connect, <see cref="LoopbackConnect"/>) in that test's captured output,
+/// which it prints only for a failing test, while a line written outside any test's flow reaches the
+/// run's output.
 /// </summary>
 internal sealed class LoopbackKestrelDiagnostics: ILoggerProvider
 {
@@ -143,7 +147,10 @@ internal sealed class LoopbackKestrelDiagnostics: ILoggerProvider
                 : $" ({exception.GetType().Name}: {exception.Message})";
             string line = $"[loopback-kestrel] {CategoryName}[{eventId}] {message}{exceptionSummary}";
 
-            Console.Out.WriteLine(line);
+            //A work item queued without the caller's ExecutionContext writes the line outside any test's
+            //flow, so the runner prints it in the run's output instead of keeping it in the captured
+            //output of the test that logged it, which the runner shows only when that test fails.
+            _ = ThreadPool.UnsafeQueueUserWorkItem(static pendingLine => Console.Out.WriteLine(pendingLine), line, preferLocal: false);
             Owner.Append(line);
         }
     }

@@ -217,7 +217,7 @@ internal static class RawAuthCodeWirePushers
     public static async Task<HttpResponseMessage> SendPinnedNoRedirectGetAsync(
         TestHostShell host, Uri url, string subjectId, CancellationToken cancellationToken)
     {
-        using HttpClientHandler noRedirectHandler = LoopbackTls.CreatePinnedHandler(host.ServerCertificate);
+        using SocketsHttpHandler noRedirectHandler = LoopbackTls.CreatePinnedHandler(host.ServerCertificate);
         noRedirectHandler.AllowAutoRedirect = false;
         using HttpClient browserClient = new(noRedirectHandler);
         using HttpRequestMessage request = new(HttpMethod.Get, url);
@@ -301,7 +301,7 @@ internal static class RawAuthCodeWirePushers
     public static async Task<HttpResponseMessage> SendPinnedJsonPostAsync(
         TestHostShell host, Uri url, string json, CancellationToken cancellationToken)
     {
-        using HttpClientHandler handler = LoopbackTls.CreatePinnedHandler(host.ServerCertificate);
+        using SocketsHttpHandler handler = LoopbackTls.CreatePinnedHandler(host.ServerCertificate);
         handler.AllowAutoRedirect = false;
         using HttpClient client = new(handler);
         using HttpRequestMessage request = new(HttpMethod.Post, url)

@@ -324,7 +324,7 @@ internal sealed class ResolveIssuerDelegateTests
         //A fresh pinned, no-redirect client for the browser leg: the same certificate the shell's
         //SharedHttpClient pins, so the real-wire GET succeeds without trusting a CA, and with
         //auto-redirect disabled so the 302 Location is read off the wire directly.
-        using HttpClientHandler noRedirectHandler = LoopbackTls.CreatePinnedHandler(host.ServerCertificate);
+        using SocketsHttpHandler noRedirectHandler = LoopbackTls.CreatePinnedHandler(host.ServerCertificate);
         noRedirectHandler.AllowAutoRedirect = false;
         using HttpClient browserClient = new(noRedirectHandler) { BaseAddress = hosted.HttpBaseAddress };
         using HttpRequestMessage authorizeRequest = new(HttpMethod.Get, authorizeUrl);

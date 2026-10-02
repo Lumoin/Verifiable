@@ -104,7 +104,7 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
     /// policy-evaluated.
     /// </summary>
     /// <remarks>
-    /// Wires the resolver's transport manually with <see cref="HttpClientHandler.AllowAutoRedirect"/>
+    /// Wires the resolver's transport manually with <see cref="SocketsHttpHandler.AllowAutoRedirect"/>
     /// explicitly <see langword="false"/> — <see cref="TestHostShell.WireCimdMaterializationAsync"/>'s
     /// pinned client leaves the framework default (<see langword="true"/>), which would let
     /// <see cref="HttpClient"/> itself silently follow the 302 before the guarded
@@ -137,7 +137,7 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
 
         await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
 
-        using HttpClientHandler noAutoRedirectHandler = LoopbackTls.CreatePinnedHandler(documentHost.Certificate);
+        using SocketsHttpHandler noAutoRedirectHandler = LoopbackTls.CreatePinnedHandler(documentHost.Certificate);
         noAutoRedirectHandler.AllowAutoRedirect = false;
         using HttpClient documentHttpClient = new(noAutoRedirectHandler);
         OutboundTransportDelegate transport = GuardedHttpClientTransport.BuildSingleHopTransport(documentHttpClient);
@@ -1471,7 +1471,7 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
             $"?{OAuthRequestParameterNames.ClientId}={Uri.EscapeDataString(registration.ClientId.Value)}" +
             $"&{OAuthRequestParameterNames.RequestUri}={Uri.EscapeDataString(parState.Par.RequestUri.ToString())}");
 
-        using HttpClientHandler noRedirectHandler = LoopbackTls.CreatePinnedHandler(app.ServerCertificate);
+        using SocketsHttpHandler noRedirectHandler = LoopbackTls.CreatePinnedHandler(app.ServerCertificate);
         noRedirectHandler.AllowAutoRedirect = false;
         using HttpClient browserClient = new(noRedirectHandler) { BaseAddress = hosted.HttpBaseAddress };
         using HttpRequestMessage authorizeRequest = new(HttpMethod.Get, authorizeUrl);

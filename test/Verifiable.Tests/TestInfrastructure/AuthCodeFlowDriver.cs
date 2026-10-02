@@ -53,7 +53,7 @@ internal sealed record AuthCodeFlowDriveResult
 /// must have auto-redirect DISABLED (for example
 /// <see cref="LoopbackTls.CreateSingleHopPinnedHttpClient(System.Security.Cryptography.X509Certificates.X509Certificate2)"/>, or a handler from
 /// <see cref="LoopbackTls.CreatePinnedHandler(IReadOnlyCollection{System.Security.Cryptography.X509Certificates.X509Certificate2})"/>
-/// with <see cref="HttpClientHandler.AllowAutoRedirect"/> set to <see langword="false"/>): the
+/// with <see cref="SocketsHttpHandler.AllowAutoRedirect"/> set to <see langword="false"/>): the
 /// driver asserts the authorize 302 itself, so the framework must never silently follow the
 /// <c>Location</c> to the client's (non-resolvable) redirect URI. A single multi-pinned client can
 /// drive flows against several hosts with distinct TLS identities

@@ -6791,7 +6791,7 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         //A fresh pinned, no-redirect client for the browser leg: the same certificate the shell's
         //SharedHttpClient pins, so this genuine HTTPS GET succeeds without trusting a CA, and with
         //auto-redirect disabled so the 302 Location is read off the wire instead of being followed.
-        using HttpClientHandler noRedirectHandler = LoopbackTls.CreatePinnedHandler(pinnedCertificate);
+        using SocketsHttpHandler noRedirectHandler = LoopbackTls.CreatePinnedHandler(pinnedCertificate);
         noRedirectHandler.AllowAutoRedirect = false;
         using HttpClient browserClient = new(noRedirectHandler) { BaseAddress = hosted.HttpBaseAddress };
         using HttpRequestMessage authorizeRequest = new(HttpMethod.Get, authorizeUrl);

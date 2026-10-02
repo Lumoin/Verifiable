@@ -361,7 +361,7 @@ internal sealed class ClientIdMetadataDocumentCrossWireFlowTests
             //certificate; here the resolver must reach both the CIMD document host and the separate
             //jwks_uri host, so the integration is wired directly, mirroring WireCimdMaterialization's
             //own body over a two-certificate pinned, single-hop client.
-            using HttpClientHandler resolverHandler =
+            using SocketsHttpHandler resolverHandler =
                 LoopbackTls.CreatePinnedHandler([documentHost.Certificate, jwksHost.Certificate]);
             resolverHandler.AllowAutoRedirect = false;
             using HttpClient resolverHttpClient = new(resolverHandler);
@@ -831,7 +831,7 @@ internal sealed class ClientIdMetadataDocumentCrossWireFlowTests
             $"?{OAuthRequestParameterNames.ClientId}={Uri.EscapeDataString(registration.ClientId.Value)}" +
             $"&{OAuthRequestParameterNames.RequestUri}={Uri.EscapeDataString(parState.Par.RequestUri.ToString())}");
 
-        using HttpClientHandler noRedirectHandler = LoopbackTls.CreatePinnedHandler(pinnedCertificate);
+        using SocketsHttpHandler noRedirectHandler = LoopbackTls.CreatePinnedHandler(pinnedCertificate);
         noRedirectHandler.AllowAutoRedirect = false;
         using HttpClient browserClient = new(noRedirectHandler) { BaseAddress = hosted.HttpBaseAddress };
         using HttpRequestMessage authorizeRequest = new(HttpMethod.Get, authorizeUrl);
