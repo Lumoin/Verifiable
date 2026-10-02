@@ -131,7 +131,7 @@ public readonly record struct JwsVerificationResult
 /// as the upper bound, and an explicit overload that takes a caller-supplied
 /// <c>maxJwsLength</c>. Deployments that handle larger or smaller tokens than
 /// the default opt in to the explicit overload; everyone else uses the simple
-/// overload and gets the default RFC 8725 §3.11 guard for free.
+/// overload and gets this library's own default length guard for free.
 /// </para>
 /// </remarks>
 [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The caller is responsible for disposing the returned JwsMessage.")]
@@ -148,10 +148,10 @@ public static class Jws
     /// <c>maxJwsLength</c>.
     /// </summary>
     /// <remarks>
-    /// Per RFC 8725 §3.11, "JWT implementations should consider providing
-    /// a way for applications to set a maximum size for incoming JWTs".
-    /// 1 MiB matches the upper bound common JWT libraries use as a sane
-    /// default.
+    /// The bound is this library's own guard against a large allocation
+    /// from a presenter-supplied token; no specification states it. The
+    /// value of 1 MiB is a ceiling far above the size of the tokens named
+    /// above.
     /// </remarks>
     public const int DefaultMaxJwsLength = 1 * 1024 * 1024;
 
@@ -649,13 +649,14 @@ public static class Jws
     /// <summary>
     /// Verifies a JWS compact serialization using registry-resolved
     /// verification function, with a caller-supplied
-    /// <paramref name="maxJwsLength"/> upper bound per RFC 8725 §3.11.
+    /// <paramref name="maxJwsLength"/> upper bound, this library's own guard
+    /// against a large allocation, stated by no specification.
     /// </summary>
     /// <param name="jws">The JWS compact serialization to verify.</param>
     /// <param name="base64UrlDecoder">Decodes Base64Url strings to bytes with pooled memory.</param>
     /// <param name="pool">Memory pool for decoding allocation.</param>
     /// <param name="publicKey">The public key for verification.</param>
-    /// <param name="maxJwsLength">Maximum accepted JWS length per RFC 8725 §3.11.</param>
+    /// <param name="maxJwsLength">Maximum accepted JWS length, this library's own guard against a large allocation, stated by no specification.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns><see langword="true"/> if the signature is valid; otherwise <see langword="false"/>.</returns>
     /// <exception cref="ArgumentException">Thrown when the JWS exceeds <paramref name="maxJwsLength"/> or does not have exactly three parts.</exception>
@@ -706,14 +707,15 @@ public static class Jws
     /// <summary>
     /// Verifies a JWS compact serialization using an explicit verification
     /// function, with a caller-supplied <paramref name="maxJwsLength"/>
-    /// upper bound per RFC 8725 §3.11.
+    /// upper bound, this library's own guard against a large allocation,
+    /// stated by no specification.
     /// </summary>
     /// <param name="jws">The JWS compact serialization to verify.</param>
     /// <param name="base64UrlDecoder">Decodes Base64Url strings to bytes with pooled memory.</param>
     /// <param name="pool">Memory pool for decoding allocation.</param>
     /// <param name="publicKey">The public key for verification.</param>
     /// <param name="verificationDelegate">The verification function to use.</param>
-    /// <param name="maxJwsLength">Maximum accepted JWS length per RFC 8725 §3.11.</param>
+    /// <param name="maxJwsLength">Maximum accepted JWS length, this library's own guard against a large allocation, stated by no specification.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <param name="eventSink">
     /// Receives the <see cref="VerificationCompletedEvent"/> the resolved <paramref name="verificationDelegate"/>
@@ -831,15 +833,16 @@ public static class Jws
 
     /// <summary>
     /// Verifies a JWS and returns the decoded header and payload, with a
-    /// caller-supplied <paramref name="maxJwsLength"/> upper bound per
-    /// RFC 8725 §3.11.
+    /// caller-supplied <paramref name="maxJwsLength"/> upper bound, this
+    /// library's own guard against a large allocation, stated by no
+    /// specification.
     /// </summary>
     /// <param name="jws">The JWS compact serialization to verify.</param>
     /// <param name="base64UrlDecoder">Decodes Base64Url strings to bytes with pooled memory.</param>
     /// <param name="partDecoder">Decodes JWT part bytes to a claims dictionary.</param>
     /// <param name="pool">Memory pool for decoding allocation.</param>
     /// <param name="publicKey">The public key for verification.</param>
-    /// <param name="maxJwsLength">Maximum accepted JWS length per RFC 8725 §3.11.</param>
+    /// <param name="maxJwsLength">Maximum accepted JWS length, this library's own guard against a large allocation, stated by no specification.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The verification result containing validity and decoded parts.</returns>
     /// <exception cref="ArgumentException">Thrown when the JWS exceeds <paramref name="maxJwsLength"/> or does not have exactly three parts.</exception>
@@ -868,7 +871,8 @@ public static class Jws
     /// <summary>
     /// Verifies a JWS and returns the decoded header and payload using an
     /// explicit <see cref="VerificationDelegate"/>, with a caller-supplied
-    /// <paramref name="maxJwsLength"/> upper bound per RFC 8725 §3.11. The
+    /// <paramref name="maxJwsLength"/> upper bound, this library's own guard
+    /// against a large allocation, stated by no specification. The
     /// registry-resolving overload above delegates here after resolving the
     /// function via
     /// <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>
@@ -880,7 +884,7 @@ public static class Jws
     /// <param name="pool">Memory pool for decoding allocation.</param>
     /// <param name="publicKey">The public key for verification.</param>
     /// <param name="verificationDelegate">The verification delegate to use.</param>
-    /// <param name="maxJwsLength">Maximum accepted JWS length per RFC 8725 §3.11.</param>
+    /// <param name="maxJwsLength">Maximum accepted JWS length, this library's own guard against a large allocation, stated by no specification.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <param name="eventSink">
     /// Receives the <see cref="VerificationCompletedEvent"/> the resolved <paramref name="verificationDelegate"/>
@@ -1077,8 +1081,9 @@ public static class Jws
 
     /// <summary>
     /// Verifies a JWS using resolver/binder pattern for key resolution,
-    /// with a caller-supplied <paramref name="maxJwsLength"/> upper bound
-    /// per RFC 8725 §3.11.
+    /// with a caller-supplied <paramref name="maxJwsLength"/> upper bound,
+    /// this library's own guard against a large allocation, stated by no
+    /// specification.
     /// </summary>
     /// <remarks>
     /// The verify-side counterpart of the resolver/binder <c>SignAsync</c> overload's remarks: <paramref name="binder"/>
@@ -1190,7 +1195,8 @@ public static class Jws
     /// <summary>
     /// Verifies a JWS and returns the decoded payload using resolver/binder
     /// pattern, with a caller-supplied <paramref name="maxJwsLength"/>
-    /// upper bound per RFC 8725 §3.11.
+    /// upper bound, this library's own guard against a large allocation,
+    /// stated by no specification.
     /// </summary>
     /// <remarks>
     /// The verify-and-decode counterpart of the resolver/binder <c>VerifyAsync</c> overload's remarks:
@@ -1356,7 +1362,8 @@ public static class Jws
     //Throws if <paramref name="jws"/> is longer than <paramref name="maxJwsLength"/>.
     //The pooled signing-input buffer is sized from the JWS parts, so an
     //unbounded JWS would translate to an unbounded pool rental — a
-    //large-allocation DoS vector per RFC 8725 §3.11. Rejecting early also
+    //large-allocation DoS vector that this library's own bound, stated by no
+    //specification, guards against. Rejecting early also
     //makes the subsequent length arithmetic immune to integer overflow.
     private static void EnsureJwsLengthAccepted(string jws, int maxJwsLength)
     {

@@ -49,7 +49,7 @@ public static class StatusListTokenResolvers
     /// </param>
     /// <param name="maxResponseBytes">
     /// The upper bound on the fetched response body. Defaults to <see cref="Jws.DefaultMaxJwsLength"/> (1 MiB) —
-    /// the same RFC 8725 §3.11 ceiling <see cref="Jws.VerifyAsync(string,DecodeDelegate,BaseMemoryPool,PublicKeyMemory,System.Threading.CancellationToken)"/>
+    /// the same ceiling, this library's own guard stated by no specification, <see cref="Jws.VerifyAsync(string,DecodeDelegate,BaseMemoryPool,PublicKeyMemory,System.Threading.CancellationToken)"/>
     /// applies to the compact JWS it verifies, so a larger response could never verify anyway.
     /// </param>
     /// <returns>

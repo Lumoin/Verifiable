@@ -2815,10 +2815,17 @@ internal sealed class Rfc8707ResourceIndicatorTests
 
 
     /// <summary>
-    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707 section 2.1</see>: "If
-    /// the authorization server fails to parse the provided value(s) or does not consider the
-    /// resource(s) acceptable, it should reject the request with an error response using the error
-    /// code "invalid_target" as the value of the "error" parameter". The value is not an absolute URI
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707 section 2.1</see>, for
+    /// an authorization request: "If the authorization server fails to parse the provided value(s) or
+    /// does not consider the resource(s) acceptable, it should reject the request with an error
+    /// response using the error code "invalid_target" as the value of the "error" parameter and can
+    /// provide additional information regarding the reasons for the error using the
+    /// "error_description"."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 section 2</see>, for an
+    /// access token request: "The following error code is provided for an authorization server to
+    /// indicate problems with the requested resource(s) in response to an authorization request or
+    /// access token request." The token request receipts apply the section 2.1 instruction at the
+    /// token endpoint as this library's own reading. The value is not an absolute URI
     /// (<see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 section 2</see>: "Its
     /// value MUST be an absolute URI, as specified by Section 4.3 of [RFC3986]") because
     /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-2">RFC 3986 section 2</see> bases its
@@ -2894,10 +2901,17 @@ internal sealed class Rfc8707ResourceIndicatorTests
 
 
     /// <summary>
-    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707 section 2.1</see>: "If
-    /// the authorization server fails to parse the provided value(s) or does not consider the
-    /// resource(s) acceptable, it should reject the request with an error response using the error
-    /// code "invalid_target" as the value of the "error" parameter". A <c>resource</c> occurrence that
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707 section 2.1</see>, for
+    /// an authorization request: "If the authorization server fails to parse the provided value(s) or
+    /// does not consider the resource(s) acceptable, it should reject the request with an error
+    /// response using the error code "invalid_target" as the value of the "error" parameter and can
+    /// provide additional information regarding the reasons for the error using the
+    /// "error_description"."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 section 2</see>, for an
+    /// access token request: "The following error code is provided for an authorization server to
+    /// indicate problems with the requested resource(s) in response to an authorization request or
+    /// access token request." The token request receipt applies the section 2.1 instruction at the
+    /// token endpoint as this library's own reading. A <c>resource</c> occurrence that
     /// carries whitespace is not an absolute URI
     /// (<see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 section 2</see>: "Its
     /// value MUST be an absolute URI, as specified by Section 4.3 of [RFC3986]"), and the refusal
@@ -2953,8 +2967,13 @@ internal sealed class Rfc8707ResourceIndicatorTests
 
 
     /// <summary>
-    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707 section 2.1</see> and
-    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.2">section 2.2</see>: a refresh
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 section 2</see>: "The
+    /// following error code is provided for an authorization server to indicate problems with the
+    /// requested resource(s) in response to an authorization request or access token request."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.2">Section 2.2</see>: "When the
+    /// "resource" parameter is used on an access token request made to the token endpoint, for all
+    /// grant types, it indicates the target service or protected resource where the client intends to
+    /// use the requested access token." A refresh
     /// token request whose <c>resource</c> is not an absolute URI is refused with
     /// <c>invalid_target</c> before the presented <c>refresh_token</c> is correlated to any grant
     /// ("In the case of a "refresh_token" or "authorization_code" grant type request, such policy

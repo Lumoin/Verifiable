@@ -697,7 +697,7 @@ internal sealed class StatusListTokenVerificationTests
 
 
     /// <summary>
-    /// Per RFC 8725 §3.11, an input beyond the accepted maximum length is refused on its length alone,
+    /// An input beyond the accepted maximum length, this library's own guard stated by no specification, is refused on its length alone,
     /// before any base64url decode is attempted — a Status Provider that ignores the fetch's size hint
     /// cannot make the Relying Party decode an attacker-sized input first.
     /// </summary>

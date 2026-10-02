@@ -158,7 +158,7 @@ public static class DpopProofValidator
 
         //Signature verification via JCose's Jws.VerifyAsync — composes the
         //library's existing JWS verification primitive (including the pooled
-        //signing-input construction and RFC 8725 §3.11 length bound) instead
+        //signing-input construction and this library's own length bound) instead
         //of duplicating those mechanics here.
         bool signatureValid;
         using(publicKey)

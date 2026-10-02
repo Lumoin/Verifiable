@@ -283,13 +283,14 @@ internal sealed class TokenExchangeRequestBuilderTests
     /// The shipped token endpoint refuses a <c>resource</c> value the builder refuses, with an
     /// <c>error_description</c> equal to the text of
     /// <see cref="TokenExchangeRequestBuilder.InvalidResourceReason"/>. The endpoint's refusal follows
-    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707 section 2.1</see>: "If the
-    /// authorization server fails to parse the provided value(s) or does not consider the resource(s)
-    /// acceptable, it should reject the request with an error response using the error code
-    /// "invalid_target" as the value of the "error" parameter", where
-    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 section 2</see> defines
-    /// <c>invalid_target</c> as "The requested resource is invalid, missing, unknown, or malformed."
-    /// That the builder and the endpoint answer with the same text is a rule of this library, not a
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 section 2</see>: "The
+    /// following error code is provided for an authorization server to indicate problems with the
+    /// requested resource(s) in response to an authorization request or access token request." The
+    /// section defines <c>invalid_target</c>: "The requested resource is invalid, missing, unknown, or
+    /// malformed." The instruction of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707 section 2.1</see> for a
+    /// value the server fails to parse is the authorization request's, and this library applies the
+    /// same reading at the token endpoint as its own reading. That the builder and the endpoint answer with the same text is a rule of this library, not a
     /// clause of a specification. The form is hand-built, since the builder does not build it, and is
     /// posted with <c>client_secret_post</c> over the loopback listener.
     /// </summary>

@@ -53,7 +53,7 @@ public enum StatusListTokenVerificationFailure
     MalformedCompactSerialization,
 
     /// <summary>
-    /// The compact serialization is longer than the accepted maximum (RFC 8725 §3.11), refused before
+    /// The compact serialization is longer than the accepted maximum (this library's own guard, stated by no specification), refused before
     /// any base64url decode of it is attempted.
     /// </summary>
     InputTooLong,
@@ -132,8 +132,8 @@ public sealed record StatusListTokenVerificationResult
 /// <see cref="Core.StatusLists.CredentialStatusGate"/> after a resolver composes this verification.
 /// </para>
 /// <para>
-/// <strong>Ordering (RFC 7519 §7.2 steps 1-4/5; Section 8.3 steps 3.a/3.b; Section 5.1 rule 2; RFC
-/// 8725 §3.11).</strong> (0) the input length, against <see cref="Jws.DefaultMaxJwsLength"/>; (1) the
+/// <strong>Ordering (RFC 7519 §7.2 steps 1-4/5; Section 8.3 steps 3.a/3.b; Section 5.1 rule 2).</strong>
+/// (0) the input length, this library's own guard stated by no specification, against <see cref="Jws.DefaultMaxJwsLength"/>; (1) the
 /// compact shape — three non-empty, base64url, dot-separated segments; (2) the protected header —
 /// <c>alg</c> present, not <c>none</c>, and a JWA this build understands, <c>typ</c> present and equal
 /// to <c>statuslist+jwt</c> ("The JWT type MUST be statuslist+jwt."); (3) the issuer key, resolved
@@ -197,7 +197,7 @@ public static class StatusListTokenVerification
 
         string expectedSubject = context.Reference.Uri;
 
-        //RFC 8725 §3.11: an attacker-sized input is refused on its length before any base64url decode
+        //The length bound is this library's own guard, stated by no specification: an attacker-sized input is refused on its length before any base64url decode
         //of it is attempted, rather than reaching Jws.VerifyAsync's own cap after the header has
         //already been decoded — so a hostile or non-conforming transport that ignores
         //StatusListTokenFetch's MaxResponseBytes hint is turned away as cheaply as possible.
@@ -318,7 +318,7 @@ public static class StatusListTokenVerification
 
             //Rule 2: "Relying Parties MUST reject JWTs with an invalid signature." Checked before any
             //payload claim below is read. ArgumentException is caught alongside: Jws.VerifyAsync applies
-            //RFC 8725 §3.11's length cap ahead of parsing, and a hostile or non-conforming transport that
+            //this library's own length cap ahead of parsing, and a hostile or non-conforming transport that
             //ignores StatusListTokenFetch's MaxResponseBytes hint must still fail closed here, not fault.
             bool signatureValid;
             try

@@ -803,9 +803,13 @@ internal sealed class TokenExchangeGrantTests
     /// this library answers for every malformed <c>resource</c> value, the token exchange grant
     /// included: a departure from RFC 8693 section 2.2.2's general <c>invalid_request</c> for a
     /// request that is not valid, following
-    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707 section 2.1</see>'s
-    /// own instruction for a value the server fails to parse ("it should reject the request with an
-    /// error response using the error code "invalid_target"").
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 section 2</see>, which
+    /// provides the code for an access token request: "The following error code is provided for an
+    /// authorization server to indicate problems with the requested resource(s) in response to an
+    /// authorization request or access token request." The instruction of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707 section 2.1</see> for a
+    /// value the server fails to parse is the authorization request's, and this library applies the
+    /// same reading at the token endpoint as its own reading.
     /// </summary>
     /// <remarks>
     /// Deliberately NOT built via <see cref="TokenExchangeRequestBuilder"/>: both values below are
@@ -958,10 +962,13 @@ internal sealed class TokenExchangeGrantTests
     /// A <c>resource</c> outside ASCII is refused at the token exchange with the fixed
     /// <c>invalid_target</c> body this library answers for every malformed <c>resource</c> value.
     /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 section 2</see> defines
-    /// <c>invalid_target</c> as "The requested resource is invalid, missing, unknown, or malformed",
-    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707 section 2.1</see>
-    /// instructs the server that fails to parse a value to "reject the request with an error
-    /// response using the error code "invalid_target"", and
+    /// <c>invalid_target</c>: "The requested resource is invalid, missing, unknown, or malformed."
+    /// It provides the code for an access token request as well: "The following error code is
+    /// provided for an authorization server to indicate problems with the requested resource(s) in
+    /// response to an authorization request or access token request." The instruction of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707 section 2.1</see> for a
+    /// value the server fails to parse is the authorization request's, and this library applies the
+    /// same reading at the token endpoint as its own reading. Last,
     /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 section 2.1</see>
     /// makes the token exchange's <c>resource</c> the same value: "an absolute URI, as specified by
     /// Section 4.3 of [RFC3986]". The URI syntax defines its terminal values as code points "based on

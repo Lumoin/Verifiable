@@ -4960,10 +4960,15 @@ public static class AuthCodeEndpoints
                     //8693 section 2.1 repeats the same MUST for this grant's own resource parameter.
                     //RFC 8693 section 2.2.2 requires invalid_request for a request that is not
                     //valid; this shape check answers invalid_target instead, a deviation from that
-                    //MUST, following RFC 8707 section 2.1's own instruction for a value the server
-                    //fails to parse ("it should reject the request with an error response using the
-                    //error code "invalid_target""), one error code per parameter at every endpoint
-                    //this library answers with.
+                    //MUST. RFC 8707 section 2 provides the code for an access token request: "The
+                    //following error code is provided for an authorization server to indicate
+                    //problems with the requested resource(s) in response to an authorization
+                    //request or access token request." It defines the code: "The requested
+                    //resource is invalid, missing, unknown, or malformed." Section 2.1 instructs
+                    //the server that fails to parse a value to reject the request with
+                    //invalid_target; that instruction is the authorization request's, and this
+                    //library applies the same reading at the token endpoint as its own reading,
+                    //one error code per parameter at every endpoint this library answers with.
                     foreach(string indicator in resourceIndicators)
                     {
                         ResourceIndicatorFault fault = ResourceIndicatorSyntax.Check(indicator);
