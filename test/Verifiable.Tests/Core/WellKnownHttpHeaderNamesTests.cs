@@ -19,6 +19,7 @@ namespace Verifiable.Tests.Core;
 /// and <see href="https://www.w3.org/TR/2021/REC-trace-context-1-20211123/#header-name-0">Section 3.3.1</see>),
 /// the W3C Baggage Candidate Recommendation Snapshot of 30 May 2024
 /// (<see href="https://www.w3.org/TR/2024/CR-baggage-20240530/#header-name">Section 3.1</see>),
+/// <see href="https://www.rfc-editor.org/rfc/rfc6265#section-4.1">RFC 6265, Section 4.1</see>,
 /// <see href="https://www.rfc-editor.org/rfc/rfc6585#section-4">RFC 6585, Section 4</see>, and
 /// <see href="https://www.ietf.org/archive/id/draft-ietf-httpapi-ratelimit-headers-11.html#section-10.1">draft-ietf-httpapi-ratelimit-headers-11, Section 10.1</see>,
 /// which is an Internet-Draft.
@@ -57,10 +58,14 @@ internal sealed class WellKnownHttpHeaderNamesTests
     /// Every field name the table registers, each row's wire value transcribed from the defining
     /// specification: <c>Authorization</c> (RFC 9110 Section 11.6.2), <c>Accept</c> (Section 12.5.1),
     /// <c>Accept-Language</c> (Section 12.5.4), <c>Content-Language</c> (Section 8.5),
-    /// <c>Content-Type</c> (Section 8.3), <c>DPoP</c> / <c>DPoP-Nonce</c> (RFC 9449 Sections 4 and 8),
+    /// <c>Content-Type</c> (Section 8.3),
+    /// <c>Content-Length</c> (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-8.6">Section 8.6</see>),
+    /// <c>DPoP</c> / <c>DPoP-Nonce</c> (RFC 9449 Sections 4 and 8),
     /// <c>Cache-Control</c> (RFC 9111 Section 5.2), <c>WWW-Authenticate</c> (RFC 9110 Section 11.6.1),
     /// <c>Allow</c> (Section 10.2.1), <c>Location</c> (Section 10.2.2), <c>Date</c> (Section 6.6.1),
     /// and <c>Age</c> / <c>Expires</c> (RFC 9111 Sections 5.1 and 5.3).
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6265#section-4.1">RFC 6265, Section 4.1</see>
+    /// names <c>Set-Cookie</c>.
     /// W3C Trace Context Sections 3.2.1 and 3.3.1 name <c>traceparent</c> and <c>tracestate</c>;
     /// the Baggage Candidate Recommendation Snapshot Section 3.1 names <c>baggage</c>.
     /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-10.2.3">RFC 9110, Section 10.2.3</see>
@@ -76,6 +81,7 @@ internal sealed class WellKnownHttpHeaderNamesTests
         new(nameof(WellKnownHttpHeaderNames.AcceptLanguage), WellKnownHttpHeaderNames.AcceptLanguage, "Accept-Language", "accept-language", "ACCEPT-LANGUAGE", WellKnownHttpHeaderNames.IsAcceptLanguage),
         new(nameof(WellKnownHttpHeaderNames.ContentLanguage), WellKnownHttpHeaderNames.ContentLanguage, "Content-Language", "content-language", "CONTENT-LANGUAGE", WellKnownHttpHeaderNames.IsContentLanguage),
         new(nameof(WellKnownHttpHeaderNames.ContentType), WellKnownHttpHeaderNames.ContentType, "Content-Type", "content-type", "CONTENT-TYPE", WellKnownHttpHeaderNames.IsContentType),
+        new(nameof(WellKnownHttpHeaderNames.ContentLength), WellKnownHttpHeaderNames.ContentLength, "Content-Length", "content-length", "CONTENT-LENGTH", WellKnownHttpHeaderNames.IsContentLength),
         new(nameof(WellKnownHttpHeaderNames.DPoP), WellKnownHttpHeaderNames.DPoP, "DPoP", "dpop", "DPOP", WellKnownHttpHeaderNames.IsDPoP),
         new(nameof(WellKnownHttpHeaderNames.DPoPNonce), WellKnownHttpHeaderNames.DPoPNonce, "DPoP-Nonce", "dpop-nonce", "DPOP-NONCE", WellKnownHttpHeaderNames.IsDPoPNonce),
         new(nameof(WellKnownHttpHeaderNames.CacheControl), WellKnownHttpHeaderNames.CacheControl, "Cache-Control", "cache-control", "CACHE-CONTROL", WellKnownHttpHeaderNames.IsCacheControl),
@@ -85,6 +91,7 @@ internal sealed class WellKnownHttpHeaderNamesTests
         new(nameof(WellKnownHttpHeaderNames.Date), WellKnownHttpHeaderNames.Date, "Date", "date", "DATE", WellKnownHttpHeaderNames.IsDate),
         new(nameof(WellKnownHttpHeaderNames.Age), WellKnownHttpHeaderNames.Age, "Age", "age", "AGE", WellKnownHttpHeaderNames.IsAge),
         new(nameof(WellKnownHttpHeaderNames.Expires), WellKnownHttpHeaderNames.Expires, "Expires", "expires", "EXPIRES", WellKnownHttpHeaderNames.IsExpires),
+        new(nameof(WellKnownHttpHeaderNames.SetCookie), WellKnownHttpHeaderNames.SetCookie, "Set-Cookie", "set-cookie", "SET-COOKIE", WellKnownHttpHeaderNames.IsSetCookie),
         new(nameof(WellKnownHttpHeaderNames.TraceParent), WellKnownHttpHeaderNames.TraceParent, "traceparent", "traceparent", "TRACEPARENT", WellKnownHttpHeaderNames.IsTraceParent),
         new(nameof(WellKnownHttpHeaderNames.TraceState), WellKnownHttpHeaderNames.TraceState, "tracestate", "tracestate", "TRACESTATE", WellKnownHttpHeaderNames.IsTraceState),
         new(nameof(WellKnownHttpHeaderNames.Baggage), WellKnownHttpHeaderNames.Baggage, "baggage", "baggage", "BAGGAGE", WellKnownHttpHeaderNames.IsBaggage),
@@ -127,6 +134,10 @@ internal sealed class WellKnownHttpHeaderNamesTests
     /// names "The &quot;RateLimit-Policy&quot; response header field", and
     /// <see href="https://www.ietf.org/archive/id/draft-ietf-httpapi-ratelimit-headers-11.html#section-4">Section 4</see>
     /// names "the &quot;RateLimit&quot; response header field".
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-8.6">RFC 9110, Section 8.6</see>
+    /// defines the <c>Content-Length</c> header field, and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6265#section-4.1">RFC 6265, Section 4.1</see>
+    /// defines the <c>Set-Cookie</c> response header.
     /// </summary>
     [TestMethod]
     public void EveryEntrySpellsItsRegisteredFieldNameVerbatim()
@@ -154,6 +165,7 @@ internal sealed class WellKnownHttpHeaderNamesTests
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.AcceptLanguage), WellKnownHttpHeaderNames.AcceptLanguage, WellKnownHttpHeaderNames.AcceptLanguageUtf8);
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.ContentLanguage), WellKnownHttpHeaderNames.ContentLanguage, WellKnownHttpHeaderNames.ContentLanguageUtf8);
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.ContentType), WellKnownHttpHeaderNames.ContentType, WellKnownHttpHeaderNames.ContentTypeUtf8);
+        AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.ContentLength), WellKnownHttpHeaderNames.ContentLength, WellKnownHttpHeaderNames.ContentLengthUtf8);
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.DPoP), WellKnownHttpHeaderNames.DPoP, WellKnownHttpHeaderNames.DPoPUtf8);
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.DPoPNonce), WellKnownHttpHeaderNames.DPoPNonce, WellKnownHttpHeaderNames.DPoPNonceUtf8);
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.CacheControl), WellKnownHttpHeaderNames.CacheControl, WellKnownHttpHeaderNames.CacheControlUtf8);
@@ -163,6 +175,7 @@ internal sealed class WellKnownHttpHeaderNamesTests
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.Date), WellKnownHttpHeaderNames.Date, WellKnownHttpHeaderNames.DateUtf8);
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.Age), WellKnownHttpHeaderNames.Age, WellKnownHttpHeaderNames.AgeUtf8);
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.Expires), WellKnownHttpHeaderNames.Expires, WellKnownHttpHeaderNames.ExpiresUtf8);
+        AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.SetCookie), WellKnownHttpHeaderNames.SetCookie, WellKnownHttpHeaderNames.SetCookieUtf8);
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.TraceParent), WellKnownHttpHeaderNames.TraceParent, WellKnownHttpHeaderNames.TraceParentUtf8);
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.TraceState), WellKnownHttpHeaderNames.TraceState, WellKnownHttpHeaderNames.TraceStateUtf8);
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.Baggage), WellKnownHttpHeaderNames.Baggage, WellKnownHttpHeaderNames.BaggageUtf8);

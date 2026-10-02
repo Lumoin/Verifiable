@@ -448,4 +448,41 @@ internal sealed class HttpHeaderSetTests
         Assert.IsFalse(headers.Contains("Content Type"), "The dropped field line is not present under any spelling.");
         Assert.AreEqual("application/jwt", headers.Accept, "The well-formed field line survives the drop of its neighbour.");
     }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.1">RFC 9110, Section 5.1</see>:
+    /// "Field names are case-insensitive and ought to be registered within the "Hypertext Transfer
+    /// Protocol (HTTP) Field Name Registry"; see Section 16.3.1." A received lower-case
+    /// <c>set-cookie</c> or <c>content-length</c> field line therefore names the registered field, and
+    /// the set holds it under the registered spelling <c>Set-Cookie</c> or <c>Content-Length</c>, each
+    /// <c>Set-Cookie</c> field line staying its own value in received order.
+    /// </summary>
+    /// <param name="receivedName">The lower-case field name as received.</param>
+    /// <param name="receivedValues">The value of each received field line, in received order.</param>
+    /// <param name="expectedName">The registered spelling the set holds the field under.</param>
+    [TestMethod]
+    [DataRow("set-cookie", new[] { "a=1", "b=2" }, "Set-Cookie")]
+    [DataRow("content-length", new[] { "5" }, "Content-Length")]
+    public void FromReceivedStoresARegisteredNameUnderItsRegisteredSpelling(string receivedName, string[] receivedValues, string expectedName)
+    {
+        var fieldLines = new List<(string Name, string Value)>();
+        foreach(string receivedValue in receivedValues)
+        {
+            fieldLines.Add((receivedName, receivedValue));
+        }
+
+        HttpHeaderSet headers = HttpHeaderSet.FromReceived(fieldLines);
+
+        Assert.HasCount(1, headers.Names, "RFC 9110 Section 5.1: the received field lines name one field.");
+        Assert.AreEqual(expectedName, headers.Names[0], "RFC 9110 Section 5.1: the received lower-case name is held under the registered spelling.");
+
+        IReadOnlyList<string> values = headers.GetValues(expectedName);
+
+        Assert.HasCount(receivedValues.Length, values, "RFC 9110 Section 5.3: every received field line is its own value.");
+        for(int i = 0; i < receivedValues.Length; ++i)
+        {
+            Assert.AreEqual(receivedValues[i], values[i], "RFC 9110 Section 5.3: the received order of field lines with the same name is kept.");
+        }
+    }
 }

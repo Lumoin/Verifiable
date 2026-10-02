@@ -22,8 +22,9 @@ namespace Verifiable.Core.Transport;
 /// <see cref="ContentType"/>, <see cref="DPoP"/>, <see cref="DPoPNonce"/>,
 /// <see cref="CacheControl"/>, <see cref="WwwAuthenticate"/>, <see cref="Allow"/>,
 /// <see cref="Location"/>, <see cref="Date"/>, <see cref="Age"/>, <see cref="Expires"/>,
-/// and <see cref="RetryAfter"/>. Hosts that read or write trace context and rate limits beside
-/// the library can use <see cref="TraceParent"/>, <see cref="TraceState"/>,
+/// and <see cref="RetryAfter"/>. Hosts that read or write content length, cookies, trace context
+/// and rate limits beside the library can use <see cref="ContentLength"/>, <see cref="SetCookie"/>,
+/// <see cref="TraceParent"/>, <see cref="TraceState"/>,
 /// <see cref="Baggage"/>, <see cref="RateLimitPolicy"/>, and <see cref="RateLimit"/>.
 /// The trace-context names use the lowercase spelling their specifications ask senders to use:
 /// W3C Trace Context says "Vendors MUST expect the header name in any case (upper, lower, mixed),
@@ -99,6 +100,17 @@ public static class WellKnownHttpHeaderNames
     /// type of the enclosed representation is unknown to the sender."
     /// </summary>
     public static string ContentType { get; } = Utf8Constants.ToInternedString(ContentTypeUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="ContentLength"/>.</summary>
+    public static ReadOnlySpan<byte> ContentLengthUtf8 => "Content-Length"u8;
+
+    /// <summary>
+    /// The <c>Content-Length</c> header per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-8.6">RFC 9110 Section 8.6</see>:
+    /// "The &quot;Content-Length&quot; header field indicates the associated representation's data
+    /// length as a decimal non-negative integer number of octets."
+    /// </summary>
+    public static string ContentLength { get; } = Utf8Constants.ToInternedString(ContentLengthUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="DPoP"/>.</summary>
     public static ReadOnlySpan<byte> DPoPUtf8 => "DPoP"u8;
@@ -211,6 +223,23 @@ public static class WellKnownHttpHeaderNames
     /// <see cref="CacheControl"/> <c>max-age</c>/<c>s-maxage</c> directive is present.
     /// </summary>
     public static string Expires { get; } = Utf8Constants.ToInternedString(ExpiresUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="SetCookie"/>.</summary>
+    public static ReadOnlySpan<byte> SetCookieUtf8 => "Set-Cookie"u8;
+
+    /// <summary>
+    /// The <c>Set-Cookie</c> response header per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6265#section-4.1">RFC 6265 Section 4.1</see>:
+    /// "The Set-Cookie HTTP response header is used to send cookies from the server to the user agent."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.3">RFC 9110 Section 5.3</see>:
+    /// "In practice, the &quot;Set-Cookie&quot; header field ([COOKIE]) often appears in a response
+    /// message across multiple field lines and does not use the list syntax, violating the above
+    /// requirements on multiple field lines with the same field name." The note goes on: "Since it
+    /// cannot be combined into a single field value, recipients ought to handle &quot;Set-Cookie&quot;
+    /// as a special case while processing fields." A <see cref="HttpHeaderSet"/> holds each
+    /// <c>Set-Cookie</c> field line as its own value.
+    /// </summary>
+    public static string SetCookie { get; } = Utf8Constants.ToInternedString(SetCookieUtf8);
 
     /// <summary>
     /// The UTF-8 source literal of <see cref="TraceParent"/>: "Header name: traceparent" in the
@@ -339,6 +368,12 @@ public static class WellKnownHttpHeaderNames
 
     /// <summary>
     /// Returns <see langword="true"/> when <paramref name="name"/> is the
+    /// <c>Content-Length</c> header.
+    /// </summary>
+    public static bool IsContentLength(string name) => Equals(name, ContentLength);
+
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="name"/> is the
     /// <c>DPoP</c> header.
     /// </summary>
     public static bool IsDPoP(string name) => Equals(name, DPoP);
@@ -390,6 +425,12 @@ public static class WellKnownHttpHeaderNames
     /// <c>Expires</c> header.
     /// </summary>
     public static bool IsExpires(string name) => Equals(name, Expires);
+
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="name"/> is the
+    /// <c>Set-Cookie</c> header.
+    /// </summary>
+    public static bool IsSetCookie(string name) => Equals(name, SetCookie);
 
     /// <summary>
     /// Tests whether <paramref name="name"/> names <see cref="TraceParent"/> through <see cref="Equals"/>.
@@ -455,6 +496,7 @@ public static class WellKnownHttpHeaderNames
         var n when IsAcceptLanguage(n) => AcceptLanguage,
         var n when IsContentLanguage(n) => ContentLanguage,
         var n when IsContentType(n) => ContentType,
+        var n when IsContentLength(n) => ContentLength,
         var n when IsDPoP(n) => DPoP,
         var n when IsDPoPNonce(n) => DPoPNonce,
         var n when IsCacheControl(n) => CacheControl,
@@ -464,6 +506,7 @@ public static class WellKnownHttpHeaderNames
         var n when IsDate(n) => Date,
         var n when IsAge(n) => Age,
         var n when IsExpires(n) => Expires,
+        var n when IsSetCookie(n) => SetCookie,
         var n when IsTraceParent(n) => TraceParent,
         var n when IsTraceState(n) => TraceState,
         var n when IsBaggage(n) => Baggage,
