@@ -329,25 +329,20 @@ internal sealed class GlobalTokenRevocationServerTests
 
     /// <summary>
     /// A posted <c>sub_id</c> whose shape breaks its format is answered 400 <c>invalid_request</c>, and the
-    /// revoke seam is not called: an <c>ip-addresses</c> member that is a string, a <c>complex</c> subject
-    /// whose member is itself <c>complex</c>, and an <c>aliases</c> identifier whose one element is a complex
-    /// subject. The body is posted over the host's loopback listener and read by the default JSON parser.
+    /// revoke seam is not called: an <c>ip-addresses</c> member that is a string, and a <c>complex</c>
+    /// subject whose member is itself <c>complex</c>. The body is posted over the host's loopback listener and
+    /// read by the default JSON parser.
     /// <see href="https://openid.net/specs/openid-sharedsignals-framework-1_0.html#section-3.5.3">OpenID Shared Signals Framework 1.0 Section 3.5.3</see>:
     /// "The value MUST be in the format of an array of strings, each one of which represents the [RFC4001]
     /// string representation of an IP address."
     /// <see href="https://openid.net/specs/openid-sharedsignals-framework-1_0.html#section-3.3">Section 3.3</see>:
     /// "A Complex Subject Member has a name and a value that is a JSON [RFC7159] object that has a format
     /// field, and one or more Simple Subject Members."
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3.2.8">RFC 9493 Section 3.2.8</see>: "Subject
-    /// Identifiers in this format MUST contain an "identifiers" member whose value is a JSON array containing one
-    /// or more Subject Identifiers." A complex subject is not a Subject Identifier such an array holds, which is
-    /// this library's reading (<see cref="SubjectIdentifier.IsValidForKnownFormat"/>).
     /// </summary>
     /// <param name="subIdJson">The request body posted to the endpoint.</param>
     [TestMethod]
     [DataRow(/*lang=json,strict*/ "{\"sub_id\":{\"format\":\"ip-addresses\",\"ip-addresses\":\"10.0.0.1\"}}", DisplayName = "an ip-addresses identifier whose member is a string")]
     [DataRow(/*lang=json,strict*/ "{\"sub_id\":{\"format\":\"complex\",\"user\":{\"format\":\"complex\",\"user\":{\"format\":\"email\",\"email\":\"bar@example.com\"}}}}", DisplayName = "a complex subject whose user member is itself complex")]
-    [DataRow(/*lang=json,strict*/ "{\"sub_id\":{\"format\":\"aliases\",\"identifiers\":[{\"format\":\"complex\",\"user\":{\"format\":\"email\",\"email\":\"bar@example.com\"}}]}}", DisplayName = "an aliases identifier whose one element is a complex subject")]
     public async Task ASubjectIdentifierWhoseShapeBreaksItsFormatIsRefusedAsync(string subIdJson)
     {
         (int statusCode, string body, int revokeCallCount, _) = await PostOverTheLoopbackListenerAsync(subIdJson).ConfigureAwait(false);
@@ -371,13 +366,19 @@ internal sealed class GlobalTokenRevocationServerTests
     /// string representation of an IP address."
     /// <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3.2.8">RFC 9493 Section 3.2.8</see>: "Subject
     /// Identifiers in this format MUST contain an "identifiers" member whose value is a JSON array containing one
-    /// or more Subject Identifiers."
+    /// or more Subject Identifiers." and ""aliases" Subject Identifiers MUST NOT be nested, i.e., the
+    /// "identifiers" member of an "aliases" Subject Identifier MUST NOT contain a Subject Identifier in the
+    /// Aliases Identifier Format." The second sentence forbids that nesting only, so an <c>aliases</c>
+    /// identifier whose one element is a <c>complex</c> subject of
+    /// <see href="https://openid.net/specs/openid-sharedsignals-framework-1_0.html#section-3.3">OpenID Shared Signals Framework 1.0 Section 3.3</see>
+    /// reaches the revoke seam.
     /// </summary>
     /// <param name="subIdJson">The request body posted to the endpoint.</param>
     /// <param name="expectedFormat">The format of the identifier the revoke seam receives.</param>
     [TestMethod]
     [DataRow(/*lang=json,strict*/ "{\"sub_id\":{\"format\":\"ip-addresses\",\"ip-addresses\":[\"10.29.37.75\",\"2001:db8::1\"]}}", "ip-addresses", DisplayName = "an ip-addresses identifier of two addresses")]
     [DataRow(/*lang=json,strict*/ "{\"sub_id\":{\"format\":\"aliases\",\"identifiers\":[{\"format\":\"email\",\"email\":\"user@example.com\"},{\"format\":\"iss_sub\",\"iss\":\"https://issuer.test\",\"sub\":\"subject-123\"}]}}", "aliases", DisplayName = "an aliases identifier of an email and an iss_sub identifier")]
+    [DataRow(/*lang=json,strict*/ "{\"sub_id\":{\"format\":\"aliases\",\"identifiers\":[{\"format\":\"complex\",\"user\":{\"format\":\"email\",\"email\":\"bar@example.com\"}}]}}", "aliases", DisplayName = "an aliases identifier whose one element is a complex subject")]
     public async Task AWellFormedIpAddressesOrAliasesIdentifierReachesTheRevokeSeamAsync(string subIdJson, string expectedFormat)
     {
         (int statusCode, string body, int revokeCallCount, SubjectIdentifier? revokedSubject) =
@@ -389,6 +390,89 @@ internal sealed class GlobalTokenRevocationServerTests
         Assert.IsNotNull(revokedSubject);
         Assert.AreEqual(expectedFormat, revokedSubject.Format);
         Assert.IsTrue(revokedSubject.IsValidForKnownFormat());
+    }
+
+
+    /// <summary>
+    /// A posted <c>sub_id</c> that is a chain of 32 Subject Identifiers, <c>aliases</c> and <c>complex</c>
+    /// alternating with an <c>aliases</c> identifier outermost and an <c>email</c> identifier innermost, read by
+    /// the default JSON parser from the body the host's loopback listener received, reaches the revoke seam
+    /// once as an <c>aliases</c> identifier, and the endpoint answers 204 with an empty body. The innermost
+    /// identifier stands at depth 32, at the nesting bound of <see cref="SubjectIdentifier.IsValidForKnownFormat"/>,
+    /// this library's resource rule; each link is one the texts admit.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-parecki-oauth-global-token-revocation-06#section-3.4.1">draft-parecki-oauth-global-token-revocation-06 Section 3.4.1</see>:
+    /// "To indicate that the request was successful and revocation of the requested set of tokens has begun,
+    /// the server returns an HTTP 204 response."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3.2.8">RFC 9493 Section 3.2.8</see>:
+    /// ""aliases" Subject Identifiers MUST NOT be nested, i.e., the "identifiers" member of an "aliases"
+    /// Subject Identifier MUST NOT contain a Subject Identifier in the Aliases Identifier Format." The sentence
+    /// forbids that nesting only, and
+    /// <see href="https://openid.net/specs/openid-sharedsignals-framework-1_0.html#section-3.3">OpenID Shared Signals Framework 1.0 Section 3.3</see>
+    /// makes each member of a complex subject a Subject Identifier.
+    /// </summary>
+    [TestMethod]
+    public async Task AChainOfAliasesAndComplexAtTheNestingBoundReachesTheRevokeSeamAsync()
+    {
+        (int statusCode, string body, int revokeCallCount, SubjectIdentifier? revokedSubject) =
+            await PostOverTheLoopbackListenerAsync(WriteAlternatingChainBody(32)).ConfigureAwait(false);
+
+        Assert.AreEqual(204, statusCode, body);
+        Assert.AreEqual(string.Empty, body);
+        Assert.AreEqual(1, revokeCallCount);
+        Assert.IsNotNull(revokedSubject);
+        Assert.AreEqual("aliases", revokedSubject.Format);
+        Assert.IsTrue(revokedSubject.IsValidForKnownFormat());
+    }
+
+
+    /// <summary>
+    /// A posted <c>sub_id</c> that is a chain of 33 Subject Identifiers, <c>aliases</c> and <c>complex</c>
+    /// alternating with an <c>aliases</c> identifier outermost and an <c>email</c> identifier innermost, is
+    /// answered 400 <c>invalid_request</c>, and the revoke seam is not called. The default JSON parser reads the
+    /// body at its default depth of 64, deeper than the body's 50 JSON levels, so the identifier reaches the
+    /// endpoint's check whole; its innermost identifier stands at depth 33, one past the nesting bound of 32 of
+    /// <see cref="SubjectIdentifier.IsValidForKnownFormat"/>, this library's resource rule, and every link
+    /// above it is one the format rules admit, so the bound alone refuses it.
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-parecki-oauth-global-token-revocation-06#section-3.4.2">draft-parecki-oauth-global-token-revocation-06 Section 3.4.2</see>,
+    /// 400 Bad Request: "The request was malformed, e.g. an unrecognized or unsupported type of subject
+    /// identifier."
+    /// </summary>
+    [TestMethod]
+    public async Task AChainOfAliasesAndComplexPastTheNestingBoundIsRefusedAsync()
+    {
+        (int statusCode, string body, int revokeCallCount, _) =
+            await PostOverTheLoopbackListenerAsync(WriteAlternatingChainBody(33)).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        using JsonDocument error = JsonDocument.Parse(body);
+        Assert.AreEqual("invalid_request", error.RootElement.GetProperty("error").GetString(), body);
+        Assert.AreEqual(0, revokeCallCount, "A sub_id nested past the bound must not reach the revoke seam.");
+    }
+
+
+    /// <summary>
+    /// Writes a request body whose <c>sub_id</c> is a chain of <paramref name="identifierCount"/> Subject
+    /// Identifiers nested in one another: an <c>aliases</c> identifier outermost, <c>aliases</c> identifiers at
+    /// the odd depths and <c>complex</c> subjects, each holding the next identifier as its <c>user</c> member,
+    /// at the even depths, and an <c>email</c> identifier innermost, at depth
+    /// <paramref name="identifierCount"/>. Each <c>aliases</c> level is two JSON levels (an object and an
+    /// array) and every other identifier one, so the body of a chain of 33 is 50 JSON levels deep.
+    /// </summary>
+    /// <param name="identifierCount">The number of identifiers on the chain, two or more.</param>
+    /// <returns>The JSON request body.</returns>
+    private static string WriteAlternatingChainBody(int identifierCount)
+    {
+        string nested = /*lang=json,strict*/ "{\"format\":\"email\",\"email\":\"user@example.com\"}";
+        for(int depth = identifierCount - 1; depth >= 1; depth--)
+        {
+            nested = (depth % 2) switch
+            {
+                1 => $"{{\"format\":\"aliases\",\"identifiers\":[{nested}]}}",
+                _ => $"{{\"format\":\"complex\",\"user\":{nested}}}"
+            };
+        }
+
+        return $"{{\"sub_id\":{nested}}}";
     }
 
 

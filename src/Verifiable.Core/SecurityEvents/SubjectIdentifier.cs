@@ -206,8 +206,9 @@ public sealed record SubjectIdentifier
     /// <summary>
     /// Creates an <c>aliases</c> Subject Identifier grouping several other Subject
     /// Identifiers that all refer to the same subject. The factory does not check its elements: an identifier
-    /// built from an element of the <c>aliases</c> or the <c>complex</c> format is one
-    /// <see cref="IsValidForKnownFormat"/> and <see cref="IsWellFormed"/> refuse.
+    /// built from an element of the <c>aliases</c> format, or nested deeper than the bound
+    /// <see cref="IsWellFormed"/> names, is one <see cref="IsValidForKnownFormat"/> and
+    /// <see cref="IsWellFormed"/> refuse. An element that is a <c>complex</c> subject is admitted.
     /// </summary>
     public static SubjectIdentifier Aliases(IReadOnlyList<SubjectIdentifier> identifiers)
     {
@@ -444,8 +445,12 @@ public sealed record SubjectIdentifier
     /// address."
     /// </description></item>
     /// </list>
+    /// <para>
+    /// An identifier holding one nested deeper than 32 (<see cref="MaxNestingDepth"/>) is not valid; the bound
+    /// and the remembered walk are those <see cref="IsWellFormed"/> states.
+    /// </para>
     /// </remarks>
-    public bool IsValidForKnownFormat() => CheckKnownFormat() is true;
+    public bool IsValidForKnownFormat() => CheckKnownFormat(1, null) is true;
 
 
     /// <summary>
@@ -472,8 +477,55 @@ public sealed record SubjectIdentifier
     /// rules, so an <c>aliases</c> element or a <c>complex</c> member whose format is blank is refused by the
     /// same rule as an identifier whose own format is.
     /// </para>
+    /// <para>
+    /// The nesting of <c>aliases</c> identifiers and <c>complex</c> subjects in one another is bounded at a
+    /// depth of 32 (<see cref="MaxNestingDepth"/>): the identifier this method is called on stands at depth
+    /// one, each element of an <c>aliases</c> identifier and each member of a <c>complex</c> subject one level
+    /// deeper, and an identifier holding one deeper than 32 is not well formed, whatever the format of the
+    /// deeper one. The bound counts identifiers, not JSON levels. It is this library's resource rule, stated by
+    /// no specification. Its reason: an <c>aliases</c> identifier may hold a <c>complex</c> subject and a
+    /// <c>complex</c> subject an <c>aliases</c> identifier, so the two formats nest each other without end; an
+    /// identifier an application builds from its own objects, a cyclic object graph among them, is bounded by
+    /// no parser, and a check that followed it without a bound would recurse until the stack is exhausted, a
+    /// failure no <c>catch</c> stops. The value is taken from the <c>MaxDepth</c> of 32 that the library's JSON
+    /// readers of this family use for a document (<c>SsfJsonReadHelpers.DocumentOptions</c> in
+    /// <c>Verifiable.Json</c>), a depth that counts JSON levels, each object and each array one. A parser's
+    /// depth bounds the walk of an identifier read from the wire without keeping it inside this bound: the
+    /// global token revocation parser of <c>Verifiable.Json</c> reads a request at the default depth of 64, so
+    /// a chain of 33 identifiers parses and this bound refuses it.
+    /// </para>
+    /// <para>
+    /// One check walks a nested object once for each depth it needs. It remembers, by reference, each nested
+    /// object it found well formed and the deepest depth it found it at, and does not walk that object again
+    /// where it stands at that depth or a shallower one; where it stands deeper, it is walked again. Its answer
+    /// holds because no rule but the bound depends on the depth, and a shallower place leaves more room under
+    /// the bound. So for an identifier that holds one nested object in several places, as one built by
+    /// <see cref="Aliases"/> or <see cref="Complex"/> from a shared identifier does, the work of one check is
+    /// linear in the size of the identifier's distinct nested objects, their members and elements, times the
+    /// bound, not in its paths. That is the check's cost: a writer of the identifier writes every path, since
+    /// JSON carries no references. The memory is created by the first identifier of the check that holds
+    /// nested identifiers, an <c>aliases</c> or a <c>complex</c> identifier, and ends with the call; the check
+    /// of an identifier that holds none allocates no memory. A refusal ends the walk at once.
+    /// </para>
+    /// <para>
+    /// The check reads an identifier's values as stable, finite data, what a JSON document holds: a value whose
+    /// enumeration differs between two reads, or does not end, is outside what the check judges.
+    /// </para>
     /// </remarks>
-    public bool IsWellFormed() => CheckKnownFormat() is not false;
+    public bool IsWellFormed() => CheckKnownFormat(1, null) is not false;
+
+
+    /// <summary>
+    /// The deepest nesting <see cref="CheckKnownFormat"/> follows, 32: the identifier the check starts from
+    /// stands at depth one, and an <c>aliases</c> element or a <c>complex</c> member one level deeper than the
+    /// identifier holding it. An identifier deeper than this bound is refused. The bound counts identifiers,
+    /// not JSON levels. It is this library's resource rule (<see cref="IsWellFormed"/> states its reason). Its
+    /// value is taken from the <c>MaxDepth</c> of 32 that the library's JSON readers of this family use for a
+    /// document, a depth of JSON levels; a parser's depth does not keep an identifier read from the wire inside
+    /// this bound (the global token revocation parser reads at the default depth of 64, so a chain of 33
+    /// identifiers parses and this bound refuses it).
+    /// </summary>
+    private static int MaxNestingDepth { get; } = 32;
 
 
     /// <summary>
@@ -490,10 +542,29 @@ public sealed record SubjectIdentifier
     /// <see cref="IsValidAliases"/> and <see cref="IsValidComplex"/> admit a member of an unknown format while
     /// <see cref="IsValidForKnownFormat"/> refuses it. The catalog is asked before the rules, so the final arm is
     /// reached only by a name the catalog knows that has no rule below, and it answers
-    /// <see langword="false"/>: such a name fails closed.
+    /// <see langword="false"/>: such a name fails closed. An identifier standing deeper than
+    /// <see cref="MaxNestingDepth"/> answers <see langword="false"/> before any other arm is read, whatever its
+    /// format, so the recursion through <see cref="IsValidAliases"/> and <see cref="IsValidComplex"/> ends at
+    /// the bound on every input, a cyclic object graph included (this library's resource rule,
+    /// <see cref="IsWellFormed"/>). The nested objects it reaches are walked through
+    /// <see cref="IsAdmittedNestedIdentifier"/>, which remembers in <paramref name="wellFormedAt"/> each one
+    /// found well formed, so one check walks a shared nested object once for each depth it needs.
     /// </summary>
-    private bool? CheckKnownFormat() => Format switch
+    /// <param name="depth">
+    /// The depth this identifier stands at: one for the identifier the public check is called on, and one more
+    /// than its holder's for an <c>aliases</c> element or a <c>complex</c> member.
+    /// </param>
+    /// <param name="wellFormedAt">
+    /// The memory of the one check: each nested object, by reference, that the check found well formed, with
+    /// the deepest depth it found it at and its format. The public check passes <see langword="null"/>; the
+    /// first identifier of the check that holds nested identifiers, an <c>aliases</c> identifier
+    /// (<see cref="IsValidAliases"/>) or a <c>complex</c> subject (<see cref="IsValidComplex"/>), creates it
+    /// (<see cref="CreateWellFormedMemory"/>) and hands it down, so the check of an identifier that holds none
+    /// allocates none. It ends with the call.
+    /// </param>
+    private bool? CheckKnownFormat(int depth, Dictionary<object, (int Depth, string Format)>? wellFormedAt) => Format switch
     {
+        _ when depth > MaxNestingDepth => false,
         _ when Members.ContainsKey(SubjectIdentifierMemberNames.Format) => false,
         _ when string.IsNullOrWhiteSpace(Format) => false,
         _ when !SubjectIdentifierFormats.IsKnown(Format) => null,
@@ -503,14 +574,14 @@ public sealed record SubjectIdentifier
         _ when SubjectIdentifierFormats.IsOpaque(Format) => HasDescribedMembers([SubjectIdentifierMemberNames.Id], []),
         _ when SubjectIdentifierFormats.IsPhoneNumber(Format) => HasDescribedMembers([SubjectIdentifierMemberNames.PhoneNumber], []),
         _ when SubjectIdentifierFormats.IsDecentralizedIdentifier(Format) => HasDescribedMembers([SubjectIdentifierMemberNames.Url], []),
-        _ when SubjectIdentifierFormats.IsAliases(Format) => IsValidAliases(),
+        _ when SubjectIdentifierFormats.IsAliases(Format) => IsValidAliases(depth, wellFormedAt),
         _ when SubjectIdentifierFormats.IsSamlNameId(Format) => HasDescribedMembers(
             [SubjectIdentifierMemberNames.Issuer, SubjectIdentifierMemberNames.NameId],
             [SubjectIdentifierMemberNames.NameIdFormat, SubjectIdentifierMemberNames.NameQualifier, SubjectIdentifierMemberNames.SpNameQualifier, SubjectIdentifierMemberNames.SpProvidedId]),
         _ when SubjectIdentifierFormats.IsJwtId(Format) => HasDescribedMembers([SubjectIdentifierMemberNames.Iss, SubjectIdentifierMemberNames.Jti], []),
         _ when SubjectIdentifierFormats.IsSamlAssertionId(Format) => HasDescribedMembers([SubjectIdentifierMemberNames.Issuer, SubjectIdentifierMemberNames.AssertionId], []),
         _ when SubjectIdentifierFormats.IsIpAddresses(Format) => IsValidIpAddresses(),
-        _ when SubjectIdentifierFormats.IsComplex(Format) => IsValidComplex(),
+        _ when SubjectIdentifierFormats.IsComplex(Format) => IsValidComplex(depth, wellFormedAt),
         _ => false
     };
 
@@ -554,32 +625,39 @@ public sealed record SubjectIdentifier
     /// space included (a Subject Identifier,
     /// <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3">RFC 9493 Section 3</see>;
     /// <see cref="CheckKnownFormat"/> refuses a blank one at every depth), no element is in the Aliases
-    /// Identifier Format (aliases identifiers are not nested), no element is a <c>complex</c> subject, and an
-    /// element of a format this library recognizes satisfies that format. An element of a format this library
-    /// does not recognize is admitted, since
+    /// Identifier Format, and an element of a format this library recognizes satisfies that format. An element
+    /// of a format this library does not recognize is admitted, since
     /// <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3">RFC 9493 Section 3</see> also lets a
     /// Collision-Resistant Name name an Identifier Format. Exact duplicates are admitted:
     /// <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3.2.8">Section 3.2.8</see>'s "SHOULD NOT
     /// contain exact duplicates" binds the party that writes the identifier, and a reader loses nothing by a
     /// repeated alias.
     /// <para>
-    /// A <c>complex</c> element is refused because
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3.2.8">RFC 9493 Section 3.2.8</see> makes the
-    /// array's elements Subject Identifiers ("a JSON array containing one or more Subject Identifiers"),
-    /// <see href="https://openid.net/specs/openid-sharedsignals-framework-1_0.html#section-3.2">OpenID Shared Signals Framework 1.0 Section 3.2</see>
-    /// makes the value of a simple subject a Subject Identifier, and
-    /// <see href="https://openid.net/specs/openid-sharedsignals-framework-1_0.html#section-3.1.4">Section 3.1.4</see>
-    /// names the two kinds of value apart ("The value of a Subject Member MAY be a "simple subject" or a
-    /// "complex subject"."): a complex subject is not a Subject Identifier an <c>aliases</c> array holds. The
-    /// reading is this library's; no sentence of either specification states the refusal. The reading
-    /// concerns what an <c>aliases</c> array holds and nothing else: an identifier whose own format is
-    /// <c>complex</c> is the Shared Signals shape the catalog carries, held to its members by
-    /// <see cref="IsValidComplex"/>. With the refusal the check ends: a member of a complex subject is a
-    /// simple subject or an <c>aliases</c> identifier, and an element of an <c>aliases</c> identifier is
-    /// neither <c>aliases</c> nor <c>complex</c>.
+    /// The one element refused by its format is the one the text forbids,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3.2.8">RFC 9493 Section 3.2.8</see>:
+    /// ""aliases" Subject Identifiers MUST NOT be nested, i.e., the "identifiers" member of an "aliases"
+    /// Subject Identifier MUST NOT contain a Subject Identifier in the Aliases Identifier Format." The text
+    /// forbids nothing else, so every other well-formed Subject Identifier is admitted as an element, a
+    /// <c>complex</c> subject of
+    /// <see href="https://openid.net/specs/openid-sharedsignals-framework-1_0.html#section-3.3">OpenID Shared Signals Framework 1.0 Section 3.3</see>
+    /// included, which <see cref="IsValidComplex"/> holds to its members as every element of a format the
+    /// catalog knows is held to its format's rule. A <c>complex</c> member may in turn be an <c>aliases</c>
+    /// identifier, so the two formats nest each other; each element is checked one level deeper than this
+    /// identifier, and <see cref="CheckKnownFormat"/> refuses one past <see cref="MaxNestingDepth"/>.
+    /// </para>
+    /// <para>
+    /// Each element is walked through <see cref="IsAdmittedNestedIdentifier"/>, so an element object the check
+    /// found well formed at the depth it stands at here or a deeper one, one object listed twice among them, is
+    /// not walked again: no rule but the bound depends on the depth, and a shallower place leaves more room
+    /// under the bound.
     /// </para>
     /// </summary>
-    private bool IsValidAliases()
+    /// <param name="depth">The depth this identifier stands at (<see cref="CheckKnownFormat"/>).</param>
+    /// <param name="wellFormedAt">
+    /// The memory of the one check (<see cref="CheckKnownFormat"/>), or <see langword="null"/> when this
+    /// identifier is the first of the check to hold nested identifiers, which creates it.
+    /// </param>
+    private bool IsValidAliases(int depth, Dictionary<object, (int Depth, string Format)>? wellFormedAt)
     {
         if(Members.Count != 1
             || !Members.TryGetValue(SubjectIdentifierMemberNames.Identifiers, out object? value)
@@ -589,14 +667,11 @@ public sealed record SubjectIdentifier
             return false;
         }
 
+        Dictionary<object, (int Depth, string Format)> memory = wellFormedAt ?? CreateWellFormedMemory();
         bool isAny = false;
         foreach(object? element in elements)
         {
-            if(element is not IReadOnlyDictionary<string, object> nested
-                || FromWireObject(nested) is not SubjectIdentifier alias
-                || SubjectIdentifierFormats.IsAliases(alias.Format)
-                || SubjectIdentifierFormats.IsComplex(alias.Format)
-                || alias.CheckKnownFormat() is false)
+            if(!IsAdmittedNestedIdentifier(element, depth + 1, SubjectIdentifierFormats.IsAliases, memory))
             {
                 return false;
             }
@@ -659,18 +734,29 @@ public sealed record SubjectIdentifier
     /// <see href="https://www.rfc-editor.org/rfc/rfc9493#section-3">RFC 9493 Section 3</see> and
     /// <see href="https://openid.net/specs/openid-sharedsignals-framework-1_0.html#section-3.1.4">Section 3.1.4</see>
     /// names the two kinds of value apart: "The value of a Subject Member MAY be a "simple subject" or a
-    /// "complex subject"." A member of the <c>aliases</c> format is admitted as a simple subject, and it holds
-    /// no complex subject (<see cref="IsValidAliases"/>).
+    /// "complex subject"." A member of the <c>aliases</c> format is admitted as a simple subject, and its
+    /// elements may include a complex subject (<see cref="IsValidAliases"/>), so the two formats nest each
+    /// other; each member is checked one level deeper than this identifier, and
+    /// <see cref="CheckKnownFormat"/> refuses one past <see cref="MaxNestingDepth"/>.
+    /// <para>
+    /// Each member is walked through <see cref="IsAdmittedNestedIdentifier"/>, so a member object the check
+    /// found well formed at the depth it stands at here or a deeper one, one object held under two members
+    /// among them, is not walked again: no rule but the bound depends on the depth, and a shallower place
+    /// leaves more room under the bound.
+    /// </para>
     /// </summary>
-    private bool IsValidComplex()
+    /// <param name="depth">The depth this identifier stands at (<see cref="CheckKnownFormat"/>).</param>
+    /// <param name="wellFormedAt">
+    /// The memory of the one check (<see cref="CheckKnownFormat"/>), or <see langword="null"/> when this
+    /// identifier is the first of the check to hold nested identifiers, which creates it.
+    /// </param>
+    private bool IsValidComplex(int depth, Dictionary<object, (int Depth, string Format)>? wellFormedAt)
     {
+        Dictionary<object, (int Depth, string Format)> memory = wellFormedAt ?? CreateWellFormedMemory();
         bool isAny = false;
         foreach(KeyValuePair<string, object> member in Members)
         {
-            if(member.Value is not IReadOnlyDictionary<string, object> nested
-                || FromWireObject(nested) is not SubjectIdentifier parsed
-                || SubjectIdentifierFormats.IsComplex(parsed.Format)
-                || parsed.CheckKnownFormat() is false)
+            if(!IsAdmittedNestedIdentifier(member.Value, depth + 1, SubjectIdentifierFormats.IsComplex, memory))
             {
                 return false;
             }
@@ -680,6 +766,66 @@ public sealed record SubjectIdentifier
 
         return isAny;
     }
+
+
+    /// <summary>
+    /// Whether <paramref name="value"/>, an element of an <c>aliases</c> identifier or a member of a
+    /// <c>complex</c> subject standing at <paramref name="depth"/>, is admitted by its holder: a JSON object
+    /// that <see cref="FromWireObject"/> reads, whose format is not the one its holder refuses
+    /// (<paramref name="isRefusedByHolder"/>: an <c>aliases</c> element is never <c>aliases</c>, a
+    /// <c>complex</c> member never <c>complex</c>), and that <see cref="CheckKnownFormat"/> does not refuse at
+    /// that depth. An object found well formed is remembered in <paramref name="wellFormedAt"/>, by reference,
+    /// with the depth it was found at and its format. An object met again where it stands at that depth or a
+    /// shallower one is not walked again: its answer holds, because no rule but the bound
+    /// (<see cref="MaxNestingDepth"/>) depends on the depth and a shallower place leaves more room under the
+    /// bound, and the holder's format rule is read on the remembered format. An object met again deeper is
+    /// walked again, and the deeper depth remembered when it is found well formed again. Nothing is remembered
+    /// of a refusal, which ends the walk at once. So one check walks each nested object at most once for each
+    /// depth up to the bound, and the work of the check is linear in the size of the distinct nested objects,
+    /// their members and elements, times the bound. That is the check's cost: a writer of the identifier writes
+    /// every path, since JSON carries no references. The values are read as stable, finite data, as the remarks
+    /// of <see cref="IsWellFormed"/> state.
+    /// </summary>
+    /// <param name="value">The element or member value the holder carries.</param>
+    /// <param name="depth">The depth the value stands at, one more than its holder's.</param>
+    /// <param name="isRefusedByHolder">Whether the holder refuses a nested identifier of the given format.</param>
+    /// <param name="wellFormedAt">The memory of the one check (<see cref="CheckKnownFormat"/>).</param>
+    private static bool IsAdmittedNestedIdentifier(
+        object? value,
+        int depth,
+        Func<string, bool> isRefusedByHolder,
+        Dictionary<object, (int Depth, string Format)> wellFormedAt)
+    {
+        if(value is not IReadOnlyDictionary<string, object> nested)
+        {
+            return false;
+        }
+
+        if(wellFormedAt.TryGetValue(nested, out (int Depth, string Format) found) && depth <= found.Depth)
+        {
+            return !isRefusedByHolder(found.Format);
+        }
+
+        if(FromWireObject(nested) is not SubjectIdentifier parsed
+            || isRefusedByHolder(parsed.Format)
+            || parsed.CheckKnownFormat(depth, wellFormedAt) is false)
+        {
+            return false;
+        }
+
+        wellFormedAt[nested] = (depth, parsed.Format);
+
+        return true;
+    }
+
+
+    /// <summary>
+    /// Creates the empty memory of one check (<see cref="CheckKnownFormat"/>), keyed by the reference of each
+    /// nested object (<see cref="ReferenceEqualityComparer"/>), so an object is remembered as the object it is
+    /// and no equality of its own is asked.
+    /// </summary>
+    /// <returns>The empty memory.</returns>
+    private static Dictionary<object, (int Depth, string Format)> CreateWellFormedMemory() => new(ReferenceEqualityComparer.Instance);
 
 
     /// <summary>Builds an identifier of <paramref name="format"/> carrying the one member <paramref name="memberName"/>.</summary>
