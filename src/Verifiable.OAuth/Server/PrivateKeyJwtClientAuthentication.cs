@@ -715,8 +715,9 @@ public static class PrivateKeyJwtClientAuthentication
 
                         //Any outcome other than FirstUse refuses the assertion: Replayed is the
                         //defense doing its job, StoreUnavailable is a policy that cannot prove
-                        //itself, and Unacceptable is an oversized jti the guard will not track —
-                        //none of the three authenticates the client.
+                        //itself, and Unacceptable is a jti too long to track or a jti or issuer that
+                        //carries a character the replay guard cannot store; none of the three
+                        //authenticates the client.
                         if(outcome != JtiReplayOutcome.FirstUse)
                         {
                             return false;

@@ -2527,8 +2527,10 @@ internal sealed class IdJagGrantTests
     /// last whole second, 253402300799, and its last tick, 253402300799.9999999. The expiry check and the replay
     /// record the token endpoint keeps for the grant's <c>jti</c> leave no sum outside the representable
     /// instants: the one replay record of the grant is kept until <see cref="DateTimeOffset.MaxValue"/>, the last
-    /// instant, since the expiry and the tolerance pass it. Accepting an expiry that far ahead is this library's
-    /// choice. The rows run inside a <see cref="ServedCultureScope"/> set to "tr-TR".
+    /// instant, since the expiry and the tolerance pass it, and the store observation of
+    /// <see cref="HostedAuthorizationServer.InstallObservedStorage"/> sees the replay guard read, save, read back
+    /// and claim that record. Accepting an expiry that far ahead is this library's choice. The rows run inside a
+    /// <see cref="ServedCultureScope"/> set to "tr-TR".
     /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see> item 4: "The
     /// authorization server MUST reject any JWT with an expiration time that has passed, subject to allowable
     /// clock skew between systems. Note that the authorization server may reject JWTs with an "exp" claim value
@@ -2552,6 +2554,7 @@ internal sealed class IdJagGrantTests
         };
 
         List<JtiSeenState> replayRecords = [];
+        List<string> storeOperations = [];
         (int statusCode, string body, IdJagAssertionValidationResult? recorded, _) = await RedeemSubIdGrantAsync(
             static _ => IdJagSubjectIdentifierRule.Default,
             signedClaims: _ => new Dictionary<string, object>(StringComparer.Ordinal)
@@ -2559,7 +2562,8 @@ internal sealed class IdJagGrantTests
                 [WellKnownJwtClaimNames.Exp] = expiration
             },
             servedCulture: "tr-TR",
-            replayRecords: replayRecords).ConfigureAwait(false);
+            replayRecords: replayRecords,
+            storeOperations: storeOperations).ConfigureAwait(false);
 
         Assert.AreEqual(200, statusCode, body);
         Assert.IsNotNull(recorded);
@@ -2568,6 +2572,46 @@ internal sealed class IdJagGrantTests
         Assert.AreEqual(JtiReplayPurpose.AuthorizationGrantAssertion, grantRecord.Purpose);
         Assert.AreEqual(recorded.Jti, grantRecord.Jti);
         Assert.AreEqual(DateTimeOffset.MaxValue, grantRecord.ExpiresAt);
+        Assert.IsTrue(HostedAuthorizationServer.IsReplayGuardFirstUseObserved(storeOperations),
+            $"The store observation must see the replay guard's read, save, read-back and claim of the grant; it observed: {string.Join(", ", storeOperations)}.");
+    }
+
+
+    /// <summary>
+    /// A hand-built ID-JAG whose <c>iss</c> holds U+0000 is validated by the redeem seam, which surfaces that issuer
+    /// on the grant for the token endpoint's replay defense of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523, Section 3</see> (item 7), and is refused
+    /// over the wire with <c>invalid_grant</c> and the description that names both causes before the replay store is
+    /// read or written. The replay guard refuses an issuer holding a character of the Unicode general category Cc or
+    /// an unpaired surrogate, since the application's store may not hold such a character; the character rule is this
+    /// library's policy, not a rule of the text. The error code is the one
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3.1">RFC 7523, Section 3.1</see> names for an
+    /// assertion that is not valid.
+    /// </summary>
+    [TestMethod]
+    public async Task AnIdJagIssuerCarryingAControlCharacterIsRefusedBeforeAnyStoreCallAsync()
+    {
+        string controlCharacter = ((char)0x0000).ToString();
+        List<string> storeOperations = [];
+        (int statusCode, string body, IdJagAssertionValidationResult? recorded, string idpIssuer) = await RedeemSubIdGrantAsync(
+            static _ => IdJagSubjectIdentifierRule.Default,
+            signedClaims: hostIssuer => new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [WellKnownJwtClaimNames.Iss] = string.Concat(hostIssuer, controlCharacter)
+            },
+            storeOperations: storeOperations).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual("invalid_grant", document.RootElement.GetProperty("error").GetString());
+        Assert.AreEqual(
+            "The assertion jti is too long, or the assertion jti or issuer carries a character the replay guard cannot store.",
+            document.RootElement.GetProperty("error_description").GetString());
+        Assert.IsNotNull(recorded);
+        Assert.AreEqual(string.Concat(idpIssuer, controlCharacter), recorded.Issuer,
+            "The seam validated the grant and surfaced the presented issuer, so the refusal is the replay guard's.");
+        Assert.IsEmpty(storeOperations,
+            $"The refused issuer must never reach the store; it observed: {string.Join(", ", storeOperations)}.");
     }
 
 
@@ -7993,6 +8037,11 @@ internal sealed class IdJagGrantTests
     /// the seam recorded for it, or <see langword="null"/> for one redemption. When given, the host redeems a
     /// first grant, calls it, and redeems a second grant minted or signed afresh, whose answer is returned.
     /// </param>
+    /// <param name="storeOperations">
+    /// The list that receives, in call order, the operation of every flow-state store call the host makes while
+    /// the grants are redeemed, observed through <see cref="HostedAuthorizationServer.InstallObservedStorage"/>
+    /// installed just before the first redemption, or <see langword="null"/> to observe none.
+    /// </param>
     /// <returns>
     /// The last redemption's status code and body, the validation result the seam recorded for it
     /// (<see langword="null"/> when the seam recorded none), and the host's issuer identifier.
@@ -8009,7 +8058,8 @@ internal sealed class IdJagGrantTests
         string? resourceServerIssuer = null,
         IReadOnlyDictionary<string, string>? scopeAudiences = null,
         List<JtiSeenState>? replayRecords = null,
-        Action<string, int, IdJagAssertionValidationResult?>? betweenRedemptions = null)
+        Action<string, int, IdJagAssertionValidationResult?>? betweenRedemptions = null,
+        List<string>? storeOperations = null)
     {
         await using TestHostShell app = new(TimeProvider);
         using ServedCultureScope? culture = servedCulture is null
@@ -8051,6 +8101,16 @@ internal sealed class IdJagGrantTests
                         assertion, registration, jwksResolver, resourceServerIssuer ?? ResourceAsIssuer, redeemRule, result => recorded = result).ConfigureAwait(false);
         }).ConfigureAwait(false);
 
+        int observedFrom = 0;
+        if(storeOperations is not null)
+        {
+            await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+            {
+                host.InstallObservedStorage(candidateIntegration, host);
+            }).ConfigureAwait(false);
+            observedFrom = host.StorageObservations.Count;
+        }
+
         (int StatusCode, string Body) answer = await RedeemFreshGrantAsync().ConfigureAwait(false);
         int redemptions = 1;
         if(betweenRedemptions is not null)
@@ -8064,6 +8124,7 @@ internal sealed class IdJagGrantTests
         //Each mint and each redemption is a token request, a hand-built grant's redemption the only one per grant.
         culture?.AssertEveryRequestWasServedUnder(servedCulture!, redemptions * (signedClaims is null ? 2 : 1));
         replayRecords?.AddRange(app.FlowStore.Values.Select(static entry => entry.State).OfType<JtiSeenState>());
+        storeOperations?.AddRange(host.StorageObservations.Skip(observedFrom).Select(static entry => entry.Operation));
 
         return (answer.StatusCode, answer.Body, recorded, idpIssuer);
 

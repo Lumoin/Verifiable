@@ -324,6 +324,20 @@ internal sealed class HostedAuthorizationServer: IClientRegistrationStore
     }
 
 
+    /// <summary>
+    /// Whether <paramref name="operations"/> holds, as one unbroken run, the four flow-state store calls
+    /// <see cref="JtiReplayGuard"/> makes for a first use: the correlation read, the record's save, the
+    /// read-back of the record and the atomic claim (<c>correlate</c>, <c>save</c>, <c>correlate</c>,
+    /// <c>claim</c>). An accepted presentation that answers <see langword="true"/> shows that
+    /// <see cref="InstallObservedStorage"/> observes the guard on that path, so an empty observation of a
+    /// refused presentation on the same path is an observed absence of every store call.
+    /// </summary>
+    /// <param name="operations">The operations <see cref="StorageObservations"/> recorded for the request, in call order.</param>
+    /// <returns><see langword="true"/> when the guard's first-use run is among them.</returns>
+    public static bool IsReplayGuardFirstUseObserved(IEnumerable<string> operations) =>
+        string.Join(',', operations).Contains("correlate,save,correlate,claim", StringComparison.Ordinal);
+
+
     /// <summary>The host's role name (e.g. "verifier", "anchor", "resource-server").</summary>
     public string Name { get; }
 

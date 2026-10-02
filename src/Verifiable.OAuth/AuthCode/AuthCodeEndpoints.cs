@@ -2369,7 +2369,7 @@ public static class AuthCodeEndpoints
                     "The JAR jti has already been presented within its validity window."),
                 JtiReplayOutcome.Unacceptable => ServerHttpResponse.BadRequest(
                     OAuthErrors.InvalidRequestObject,
-                    "The JAR jti exceeds the length the replay guard can track."),
+                    "The JAR jti is too long or carries a character the replay guard cannot store."),
                 JtiReplayOutcome.StoreUnavailable => ServerHttpResponse.ServerError(
                     OAuthErrors.ServerError,
                     "JAR jti replay defense is required by policy but no jti store is configured."),
@@ -6264,7 +6264,7 @@ public static class AuthCodeEndpoints
                             .WithHeader(WellKnownHttpHeaderNames.CacheControl, WellKnownCacheControlValues.NoStore),
                         JtiReplayOutcome.Unacceptable => ServerHttpResponse.BadRequest(
                             OAuthErrors.InvalidGrant,
-                            "The assertion jti exceeds the length the replay guard can track."),
+                            "The assertion jti is too long, or the assertion jti or issuer carries a character the replay guard cannot store."),
                         JtiReplayOutcome.StoreUnavailable => ServerHttpResponse.ServerError(
                             OAuthErrors.ServerError,
                             "Assertion jti replay defense is required by policy but no jti store is configured."),

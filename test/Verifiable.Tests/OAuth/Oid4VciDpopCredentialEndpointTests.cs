@@ -79,6 +79,64 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449, Section 11.1</see>: "In order to
+    /// guard against memory exhaustion attacks, a server that is tracking jti values should reject DPoP proof JWTs
+    /// with unnecessarily large jti values or store only a hash thereof." Beside that length rule, this library
+    /// refuses a <c>jti</c> holding a character of the Unicode general category Cc before the replay store is read
+    /// or written, since the application's store may not hold such a character; the character rule is this
+    /// library's policy, not a rule of the text. A DPoP-bound access token presented at the Credential Endpoint
+    /// over the wire with a proof signed with the key pair the token is bound to, carrying the endpoint's nonce and
+    /// a <c>jti</c> holding U+0000, is refused with 401, the single challenge
+    /// <c>DPoP error="invalid_dpop_proof", algs="..."</c>, <c>invalid_dpop_proof</c> and the description that names
+    /// both causes, and the store observation records no flow-state store call. A proof with an ordinary
+    /// <c>jti</c> is then served with 200, and the observation sees the replay guard read, save, read back and claim
+    /// its record.
+    /// </summary>
+    [TestMethod]
+    public async Task ADpopProofWhoseJtiCarriesAControlCharacterIsRefusedBeforeAnyStoreCallAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        BoundTokenContext ctx = await AcquireAsync(host).ConfigureAwait(false);
+        using DpopClientFixture fixture = ctx.Fixture;
+        HostedAuthorizationServer hosted = host.Host("default");
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            hosted.InstallObservedStorage(candidateIntegration, hosted);
+        }).ConfigureAwait(false);
+        string nonce = await ObtainResourceNonceAsync(ctx).ConfigureAwait(false);
+
+        string refusedProof = await BuildCredentialProofAsync(
+            ctx, freshKey: null, nonce, jti: string.Concat("jti-", ((char)0x0000).ToString(), "-value")).ConfigureAwait(false);
+        int beforeRefusal = hosted.StorageObservations.Count;
+        using HttpResponseMessage refused = await PostCredentialAsync(ctx, ctx.AccessToken, refusedProof).ConfigureAwait(false);
+        List<string> refusalOperations = [.. hosted.StorageObservations.Skip(beforeRefusal).Select(static entry => entry.Operation)];
+        string refusedBody = await refused.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.Unauthorized, refused.StatusCode, refusedBody);
+        Assert.IsTrue(refused.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges),
+            "The refusal carries a WWW-Authenticate challenge.");
+        Assert.AreEqual(ResourceDpopProofs.DpopChallenge("invalid_dpop_proof"), challenges.Single());
+        using JsonDocument document = JsonDocument.Parse(refusedBody);
+        Assert.AreEqual("invalid_dpop_proof", document.RootElement.GetProperty("error").GetString());
+        Assert.AreEqual(
+            "DPoP proof jti is too long or carries a character the replay guard cannot store.",
+            document.RootElement.GetProperty("error_description").GetString());
+        Assert.IsEmpty(refusalOperations,
+            $"The refused jti must never reach the store; it observed: {string.Join(", ", refusalOperations)}.");
+
+        string acceptedProof = await BuildCredentialProofAsync(ctx, freshKey: null, nonce).ConfigureAwait(false);
+        int beforeAcceptance = hosted.StorageObservations.Count;
+        using HttpResponseMessage accepted = await PostCredentialAsync(ctx, ctx.AccessToken, acceptedProof).ConfigureAwait(false);
+        List<string> acceptanceOperations = [.. hosted.StorageObservations.Skip(beforeAcceptance).Select(static entry => entry.Operation)];
+        string acceptedBody = await accepted.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.OK, accepted.StatusCode, acceptedBody);
+        Assert.IsTrue(HostedAuthorizationServer.IsReplayGuardFirstUseObserved(acceptanceOperations),
+            $"The store observation must see the replay guard's read, save, read-back and claim; it observed: {string.Join(", ", acceptanceOperations)}.");
+    }
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">RFC 9449 §9</see>: "Resource servers
     /// use an HTTP 401 (Unauthorized) error code with an accompanying WWW-Authenticate: DPoP value and
     /// DPoP-Nonce value to accomplish this." A DPoP-bound access token presented at the Credential
@@ -456,11 +514,12 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
     /// <param name="ctx">The bound-token context.</param>
     /// <param name="freshKey">A key other than the bound one, or <see langword="null"/> for the bound key.</param>
     /// <param name="nonce">The resource nonce, or <see langword="null"/> to carry none.</param>
+    /// <param name="jti">The <c>jti</c> value, or <see langword="null"/> for a fresh unique one.</param>
     /// <returns>The DPoP proof JWT.</returns>
-    private Task<string> BuildCredentialProofAsync(BoundTokenContext ctx, DpopKey? freshKey, string? nonce) =>
+    private Task<string> BuildCredentialProofAsync(BoundTokenContext ctx, DpopKey? freshKey, string? nonce, string? jti = null) =>
         ResourceDpopProofs.BuildAsync(
             freshKey ?? ctx.Fixture.DpopKey, WellKnownHttpMethods.Post, ctx.CredentialUrl.ToString(), ctx.AccessToken,
-            nonce, TimeProvider.GetUtcNow(), TestContext.CancellationToken);
+            nonce, TimeProvider.GetUtcNow(), TestContext.CancellationToken, jti);
 
 
     private async Task<HttpResponseMessage> PostCredentialAsync(

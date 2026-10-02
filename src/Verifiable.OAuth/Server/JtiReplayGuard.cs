@@ -1,5 +1,6 @@
 using System.Globalization;
 using Verifiable.Core;
+using Verifiable.Core.Text;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Server.States;
 
@@ -32,8 +33,12 @@ public enum JtiReplayOutcome
     StoreUnavailable,
 
     /// <summary>
-    /// The <c>jti</c> exceeds <see cref="JtiReplayGuard.MaxJtiLength"/> and cannot be tracked —
-    /// the caller must reject the presentation as malformed before any store is consulted.
+    /// The <c>jti</c> exceeds <see cref="JtiReplayGuard.MaxJtiLength"/>, or the <c>jti</c> or the issuer holds a
+    /// character of the Unicode general category Cc (the C0 and C1 controls and U+007F) or an unpaired surrogate,
+    /// so the guard cannot track it; the caller must reject the presentation as malformed, and no store has been
+    /// consulted. The length bound answers
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449, Section 11.1</see>; the character
+    /// rule is this library's policy, since the application's store may not hold such a character.
     /// </summary>
     Unacceptable
 }
@@ -70,7 +75,17 @@ public static class JtiReplayGuard
     /// thereof."). A <c>jti</c> longer than this is refused via
     /// <see cref="JtiReplayOutcome.Unacceptable"/> before any store access.
     /// </summary>
-    public const int MaxJtiLength = 1024;
+    public static int MaxJtiLength { get; } = 1024;
+
+
+    /// <summary>
+    /// The classes of character the guard refuses in a <c>jti</c> or an issuer before any store call: the Unicode
+    /// general category Cc (the C0 and C1 controls and U+007F) and an unpaired surrogate, with no exempt code point.
+    /// A format character (Cf) such as U+200B is not selected. Built once over the shared classifier
+    /// <see cref="TextHygiene"/>; the rule is this library's policy, which <see cref="ConsultCoreAsync"/> applies.
+    /// </summary>
+    private static TextHygieneRule UnstorableCharacterRule { get; } = new(
+        [TextHygieneClass.Control, TextHygieneClass.UnpairedSurrogate], []);
 
     /// <summary>
     /// Composes the <c>(purpose, issuer, jti)</c> correlation key of a purpose whose identifiers are not
@@ -267,9 +282,9 @@ public static class JtiReplayGuard
 
     /// <summary>
     /// The one consultation <see cref="ConsultAsync"/> and <see cref="ConsultDpopProofAsync"/> share: the
-    /// policy, the length bound, the store's presence and claim, the record, its read-back and the claim
-    /// that decides the first use, over the key <see cref="CorrelationKey(JtiReplayPurpose, string, string?, string)"/>
-    /// composes.
+    /// policy, the length bound, the character rule of <see cref="UnstorableCharacterRule"/>, the store's
+    /// presence and claim, the record, its read-back and the claim that decides the first use, over the correlation
+    /// key <see cref="CorrelationKey(JtiReplayPurpose, string, string?, string)"/> composes.
     /// </summary>
     /// <param name="server">The authorization server (its integration store and clock).</param>
     /// <param name="context">The exchange context carrying the resolved policy and tenant.</param>
@@ -309,6 +324,18 @@ public static class JtiReplayGuard
         //RFC 9449 §11.1's memory-exhaustion rule: an oversized jti is refused before it ever
         //reaches a store, under every policy that consults the store at all.
         if(jti.Length > MaxJtiLength)
+        {
+            return JtiReplayOutcome.Unacceptable;
+        }
+
+        //The composed correlation string and the saved record carry the jti and the issuer to the application's
+        //store, and a store may not hold a control character or an unpaired surrogate (a durable store faults on
+        //U+0000), so the guard answers a refusal where a fault would otherwise reach the caller as a server error.
+        //The rule is this library's policy, beyond the length the text asks to bound, and runs before any store
+        //call.
+        bool isUnstorable = TextHygiene.Inspect(jti, UnstorableCharacterRule) is not null
+            || TextHygiene.Inspect(issuer, UnstorableCharacterRule) is not null;
+        if(isUnstorable)
         {
             return JtiReplayOutcome.Unacceptable;
         }

@@ -227,7 +227,7 @@ internal static class DpopTokenEndpointValidation
                 "DPoP proof jti has been seen previously."),
             JtiReplayOutcome.Unacceptable => ServerHttpResponse.BadRequest(
                 OAuthErrors.InvalidDpopProof,
-                "DPoP proof jti exceeds the length the replay guard can track."),
+                "DPoP proof jti is too long or carries a character the replay guard cannot store."),
             JtiReplayOutcome.StoreUnavailable => ServerHttpResponse.ServerError(
                 OAuthErrors.ServerError,
                 "DPoP proof jti replay defense is required by policy but no jti store is configured."),
@@ -491,7 +491,7 @@ internal static class DpopTokenEndpointValidation
                 "DPoP proof jti has been seen previously."),
             JtiReplayOutcome.Unacceptable => ServerHttpResponse.BadRequest(
                 OAuthErrors.InvalidDpopProof,
-                "DPoP proof jti exceeds the length the replay guard can track."),
+                "DPoP proof jti is too long or carries a character the replay guard cannot store."),
             JtiReplayOutcome.StoreUnavailable => ServerHttpResponse.ServerError(
                 OAuthErrors.ServerError,
                 "DPoP proof jti replay defense is required by policy but no jti store is configured."),

@@ -253,6 +253,73 @@ internal sealed class JtiReplayGuardStoreProofTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.2">RFC 8259, Section 8.2</see>, on a string
+    /// value holding an unpaired surrogate: "The behavior of software that receives JSON texts containing such
+    /// values is unpredictable; for example, implementations might return different values for the length of a
+    /// string value or even suffer fatal runtime exceptions." The composed correlation string and the saved record
+    /// carry the <c>jti</c> and the issuer to the application's store, which may not hold such a code unit, so
+    /// this library's replay guard answers <see cref="JtiReplayOutcome.Unacceptable"/> for a <c>jti</c> or an
+    /// issuer that holds an unpaired surrogate before its store's resolver or writer is called; the rule is this
+    /// library's policy, not a rule of a specification. The row consults the guard directly: every wire path of
+    /// this library reads the <c>jti</c> and the issuer through a JSON claims reader that refuses a lone
+    /// surrogate, so no wire carries one to the guard, and only a value an application's own grant delegate hands
+    /// over reaches it. A lone high surrogate inside the <c>jti</c>, a lone low surrogate inside the <c>jti</c>
+    /// and a lone high surrogate at the end of the issuer are each refused with no store call.
+    /// </summary>
+    /// <param name="codePoint">The UTF-16 code unit of the lone surrogate.</param>
+    /// <param name="isInIssuer">Whether the lone surrogate ends the issuer rather than sitting inside the <c>jti</c>.</param>
+    [TestMethod]
+    [DataRow(0xD800, false, DisplayName = "a lone high surrogate inside the jti")]
+    [DataRow(0xDC00, false, DisplayName = "a lone low surrogate inside the jti")]
+    [DataRow(0xDBFF, true, DisplayName = "a lone high surrogate at the end of the issuer")]
+    public async Task AJtiOrIssuerCarryingALoneSurrogateIsUnacceptableBeforeAnyStoreCall(int codePoint, bool isInIssuer)
+    {
+        InMemoryJtiStore store = new(JtiStoreBehavior.ResolvesWhatItSaved);
+        using EndpointServer server = BuildServer(store);
+        ExchangeContext context = BuildContext(JtiReplayPolicy.Required);
+        string loneSurrogate = ((char)codePoint).ToString();
+        string issuer = isInIssuer ? string.Concat(Issuer, loneSurrogate) : Issuer;
+        string jti = isInIssuer ? Jti : string.Concat("jti-", loneSurrogate, "-value");
+
+        JtiReplayOutcome outcome = await ConsultAsync(
+            server, context, issuer, jti, JtiReplayPurpose.AuthorizationGrantAssertion).ConfigureAwait(false);
+
+        Assert.AreEqual(JtiReplayOutcome.Unacceptable, outcome,
+            "A jti or an issuer holding an unpaired surrogate is refused before it can be tracked.");
+        Assert.AreEqual(0, store.ResolveCallCount,
+            "The unpaired surrogate must never reach the store's resolver.");
+        Assert.AreEqual(0, store.SaveCallCount,
+            "The unpaired surrogate must never reach the store's writer.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.7">RFC 7519, Section 4.1.7</see>: "The "jti"
+    /// value is a case-sensitive string." A <c>jti</c> holding a valid surrogate pair (the code units 0xD83D and
+    /// 0xDE00, one supplementary scalar) is well-formed text, which the replay guard's character rule does not
+    /// select, since the rule refuses only an unpaired surrogate and the general category Cc: the guard records
+    /// it in its store as a first use.
+    /// </summary>
+    [TestMethod]
+    public async Task AJtiCarryingASurrogatePairIsAccepted()
+    {
+        InMemoryJtiStore store = new(JtiStoreBehavior.ResolvesWhatItSaved);
+        using EndpointServer server = BuildServer(store);
+        ExchangeContext context = BuildContext(JtiReplayPolicy.Required);
+        string surrogatePair = string.Concat(((char)0xD83D).ToString(), ((char)0xDE00).ToString());
+        string jti = string.Concat("jti-", surrogatePair, "-value");
+
+        JtiReplayOutcome outcome = await ConsultAsync(
+            server, context, Issuer, jti, JtiReplayPurpose.AuthorizationGrantAssertion).ConfigureAwait(false);
+
+        Assert.AreEqual(JtiReplayOutcome.FirstUse, outcome,
+            "A jti holding a valid surrogate pair is well-formed text and is tracked as a first use.");
+        Assert.AreEqual(1, store.SaveCallCount,
+            "The well-formed jti is recorded in the store once.");
+    }
+
+
+    /// <summary>
     /// RFC 7523 §3 rule 7 keys the used-<c>jti</c> set by <c>(issuer, jti)</c>; the guard composes that
     /// key once through <see cref="JtiReplayGuard.CorrelationKey(JtiReplayPurpose, string, string?, string)"/>, and the flow state a host indexes
     /// under composes its own key through the same function via

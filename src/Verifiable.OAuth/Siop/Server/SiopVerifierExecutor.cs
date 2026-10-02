@@ -342,9 +342,7 @@ public static class SiopVerifierExecutor
                         //produces under this RP's policy — Malformed, not a Verifier fault.
                         JtiReplayOutcome.Unacceptable => new SiopFlowFailed
                         {
-                            Reason =
-                                "Self-Issued ID Token nonce exceeds the length the replay guard "
-                                + "can track (SIOPv2 §11.2).",
+                            Reason = "Self-Issued ID Token nonce is too long or carries a character the replay guard cannot store.",
                             FailedAt = now,
                             Refusal = VerifierFlowRefusal.For(VerifierFlowRefusalKind.Malformed)
                         },

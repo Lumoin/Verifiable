@@ -261,8 +261,10 @@ public sealed record IdJagAssertionValidationResult
     /// from <see cref="Issuer"/> and <see cref="Expiration"/>. The guard keys the <c>jti</c> on that issuer under
     /// <see cref="Server.JtiReplayPurpose.AuthorizationGrantAssertion"/> and applies the exchange's
     /// <see cref="Server.JtiReplayPolicy"/>: under <see cref="Server.JtiReplayPolicy.Disabled"/> nothing is
-    /// checked; under the other two a <c>jti</c> longer than <see cref="Server.JtiReplayGuard.MaxJtiLength"/>
-    /// or one the store has seen is refused with <c>invalid_grant</c>; with no store wired,
+    /// checked; under the other two a <c>jti</c> longer than <see cref="Server.JtiReplayGuard.MaxJtiLength"/>, a
+    /// <c>jti</c> or an issuer that holds a character of the Unicode general category Cc or an unpaired surrogate
+    /// (this library's policy, since the application's store may not hold such a character), or a <c>jti</c> the
+    /// store has seen is refused with <c>invalid_grant</c>; with no store wired,
     /// <see cref="Server.JtiReplayPolicy.OptionalIfStorePresent"/> checks nothing further and
     /// <see cref="Server.JtiReplayPolicy.Required"/> answers <c>server_error</c>, as does a wired store that
     /// cannot prove what it records.

@@ -1555,6 +1555,118 @@ internal sealed class DpopBoundRefreshTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449, Section 11.1</see>: "In order to
+    /// guard against memory exhaustion attacks, a server that is tracking jti values should reject DPoP proof JWTs
+    /// with unnecessarily large jti values or store only a hash thereof." Beside that length rule, this library
+    /// refuses a <c>jti</c> holding a character of the Unicode general category Cc before the replay store is read
+    /// or written, since the application's store may not hold such a character; the character rule is this
+    /// library's policy, not a rule of the text. At REFRESH, whose DPoP proof the token endpoint validates before it
+    /// correlates the stored refresh token, a valid proof carrying the server's nonce and a <c>jti</c> holding U+0000
+    /// is answered 400 with <c>invalid_dpop_proof</c> and the description that names both causes, and the store
+    /// observation records no flow-state store call. The refresh token is unconsumed: a proof with an ordinary
+    /// <c>jti</c> then refreshes it with 200, and the observation sees the replay guard read, save, read back and
+    /// claim its record.
+    /// </summary>
+    [TestMethod]
+    public async Task ADpopProofAtRefreshWhoseJtiCarriesAControlCharacterIsRefusedBeforeAnyStoreCallAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+
+        (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
+            await host.CreateOAuthClientAndRegistrationAsync(
+                material.Registration, RedirectUri.OriginalString, profile: PolicyProfile.Rfc6749WithPkce,
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+        using HttpClient browserClient = LoopbackTls.CreateSingleHopPinnedHttpClient(host.ServerCertificate);
+        HostedAuthorizationServer hosted = host.Host("default");
+        string segment = material.Registration.TenantId.Value;
+
+        (string flowId, _) = await AuthCodeFlowDriver.DriveParAuthorizeAndCallbackAsync(
+            hosted, client, registration, clientFlowStore, segment, RedirectUri, SubjectId,
+            browserClient, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        AuthorizationCodeReceivedState callbackState = (AuthorizationCodeReceivedState)clientFlowStore[flowId];
+
+        Uri tokenUri = RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment);
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> proofKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey proofKey = new(proofKeys, WellKnownJwaValues.Es256);
+        try
+        {
+            async Task<HttpResponseData> PostWithProofAsync(Dictionary<string, string> fields, string? nonce, string jti)
+            {
+                string proof = await DpopProofConstruction.BuildAsync(
+                    new DpopProofClaims
+                    {
+                        Htm = WellKnownHttpMethods.Post,
+                        Htu = tokenUri.OriginalString,
+                        Iat = TimeProvider.GetUtcNow(),
+                        Jti = jti,
+                        Nonce = nonce
+                    },
+                    proofKey, TestHostShell.Base64UrlEncoder, DpopTestSupport.Serializer,
+                    MicrosoftCryptographicFunctionsAdapter.SignP256Async, TestHostShell.MemoryPool,
+                    TestContext.CancellationToken).ConfigureAwait(false);
+
+                return await HttpClientTransport.SendFormPostAsync(
+                    hosted.SharedHttpClient!, tokenUri, fields,
+                    OutgoingHeaders.Empty.WithDpop(proof), TestContext.CancellationToken).ConfigureAwait(false);
+            }
+
+            //Establish the bound refresh token: a voluntary proof at redemption, challenged once for the server's
+            //nonce, then retried with it.
+            Dictionary<string, string> tokenFields = RawAuthCodeWirePushers.BuildTokenFields(
+                ClientId, callbackState.Code, callbackState.Pkce.EncodedVerifier, callbackState.RedirectUri.OriginalString);
+            HttpResponseData challenge = await PostWithProofAsync(tokenFields, nonce: null, "jti-redemption-challenge").ConfigureAwait(false);
+            Assert.AreEqual(400, challenge.StatusCode, challenge.Body);
+            Assert.Contains(OAuthErrors.UseDpopNonce, challenge.Body, StringComparison.Ordinal);
+            string serverNonce = challenge.Headers.TryGetSingle(WellKnownHttpHeaderNames.DPoPNonce)
+                ?? throw new AssertFailedException("The use_dpop_nonce challenge must carry a DPoP-Nonce header.");
+
+            HttpResponseData redemption = await PostWithProofAsync(tokenFields, serverNonce, "jti-redemption").ConfigureAwait(false);
+            Assert.AreEqual(200, redemption.StatusCode, redemption.Body);
+            using JsonDocument redemptionDocument = JsonDocument.Parse(redemption.Body);
+            string boundRefreshToken = redemptionDocument.RootElement.GetProperty(OAuthRequestParameterNames.RefreshToken).GetString()!;
+
+            await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+            {
+                hosted.InstallObservedStorage(candidateIntegration, hosted);
+            }).ConfigureAwait(false);
+            Dictionary<string, string> refreshFields = RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, boundRefreshToken);
+
+            int beforeRefusal = hosted.StorageObservations.Count;
+            HttpResponseData refused = await PostWithProofAsync(
+                refreshFields, serverNonce, string.Concat("jti-", ((char)0x0000).ToString(), "-value")).ConfigureAwait(false);
+            List<string> refusalOperations = [.. hosted.StorageObservations.Skip(beforeRefusal).Select(static entry => entry.Operation)];
+
+            Assert.AreEqual(400, refused.StatusCode, refused.Body);
+            using JsonDocument refusedDocument = JsonDocument.Parse(refused.Body);
+            Assert.AreEqual("invalid_dpop_proof", refusedDocument.RootElement.GetProperty("error").GetString());
+            Assert.AreEqual(
+                "DPoP proof jti is too long or carries a character the replay guard cannot store.",
+                refusedDocument.RootElement.GetProperty("error_description").GetString());
+            Assert.IsEmpty(refusalOperations,
+                $"The refused jti must never reach the store; it observed: {string.Join(", ", refusalOperations)}.");
+
+            int beforeAcceptance = hosted.StorageObservations.Count;
+            HttpResponseData refreshed = await PostWithProofAsync(refreshFields, serverNonce, "jti-refresh").ConfigureAwait(false);
+            List<string> acceptanceOperations = [.. hosted.StorageObservations.Skip(beforeAcceptance).Select(static entry => entry.Operation)];
+
+            Assert.AreEqual(200, refreshed.StatusCode, refreshed.Body);
+            Assert.IsTrue(HostedAuthorizationServer.IsReplayGuardFirstUseObserved(acceptanceOperations),
+                $"The store observation must see the replay guard's read, save, read-back and claim; it observed: {string.Join(", ", acceptanceOperations)}.");
+        }
+        finally
+        {
+            proofKeys.PublicKey.Dispose();
+            proofKeys.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
     /// A profile that does NOT require DPoP (<see cref="PolicyProfile.Rfc6749WithPkce"/>), holding a
     /// DPoP-BOUND refresh token established by voluntarily presenting a proof at code redemption,
     /// presented at REFRESH with NO proof at all: <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC

@@ -169,6 +169,79 @@ internal sealed class JarParTests
     }
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.7">RFC 7519, Section 4.1.7</see>: "The "jti"
+    /// value is a case-sensitive string." This library refuses a request object <c>jti</c> holding a character of the
+    /// Unicode general category Cc before the replay store is read or written, since the application's store may not
+    /// hold such a character; the character rule is this library's policy, not a rule of a specification. A signed
+    /// request object whose <c>jti</c> holds U+0000, pushed to the pushed authorization request endpoint over the
+    /// wire, is answered 400 <c>invalid_request_object</c> with the description that names both causes, mints no
+    /// <c>request_uri</c>, and the store observation records no flow-state store call. A request object with an
+    /// ordinary <c>jti</c> is then accepted with 201, and the observation sees the replay guard read, save, read back
+    /// and claim its record.
+    /// </summary>
+    [TestMethod]
+    public async Task APushedRequestObjectWhoseJtiCarriesAControlCharacterIsRefusedBeforeAnyStoreCallAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarParCapabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        HostedAuthorizationServer hosted = host.Host("default");
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            hosted.InstallObservedStorage(candidateIntegration, hosted);
+        }).ConfigureAwait(false);
+
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        Dictionary<string, object> refusedClaims = OAuthJarFixtures.BuildBaseClaims(
+            material, now, ClientId, RegisteredRedirectUri, DefaultState, DefaultNonce);
+        refusedClaims[WellKnownJwtClaimNames.Jti] = string.Concat("jti-", ((char)0x0000).ToString(), "-value");
+        string refusedJar = await OAuthJarFixtures.BuildSignedJarAsync(
+            material, refusedClaims, TestContext.CancellationToken).ConfigureAwait(false);
+
+        int beforeRefusal = hosted.StorageObservations.Count;
+        (int statusCode, string body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, segment,
+            new Dictionary<string, string>
+            {
+                [OAuthRequestParameterNames.ClientId] = ClientId,
+                [OAuthRequestParameterNames.Request] = refusedJar
+            }, TestContext.CancellationToken).ConfigureAwait(false);
+        List<string> refusalOperations = [.. hosted.StorageObservations.Skip(beforeRefusal).Select(static entry => entry.Operation)];
+
+        Assert.AreEqual(400, statusCode, body);
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual("invalid_request_object", document.RootElement.GetProperty("error").GetString());
+        Assert.AreEqual(
+            "The JAR jti is too long or carries a character the replay guard cannot store.",
+            document.RootElement.GetProperty("error_description").GetString());
+        Assert.IsFalse(document.RootElement.TryGetProperty("request_uri", out _), "A refused pushed request mints no request_uri.");
+        Assert.IsEmpty(refusalOperations,
+            $"The refused jti must never reach the store; it observed: {string.Join(", ", refusalOperations)}.");
+
+        Dictionary<string, object> acceptedClaims = OAuthJarFixtures.BuildBaseClaims(
+            material, now, ClientId, RegisteredRedirectUri, DefaultState, DefaultNonce);
+        acceptedClaims[WellKnownJwtClaimNames.Jti] = "jti-ordinary-value";
+        string acceptedJar = await OAuthJarFixtures.BuildSignedJarAsync(
+            material, acceptedClaims, TestContext.CancellationToken).ConfigureAwait(false);
+
+        int beforeAcceptance = hosted.StorageObservations.Count;
+        (int acceptedStatusCode, string acceptedBody) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, segment,
+            new Dictionary<string, string>
+            {
+                [OAuthRequestParameterNames.ClientId] = ClientId,
+                [OAuthRequestParameterNames.Request] = acceptedJar
+            }, TestContext.CancellationToken).ConfigureAwait(false);
+        List<string> acceptanceOperations = [.. hosted.StorageObservations.Skip(beforeAcceptance).Select(static entry => entry.Operation)];
+
+        Assert.AreEqual(201, acceptedStatusCode, acceptedBody);
+        Assert.IsTrue(HostedAuthorizationServer.IsReplayGuardFirstUseObserved(acceptanceOperations),
+            $"The store observation must see the replay guard's read, save, read-back and claim; it observed: {string.Join(", ", acceptanceOperations)}.");
+    }
+
+
     [TestMethod]
     public async Task RejectsJarWithMissingOuterClientId()
     {

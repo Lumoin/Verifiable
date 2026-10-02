@@ -215,7 +215,7 @@ internal static class CredentialEndpointDpopValidation
             JtiReplayOutcome.Replayed => RefuseUnderScheme(isDpopPresentation,
                 OAuthErrors.InvalidDpopProof, "The DPoP proof jti has been presented previously."),
             JtiReplayOutcome.Unacceptable => RefuseUnderScheme(isDpopPresentation,
-                OAuthErrors.InvalidDpopProof, "DPoP proof jti exceeds the length the replay guard can track."),
+                OAuthErrors.InvalidDpopProof, "DPoP proof jti is too long or carries a character the replay guard cannot store."),
             JtiReplayOutcome.StoreUnavailable => ServerHttpResponse.ServerError(
                 OAuthErrors.ServerError,
                 "DPoP proof jti replay defense is required by policy but no jti store is configured."),

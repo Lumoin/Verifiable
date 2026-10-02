@@ -2,6 +2,7 @@ using Microsoft.Extensions.Time.Testing;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -47,6 +48,12 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
     private const string OfferSubject = "urn:uuid:end-user-42";
 
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
+
+    /// <summary>
+    /// The ASCII text a proof <see cref="PresentProofWithJtiAsync"/> builds holds in its <c>jti</c> until the payload
+    /// is encoded, where it is replaced by the JSON escape of the row's code point.
+    /// </summary>
+    private static string JtiCodePointPlaceholder { get; } = "JTICODEPOINT";
 
     /// <summary>
     /// The capabilities a truly grant-only tenant needs: the grant capability itself, plus discovery
@@ -861,6 +868,97 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449, Section 11.1</see>: "In order to
+    /// guard against memory exhaustion attacks, a server that is tracking jti values should reject DPoP proof JWTs
+    /// with unnecessarily large jti values or store only a hash thereof." Beside that length rule, this library
+    /// refuses a <c>jti</c> holding a character of the Unicode general category Cc or an unpaired surrogate before
+    /// the replay store is read or written, since the application's store may not hold such a character; the
+    /// character rule is this library's policy, not a rule of the text. A DPoP proof presented with a Pre-Authorized
+    /// Code Token Request, a grant whose DPoP proof the token endpoint validates without a pre-correlation step, whose
+    /// <c>jti</c> holds U+0000, U+001F, U+007F or U+0085 is answered 400 with <c>invalid_dpop_proof</c> and the
+    /// description that names both causes, the store observation records no flow-state store call, and the
+    /// code-validation seam is never consulted. A lone surrogate is refused earlier, as a malformed proof; see
+    /// <see cref="ADpopProofWhoseJtiCarriesALoneSurrogateIsRefusedAsMalformedBeforeAnyStoreCall"/>.
+    /// </summary>
+    /// <param name="codePoint">The code point the presented <c>jti</c> holds.</param>
+    [TestMethod]
+    [DataRow(0x0000, DisplayName = "a jti holding U+0000")]
+    [DataRow(0x001F, DisplayName = "a jti holding U+001F")]
+    [DataRow(0x007F, DisplayName = "a jti holding U+007F")]
+    [DataRow(0x0085, DisplayName = "a jti holding U+0085")]
+    public async Task ADpopProofWhoseJtiCarriesAControlCharacterIsRefusedBeforeAnyStoreCall(int codePoint)
+    {
+        (int statusCode, string body, int seamInvocations, IReadOnlyList<string> storeOperations, _) =
+            await PresentProofWithJtiAsync(codePoint).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual("invalid_dpop_proof", document.RootElement.GetProperty("error").GetString());
+        Assert.AreEqual(
+            "DPoP proof jti is too long or carries a character the replay guard cannot store.",
+            document.RootElement.GetProperty("error_description").GetString());
+        Assert.IsEmpty(storeOperations,
+            $"The refused jti must never reach the store; it observed: {string.Join(", ", storeOperations)}.");
+        Assert.AreEqual(0, seamInvocations, "A refused proof must never reach the code-validation seam.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.2">RFC 8259, Section 8.2</see>, on a string
+    /// value holding an unpaired surrogate: "The behavior of software that receives JSON texts containing such
+    /// values is unpredictable; for example, implementations might return different values for the length of a
+    /// string value or even suffer fatal runtime exceptions." This library's JSON claims reader for a DPoP proof
+    /// refuses such a value, its policy for a JSON text that section calls unpredictable. A DPoP proof at the token
+    /// endpoint whose payload writes the <c>jti</c> with the JSON escape of a lone U+D800 is answered 400 with
+    /// <c>invalid_dpop_proof</c> as malformed before the replay guard is consulted, so the store observation records
+    /// no flow-state store call and the code-validation seam is never consulted.
+    /// </summary>
+    [TestMethod]
+    public async Task ADpopProofWhoseJtiCarriesALoneSurrogateIsRefusedAsMalformedBeforeAnyStoreCall()
+    {
+        (int statusCode, string body, int seamInvocations, IReadOnlyList<string> storeOperations, _) =
+            await PresentProofWithJtiAsync(0xD800).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual("invalid_dpop_proof", document.RootElement.GetProperty("error").GetString());
+        Assert.AreEqual(
+            "DPoP proof validation failed: Malformed.",
+            document.RootElement.GetProperty("error_description").GetString());
+        Assert.IsEmpty(storeOperations,
+            $"The malformed proof must never reach the store; it observed: {string.Join(", ", storeOperations)}.");
+        Assert.AreEqual(0, seamInvocations, "A malformed proof must never reach the code-validation seam.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.7">RFC 7519, Section 4.1.7</see>: "The "jti"
+    /// value is a case-sensitive string." The replay guard's character rule refuses only the general category Cc and
+    /// an unpaired surrogate; a format character such as U+200B ZERO WIDTH SPACE (Cf) is neither, so a DPoP proof at
+    /// the token endpoint whose <c>jti</c> holds it is accepted with 200, the store observation sees the replay
+    /// guard read, save, read back and claim its record, and the record is kept under the <c>jti</c> as presented.
+    /// </summary>
+    [TestMethod]
+    public async Task ADpopProofWhoseJtiCarriesAFormatCharacterIsAccepted()
+    {
+        int zeroWidthSpace = 0x200B;
+        string jti = string.Concat("jti-", ((char)zeroWidthSpace).ToString(), "-value");
+
+        (int statusCode, string body, int seamInvocations, IReadOnlyList<string> storeOperations, IReadOnlyList<string> replayRecordHandles) =
+            await PresentProofWithJtiAsync(zeroWidthSpace).ConfigureAwait(false);
+
+        Assert.AreEqual(200, statusCode, body);
+        Assert.AreEqual(1, seamInvocations, "An accepted proof reaches the code-validation seam once.");
+        Assert.IsTrue(HostedAuthorizationServer.IsReplayGuardFirstUseObserved(storeOperations),
+            $"The store observation must see the replay guard's read, save, read-back and claim; it observed: {string.Join(", ", storeOperations)}.");
+        Assert.Contains(
+            handle => handle.EndsWith(jti, StringComparison.Ordinal),
+            replayRecordHandles,
+            $"The accepted jti must be recorded in the replay store as presented; it holds: {string.Join(", ", replayRecordHandles)}.");
+    }
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 §5</see>: a client
     /// whose policy profile mandates DPoP-bound access tokens
     /// (<see cref="ClientPolicyProfiles.RequiresDpop"/>) is refused before the code-validation
@@ -1007,6 +1105,100 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
             claims, key, TestHostShell.Base64UrlEncoder, DpopTestSupport.Serializer,
             MicrosoftCryptographicFunctionsAdapter.SignP256Async, TestHostShell.MemoryPool,
             cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Registers a DPoP client on a host listening over the loopback wire, answers the server's nonce challenge
+    /// (RFC 9449, Section 8) with a proof carrying an ordinary <c>jti</c>, observes the host's flow-state store from
+    /// then on through <see cref="HostedAuthorizationServer.InstallObservedStorage"/>, and presents a Pre-Authorized
+    /// Code Token Request whose DPoP proof carries the challenged nonce and the <c>jti</c> "jti-", the code point,
+    /// "-value". The proof's payload writes that code point as its JSON escape (a reverse solidus, the letter u and
+    /// four hexadecimal digits), so every code point, a lone surrogate included, reaches the wire as sent: a JSON
+    /// text writer replaces an ill-formed UTF-16 code unit, so the default serializer alone would never send one.
+    /// </summary>
+    /// <param name="codePoint">The code point the presented <c>jti</c> holds, at most U+FFFF.</param>
+    /// <returns>
+    /// The answer's status code and body, how many times the code-validation seam was consulted, the operation of
+    /// every flow-state store call observed while the presentation was served, in call order, and the correlation
+    /// handles of the replay records the host's store holds once it is answered.
+    /// </returns>
+    private async Task<(int StatusCode, string Body, int SeamInvocations, IReadOnlyList<string> StoreOperations, IReadOnlyList<string> ReplayRecordHandles)> PresentProofWithJtiAsync(int codePoint)
+    {
+        string escapedCodePoint = string.Concat("\\", "u", codePoint.ToString("X4", CultureInfo.InvariantCulture));
+        DpopJwsPartSerializer escapingSerializer = DpopTestSupport.Serializer with
+        {
+            EncodePart = part =>
+            {
+                string json = Encoding.UTF8.GetString(DpopTestSupport.Serializer.EncodePart(part).Span);
+
+                return new TaggedMemory<byte>(
+                    Encoding.UTF8.GetBytes(json.Replace(JtiCodePointPlaceholder, escapedCodePoint, StringComparison.Ordinal)),
+                    BufferTags.Json);
+            }
+        };
+
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+
+        int seamInvocations = 0;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidatePreAuthorizedCodeAsync =
+                (code, txCode, clientId, registration, context, ct) =>
+                {
+                    _ = Interlocked.Increment(ref seamInvocations);
+
+                    return ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject));
+                };
+        }).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+        string segment = material.Registration.TenantId.Value;
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+        Uri tokenEndpoint = RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment);
+
+        string challengeProof = await BuildTokenProofAsync(host, segment, dpopKey, nonce: null, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        HttpResponseData challenge = await HttpClientTransport.SendFormPostAsync(
+            host.Host("default").SharedHttpClient!, tokenEndpoint, BuildPreAuthorizedFields(),
+            OutgoingHeaders.Empty.WithDpop(challengeProof), TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, challenge.StatusCode, challenge.Body);
+        Assert.Contains(OAuthErrors.UseDpopNonce, challenge.Body);
+        string freshNonce = challenge.Headers.TryGetSingle(WellKnownHttpHeaderNames.DPoPNonce)
+            ?? throw new AssertFailedException("RFC 9449, Section 8 requires a DPoP-Nonce header on the use_dpop_nonce challenge.");
+
+        HostedAuthorizationServer hosted = host.Host("default");
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            hosted.InstallObservedStorage(candidateIntegration, hosted);
+        }).ConfigureAwait(false);
+        int observedFrom = hosted.StorageObservations.Count;
+
+        string proof = await DpopProofConstruction.BuildAsync(
+            new DpopProofClaims
+            {
+                Htm = WellKnownHttpMethods.Post,
+                Htu = tokenEndpoint.OriginalString,
+                Iat = TimeProvider.GetUtcNow(),
+                Jti = string.Concat("jti-", JtiCodePointPlaceholder, "-value"),
+                Nonce = freshNonce
+            },
+            dpopKey, TestHostShell.Base64UrlEncoder, escapingSerializer,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async, TestHostShell.MemoryPool,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        (int statusCode, string body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, BuildPreAuthorizedFields(), OutgoingHeaders.Empty.WithDpop(proof),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        List<string> storeOperations = [.. hosted.StorageObservations.Skip(observedFrom).Select(static entry => entry.Operation)];
+        List<string> replayRecordHandles = [.. hosted.JtiIndex.Keys];
+
+        return (statusCode, body, Volatile.Read(ref seamInvocations), storeOperations, replayRecordHandles);
     }
 
 
