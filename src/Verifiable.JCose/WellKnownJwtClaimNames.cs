@@ -171,6 +171,47 @@ public static class WellKnownJwtClaimNames
     /// </summary>
     public static string Azp { get; } = Utf8Constants.ToInternedString(AzpUtf8);
 
+    /// <summary>The UTF-8 source literal of <see cref="AtHash"/>.</summary>
+    public static ReadOnlySpan<byte> AtHashUtf8 => "at_hash"u8;
+
+    /// <summary>
+    /// The <c>at_hash</c> (Access Token hash value) claim of an ID Token: "Its value is the base64url
+    /// encoding of the left-most half of the hash of the octets of the ASCII representation of the
+    /// access_token value, where the hash algorithm used is the hash algorithm used in the alg Header
+    /// Parameter of the ID Token's JOSE Header."
+    /// See <see href="https://openid.net/specs/openid-connect-core-1_0.html#CodeIDToken">OpenID Connect Core 1.0, Section 3.1.3.6</see>
+    /// (the Authorization Code Flow),
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#ImplicitIDToken">Section 3.2.2.10</see>
+    /// (the Implicit Flow) and
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#HybridIDToken">Section 3.3.2.11</see>
+    /// (the Hybrid Flow).
+    /// </summary>
+    public static string AtHash { get; } = Utf8Constants.ToInternedString(AtHashUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="CHash"/>.</summary>
+    public static ReadOnlySpan<byte> CHashUtf8 => "c_hash"u8;
+
+    /// <summary>
+    /// The <c>c_hash</c> (Code hash value) claim of an ID Token: "Its value is the base64url encoding
+    /// of the left-most half of the hash of the octets of the ASCII representation of the code value,
+    /// where the hash algorithm used is the hash algorithm used in the alg Header Parameter of the
+    /// ID Token's JOSE Header."
+    /// See <see href="https://openid.net/specs/openid-connect-core-1_0.html#HybridIDToken">OpenID Connect Core 1.0, Section 3.3.2.11</see>.
+    /// </summary>
+    public static string CHash { get; } = Utf8Constants.ToInternedString(CHashUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="SHash"/>.</summary>
+    public static ReadOnlySpan<byte> SHashUtf8 => "s_hash"u8;
+
+    /// <summary>
+    /// The <c>s_hash</c> (State hash value) claim of an ID Token that protects the <c>state</c> value
+    /// of an authorization response: "Its value is the base64url encoding of the left-most half of the
+    /// hash of the octets of the ASCII representation of the state value, where the hash algorithm used
+    /// is the hash algorithm used in the alg header parameter of the ID Token's JOSE header."
+    /// See <see href="https://openid.net/specs/openid-financial-api-part-2-1_0.html#id-token-as-detached-signature">Financial-grade API Part 2, Section 5.1.1</see>.
+    /// </summary>
+    public static string SHash { get; } = Utf8Constants.ToInternedString(SHashUtf8);
+
     /// <summary>The UTF-8 source literal of <see cref="Name"/>.</summary>
     public static ReadOnlySpan<byte> NameUtf8 => "name"u8;
 
@@ -512,6 +553,9 @@ public static class WellKnownJwtClaimNames
     /// <summary>Whether <paramref name="claim"/> is <see cref="Jti"/>.</summary>
     public static bool IsJti(string claim) => Equals(claim, Jti);
 
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Scope"/>.</summary>
+    public static bool IsScope(string claim) => Equals(claim, Scope);
+
     /// <summary>Whether <paramref name="claim"/> is <see cref="ClientId"/>.</summary>
     public static bool IsClientId(string claim) => Equals(claim, ClientId);
 
@@ -520,6 +564,9 @@ public static class WellKnownJwtClaimNames
 
     /// <summary>Whether <paramref name="claim"/> is <see cref="AuthTime"/>.</summary>
     public static bool IsAuthTime(string claim) => Equals(claim, AuthTime);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Sid"/>.</summary>
+    public static bool IsSid(string claim) => Equals(claim, Sid);
 
     /// <summary>Whether <paramref name="claim"/> is <see cref="Acr"/>.</summary>
     public static bool IsAcr(string claim) => Equals(claim, Acr);
@@ -530,8 +577,71 @@ public static class WellKnownJwtClaimNames
     /// <summary>Whether <paramref name="claim"/> is <see cref="Azp"/>.</summary>
     public static bool IsAzp(string claim) => Equals(claim, Azp);
 
+    /// <summary>Whether <paramref name="claim"/> is <see cref="AtHash"/>.</summary>
+    public static bool IsAtHash(string claim) => Equals(claim, AtHash);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="CHash"/>.</summary>
+    public static bool IsCHash(string claim) => Equals(claim, CHash);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="SHash"/>.</summary>
+    public static bool IsSHash(string claim) => Equals(claim, SHash);
+
     /// <summary>Whether <paramref name="claim"/> is <see cref="Name"/>.</summary>
     public static bool IsName(string claim) => Equals(claim, Name);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="GivenName"/>.</summary>
+    public static bool IsGivenName(string claim) => Equals(claim, GivenName);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="FamilyName"/>.</summary>
+    public static bool IsFamilyName(string claim) => Equals(claim, FamilyName);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="MiddleName"/>.</summary>
+    public static bool IsMiddleName(string claim) => Equals(claim, MiddleName);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Nickname"/>.</summary>
+    public static bool IsNickname(string claim) => Equals(claim, Nickname);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="PreferredUsername"/>.</summary>
+    public static bool IsPreferredUsername(string claim) => Equals(claim, PreferredUsername);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Profile"/>.</summary>
+    public static bool IsProfile(string claim) => Equals(claim, Profile);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Picture"/>.</summary>
+    public static bool IsPicture(string claim) => Equals(claim, Picture);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Website"/>.</summary>
+    public static bool IsWebsite(string claim) => Equals(claim, Website);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Gender"/>.</summary>
+    public static bool IsGender(string claim) => Equals(claim, Gender);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Birthdate"/>.</summary>
+    public static bool IsBirthdate(string claim) => Equals(claim, Birthdate);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Zoneinfo"/>.</summary>
+    public static bool IsZoneinfo(string claim) => Equals(claim, Zoneinfo);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Locale"/>.</summary>
+    public static bool IsLocale(string claim) => Equals(claim, Locale);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="UpdatedAt"/>.</summary>
+    public static bool IsUpdatedAt(string claim) => Equals(claim, UpdatedAt);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Email"/>.</summary>
+    public static bool IsEmail(string claim) => Equals(claim, Email);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="EmailVerified"/>.</summary>
+    public static bool IsEmailVerified(string claim) => Equals(claim, EmailVerified);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="PhoneNumber"/>.</summary>
+    public static bool IsPhoneNumber(string claim) => Equals(claim, PhoneNumber);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="PhoneNumberVerified"/>.</summary>
+    public static bool IsPhoneNumberVerified(string claim) => Equals(claim, PhoneNumberVerified);
+
+    /// <summary>Whether <paramref name="claim"/> is <see cref="Address"/>.</summary>
+    public static bool IsAddress(string claim) => Equals(claim, Address);
 
     /// <summary>Whether <paramref name="claim"/> is <see cref="Roles"/>.</summary>
     public static bool IsRoles(string claim) => Equals(claim, Roles);
@@ -601,13 +711,36 @@ public static class WellKnownJwtClaimNames
         _ when IsNbf(claim) => Nbf,
         _ when IsIat(claim) => Iat,
         _ when IsJti(claim) => Jti,
+        _ when IsScope(claim) => Scope,
         _ when IsClientId(claim) => ClientId,
         _ when IsNonce(claim) => Nonce,
         _ when IsAuthTime(claim) => AuthTime,
+        _ when IsSid(claim) => Sid,
         _ when IsAcr(claim) => Acr,
         _ when IsAmr(claim) => Amr,
         _ when IsAzp(claim) => Azp,
+        _ when IsAtHash(claim) => AtHash,
+        _ when IsCHash(claim) => CHash,
+        _ when IsSHash(claim) => SHash,
         _ when IsName(claim) => Name,
+        _ when IsGivenName(claim) => GivenName,
+        _ when IsFamilyName(claim) => FamilyName,
+        _ when IsMiddleName(claim) => MiddleName,
+        _ when IsNickname(claim) => Nickname,
+        _ when IsPreferredUsername(claim) => PreferredUsername,
+        _ when IsProfile(claim) => Profile,
+        _ when IsPicture(claim) => Picture,
+        _ when IsWebsite(claim) => Website,
+        _ when IsGender(claim) => Gender,
+        _ when IsBirthdate(claim) => Birthdate,
+        _ when IsZoneinfo(claim) => Zoneinfo,
+        _ when IsLocale(claim) => Locale,
+        _ when IsUpdatedAt(claim) => UpdatedAt,
+        _ when IsEmail(claim) => Email,
+        _ when IsEmailVerified(claim) => EmailVerified,
+        _ when IsPhoneNumber(claim) => PhoneNumber,
+        _ when IsPhoneNumberVerified(claim) => PhoneNumberVerified,
+        _ when IsAddress(claim) => Address,
         _ when IsRoles(claim) => Roles,
         _ when IsTenant(claim) => Tenant,
         _ when IsAudienceTenant(claim) => AudienceTenant,

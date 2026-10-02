@@ -67,6 +67,29 @@ namespace Verifiable.Tests.Jose
             yield return new object[] { WellKnownJwtClaimNames.Roles, new Func<string, bool>(WellKnownJwtClaimNames.IsRoles), new Func<string, string>(WellKnownJwtClaimNames.GetCanonicalizedValue) };
             yield return new object[] { WellKnownJwtClaimNames.Sub, new Func<string, bool>(WellKnownJwtClaimNames.IsSub), new Func<string, string>(WellKnownJwtClaimNames.GetCanonicalizedValue) };
             yield return new object[] { WellKnownJwtClaimNames.Tenant, new Func<string, bool>(WellKnownJwtClaimNames.IsTenant), new Func<string, string>(WellKnownJwtClaimNames.GetCanonicalizedValue) };
+            yield return new object[] { "address", new Func<string, bool>(WellKnownJwtClaimNames.IsAddress), new Func<string, string>(WellKnownJwtClaimNames.GetCanonicalizedValue) };
+            yield return new object[] { "at_hash", new Func<string, bool>(WellKnownJwtClaimNames.IsAtHash), new Func<string, string>(WellKnownJwtClaimNames.GetCanonicalizedValue) };
+            yield return new object[] { "birthdate", new Func<string, bool>(WellKnownJwtClaimNames.IsBirthdate), new Func<string, string>(WellKnownJwtClaimNames.GetCanonicalizedValue) };
+            yield return new object[] { "c_hash", new Func<string, bool>(WellKnownJwtClaimNames.IsCHash), new Func<string, string>(WellKnownJwtClaimNames.GetCanonicalizedValue) };
+            yield return new object[] { "email", new Func<string, bool>(WellKnownJwtClaimNames.IsEmail), new Func<string, string>(WellKnownJwtClaimNames.GetCanonicalizedValue) };
+            yield return new object[] { "email_verified", new Func<string, bool>(WellKnownJwtClaimNames.IsEmailVerified), new Func<string, string>(WellKnownJwtClaimNames.GetCanonicalizedValue) };
+            yield return new object[] { "family_name", new Func<string, bool>(WellKnownJwtClaimNames.IsFamilyName), new Func<string, string>(WellKnownJwtClaimNames.GetCanonicalizedValue) };
+            yield return new object[] { "gender", new Func<string, bool>(WellKnownJwtClaimNames.IsGender), new Func<string, string>(WellKnownJwtClaimNames.GetCanonicalizedValue) };
+            yield return new object[] { "given_name", new Func<string, bool>(WellKnownJwtClaimNames.IsGivenName), new Func<string, string>(WellKnownJwtClaimNames.GetCanonicalizedValue) };
+            yield return new object[] { "locale", new Func<string, bool>(WellKnownJwtClaimNames.IsLocale), new Func<string, string>(WellKnownJwtClaimNames.GetCanonicalizedValue) };
+            yield return new object[] { "middle_name", new Func<string, bool>(WellKnownJwtClaimNames.IsMiddleName), new Func<string, string>(WellKnownJwtClaimNames.GetCanonicalizedValue) };
+            yield return new object[] { "nickname", new Func<string, bool>(WellKnownJwtClaimNames.IsNickname), new Func<string, string>(WellKnownJwtClaimNames.GetCanonicalizedValue) };
+            yield return new object[] { "phone_number", new Func<string, bool>(WellKnownJwtClaimNames.IsPhoneNumber), new Func<string, string>(WellKnownJwtClaimNames.GetCanonicalizedValue) };
+            yield return new object[] { "phone_number_verified", new Func<string, bool>(WellKnownJwtClaimNames.IsPhoneNumberVerified), new Func<string, string>(WellKnownJwtClaimNames.GetCanonicalizedValue) };
+            yield return new object[] { "picture", new Func<string, bool>(WellKnownJwtClaimNames.IsPicture), new Func<string, string>(WellKnownJwtClaimNames.GetCanonicalizedValue) };
+            yield return new object[] { "preferred_username", new Func<string, bool>(WellKnownJwtClaimNames.IsPreferredUsername), new Func<string, string>(WellKnownJwtClaimNames.GetCanonicalizedValue) };
+            yield return new object[] { "profile", new Func<string, bool>(WellKnownJwtClaimNames.IsProfile), new Func<string, string>(WellKnownJwtClaimNames.GetCanonicalizedValue) };
+            yield return new object[] { "s_hash", new Func<string, bool>(WellKnownJwtClaimNames.IsSHash), new Func<string, string>(WellKnownJwtClaimNames.GetCanonicalizedValue) };
+            yield return new object[] { "scope", new Func<string, bool>(WellKnownJwtClaimNames.IsScope), new Func<string, string>(WellKnownJwtClaimNames.GetCanonicalizedValue) };
+            yield return new object[] { "sid", new Func<string, bool>(WellKnownJwtClaimNames.IsSid), new Func<string, string>(WellKnownJwtClaimNames.GetCanonicalizedValue) };
+            yield return new object[] { "updated_at", new Func<string, bool>(WellKnownJwtClaimNames.IsUpdatedAt), new Func<string, string>(WellKnownJwtClaimNames.GetCanonicalizedValue) };
+            yield return new object[] { "website", new Func<string, bool>(WellKnownJwtClaimNames.IsWebsite), new Func<string, string>(WellKnownJwtClaimNames.GetCanonicalizedValue) };
+            yield return new object[] { "zoneinfo", new Func<string, bool>(WellKnownJwtClaimNames.IsZoneinfo), new Func<string, string>(WellKnownJwtClaimNames.GetCanonicalizedValue) };
         }
 
 
