@@ -60,7 +60,7 @@ public static class TokenProducerExtensions
         /// signing key from
         /// <see cref="Verifiable.Cryptography.Context.KeyUsageContext.IdTokenIssuance"/>
         /// and emits the OIDC Core claim set (<c>iss</c>, <c>sub</c>, <c>aud</c>,
-        /// <c>exp</c>, <c>iat</c>, plus <c>nonce</c> and <c>auth_time</c> when
+        /// <c>exp</c>, <c>iat</c>, <c>jti</c>, plus <c>nonce</c> and <c>auth_time</c> when
         /// available on the issuance context).
         /// </remarks>
         public static TokenProducer Oidc10IdToken => Oidc10IdTokenProducer.Instance;

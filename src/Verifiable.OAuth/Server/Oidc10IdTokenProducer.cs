@@ -32,7 +32,7 @@ namespace Verifiable.OAuth.Server;
 /// </para>
 /// <para>
 /// Composes the JWT structural baseline only: <c>iss</c>, <c>aud</c>,
-/// <c>iat</c>, <c>exp</c>, and the optional <c>nonce</c>. The <c>sub</c>
+/// <c>iat</c>, <c>exp</c>, <c>jti</c>, and the optional <c>nonce</c>. The <c>sub</c>
 /// claim is emitted by <see cref="SubjectIdentifierContributor"/> via
 /// <see cref="AuthorizationServerIntegration.ResolveSubjectIdentifierAsync"/>;
 /// the OIDC Core §2 authentication-context claims (<c>acr</c>,
@@ -44,6 +44,19 @@ namespace Verifiable.OAuth.Server;
 /// <see cref="CnfClaimContributor"/>. The token endpoint's walking site
 /// merges every <see cref="AuthorizationServerIntegration.ClaimIssuer"/>
 /// contribution into this payload before signing.
+/// </para>
+/// <para>
+/// The <c>jti</c> is
+/// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.7">RFC 7519 section 4.1.7</see>'s
+/// claim: "The "jti" (JWT ID) claim provides a unique identifier for the JWT." and "The identifier
+/// value MUST be assigned in a manner that ensures that there is a negligible probability that the
+/// same value will be accidentally assigned to a different data object; if the application uses
+/// multiple issuers, collisions MUST be prevented among values produced by different issuers as
+/// well." The section also states "Use of this claim is OPTIONAL." The producer writes it on every
+/// ID Token, drawn from <see cref="Verifiable.Server.ServerIntegration.GenerateIdentifierAsync"/>
+/// under <see cref="WellKnownIdentifierPurposes.OAuthJti"/>, the seam and purpose
+/// <see cref="Rfc9068AccessTokenProducer"/> draws the access token's <c>jti</c> from, so the
+/// uniqueness the clause asks for is the identifier seam's.
 /// </para>
 /// <para>
 /// Consumed indirectly via <c>TokenProducer.Oidc10IdToken</c>.
@@ -84,7 +97,22 @@ internal static class Oidc10IdTokenProducer
     }
 
 
-    private static ValueTask<TokenProducerOutput> BuildAsync(
+    /// <summary>
+    /// Builds the ID Token's header and structural baseline payload: <c>iss</c>, <c>aud</c>, <c>iat</c>,
+    /// <c>exp</c>, a <c>jti</c> drawn from <see cref="Verifiable.Server.ServerIntegration.GenerateIdentifierAsync"/>
+    /// under <see cref="WellKnownIdentifierPurposes.OAuthJti"/>, and the <c>nonce</c> when the request carried one.
+    /// </summary>
+    /// <param name="context">The issuance context; the <c>RequestServer</c> of its exchange context is the serving server.</param>
+    /// <param name="signingKeyId">The identifier of the signing material, written as the header's <c>kid</c>.</param>
+    /// <param name="algorithm">The JWA algorithm the token is signed with, written as the header's <c>alg</c>.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The unsigned header and payload the token endpoint's walk merges contributions into and signs.</returns>
+    /// <exception cref="InvalidOperationException">The issuance context names no serving server.</exception>
+    /// <exception cref="ArgumentException">
+    /// The identifier seam answers a <c>jti</c> that is null, empty or white space only, refused as
+    /// <see cref="JwtPayloadExtensions.ForAccessToken"/> refuses it for the access token.
+    /// </exception>
+    private static async ValueTask<TokenProducerOutput> BuildAsync(
         IssuanceContext context,
         KeyId signingKeyId,
         string algorithm,
@@ -93,10 +121,28 @@ internal static class Oidc10IdTokenProducer
         ArgumentNullException.ThrowIfNull(context);
         ArgumentException.ThrowIfNullOrWhiteSpace(algorithm);
 
+        EndpointServer server = context.Context.RequestServer
+            ?? throw new InvalidOperationException(
+                "IssuanceContext.Context.RequestServer must be set before "
+                + nameof(Oidc10IdTokenProducer) + "." + nameof(BuildAsync) + ".");
+
         TimeSpan lifetime =
             context.Registration.GetTokenLifetime(WellKnownTokenTypes.IdToken)
                 ?? TimeSpan.FromHours(1);
         DateTimeOffset expiresAt = context.IssuedAt.Add(lifetime);
+
+        //Two ID Tokens issued within one second for one subject and one client carry the same iss, sub,
+        //aud, iat and exp, so without an identifier of their own they cannot be told apart; the jti is the
+        //value a receiver's replay or audit record refers to. Each token draws its own value from the
+        //server's identifier seam, the source the access token's jti is drawn from.
+        string jti = await server.OAuth().GenerateIdentifierAsync!(
+            WellKnownIdentifierPurposes.OAuthJti, context.Context, cancellationToken)
+            .ConfigureAwait(false);
+
+        //An answer that is null, empty or white space only gives the token no identifier of its own, and a token
+        //without one cannot be told apart from another. The access token's builder, JwtPayload.ForAccessToken,
+        //refuses the same answer with this check, so both producers end the token endpoint's walk alike.
+        ArgumentException.ThrowIfNullOrWhiteSpace(jti);
 
         //RFC 8414 §3 + RFC 9207 §2.4 require exact-string equality on the
         //issuer identifier; preserve the URL verbatim — matches the
@@ -110,12 +156,13 @@ internal static class Oidc10IdTokenProducer
         //walk. JwtPayload.ForIdToken is not used here: its required
         //subject parameter would conflict with the producer's split-of-
         //responsibilities.
-        JwtPayload payload = new(capacity: 6)
+        JwtPayload payload = new(capacity: 7)
         {
             [WellKnownJwtClaimNames.Iss] = issuerValue,
             [WellKnownJwtClaimNames.Aud] = context.ClientId,
             [WellKnownJwtClaimNames.Iat] = context.IssuedAt.ToUnixTimeSeconds(),
-            [WellKnownJwtClaimNames.Exp] = expiresAt.ToUnixTimeSeconds()
+            [WellKnownJwtClaimNames.Exp] = expiresAt.ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Jti] = jti
         };
 
         if(context.Nonce is not null)
@@ -123,6 +170,6 @@ internal static class Oidc10IdTokenProducer
             payload[WellKnownJwtClaimNames.Nonce] = context.Nonce;
         }
 
-        return new ValueTask<TokenProducerOutput>(new TokenProducerOutput(header, payload));
+        return new TokenProducerOutput(header, payload);
     }
 }

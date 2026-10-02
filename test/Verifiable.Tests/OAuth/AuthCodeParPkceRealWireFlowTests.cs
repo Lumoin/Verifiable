@@ -8672,4 +8672,104 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     /// </summary>
     private static void AssertNoGrantStorageTouched(HostedAuthorizationServer hosted, int before, string context) =>
         hosted.AssertNoFlowStateStoreOperationTouched(before, context);
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.7">RFC 7519 section 4.1.7</see>: "The "jti"
+    /// (JWT ID) claim provides a unique identifier for the JWT." and "The identifier value MUST be assigned in a
+    /// manner that ensures that there is a negligible probability that the same value will be accidentally
+    /// assigned to a different data object; if the application uses multiple issuers, collisions MUST be
+    /// prevented among values produced by different issuers as well." Every ID Token the authorization server
+    /// issues carries its own identifier: two code redemptions for one subject and one client and a refresh of
+    /// the first, all at one instant over the real wire, return three ID Tokens whose <c>jti</c> values are
+    /// non-empty strings that differ from one another.
+    /// </summary>
+    [TestMethod]
+    public async Task EveryIdTokenCarriesADistinctJti()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: CapabilitiesWithOpenIdConnect)
+            .ConfigureAwait(false);
+
+        (OAuthClient firstClient, ClientRegistration firstRegistration, Dictionary<string, FlowState> firstFlowStore) =
+            await ComposeResourceJourneyClientAsync(host, material).ConfigureAwait(false);
+
+        //A second client instance of the same registration keeps its own flow store, so each store holds one flow.
+        (OAuthClient secondClient, ClientRegistration secondRegistration, Dictionary<string, FlowState> secondFlowStore) =
+            await host.CreateOAuthClientAndRegistrationAsync(
+                material.Registration,
+                RedirectUri.OriginalString,
+                profile: PolicyProfile.Rfc6749WithPkce,
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+        HostedAuthorizationServer hosted = host.Host("default");
+        string segment = material.Registration.TenantId.Value;
+
+        string firstFlowId = await DriveParAuthorizeAndCallbackAsync(
+            hosted, firstClient, firstRegistration, firstFlowStore, segment, host.ServerCertificate,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        string secondFlowId = await DriveParAuthorizeAndCallbackAsync(
+            hosted, secondClient, secondRegistration, secondFlowStore, segment, host.ServerCertificate,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        //The clock is not advanced: both redemptions and the refresh run at one instant.
+        AuthCodeFlowEndpointResult firstResult = await firstClient.AuthCode.ExchangeTokenAsync(
+            firstRegistration, firstFlowId, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, firstResult.Outcome,
+            $"The first code redemption must succeed over the real wire. ErrorCode={firstResult.ErrorCode} ErrorDescription={firstResult.ErrorDescription}");
+
+        AuthCodeFlowEndpointResult secondResult = await secondClient.AuthCode.ExchangeTokenAsync(
+            secondRegistration, secondFlowId, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, secondResult.Outcome,
+            $"The second code redemption must succeed over the real wire. ErrorCode={secondResult.ErrorCode} ErrorDescription={secondResult.ErrorDescription}");
+
+        AuthCodeFlowEndpointResult refreshResult = await firstClient.AuthCode.RefreshAsync(
+            firstRegistration,
+            new RefreshTokenRequest
+            {
+                ClientId = ClientId,
+                RefreshToken = (string)firstResult.Body![OAuthRequestParameterNames.RefreshToken]
+            },
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, refreshResult.Outcome,
+            $"The refresh must succeed over the real wire. ErrorCode={refreshResult.ErrorCode} ErrorDescription={refreshResult.ErrorDescription}");
+
+        string firstJti = ReadIdTokenJti(firstResult.Body!, "the ID Token of the first code redemption");
+        string secondJti = ReadIdTokenJti(secondResult.Body!, "the ID Token of the second code redemption");
+        string refreshedJti = ReadIdTokenJti(refreshResult.Body!, "the ID Token of the refresh");
+
+        Assert.AreNotEqual(firstJti, secondJti,
+            "The ID Tokens of two code redemptions at one instant must carry different jti values.");
+        Assert.AreNotEqual(firstJti, refreshedJti,
+            "The ID Token of a refresh must carry a jti other than the one of the ID Token it follows.");
+        Assert.AreNotEqual(secondJti, refreshedJti,
+            "The ID Token of a refresh must carry a jti other than the one of another code redemption's ID Token.");
+    }
+
+
+    /// <summary>
+    /// Reads the <c>jti</c> of the ID Token the token response <paramref name="body"/> carries, asserting that the
+    /// response carries an ID Token and that its <c>jti</c> member is a JSON string that is not empty, the shape
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.7">RFC 7519 section 4.1.7</see> gives the claim:
+    /// "The "jti" value is a case-sensitive string."
+    /// </summary>
+    /// <param name="body">The token endpoint's response members as the client decoded them off the wire.</param>
+    /// <param name="tokenDescription">The ID Token's name in the assertion messages.</param>
+    /// <returns>The ID Token's <c>jti</c> value.</returns>
+    private static string ReadIdTokenJti(IReadOnlyDictionary<string, object> body, string tokenDescription)
+    {
+        Assert.IsTrue(body.TryGetValue(OAuthRequestParameterNames.IdToken, out object? token) && token is string { Length: > 0 },
+            $"The response must carry {tokenDescription}.");
+        using JsonDocument payload = JwtPayloadReader.ParsePayloadJson((string)token);
+        Assert.IsTrue(payload.RootElement.TryGetProperty(WellKnownJwtClaimNames.Jti, out JsonElement jti),
+            $"The payload of {tokenDescription} must carry a jti member.");
+        Assert.AreEqual(JsonValueKind.String, jti.ValueKind,
+            $"The jti of {tokenDescription} must be a JSON string.");
+        string value = jti.GetString()!;
+        Assert.IsFalse(string.IsNullOrEmpty(value),
+            $"The jti of {tokenDescription} must not be empty.");
+
+        return value;
+    }
 }
