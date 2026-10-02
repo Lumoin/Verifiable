@@ -226,13 +226,7 @@ public static class VcalmVerifierEndpoints
                 {
                     if(req.Body.Bytes.Length > oauth.VcalmMaxRequestBytes)
                     {
-                        VcalmProblemDetail tooLarge = VcalmProblemDetail.Error(
-                            VcalmProblemTypes.MalformedValueError,
-                            "PAYLOAD_TOO_LARGE",
-                            "The request body exceeds the configured maximum payload size.");
-
-                        return (null, ServerHttpResponse.PayloadTooLarge(
-                            VcalmResponseWriter.BuildProblemDetailBody(tooLarge), WellKnownMediaTypes.Application.Json));
+                        return (null, VcalmResponseWriter.BuildContentTooLargeResponse());
                     }
 
                     if(!IsJsonContentType(req.Body.ContentType))
@@ -309,7 +303,7 @@ public static class VcalmVerifierEndpoints
             {
                 presentationProblems.Add(VcalmProblemDetail.Error(
                     VcalmProblemTypes.ChallengeNotIssued,
-                    "CHALLENGE_NOT_ISSUED",
+                    VcalmProblemTypes.ChallengeNotIssuedTitle,
                     "The presented options.challenge was not issued by this verifier instance, or was already consumed."));
             }
         }
@@ -348,7 +342,7 @@ public static class VcalmVerifierEndpoints
             {
                 unproofedBindingProblems.Add(VcalmProblemDetail.Error(
                     VcalmProblemTypes.InvalidChallengeError,
-                    "INVALID_CHALLENGE_ERROR",
+                    VcalmProblemTypes.InvalidChallengeErrorTitle,
                     "The presentation carries no proof, so the requested options.challenge cannot be bound."));
             }
 
@@ -356,7 +350,7 @@ public static class VcalmVerifierEndpoints
             {
                 unproofedBindingProblems.Add(VcalmProblemDetail.Error(
                     VcalmProblemTypes.InvalidDomainError,
-                    "INVALID_DOMAIN_ERROR",
+                    VcalmProblemTypes.InvalidDomainErrorTitle,
                     "The presentation carries no proof, so the requested options.domain cannot be bound."));
             }
 
@@ -395,7 +389,7 @@ public static class VcalmVerifierEndpoints
                 [
                     VcalmProblemDetail.Error(
                         VcalmProblemTypes.ParsingError,
-                        "PARSING_ERROR",
+                        VcalmProblemTypes.ParsingErrorTitle,
                         "The secured presentation carries no Data Integrity proof map to verify.")
                 ]
             };
@@ -421,7 +415,7 @@ public static class VcalmVerifierEndpoints
                 [
                     VcalmProblemDetail.Error(
                         VcalmProblemTypes.UnsupportedSecuringMechanism,
-                        "UNSUPPORTED_SECURING_MECHANISM",
+                        VcalmProblemTypes.UnsupportedSecuringMechanismTitle,
                         VcalmProblemTypes.UnsupportedSecuringMechanismDetail)
                 ]
             };
@@ -485,7 +479,7 @@ public static class VcalmVerifierEndpoints
     {
         VcalmProblemDetail tooMany = VcalmProblemDetail.Error(
             VcalmProblemTypes.RangeError,
-            "RANGE_ERROR",
+            VcalmProblemTypes.RangeErrorTitle,
             $"The presentation contains {containedCount.ToString(CultureInfo.InvariantCulture)} credentials, more than the "
             + $"{maximum.ToString(CultureInfo.InvariantCulture)} this verifier accepts per presentation.");
         VcalmPresentationProofResult presentationResult = new()
@@ -549,13 +543,7 @@ public static class VcalmVerifierEndpoints
         //§2.4 / B.4 payload size: a body over the configured cap is refused with 413 before parsing.
         if(req.Body.Bytes.Length > oauth.VcalmMaxRequestBytes)
         {
-            VcalmProblemDetail tooLarge = VcalmProblemDetail.Error(
-                VcalmProblemTypes.MalformedValueError,
-                "PAYLOAD_TOO_LARGE",
-                "The request body exceeds the configured maximum payload size.");
-
-            return ServerHttpResponse.PayloadTooLarge(
-                VcalmResponseWriter.BuildProblemDetailBody(tooLarge), WellKnownMediaTypes.Application.Json);
+            return VcalmResponseWriter.BuildContentTooLargeResponse();
         }
 
         //§2.4: "All entity bodies […] MUST be serialized as JSON and include the Content-Type header
@@ -605,7 +593,7 @@ public static class VcalmVerifierEndpoints
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
             VcalmProblemTypes.MalformedValueError,
-            "MALFORMED_VALUE_ERROR",
+            VcalmProblemTypes.MalformedValueErrorTitle,
             "The request body could not be parsed as a valid verification request.");
 
         return ServerHttpResponse.Json(
@@ -620,7 +608,7 @@ public static class VcalmVerifierEndpoints
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
             VcalmProblemTypes.UnknownOptionProvided,
-            "UNKNOWN_OPTION_PROVIDED",
+            VcalmProblemTypes.UnknownOptionProvidedTitle,
             "An option that is unknown to the implementation was provided to the API call.");
 
         return ServerHttpResponse.Json(

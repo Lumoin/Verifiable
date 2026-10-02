@@ -546,13 +546,7 @@ public static class VcalmIssuerEndpoints
 
         if(req.Body.Bytes.Length > oauth.VcalmMaxRequestBytes)
         {
-            VcalmProblemDetail tooLarge = VcalmProblemDetail.Error(
-                VcalmProblemTypes.MalformedValueError,
-                "PAYLOAD_TOO_LARGE",
-                "The request body exceeds the configured maximum payload size.");
-
-            return ServerHttpResponse.PayloadTooLarge(
-                VcalmResponseWriter.BuildProblemDetailBody(tooLarge), WellKnownMediaTypes.Application.Json);
+            return VcalmResponseWriter.BuildContentTooLargeResponse();
         }
 
         if(!IsJsonContentType(req.Body.ContentType))
@@ -598,7 +592,7 @@ public static class VcalmIssuerEndpoints
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
             VcalmProblemTypes.MalformedValueError,
-            "MALFORMED_VALUE_ERROR",
+            VcalmProblemTypes.MalformedValueErrorTitle,
             "The request body could not be parsed as a valid issuance request.");
 
         return ServerHttpResponse.Json(
@@ -712,7 +706,7 @@ public static class VcalmIssuerEndpoints
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
             VcalmProblemTypes.MalformedValueError,
-            "MALFORMED_VALUE_ERROR",
+            VcalmProblemTypes.MalformedValueErrorTitle,
             detail);
 
         return ServerHttpResponse.Json(
@@ -725,7 +719,7 @@ public static class VcalmIssuerEndpoints
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
             VcalmProblemTypes.UnknownOptionProvided,
-            "UNKNOWN_OPTION_PROVIDED",
+            VcalmProblemTypes.UnknownOptionProvidedTitle,
             "An option that is unknown to or unsupported by the issuer instance was provided to the API call.");
 
         return ServerHttpResponse.Json(
@@ -740,7 +734,7 @@ public static class VcalmIssuerEndpoints
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
             VcalmProblemTypes.MalformedValueError,
-            "MALFORMED_VALUE_ERROR",
+            VcalmProblemTypes.MalformedValueErrorTitle,
             "The provided value of 'issuer' does not match the expected configuration.");
 
         return ServerHttpResponse.Json(
@@ -756,7 +750,7 @@ public static class VcalmIssuerEndpoints
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
             VcalmProblemTypes.MalformedValueError,
-            "MALFORMED_VALUE_ERROR",
+            VcalmProblemTypes.MalformedValueErrorTitle,
             "options.credentialId and credential.id are both set and differ. Per §3.2.1, credentialId "
             + "SHOULD NOT be set when credential.id is set; a conflicting pair is an ambiguous identity.");
 

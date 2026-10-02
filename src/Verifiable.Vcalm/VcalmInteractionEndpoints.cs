@@ -443,13 +443,7 @@ public static class VcalmInteractionEndpoints
 
         if(req.Body.Bytes.Length > vcalm.VcalmMaxRequestBytes)
         {
-            VcalmProblemDetail tooLarge = VcalmProblemDetail.Error(
-                VcalmProblemTypes.MalformedValueError,
-                "PAYLOAD_TOO_LARGE",
-                "The request body exceeds the configured maximum payload size.");
-
-            return ServerHttpResponse.PayloadTooLarge(
-                VcalmResponseWriter.BuildProblemDetailBody(tooLarge), WellKnownMediaTypes.Application.Json);
+            return VcalmResponseWriter.BuildContentTooLargeResponse();
         }
 
         if(!IsJsonContentType(req.Body.ContentType))
@@ -490,7 +484,7 @@ public static class VcalmInteractionEndpoints
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
             VcalmProblemTypes.MalformedValueError,
-            "MALFORMED_VALUE_ERROR",
+            VcalmProblemTypes.MalformedValueErrorTitle,
             "The request could not be parsed as a valid inviteRequest.");
 
         return ServerHttpResponse.Json(
@@ -503,7 +497,7 @@ public static class VcalmInteractionEndpoints
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
             VcalmProblemTypes.UnknownOptionProvided,
-            "UNKNOWN_OPTION_PROVIDED",
+            VcalmProblemTypes.UnknownOptionProvidedTitle,
             "A member unknown to the inviteRequest endpoint was provided to the API call.");
 
         return ServerHttpResponse.Json(

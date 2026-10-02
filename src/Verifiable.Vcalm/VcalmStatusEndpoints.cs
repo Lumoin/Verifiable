@@ -442,13 +442,7 @@ public static class VcalmStatusEndpoints
 
         if(req.Body.Bytes.Length > vcalm.VcalmMaxRequestBytes)
         {
-            VcalmProblemDetail tooLarge = VcalmProblemDetail.Error(
-                VcalmProblemTypes.MalformedValueError,
-                "PAYLOAD_TOO_LARGE",
-                "The request body exceeds the configured maximum payload size.");
-
-            return ServerHttpResponse.PayloadTooLarge(
-                VcalmResponseWriter.BuildProblemDetailBody(tooLarge), WellKnownMediaTypes.Application.Json);
+            return VcalmResponseWriter.BuildContentTooLargeResponse();
         }
 
         if(!IsJsonContentType(req.Body.ContentType))
@@ -491,7 +485,7 @@ public static class VcalmStatusEndpoints
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
             VcalmProblemTypes.MalformedValueError,
-            "MALFORMED_VALUE_ERROR",
+            VcalmProblemTypes.MalformedValueErrorTitle,
             "The request body could not be parsed as a valid status request.");
 
         return ServerHttpResponse.Json(
@@ -504,7 +498,7 @@ public static class VcalmStatusEndpoints
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
             VcalmProblemTypes.UnknownOptionProvided,
-            "UNKNOWN_OPTION_PROVIDED",
+            VcalmProblemTypes.UnknownOptionProvidedTitle,
             "An option that is unknown to or unsupported by the status service instance was provided to the API call.");
 
         return ServerHttpResponse.Json(

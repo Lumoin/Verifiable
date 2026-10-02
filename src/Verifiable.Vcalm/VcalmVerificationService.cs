@@ -125,7 +125,7 @@ public static class VcalmVerificationService
         {
             problems.Add(VcalmProblemDetail.Error(
                 VcalmProblemTypes.ParsingError,
-                "PARSING_ERROR",
+                VcalmProblemTypes.ParsingErrorTitle,
                 "The secured credential carries no Data Integrity proof map to verify."));
         }
         else
@@ -266,7 +266,7 @@ public static class VcalmVerificationService
             Verified = false,
             ProblemDetails =
             [
-                VcalmProblemDetail.Error(VcalmProblemTypes.ParsingError, "PARSING_ERROR",
+                VcalmProblemDetail.Error(VcalmProblemTypes.ParsingError, VcalmProblemTypes.ParsingErrorTitle,
                     "The secured credential or its proof could not be parsed as a map.")
             ]
         };
@@ -285,7 +285,7 @@ public static class VcalmVerificationService
             [
                 VcalmProblemDetail.Error(
                     VcalmProblemTypes.UnsupportedSecuringMechanism,
-                    "UNSUPPORTED_SECURING_MECHANISM",
+                    VcalmProblemTypes.UnsupportedSecuringMechanismTitle,
                     VcalmProblemTypes.UnsupportedSecuringMechanismDetail)
             ]
         };
@@ -312,7 +312,7 @@ public static class VcalmVerificationService
     private static VcalmProblemDetail TooManyProofs(int proofCount, int maximum) =>
         VcalmProblemDetail.Error(
             VcalmProblemTypes.RangeError,
-            "RANGE_ERROR",
+            VcalmProblemTypes.RangeErrorTitle,
             $"The document carries {proofCount.ToString(CultureInfo.InvariantCulture)} proofs, more than the "
             + $"{maximum.ToString(CultureInfo.InvariantCulture)} this verifier accepts per document.");
 
@@ -376,7 +376,7 @@ public static class VcalmVerificationService
             {
                 problems.Add(VcalmProblemDetail.Error(
                     VcalmProblemTypes.MalformedValueError,
-                    "MALFORMED_VALUE_ERROR",
+                    VcalmProblemTypes.MalformedValueErrorTitle,
                     "A credentialSchema entry must specify its type and an id URL (VC Data Model 2.0 §4.11)."));
                 results.Add(new VcalmSchemaResult { Verified = false, Id = entry.Id ?? string.Empty, Type = entry.Type ?? string.Empty });
 
@@ -419,7 +419,7 @@ public static class VcalmVerificationService
                 CredentialSchemaValidationOutcome.Success or CredentialSchemaValidationOutcome.Indeterminate => null,
                 CredentialSchemaValidationOutcome.Failure => VcalmProblemDetail.Error(
                     VcalmProblemTypes.MalformedValueError,
-                    "MALFORMED_VALUE_ERROR",
+                    VcalmProblemTypes.MalformedValueErrorTitle,
                     $"The credential does not conform to its declared schema '{entry.Id}'."),
                 _ => SchemaNotEvaluated(entry.Id, VcalmSchemaValidatorRegistry.ValidationOutcomeUndefinedDetail)
             };
@@ -464,7 +464,7 @@ public static class VcalmVerificationService
     private static VcalmProblemDetail SchemaNotEvaluated(string schemaId, string cause) =>
         VcalmProblemDetail.Error(
             VcalmProblemTypes.MalformedValueError,
-            "MALFORMED_VALUE_ERROR",
+            VcalmProblemTypes.MalformedValueErrorTitle,
             $"The credential's conformance to its declared schema '{schemaId}' was not evaluated: " + cause);
 
 
@@ -647,7 +647,7 @@ public static class VcalmVerificationService
                 {
                     problems.Add(VcalmProblemDetail.Warning(
                         VcalmProblemTypes.StatusVerificationError,
-                        "STATUS_VERIFICATION_ERROR",
+                        VcalmProblemTypes.StatusVerificationErrorTitle,
                         "A BitstringStatusListEntry credentialStatus entry lacks, or carries an unparseable, "
                         + "statusListIndex, statusListCredential, or statusPurpose."));
                 }
@@ -662,7 +662,7 @@ public static class VcalmVerificationService
             {
                 problems.Add(VcalmProblemDetail.Warning(
                     VcalmProblemTypes.StatusRetrievalError,
-                    "STATUS_RETRIEVAL_ERROR",
+                    VcalmProblemTypes.StatusRetrievalErrorTitle,
                     $"The status list referenced by the '{entry.StatusPurpose}' credentialStatus entry "
                     + "was not retrieved: " + DependencyNotAttemptedDetail));
 
@@ -683,7 +683,7 @@ public static class VcalmVerificationService
                 {
                     problems.Add(VcalmProblemDetail.Warning(
                         VcalmProblemTypes.StatusRetrievalError,
-                        "STATUS_RETRIEVAL_ERROR",
+                        VcalmProblemTypes.StatusRetrievalErrorTitle,
                         $"The status list referenced by the '{entry.StatusPurpose}' credentialStatus "
                         + "entry could not be retrieved."));
 
@@ -708,7 +708,7 @@ public static class VcalmVerificationService
                 {
                     problems.Add(VcalmProblemDetail.Warning(
                         VcalmProblemTypes.StatusWarning,
-                        "STATUS_WARNING",
+                        VcalmProblemTypes.StatusWarningTitle,
                         $"The credential's '{entry.StatusPurpose}' status is set (status value "
                         + $"{statusResult.Status}) in the referenced status list."));
                 }
@@ -721,7 +721,7 @@ public static class VcalmVerificationService
                 context.SetDependencyBudgetExhausted();
                 problems.Add(VcalmProblemDetail.Warning(
                     VcalmProblemTypes.StatusRetrievalError,
-                    "STATUS_RETRIEVAL_ERROR",
+                    VcalmProblemTypes.StatusRetrievalErrorTitle,
                     $"The status list referenced by the '{entry.StatusPurpose}' credentialStatus "
                     + "entry could not be retrieved: " + CancelledByOwnBudgetDetail));
             }
@@ -747,28 +747,34 @@ public static class VcalmVerificationService
     /// <see cref="BitstringStatusListException"/> reports the specification's own error kind (§3.5
     /// Processing Errors, or the §3.2 <c>RANGE_ERROR</c>); any other exception reports
     /// <see cref="VcalmProblemTypes.StatusRetrievalError"/> — the application's resolver failed and
-    /// said no more. The detail is this library's own fixed sentence: it never carries the
+    /// said no more. Each error kind is reported as its type and title pair from <see cref="VcalmProblemTypes"/>,
+    /// and an error kind outside the defined values as <see cref="VcalmProblemTypes.StatusRetrievalError"/> with its
+    /// title. The detail is this library's own fixed sentence: it never carries the
     /// exception's message, type name, or stack (§3.8: "sanitize all server errors").
     /// </summary>
-    private static VcalmProblemDetail BuildStatusUnavailableProblem(string purpose, Exception exception) =>
-        exception is BitstringStatusListException bitstringException
-            ? VcalmProblemDetail.Warning(
-                bitstringException.ErrorType switch
-                {
-                    BitstringStatusListErrorType.StatusRetrieval => VcalmProblemTypes.StatusRetrievalError,
-                    BitstringStatusListErrorType.StatusVerification => VcalmProblemTypes.StatusVerificationError,
-                    BitstringStatusListErrorType.StatusListLength => VcalmProblemTypes.StatusListLengthError,
-                    BitstringStatusListErrorType.Range => VcalmProblemTypes.RangeError,
-                    BitstringStatusListErrorType.MalformedValue => VcalmProblemTypes.MalformedValueError,
-                    _ => VcalmProblemTypes.StatusRetrievalError
-                },
-                bitstringException.ErrorCode,
-                $"The '{purpose}' credentialStatus entry's status could not be established.")
-            : VcalmProblemDetail.Warning(
+    private static VcalmProblemDetail BuildStatusUnavailableProblem(string purpose, Exception exception)
+    {
+        if(exception is not BitstringStatusListException bitstringException)
+        {
+            return VcalmProblemDetail.Warning(
                 VcalmProblemTypes.StatusRetrievalError,
-                "STATUS_RETRIEVAL_ERROR",
+                VcalmProblemTypes.StatusRetrievalErrorTitle,
                 $"The '{purpose}' credentialStatus entry's status could not be established: the "
                 + "application's resolver failed and said no more.");
+        }
+
+        (string type, string title) = bitstringException.ErrorType switch
+        {
+            BitstringStatusListErrorType.StatusRetrieval => (VcalmProblemTypes.StatusRetrievalError, VcalmProblemTypes.StatusRetrievalErrorTitle),
+            BitstringStatusListErrorType.StatusVerification => (VcalmProblemTypes.StatusVerificationError, VcalmProblemTypes.StatusVerificationErrorTitle),
+            BitstringStatusListErrorType.StatusListLength => (VcalmProblemTypes.StatusListLengthError, VcalmProblemTypes.StatusListLengthErrorTitle),
+            BitstringStatusListErrorType.Range => (VcalmProblemTypes.RangeError, VcalmProblemTypes.RangeErrorTitle),
+            BitstringStatusListErrorType.MalformedValue => (VcalmProblemTypes.MalformedValueError, VcalmProblemTypes.MalformedValueErrorTitle),
+            _ => (VcalmProblemTypes.StatusRetrievalError, VcalmProblemTypes.StatusRetrievalErrorTitle)
+        };
+
+        return VcalmProblemDetail.Warning(type, title, $"The '{purpose}' credentialStatus entry's status could not be established.");
+    }
 
 
     /// <summary>
@@ -1017,7 +1023,7 @@ public static class VcalmVerificationService
         bool isSelectiveDisclosure = proofs.Exists(IsSelectiveDisclosureProof);
         if(isSelectiveDisclosure && proofs.Count != 1)
         {
-            return ProofVerificationOutcome.Failure(VcalmProblemTypes.UnsupportedSecuringMechanism,
+            return ProofVerificationOutcome.Failure(VcalmProblemTypes.UnsupportedSecuringMechanism, VcalmProblemTypes.UnsupportedSecuringMechanismTitle,
                 VcalmProblemTypes.UnsupportedSecuringMechanismDetail);
         }
 
@@ -1090,7 +1096,7 @@ public static class VcalmVerificationService
         string? proofValue = credential.Proof![0].ProofValue;
         if(string.IsNullOrEmpty(proofValue) || proofValue[0] != MultibaseAlgorithms.Base64Url)
         {
-            return ProofVerificationOutcome.Failure(VcalmProblemTypes.ProofVerificationError,
+            return ProofVerificationOutcome.Failure(VcalmProblemTypes.ProofVerificationError, VcalmProblemTypes.ProofVerificationErrorTitle,
                 "An error was encountered during selective-disclosure proof decoding.");
         }
 
@@ -1102,7 +1108,7 @@ public static class VcalmVerificationService
             //parseDerivedProofValue raises PROOF_VERIFICATION_ERROR when the decoded value does not start
             //with the disclosure proof header bytes 0xd9, 0x5d and 0x01.
 
-            return ProofVerificationOutcome.Failure(VcalmProblemTypes.ProofVerificationError,
+            return ProofVerificationOutcome.Failure(VcalmProblemTypes.ProofVerificationError, VcalmProblemTypes.ProofVerificationErrorTitle,
                 "An error was encountered during selective-disclosure proof decoding because the disclosure proof header is not recognized.");
         }
 
@@ -1153,13 +1159,13 @@ public static class VcalmVerificationService
         if(expectedDomain is not null && (proof!.Domain is not { Count: 1 } domains
             || !string.Equals(domains[0], expectedDomain, StringComparison.Ordinal)))
         {
-            return ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidDomainError,
+            return ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidDomainError, VcalmProblemTypes.InvalidDomainErrorTitle,
                 "The domain value in the proof did not match the expected value.");
         }
 
         if(expectedChallenge is not null && !string.Equals(proof!.Challenge, expectedChallenge, StringComparison.Ordinal))
         {
-            return ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidChallengeError,
+            return ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidChallengeError, VcalmProblemTypes.InvalidChallengeErrorTitle,
                 "The challenge value in the proof did not match the expected value.");
         }
 
@@ -1210,15 +1216,15 @@ public static class VcalmVerificationService
     /// </summary>
     private static ProofVerificationOutcome ValidateProofOptions(DataIntegrityProof? proof, string expectedPurpose) => proof switch
     {
-        null => ProofVerificationOutcome.Failure(VcalmProblemTypes.ParsingError,
+        null => ProofVerificationOutcome.Failure(VcalmProblemTypes.ParsingError, VcalmProblemTypes.ParsingErrorTitle,
             "The secured document carries no Data Integrity proof map to verify."),
-        _ when !HasMandatoryProofOptions(proof) => ProofVerificationOutcome.Failure(VcalmProblemTypes.ProofVerificationError,
+        _ when !HasMandatoryProofOptions(proof) => ProofVerificationOutcome.Failure(VcalmProblemTypes.ProofVerificationError, VcalmProblemTypes.ProofVerificationErrorTitle,
             "An error was encountered during proof verification because type, verificationMethod or proofPurpose is missing."),
         _ when !string.Equals(proof.ProofPurpose, expectedPurpose, StringComparison.Ordinal) =>
-            ProofVerificationOutcome.Failure(VcalmProblemTypes.ProofVerificationError,
+            ProofVerificationOutcome.Failure(VcalmProblemTypes.ProofVerificationError, VcalmProblemTypes.ProofVerificationErrorTitle,
                 "The proof purpose does not match the expected proof purpose."),
         _ when !IsValidVerificationMethodUrl(proof.VerificationMethod!.Id!) =>
-            ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidVerificationMethodUrl,
+            ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidVerificationMethodUrl, VcalmProblemTypes.InvalidVerificationMethodUrlTitle,
                 "The verification method identifier is not a valid URL."),
         _ => ProofVerificationOutcome.Success
     };
@@ -1277,14 +1283,14 @@ public static class VcalmVerificationService
             _ when verification is null || proof.Type != DataIntegrityProof.DataIntegrityProofType
                 || proof.Cryptosuite is UnknownCryptosuiteInfo
                 || proof.Cryptosuite?.CryptosuiteName == CredentialConstants.Cryptosuites.Bbs2023 =>
-                ProofVerificationOutcome.Failure(VcalmProblemTypes.UnsupportedSecuringMechanism,
+                ProofVerificationOutcome.Failure(VcalmProblemTypes.UnsupportedSecuringMechanism, VcalmProblemTypes.UnsupportedSecuringMechanismTitle,
                     VcalmProblemTypes.UnsupportedSecuringMechanismDetail),
-            { Cryptosuite: null } => ProofVerificationOutcome.Failure(VcalmProblemTypes.ProofVerificationError,
+            { Cryptosuite: null } => ProofVerificationOutcome.Failure(VcalmProblemTypes.ProofVerificationError, VcalmProblemTypes.ProofVerificationErrorTitle,
                 "An error was encountered during proof verification because the cryptosuite is missing."),
             _ when proof.Cryptosuite.CryptosuiteName == CredentialConstants.Cryptosuites.EcdsaSd2023
                 && (isPresentation || verification.ParseDerivedProof is null || verification.VerifyDerivedSignature is null
                     || verification.SdProofEncoder is null || verification.SdProofDecoder is null) =>
-                ProofVerificationOutcome.Failure(VcalmProblemTypes.UnsupportedSecuringMechanism,
+                ProofVerificationOutcome.Failure(VcalmProblemTypes.UnsupportedSecuringMechanism, VcalmProblemTypes.UnsupportedSecuringMechanismTitle,
                     VcalmProblemTypes.UnsupportedSecuringMechanismDetail),
             _ when proof.Cryptosuite.CryptosuiteName != CredentialConstants.Cryptosuites.EcdsaSd2023 =>
                 ValidateCryptoRegistry(proof.Cryptosuite.SignatureAlgorithm),
@@ -1310,7 +1316,7 @@ public static class VcalmVerificationService
         CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.IsInitialized
             && CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(algorithm, Purpose.Verification) is not null
             ? ProofVerificationOutcome.Success
-            : ProofVerificationOutcome.Failure(VcalmProblemTypes.UnsupportedSecuringMechanism,
+            : ProofVerificationOutcome.Failure(VcalmProblemTypes.UnsupportedSecuringMechanism, VcalmProblemTypes.UnsupportedSecuringMechanismTitle,
                 VcalmProblemTypes.UnsupportedSecuringMechanismDetail);
 
 
@@ -1353,7 +1359,7 @@ public static class VcalmVerificationService
     {
         if(!IsValidVerificationMethodUrl(verificationMethodId))
         {
-            return new(null, ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidVerificationMethodUrl,
+            return new(null, ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidVerificationMethodUrl, VcalmProblemTypes.InvalidVerificationMethodUrlTitle,
                 "The verification method identifier is not a valid URL.").Problem);
         }
 
@@ -1462,7 +1468,7 @@ public static class VcalmVerificationService
     /// <param name="verificationMethodId">The caller-supplied verification method URL the detail names.</param>
     /// <param name="cause">The detail ending naming why no fetch was made or completed, or <see langword="null"/> for none.</param>
     private static ProofVerificationOutcome ControllerDocumentNotRetrieved(string verificationMethodId, string? cause) =>
-        ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidControlledIdentifierDocument, cause is null
+        ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidControlledIdentifierDocument, VcalmProblemTypes.InvalidControlledIdentifierDocumentTitle, cause is null
             ? $"A conforming controlled identifier document could not be retrieved for '{verificationMethodId}'."
             : $"A conforming controlled identifier document could not be retrieved for '{verificationMethodId}': {cause}");
 
@@ -1475,7 +1481,7 @@ public static class VcalmVerificationService
     /// </summary>
     /// <param name="verificationMethodId">The caller-supplied verification method URL the detail names.</param>
     private static ProofVerificationOutcome DocumentIdMismatch(string verificationMethodId) =>
-        ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidControlledIdentifierDocumentId,
+        ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidControlledIdentifierDocumentId, VcalmProblemTypes.InvalidControlledIdentifierDocumentIdTitle,
             $"The controlled identifier document id does not match the controller document URL for '{verificationMethodId}'.");
 
 
@@ -1521,29 +1527,29 @@ public static class VcalmVerificationService
 
         return method switch
         {
-            null => ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidVerificationMethod,
+            null => ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidVerificationMethod, VcalmProblemTypes.InvalidVerificationMethodTitle,
                 $"The verification method '{identifier}' is not a conforming verification method."),
             _ when !IsValidVerificationMethodType(method.Type) || method.KeyFormat is null
                 || method.Controller is null || !IsValidVerificationMethodUrl(method.Controller) =>
-                ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidVerificationMethod,
+                ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidVerificationMethod, VcalmProblemTypes.InvalidVerificationMethodTitle,
                     $"The verification method '{identifier}' is not a conforming verification method."),
             _ when IsKeyAgreementVerificationMethodType(method.Type!) => ProofVerificationOutcome.Failure(
-                VcalmProblemTypes.InvalidVerificationMethod,
+                VcalmProblemTypes.InvalidVerificationMethod, VcalmProblemTypes.InvalidVerificationMethodTitle,
                 $"The verification method '{identifier}' is of a key agreement type, not a signing type."),
             _ when ValidateVerificationMethodKey(method, memoryPool) is { IsValid: false } keyFailure => keyFailure,
             _ when !string.Equals(method.Id, identifier, StringComparison.Ordinal) =>
-                ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidVerificationMethod,
+                ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidVerificationMethod, VcalmProblemTypes.InvalidVerificationMethodTitle,
                     $"The verification method's id does not equal '{identifier}'."),
             _ when !string.Equals(method.Controller, GetControllerDocumentId(identifier), StringComparison.Ordinal) =>
-                ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidVerificationMethod,
+                ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidVerificationMethod, VcalmProblemTypes.InvalidVerificationMethodTitle,
                     $"The controller of the verification method '{identifier}' does not equal its controller document URL."),
-            _ when related is null => ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidRelationshipForVerificationMethod,
+            _ when related is null => ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidRelationshipForVerificationMethod, VcalmProblemTypes.InvalidRelationshipForVerificationMethodTitle,
                 $"The verification method '{identifier}' is not associated with the required '{purpose}' verification relationship."),
             _ when !string.Equals(method.Controller, claimedController, StringComparison.Ordinal) =>
-                ProofVerificationOutcome.Failure(VcalmProblemTypes.VerificationMethodControllerMismatch,
+                ProofVerificationOutcome.Failure(VcalmProblemTypes.VerificationMethodControllerMismatch, VcalmProblemTypes.VerificationMethodControllerMismatchTitle,
                     $"The controller of the verification method '{identifier}' is not the credential's issuer or the presentation's holder."),
             _ when !IsCatalogVerificationMethodType(method.Type!) => ProofVerificationOutcome.Failure(
-                VcalmProblemTypes.UnsupportedSecuringMechanism, VcalmProblemTypes.UnsupportedSecuringMechanismDetail),
+                VcalmProblemTypes.UnsupportedSecuringMechanism, VcalmProblemTypes.UnsupportedSecuringMechanismTitle, VcalmProblemTypes.UnsupportedSecuringMechanismDetail),
             _ => ProofVerificationOutcome.Success
         };
     }
@@ -1639,7 +1645,7 @@ public static class VcalmVerificationService
         };
         if(!hasKeyMaterial)
         {
-            return ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidVerificationMethod,
+            return ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidVerificationMethod, VcalmProblemTypes.InvalidVerificationMethodTitle,
                 "The verification method does not contain conforming public key material.");
         }
 
@@ -1650,10 +1656,10 @@ public static class VcalmVerificationService
 
             return key switch
             {
-                null => ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidVerificationMethod,
+                null => ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidVerificationMethod, VcalmProblemTypes.InvalidVerificationMethodTitle,
                     "The verification method does not contain conforming public key material."),
                 _ when !IsKeyMaterialOfDeclaredType(method.Type!, material.Algorithm, material.Purpose) =>
-                    ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidVerificationMethod,
+                    ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidVerificationMethod, VcalmProblemTypes.InvalidVerificationMethodTitle,
                         "The verification method's public key material is not a signing key of its declared type."),
                 _ => ProofVerificationOutcome.Success
             };
@@ -1663,7 +1669,7 @@ public static class VcalmVerificationService
             //The converter's decoders report a malformed encoding of present material by throwing one of these two
             //types and offer no result-returning entry point; every other exception reaches the phase boundary.
 
-            return ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidVerificationMethod,
+            return ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidVerificationMethod, VcalmProblemTypes.InvalidVerificationMethodTitle,
                 "The verification method does not contain conforming public key material.");
         }
     }
@@ -1688,9 +1694,15 @@ public static class VcalmVerificationService
         /// <summary>A successful outcome with no <see cref="VcalmProblemDetail"/>.</summary>
         public static ProofVerificationOutcome Success { get; } = new(null);
 
-        /// <summary>Constructs the error whose title is its <see cref="VcalmProblemTypes"/> code.</summary>
-        public static ProofVerificationOutcome Failure(string type, string detail) =>
-            new(VcalmProblemDetail.Error(type, type[(type.IndexOf('#', StringComparison.Ordinal) + 1)..], detail));
+        /// <summary>
+        /// Constructs the error of <paramref name="type"/> titled <paramref name="title"/>, the title member that stands
+        /// beside the type in <see cref="VcalmProblemTypes"/>.
+        /// </summary>
+        /// <param name="type">The problem type URL from <see cref="VcalmProblemTypes"/>.</param>
+        /// <param name="title">The title member of <see cref="VcalmProblemTypes"/> beside <paramref name="type"/>.</param>
+        /// <param name="detail">The sanitized detail sentence of this occurrence.</param>
+        public static ProofVerificationOutcome Failure(string type, string title, string detail) =>
+            new(VcalmProblemDetail.Error(type, title, detail));
     }
 
 
@@ -1767,15 +1779,21 @@ public static class VcalmVerificationService
 
         /// <summary>Maps an actual thrown dependency failure to its <see cref="Phase"/>, never to tampering.</summary>
         /// <param name="isCancelledByOwnBudget">Whether the dependency cancelled while the caller's token was still live.</param>
-        public ProofVerificationOutcome UnexpectedFailure(bool isCancelledByOwnBudget = false) => ProofVerificationOutcome.Failure(
-            Phase switch
+        public ProofVerificationOutcome UnexpectedFailure(bool isCancelledByOwnBudget = false)
+        {
+            (string type, string title) = Phase switch
             {
-                ProofVerificationPhase.Transformation => VcalmProblemTypes.ProofTransformationError,
-                _ => VcalmProblemTypes.ProofVerificationError
-            },
-            isCancelledByOwnBudget
-                ? $"An error was encountered during {PhaseName}: the fetch or operation was cancelled by its own budget."
-                : $"An error was encountered during {PhaseName}.");
+                ProofVerificationPhase.Transformation => (VcalmProblemTypes.ProofTransformationError, VcalmProblemTypes.ProofTransformationErrorTitle),
+                _ => (VcalmProblemTypes.ProofVerificationError, VcalmProblemTypes.ProofVerificationErrorTitle)
+            };
+
+            return ProofVerificationOutcome.Failure(
+                type,
+                title,
+                isCancelledByOwnBudget
+                    ? $"An error was encountered during {PhaseName}: the fetch or operation was cancelled by its own budget."
+                    : $"An error was encountered during {PhaseName}.");
+        }
 
 
         /// <summary>
@@ -1786,7 +1804,7 @@ public static class VcalmVerificationService
         /// Integrity §4.7</see>: "An error was encountered during the transformation process").
         /// </summary>
         public static ProofVerificationOutcome TransformationNotAttempted { get; } = ProofVerificationOutcome.Failure(
-            VcalmProblemTypes.ProofTransformationError,
+            VcalmProblemTypes.ProofTransformationError, VcalmProblemTypes.ProofTransformationErrorTitle,
             "An error was encountered during proof transformation: " + DependencyNotAttemptedDetail);
 
 
@@ -1802,22 +1820,22 @@ public static class VcalmVerificationService
         {
             (true, _) => ProofVerificationOutcome.Success,
             (_, VerificationFailureReason.SignatureInvalid) when IsSelectiveDisclosure && !HasInvalidSignature =>
-                ProofVerificationOutcome.Failure(VcalmProblemTypes.ProofVerificationError,
+                ProofVerificationOutcome.Failure(VcalmProblemTypes.ProofVerificationError, VcalmProblemTypes.ProofVerificationErrorTitle,
                     "An error was encountered during selective-disclosure proof verification."),
-            (_, VerificationFailureReason.SignatureInvalid) => ProofVerificationOutcome.Failure(VcalmProblemTypes.CryptographicSecurityError,
+            (_, VerificationFailureReason.SignatureInvalid) => ProofVerificationOutcome.Failure(VcalmProblemTypes.CryptographicSecurityError, VcalmProblemTypes.CryptographicSecurityErrorTitle,
                 "The securing mechanism detected a modification in the document contents since it was created; potential tampering detected."),
-            (_, VerificationFailureReason.NoProof) => ProofVerificationOutcome.Failure(VcalmProblemTypes.ParsingError,
+            (_, VerificationFailureReason.NoProof) => ProofVerificationOutcome.Failure(VcalmProblemTypes.ParsingError, VcalmProblemTypes.ParsingErrorTitle,
                 "The secured document carries no Data Integrity proof map to verify."),
             (_, VerificationFailureReason.ContextValidationFailed) when Phase == ProofVerificationPhase.Transformation => UnexpectedFailure(),
-            (_, VerificationFailureReason.ContextValidationFailed) => ProofVerificationOutcome.Failure(VcalmProblemTypes.ContextValidationError,
+            (_, VerificationFailureReason.ContextValidationFailed) => ProofVerificationOutcome.Failure(VcalmProblemTypes.ContextValidationError, VcalmProblemTypes.ContextValidationErrorTitle,
                 "The document context failed context validation after proof transformation."),
-            (_, VerificationFailureReason.VerificationMethodNotFound) => ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidVerificationMethod,
+            (_, VerificationFailureReason.VerificationMethodNotFound) => ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidVerificationMethod, VcalmProblemTypes.InvalidVerificationMethodTitle,
                 "The verification method is not a conforming verification method of the controller document."),
-            (_, VerificationFailureReason.DomainMismatch) => ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidDomainError,
+            (_, VerificationFailureReason.DomainMismatch) => ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidDomainError, VcalmProblemTypes.InvalidDomainErrorTitle,
                 "The domain value in the proof did not match the expected value."),
-            (_, VerificationFailureReason.ChallengeMismatch) => ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidChallengeError,
+            (_, VerificationFailureReason.ChallengeMismatch) => ProofVerificationOutcome.Failure(VcalmProblemTypes.InvalidChallengeError, VcalmProblemTypes.InvalidChallengeErrorTitle,
                 "The challenge value in the proof did not match the expected value."),
-            _ => ProofVerificationOutcome.Failure(VcalmProblemTypes.ProofVerificationError,
+            _ => ProofVerificationOutcome.Failure(VcalmProblemTypes.ProofVerificationError, VcalmProblemTypes.ProofVerificationErrorTitle,
                 "An error was encountered during proof verification.")
         };
     }
@@ -1840,7 +1858,7 @@ public static class VcalmVerificationService
         {
             problems.Add(VcalmProblemDetail.Warning(
                 VcalmProblemTypes.ValidityPeriodWarning,
-                "VALIDITY_PERIOD_WARNING",
+                VcalmProblemTypes.ValidityPeriodWarningTitle,
                 $"The credential's validFrom ({validFrom}) is in the future relative to the verification time."));
         }
 
@@ -1865,7 +1883,7 @@ public static class VcalmVerificationService
         {
             problems.Add(VcalmProblemDetail.Warning(
                 VcalmProblemTypes.ValidityPeriodWarning,
-                "VALIDITY_PERIOD_WARNING",
+                VcalmProblemTypes.ValidityPeriodWarningTitle,
                 $"The credential's validUntil ({validUntil}) is in the past relative to the verification time."));
         }
 

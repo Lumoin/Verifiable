@@ -116,6 +116,6 @@ public static class VcalmWorkflowValidation
     private static VcalmProblemDetail Invalid(string detail) =>
         VcalmProblemDetail.Error(
             VcalmProblemTypes.MalformedValueError,
-            "MALFORMED_VALUE_ERROR",
+            VcalmProblemTypes.MalformedValueErrorTitle,
             detail);
 }

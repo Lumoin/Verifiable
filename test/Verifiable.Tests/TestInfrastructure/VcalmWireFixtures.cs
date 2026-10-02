@@ -265,6 +265,57 @@ internal static class VcalmWireFixtures
 
 
     /// <summary>
+    /// The payload cap, in bytes, <see cref="PostOneByteOverCapWireAsync"/> configures as
+    /// <see cref="VcalmIntegration.VcalmMaxRequestBytes"/>: small, so the body one byte over it stays small.
+    /// </summary>
+    internal static int OverCapRowPayloadCap { get; } = 1024;
+
+
+    /// <summary>
+    /// Lowers <see cref="VcalmIntegration.VcalmMaxRequestBytes"/> of <paramref name="app"/> to
+    /// <see cref="OverCapRowPayloadCap"/> and POSTs a JSON object of exactly that cap plus one UTF-8 bytes, labelled
+    /// <c>application/json</c>, over the real wire to <paramref name="path"/>: the smallest body the VCALM payload cap
+    /// refuses, the request a row proving the answer to a body over the cap sends. Every such answer is asserted here
+    /// to be HTTP 413 whose <c>detail</c> is the literal sentence
+    /// "The request body exceeds the configured maximum payload size." and whose body holds no digit, so the
+    /// configured cap is never disclosed.
+    /// </summary>
+    /// <param name="app">The host shell whose default host serves the request.</param>
+    /// <param name="path">The absolute path of the endpoint on the host.</param>
+    /// <param name="authorizationHeader">
+    /// The <c>Authorization</c> header value to send, or <see langword="null"/> to send no <c>Authorization</c> header.
+    /// </param>
+    /// <param name="cancellationToken">The test's own cancellation token.</param>
+    /// <returns>The response status code and its body text.</returns>
+    internal static async Task<(int StatusCode, string Body)> PostOneByteOverCapWireAsync(
+        TestHostShell app, string path, string? authorizationHeader, CancellationToken cancellationToken)
+    {
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.VcalmMaxRequestBytes = OverCapRowPayloadCap;
+        }).ConfigureAwait(false);
+
+        //The object {"x":"aa...a"} carries eight bytes of structure around its ASCII padding, so its UTF-8 form is
+        //exactly the cap plus one byte long.
+        string body = "{\"x\":\"" + new string('a', OverCapRowPayloadCap + 1 - 8) + "\"}";
+        Assert.AreEqual(OverCapRowPayloadCap + 1, Encoding.UTF8.GetByteCount(body),
+            "The request body is exactly one byte over the configured payload cap.");
+
+        (int statusCode, _, string responseBody) = await SendWireAsync(
+            app, "POST", path, body, authorizationHeader, cancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(413, statusCode, responseBody);
+        using JsonDocument problem = JsonDocument.Parse(responseBody);
+        Assert.AreEqual("The request body exceeds the configured maximum payload size.",
+            problem.RootElement.GetProperty(VcalmParameterNames.ProblemDetail).GetString(), responseBody);
+        Assert.IsFalse(responseBody.AsSpan().ContainsAnyInRange('0', '9'),
+            $"The answer to a body over the cap holds no digit, so the configured cap is not disclosed: {responseBody}");
+
+        return (statusCode, responseBody);
+    }
+
+
+    /// <summary>
     /// Sends an HTTP request of <paramref name="method"/> to <paramref name="path"/> on the loopback HTTPS host of
     /// <paramref name="app"/> over the real wire, starting the host when it is not yet listening, with an optional
     /// JSON <paramref name="body"/> and an optional <paramref name="authorizationHeader"/> value carried on the

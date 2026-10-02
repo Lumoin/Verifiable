@@ -2566,6 +2566,51 @@ internal sealed class VcalmVerifierEndpointTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9457#section-3.1.3">RFC 9457 Section 3.1.3</see> says of the
+    /// <c>title</c> member: "It SHOULD NOT change from occurrence to occurrence of the problem, except for localization
+    /// (e.g., using proactive content negotiation; see [HTTP], Section 12.1)." A status-list resolver that throws a
+    /// <see cref="BitstringStatusListException"/> whose error type lies outside the values
+    /// <see cref="BitstringStatusListErrorType"/> defines leaves the status unestablished, reported as the
+    /// <see href="https://www.w3.org/TR/vc-bitstring-status-list/#processing-errors">Bitstring Status List 1.0
+    /// Section 3.5</see> STATUS_RETRIEVAL_ERROR warning: its <c>type</c> and its <c>title</c> are that one problem
+    /// type's pair, the title being the code name every STATUS_RETRIEVAL_ERROR problem carries.
+    /// </summary>
+    [TestMethod]
+    public async Task StatusResolverThrowOfAnUndefinedErrorTypeIsTitledStatusRetrievalError()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterVerifierAsync(app).ConfigureAwait(false);
+
+        bool isResolverInvoked = false;
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveVcalmStatusListAsync = (entry, ctx, ct) =>
+            {
+                isResolverInvoked = true;
+
+                throw new BitstringStatusListException((BitstringStatusListErrorType)99, "The status list could not be processed.");
+            };
+        }).ConfigureAwait(false);
+
+        DataIntegritySecuredCredential credential = await SignCredentialAsync(
+            validUntilPast: false, withStatus: true).ConfigureAwait(false);
+        string body = BuildCredentialRequestBody(credential, returnProblemDetails: true);
+
+        using JsonDocument response = await PostCredentialWireAsync(app, segment, body, 200).ConfigureAwait(false);
+        string responseText = response.RootElement.GetRawText();
+
+        Assert.IsTrue(isResolverInvoked,
+            "The credentialStatus entry must map so the status resolver is actually invoked (else the test proves nothing).");
+        JsonElement problems = response.RootElement.GetProperty(VcalmParameterNames.ProblemDetails);
+        Assert.AreEqual(1, problems.GetArrayLength(), responseText);
+        Assert.AreEqual("https://www.w3.org/ns/credentials/status-list#STATUS_RETRIEVAL_ERROR",
+            problems[0].GetProperty(VcalmParameterNames.ProblemType).GetString(), responseText);
+        Assert.AreEqual("STATUS_RETRIEVAL_ERROR",
+            problems[0].GetProperty(VcalmParameterNames.ProblemTitle).GetString(), responseText);
+    }
+
+
+    /// <summary>
     /// <see href="https://www.w3.org/TR/vcalm-1.0/#verification-errors-vs-warnings">VCALM §3.8.1</see>: "Warnings are
     /// ProblemDetails relating to status and validity periods", and "if no errors are included, it MUST be set to true".
     /// A credential whose only status-list fetch ends on its own budget while the caller still waits, the cancellation
@@ -3708,53 +3753,61 @@ internal sealed class VcalmVerifierEndpointTests
 
 
     /// <summary>
-    /// §2.4 / B.4 payload size: a request body over the configured cap is rejected with HTTP 413.
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#payload-sizes-0">VCALM Section 2.4</see> and
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#payload-sizes">VCALM Appendix B.4</see> payload sizes, on the
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verify-credential">VCALM Section 3.3.1</see> endpoint: a
+    /// credential-verify body one byte over the configured cap is rejected with HTTP 413,
+    /// answered with the type <c>about:blank</c> titled <c>Content Too Large</c>, as
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9457#section-4.2.1">RFC 9457 Section 4.2.1</see> states: "When
+    /// "about:blank" is used, the title SHOULD be the same as the recommended HTTP status phrase for that code (e.g.,
+    /// "Not Found" for 404, and so on), although it MAY be localized to suit client preferences (expressed with the
+    /// Accept-Language request header)." The phrase for 413 is the one
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.5.14">RFC 9110 Section 15.5.14</see> names.
     /// </summary>
     [TestMethod]
     public async Task OversizeBodyYields413()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = await RegisterVerifierAsync(app, maxRequestBytes: 1024).ConfigureAwait(false);
+        string segment = await RegisterVerifierAsync(app).ConfigureAwait(false);
 
-        //A body comfortably over the 1 KiB cap configured for this verifier instance.
-        byte[] bytes = Encoding.UTF8.GetBytes("{\"verifiableCredential\":{\"x\":\"" + new string('a', 4096) + "\"}}");
-        ServerHttpResponse response = await app.DispatchWithBodyAsync(
-            segment,
-            WellKnownVcalmEndpointNames.VcalmCredentialsVerify,
-            "POST",
-            bytes,
-            WellKnownMediaTypes.Application.Json,
-            [],
-            TestContext.CancellationToken).ConfigureAwait(false);
+        (int statusCode, string body) = await VcalmWireFixtures.PostOneByteOverCapWireAsync(
+            app, TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCredentialsVerify, segment),
+            authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(413, response.StatusCode,
-            "A body over the configured §2.4 payload-size cap is rejected with 413.");
+        Assert.AreEqual(413, statusCode, body);
+        using JsonDocument problem = JsonDocument.Parse(body);
+        Assert.AreEqual("about:blank", problem.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(), body);
+        Assert.AreEqual("Content Too Large", problem.RootElement.GetProperty(VcalmParameterNames.ProblemTitle).GetString(), body);
     }
 
 
     /// <summary>
-    /// §2.4 / B.4 payload size on §3.3.3: the /challenges endpoint accepts an empty body, but a PRESENT
-    /// body over the configured cap is rejected with HTTP 413 — the same DoS gate every other
-    /// body-bearing VCALM endpoint enforces.
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#payload-sizes-0">VCALM Section 2.4</see> and
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#payload-sizes">VCALM Appendix B.4</see> payload sizes, on the
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-challenge">VCALM Section 3.3.3</see> endpoint: the
+    /// /challenges endpoint accepts an empty body, but a PRESENT
+    /// body one byte over the configured cap is rejected with HTTP 413, the same gate every other
+    /// body-bearing VCALM endpoint enforces, answered with the type <c>about:blank</c> titled
+    /// <c>Content Too Large</c>, as <see href="https://www.rfc-editor.org/rfc/rfc9457#section-4.2.1">RFC 9457
+    /// Section 4.2.1</see> states: "When "about:blank" is used, the title SHOULD be the same as the recommended HTTP
+    /// status phrase for that code (e.g., "Not Found" for 404, and so on), although it MAY be localized to suit client
+    /// preferences (expressed with the Accept-Language request header)." The phrase for 413 is the one
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.5.14">RFC 9110 Section 15.5.14</see> names.
     /// </summary>
     [TestMethod]
     public async Task ChallengeOversizeBodyYields413()
     {
         await using TestHostShell app = new(TimeProvider);
-        string segment = await RegisterVerifierAsync(app, maxRequestBytes: 1024).ConfigureAwait(false);
+        string segment = await RegisterVerifierAsync(app).ConfigureAwait(false);
 
-        byte[] bytes = Encoding.UTF8.GetBytes("{\"x\":\"" + new string('a', 4096) + "\"}");
-        ServerHttpResponse response = await app.DispatchWithBodyAsync(
-            segment,
-            WellKnownVcalmEndpointNames.VcalmCreateChallenge,
-            "POST",
-            bytes,
-            WellKnownMediaTypes.Application.Json,
-            [],
-            TestContext.CancellationToken).ConfigureAwait(false);
+        (int statusCode, string body) = await VcalmWireFixtures.PostOneByteOverCapWireAsync(
+            app, TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCreateChallenge, segment),
+            authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(413, response.StatusCode,
-            "A present /challenges body over the §2.4 payload cap is rejected with 413, like its siblings.");
+        Assert.AreEqual(413, statusCode, body);
+        using JsonDocument problem = JsonDocument.Parse(body);
+        Assert.AreEqual("about:blank", problem.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(), body);
+        Assert.AreEqual("Content Too Large", problem.RootElement.GetProperty(VcalmParameterNames.ProblemTitle).GetString(), body);
     }
 
 
@@ -4706,7 +4759,6 @@ internal sealed class VcalmVerifierEndpointTests
     /// </summary>
     private async Task<string> RegisterVerifierAsync(
         TestHostShell app,
-        long maxRequestBytes = 10L * 1024 * 1024,
         CanonicalizationDelegate? canonicalizer = null,
         ContextResolverDelegate? contextResolver = null,
         PersistVcalmChallengeDelegate? persistChallenge = null,
@@ -4776,12 +4828,6 @@ internal sealed class VcalmVerifierEndpointTests
                 candidateIntegration.ConsumeVcalmChallengeAsync = consumeChallenge;
             }).ConfigureAwait(false);
         }
-
-        //The §2.4 / B.4 payload-size cap is a server-level instance configuration.
-        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
-        {
-            candidateIntegration.VcalmMaxRequestBytes = maxRequestBytes;
-        }).ConfigureAwait(false);
 
         return material.Registration.TenantId.Value;
     }

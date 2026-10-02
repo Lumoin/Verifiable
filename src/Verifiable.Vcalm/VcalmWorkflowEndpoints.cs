@@ -297,13 +297,7 @@ public static class VcalmWorkflowEndpoints
 
         if(req.Body.Bytes.Length > vcalm.VcalmMaxRequestBytes)
         {
-            VcalmProblemDetail tooLarge = VcalmProblemDetail.Error(
-                VcalmProblemTypes.MalformedValueError,
-                "PAYLOAD_TOO_LARGE",
-                "The request body exceeds the configured maximum payload size.");
-
-            return ServerHttpResponse.PayloadTooLarge(
-                VcalmResponseWriter.BuildProblemDetailBody(tooLarge), WellKnownMediaTypes.Application.Json);
+            return VcalmResponseWriter.BuildContentTooLargeResponse();
         }
 
         if(!IsJsonContentType(req.Body.ContentType))
@@ -343,7 +337,7 @@ public static class VcalmWorkflowEndpoints
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
             VcalmProblemTypes.MalformedValueError,
-            "MALFORMED_VALUE_ERROR",
+            VcalmProblemTypes.MalformedValueErrorTitle,
             "The request body could not be parsed as a valid workflow configuration or callback notification.");
 
         return ProblemDetailsResponse(problem, 400);
@@ -354,7 +348,7 @@ public static class VcalmWorkflowEndpoints
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
             VcalmProblemTypes.UnknownOptionProvided,
-            "UNKNOWN_OPTION_PROVIDED",
+            VcalmProblemTypes.UnknownOptionProvidedTitle,
             "An option or property unknown to the workflow service was provided to the API call.");
 
         return ProblemDetailsResponse(problem, 400);

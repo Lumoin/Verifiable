@@ -212,6 +212,31 @@ internal sealed class VcalmWorkflowEndpointTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9457#section-4.2.1">RFC 9457 Section 4.2.1</see>: "When
+    /// "about:blank" is used, the title SHOULD be the same as the recommended HTTP status phrase for that code (e.g.,
+    /// "Not Found" for 404, and so on), although it MAY be localized to suit client preferences (expressed with the
+    /// Accept-Language request header)." A create-workflow body one byte over the configured payload cap is answered
+    /// 413 with the type <c>about:blank</c> titled <c>Content Too Large</c>, the phrase
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.5.14">RFC 9110 Section 15.5.14</see> gives 413.
+    /// </summary>
+    [TestMethod]
+    public async Task ABodyOverTheCapIsAboutBlankContentTooLarge()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterAdministrationAsync(app).ConfigureAwait(false);
+
+        (int statusCode, string body) = await VcalmWireFixtures.PostOneByteOverCapWireAsync(
+            app, TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCreateWorkflow, segment),
+            authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(413, statusCode, body);
+        using JsonDocument problem = JsonDocument.Parse(body);
+        Assert.AreEqual("about:blank", problem.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(), body);
+        Assert.AreEqual("Content Too Large", problem.RootElement.GetProperty(VcalmParameterNames.ProblemTitle).GetString(), body);
+    }
+
+
+    /// <summary>
     /// Registers the workflow administration capability with the configuration and callback delegates.
     /// </summary>
     private async Task<string> RegisterAdministrationAsync(TestHostShell app)

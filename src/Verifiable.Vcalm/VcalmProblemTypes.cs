@@ -36,6 +36,15 @@ public static class VcalmProblemTypes
         "https://www.w3.org/TR/vcalm#UNKNOWN_OPTION_PROVIDED";
 
     /// <summary>
+    /// The one <c>title</c> every <see cref="UnknownOptionProvided"/> problem carries, the code name the type URL
+    /// ends with. Each problem type of this catalogue has one such title member beside it, because
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9457#section-3.1.3">RFC 9457 Section 3.1.3</see> says of the
+    /// <c>title</c> member: "It SHOULD NOT change from occurrence to occurrence of the problem, except for
+    /// localization (e.g., using proactive content negotiation; see [HTTP], Section 12.1)."
+    /// </summary>
+    public static string UnknownOptionProvidedTitle { get; } = "UNKNOWN_OPTION_PROVIDED";
+
+    /// <summary>
     /// The securing mechanism has detected a modification in the document contents since it was
     /// created; potential tampering detected, as defined by
     /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#problem-details">VCDM §7.2</see>.
@@ -45,23 +54,36 @@ public static class VcalmProblemTypes
         "https://www.w3.org/TR/vc-data-model#CRYPTOGRAPHIC_SECURITY_ERROR";
 
     /// <summary>
+    /// The one <c>title</c> every <see cref="CryptographicSecurityError"/> problem carries, for the reason
+    /// <see cref="UnknownOptionProvidedTitle"/> states.
+    /// </summary>
+    public static string CryptographicSecurityErrorTitle { get; } = "CRYPTOGRAPHIC_SECURITY_ERROR";
+
+    /// <summary>
     /// The VC Data Model 2.0 <c>MALFORMED_VALUE_ERROR</c>, "The value associated with a particular property is
     /// malformed", per <see href="https://www.w3.org/TR/vc-data-model-2.0/#problem-details">VCDM §7.2</see>. The verifier
     /// reports it as an ERROR of the data-model phase, which makes <see cref="VcalmVerificationOutcome.Verified"/> false:
     /// a <c>credentialSchema</c> entry without its <c>type</c> or <c>id</c>, a credential that does not conform to its
     /// declared schema, and a declared schema left unchecked, whatever the cause. The endpoints answer with it as a
-    /// refusal too: HTTP 400 for a request body they cannot read and HTTP 413, titled <c>PAYLOAD_TOO_LARGE</c>, for a body
-    /// over the configured payload cap; the issuing endpoint's HTTP 400 for a credential it will not issue, such as one
-    /// carrying an existing proof its configuration refuses, an <c>issuer</c> that does not match the instance, or a
-    /// conflicting <c>credentialId</c>; and the exchange endpoint's HTTP 400 for a workflow step it cannot run and for a
+    /// refusal too: HTTP 400 for a request body they cannot read; the issuing endpoint's HTTP 400 for a credential it
+    /// will not issue, such as one carrying an existing proof its configuration refuses, an <c>issuer</c> that does not
+    /// match the instance, or a conflicting <c>credentialId</c>; and the exchange endpoint's HTTP 400 for a workflow step it cannot run and for a
     /// presented presentation its step's <c>presentationSchema</c> refuses or could not check. The status phase reports
     /// its problems as warnings under the Bitstring Status List types (<see cref="StatusRetrievalError"/>,
     /// <see cref="StatusVerificationError"/>, <see cref="StatusListLengthError"/>) and uses this type only where the
     /// Bitstring Status List validation itself raises a malformed value, then as a warning, since VCALM §3.8.1 makes every
     /// status problem one.
+    /// Every occurrence carries the one title <see cref="MalformedValueErrorTitle"/>. A body over the configured
+    /// payload cap is not answered with this type: it is answered with HTTP 413 and the <c>about:blank</c> type.
     /// </summary>
     public static string MalformedValueError { get; } =
         "https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR";
+
+    /// <summary>
+    /// The one <c>title</c> every <see cref="MalformedValueError"/> problem carries, for the reason
+    /// <see cref="UnknownOptionProvidedTitle"/> states.
+    /// </summary>
+    public static string MalformedValueErrorTitle { get; } = "MALFORMED_VALUE_ERROR";
 
     /// <summary>
     /// The Bitstring Status List 1.0 §3.5 <c>STATUS_RETRIEVAL_ERROR</c>: reported as a §3.8.1
@@ -83,6 +105,12 @@ public static class VcalmProblemTypes
         BitstringStatusListConstants.ErrorTypeUrlPrefix + "STATUS_RETRIEVAL_ERROR";
 
     /// <summary>
+    /// The one <c>title</c> every <see cref="StatusRetrievalError"/> problem carries, for the reason
+    /// <see cref="UnknownOptionProvidedTitle"/> states.
+    /// </summary>
+    public static string StatusRetrievalErrorTitle { get; } = "STATUS_RETRIEVAL_ERROR";
+
+    /// <summary>
     /// The Bitstring Status List 1.0 §3.5 <c>STATUS_VERIFICATION_ERROR</c>: reported as a §3.8.1
     /// status WARNING when a <c>BitstringStatusListEntry</c>'s <c>statusListIndex</c>,
     /// <c>statusListCredential</c>, or <c>statusPurpose</c> is missing or unparseable, or when
@@ -99,6 +127,12 @@ public static class VcalmProblemTypes
         BitstringStatusListConstants.ErrorTypeUrlPrefix + "STATUS_VERIFICATION_ERROR";
 
     /// <summary>
+    /// The one <c>title</c> every <see cref="StatusVerificationError"/> problem carries, for the reason
+    /// <see cref="UnknownOptionProvidedTitle"/> states.
+    /// </summary>
+    public static string StatusVerificationErrorTitle { get; } = "STATUS_VERIFICATION_ERROR";
+
+    /// <summary>
     /// The Bitstring Status List 1.0 §3.5 <c>STATUS_LIST_LENGTH_ERROR</c>: reported as a §3.8.1
     /// status WARNING when the referenced status list is shorter than the herd-privacy minimum.
     /// </summary>
@@ -109,6 +143,12 @@ public static class VcalmProblemTypes
     /// </remarks>
     public static string StatusListLengthError { get; } =
         BitstringStatusListConstants.ErrorTypeUrlPrefix + "STATUS_LIST_LENGTH_ERROR";
+
+    /// <summary>
+    /// The one <c>title</c> every <see cref="StatusListLengthError"/> problem carries, for the reason
+    /// <see cref="UnknownOptionProvidedTitle"/> states.
+    /// </summary>
+    public static string StatusListLengthErrorTitle { get; } = "STATUS_LIST_LENGTH_ERROR";
 
     /// <summary>
     /// The VC Data Model 2.0 <c>RANGE_ERROR</c>, "A provided value is outside of the expected range of an associated
@@ -128,11 +168,23 @@ public static class VcalmProblemTypes
         "https://www.w3.org/TR/vc-data-model#RANGE_ERROR";
 
     /// <summary>
+    /// The one <c>title</c> every <see cref="RangeError"/> problem carries, for the reason
+    /// <see cref="UnknownOptionProvidedTitle"/> states.
+    /// </summary>
+    public static string RangeErrorTitle { get; } = "RANGE_ERROR";
+
+    /// <summary>
     /// There was an error while parsing input.
     /// Defined by <see href="https://www.w3.org/TR/vc-data-model-2.0/#problem-details"/> and reported by <see cref="VcalmVerificationService"/>.
     /// </summary>
     public static string ParsingError { get; } =
         "https://www.w3.org/TR/vc-data-model#PARSING_ERROR";
+
+    /// <summary>
+    /// The one <c>title</c> every <see cref="ParsingError"/> problem carries, for the reason
+    /// <see cref="UnknownOptionProvidedTitle"/> states.
+    /// </summary>
+    public static string ParsingErrorTitle { get; } = "PARSING_ERROR";
 
     /// <summary>
     /// An error was encountered during proof verification.
@@ -142,11 +194,23 @@ public static class VcalmProblemTypes
         "https://w3id.org/security#PROOF_VERIFICATION_ERROR";
 
     /// <summary>
+    /// The one <c>title</c> every <see cref="ProofVerificationError"/> problem carries, for the reason
+    /// <see cref="UnknownOptionProvidedTitle"/> states.
+    /// </summary>
+    public static string ProofVerificationErrorTitle { get; } = "PROOF_VERIFICATION_ERROR";
+
+    /// <summary>
     /// An error was encountered during the transformation process.
     /// Defined by <see href="https://www.w3.org/TR/vc-data-integrity/#processing-errors"/> and reported by <see cref="VcalmVerificationService"/>.
     /// </summary>
     public static string ProofTransformationError { get; } =
         "https://w3id.org/security#PROOF_TRANSFORMATION_ERROR";
+
+    /// <summary>
+    /// The one <c>title</c> every <see cref="ProofTransformationError"/> problem carries, for the reason
+    /// <see cref="UnknownOptionProvidedTitle"/> states.
+    /// </summary>
+    public static string ProofTransformationErrorTitle { get; } = "PROOF_TRANSFORMATION_ERROR";
 
     /// <summary>
     /// The domain value in a proof did not match the expected value.
@@ -156,11 +220,23 @@ public static class VcalmProblemTypes
         "https://w3id.org/security#INVALID_DOMAIN_ERROR";
 
     /// <summary>
+    /// The one <c>title</c> every <see cref="InvalidDomainError"/> problem carries, for the reason
+    /// <see cref="UnknownOptionProvidedTitle"/> states.
+    /// </summary>
+    public static string InvalidDomainErrorTitle { get; } = "INVALID_DOMAIN_ERROR";
+
+    /// <summary>
     /// The challenge value in a proof did not match the expected value.
     /// Defined by <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof"/> and reported by <see cref="VcalmVerificationService"/>.
     /// </summary>
     public static string InvalidChallengeError { get; } =
         "https://w3id.org/security#INVALID_CHALLENGE_ERROR";
+
+    /// <summary>
+    /// The one <c>title</c> every <see cref="InvalidChallengeError"/> problem carries, for the reason
+    /// <see cref="UnknownOptionProvidedTitle"/> states.
+    /// </summary>
+    public static string InvalidChallengeErrorTitle { get; } = "INVALID_CHALLENGE_ERROR";
 
     /// <summary>
     /// The controller document is not a conforming controlled identifier document.
@@ -170,11 +246,23 @@ public static class VcalmProblemTypes
         "https://w3id.org/security#INVALID_CONTROLLED_IDENTIFIER_DOCUMENT";
 
     /// <summary>
+    /// The one <c>title</c> every <see cref="InvalidControlledIdentifierDocument"/> problem carries, for the reason
+    /// <see cref="UnknownOptionProvidedTitle"/> states.
+    /// </summary>
+    public static string InvalidControlledIdentifierDocumentTitle { get; } = "INVALID_CONTROLLED_IDENTIFIER_DOCUMENT";
+
+    /// <summary>
     /// The controller document id does not match the controller document URL.
     /// Defined by <see href="https://www.w3.org/TR/cid-1.0/#retrieve-verification-method"/> and reported by <see cref="VcalmVerificationService"/>.
     /// </summary>
     public static string InvalidControlledIdentifierDocumentId { get; } =
         "https://w3id.org/security#INVALID_CONTROLLED_IDENTIFIER_DOCUMENT_ID";
+
+    /// <summary>
+    /// The one <c>title</c> every <see cref="InvalidControlledIdentifierDocumentId"/> problem carries, for the reason
+    /// <see cref="UnknownOptionProvidedTitle"/> states.
+    /// </summary>
+    public static string InvalidControlledIdentifierDocumentIdTitle { get; } = "INVALID_CONTROLLED_IDENTIFIER_DOCUMENT_ID";
 
     /// <summary>
     /// The verification method identifier is not a valid URL.
@@ -186,6 +274,14 @@ public static class VcalmProblemTypes
         "https://w3id.org/security#INVALID_VERIFICATION_METHOD_URL";
 
     /// <summary>
+    /// The one <c>title</c> every <see cref="InvalidVerificationMethodUrl"/> problem carries, for the reason
+    /// <see cref="UnknownOptionProvidedTitle"/> states.
+    /// </summary>
+    [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
+        Justification = "The value is the problem's title, the code name its type URL ends with, and not a URI.")]
+    public static string InvalidVerificationMethodUrlTitle { get; } = "INVALID_VERIFICATION_METHOD_URL";
+
+    /// <summary>
     /// The verification method is nonconforming or its id or controller does not match.
     /// Defined by <see href="https://www.w3.org/TR/cid-1.0/#retrieve-verification-method"/> and reported by <see cref="VcalmVerificationService"/>.
     /// </summary>
@@ -193,11 +289,23 @@ public static class VcalmProblemTypes
         "https://w3id.org/security#INVALID_VERIFICATION_METHOD";
 
     /// <summary>
+    /// The one <c>title</c> every <see cref="InvalidVerificationMethod"/> problem carries, for the reason
+    /// <see cref="UnknownOptionProvidedTitle"/> states.
+    /// </summary>
+    public static string InvalidVerificationMethodTitle { get; } = "INVALID_VERIFICATION_METHOD";
+
+    /// <summary>
     /// The verification method is not associated with the required verification relationship.
     /// Defined by <see href="https://www.w3.org/TR/cid-1.0/#retrieve-verification-method"/> and reported by <see cref="VcalmVerificationService"/>.
     /// </summary>
     public static string InvalidRelationshipForVerificationMethod { get; } =
         "https://w3id.org/security#INVALID_RELATIONSHIP_FOR_VERIFICATION_METHOD";
+
+    /// <summary>
+    /// The one <c>title</c> every <see cref="InvalidRelationshipForVerificationMethod"/> problem carries, for the reason
+    /// <see cref="UnknownOptionProvidedTitle"/> states.
+    /// </summary>
+    public static string InvalidRelationshipForVerificationMethodTitle { get; } = "INVALID_RELATIONSHIP_FOR_VERIFICATION_METHOD";
 
     /// <summary>
     /// The base URL for every library-defined problem type in this catalogue, as permitted by
@@ -216,6 +324,12 @@ public static class VcalmProblemTypes
     public static string UnsupportedSecuringMechanism { get; } = LibraryProblemTypeBase + "UNSUPPORTED_SECURING_MECHANISM";
 
     /// <summary>
+    /// The one <c>title</c> every <see cref="UnsupportedSecuringMechanism"/> problem carries, for the reason
+    /// <see cref="UnknownOptionProvidedTitle"/> states.
+    /// </summary>
+    public static string UnsupportedSecuringMechanismTitle { get; } = "UNSUPPORTED_SECURING_MECHANISM";
+
+    /// <summary>
     /// The one fixed detail sentence every <see cref="UnsupportedSecuringMechanism"/> ProblemDetail
     /// carries, regardless of which mechanism (an envelope, a cryptosuite, or the crypto registry)
     /// could not be dispatched: the wired registry's topology is never described.
@@ -231,6 +345,12 @@ public static class VcalmProblemTypes
     public static string ContextValidationError { get; } = LibraryProblemTypeBase + "CONTEXT_VALIDATION_ERROR";
 
     /// <summary>
+    /// The one <c>title</c> every <see cref="ContextValidationError"/> problem carries, for the reason
+    /// <see cref="UnknownOptionProvidedTitle"/> states.
+    /// </summary>
+    public static string ContextValidationErrorTitle { get; } = "CONTEXT_VALIDATION_ERROR";
+
+    /// <summary>
     /// The validity-period WARNING (§3.8.1: a validity-period ProblemDetails is recoverable and
     /// does NOT flip <c>verified</c>) — emitted when <c>validFrom</c> is in the future or
     /// <c>validUntil</c> is in the past relative to the verification instant. Neither VCDM §7.2 nor
@@ -242,6 +362,12 @@ public static class VcalmProblemTypes
     /// defines warnings as problems relating to status and validity periods; <see cref="VcalmVerificationOutcome.Verified"/> is unchanged.
     /// </summary>
     public static string ValidityPeriodWarning { get; } = LibraryProblemTypeBase + "VALIDITY_PERIOD_WARNING";
+
+    /// <summary>
+    /// The one <c>title</c> every <see cref="ValidityPeriodWarning"/> problem carries, for the reason
+    /// <see cref="UnknownOptionProvidedTitle"/> states.
+    /// </summary>
+    public static string ValidityPeriodWarningTitle { get; } = "VALIDITY_PERIOD_WARNING";
 
     /// <summary>
     /// The status WARNING (§3.8.1: a status ProblemDetails is recoverable and does NOT flip
@@ -256,6 +382,12 @@ public static class VcalmProblemTypes
     public static string StatusWarning { get; } = LibraryProblemTypeBase + "STATUS_WARNING";
 
     /// <summary>
+    /// The one <c>title</c> every <see cref="StatusWarning"/> problem carries, for the reason
+    /// <see cref="UnknownOptionProvidedTitle"/> states.
+    /// </summary>
+    public static string StatusWarningTitle { get; } = "STATUS_WARNING";
+
+    /// <summary>
     /// A presented <c>options.challenge</c> that this verifier instance never issued, or that was
     /// already consumed by an earlier presentation. <see href="https://www.w3.org/TR/vc-data-integrity/#verify-proof">Data
     /// Integrity §4.4</see> defines only a challenge that differs from the proof's own bound value
@@ -265,6 +397,12 @@ public static class VcalmProblemTypes
     /// <see href="https://www.rfc-editor.org/rfc/rfc9457#section-4">RFC 9457 §4</see>.
     /// </summary>
     public static string ChallengeNotIssued { get; } = LibraryProblemTypeBase + "CHALLENGE_NOT_ISSUED";
+
+    /// <summary>
+    /// The one <c>title</c> every <see cref="ChallengeNotIssued"/> problem carries, for the reason
+    /// <see cref="UnknownOptionProvidedTitle"/> states.
+    /// </summary>
+    public static string ChallengeNotIssuedTitle { get; } = "CHALLENGE_NOT_ISSUED";
 
     /// <summary>
     /// A verification method whose <c>controller</c> does not match the credential's <c>issuer</c> or
@@ -278,4 +416,10 @@ public static class VcalmProblemTypes
     /// <see href="https://www.rfc-editor.org/rfc/rfc9457#section-4">RFC 9457 §4</see>.
     /// </summary>
     public static string VerificationMethodControllerMismatch { get; } = LibraryProblemTypeBase + "VERIFICATION_METHOD_CONTROLLER_MISMATCH";
+
+    /// <summary>
+    /// The one <c>title</c> every <see cref="VerificationMethodControllerMismatch"/> problem carries, for the reason
+    /// <see cref="UnknownOptionProvidedTitle"/> states.
+    /// </summary>
+    public static string VerificationMethodControllerMismatchTitle { get; } = "VERIFICATION_METHOD_CONTROLLER_MISMATCH";
 }

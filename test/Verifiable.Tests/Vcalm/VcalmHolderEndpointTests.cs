@@ -1197,6 +1197,32 @@ internal sealed class VcalmHolderEndpointTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9457#section-4.2.1">RFC 9457 Section 4.2.1</see>: "When
+    /// "about:blank" is used, the title SHOULD be the same as the recommended HTTP status phrase for that code (e.g.,
+    /// "Not Found" for 404, and so on), although it MAY be localized to suit client preferences (expressed with the
+    /// Accept-Language request header)." A create-presentation body one byte over the configured payload cap is
+    /// answered 413 with the type <c>about:blank</c> titled <c>Content Too Large</c>, the phrase
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.5.14">RFC 9110 Section 15.5.14</see> gives 413.
+    /// </summary>
+    [TestMethod]
+    public async Task ABodyOverTheCapIsAboutBlankContentTooLarge()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
+        string segment = await RegisterHolderAsync(app, holder).ConfigureAwait(false);
+
+        (int statusCode, string body) = await VcalmWireFixtures.PostOneByteOverCapWireAsync(
+            app, TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCreatePresentation, segment),
+            authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(413, statusCode, body);
+        using JsonDocument problem = JsonDocument.Parse(body);
+        Assert.AreEqual("about:blank", problem.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(), body);
+        Assert.AreEqual("Content Too Large", problem.RootElement.GetProperty(VcalmParameterNames.ProblemTitle).GetString(), body);
+    }
+
+
+    /// <summary>
     /// Registers a tenant with the VCALM holder capability and wires the parse seams, the holder's selective-disclosure
     /// derive configuration, the §3.4.3.2 channel-domain seam and the presentation store, with no presentation signing.
     /// </summary>

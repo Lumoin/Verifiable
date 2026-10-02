@@ -612,7 +612,7 @@ public static class VcalmExchangeEndpoints
         {
             VcalmProblemDetail unsolicited = VcalmProblemDetail.Error(
                 VcalmProblemTypes.CryptographicSecurityError,
-                "CRYPTOGRAPHIC_SECURITY_ERROR",
+                VcalmProblemTypes.CryptographicSecurityErrorTitle,
                 "A verifiablePresentation cannot be accepted before the exchange has requested one; "
                 + "there is no bound anti-replay challenge to verify it against.");
 
@@ -734,7 +734,7 @@ public static class VcalmExchangeEndpoints
             {
                 VcalmProblemDetail problem = VcalmProblemDetail.Error(
                     VcalmProblemTypes.MalformedValueError,
-                    "MALFORMED_VALUE_ERROR",
+                    VcalmProblemTypes.MalformedValueErrorTitle,
                     outcome.FailureDetail ?? "The workflow step could not be executed.");
 
                 context.SetVcalmExchangeReply(ProblemDetailsResponse(problem, 400));
@@ -842,7 +842,7 @@ public static class VcalmExchangeEndpoints
         {
             VcalmProblemDetail problem = VcalmProblemDetail.Error(
                 VcalmProblemTypes.MalformedValueError,
-                "MALFORMED_VALUE_ERROR",
+                VcalmProblemTypes.MalformedValueErrorTitle,
                 "The active exchange step's verifiable presentation request could not be re-composed for a re-poll.");
 
             return (null, ProblemDetailsResponse(problem, 400));
@@ -950,7 +950,7 @@ public static class VcalmExchangeEndpoints
         {
             return PresentationSchemaCheck.Refused(VcalmProblemDetail.Error(
                 VcalmProblemTypes.MalformedValueError,
-                "MALFORMED_VALUE_ERROR",
+                VcalmProblemTypes.MalformedValueErrorTitle,
                 "The step declares a presentationSchema but no envelope parser is wired; the "
                 + "declared validation cannot run, so the presentation is refused."));
         }
@@ -959,7 +959,7 @@ public static class VcalmExchangeEndpoints
         {
             return PresentationSchemaCheck.Refused(VcalmProblemDetail.Error(
                 VcalmProblemTypes.MalformedValueError,
-                "MALFORMED_VALUE_ERROR",
+                VcalmProblemTypes.MalformedValueErrorTitle,
                 "The step's presentationSchema is not a JSON object carrying a string type (§3.6.1)."));
         }
 
@@ -967,7 +967,7 @@ public static class VcalmExchangeEndpoints
         {
             return PresentationSchemaCheck.Refused(VcalmProblemDetail.Error(
                 VcalmProblemTypes.MalformedValueError,
-                "MALFORMED_VALUE_ERROR",
+                VcalmProblemTypes.MalformedValueErrorTitle,
                 $"The step's presentationSchema uses the schema mechanism '{envelope.Type}', for which "
                 + "no validator is registered; the declared validation cannot run, so the presentation "
                 + "is refused."));
@@ -977,7 +977,7 @@ public static class VcalmExchangeEndpoints
         {
             return PresentationSchemaCheck.Refused(VcalmProblemDetail.Error(
                 VcalmProblemTypes.MalformedValueError,
-                "MALFORMED_VALUE_ERROR",
+                VcalmProblemTypes.MalformedValueErrorTitle,
                 "The step's presentationSchema is of type JsonSchema but carries no jsonSchema object (§3.6.1)."));
         }
 
@@ -1007,13 +1007,13 @@ public static class VcalmExchangeEndpoints
             CredentialSchemaValidationOutcome.Success => PresentationSchemaCheck.Passed,
             CredentialSchemaValidationOutcome.Failure => PresentationSchemaCheck.Refused(VcalmProblemDetail.Error(
                 VcalmProblemTypes.MalformedValueError,
-                "MALFORMED_VALUE_ERROR",
+                VcalmProblemTypes.MalformedValueErrorTitle,
                 validation.Errors.Count > 0
                     ? $"The presented presentation does not conform to the step's presentationSchema: {validation.Errors[0].Message} (instance {validation.Errors[0].InstanceLocation}, keyword {validation.Errors[0].KeywordLocation})."
                     : "The presented presentation does not conform to the step's presentationSchema.")),
             CredentialSchemaValidationOutcome.Indeterminate => PresentationSchemaCheck.Refused(VcalmProblemDetail.Error(
                 VcalmProblemTypes.MalformedValueError,
-                "MALFORMED_VALUE_ERROR",
+                VcalmProblemTypes.MalformedValueErrorTitle,
                 "The step's presentationSchema could not be evaluated (an unsupported schema version "
                 + "or an unevaluable schema); the declared validation cannot assert conformance, so "
                 + "the presentation is refused.")),
@@ -1032,7 +1032,7 @@ public static class VcalmExchangeEndpoints
     private static VcalmProblemDetail SchemaNotChecked(string cause) =>
         VcalmProblemDetail.Error(
             VcalmProblemTypes.MalformedValueError,
-            "MALFORMED_VALUE_ERROR",
+            VcalmProblemTypes.MalformedValueErrorTitle,
             "The presented presentation's conformance to the step's presentationSchema was not checked: " + cause);
 
 
@@ -1282,13 +1282,7 @@ public static class VcalmExchangeEndpoints
 
         if(req.Body.Bytes.Length > vcalm.VcalmMaxRequestBytes)
         {
-            VcalmProblemDetail tooLarge = VcalmProblemDetail.Error(
-                VcalmProblemTypes.MalformedValueError,
-                "PAYLOAD_TOO_LARGE",
-                "The request body exceeds the configured maximum payload size.");
-
-            return ServerHttpResponse.PayloadTooLarge(
-                VcalmResponseWriter.BuildProblemDetailBody(tooLarge), WellKnownMediaTypes.Application.Json);
+            return VcalmResponseWriter.BuildContentTooLargeResponse();
         }
 
         if(!IsJsonContentType(req.Body.ContentType))
@@ -1329,7 +1323,7 @@ public static class VcalmExchangeEndpoints
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
             VcalmProblemTypes.MalformedValueError,
-            "MALFORMED_VALUE_ERROR",
+            VcalmProblemTypes.MalformedValueErrorTitle,
             "The request body could not be parsed as a valid exchange request or vcapi message.");
 
         return ProblemDetailsResponse(problem, 400);
@@ -1341,7 +1335,7 @@ public static class VcalmExchangeEndpoints
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
             VcalmProblemTypes.UnknownOptionProvided,
-            "UNKNOWN_OPTION_PROVIDED",
+            VcalmProblemTypes.UnknownOptionProvidedTitle,
             "An option or property unknown to the exchange engine was provided to the API call.");
 
         return ProblemDetailsResponse(problem, 400);
@@ -1387,7 +1381,7 @@ public static class VcalmExchangeEndpoints
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
             VcalmProblemTypes.MalformedValueError,
-            "MALFORMED_VALUE_ERROR",
+            VcalmProblemTypes.MalformedValueErrorTitle,
             "The exchange has finished and cannot accept further vcapi messages.");
 
         return ProblemDetailsResponse(problem, 400);

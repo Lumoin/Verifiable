@@ -759,13 +759,7 @@ public static class VcalmHolderEndpoints
 
         if(req.Body.Bytes.Length > vcalm.VcalmMaxRequestBytes)
         {
-            VcalmProblemDetail tooLarge = VcalmProblemDetail.Error(
-                VcalmProblemTypes.MalformedValueError,
-                "PAYLOAD_TOO_LARGE",
-                "The request body exceeds the configured maximum payload size.");
-
-            return ServerHttpResponse.PayloadTooLarge(
-                VcalmResponseWriter.BuildProblemDetailBody(tooLarge), WellKnownMediaTypes.Application.Json);
+            return VcalmResponseWriter.BuildContentTooLargeResponse();
         }
 
         if(!IsJsonContentType(req.Body.ContentType))
@@ -811,7 +805,7 @@ public static class VcalmHolderEndpoints
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
             VcalmProblemTypes.MalformedValueError,
-            "MALFORMED_VALUE_ERROR",
+            VcalmProblemTypes.MalformedValueErrorTitle,
             "The request body could not be parsed as a valid presenting request.");
 
         return ServerHttpResponse.Json(
@@ -824,7 +818,7 @@ public static class VcalmHolderEndpoints
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
             VcalmProblemTypes.UnknownOptionProvided,
-            "UNKNOWN_OPTION_PROVIDED",
+            VcalmProblemTypes.UnknownOptionProvidedTitle,
             "An option that is unknown to or unsupported by the holder instance was provided to the API call.");
 
         return ServerHttpResponse.Json(
@@ -840,7 +834,7 @@ public static class VcalmHolderEndpoints
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
             VcalmProblemTypes.MalformedValueError,
-            "MALFORMED_VALUE_ERROR",
+            VcalmProblemTypes.MalformedValueErrorTitle,
             "The supplied credential is not a derivable selective-disclosure credential: it carries no "
             + "ecdsa-sd-2023 base proof to derive a selectively-disclosed credential from (§3.5.1).");
 
@@ -859,7 +853,7 @@ public static class VcalmHolderEndpoints
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
             VcalmProblemTypes.MalformedValueError,
-            "MALFORMED_VALUE_ERROR",
+            VcalmProblemTypes.MalformedValueErrorTitle,
             VcalmVerificationService.IncompleteInputProofDetail);
 
         return ServerHttpResponse.Json(
@@ -881,7 +875,7 @@ public static class VcalmHolderEndpoints
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
             VcalmProblemTypes.MalformedValueError,
-            "MALFORMED_VALUE_ERROR",
+            VcalmProblemTypes.MalformedValueErrorTitle,
             VcalmHolderService.EmbeddedProofDetail);
 
         return ServerHttpResponse.Json(
@@ -899,7 +893,7 @@ public static class VcalmHolderEndpoints
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
             VcalmProblemTypes.MalformedValueError,
-            "MALFORMED_VALUE_ERROR",
+            VcalmProblemTypes.MalformedValueErrorTitle,
             VcalmHolderService.MissingPresentationStructureDetail);
 
         return ServerHttpResponse.Json(
@@ -920,7 +914,7 @@ public static class VcalmHolderEndpoints
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
             VcalmProblemTypes.MalformedValueError,
-            "MALFORMED_VALUE_ERROR",
+            VcalmProblemTypes.MalformedValueErrorTitle,
             "The options.created value is not a dateTimeStamp: a date and time to the second, optionally with "
             + "fractional seconds, followed by Z or a time zone offset such as +01:00.");
 
@@ -937,7 +931,7 @@ public static class VcalmHolderEndpoints
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
             VcalmProblemTypes.MalformedValueError,
-            "MALFORMED_VALUE_ERROR",
+            VcalmProblemTypes.MalformedValueErrorTitle,
             "A §3.5.2 presentation proof binds a challenge and a domain (VC Data Model 2.0 §4.13); the "
             + "request must supply options.challenge and options.domain.");
 
@@ -959,7 +953,7 @@ public static class VcalmHolderEndpoints
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
             VcalmProblemTypes.InvalidDomainError,
-            "INVALID_DOMAIN_ERROR",
+            VcalmProblemTypes.InvalidDomainErrorTitle,
             $"The request's options.domain '{requestedDomain}' does not match the current communication "
             + $"channel's domain '{channelDomain}'; a §3.4.3.2 holder refuses to sign a presentation whose "
             + "domain names a verifier other than the one it is communicating with (anti-replay).");
@@ -980,7 +974,7 @@ public static class VcalmHolderEndpoints
     {
         VcalmProblemDetail problem = VcalmProblemDetail.Error(
             VcalmProblemTypes.InvalidDomainError,
-            "INVALID_DOMAIN_ERROR",
+            VcalmProblemTypes.InvalidDomainErrorTitle,
             "The current communication channel's domain could not be determined; a §3.4.3.2 holder "
             + "refuses to sign a presentation whose verifier identity it cannot confirm (anti-replay).");
 

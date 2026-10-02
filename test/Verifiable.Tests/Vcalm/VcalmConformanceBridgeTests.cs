@@ -207,13 +207,18 @@ internal sealed class VcalmConformanceBridgeTests
     private const string JsonMediaType = "application/json";
 
     /// <summary>
-    /// The problem <c>type</c> URL the issuer's payload-size refusal carries: the Verifiable Credentials
-    /// Data Model's malformed-value problem under the base URL the VCALM 1.0 Error Handling example uses.
+    /// The problem <c>type</c> the issuer's payload-size refusal carries: <c>about:blank</c>, the problem
+    /// with no semantics beyond its HTTP status code
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9457#section-4.2.1">RFC 9457 Section 4.2.1</see>).
     /// </summary>
-    private const string PayloadTooLargeProblemType = "https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR";
+    private static string ContentTooLargeProblemType { get; } = "about:blank";
 
-    /// <summary>The problem <c>title</c> the issuer's payload-size refusal carries.</summary>
-    private const string PayloadTooLargeProblemTitle = "PAYLOAD_TOO_LARGE";
+    /// <summary>
+    /// The problem <c>title</c> the issuer's payload-size refusal carries: the status phrase
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.5.14">RFC 9110 Section 15.5.14</see>
+    /// gives 413.
+    /// </summary>
+    private static string ContentTooLargeProblemTitle { get; } = "Content Too Large";
 
     /// <summary>
     /// The capabilities of the conformance tenant: the VCALM issuer and verifier roles, the
@@ -1191,16 +1196,20 @@ internal sealed class VcalmConformanceBridgeTests
     /// <summary>
     /// A validly authorized issuance whose body exceeds the 10MB baseline the VCALM issuer enforces
     /// reaches that issuer and is answered by it: 413 with a JSON ProblemDetails body whose
-    /// <c>type</c> is a URL and whose <c>title</c> names the payload-size problem, no challenge, and
-    /// nothing stored.
+    /// <c>type</c> is <c>about:blank</c> and whose <c>title</c> is the 413 status phrase, no challenge,
+    /// and nothing stored.
     /// <see href="https://www.w3.org/TR/vcalm-1.0/#error-handling">VCALM 1.0 Error Handling</see>:
     /// "When an implementation detects an anomaly while processing a document, a ProblemDetails object
     /// can be used to report the issue to other software systems. The interfaces for these objects
     /// follow [RFC9457] to encode the data." and "The type key MUST be present and its value MUST be a
     /// URL identifying the type of problem."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9457#section-4.2.1">RFC 9457 Section 4.2.1</see>:
+    /// "When "about:blank" is used, the title SHOULD be the same as the recommended HTTP status phrase
+    /// for that code (e.g., "Not Found" for 404, and so on), although it MAY be localized to suit client
+    /// preferences (expressed with the Accept-Language request header)."
     /// </summary>
     [TestMethod]
-    public async Task OversizedBodyAtMappedPathIsPayloadTooLarge()
+    public async Task OversizedBodyAtMappedPathIsAboutBlankContentTooLarge()
     {
         await using TestHostShell app = new(TimeProvider);
         ConformanceContext ctx = await StartConformanceHostAsync(app).ConfigureAwait(false);
@@ -1222,8 +1231,8 @@ internal sealed class VcalmConformanceBridgeTests
         Assert.AreEqual(JsonMediaType, response.Content.Headers.ContentType?.MediaType,
             "The issuer's 413 carries a JSON ProblemDetails body.");
         using JsonDocument problem = JsonDocument.Parse(body);
-        Assert.AreEqual(PayloadTooLargeProblemType, problem.RootElement.GetProperty("type").GetString(), body);
-        Assert.AreEqual(PayloadTooLargeProblemTitle, problem.RootElement.GetProperty("title").GetString(), body);
+        Assert.AreEqual(ContentTooLargeProblemType, problem.RootElement.GetProperty("type").GetString(), body);
+        Assert.AreEqual(ContentTooLargeProblemTitle, problem.RootElement.GetProperty("title").GetString(), body);
         Assert.IsFalse(response.Headers.NonValidated.Contains(WwwAuthenticateHeaderName),
             "A 413 after admission carries no bearer challenge.");
         AssertNothingReachedStorage();

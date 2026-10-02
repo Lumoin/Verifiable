@@ -2,6 +2,8 @@ using System.Collections.Immutable;
 using System.Text;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
+using Verifiable.Core.Transport;
+using Verifiable.JCose;
 
 namespace Verifiable.Vcalm;
 
@@ -833,4 +835,36 @@ public static class VcalmResponseWriter
             JsonAppender.Return(sb);
         }
     }
+
+
+    /// <summary>
+    /// The answer every VCALM endpoint gives a request body over the configured
+    /// <see cref="VcalmIntegration.VcalmMaxRequestBytes"/> cap: HTTP 413 with a ProblemDetails body of the
+    /// <see cref="WellKnownProblemTypes.AboutBlank"/> type titled <see cref="ContentTooLargeTitle"/>. The condition
+    /// has no semantics beyond the status code, the case
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9457#section-4.2.1">RFC 9457 Section 4.2.1</see> describes:
+    /// "The "about:blank" URI [ABOUT], when used as a problem type, indicates that the problem has no additional
+    /// semantics beyond that of the HTTP status code."
+    /// </summary>
+    /// <returns>The 413 response carrying the JSON ProblemDetails body.</returns>
+    internal static ServerHttpResponse BuildContentTooLargeResponse()
+    {
+        VcalmProblemDetail tooLarge = VcalmProblemDetail.Error(
+            WellKnownProblemTypes.AboutBlank,
+            ContentTooLargeTitle,
+            "The request body exceeds the configured maximum payload size.");
+
+        return ServerHttpResponse.PayloadTooLarge(BuildProblemDetailBody(tooLarge), WellKnownMediaTypes.Application.Json);
+    }
+
+
+    /// <summary>
+    /// The <c>title</c> of <see cref="BuildContentTooLargeResponse"/>: the status phrase
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.5.14">RFC 9110 Section 15.5.14</see> gives 413,
+    /// as <see href="https://www.rfc-editor.org/rfc/rfc9457#section-4.2.1">RFC 9457 Section 4.2.1</see> asks of an
+    /// <c>about:blank</c> problem: "When "about:blank" is used, the title SHOULD be the same as the recommended HTTP
+    /// status phrase for that code (e.g., "Not Found" for 404, and so on), although it MAY be localized to suit client
+    /// preferences (expressed with the Accept-Language request header)."
+    /// </summary>
+    private static string ContentTooLargeTitle { get; } = "Content Too Large";
 }

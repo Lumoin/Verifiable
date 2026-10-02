@@ -120,7 +120,7 @@ public static class VcalmExchangeService
     private static VcalmProblemDetail TooManyContainedCredentials(int containedCount, int maximum) =>
         VcalmProblemDetail.Error(
             VcalmProblemTypes.RangeError,
-            "RANGE_ERROR",
+            VcalmProblemTypes.RangeErrorTitle,
             $"The presentation contains {containedCount.ToString(CultureInfo.InvariantCulture)} credentials, more than the "
             + $"{maximum.ToString(CultureInfo.InvariantCulture)} this exchange accepts per presentation.");
 
