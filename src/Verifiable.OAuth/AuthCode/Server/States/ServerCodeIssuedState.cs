@@ -15,7 +15,8 @@ namespace Verifiable.OAuth.AuthCode.Server.States;
 /// <para>
 /// <see cref="SubjectId"/> identifies the authenticated subject so that the issued
 /// token can be bound to the correct user without re-authenticating. The
-/// <see cref="AuthTime"/> is carried forward for ID Token <c>auth_time</c> claims.
+/// <see cref="AuthTime"/> the host stamped is carried forward for the <c>auth_time</c> claims;
+/// an instant the host did not stamp is carried as unknown.
 /// </para>
 /// <para>
 /// Transitions to <see cref="ServerTokenIssuedState"/> when
@@ -72,11 +73,33 @@ public sealed record ServerCodeIssuedState: FlowState
     public required string SubjectId { get; init; }
 
     /// <summary>
-    /// The UTC instant at which the subject authenticated. Carried into the ID Token
-    /// as <c>auth_time</c> per
-    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#IDToken">OIDC Core §2</see>.
+    /// The UTC instant at which the subject authenticated, as the host stamped it on the
+    /// authorize-time context, or <see langword="null"/> when the host stamped none. Carried into
+    /// the ID Token as <c>auth_time</c> per
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#IDToken">OpenID Connect Core 1.0 section 2</see>:
+    /// "Time when the End-User authentication occurred."
     /// </summary>
-    public required DateTimeOffset AuthTime { get; init; }
+    /// <remarks>
+    /// <para>
+    /// The authentication instant is a fact of the host's own authentication, so the library
+    /// states none it was not given: an unknown instant is carried as unknown, never replaced by
+    /// the instant the authorize leg ran. The member is <c>required</c> so the site that builds the
+    /// state states the instant, <see langword="null"/> when it is unknown.
+    /// </para>
+    /// <para>
+    /// What follows from an unknown instant, as <see cref="AcrAmrClaimContributor"/> writes the claim:
+    /// the access tokens of the code redemption and of every refresh, and every refreshed ID Token,
+    /// carry no <c>auth_time</c>; the ID Token of the code redemption carries one only when the
+    /// application's resolver returns <see cref="Oidc.AuthenticationContext.AuthTime"/>, which the
+    /// contributor reads before this instant. A request that asks for a maximum authentication age is
+    /// refused before a code is issued
+    /// (<see cref="AuthCodeEndpoints.EvaluateAuthenticationRequirementsAsync"/>). The same clause
+    /// states when the claim may be left out: "When a max_age request is made or when auth_time is
+    /// requested as an Essential Claim, then this Claim is REQUIRED; otherwise, its inclusion is
+    /// OPTIONAL."
+    /// </para>
+    /// </remarks>
+    public required DateTimeOffset? AuthTime { get; init; }
 
     /// <summary>The client identifier, carried forward for token endpoint validation.</summary>
     public required string ClientId { get; init; }

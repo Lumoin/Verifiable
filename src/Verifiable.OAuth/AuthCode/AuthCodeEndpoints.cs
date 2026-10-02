@@ -888,7 +888,9 @@ public static class AuthCodeEndpoints
                 }
 
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
-                DateTimeOffset authTime = context.AuthTime ?? now;
+
+                //The instant as the host stamped it, null when it stamped none (see ServerCodeIssuedState.AuthTime).
+                DateTimeOffset? authTime = context.AuthTime;
 
                 //RFC 9101 §6.3 (applied to PAR via RFC 9126 §4): when the authorization request
                 //is passed by reference (request_uri), the authorization server MUST only use the
@@ -1291,7 +1293,9 @@ public static class AuthCodeEndpoints
                 }
 
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
-                DateTimeOffset authTime = context.AuthTime ?? now;
+
+                //The instant as the host stamped it, null when it stamped none (see ServerCodeIssuedState.AuthTime).
+                DateTimeOffset? authTime = context.AuthTime;
 
                 (string effectiveScope, ServerHttpResponse? requirementFailure) =
                     await EvaluateAuthenticationRequirementsAsync(
@@ -1936,7 +1940,9 @@ public static class AuthCodeEndpoints
                 }
 
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
-                DateTimeOffset authTime = context.AuthTime ?? now;
+
+                //The instant as the host stamped it, null when it stamped none (see ServerCodeIssuedState.AuthTime).
+                DateTimeOffset? authTime = context.AuthTime;
 
                 (string effectiveScope, ServerHttpResponse? requirementFailure) =
                     await EvaluateAuthenticationRequirementsAsync(
@@ -9931,7 +9937,10 @@ public static class AuthCodeEndpoints
     /// Evaluates a request's RFC 9470 §5 step-up authentication requirements at the
     /// authorization endpoint, shared across every code-issuing authorize path (PAR-backed,
     /// direct, and JAR). Enforces the temporal <c>max_age</c> recency requirement itself
-    /// (OIDC Core §3.1.2.1, using the deployment's <c>ClockSkewTolerance</c>), then invokes
+    /// (OpenID Connect Core 1.0 section 3.1.2.1): the elapsed whole seconds between the stamped
+    /// authentication instant and the authorize leg's instant are compared with <c>max_age</c>
+    /// without a clock-skew tolerance, and a request whose context carries no stamped
+    /// authentication instant is refused, since its recency cannot be confirmed. Then it invokes
     /// the application's <see cref="EvaluateAuthorizationRequestDelegate"/> for the semantic
     /// decision (<c>acr</c> satisfaction, consent, policy, and RFC 6749 §3.3 scope narrowing via
     /// <see cref="AuthorizationRequestDecision.Permit(string?)"/>).

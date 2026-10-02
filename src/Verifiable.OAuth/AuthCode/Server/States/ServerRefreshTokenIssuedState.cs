@@ -106,8 +106,10 @@ public sealed record ServerRefreshTokenIssuedState: FlowState
     /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-2.2.1">RFC 9068 §2.2.1</see>,
     /// the authentication-context claims remain the same across all access tokens that
     /// derive from a given authorization response, including those obtained by refreshing.
-    /// <see langword="null"/> when no End-User authentication backs the token (e.g. a
-    /// grant shape with no interactive login).
+    /// <see langword="null"/> in two cases: no End-User authentication backs the token (e.g. a
+    /// grant shape with no interactive login), or the host stamped no authentication instant at
+    /// the authorize leg (<see cref="ServerCodeIssuedState.AuthTime"/>); the refreshed tokens then
+    /// carry no <c>auth_time</c>.
     /// </summary>
     public DateTimeOffset? AuthTime { get; init; }
 

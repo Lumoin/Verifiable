@@ -27,9 +27,10 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.OAuth;
 
 /// <summary>
-/// Real-wire capstone for the Authorization Code + PAR + PKCE family: every
-/// leg — PAR, the browser's authorize GET, the callback, token exchange, refresh, and revocation —
-/// crosses a real loopback socket, composed via <see cref="TestHostShell.CreateOAuthClientAndRegistrationAsync"/>
+/// Real-wire capstone for the Authorization Code + PAR + PKCE family: PAR, the browser's authorize
+/// GET, token exchange, refresh, and revocation cross a real loopback socket, and the callback is a
+/// client-local transition on the <c>code</c>/<c>state</c>/<c>iss</c> parameters read from the HTTP
+/// redirect the authorize GET answers, composed via <see cref="TestHostShell.CreateOAuthClientAndRegistrationAsync"/>
 /// and <see cref="AuthCodeClient.StartParAsync(ClientRegistration, Uri, OAuthFormEncodedFields, ExchangeContext, IReadOnlyList{string}?, CancellationToken)"/> / <see cref="AuthCodeClient.HandleCallbackAsync(ClientRegistration, OAuthFormEncodedFields, CancellationToken)"/> /
 /// <see cref="AuthCodeClient.ExchangeTokenAsync(ClientRegistration, string, CancellationToken)"/> exactly as <see cref="IdJagGrantTests"/> and
 /// <see cref="HttpWireFidelityTests"/> compose the HTTP-backed factory. <see cref="AuthCodeFlowTests"/>
@@ -91,6 +92,17 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     /// </summary>
     private static ImmutableHashSet<CapabilityIdentifier> CapabilitiesWithIntrospection { get; } =
         Capabilities.Add(WellKnownCapabilityIdentifiers.OAuthTokenIntrospection);
+
+    /// <summary>
+    /// <see cref="Capabilities"/> plus the direct authorization request, signed request objects and
+    /// OpenID Connect, so that one registration takes every start the client offers and its token
+    /// responses carry an ID Token beside the access token.
+    /// </summary>
+    private static ImmutableHashSet<CapabilityIdentifier> CapabilitiesWithOpenIdConnect { get; } =
+        Capabilities
+            .Add(WellKnownCapabilityIdentifiers.OAuthDirectAuthorization)
+            .Add(WellKnownCapabilityIdentifiers.OAuthJwtSecuredAuthorizationRequest)
+            .Add(WellKnownCapabilityIdentifiers.OidcOpenIdConnect);
 
 
     /// <summary>
@@ -161,6 +173,94 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, revokeResult.Outcome,
             $"Revocation must succeed over the real wire. ErrorCode={revokeResult.ErrorCode} ErrorDescription={revokeResult.ErrorDescription}");
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#IDToken">OpenID Connect Core 1.0
+    /// section 2</see> defines <c>auth_time</c> as "Time when the End-User authentication occurred." and
+    /// states "When a max_age request is made or when auth_time is requested as an Essential Claim, then
+    /// this Claim is REQUIRED; otherwise, its inclusion is OPTIONAL." The instant is a fact of the host's
+    /// own authentication: a session whose browser leg carries the authenticated subject and no
+    /// authentication instant yields a code whose redemption and whose refresh carry no <c>auth_time</c>
+    /// on either ID Token or on either access token, never the instant the authorize leg ran, whichever
+    /// start carries the authorization request.
+    /// </summary>
+    /// <param name="start">
+    /// Which start carries the authorization request: <see cref="PushedStart"/>,
+    /// <see cref="DirectStart"/>, <see cref="RequestObjectByValueStart"/> or
+    /// <see cref="PushedRequestObjectStart"/>.
+    /// </param>
+    [TestMethod]
+    [DataRow(PushedStart, DisplayName = "PushedRequest")]
+    [DataRow(DirectStart, DisplayName = "DirectRequest")]
+    [DataRow(RequestObjectByValueStart, DisplayName = "SignedRequestByValue")]
+    [DataRow(PushedRequestObjectStart, DisplayName = "PushedSignedRequest")]
+    public async Task ASessionStampedWithoutAnAuthenticationInstantIssuesNoAuthTime(string start)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: CapabilitiesWithOpenIdConnect)
+            .ConfigureAwait(false);
+
+        (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
+            await ComposeResourceJourneyClientAsync(host, material).ConfigureAwait(false);
+
+        HostedAuthorizationServer hosted = host.Host("default");
+        string flowId = start switch
+        {
+            PushedStart => await DriveParAuthorizeAndCallbackAsync(
+                hosted, client, registration, clientFlowStore, material.Registration.TenantId.Value,
+                host.ServerCertificate, TestContext.CancellationToken).ConfigureAwait(false),
+            DirectStart => await DriveDirectStartAuthorizeAndCallbackAsync(
+                hosted, client, registration, clientFlowStore, host.ServerCertificate,
+                OAuthFormEncodedFieldsFixtures.OpenIdScope, TestContext.CancellationToken).ConfigureAwait(false),
+            PushedRequestObjectStart or RequestObjectByValueStart => await DriveRequestObjectStartAuthorizeAndCallbackAsync(
+                start, host, client, registration, clientFlowStore, material, WellKnownScopes.OpenId, resource: null).ConfigureAwait(false),
+            _ => throw new ArgumentOutOfRangeException(nameof(start), start, "Unknown authorization request start.")
+        };
+
+        AuthCodeFlowEndpointResult tokenResult = await client.AuthCode.ExchangeTokenAsync(
+            registration, flowId, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, tokenResult.Outcome,
+            $"Token exchange must succeed over the real wire. ErrorCode={tokenResult.ErrorCode} ErrorDescription={tokenResult.ErrorDescription}");
+        AssertNoAuthTime(tokenResult.Body!, OAuthRequestParameterNames.IdToken, "the ID Token of the code redemption");
+        AssertNoAuthTime(tokenResult.Body!, OAuthRequestParameterNames.AccessToken, "the access token of the code redemption");
+
+        //The refresh runs at a later instant, so a refresh that dated the grant by its own clock would show.
+        TimeProvider.Advance(TimeSpan.FromMinutes(10));
+
+        AuthCodeFlowEndpointResult refreshResult = await client.AuthCode.RefreshAsync(
+            registration,
+            new RefreshTokenRequest
+            {
+                ClientId = ClientId,
+                RefreshToken = (string)tokenResult.Body![OAuthRequestParameterNames.RefreshToken]
+            },
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, refreshResult.Outcome,
+            $"Refresh must succeed over the real wire. ErrorCode={refreshResult.ErrorCode} ErrorDescription={refreshResult.ErrorDescription}");
+        AssertNoAuthTime(refreshResult.Body!, OAuthRequestParameterNames.IdToken, "the ID Token of the refresh");
+        AssertNoAuthTime(refreshResult.Body!, OAuthRequestParameterNames.AccessToken, "the access token of the refresh");
+    }
+
+
+    /// <summary>
+    /// Asserts that the token response <paramref name="body"/> carries the JWT named
+    /// <paramref name="tokenParameterName"/> and that its payload has no <c>auth_time</c> member, the
+    /// shape of a token issued for an authentication whose instant the host did not state.
+    /// </summary>
+    /// <param name="body">The token endpoint's response members as the client decoded them off the wire.</param>
+    /// <param name="tokenParameterName">The response member that holds the compact JWT.</param>
+    /// <param name="tokenDescription">The token's name in the assertion messages.</param>
+    private static void AssertNoAuthTime(
+        IReadOnlyDictionary<string, object> body, string tokenParameterName, string tokenDescription)
+    {
+        Assert.IsTrue(body.TryGetValue(tokenParameterName, out object? token) && token is string { Length: > 0 },
+            $"The response must carry {tokenDescription}.");
+        using JsonDocument payload = JwtPayloadReader.ParsePayloadJson((string)token);
+        Assert.IsFalse(payload.RootElement.TryGetProperty(WellKnownJwtClaimNames.AuthTime, out JsonElement authTime),
+            $"No authentication instant was stamped, so {tokenDescription} must carry no auth_time; it carried {authTime}.");
     }
 
 
@@ -5700,6 +5800,7 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
     /// <summary>
     /// Composes the client for a registration made with <see cref="ResourceJourneyCapabilities"/>
+    /// (or <see cref="CapabilitiesWithOpenIdConnect"/>, which holds them)
     /// and lists the registration's own key as its request-object signing key, so the same
     /// registration verifies a signed request object and issues the tokens a code redemption
     /// returns. The client-credential check answers true, as for the other journeys of this class

@@ -66,7 +66,7 @@ internal sealed class StepUpAccessTokenClaimsTests
         Assert.AreEqual("loa-substantial", acr.GetString());
 
         Assert.IsTrue(payload.RootElement.TryGetProperty(WellKnownJwtClaimNames.AuthTime, out JsonElement authTime),
-            $"Access token must carry auth_time for an End-User authentication. Body: {tokenResponse.Body}");
+            $"An authentication instant was stamped, so the access token must carry auth_time. Body: {tokenResponse.Body}");
         Assert.AreEqual(StampedAuthTime.ToUnixTimeSeconds(), authTime.GetInt64(),
             "auth_time must equal the stamped authentication instant, not the request clock.");
     }
@@ -75,11 +75,10 @@ internal sealed class StepUpAccessTokenClaimsTests
     /// <summary>
     /// No <c>acr</c> is stamped → the access token omits the <c>acr</c> claim — <c>acr</c>
     /// is OPTIONAL (RFC 9068 §2.2.1) and present only when the AS established it — while
-    /// <c>auth_time</c>, always available for an auth-code End-User authentication, is
-    /// still emitted.
+    /// the stamped authentication instant is emitted as <c>auth_time</c>.
     /// </summary>
     [TestMethod]
-    public async Task AcrOmittedOnAccessTokenWhenNoAuthContextStamped()
+    public async Task AcrOmittedOnAccessTokenWhenNoAcrStamped()
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
@@ -96,7 +95,7 @@ internal sealed class StepUpAccessTokenClaimsTests
         Assert.IsFalse(payload.RootElement.TryGetProperty(WellKnownJwtClaimNames.Acr, out _),
             "acr must be omitted when the application stamped no authentication-context reference.");
         Assert.IsTrue(payload.RootElement.TryGetProperty(WellKnownJwtClaimNames.AuthTime, out _),
-            "auth_time is available for every auth-code End-User authentication and must still be emitted.");
+            "An authentication instant was stamped, so auth_time must be emitted although no acr was stamped.");
     }
 
 

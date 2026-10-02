@@ -83,13 +83,14 @@ internal sealed class Oidc10IdTokenProducerTests
 
         //iat = 2026-05-17T12:00:00Z = 1779019200
         //exp = iat + 1h default lifetime = 1779022800
-        //auth_time = the authorize-step instant, equal to iat for this fixture
+        //auth_time: absent, the fixed inputs stamp no authentication instant and the
+        //authorization server states none it was not given
         //iss = host's per-registration issuer (tenant-segmented)
         //sub = identity-resolved SubjectId via the default subject identifier resolver
         string expectedIssuer = ExtractIssuer(payload.RootElement);
         string expectedCanonical =
             $$"""
-            {"aud":"{{ClientId}}","auth_time":1779019200,"exp":1779022800,"iat":1779019200,"iss":"{{expectedIssuer}}","sub":"{{SubjectId}}"}
+            {"aud":"{{ClientId}}","exp":1779022800,"iat":1779019200,"iss":"{{expectedIssuer}}","sub":"{{SubjectId}}"}
             """;
 
         Assert.AreEqual(expectedCanonical, actualCanonical,

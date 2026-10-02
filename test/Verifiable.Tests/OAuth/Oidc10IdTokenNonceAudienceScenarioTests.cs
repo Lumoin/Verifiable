@@ -17,12 +17,14 @@ namespace Verifiable.Tests.OAuth;
 /// Firewalled end-to-end scenario for the OIDC Core §3.1.3.7 checks
 /// <see cref="Oidc10IdTokenValidator.ValidateAsync"/> enforces only when the caller opts in: the
 /// <c>nonce</c> conditional-MUST and the untrusted-audience rejection MUST. Also proves that
-/// <c>auth_time</c>/<c>acr</c>/<c>sid</c> are surfaced on every successful validation regardless of
+/// the validator surfaces <c>auth_time</c>/<c>acr</c>/<c>sid</c> when the ID Token carries them, regardless of
 /// whether the caller enforces them, so a caller that requested <c>acr_values</c>/<c>max_age</c> can
 /// apply those §3.1.3.7 SHOULDs itself. Every id_token is minted through the REAL pipeline — a full
 /// PAR → Authorize → Token exchange over the library's production issuance path; the relying party
 /// reconstructs from the wire body alone and runs the full validation including the signature, the
-/// same shape <see cref="AzpMultiAudienceScenarioTests"/> uses for the azp scenarios.
+/// same shape <see cref="AzpMultiAudienceScenarioTests"/> uses for the azp scenarios. An ID Token
+/// issued without a stamped authentication instant carries no <c>auth_time</c>, and a stamped one is
+/// surfaced as stamped.
 /// </summary>
 [TestClass]
 internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
@@ -49,7 +51,13 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
     private FakeTimeProvider TimeProvider { get; } = new(TestClock.CanonicalEpoch);
 
 
-    /// <summary>An id_token whose nonce equals the expected value validates, and the authentication-context claims arrive on the result.</summary>
+    /// <summary>
+    /// An id_token whose nonce equals the expected value validates, and the authentication-context claims
+    /// arrive on the result. The host stamps no authentication instant, so per
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#IDToken">OpenID Connect Core 1.0
+    /// section 2</see> ("Time when the End-User authentication occurred.") the ID Token states no
+    /// <c>auth_time</c>.
+    /// </summary>
     [TestMethod]
     public async Task MatchingNonceValidatesAndSurfacesAuthenticationContext()
     {
@@ -81,9 +89,39 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
         Assert.IsTrue(result.IsSuccess,
             $"An id_token whose nonce matches the expected nonce must validate; got {result.FailureReason}: {result.FailureDescription}");
         Assert.AreEqual(RequestNonce, result.Claims!.Nonce);
-        Assert.IsNotNull(result.Claims.AuthTime, "auth_time must be surfaced — the AS always establishes it at authorize time.");
+        Assert.IsNull(result.Claims.AuthTime,
+            "No authentication instant was stamped, so the ID Token must carry no auth_time.");
         Assert.AreEqual(EstablishedAcr, result.Claims.Acr);
         Assert.AreEqual(EstablishedSessionId, result.Claims.Sid);
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#IDToken">OpenID Connect Core 1.0
+    /// section 2</see>: <c>auth_time</c> is the "Time when the End-User authentication occurred." The host
+    /// stamps the instant of its authentication and the clock moves on before the authorize leg runs; the
+    /// ID Token the relying party validates states the stamped instant, never the instant of the leg.
+    /// </summary>
+    [TestMethod]
+    public async Task AStampedAuthenticationInstantIsTheIdTokenAuthTime()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        DateTimeOffset stampedAuthTime = TimeProvider.GetUtcNow();
+        TimeProvider.Advance(TimeSpan.FromMinutes(10));
+
+        string idToken = await DriveCodeExchangeForIdTokenAsync(
+            host, material, nonce: null, stampSessionId: false, authTime: stampedAuthTime).ConfigureAwait(false);
+
+        Oidc10IdTokenValidationResult result = await ValidateAsRelyingPartyAsync(
+            idToken, material, expectedNonce: null, trustedAudiences: null).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsSuccess, $"The ID Token must validate; got {result.FailureReason}: {result.FailureDescription}");
+        Assert.AreEqual(stampedAuthTime.ToUnixTimeSeconds(), result.Claims!.AuthTime?.ToUnixTimeSeconds(),
+            "auth_time must be the stamped authentication instant, not the instant the authorize leg ran.");
     }
 
 
@@ -460,12 +498,20 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
 
     /// <summary>
     /// Drives the full PAR → Authorize → Token exchange with the <c>openid</c> scope, optionally
-    /// carrying <paramref name="nonce"/> on the authentication request and optionally stamping the
-    /// authorize-time <c>sid</c> via <paramref name="stampSessionId"/>, and returns the <c>id_token</c>
-    /// from the wire body.
+    /// carrying <paramref name="nonce"/> on the authentication request, optionally stamping the
+    /// authorize-time <c>sid</c> via <paramref name="stampSessionId"/> and the authentication instant
+    /// via <paramref name="authTime"/>, and returns the <c>id_token</c> from the wire body.
     /// </summary>
+    /// <param name="host">The authorization server host the exchange runs against.</param>
+    /// <param name="material">The registered client's material.</param>
+    /// <param name="nonce">The <c>nonce</c> the authentication request carries, or <see langword="null"/> for none.</param>
+    /// <param name="stampSessionId">Whether the authorize-time context carries <see cref="EstablishedSessionId"/>.</param>
+    /// <param name="authTime">
+    /// The authentication instant the authorize-time context carries, or <see langword="null"/> when the
+    /// host states none.
+    /// </param>
     private async Task<string> DriveCodeExchangeForIdTokenAsync(
-        TestHostShell host, VerifierKeyMaterial material, string? nonce, bool stampSessionId)
+        TestHostShell host, VerifierKeyMaterial material, string? nonce, bool stampSessionId, DateTimeOffset? authTime = null)
     {
         InProcessAuthCodeDriveResult result = await InProcessAuthCodeDriver.DriveAsync(
             host, material, SubjectId, RedirectUri,
@@ -473,7 +519,8 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
             {
                 Scope = WellKnownScopes.OpenId,
                 Nonce = nonce,
-                SessionId = stampSessionId ? EstablishedSessionId : null
+                SessionId = stampSessionId ? EstablishedSessionId : null,
+                AuthTime = authTime
             },
             TestContext.CancellationToken).ConfigureAwait(false);
 

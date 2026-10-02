@@ -2,6 +2,7 @@ using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
 using System.Text.Json;
 using Verifiable.Core;
+using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
@@ -125,6 +126,54 @@ internal sealed class UnmetAuthenticationRequirementsTests
             $"A fresh authentication within max_age must yield an authorization code. Location: {authorizeResponse.Location}");
         Assert.DoesNotContain(OAuthErrors.UnmetAuthenticationRequirements, authorizeResponse.Location!,
             StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest">OpenID Connect Core 1.0
+    /// section 3.1.2.1</see>: "When max_age is used, the ID Token returned MUST include an auth_time Claim
+    /// Value." A permitted <c>max_age=300</c> request whose authentication instant was stamped 60 seconds
+    /// before the authorize leg yields a code whose redemption for <c>openid</c> returns an ID Token whose
+    /// <c>auth_time</c> is the stamped instant.
+    /// </summary>
+    [TestMethod]
+    public async Task IdTokenOfAPermittedMaxAgeRequestCarriesTheStampedAuthTime()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        DateTimeOffset stampedAuthTime = TimeProvider.GetUtcNow() - TimeSpan.FromSeconds(60);
+        ServerHttpResponse authorizeResponse = await DriveToAuthorizeAsync(
+            host, material, maxAge: "300", authTime: stampedAuthTime, pkce: pkce).ConfigureAwait(false);
+        Assert.AreEqual(302, authorizeResponse.StatusCode, authorizeResponse.Body);
+        string code = TestBrowser.ExtractQueryParam(authorizeResponse.Location!, OAuthRequestParameterNames.Code)
+            ?? throw new InvalidOperationException($"A permitted max_age request must yield a code. Location: {authorizeResponse.Location}");
+
+        RequestFields tokenFields = new()
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.AuthorizationCode,
+            [OAuthRequestParameterNames.Code] = code,
+            [OAuthRequestParameterNames.CodeVerifier] = pkce.EncodedVerifier,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString
+        };
+        ServerHttpResponse tokenResponse = await host.DispatchAtEndpointAsync(
+            material.Registration.TenantId.Value,
+            WellKnownEndpointNames.AuthCodeToken, WellKnownHttpMethods.Post,
+            tokenFields, [],
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
+
+        using JsonDocument tokenBody = JsonDocument.Parse(tokenResponse.Body);
+        using JsonDocument idTokenPayload = JwtPayloadReader.ParsePayloadJson(
+            tokenBody.RootElement.GetProperty(OAuthRequestParameterNames.IdToken).GetString()!);
+        Assert.IsTrue(idTokenPayload.RootElement.TryGetProperty(WellKnownJwtClaimNames.AuthTime, out JsonElement authTime),
+            $"When max_age is used, the ID Token must carry auth_time. Payload: {idTokenPayload.RootElement}");
+        Assert.AreEqual(stampedAuthTime.ToUnixTimeSeconds(), authTime.GetInt64(),
+            "The ID Token's auth_time must be the instant the host stamped.");
     }
 
 
@@ -1040,12 +1089,24 @@ internal sealed class UnmetAuthenticationRequirementsTests
     /// context (mirroring the application's authentication middleware). Returns the authorize
     /// endpoint response.
     /// </summary>
+    /// <param name="host">The host whose endpoints answer.</param>
+    /// <param name="material">The registration the request is made for.</param>
+    /// <param name="maxAge">The <c>max_age</c> the pushed request carries, or <see langword="null"/> for none.</param>
+    /// <param name="acrValues">The <c>acr_values</c> the pushed request carries, or <see langword="null"/> for none.</param>
+    /// <param name="authTime">The authentication instant stamped on the authorize-time context, or <see langword="null"/> for none.</param>
+    /// <param name="establishedAcr">The <c>acr</c> stamped on the authorize-time context, or <see langword="null"/> for none.</param>
+    /// <param name="pkce">
+    /// The PKCE pair whose challenge the pushed request carries, so a caller that redeems the code holds
+    /// its verifier; <see langword="null"/> generates a fresh pair.
+    /// </param>
+    /// <returns>The authorize endpoint's answer.</returns>
     private async Task<ServerHttpResponse> DriveToAuthorizeAsync(
         TestHostShell host, VerifierKeyMaterial material,
         string? maxAge = null, string? acrValues = null,
-        DateTimeOffset? authTime = null, string? establishedAcr = null)
+        DateTimeOffset? authTime = null, string? establishedAcr = null,
+        PkceParameters? pkce = null)
     {
-        PkceParameters pkce = PkceGeneration.Generate(
+        pkce ??= PkceGeneration.Generate(
             TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
 
         RequestFields parFields = new()

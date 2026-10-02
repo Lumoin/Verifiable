@@ -95,7 +95,11 @@ public sealed record ServerParValidated(
 /// </remarks>
 /// <param name="CodeHash">SHA-256 hash of the authorization code returned to the client.</param>
 /// <param name="SubjectId">The authenticated subject identifier.</param>
-/// <param name="AuthTime">The UTC instant at which the subject authenticated.</param>
+/// <param name="AuthTime">
+/// The UTC instant at which the subject authenticated, as the host stamped it on the authorize-time
+/// context, or <see langword="null"/> when the host stamped none, carried as is into
+/// <see cref="ServerCodeIssuedState.AuthTime"/>, whose remarks state why and what follows.
+/// </param>
 /// <param name="Scope">The scope granted at the authorization endpoint.</param>
 /// <param name="CompletedAt">The UTC instant the authorization completed.</param>
 /// <param name="ExpiresAt">
@@ -122,7 +126,7 @@ public sealed record ServerParValidated(
 public sealed record ServerAuthorizeCompleted(
     string CodeHash,
     string SubjectId,
-    DateTimeOffset AuthTime,
+    DateTimeOffset? AuthTime,
     string Scope,
     DateTimeOffset CompletedAt,
     DateTimeOffset ExpiresAt,
@@ -304,7 +308,11 @@ public sealed record ServerFail(
 /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest">OIDC Core §3.1.2.1</see>.
 /// </param>
 /// <param name="SubjectId">The authenticated subject identifier.</param>
-/// <param name="AuthTime">The UTC instant at which the subject authenticated.</param>
+/// <param name="AuthTime">
+/// The UTC instant at which the subject authenticated, as the host stamped it on the authorize-time
+/// context, or <see langword="null"/> when the host stamped none, carried as is into
+/// <see cref="ServerCodeIssuedState.AuthTime"/>, whose remarks state why and what follows.
+/// </param>
 /// <param name="ExpectedIssuer">The server's issuer identifier.</param>
 /// <param name="CompletedAt">The UTC instant the authorization completed.</param>
 /// <param name="ExpiresAt">The UTC instant the authorization session expires.</param>
@@ -340,7 +348,7 @@ public sealed record ServerDirectAuthorizeCompleted(
     string ClientId,
     string Nonce,
     string SubjectId,
-    DateTimeOffset AuthTime,
+    DateTimeOffset? AuthTime,
     string ExpectedIssuer,
     DateTimeOffset CompletedAt,
     DateTimeOffset ExpiresAt,

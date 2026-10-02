@@ -20,8 +20,9 @@ namespace Verifiable.OAuth;
 /// <c>acr</c> and <c>amr</c> claims come exclusively from
 /// <see cref="OidcClaims.AuthContext"/>, and <c>auth_time</c> follows the documented
 /// fallback chain: <see cref="AuthenticationContext.AuthTime"/> when populated,
-/// otherwise <see cref="IssuanceContext.AuthTime"/> (the instant the End-User
-/// authenticated as observed by the AS).
+/// otherwise <see cref="IssuanceContext.AuthTime"/> (the instant the host stamped for
+/// the End-User's authentication). When neither holds an instant, no <c>auth_time</c>
+/// is written.
 /// </para>
 /// <para>
 /// On an <see cref="IdTokenTarget"/> whose <see cref="IssuanceContext.GrantType"/>
