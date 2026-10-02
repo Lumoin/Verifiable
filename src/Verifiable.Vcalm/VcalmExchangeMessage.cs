@@ -86,4 +86,9 @@ public sealed record VcalmExchangeMessage
     /// <summary>Creates an unknown-member parse failure (§2.4 → HTTP 400 / UNKNOWN_OPTION_PROVIDED).</summary>
     public static VcalmExchangeMessage UnknownOption() =>
         new() { Failure = VcalmParseFailure.UnknownOption };
+
+
+    /// <summary>Creates the parse failure of a body that is not a JSON text (HTTP 400 / PARSING_ERROR).</summary>
+    public static VcalmExchangeMessage Unparseable() =>
+        new() { Failure = VcalmParseFailure.Unparseable };
 }

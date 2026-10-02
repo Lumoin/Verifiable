@@ -89,4 +89,14 @@ public sealed record VcalmWorkflowConfiguration
             Steps = ImmutableDictionary<string, VcalmWorkflowStep>.Empty,
             Failure = VcalmParseFailure.UnknownOption
         };
+
+
+    /// <summary>Creates the parse failure of a body that is not a JSON text (HTTP 400 / PARSING_ERROR).</summary>
+    public static VcalmWorkflowConfiguration Unparseable() =>
+        new()
+        {
+            InitialStep = string.Empty,
+            Steps = ImmutableDictionary<string, VcalmWorkflowStep>.Empty,
+            Failure = VcalmParseFailure.Unparseable
+        };
 }

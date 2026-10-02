@@ -25,8 +25,10 @@ namespace Verifiable.Tests.Vcalm;
 /// UTF-8" (RFC 3629). <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM Options</see>: "Implementations MUST
 /// throw an error if an endpoint receives data, options, or option values that it does not understand or know how to
 /// process." A body whose bytes are not valid UTF-8 is not JSON text an endpoint can process, so each endpoint refuses
-/// it with HTTP 400 and the malformed-value problem type, and writes nothing, instead of decoding the damaged bytes into
-/// the Unicode replacement character and acting on a value the client never sent.
+/// it with HTTP 400 and the parsing-error problem type, and writes nothing, instead of decoding the damaged bytes into
+/// the Unicode replacement character and acting on a value the client never sent. The type is the one the
+/// <see href="https://www.w3.org/TR/vc-data-model-2.0/#PARSING_ERROR">VC Data Model 2.0 Section 7.2</see> defines as
+/// "There was an error while parsing input."
 /// </summary>
 /// <remarks>
 /// Every test sends its body over the real wire as raw bytes through
@@ -134,9 +136,9 @@ internal sealed class VcalmRequestEncodingTests
     /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.1">RFC 8259 §8.1</see> requires JSON text to be
     /// "encoded using UTF-8" for interoperable transmission, which
     /// <see href="https://www.w3.org/TR/vcalm-1.0/#content-serialization">VCALM §2.4</see> ("MUST be serialized as
-    /// JSON") relies on. A body whose bytes are not valid UTF-8 — a lone <c>0xFF</c> byte inside the
-    /// <c>options.challenge</c> string — is data this holder cannot process, refused with HTTP 400 and
-    /// <c>https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR</c>, never silently repaired into the Unicode
+    /// JSON") relies on. A body whose bytes are not valid UTF-8, a lone <c>0xFF</c> byte inside the
+    /// <c>options.challenge</c> string, is no JSON text this holder can process, refused with HTTP 400 and
+    /// <c>https://www.w3.org/TR/vc-data-model#PARSING_ERROR</c>, never silently repaired into the Unicode
     /// replacement character and signed as if the client had sent that character.
     /// </summary>
     [TestMethod]
@@ -155,19 +157,13 @@ internal sealed class VcalmRequestEncodingTests
         bytes[prefixBytes.Length] = 0xFF;
         suffixBytes.CopyTo(bytes, prefixBytes.Length + 1);
 
-        (int statusCode, string body) = await VcalmWireFixtures.SendRawBytesWireAsync(
+        (int statusCode, string? mediaType, string responseBody) = await PostRawAsync(
             app,
-            "POST",
             TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCreatePresentation, segment),
             bytes,
-            "application/json",
-            TestContext.CancellationToken).ConfigureAwait(false);
+            authorizationHeader: null).ConfigureAwait(false);
 
-        Assert.AreEqual(400, statusCode, body);
-        using JsonDocument refused = JsonDocument.Parse(body);
-        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
-            refused.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
-            "Bytes that are not valid UTF-8 are a malformed-value 400.");
+        AssertRefusedAsParsingError(statusCode, mediaType, responseBody);
         Assert.IsTrue(PresentationStore.IsEmpty, "The refused request signs and stores nothing.");
     }
 
@@ -178,7 +174,7 @@ internal sealed class VcalmRequestEncodingTests
     /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM Options</see>: "Implementations MUST throw an error if
     /// an endpoint receives data, options, or option values that it does not understand or know how to process." A §3.6.3
     /// create-exchange body from an authorized coordinator whose <c>variables</c> carry a byte that is not valid UTF-8 is
-    /// refused with HTTP 400, <c>application/json</c> and the malformed-value problem type, and no exchange is created.
+    /// refused with HTTP 400, <c>application/json</c> and the parsing-error problem type, and no exchange is created.
     /// </summary>
     [TestMethod]
     public async Task CreateExchangeRefusesABodyThatIsNotValidUtf8()
@@ -205,7 +201,7 @@ internal sealed class VcalmRequestEncodingTests
             body,
             VcalmWireFixtures.CoordinatorAuthorizationHeader).ConfigureAwait(false);
 
-        AssertRefusedAsMalformedValue(statusCode, mediaType, responseBody);
+        AssertRefusedAsParsingError(statusCode, mediaType, responseBody);
         Assert.DoesNotContain(entry => entry.State is VcalmExchangePendingState, app.FlowStore.Values,
             "The refused request creates no exchange.");
     }
@@ -217,7 +213,7 @@ internal sealed class VcalmRequestEncodingTests
     /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM Options</see>: "Implementations MUST throw an error if
     /// an endpoint receives data, options, or option values that it does not understand or know how to process." A §3.7.5
     /// inviteRequest body whose <c>purpose</c> carries a byte that is not valid UTF-8 is refused with HTTP 400,
-    /// <c>application/json</c> and the malformed-value problem type, and no invitation is recorded.
+    /// <c>application/json</c> and the parsing-error problem type, and no invitation is recorded.
     /// </summary>
     [TestMethod]
     public async Task InviteRequestRefusesABodyThatIsNotValidUtf8()
@@ -243,7 +239,7 @@ internal sealed class VcalmRequestEncodingTests
         (int statusCode, string? mediaType, string responseBody) = await PostRawAsync(
             app, invitePath, body, authorizationHeader: null).ConfigureAwait(false);
 
-        AssertRefusedAsMalformedValue(statusCode, mediaType, responseBody);
+        AssertRefusedAsParsingError(statusCode, mediaType, responseBody);
         Assert.IsEmpty(recordedInviteIds, "The refused request records no invitation.");
     }
 
@@ -254,7 +250,7 @@ internal sealed class VcalmRequestEncodingTests
     /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM Options</see>: "Implementations MUST throw an error if
     /// an endpoint receives data, options, or option values that it does not understand or know how to process." A §3.2.1
     /// issue body whose <c>options.credentialId</c> carries a byte that is not valid UTF-8 is refused with HTTP 400,
-    /// <c>application/json</c> and the malformed-value problem type, and no credential is issued or stored.
+    /// <c>application/json</c> and the parsing-error problem type, and no credential is issued or stored.
     /// </summary>
     [TestMethod]
     public async Task IssueCredentialRefusesABodyThatIsNotValidUtf8()
@@ -283,7 +279,7 @@ internal sealed class VcalmRequestEncodingTests
             body,
             authorizationHeader: null).ConfigureAwait(false);
 
-        AssertRefusedAsMalformedValue(statusCode, mediaType, responseBody);
+        AssertRefusedAsParsingError(statusCode, mediaType, responseBody);
         Assert.IsEmpty(storedCredentialIds, "The refused request issues and stores no credential.");
     }
 
@@ -294,7 +290,7 @@ internal sealed class VcalmRequestEncodingTests
     /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM Options</see>: "Implementations MUST throw an error if
     /// an endpoint receives data, options, or option values that it does not understand or know how to process." A §C.3
     /// update-status body whose <c>credentialId</c> carries a byte that is not valid UTF-8 is refused with HTTP 400,
-    /// <c>application/json</c> and the malformed-value problem type, and no credential status is changed.
+    /// <c>application/json</c> and the parsing-error problem type, and no credential status is changed.
     /// </summary>
     [TestMethod]
     public async Task UpdateStatusRefusesABodyThatIsNotValidUtf8()
@@ -323,7 +319,7 @@ internal sealed class VcalmRequestEncodingTests
             body,
             authorizationHeader: null).ConfigureAwait(false);
 
-        AssertRefusedAsMalformedValue(statusCode, mediaType, responseBody);
+        AssertRefusedAsParsingError(statusCode, mediaType, responseBody);
         Assert.IsEmpty(updatedCredentialIds, "The refused request changes no credential status.");
     }
 
@@ -334,7 +330,7 @@ internal sealed class VcalmRequestEncodingTests
     /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM Options</see>: "Implementations MUST throw an error if
     /// an endpoint receives data, options, or option values that it does not understand or know how to process." A §3.3.2
     /// verify-presentation body whose <c>options.challenge</c> carries a byte that is not valid UTF-8 is refused with
-    /// HTTP 400, <c>application/json</c> and the malformed-value problem type, and no challenge is consumed.
+    /// HTTP 400, <c>application/json</c> and the parsing-error problem type, and no challenge is consumed.
     /// </summary>
     [TestMethod]
     public async Task VerifyPresentationRefusesABodyThatIsNotValidUtf8()
@@ -362,7 +358,7 @@ internal sealed class VcalmRequestEncodingTests
             body,
             authorizationHeader: null).ConfigureAwait(false);
 
-        AssertRefusedAsMalformedValue(statusCode, mediaType, responseBody);
+        AssertRefusedAsParsingError(statusCode, mediaType, responseBody);
         Assert.IsEmpty(consumedChallenges, "The refused request consumes no challenge.");
     }
 
@@ -373,7 +369,7 @@ internal sealed class VcalmRequestEncodingTests
     /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM Options</see>: "Implementations MUST throw an error if
     /// an endpoint receives data, options, or option values that it does not understand or know how to process." A §3.6.1
     /// create-workflow body whose <c>id</c> carries a byte that is not valid UTF-8 is refused with HTTP 400,
-    /// <c>application/json</c> and the malformed-value problem type, and no workflow is stored.
+    /// <c>application/json</c> and the parsing-error problem type, and no workflow is stored.
     /// </summary>
     [TestMethod]
     public async Task CreateWorkflowRefusesABodyThatIsNotValidUtf8()
@@ -400,7 +396,7 @@ internal sealed class VcalmRequestEncodingTests
             body,
             authorizationHeader: null).ConfigureAwait(false);
 
-        AssertRefusedAsMalformedValue(statusCode, mediaType, responseBody);
+        AssertRefusedAsParsingError(statusCode, mediaType, responseBody);
         Assert.IsEmpty(storedWorkflowIds, "The refused request stores no workflow.");
     }
 
@@ -580,19 +576,20 @@ internal sealed class VcalmRequestEncodingTests
 
     /// <summary>
     /// Asserts the refusal of a body that is not valid UTF-8: HTTP 400, an <c>application/json</c> body, and a ProblemDetail
-    /// whose <c>type</c> is the literal MALFORMED_VALUE_ERROR URL.
+    /// whose <c>type</c> is the literal PARSING_ERROR URL and whose <c>title</c> is the literal <c>PARSING_ERROR</c>.
     /// </summary>
     /// <param name="statusCode">The response status code.</param>
     /// <param name="mediaType">The media type the response's <c>Content-Type</c> header names.</param>
     /// <param name="responseBody">The response body text.</param>
-    private static void AssertRefusedAsMalformedValue(int statusCode, string? mediaType, string responseBody)
+    private static void AssertRefusedAsParsingError(int statusCode, string? mediaType, string responseBody)
     {
         Assert.AreEqual(400, statusCode, responseBody);
         Assert.AreEqual("application/json", mediaType, responseBody);
         using JsonDocument refused = JsonDocument.Parse(responseBody);
-        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
+        Assert.AreEqual("https://www.w3.org/TR/vc-data-model#PARSING_ERROR",
             refused.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
-            "Bytes that are not valid UTF-8 are a malformed-value 400.");
+            "Bytes that are not valid UTF-8 are no JSON text: a parsing-error 400.");
+        Assert.AreEqual("PARSING_ERROR", refused.RootElement.GetProperty(VcalmParameterNames.ProblemTitle).GetString(), responseBody);
     }
 
 

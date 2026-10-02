@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Time.Testing;
+using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Text.Json;
 using Verifiable.Core;
@@ -381,16 +382,193 @@ internal sealed class VcalmInteractionEndpointTests
         await using TestHostShell app = new(TimeProvider);
         string segment = await RegisterCoordinatorAsync(app).ConfigureAwait(false);
 
-        string path = TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmInviteRequest, segment)
-            + "/8372974/invite-request/response";
         (int statusCode, string body) = await VcalmWireFixtures.PostOneByteOverCapWireAsync(
-            app, path, authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+            app, ComposeInviteRequestPath(segment), authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(413, statusCode, body);
         using JsonDocument problem = JsonDocument.Parse(body);
         Assert.AreEqual("about:blank", problem.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(), body);
         Assert.AreEqual("Content Too Large", problem.RootElement.GetProperty(VcalmParameterNames.ProblemTitle).GetString(), body);
     }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-2">RFC 8259 Section 2</see>: "A JSON text is a
+    /// serialized value." with the grammar <c>JSON-text = ws value ws</c>. The body <c>{</c> opens an object it never
+    /// closes, so it holds no value and is no JSON text: the inviteRequest operation answers it with HTTP 400 and the
+    /// type the <see href="https://www.w3.org/TR/vc-data-model-2.0/#PARSING_ERROR">VC Data Model 2.0 Section 7.2</see>
+    /// defines as "There was an error while parsing input."
+    /// </summary>
+    [TestMethod]
+    public async Task BodyThatIsNotAJsonTextAnswersParsingError()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterCoordinatorAsync(app).ConfigureAwait(false);
+
+        await VcalmWireFixtures.AssertPostAnswersParsingErrorWireAsync(
+            app, ComposeInviteRequestPath(segment), "{"u8.ToArray(),
+            authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-2">RFC 8259 Section 2</see>: "A JSON text is a
+    /// serialized value." with the grammar <c>JSON-text = ws value ws</c>. An empty body labelled
+    /// <c>application/json</c> holds no value, so it is no JSON text: the inviteRequest operation answers it with HTTP
+    /// 400 and the type the
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#PARSING_ERROR">VC Data Model 2.0 Section 7.2</see> defines as
+    /// "There was an error while parsing input."
+    /// </summary>
+    [TestMethod]
+    public async Task EmptyBodyAnswersParsingError()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterCoordinatorAsync(app).ConfigureAwait(false);
+
+        await VcalmWireFixtures.AssertPostAnswersParsingErrorWireAsync(
+            app, ComposeInviteRequestPath(segment), [],
+            authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.1">RFC 8259 Section 8.1</see>: "JSON text exchanged
+    /// between systems that are not part of a closed ecosystem MUST be encoded using UTF-8 [RFC3629]." The bytes
+    /// <c>C3 28</c>, a lead byte followed by a byte that cannot continue it, are not UTF-8, so the body is no JSON text
+    /// this endpoint receives: the inviteRequest operation answers it with HTTP 400 and the type the
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#PARSING_ERROR">VC Data Model 2.0 Section 7.2</see> defines as
+    /// "There was an error while parsing input."
+    /// </summary>
+    [TestMethod]
+    public async Task BodyThatIsNotUtf8AnswersParsingError()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterCoordinatorAsync(app).ConfigureAwait(false);
+
+        await VcalmWireFixtures.AssertPostAnswersParsingErrorWireAsync(
+            app, ComposeInviteRequestPath(segment), [0xC3, 0x28],
+            authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#MALFORMED_VALUE_ERROR">VC Data Model 2.0 Section 7.2</see>:
+    /// "The value associated with a particular property is malformed." The body <c>{"url":7}</c> is a JSON text whose
+    /// <c>url</c> is a number where
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#inviterequest-interaction-protocol">VCALM Section 3.7.5</see> names
+    /// a URL string, so the inviteRequest operation answers it with HTTP 400 and that malformed-value type.
+    /// </summary>
+    [TestMethod]
+    public async Task UrlOfTheWrongKindAnswersMalformedValueError()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterCoordinatorAsync(app).ConfigureAwait(false);
+
+        await VcalmWireFixtures.AssertPostAnswersMalformedValueErrorWireAsync(
+            app, ComposeInviteRequestPath(segment), "{\"url\":7}",
+            authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM Section 2.4</see>: "Implementations MUST throw an
+    /// error if an endpoint receives data, options, or option values that it does not understand or know how to
+    /// process." The application's parse delegate answers an inviteRequest whose <c>url</c> and <c>purpose</c> are
+    /// valid but whose <see cref="VcalmInviteRequest.Failure"/> is a value outside the reasons
+    /// <see cref="VcalmParseFailure"/> names: the inviteRequest operation answers HTTP 400 with the type the
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#MALFORMED_VALUE_ERROR">VC Data Model 2.0 Section 7.2</see>
+    /// defines as "The value associated with a particular property is malformed.", and records no invitation.
+    /// </summary>
+    [TestMethod]
+    public async Task UnnamedParseFailureOfAnInviteRequestAnswersMalformedValueError()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterCoordinatorAsync(app).ConfigureAwait(false);
+        ConcurrentDictionary<string, VcalmInviteRequest> store = new(StringComparer.Ordinal);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.StoreVcalmInviteRequestAsync = (inviteId, invite, _, _) =>
+            {
+                store[inviteId] = invite;
+
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            ParseVcalmInviteRequestDelegate parse = candidateIntegration.ParseVcalmInviteRequestAsync!;
+            candidateIntegration.ParseVcalmInviteRequestAsync = async (requestBody, context, cancellationToken) =>
+                (await parse(requestBody, context, cancellationToken).ConfigureAwait(false))! with { Failure = VcalmWireFixtures.UnnamedParseFailure };
+        }).ConfigureAwait(false);
+
+        await VcalmWireFixtures.AssertPostAnswersMalformedValueErrorWireAsync(
+            app, ComposeInviteRequestPath(segment),
+            "{\"url\":\"https://website.example/checkout/8372974\",\"purpose\":\"Checkout at ShopCo\"}",
+            authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(store, "A request the endpoint does not understand records no invitation.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.2">RFC 8259 Section 8.2</see>: "However, the ABNF in
+    /// this specification allows member names and string values to contain bit sequences that cannot encode Unicode
+    /// characters; for example, "\uDEAD" (a single unpaired UTF-16 surrogate)." The body is a JSON text whose
+    /// <c>url</c> is the escape <c>\ud800</c>, a value that spells no Unicode string, so it is data
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM Section 2.4</see> requires the operation to refuse:
+    /// the inviteRequest operation answers HTTP 400 with the type the
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#MALFORMED_VALUE_ERROR">VC Data Model 2.0 Section 7.2</see>
+    /// defines as "The value associated with a particular property is malformed.", and the host records no fault.
+    /// </summary>
+    [TestMethod]
+    public async Task UnpairedSurrogateEscapeAnswersMalformedValueError()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterCoordinatorAsync(app).ConfigureAwait(false);
+
+        await VcalmWireFixtures.AssertPostAnswersMalformedValueErrorWireAsync(
+            app, ComposeInviteRequestPath(segment), "{\"url\":\"\\ud800\"}",
+            authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#content-serialization">VCALM Content Serialization</see>: "All entity
+    /// bodies in requests and responses sent to or received from the API endpoints defined by this specification MUST be
+    /// serialized as JSON and include the Content-Type header with a media type value of application/json." The
+    /// inviteRequest operation answers the body <c>{}</c> labelled <c>text/plain</c> or carrying no Content-Type header
+    /// with HTTP 400 and the MALFORMED_VALUE_ERROR type, and answers zero bytes, whether labelled <c>text/plain</c> or
+    /// carrying no Content-Type header, with HTTP 400 and the PARSING_ERROR type, since
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-2">RFC 8259 Section 2</see> says "A JSON text is a
+    /// serialized value." and zero bytes hold none.
+    /// </summary>
+    /// <param name="body">The request body text; the empty string sends zero bytes.</param>
+    /// <param name="mediaType">The media type the body is labelled with, or <see langword="null"/> to send no Content-Type header.</param>
+    /// <param name="expectedTitle">The literal problem title the answer carries.</param>
+    [TestMethod]
+    [DataRow("{}", "text/plain", "MALFORMED_VALUE_ERROR", DisplayName = "{} as text/plain")]
+    [DataRow("{}", null, "MALFORMED_VALUE_ERROR", DisplayName = "{} with no Content-Type header")]
+    [DataRow("", null, "PARSING_ERROR", DisplayName = "zero bytes with no Content-Type header")]
+    [DataRow("", "text/plain", "PARSING_ERROR", DisplayName = "zero bytes as text/plain")]
+    public async Task BodyAtTheRequestBoundaryKeepsItsAnswer(string body, string? mediaType, string expectedTitle)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterCoordinatorAsync(app).ConfigureAwait(false);
+
+        await VcalmWireFixtures.AssertBoundaryAnswerWireAsync(
+            app, ComposeInviteRequestPath(segment), body, mediaType, expectedTitle,
+            authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// The absolute path of the inviteRequest endpoint of the tenant <paramref name="segment"/>, which holds the VCALM
+    /// coordinator capability, for the invite id <c>8372974</c> the inviteRequest example uses.
+    /// </summary>
+    /// <param name="segment">The tenant segment.</param>
+    /// <returns>The endpoint's path on the host.</returns>
+    private static string ComposeInviteRequestPath(string segment) =>
+        TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmInviteRequest, segment) + "/8372974/invite-request/response";
 
 
     /// <summary>

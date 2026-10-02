@@ -398,13 +398,222 @@ internal sealed class VcalmStatusEndpointTests
 
 
     /// <summary>
-    /// §C.3 malformed update: a §C.3 POST body that is not valid JSON, or omits the REQUIRED
-    /// <c>credentialId</c> or <c>credentialStatus</c> members, is rejected with HTTP 400 and the §3.8
-    /// <c>MALFORMED_VALUE_ERROR</c> type — distinct from the unknown-option (UNKNOWN_OPTION_PROVIDED) and
-    /// the unknown-credential (404) branches.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-2">RFC 8259 Section 2</see>: "A JSON text is a
+    /// serialized value." with the grammar <c>JSON-text = ws value ws</c>. The body <c>{</c> opens an object it never
+    /// closes, so it holds no value and is no JSON text: the update-status and the create-status-list operations each
+    /// answer it with HTTP 400 and the type the
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#PARSING_ERROR">VC Data Model 2.0 Section 7.2</see> defines as
+    /// "There was an error while parsing input."
+    /// </summary>
+    /// <param name="endpointName">The well-known name of the status operation the body is posted to.</param>
+    [TestMethod]
+    [DataRow("Vcalm.CredentialsStatus")]
+    [DataRow("Vcalm.CreateStatusList")]
+    public async Task BodyThatIsNotAJsonTextAnswersParsingError(string endpointName)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        StatusContext ctx = await RegisterStatusServiceAsync(app).ConfigureAwait(false);
+
+        await VcalmWireFixtures.AssertPostAnswersParsingErrorWireAsync(
+            app, TestHostShell.ComposeEndpointPath(endpointName, ctx.Segment), "{"u8.ToArray(),
+            authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-2">RFC 8259 Section 2</see>: "A JSON text is a
+    /// serialized value." with the grammar <c>JSON-text = ws value ws</c>. An empty body labelled
+    /// <c>application/json</c> holds no value, so it is no JSON text: the update-status operation answers it with HTTP
+    /// 400 and the type the
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#PARSING_ERROR">VC Data Model 2.0 Section 7.2</see> defines as
+    /// "There was an error while parsing input."
     /// </summary>
     [TestMethod]
-    [DataRow("{ not valid json", "malformed JSON")]
+    public async Task EmptyBodyAnswersParsingError()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        StatusContext ctx = await RegisterStatusServiceAsync(app).ConfigureAwait(false);
+
+        await VcalmWireFixtures.AssertPostAnswersParsingErrorWireAsync(
+            app, TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCredentialsStatus, ctx.Segment), [],
+            authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.1">RFC 8259 Section 8.1</see>: "JSON text exchanged
+    /// between systems that are not part of a closed ecosystem MUST be encoded using UTF-8 [RFC3629]." The bytes
+    /// <c>C3 28</c>, a lead byte followed by a byte that cannot continue it, are not UTF-8, so the body is no JSON text
+    /// this endpoint receives: the update-status operation answers it with HTTP 400 and the type the
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#PARSING_ERROR">VC Data Model 2.0 Section 7.2</see> defines as
+    /// "There was an error while parsing input."
+    /// </summary>
+    [TestMethod]
+    public async Task BodyThatIsNotUtf8AnswersParsingError()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        StatusContext ctx = await RegisterStatusServiceAsync(app).ConfigureAwait(false);
+
+        await VcalmWireFixtures.AssertPostAnswersParsingErrorWireAsync(
+            app, TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCredentialsStatus, ctx.Segment), [0xC3, 0x28],
+            authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#MALFORMED_VALUE_ERROR">VC Data Model 2.0 Section 7.2</see>:
+    /// "The value associated with a particular property is malformed." The body <c>{"statusPurpose":7}</c> is a JSON
+    /// text whose <c>statusPurpose</c> is a number where
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-status-list">VCALM Appendix C.1</see> names a string, so the
+    /// create-status-list operation answers it with HTTP 400 and that malformed-value type.
+    /// </summary>
+    [TestMethod]
+    public async Task StatusPurposeOfTheWrongKindAnswersMalformedValueError()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        StatusContext ctx = await RegisterStatusServiceAsync(app).ConfigureAwait(false);
+
+        await VcalmWireFixtures.AssertPostAnswersMalformedValueErrorWireAsync(
+            app, TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCreateStatusList, ctx.Segment),
+            "{\"statusPurpose\":7}", authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM Section 2.4</see>: "Implementations MUST throw an
+    /// error if an endpoint receives data, options, or option values that it does not understand or know how to
+    /// process." The application's parse delegate answers an update-status request whose credential, status entry and
+    /// status are valid but whose <see cref="VcalmUpdateStatusRequest.Failure"/> is a value outside the reasons
+    /// <see cref="VcalmParseFailure"/> names: the update-status operation answers HTTP 400 with the type the
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#MALFORMED_VALUE_ERROR">VC Data Model 2.0 Section 7.2</see>
+    /// defines as "The value associated with a particular property is malformed.", and the status list keeps its bit.
+    /// </summary>
+    [TestMethod]
+    public async Task UnnamedParseFailureOfAnUpdateStatusRequestAnswersMalformedValueError()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        StatusContext ctx = await RegisterStatusServiceAsync(app).ConfigureAwait(false);
+        await CreateStatusListWireAsync(app, ctx.Segment).ConfigureAwait(false);
+
+        const int Index = 94;
+        const string CredentialId = "urn:uuid:unnamed-failure-target";
+        KnownCredentials[CredentialId] = StatusListId;
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            ParseVcalmUpdateStatusDelegate parse = candidateIntegration.ParseVcalmUpdateStatusAsync!;
+            candidateIntegration.ParseVcalmUpdateStatusAsync = async (requestBody, context, cancellationToken) =>
+                (await parse(requestBody, context, cancellationToken).ConfigureAwait(false))! with { Failure = VcalmWireFixtures.UnnamedParseFailure };
+        }).ConfigureAwait(false);
+
+        await VcalmWireFixtures.AssertPostAnswersMalformedValueErrorWireAsync(
+            app, TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCredentialsStatus, ctx.Segment),
+            BuildUpdateStatusBody(CredentialId, Index, status: true), authorizationHeader: null,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual<byte>(0, LiveStatusLists[StatusListId].Get(Index),
+            "A request the endpoint does not understand reaches no status update.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM Section 2.4</see>: "Implementations MUST throw an
+    /// error if an endpoint receives data, options, or option values that it does not understand or know how to
+    /// process." The application's parse delegate answers a create-status-list request whose status purpose and id are
+    /// valid but whose <see cref="VcalmCreateStatusListRequest.Failure"/> is a value outside the reasons
+    /// <see cref="VcalmParseFailure"/> names: the create-status-list operation answers HTTP 400 with the type the
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#MALFORMED_VALUE_ERROR">VC Data Model 2.0 Section 7.2</see>
+    /// defines as "The value associated with a particular property is malformed.", and stores no status list.
+    /// </summary>
+    [TestMethod]
+    public async Task UnnamedParseFailureOfACreateStatusListRequestAnswersMalformedValueError()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        StatusContext ctx = await RegisterStatusServiceAsync(app).ConfigureAwait(false);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            ParseVcalmCreateStatusListDelegate parse = candidateIntegration.ParseVcalmCreateStatusListAsync!;
+            candidateIntegration.ParseVcalmCreateStatusListAsync = async (requestBody, context, cancellationToken) =>
+                (await parse(requestBody, context, cancellationToken).ConfigureAwait(false))! with { Failure = VcalmWireFixtures.UnnamedParseFailure };
+        }).ConfigureAwait(false);
+
+        await VcalmWireFixtures.AssertPostAnswersMalformedValueErrorWireAsync(
+            app, TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCreateStatusList, ctx.Segment),
+            $"{{\"statusPurpose\":\"{RevocationPurpose}\",\"id\":\"{StatusListId}\"}}", authorizationHeader: null,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(StatusListStore, "A request the endpoint does not understand stores no status list.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.2">RFC 8259 Section 8.2</see>: "However, the ABNF in
+    /// this specification allows member names and string values to contain bit sequences that cannot encode Unicode
+    /// characters; for example, "\uDEAD" (a single unpaired UTF-16 surrogate)." Each body is a JSON text whose string
+    /// value is the escape <c>\ud800</c>, a value that spells no Unicode string: the update-status body's
+    /// <c>credentialId</c> and the create-status-list body's <c>statusPurpose</c>. It is data
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM Section 2.4</see> requires the operation to refuse:
+    /// each operation answers HTTP 400 with the type the
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#MALFORMED_VALUE_ERROR">VC Data Model 2.0 Section 7.2</see>
+    /// defines as "The value associated with a particular property is malformed.", and the host records no fault.
+    /// </summary>
+    /// <param name="endpointName">The well-known name of the status operation the body is posted to.</param>
+    [TestMethod]
+    [DataRow("Vcalm.CredentialsStatus")]
+    [DataRow("Vcalm.CreateStatusList")]
+    public async Task UnpairedSurrogateEscapeAnswersMalformedValueError(string endpointName)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        StatusContext ctx = await RegisterStatusServiceAsync(app).ConfigureAwait(false);
+
+        string body = endpointName switch
+        {
+            "Vcalm.CredentialsStatus" => BuildUpdateStatusBody("\\ud800", 94, status: true),
+            _ => "{\"statusPurpose\":\"\\ud800\"}"
+        };
+
+        await VcalmWireFixtures.AssertPostAnswersMalformedValueErrorWireAsync(
+            app, TestHostShell.ComposeEndpointPath(endpointName, ctx.Segment), body,
+            authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#content-serialization">VCALM Content Serialization</see>: "All entity
+    /// bodies in requests and responses sent to or received from the API endpoints defined by this specification MUST be
+    /// serialized as JSON and include the Content-Type header with a media type value of application/json." The
+    /// update-status operation answers the body <c>{}</c> labelled <c>text/plain</c> or carrying no Content-Type header
+    /// with HTTP 400 and the MALFORMED_VALUE_ERROR type, and answers zero bytes, whether labelled <c>text/plain</c> or
+    /// carrying no Content-Type header, with HTTP 400 and the PARSING_ERROR type, since
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-2">RFC 8259 Section 2</see> says "A JSON text is a
+    /// serialized value." and zero bytes hold none.
+    /// </summary>
+    /// <param name="body">The request body text; the empty string sends zero bytes.</param>
+    /// <param name="mediaType">The media type the body is labelled with, or <see langword="null"/> to send no Content-Type header.</param>
+    /// <param name="expectedTitle">The literal problem title the answer carries.</param>
+    [TestMethod]
+    [DataRow("{}", "text/plain", "MALFORMED_VALUE_ERROR", DisplayName = "{} as text/plain")]
+    [DataRow("{}", null, "MALFORMED_VALUE_ERROR", DisplayName = "{} with no Content-Type header")]
+    [DataRow("", null, "PARSING_ERROR", DisplayName = "zero bytes with no Content-Type header")]
+    [DataRow("", "text/plain", "PARSING_ERROR", DisplayName = "zero bytes as text/plain")]
+    public async Task BodyAtTheRequestBoundaryKeepsItsAnswer(string body, string? mediaType, string expectedTitle)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        StatusContext ctx = await RegisterStatusServiceAsync(app).ConfigureAwait(false);
+
+        await VcalmWireFixtures.AssertBoundaryAnswerWireAsync(
+            app, TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCredentialsStatus, ctx.Segment), body,
+            mediaType, expectedTitle, authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#update-status">VCALM Appendix C.3</see> malformed update: a JSON
+    /// text that omits the REQUIRED <c>credentialId</c> or <c>credentialStatus</c> members is rejected with HTTP 400
+    /// and the <c>MALFORMED_VALUE_ERROR</c> type, distinct from the unknown-option (UNKNOWN_OPTION_PROVIDED) and the
+    /// unknown-credential (404) branches. A body that is not a JSON text answers the parsing error instead
+    /// (<see cref="BodyThatIsNotAJsonTextAnswersParsingError"/>).
+    /// </summary>
+    [TestMethod]
     [DataRow("{\"credentialStatus\":{\"type\":\"BitstringStatusListEntry\",\"statusPurpose\":\"revocation\",\"statusListIndex\":\"1\",\"statusListCredential\":\"https://status.example/status-lists/1\"},\"status\":true}", "missing credentialId")]
     [DataRow("{\"credentialId\":\"urn:uuid:x\",\"status\":true}", "missing credentialStatus")]
     public async Task UpdateStatusMalformedBodyYields400MalformedValueError(string body, string reason)

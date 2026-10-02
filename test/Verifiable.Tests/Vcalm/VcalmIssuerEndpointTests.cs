@@ -822,6 +822,147 @@ internal sealed class VcalmIssuerEndpointTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-2">RFC 8259 Section 2</see>: "A JSON text is a
+    /// serialized value." with the grammar <c>JSON-text = ws value ws</c>. The body <c>{</c> opens an object it never
+    /// closes, so it holds no value and is no JSON text: the issue operation answers it with HTTP 400 and the type the
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#PARSING_ERROR">VC Data Model 2.0 Section 7.2</see> defines as
+    /// "There was an error while parsing input."
+    /// </summary>
+    [TestMethod]
+    public async Task BodyThatIsNotAJsonTextAnswersParsingError()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        IssuerContext ctx = await RegisterIssuerAsync(app).ConfigureAwait(false);
+
+        await VcalmWireFixtures.AssertPostAnswersParsingErrorWireAsync(
+            app, TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCredentialsIssue, ctx.Segment), "{"u8.ToArray(),
+            authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-2">RFC 8259 Section 2</see>: "A JSON text is a
+    /// serialized value." with the grammar <c>JSON-text = ws value ws</c>. An empty body labelled
+    /// <c>application/json</c> holds no value, so it is no JSON text: the issue operation answers it with HTTP 400 and
+    /// the type the <see href="https://www.w3.org/TR/vc-data-model-2.0/#PARSING_ERROR">VC Data Model 2.0 Section
+    /// 7.2</see> defines as "There was an error while parsing input."
+    /// </summary>
+    [TestMethod]
+    public async Task EmptyBodyAnswersParsingError()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        IssuerContext ctx = await RegisterIssuerAsync(app).ConfigureAwait(false);
+
+        await VcalmWireFixtures.AssertPostAnswersParsingErrorWireAsync(
+            app, TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCredentialsIssue, ctx.Segment), [],
+            authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.1">RFC 8259 Section 8.1</see>: "JSON text exchanged
+    /// between systems that are not part of a closed ecosystem MUST be encoded using UTF-8 [RFC3629]." The bytes
+    /// <c>C3 28</c>, a lead byte followed by a byte that cannot continue it, are not UTF-8, so the body is no JSON text
+    /// this endpoint receives: the issue operation answers it with HTTP 400 and the type the
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#PARSING_ERROR">VC Data Model 2.0 Section 7.2</see> defines as
+    /// "There was an error while parsing input."
+    /// </summary>
+    [TestMethod]
+    public async Task BodyThatIsNotUtf8AnswersParsingError()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        IssuerContext ctx = await RegisterIssuerAsync(app).ConfigureAwait(false);
+
+        await VcalmWireFixtures.AssertPostAnswersParsingErrorWireAsync(
+            app, TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCredentialsIssue, ctx.Segment), [0xC3, 0x28],
+            authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM Section 2.4</see>: "Implementations MUST throw an
+    /// error if an endpoint receives data, options, or option values that it does not understand or know how to
+    /// process." The application's parse delegate answers an issue request whose credential is valid but whose
+    /// <see cref="VcalmIssueCredentialRequest.Failure"/> is a value outside the reasons <see cref="VcalmParseFailure"/>
+    /// names: the issue operation answers HTTP 400 with the type the
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#MALFORMED_VALUE_ERROR">VC Data Model 2.0 Section 7.2</see>
+    /// defines as "The value associated with a particular property is malformed.", and issues and stores nothing.
+    /// </summary>
+    [TestMethod]
+    public async Task UnnamedParseFailureOfAnIssueRequestAnswersMalformedValueError()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        IssuerContext ctx = await RegisterIssuerAsync(app).ConfigureAwait(false);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            ParseVcalmIssueCredentialDelegate parse = candidateIntegration.ParseVcalmIssueCredentialAsync!;
+            candidateIntegration.ParseVcalmIssueCredentialAsync = async (requestBody, context, cancellationToken) =>
+                (await parse(requestBody, context, cancellationToken).ConfigureAwait(false))! with { Failure = VcalmWireFixtures.UnnamedParseFailure };
+        }).ConfigureAwait(false);
+
+        string body = VcalmWireFixtures.BuildIssueRequestBody(ctx.IssuerDid, credentialId: "urn:uuid:unnamed-failure", SerializeCredential);
+        await VcalmWireFixtures.AssertPostAnswersMalformedValueErrorWireAsync(
+            app, TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCredentialsIssue, ctx.Segment), body,
+            authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(CredentialStore, "A request the endpoint does not understand is never issued, so the store seam is never reached.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.2">RFC 8259 Section 8.2</see>: "However, the ABNF in
+    /// this specification allows member names and string values to contain bit sequences that cannot encode Unicode
+    /// characters; for example, "\uDEAD" (a single unpaired UTF-16 surrogate)." The body is a JSON text whose member name
+    /// is the escape <c>\ud800</c>, a name that spells no Unicode string, so it is data
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM Section 2.4</see> requires the operation to refuse:
+    /// the issue operation answers HTTP 400 with the type the
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#MALFORMED_VALUE_ERROR">VC Data Model 2.0 Section 7.2</see>
+    /// defines as "The value associated with a particular property is malformed.", and the host records no fault.
+    /// </summary>
+    [TestMethod]
+    public async Task UnpairedSurrogateEscapeAnswersMalformedValueError()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        IssuerContext ctx = await RegisterIssuerAsync(app).ConfigureAwait(false);
+
+        await VcalmWireFixtures.AssertPostAnswersMalformedValueErrorWireAsync(
+            app, TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCredentialsIssue, ctx.Segment), "{\"\\ud800\":1}",
+            authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(CredentialStore, "A refused issue request is never issued, so the store seam is never reached.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#content-serialization">VCALM Content Serialization</see>: "All entity
+    /// bodies in requests and responses sent to or received from the API endpoints defined by this specification MUST be
+    /// serialized as JSON and include the Content-Type header with a media type value of application/json." The issue
+    /// operation answers the body <c>{}</c> labelled <c>text/plain</c> or carrying no Content-Type header with HTTP 400
+    /// and the MALFORMED_VALUE_ERROR type, and answers zero bytes, whether labelled <c>text/plain</c> or carrying no
+    /// Content-Type header, with HTTP 400 and the PARSING_ERROR type, since
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-2">RFC 8259 Section 2</see> says "A JSON text is a
+    /// serialized value." and zero bytes hold none.
+    /// </summary>
+    /// <param name="body">The request body text; the empty string sends zero bytes.</param>
+    /// <param name="mediaType">The media type the body is labelled with, or <see langword="null"/> to send no Content-Type header.</param>
+    /// <param name="expectedTitle">The literal problem title the answer carries.</param>
+    [TestMethod]
+    [DataRow("{}", "text/plain", "MALFORMED_VALUE_ERROR", DisplayName = "{} as text/plain")]
+    [DataRow("{}", null, "MALFORMED_VALUE_ERROR", DisplayName = "{} with no Content-Type header")]
+    [DataRow("", null, "PARSING_ERROR", DisplayName = "zero bytes with no Content-Type header")]
+    [DataRow("", "text/plain", "PARSING_ERROR", DisplayName = "zero bytes as text/plain")]
+    public async Task BodyAtTheRequestBoundaryKeepsItsAnswer(string body, string? mediaType, string expectedTitle)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        IssuerContext ctx = await RegisterIssuerAsync(app).ConfigureAwait(false);
+
+        await VcalmWireFixtures.AssertBoundaryAnswerWireAsync(
+            app, TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCredentialsIssue, ctx.Segment), body,
+            mediaType, expectedTitle, authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
     /// §3.2.1 malformed input: a body that is not a JSON object yields HTTP 400.
     /// </summary>
     [TestMethod]

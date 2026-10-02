@@ -65,16 +65,22 @@ public static class VcalmProblemTypes
     /// reports it as an ERROR of the data-model phase, which makes <see cref="VcalmVerificationOutcome.Verified"/> false:
     /// a <c>credentialSchema</c> entry without its <c>type</c> or <c>id</c>, a credential that does not conform to its
     /// declared schema, and a declared schema left unchecked, whatever the cause. The endpoints answer with it as a
-    /// refusal too: HTTP 400 for a request body they cannot read; the issuing endpoint's HTTP 400 for a credential it
-    /// will not issue, such as one carrying an existing proof its configuration refuses, an <c>issuer</c> that does not
-    /// match the instance, or a conflicting <c>credentialId</c>; and the exchange endpoint's HTTP 400 for a workflow step it cannot run and for a
-    /// presented presentation its step's <c>presentationSchema</c> refuses or could not check. The status phase reports
-    /// its problems as warnings under the Bitstring Status List types (<see cref="StatusRetrievalError"/>,
-    /// <see cref="StatusVerificationError"/>, <see cref="StatusListLengthError"/>) and uses this type only where the
-    /// Bitstring Status List validation itself raises a malformed value, then as a warning, since VCALM §3.8.1 makes every
-    /// status problem one.
+    /// refusal too: HTTP 400 for a request body that is a JSON text whose content they refuse; the issuing endpoint's
+    /// HTTP 400 for a credential it will not issue, such as one carrying an existing proof its configuration refuses, an
+    /// <c>issuer</c> that does not match the instance, or a conflicting <c>credentialId</c>; and the exchange endpoint's
+    /// HTTP 400 for a workflow step it cannot run and for a presented presentation its step's
+    /// <c>presentationSchema</c> refuses or could not check. The status phase reports its problems as warnings under the
+    /// Bitstring Status List types (<see cref="StatusRetrievalError"/>, <see cref="StatusVerificationError"/>,
+    /// <see cref="StatusListLengthError"/>) and uses this type only where the Bitstring Status List validation itself
+    /// raises a malformed value, then as a warning, since
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verification-errors-vs-warnings">VCALM Section 3.8.1</see> makes
+    /// every status problem one.
     /// Every occurrence carries the one title <see cref="MalformedValueErrorTitle"/>. A body over the configured
-    /// payload cap is not answered with this type: it is answered with HTTP 413 and the <c>about:blank</c> type.
+    /// payload cap is not answered with this type: it is answered with HTTP 413 and the <c>about:blank</c> type. A
+    /// request body that is not a JSON text is not answered with this type either at the operations that parse their
+    /// body through the parse seam: it is answered with HTTP 400 and <see cref="ParsingError"/>. A JSON text whose
+    /// <c>options</c> carry a member the endpoint does not understand is answered with HTTP 400 and
+    /// <see cref="UnknownOptionProvided"/>.
     /// </summary>
     public static string MalformedValueError { get; } =
         "https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR";
@@ -176,6 +182,14 @@ public static class VcalmProblemTypes
     /// <summary>
     /// There was an error while parsing input.
     /// Defined by <see href="https://www.w3.org/TR/vc-data-model-2.0/#problem-details"/> and reported by <see cref="VcalmVerificationService"/>.
+    /// Every operation that parses its request body through the parse seam answers a body that is not a JSON text with it
+    /// and HTTP 400: an empty body, bytes that are not UTF-8, and a body the JSON reader refuses
+    /// (<see cref="VcalmParseFailure.Unparseable"/>). The verifier's <c>/challenges</c> endpoint is the exception:
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-challenge">VCALM Section 3.3.3</see> says "Passing an empty
+    /// body to this endpoint creates and returns a challenge string in the response body.", so an empty body mints a
+    /// challenge there; it answers bytes that are not UTF-8 and a body of JSON white space only with this type, and any
+    /// other body that is not the empty object with <see cref="MalformedValueError"/>, since it reads its body with no
+    /// JSON reader that could tell text that does not read from a JSON text.
     /// </summary>
     public static string ParsingError { get; } =
         "https://www.w3.org/TR/vc-data-model#PARSING_ERROR";

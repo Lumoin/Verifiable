@@ -14,6 +14,14 @@ namespace Verifiable.Json;
 /// over.
 /// </summary>
 /// <remarks>
+/// A body that does not read with the default <see cref="JsonDocumentOptions"/> yields
+/// <see cref="VcalmParseFailure.Unparseable"/>: the JSON reader refuses a text that is not a JSON text
+/// (<see href="https://www.rfc-editor.org/rfc/rfc8259#section-2">RFC 8259 Section 2</see>), and a JSON text that
+/// exceeds a limit the reader sets, which
+/// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-9">RFC 8259 Section 9</see> permits: "An implementation may
+/// set limits on the maximum depth of nesting." The default options set a maximum depth of nesting of 64. The strict
+/// options the request is read with (<see cref="StrictDocumentOptions"/>) also refuse a repeated member name, which
+/// yields <see cref="VcalmParseFailure.Malformed"/>.
 /// The parser is STRICT per §3.4.1 / §2.4: a body that is not a JSON object, omits the REQUIRED
 /// <c>query</c> array, carries an empty <c>query</c> array, carries an unrecognized top-level member,
 /// or carries a query entry without a string <c>type</c> ("each map MUST define a type property with
@@ -50,7 +58,8 @@ public static class VcalmPresentationRequestJsonParsing
     /// refused (<see cref="JsonDocumentOptions.AllowDuplicateProperties"/> off), so a lookup never
     /// resolves a repeated name to one of its occurrences and an earlier, malformed or narrowing
     /// occurrence of an acceptance constraint is never discarded unseen; the parse throws
-    /// <see cref="JsonException"/> and the request is <see cref="VcalmParseFailure.Malformed"/> under
+    /// <see cref="JsonException"/>, a second read with the default options finds the text a JSON text,
+    /// and the request is <see cref="VcalmParseFailure.Malformed"/> under
     /// "Implementations MUST throw an error if an endpoint receives data, options, or option values that
     /// it does not understand or know how to process"
     /// (<see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM §2.4</see>).
@@ -91,6 +100,18 @@ public static class VcalmPresentationRequestJsonParsing
         }
         catch(JsonException)
         {
+            //The strict read refuses both a text that does not read and a JSON text that repeats a member name.
+            //Read once more with the default options, which admit a repeated name: a text that reads then is a
+            //JSON text whose content is refused, one that does not is no JSON text.
+            try
+            {
+                using JsonDocument reread = JsonDocument.Parse(requestBody);
+            }
+            catch(JsonException)
+            {
+                return VerifiablePresentationRequest.Unparseable();
+            }
+
             return VerifiablePresentationRequest.Malformed();
         }
 

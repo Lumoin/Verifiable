@@ -61,6 +61,11 @@ public sealed record VcalmUpdateStatusRequest
     /// <summary>Creates an unknown-option parse failure (§2.4 → HTTP 400 / UNKNOWN_OPTION_PROVIDED).</summary>
     public static VcalmUpdateStatusRequest UnknownOption() =>
         new() { Failure = VcalmParseFailure.UnknownOption };
+
+
+    /// <summary>Creates the parse failure of a body that is not a JSON text (HTTP 400 / PARSING_ERROR).</summary>
+    public static VcalmUpdateStatusRequest Unparseable() =>
+        new() { Failure = VcalmParseFailure.Unparseable };
 }
 
 
@@ -100,6 +105,11 @@ public sealed record VcalmCreateStatusListRequest
     /// <summary>Creates an unknown-option parse failure (§2.4 → HTTP 400 / UNKNOWN_OPTION_PROVIDED).</summary>
     public static VcalmCreateStatusListRequest UnknownOption() =>
         new() { Failure = VcalmParseFailure.UnknownOption };
+
+
+    /// <summary>Creates the parse failure of a body that is not a JSON text (HTTP 400 / PARSING_ERROR).</summary>
+    public static VcalmCreateStatusListRequest Unparseable() =>
+        new() { Failure = VcalmParseFailure.Unparseable };
 }
 
 

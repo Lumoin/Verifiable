@@ -71,6 +71,18 @@ public static class VcalmJsonShape
 
 
     /// <summary>
+    /// Whether <paramref name="json"/> holds JSON white space only: every byte, if any, is one of the four the
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-2">RFC 8259 Section 2</see> grammar names white space.
+    /// Such bytes hold no value, and the same section says "A JSON text is a serialized value.", so they are no JSON
+    /// text; the <see href="https://www.w3.org/TR/vcalm-1.0/#create-challenge">VCALM Section 3.3.3</see> body check
+    /// answers them with the parsing error. The bytes are scanned once, with no parser and no allocation.
+    /// </summary>
+    /// <param name="json">The UTF-8 bytes to inspect.</param>
+    /// <returns><see langword="true"/> when no byte of <paramref name="json"/> is other than JSON white space.</returns>
+    internal static bool IsJsonWhitespaceOnly(ReadOnlySpan<byte> json) => SkipJsonWhitespace(json).IsEmpty;
+
+
+    /// <summary>
     /// The part of <paramref name="json"/> that follows its leading RFC 8259 §2 whitespace, the step
     /// <see cref="IsEmptyObject(ReadOnlySpan{byte})"/> takes before and after each of its two structural characters.
     /// </summary>

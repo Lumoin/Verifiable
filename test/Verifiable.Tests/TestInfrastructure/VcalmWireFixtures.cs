@@ -316,6 +316,150 @@ internal static class VcalmWireFixtures
 
 
     /// <summary>
+    /// POSTs the raw <paramref name="body"/> bytes labelled <c>application/json</c> over the real wire to
+    /// <paramref name="path"/> and asserts the answer to a body that is not a JSON text: HTTP 400 with an
+    /// <c>application/json</c> ProblemDetails whose <c>type</c> is the literal
+    /// <c>https://www.w3.org/TR/vc-data-model#PARSING_ERROR</c> and whose <c>title</c> is the literal
+    /// <c>PARSING_ERROR</c>, the type the
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#PARSING_ERROR">VC Data Model 2.0 Section 7.2</see> defines
+    /// as "There was an error while parsing input."
+    /// </summary>
+    /// <param name="app">The host shell whose default host serves the request.</param>
+    /// <param name="path">The absolute path of the endpoint on the host.</param>
+    /// <param name="body">The raw request body bytes, sent as they are.</param>
+    /// <param name="authorizationHeader">
+    /// The <c>Authorization</c> header value to send, or <see langword="null"/> to send no <c>Authorization</c> header.
+    /// </param>
+    /// <param name="cancellationToken">The test's own cancellation token.</param>
+    /// <returns>A task completing when the assertions have run.</returns>
+    internal static Task AssertPostAnswersParsingErrorWireAsync(
+        TestHostShell app, string path, byte[] body, string? authorizationHeader, CancellationToken cancellationToken) =>
+        AssertPostAnswersProblemWireAsync(
+            app,
+            path,
+            body,
+            "application/json",
+            authorizationHeader,
+            "https://www.w3.org/TR/vc-data-model#PARSING_ERROR",
+            "PARSING_ERROR",
+            cancellationToken);
+
+
+    /// <summary>
+    /// POSTs the JSON text <paramref name="body"/> labelled <c>application/json</c> over the real wire to
+    /// <paramref name="path"/> and asserts the answer to a JSON text whose content the endpoint refuses: HTTP 400 with
+    /// an <c>application/json</c> ProblemDetails whose <c>type</c> is the literal
+    /// <c>https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR</c> and whose <c>title</c> is the literal
+    /// <c>MALFORMED_VALUE_ERROR</c>, the type the
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#MALFORMED_VALUE_ERROR">VC Data Model 2.0 Section 7.2</see>
+    /// defines as "The value associated with a particular property is malformed."
+    /// </summary>
+    /// <param name="app">The host shell whose default host serves the request.</param>
+    /// <param name="path">The absolute path of the endpoint on the host.</param>
+    /// <param name="body">The request body JSON text, sent as UTF-8.</param>
+    /// <param name="authorizationHeader">
+    /// The <c>Authorization</c> header value to send, or <see langword="null"/> to send no <c>Authorization</c> header.
+    /// </param>
+    /// <param name="cancellationToken">The test's own cancellation token.</param>
+    /// <returns>A task completing when the assertions have run.</returns>
+    internal static Task AssertPostAnswersMalformedValueErrorWireAsync(
+        TestHostShell app, string path, string body, string? authorizationHeader, CancellationToken cancellationToken) =>
+        AssertPostAnswersProblemWireAsync(
+            app,
+            path,
+            Encoding.UTF8.GetBytes(body),
+            "application/json",
+            authorizationHeader,
+            "https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
+            "MALFORMED_VALUE_ERROR",
+            cancellationToken);
+
+
+    /// <summary>
+    /// The value a row wiring its own parse delegate gives the parse result's <c>Failure</c>: a
+    /// <see cref="VcalmParseFailure"/> outside the members the enumeration names, a value an application's own parse
+    /// delegate can return and an endpoint does not understand.
+    /// </summary>
+    internal static VcalmParseFailure UnnamedParseFailure { get; } = (VcalmParseFailure)99;
+
+
+    /// <summary>
+    /// POSTs the body text <paramref name="body"/>, sent as UTF-8, labelled <paramref name="mediaType"/> or carrying no
+    /// <c>Content-Type</c> header at all, over the real wire to <paramref name="path"/>, and asserts the answer of the
+    /// endpoint's request boundary: HTTP 400 with an <c>application/json</c> ProblemDetails whose <c>title</c> is the
+    /// literal <paramref name="expectedTitle"/> and whose <c>type</c> is the literal data model URL of that title.
+    /// </summary>
+    /// <param name="app">The host shell whose default host serves the request.</param>
+    /// <param name="path">The absolute path of the endpoint on the host.</param>
+    /// <param name="body">The request body text, sent as UTF-8; the empty string sends zero bytes.</param>
+    /// <param name="mediaType">The media type the body is labelled with, or <see langword="null"/> to send no <c>Content-Type</c> header.</param>
+    /// <param name="expectedTitle">The literal title, <c>PARSING_ERROR</c> or <c>MALFORMED_VALUE_ERROR</c>, the answer carries.</param>
+    /// <param name="authorizationHeader">The <c>Authorization</c> header value, or <see langword="null"/> to send none.</param>
+    /// <param name="cancellationToken">The test's own cancellation token.</param>
+    /// <returns>A task completing when the assertions have run.</returns>
+    internal static Task AssertBoundaryAnswerWireAsync(
+        TestHostShell app,
+        string path,
+        string body,
+        string? mediaType,
+        string expectedTitle,
+        string? authorizationHeader,
+        CancellationToken cancellationToken)
+    {
+        string expectedType = expectedTitle switch
+        {
+            "PARSING_ERROR" => "https://www.w3.org/TR/vc-data-model#PARSING_ERROR",
+            "MALFORMED_VALUE_ERROR" => "https://www.w3.org/TR/vc-data-model#MALFORMED_VALUE_ERROR",
+            _ => throw new ArgumentOutOfRangeException(nameof(expectedTitle), expectedTitle, "A boundary answer is the parsing error or the malformed value.")
+        };
+
+        return AssertPostAnswersProblemWireAsync(
+            app, path, Encoding.UTF8.GetBytes(body), mediaType, authorizationHeader, expectedType, expectedTitle, cancellationToken);
+    }
+
+
+    /// <summary>
+    /// The shared send and assertions of <see cref="AssertPostAnswersParsingErrorWireAsync"/>,
+    /// <see cref="AssertPostAnswersMalformedValueErrorWireAsync"/> and <see cref="AssertBoundaryAnswerWireAsync"/>: one
+    /// POST of the raw <paramref name="body"/> bytes labelled <paramref name="requestMediaType"/>, after which the host
+    /// has recorded no fault escaping the endpoint, answered with HTTP 400, an <c>application/json</c> body, and a
+    /// ProblemDetails whose <c>type</c> and <c>title</c> equal the expected literals.
+    /// </summary>
+    /// <param name="app">The host shell whose default host serves the request.</param>
+    /// <param name="path">The absolute path of the endpoint on the host.</param>
+    /// <param name="body">The raw request body bytes.</param>
+    /// <param name="requestMediaType">The media type the body is labelled with, or <see langword="null"/> to send no <c>Content-Type</c> header.</param>
+    /// <param name="authorizationHeader">The <c>Authorization</c> header value, or <see langword="null"/> to send none.</param>
+    /// <param name="expectedType">The literal problem type URL the answer carries.</param>
+    /// <param name="expectedTitle">The literal problem title the answer carries.</param>
+    /// <param name="cancellationToken">The test's own cancellation token.</param>
+    /// <returns>A task completing when the assertions have run.</returns>
+    private static async Task AssertPostAnswersProblemWireAsync(
+        TestHostShell app,
+        string path,
+        byte[] body,
+        string? requestMediaType,
+        string? authorizationHeader,
+        string expectedType,
+        string expectedTitle,
+        CancellationToken cancellationToken)
+    {
+        (int statusCode, string? mediaType, string responseBody) = await SendRawBytesWireAsync(
+            app, "POST", path, body, requestMediaType, authorizationHeader, cancellationToken).ConfigureAwait(false);
+
+        //The faults are consumed before any other assertion, so a fault is what the row reports rather than the
+        //status it caused, and the host's teardown finds none left over.
+        Exception[] faults = app.Host("default").ConsumeHttpFaults();
+        Assert.IsEmpty(faults, $"A request body must not escape the endpoint as a fault the host records. Response: {responseBody}");
+        Assert.AreEqual(400, statusCode, responseBody);
+        Assert.AreEqual("application/json", mediaType, responseBody);
+        using JsonDocument problem = JsonDocument.Parse(responseBody);
+        Assert.AreEqual(expectedType, problem.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(), responseBody);
+        Assert.AreEqual(expectedTitle, problem.RootElement.GetProperty(VcalmParameterNames.ProblemTitle).GetString(), responseBody);
+    }
+
+
+    /// <summary>
     /// Sends an HTTP request of <paramref name="method"/> to <paramref name="path"/> on the loopback HTTPS host of
     /// <paramref name="app"/> over the real wire, starting the host when it is not yet listening, with an optional
     /// JSON <paramref name="body"/> and an optional <paramref name="authorizationHeader"/> value carried on the
@@ -451,16 +595,19 @@ internal static class VcalmWireFixtures
     /// <summary>
     /// Sends an HTTP request of <paramref name="method"/> to <paramref name="path"/> on the loopback HTTPS host of
     /// <paramref name="app"/> over the real wire, with raw <paramref name="bytes"/> labelled <paramref name="mediaType"/>
-    /// and an optional <paramref name="authorizationHeader"/> value on the request's <c>Authorization</c> header, and
-    /// returns the media type the response's <c>Content-Type</c> header names beside its status and body: the form a
-    /// byte-level body refusal is proven through on a route authorized before its body is read, and wherever the
-    /// refusal's own media type is asserted.
+    /// or carrying no <c>Content-Type</c> header at all, and an optional <paramref name="authorizationHeader"/> value on
+    /// the request's <c>Authorization</c> header, and returns the media type the response's <c>Content-Type</c> header
+    /// names beside its status and body: the form a byte-level body refusal is proven through on a route authorized
+    /// before its body is read, wherever the refusal's own media type is asserted, and for a body sent with no media type.
     /// </summary>
     /// <param name="app">The host shell whose default host serves the request.</param>
     /// <param name="method">The HTTP method.</param>
     /// <param name="path">The absolute path of the endpoint on the host.</param>
     /// <param name="bytes">The raw request body bytes.</param>
-    /// <param name="mediaType">The media type the <c>Content-Type</c> header names.</param>
+    /// <param name="mediaType">
+    /// The media type the <c>Content-Type</c> header names, or <see langword="null"/> to send the bytes with no
+    /// <c>Content-Type</c> header.
+    /// </param>
     /// <param name="authorizationHeader">
     /// The <c>Authorization</c> header value to send, or <see langword="null"/> to send no <c>Authorization</c> header.
     /// </param>
@@ -474,7 +621,7 @@ internal static class VcalmWireFixtures
         string method,
         string path,
         byte[] bytes,
-        string mediaType,
+        string? mediaType,
         string? authorizationHeader,
         CancellationToken cancellationToken)
     {
@@ -482,11 +629,16 @@ internal static class VcalmWireFixtures
         HostedAuthorizationServer host = app.Host("default");
         Uri url = new(host.HttpBaseAddress!, path);
 
+        //A ByteArrayContent carries no Content-Type header of its own, so leaving it unset sends the bytes with none.
         using HttpRequestMessage request = new(new HttpMethod(method), url)
         {
             Content = new ByteArrayContent(bytes)
         };
-        request.Content.Headers.ContentType = new MediaTypeHeaderValue(mediaType);
+        if(mediaType is not null)
+        {
+            request.Content.Headers.ContentType = new MediaTypeHeaderValue(mediaType);
+        }
+
         if(authorizationHeader is not null)
         {
             _ = request.Headers.TryAddWithoutValidation(WellKnownHttpHeaderNames.Authorization, authorizationHeader);
@@ -569,7 +721,7 @@ internal static class VcalmWireFixtures
     /// <param name="segment">The exchange tenant segment.</param>
     /// <param name="exchangeId">The exchange id, escaped as one path segment.</param>
     /// <returns>The exchange's path on the host.</returns>
-    private static string ComposeExchangePath(string segment, string exchangeId) =>
+    internal static string ComposeExchangePath(string segment, string exchangeId) =>
         TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmParticipateInExchange, segment) + "/" + Uri.EscapeDataString(exchangeId);
 
 

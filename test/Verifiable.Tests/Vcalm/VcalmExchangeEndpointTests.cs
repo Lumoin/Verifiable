@@ -1011,6 +1011,236 @@ internal sealed class VcalmExchangeEndpointTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-2">RFC 8259 Section 2</see>: "A JSON text is a
+    /// serialized value." with the grammar <c>JSON-text = ws value ws</c>. The body <c>{</c> opens an object it never
+    /// closes, so it holds no value and is no JSON text: the create-exchange operation, posted by an authorized
+    /// coordinator, and the participate operation on a created exchange each answer it with HTTP 400 and the type the
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#PARSING_ERROR">VC Data Model 2.0 Section 7.2</see> defines as
+    /// "There was an error while parsing input."
+    /// </summary>
+    /// <param name="endpointName">The well-known name of the exchange operation the body is posted to.</param>
+    [TestMethod]
+    [DataRow("Vcalm.CreateExchange")]
+    [DataRow("Vcalm.ParticipateInExchange")]
+    public async Task BodyThatIsNotAJsonTextAnswersParsingError(string endpointName)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterExchangeAsync(app).ConfigureAwait(false);
+
+        (string path, string? authorizationHeader) = endpointName switch
+        {
+            "Vcalm.CreateExchange" => (
+                TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCreateExchange, segment),
+                VcalmWireFixtures.CoordinatorAuthorizationHeader),
+            _ => (
+                VcalmWireFixtures.ComposeExchangePath(segment, await CreateExchangeAndGetIdOverWireAsync(app, segment).ConfigureAwait(false)),
+                null)
+        };
+
+        await VcalmWireFixtures.AssertPostAnswersParsingErrorWireAsync(
+            app, path, "{"u8.ToArray(), authorizationHeader, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-2">RFC 8259 Section 2</see>: "A JSON text is a
+    /// serialized value." with the grammar <c>JSON-text = ws value ws</c>. An empty body labelled
+    /// <c>application/json</c> holds no value, so it is no JSON text: the create-exchange operation, posted by an
+    /// authorized coordinator, answers it with HTTP 400 and the type the
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#PARSING_ERROR">VC Data Model 2.0 Section 7.2</see> defines as
+    /// "There was an error while parsing input."
+    /// </summary>
+    [TestMethod]
+    public async Task EmptyBodyAnswersParsingError()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterExchangeAsync(app).ConfigureAwait(false);
+
+        await VcalmWireFixtures.AssertPostAnswersParsingErrorWireAsync(
+            app, TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCreateExchange, segment), [],
+            VcalmWireFixtures.CoordinatorAuthorizationHeader, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.1">RFC 8259 Section 8.1</see>: "JSON text exchanged
+    /// between systems that are not part of a closed ecosystem MUST be encoded using UTF-8 [RFC3629]." The bytes
+    /// <c>C3 28</c>, a lead byte followed by a byte that cannot continue it, are not UTF-8, so the body is no JSON text
+    /// this endpoint receives: the create-exchange operation, posted by an authorized coordinator, answers it with HTTP
+    /// 400 and the type the
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#PARSING_ERROR">VC Data Model 2.0 Section 7.2</see> defines as
+    /// "There was an error while parsing input."
+    /// </summary>
+    [TestMethod]
+    public async Task BodyThatIsNotUtf8AnswersParsingError()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterExchangeAsync(app).ConfigureAwait(false);
+
+        await VcalmWireFixtures.AssertPostAnswersParsingErrorWireAsync(
+            app, TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCreateExchange, segment), [0xC3, 0x28],
+            VcalmWireFixtures.CoordinatorAuthorizationHeader, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#MALFORMED_VALUE_ERROR">VC Data Model 2.0 Section 7.2</see>:
+    /// "The value associated with a particular property is malformed." The body <c>[]</c> is a JSON text, an array
+    /// where <see href="https://www.w3.org/TR/vcalm-1.0/#create-exchange">VCALM Section 3.6.3</see> names an object of
+    /// <c>expires</c>, <c>variables</c> and <c>openId</c>, so the create-exchange operation, posted by an authorized
+    /// coordinator, answers it with HTTP 400 and that malformed-value type.
+    /// </summary>
+    [TestMethod]
+    public async Task CreateExchangeBodyOfTheWrongKindAnswersMalformedValueError()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterExchangeAsync(app).ConfigureAwait(false);
+
+        await VcalmWireFixtures.AssertPostAnswersMalformedValueErrorWireAsync(
+            app, TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCreateExchange, segment), "[]",
+            VcalmWireFixtures.CoordinatorAuthorizationHeader, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM Section 2.4</see>: "Implementations MUST throw an
+    /// error if an endpoint receives data, options, or option values that it does not understand or know how to
+    /// process." The application's parse delegate answers a create-exchange request, posted by an authorized
+    /// coordinator, whose members are valid but whose <see cref="VcalmCreateExchangeRequest.Failure"/> is a value
+    /// outside the reasons <see cref="VcalmParseFailure"/> names: the create-exchange operation answers HTTP 400 with
+    /// the type the
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#MALFORMED_VALUE_ERROR">VC Data Model 2.0 Section 7.2</see>
+    /// defines as "The value associated with a particular property is malformed.", and stores no exchange.
+    /// </summary>
+    [TestMethod]
+    public async Task UnnamedParseFailureOfACreateExchangeRequestAnswersMalformedValueError()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterExchangeAsync(app).ConfigureAwait(false);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            ParseVcalmCreateExchangeDelegate parse = candidateIntegration.ParseVcalmCreateExchangeAsync!;
+            candidateIntegration.ParseVcalmCreateExchangeAsync = async (requestBody, context, cancellationToken) =>
+                (await parse(requestBody, context, cancellationToken).ConfigureAwait(false))! with { Failure = VcalmWireFixtures.UnnamedParseFailure };
+        }).ConfigureAwait(false);
+        int flowCountBefore = app.FlowStore.Count;
+
+        await VcalmWireFixtures.AssertPostAnswersMalformedValueErrorWireAsync(
+            app, TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCreateExchange, segment), "{}",
+            VcalmWireFixtures.CoordinatorAuthorizationHeader, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.HasCount(flowCountBefore, app.FlowStore, "A request the endpoint does not understand stores no exchange.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM Section 2.4</see>: "Implementations MUST throw an
+    /// error if an endpoint receives data, options, or option values that it does not understand or know how to
+    /// process." The application's parse delegate answers a participate message on a created exchange whose members
+    /// are valid but whose <see cref="VcalmExchangeMessage.Failure"/> is a value outside the reasons
+    /// <see cref="VcalmParseFailure"/> names: the participate operation answers HTTP 400 with the type the
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#MALFORMED_VALUE_ERROR">VC Data Model 2.0 Section 7.2</see>
+    /// defines as "The value associated with a particular property is malformed.", and consults no step decision.
+    /// </summary>
+    [TestMethod]
+    public async Task UnnamedParseFailureOfAParticipateMessageAnswersMalformedValueError()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterExchangeAsync(app).ConfigureAwait(false);
+        string exchangeId = await CreateExchangeAndGetIdOverWireAsync(app, segment).ConfigureAwait(false);
+        int stepDecisionCount = 0;
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            ResolveVcalmExchangeStepDelegate resolveStep = candidateIntegration.ResolveVcalmExchangeStepAsync!;
+            candidateIntegration.ResolveVcalmExchangeStepAsync = (stepExchangeId, message, context, cancellationToken) =>
+            {
+                _ = Interlocked.Increment(ref stepDecisionCount);
+
+                return resolveStep(stepExchangeId, message, context, cancellationToken);
+            };
+        }).ConfigureAwait(false);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            ParseVcalmExchangeMessageDelegate parse = candidateIntegration.ParseVcalmExchangeMessageAsync!;
+            candidateIntegration.ParseVcalmExchangeMessageAsync = async (requestBody, context, cancellationToken) =>
+                (await parse(requestBody, context, cancellationToken).ConfigureAwait(false))! with { Failure = VcalmWireFixtures.UnnamedParseFailure };
+        }).ConfigureAwait(false);
+
+        await VcalmWireFixtures.AssertPostAnswersMalformedValueErrorWireAsync(
+            app, VcalmWireFixtures.ComposeExchangePath(segment, exchangeId), "{}",
+            authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(0, stepDecisionCount, "A message the endpoint does not understand consults no step decision.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.2">RFC 8259 Section 8.2</see>: "However, the ABNF in
+    /// this specification allows member names and string values to contain bit sequences that cannot encode Unicode
+    /// characters; for example, "\uDEAD" (a single unpaired UTF-16 surrogate)." Each body is a JSON text whose string
+    /// value is the escape <c>\ud800</c>, a value that spells no Unicode string: the create-exchange body's
+    /// <c>expires</c>, posted by an authorized coordinator, and the participate message's <c>redirectUrl</c> on a
+    /// created exchange. It is data <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM Section 2.4</see>
+    /// requires the operation to refuse: each operation answers HTTP 400 with the type the
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#MALFORMED_VALUE_ERROR">VC Data Model 2.0 Section 7.2</see>
+    /// defines as "The value associated with a particular property is malformed.", and the host records no fault.
+    /// </summary>
+    /// <param name="endpointName">The well-known name of the exchange operation the body is posted to.</param>
+    [TestMethod]
+    [DataRow("Vcalm.CreateExchange")]
+    [DataRow("Vcalm.ParticipateInExchange")]
+    public async Task UnpairedSurrogateEscapeAnswersMalformedValueError(string endpointName)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterExchangeAsync(app).ConfigureAwait(false);
+
+        (string path, string body, string? authorizationHeader) = endpointName switch
+        {
+            "Vcalm.CreateExchange" => (
+                TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCreateExchange, segment),
+                "{\"expires\":\"\\ud800\"}",
+                VcalmWireFixtures.CoordinatorAuthorizationHeader),
+            _ => (
+                VcalmWireFixtures.ComposeExchangePath(segment, await CreateExchangeAndGetIdOverWireAsync(app, segment).ConfigureAwait(false)),
+                "{\"redirectUrl\":\"\\ud800\"}",
+                null)
+        };
+
+        await VcalmWireFixtures.AssertPostAnswersMalformedValueErrorWireAsync(
+            app, path, body, authorizationHeader, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#content-serialization">VCALM Content Serialization</see>: "All entity
+    /// bodies in requests and responses sent to or received from the API endpoints defined by this specification MUST be
+    /// serialized as JSON and include the Content-Type header with a media type value of application/json." The
+    /// create-exchange operation, posted by an authorized coordinator, answers the body <c>{}</c> labelled
+    /// <c>text/plain</c> or carrying no Content-Type header with HTTP 400 and the MALFORMED_VALUE_ERROR type, and
+    /// answers zero bytes, whether labelled <c>text/plain</c> or carrying no Content-Type header, with HTTP 400 and the
+    /// PARSING_ERROR type, since <see href="https://www.rfc-editor.org/rfc/rfc8259#section-2">RFC 8259 Section 2</see>
+    /// says "A JSON text is a serialized value." and zero bytes hold none.
+    /// </summary>
+    /// <param name="body">The request body text; the empty string sends zero bytes.</param>
+    /// <param name="mediaType">The media type the body is labelled with, or <see langword="null"/> to send no Content-Type header.</param>
+    /// <param name="expectedTitle">The literal problem title the answer carries.</param>
+    [TestMethod]
+    [DataRow("{}", "text/plain", "MALFORMED_VALUE_ERROR", DisplayName = "{} as text/plain")]
+    [DataRow("{}", null, "MALFORMED_VALUE_ERROR", DisplayName = "{} with no Content-Type header")]
+    [DataRow("", null, "PARSING_ERROR", DisplayName = "zero bytes with no Content-Type header")]
+    [DataRow("", "text/plain", "PARSING_ERROR", DisplayName = "zero bytes as text/plain")]
+    public async Task BodyAtTheRequestBoundaryKeepsItsAnswer(string body, string? mediaType, string expectedTitle)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterExchangeAsync(app).ConfigureAwait(false);
+
+        await VcalmWireFixtures.AssertBoundaryAnswerWireAsync(
+            app, TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCreateExchange, segment), body,
+            mediaType, expectedTitle, VcalmWireFixtures.CoordinatorAuthorizationHeader, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
     /// An expired exchange: a participate POST after the exchange's <c>expires</c> instant is rejected
     /// — the dispatcher's flow-expiry gate refuses the continuing flow (§3.6.2: a challenge bound to an
     /// exchange ceases to be valid at the expires date).

@@ -55,4 +55,9 @@ public sealed record VcalmIssueCredentialRequest
     /// <summary>Creates an unknown-option parse failure (§2.4 → HTTP 400 / UNKNOWN_OPTION_PROVIDED).</summary>
     public static VcalmIssueCredentialRequest UnknownOption() =>
         new() { Failure = VcalmParseFailure.UnknownOption };
+
+
+    /// <summary>Creates the parse failure of a body that is not a JSON text (HTTP 400 / PARSING_ERROR).</summary>
+    public static VcalmIssueCredentialRequest Unparseable() =>
+        new() { Failure = VcalmParseFailure.Unparseable };
 }

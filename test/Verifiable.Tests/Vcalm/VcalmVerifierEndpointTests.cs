@@ -3812,6 +3812,225 @@ internal sealed class VcalmVerifierEndpointTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-2">RFC 8259 Section 2</see>: "A JSON text is a
+    /// serialized value." with the grammar <c>JSON-text = ws value ws</c>. The body <c>{</c> opens an object it never
+    /// closes, so it holds no value and is no JSON text: each verify operation answers it with HTTP 400 and the type the
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#PARSING_ERROR">VC Data Model 2.0 Section 7.2</see> defines as
+    /// "There was an error while parsing input."
+    /// </summary>
+    /// <param name="endpointName">The well-known name of the verify operation the body is posted to.</param>
+    [TestMethod]
+    [DataRow("Vcalm.CredentialsVerify")]
+    [DataRow("Vcalm.PresentationsVerify")]
+    public async Task BodyThatIsNotAJsonTextAnswersParsingError(string endpointName)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterVerifierAsync(app).ConfigureAwait(false);
+
+        await VcalmWireFixtures.AssertPostAnswersParsingErrorWireAsync(
+            app, TestHostShell.ComposeEndpointPath(endpointName, segment), "{"u8.ToArray(),
+            authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-2">RFC 8259 Section 2</see>: "A JSON text is a
+    /// serialized value." with the grammar <c>JSON-text = ws value ws</c>. An empty body labelled
+    /// <c>application/json</c> holds no value, so it is no JSON text: the credential verify operation answers it with
+    /// HTTP 400 and the type the
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#PARSING_ERROR">VC Data Model 2.0 Section 7.2</see> defines as
+    /// "There was an error while parsing input."
+    /// </summary>
+    [TestMethod]
+    public async Task EmptyBodyAnswersParsingError()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterVerifierAsync(app).ConfigureAwait(false);
+
+        await VcalmWireFixtures.AssertPostAnswersParsingErrorWireAsync(
+            app, TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCredentialsVerify, segment), [],
+            authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.1">RFC 8259 Section 8.1</see>: "JSON text exchanged
+    /// between systems that are not part of a closed ecosystem MUST be encoded using UTF-8 [RFC3629]." The bytes
+    /// <c>C3 28</c>, a lead byte followed by a byte that cannot continue it, are not UTF-8, so the body is no JSON text
+    /// this endpoint receives: the credential verify operation answers it with HTTP 400 and the type the
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#PARSING_ERROR">VC Data Model 2.0 Section 7.2</see> defines as
+    /// "There was an error while parsing input."
+    /// </summary>
+    [TestMethod]
+    public async Task BodyThatIsNotUtf8AnswersParsingError()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterVerifierAsync(app).ConfigureAwait(false);
+
+        await VcalmWireFixtures.AssertPostAnswersParsingErrorWireAsync(
+            app, TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCredentialsVerify, segment), [0xC3, 0x28],
+            authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#MALFORMED_VALUE_ERROR">VC Data Model 2.0 Section 7.2</see>:
+    /// "The value associated with a particular property is malformed." The body
+    /// <c>{"verifiableCredential":7}</c> is a JSON text whose <c>verifiableCredential</c> is a number where
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verify-credential">VCALM Section 3.3.1</see> names a credential
+    /// object, so the credential verify operation answers it with HTTP 400 and that malformed-value type.
+    /// </summary>
+    [TestMethod]
+    public async Task CredentialOfTheWrongKindAnswersMalformedValueError()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterVerifierAsync(app).ConfigureAwait(false);
+
+        await VcalmWireFixtures.AssertPostAnswersMalformedValueErrorWireAsync(
+            app, TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCredentialsVerify, segment),
+            "{\"verifiableCredential\":7}", authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM Section 2.4</see>: "Implementations MUST throw an
+    /// error if an endpoint receives data, options, or option values that it does not understand or know how to
+    /// process." The application's parse delegate answers a credential verify request whose credential and options
+    /// are valid but whose <see cref="VcalmVerifyCredentialRequest.Failure"/> is a value outside the reasons
+    /// <see cref="VcalmParseFailure"/> names: the operation answers HTTP 400 with the type the
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#MALFORMED_VALUE_ERROR">VC Data Model 2.0 Section 7.2</see>
+    /// defines as "The value associated with a particular property is malformed.", and the verification canonicalizes
+    /// nothing.
+    /// </summary>
+    [TestMethod]
+    public async Task UnnamedParseFailureOfACredentialRequestAnswersMalformedValueError()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        int canonicalizeCount = 0;
+
+        //The verification's canonicalizer, counting each call before it canonicalizes as the RDFC canonicalizer does.
+        ValueTask<CanonicalizationResult> CountingCanonicalizer(
+            string json, ContextResolverDelegate? contextResolver, ExchangeContext context, CancellationToken cancellationToken)
+        {
+            _ = Interlocked.Increment(ref canonicalizeCount);
+
+            return RdfcCanonicalizer(json, contextResolver, context, cancellationToken);
+        }
+
+        string segment = await RegisterVerifierAsync(app, canonicalizer: CountingCanonicalizer).ConfigureAwait(false);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            ParseVcalmVerifyCredentialDelegate parse = candidateIntegration.ParseVcalmVerifyCredentialAsync!;
+            candidateIntegration.ParseVcalmVerifyCredentialAsync = async (requestBody, context, cancellationToken) =>
+                (await parse(requestBody, context, cancellationToken).ConfigureAwait(false))! with { Failure = VcalmWireFixtures.UnnamedParseFailure };
+        }).ConfigureAwait(false);
+
+        DataIntegritySecuredCredential credential = await SignCredentialAsync(validUntilPast: false).ConfigureAwait(false);
+        await VcalmWireFixtures.AssertPostAnswersMalformedValueErrorWireAsync(
+            app, TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCredentialsVerify, segment),
+            BuildCredentialRequestBody(credential, returnProblemDetails: false), authorizationHeader: null,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(0, canonicalizeCount, "A request the endpoint does not understand reaches no verification.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM Section 2.4</see>: "Implementations MUST throw an
+    /// error if an endpoint receives data, options, or option values that it does not understand or know how to
+    /// process." The application's parse delegate answers a presentation verify request whose presentation and options
+    /// are valid but whose <see cref="VcalmVerifyPresentationRequest.Failure"/> is a value outside the reasons
+    /// <see cref="VcalmParseFailure"/> names: the operation answers HTTP 400 with the type the
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#MALFORMED_VALUE_ERROR">VC Data Model 2.0 Section 7.2</see>
+    /// defines as "The value associated with a particular property is malformed.", and consumes no challenge.
+    /// </summary>
+    [TestMethod]
+    public async Task UnnamedParseFailureOfAPresentationRequestAnswersMalformedValueError()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        ConcurrentQueue<string> consumed = new();
+
+        //The challenge-consume seam, recording each challenge it is asked to consume and answering it as issued.
+        ValueTask<bool> RecordConsumed(string challenge, ExchangeContext context, CancellationToken cancellationToken)
+        {
+            consumed.Enqueue(challenge);
+
+            return ValueTask.FromResult(true);
+        }
+
+        string segment = await RegisterVerifierAsync(app, canonicalizer: JcsCanonicalizer, consumeChallenge: RecordConsumed).ConfigureAwait(false);
+        await TestHostShell.AlterVcalmAsync(app.Server, candidateIntegration =>
+        {
+            ParseVcalmVerifyPresentationDelegate parse = candidateIntegration.ParseVcalmVerifyPresentationAsync!;
+            candidateIntegration.ParseVcalmVerifyPresentationAsync = async (requestBody, context, cancellationToken) =>
+                (await parse(requestBody, context, cancellationToken).ConfigureAwait(false))! with { Failure = VcalmWireFixtures.UnnamedParseFailure };
+        }).ConfigureAwait(false);
+
+        DataIntegritySecuredPresentation presentation = await SignPresentationAsync("challenge-unnamed", "verifier.example").ConfigureAwait(false);
+        await VcalmWireFixtures.AssertPostAnswersMalformedValueErrorWireAsync(
+            app, TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmPresentationsVerify, segment),
+            BuildPresentationRequestBody(presentation, "challenge-unnamed", "verifier.example"), authorizationHeader: null,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(consumed, "A request the endpoint does not understand consumes no challenge.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.2">RFC 8259 Section 8.2</see>: "However, the ABNF in
+    /// this specification allows member names and string values to contain bit sequences that cannot encode Unicode
+    /// characters; for example, "\uDEAD" (a single unpaired UTF-16 surrogate)." Each body is a JSON text whose member
+    /// name is the escape <c>\ud800</c>, a name that spells no Unicode string, so it is data
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM Section 2.4</see> requires the operation to refuse:
+    /// each verify operation answers HTTP 400 with the type the
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#MALFORMED_VALUE_ERROR">VC Data Model 2.0 Section 7.2</see>
+    /// defines as "The value associated with a particular property is malformed.", and the host records no fault.
+    /// </summary>
+    /// <param name="endpointName">The well-known name of the verify operation the body is posted to.</param>
+    [TestMethod]
+    [DataRow("Vcalm.CredentialsVerify")]
+    [DataRow("Vcalm.PresentationsVerify")]
+    public async Task UnpairedSurrogateEscapeAnswersMalformedValueError(string endpointName)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterVerifierAsync(app).ConfigureAwait(false);
+
+        await VcalmWireFixtures.AssertPostAnswersMalformedValueErrorWireAsync(
+            app, TestHostShell.ComposeEndpointPath(endpointName, segment), "{\"\\ud800\":1}",
+            authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#content-serialization">VCALM Content Serialization</see>: "All entity
+    /// bodies in requests and responses sent to or received from the API endpoints defined by this specification MUST be
+    /// serialized as JSON and include the Content-Type header with a media type value of application/json." The
+    /// credential verify operation answers the body <c>{}</c> labelled <c>text/plain</c> or carrying no Content-Type
+    /// header with HTTP 400 and the MALFORMED_VALUE_ERROR type, and answers zero bytes, whether labelled
+    /// <c>text/plain</c> or carrying no Content-Type header, with HTTP 400 and the PARSING_ERROR type, since
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-2">RFC 8259 Section 2</see> says "A JSON text is a
+    /// serialized value." and zero bytes hold none.
+    /// </summary>
+    /// <param name="body">The request body text; the empty string sends zero bytes.</param>
+    /// <param name="mediaType">The media type the body is labelled with, or <see langword="null"/> to send no Content-Type header.</param>
+    /// <param name="expectedTitle">The literal problem title the answer carries.</param>
+    [TestMethod]
+    [DataRow("{}", "text/plain", "MALFORMED_VALUE_ERROR", DisplayName = "{} as text/plain")]
+    [DataRow("{}", null, "MALFORMED_VALUE_ERROR", DisplayName = "{} with no Content-Type header")]
+    [DataRow("", null, "PARSING_ERROR", DisplayName = "zero bytes with no Content-Type header")]
+    [DataRow("", "text/plain", "PARSING_ERROR", DisplayName = "zero bytes as text/plain")]
+    public async Task BodyAtTheRequestBoundaryKeepsItsAnswer(string body, string? mediaType, string expectedTitle)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        string segment = await RegisterVerifierAsync(app).ConfigureAwait(false);
+
+        await VcalmWireFixtures.AssertBoundaryAnswerWireAsync(
+            app, TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCredentialsVerify, segment), body,
+            mediaType, expectedTitle, authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
     /// §3.3.2 happy path: a holder-signed presentation whose proof's challenge and domain match the
     /// verify options verifies true.
     /// </summary>
@@ -4160,6 +4379,35 @@ internal sealed class VcalmVerifierEndpointTests
         (int statusCode, _, string responseBody) = await PostChallengeWireAsync(app, segment, body, "application/json").ConfigureAwait(false);
 
         AssertChallengeRefusedAsMalformed(statusCode, responseBody, persisted);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.1">RFC 8259 Section 8.1</see>: "JSON text exchanged
+    /// between systems that are not part of a closed ecosystem MUST be encoded using UTF-8 [RFC3629]." and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-2">RFC 8259 Section 2</see>: "A JSON text is a
+    /// serialized value." The bytes <c>C3 28</c> are not UTF-8, and a body of JSON white space only holds no value, so
+    /// neither is a JSON text: the
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-challenge">VCALM Section 3.3.3</see> endpoint answers each,
+    /// labelled <c>application/json</c>, with HTTP 400 and the type the
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#PARSING_ERROR">VC Data Model 2.0 Section 7.2</see> defines as
+    /// "There was an error while parsing input.", and mints no challenge.
+    /// </summary>
+    /// <param name="body">The raw request body bytes.</param>
+    [TestMethod]
+    [DataRow(new byte[] { 0xC3, 0x28 }, DisplayName = "C3 28, not UTF-8")]
+    [DataRow(new byte[] { 0x20 }, DisplayName = "one space, JSON white space only")]
+    public async Task ChallengeBodyThatIsNotAJsonTextAnswersParsingError(byte[] body)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        ConcurrentQueue<string> persisted = new();
+        string segment = await RegisterVerifierAsync(app, persistChallenge: RecordPersistedChallenge(persisted)).ConfigureAwait(false);
+
+        await VcalmWireFixtures.AssertPostAnswersParsingErrorWireAsync(
+            app, TestHostShell.ComposeEndpointPath(WellKnownVcalmEndpointNames.VcalmCreateChallenge, segment), body,
+            authorizationHeader: null, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(persisted, "A refused request mints no challenge.");
     }
 
 

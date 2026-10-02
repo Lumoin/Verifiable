@@ -533,6 +533,51 @@ internal sealed class VerifiablePresentationRequestTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-2">RFC 8259 Section 2</see>: "A JSON text is a
+    /// serialized value." with the grammar <c>JSON-text = ws value ws</c>. The text <c>{</c> opens an object it never
+    /// closes, so the JSON reader refuses it and the request reports <see cref="VcalmParseFailure.Unparseable"/>.
+    /// </summary>
+    [TestMethod]
+    public void TextThatDoesNotReadIsUnparseable()
+    {
+        VerifiablePresentationRequest request = VcalmPresentationRequestJsonParsing.Parse("{", JsonOptions);
+
+        Assert.AreEqual(VcalmParseFailure.Unparseable, request.Failure);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#MALFORMED_VALUE_ERROR">VC Data Model 2.0 Section 7.2</see>:
+    /// "The value associated with a particular property is malformed." The text <c>[]</c> reads as a JSON text, an array
+    /// where <see href="https://www.w3.org/TR/vcalm-1.0/#verifiable-presentation-request">VCALM Section 3.4.1</see>
+    /// names an object, so the request reports <see cref="VcalmParseFailure.Malformed"/>.
+    /// </summary>
+    [TestMethod]
+    public void TopLevelArrayIsMalformed()
+    {
+        VerifiablePresentationRequest request = VcalmPresentationRequestJsonParsing.Parse("[]", JsonOptions);
+
+        Assert.AreEqual(VcalmParseFailure.Malformed, request.Failure);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#MALFORMED_VALUE_ERROR">VC Data Model 2.0 Section 7.2</see>:
+    /// "The value associated with a particular property is malformed." The text <c>{"query":7}</c> reads as a JSON
+    /// object whose <c>query</c> is a number where
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#verifiable-presentation-request">VCALM Section 3.4.1</see> names an
+    /// array of query maps, so the request reports <see cref="VcalmParseFailure.Malformed"/>.
+    /// </summary>
+    [TestMethod]
+    public void QueryOfTheWrongKindIsMalformed()
+    {
+        VerifiablePresentationRequest request = VcalmPresentationRequestJsonParsing.Parse("{\"query\":7}", JsonOptions);
+
+        Assert.AreEqual(VcalmParseFailure.Malformed, request.Failure);
+    }
+
+
+    /// <summary>
     /// <see href="https://www.w3.org/TR/vcalm-1.0/#the-did-authentication-query-format">VCALM
     /// §3.4.3.1</see>: "A DID Authentication query MUST be of the following form": a "type" that is "A
     /// REQUIRED string value that MUST be set to DIDAuthentication", "acceptedMethods" ("An optional

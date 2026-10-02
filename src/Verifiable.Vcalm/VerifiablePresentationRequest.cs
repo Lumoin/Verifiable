@@ -61,4 +61,9 @@ public sealed record VerifiablePresentationRequest
     /// <summary>Creates an unknown-option parse failure (§2.4 → the carrying exchange maps to HTTP 400 / UNKNOWN_OPTION_PROVIDED).</summary>
     public static VerifiablePresentationRequest UnknownOption() =>
         new() { Failure = VcalmParseFailure.UnknownOption };
+
+
+    /// <summary>Creates the parse failure of a request text that is not a JSON text (the reader refuses it).</summary>
+    public static VerifiablePresentationRequest Unparseable() =>
+        new() { Failure = VcalmParseFailure.Unparseable };
 }

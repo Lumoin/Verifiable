@@ -33,6 +33,10 @@ namespace Verifiable.Vcalm;
 /// process is refused the same way: a value that is not a string, a selective pointer that is not a
 /// JSON pointer, or a proof type, cryptosuite, purpose or verification method this instance does not
 /// sign with.
+/// A body that is not a JSON text (an empty body, bytes that are not UTF-8, or text the JSON reader refuses) is
+/// answered 400 with <see cref="VcalmProblemTypes.ParsingError"/>; a JSON text whose content the endpoint refuses is
+/// answered 400 with <see cref="VcalmProblemTypes.MalformedValueError"/>; a request carrying an option the endpoint does
+/// not understand is answered 400 with <see cref="VcalmProblemTypes.UnknownOptionProvided"/>.
 /// </para>
 /// </remarks>
 public static class VcalmHolderEndpoints
@@ -123,7 +127,7 @@ public static class VcalmHolderEndpoints
 
                 VcalmDeriveCredentialRequest? request = await vcalm.ParseVcalmDeriveCredentialAsync!(
                     requestBody, context, ct).ConfigureAwait(false);
-                if(request is null || request.Failure == VcalmParseFailure.Malformed)
+                if(request is null)
                 {
                     return (null, MalformedRequest());
                 }
@@ -131,9 +135,18 @@ public static class VcalmHolderEndpoints
                 //§2.4 unknown-option is checked before the credential-presence check: an unknown option
                 //short-circuits the parser before it materializes the credential, and the §2.4 MUST is
                 //the more specific outcome.
-                if(request.Failure == VcalmParseFailure.UnknownOption)
+                ServerHttpResponse? parseFailure = request.Failure switch
                 {
-                    return (null, UnknownOptionRequest());
+                    VcalmParseFailure.None => null,
+                    VcalmParseFailure.Malformed => MalformedRequest(),
+                    VcalmParseFailure.UnknownOption => UnknownOptionRequest(),
+                    VcalmParseFailure.Unparseable => VcalmResponseWriter.BuildParsingErrorResponse(),
+                    _ => MalformedRequest()
+                };
+
+                if(parseFailure is not null)
+                {
+                    return (null, parseFailure);
                 }
 
                 //§3.5.1 "selectivePointers [array]": "An array of JSON pointers specifying the selectively
@@ -200,14 +213,23 @@ public static class VcalmHolderEndpoints
 
                 VcalmCreatePresentationRequest? request = await vcalm.ParseVcalmCreatePresentationAsync!(
                     requestBody, context, ct).ConfigureAwait(false);
-                if(request is null || request.Failure == VcalmParseFailure.Malformed)
+                if(request is null)
                 {
                     return (null, MalformedRequest());
                 }
 
-                if(request.Failure == VcalmParseFailure.UnknownOption)
+                ServerHttpResponse? parseFailure = request.Failure switch
                 {
-                    return (null, UnknownOptionRequest());
+                    VcalmParseFailure.None => null,
+                    VcalmParseFailure.Malformed => MalformedRequest(),
+                    VcalmParseFailure.UnknownOption => UnknownOptionRequest(),
+                    VcalmParseFailure.Unparseable => VcalmResponseWriter.BuildParsingErrorResponse(),
+                    _ => MalformedRequest()
+                };
+
+                if(parseFailure is not null)
+                {
+                    return (null, parseFailure);
                 }
 
                 if(request.Presentation is null)
@@ -740,6 +762,9 @@ public static class VcalmHolderEndpoints
     /// <summary>
     /// The §2.4 request-boundary MUSTs for the §3.5.1 / §3.5.2 body, mirroring the issuer and the verifier: a body
     /// MUST be present, within the configured size cap (else 413), and <c>application/json</c> (else 400).
+    /// An empty body and bytes that are not UTF-8 are no JSON text and answer 400 with the parsing error
+    /// (<see cref="VcalmResponseWriter.BuildParsingErrorResponse"/>); a request that is absent answers the
+    /// malformed-value type.
     /// </summary>
     /// <param name="context">The per-request context carrying the incoming request.</param>
     /// <param name="server">The host, for the configured size cap.</param>
@@ -752,7 +777,19 @@ public static class VcalmHolderEndpoints
         requestBody = string.Empty;
 
         IncomingRequest? req = context.IncomingRequest;
-        if(req is null || req.Body.IsEmpty || req.Body.Bytes.IsEmpty)
+        if(req is null)
+        {
+            return MalformedRequest();
+        }
+
+        //RFC 8259 Section 2: "A JSON text is a serialized value." An empty body holds no value, so it is no JSON text.
+        if(req.Body.Bytes.IsEmpty)
+        {
+            return VcalmResponseWriter.BuildParsingErrorResponse();
+        }
+
+        //A body that declares no Content-Type is refused as one of the wrong media type, ahead of the size cap.
+        if(req.Body.IsEmpty)
         {
             return MalformedRequest();
         }
@@ -767,12 +804,13 @@ public static class VcalmHolderEndpoints
             return MalformedRequest();
         }
 
-        //RFC 8259 §8.1 requires JSON text to be UTF-8 encoded for interoperable transmission; bytes that are
-        //not valid UTF-8 are data this holder cannot process (§2.4), refused rather than silently repaired
-        //into the Unicode replacement character and then read as if the client had sent that character.
+        //RFC 8259 Section 8.1: "JSON text exchanged between systems that are not part of a closed ecosystem MUST be
+        //encoded using UTF-8 [RFC3629]." Bytes that are not valid UTF-8 are no JSON text, answered with the parsing error
+        //rather than silently repaired into the Unicode replacement character and parsed as if the client had sent that
+        //character.
         if(!VcalmJsonShape.TryDecodeStrictUtf8(req.Body.Bytes.Span, out string? decodedBody))
         {
-            return MalformedRequest();
+            return VcalmResponseWriter.BuildParsingErrorResponse();
         }
 
         requestBody = decodedBody;

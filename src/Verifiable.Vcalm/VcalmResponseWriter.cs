@@ -867,4 +867,27 @@ public static class VcalmResponseWriter
     /// preferences (expressed with the Accept-Language request header)."
     /// </summary>
     private static string ContentTooLargeTitle { get; } = "Content Too Large";
+
+
+    /// <summary>
+    /// The answer every VCALM operation that parses its request body through the parse seam gives a body that is not a
+    /// JSON text: an empty body, bytes that are not UTF-8, and a body the JSON reader refuses
+    /// (<see cref="VcalmParseFailure.Unparseable"/>). The verifier's <c>/challenges</c> endpoint, where
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-challenge">VCALM Section 3.3.3</see> says "Passing an empty
+    /// body to this endpoint creates and returns a challenge string in the response body.", gives it for bytes that are
+    /// not UTF-8 and a body of JSON white space only. HTTP 400 with a ProblemDetails body of the type
+    /// <see cref="VcalmProblemTypes.ParsingError"/> titled <see cref="VcalmProblemTypes.ParsingErrorTitle"/>, the type the
+    /// <see href="https://www.w3.org/TR/vc-data-model-2.0/#PARSING_ERROR">VC Data Model 2.0 Section 7.2</see> defines as
+    /// "There was an error while parsing input." The detail names no part of the body.
+    /// </summary>
+    /// <returns>The 400 response carrying the JSON ProblemDetails body.</returns>
+    internal static ServerHttpResponse BuildParsingErrorResponse()
+    {
+        VcalmProblemDetail parsingError = VcalmProblemDetail.Error(
+            VcalmProblemTypes.ParsingError,
+            VcalmProblemTypes.ParsingErrorTitle,
+            "The request body could not be parsed as a JSON text.");
+
+        return ServerHttpResponse.Json(400, BuildProblemDetailBody(parsingError), WellKnownMediaTypes.Application.Json);
+    }
 }

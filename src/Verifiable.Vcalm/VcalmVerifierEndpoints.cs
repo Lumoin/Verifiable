@@ -30,6 +30,22 @@ namespace Verifiable.Vcalm;
 /// 400 with the §3.8 <see cref="VcalmProblemTypes.UnknownOptionProvided"/> problem type; an unknown
 /// top-level member → 400). A 200 always means the verification PROCESS ran — an invalid credential
 /// is a 200 with <c>verified:false</c>, per §3.3.1 / §3.3.2.
+/// The two verify operations parse their body through the parse seam: a body that is not a JSON text (an empty body,
+/// bytes that are not UTF-8, or text the JSON reader refuses) is answered 400 with
+/// <see cref="VcalmProblemTypes.ParsingError"/>; a JSON text whose content the endpoint refuses is answered 400 with
+/// <see cref="VcalmProblemTypes.MalformedValueError"/>, and one whose <c>options</c> carry a member the endpoint does
+/// not understand with <see cref="VcalmProblemTypes.UnknownOptionProvided"/>.
+/// </para>
+/// <para>
+/// The <c>/challenges</c> endpoint is the exception.
+/// <see href="https://www.w3.org/TR/vcalm-1.0/#create-challenge">VCALM Section 3.3.3</see> says "Passing an empty body
+/// to this endpoint creates and returns a challenge string in the response body.", so an empty body mints a challenge.
+/// The endpoint reads its body through no parse seam, and this library carries no JSON reader (the serialization
+/// firewall keeps <c>System.Text.Json</c> out), so it tells apart only what the bytes show: bytes that are not UTF-8
+/// and a body of JSON white space only are no JSON text and are answered 400 with
+/// <see cref="VcalmProblemTypes.ParsingError"/>; the empty object mints a challenge; any other body is answered 400 with
+/// <see cref="VcalmProblemTypes.MalformedValueError"/>, whether it is a JSON text such as <c>[]</c> or text that does
+/// not read such as <c>{</c>, since without a reader the two cannot be told apart.
 /// </para>
 /// </remarks>
 public static class VcalmVerifierEndpoints
@@ -96,14 +112,23 @@ public static class VcalmVerifierEndpoints
 
                 VcalmVerifyCredentialRequest? request = await oauth.ParseVcalmVerifyCredentialAsync!(
                     requestBody, context, ct).ConfigureAwait(false);
-                if(request is null || request.Failure == VcalmParseFailure.Malformed)
+                if(request is null)
                 {
                     return (null, MalformedRequest());
                 }
 
-                if(request.Failure == VcalmParseFailure.UnknownOption)
+                ServerHttpResponse? parseFailure = request.Failure switch
                 {
-                    return (null, UnknownOptionRequest());
+                    VcalmParseFailure.None => null,
+                    VcalmParseFailure.Malformed => MalformedRequest(),
+                    VcalmParseFailure.UnknownOption => UnknownOptionRequest(),
+                    VcalmParseFailure.Unparseable => VcalmResponseWriter.BuildParsingErrorResponse(),
+                    _ => MalformedRequest()
+                };
+
+                if(parseFailure is not null)
+                {
+                    return (null, parseFailure);
                 }
 
                 //§3.3.1 accepts an embedded Data Integrity credential or an
@@ -173,14 +198,23 @@ public static class VcalmVerifierEndpoints
 
                 VcalmVerifyPresentationRequest? request = await oauth.ParseVcalmVerifyPresentationAsync!(
                     requestBody, context, ct).ConfigureAwait(false);
-                if(request is null || request.Failure == VcalmParseFailure.Malformed)
+                if(request is null)
                 {
                     return (null, MalformedRequest());
                 }
 
-                if(request.Failure == VcalmParseFailure.UnknownOption)
+                ServerHttpResponse? parseFailure = request.Failure switch
                 {
-                    return (null, UnknownOptionRequest());
+                    VcalmParseFailure.None => null,
+                    VcalmParseFailure.Malformed => MalformedRequest(),
+                    VcalmParseFailure.UnknownOption => UnknownOptionRequest(),
+                    VcalmParseFailure.Unparseable => VcalmResponseWriter.BuildParsingErrorResponse(),
+                    _ => MalformedRequest()
+                };
+
+                if(parseFailure is not null)
+                {
+                    return (null, parseFailure);
                 }
 
                 return (null, await VerifyPresentationAsync(server, request, context, ct).ConfigureAwait(false));
@@ -212,15 +246,16 @@ public static class VcalmVerifierEndpoints
                 EndpointServer server = context.RequestServer!;
                 var oauth = server.Vcalm();
 
-                //§3.3.3: "Passing an empty body to this endpoint creates and returns a challenge string in the
-                //response body." §2.4 Content Serialization: "All entity bodies in requests and responses sent to
-                //or received from the API endpoints defined by this specification MUST be serialized as JSON and
-                //include the Content-Type header with a media type value of application/json." So no body bytes
-                //mint a challenge, and present bytes pass, in order, the B.4 payload cap (else 413), the
-                //application/json media type (else 400) and the empty-object shape, the one empty body JSON can
-                //carry (else 400). The gate keys on the bytes, not on RequestBody.IsEmpty, which says only that no
-                //content type was declared: a body sent without a Content-Type header is refused like any other
-                //body that is not application/json.
+                //Section 3.3.3: "Passing an empty body to this endpoint creates and returns a challenge string in
+                //the response body." Section 2.4 Content Serialization: "All entity bodies in requests and responses
+                //sent to or received from the API endpoints defined by this specification MUST be serialized as JSON
+                //and include the Content-Type header with a media type value of application/json." So no body bytes
+                //mint a challenge, and present bytes pass, in order, the Appendix B.4 payload cap (else 413), the
+                //application/json media type (else 400), the strict UTF-8 decode and the presence of a value (else
+                //the parsing error), and the empty-object shape, the one empty body JSON can carry (else 400). The
+                //gate keys on the bytes, not on RequestBody.IsEmpty, which says only that no content type was
+                //declared: a body sent without a Content-Type header is refused like any other body that is not
+                //application/json.
                 IncomingRequest? req = context.IncomingRequest;
                 if(req is not null && !req.Body.Bytes.IsEmpty)
                 {
@@ -234,6 +269,17 @@ public static class VcalmVerifierEndpoints
                         return (null, MalformedRequest());
                     }
 
+                    //RFC 8259 Section 8.1: "JSON text exchanged between systems that are not part of a closed
+                    //ecosystem MUST be encoded using UTF-8 [RFC3629]." RFC 8259 Section 2: "A JSON text is a
+                    //serialized value." Bytes that are not UTF-8, and JSON white space with no value, are no JSON text.
+                    if(!VcalmJsonShape.TryDecodeStrictUtf8(req.Body.Bytes.Span, out _)
+                        || VcalmJsonShape.IsJsonWhitespaceOnly(req.Body.Bytes.Span))
+                    {
+                        return (null, VcalmResponseWriter.BuildParsingErrorResponse());
+                    }
+
+                    //Any other body that is not the empty object, whether a JSON text or text that does not read, is
+                    //refused as a malformed value: this library carries no JSON reader to tell the two apart.
                     if(!VcalmJsonShape.IsEmptyObject(req.Body.Bytes.Span))
                     {
                         return (null, MalformedRequest());
@@ -527,6 +573,9 @@ public static class VcalmVerifierEndpoints
     /// §2.4 request-boundary MUSTs for the verify endpoints: a body MUST be present, MUST be within
     /// the configured size cap (else 413), and MUST be application/json (else 400). On success
     /// requestBody carries the UTF-8-decoded body.
+    /// An empty body and bytes that are not UTF-8 are no JSON text and answer 400 with the parsing error
+    /// (<see cref="VcalmResponseWriter.BuildParsingErrorResponse"/>); a request that is absent answers the
+    /// malformed-value type.
     /// </summary>
     private static ServerHttpResponse? CheckRequestBoundary(
         ExchangeContext context, EndpointServer server, out string requestBody)
@@ -535,7 +584,19 @@ public static class VcalmVerifierEndpoints
         requestBody = string.Empty;
 
         IncomingRequest? req = context.IncomingRequest;
-        if(req is null || req.Body.IsEmpty || req.Body.Bytes.IsEmpty)
+        if(req is null)
+        {
+            return MalformedRequest();
+        }
+
+        //RFC 8259 Section 2: "A JSON text is a serialized value." An empty body holds no value, so it is no JSON text.
+        if(req.Body.Bytes.IsEmpty)
+        {
+            return VcalmResponseWriter.BuildParsingErrorResponse();
+        }
+
+        //A body that declares no Content-Type is refused as one of the wrong media type, ahead of the size cap.
+        if(req.Body.IsEmpty)
         {
             return MalformedRequest();
         }
@@ -553,12 +614,13 @@ public static class VcalmVerifierEndpoints
             return MalformedRequest();
         }
 
-        //RFC 8259 §8.1 requires JSON text to be UTF-8 encoded; bytes that are not valid UTF-8 are data this
-        //verifier cannot process (§2.4), refused rather than silently repaired into the Unicode replacement
-        //character and parsed as if the client had sent that character.
+        //RFC 8259 Section 8.1: "JSON text exchanged between systems that are not part of a closed ecosystem MUST be
+        //encoded using UTF-8 [RFC3629]." Bytes that are not valid UTF-8 are no JSON text, answered with the parsing error
+        //rather than silently repaired into the Unicode replacement character and parsed as if the client had sent that
+        //character.
         if(!VcalmJsonShape.TryDecodeStrictUtf8(req.Body.Bytes.Span, out string? decodedBody))
         {
-            return MalformedRequest();
+            return VcalmResponseWriter.BuildParsingErrorResponse();
         }
 
         requestBody = decodedBody;

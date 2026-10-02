@@ -16,14 +16,26 @@ namespace Verifiable.Json;
 /// <see cref="VcalmJsonExtensions.UseDefaultVcalmJsonParsing"/>.
 /// </summary>
 /// <remarks>
-/// The parsers are STRICT per §2.4: a body that is not a JSON object, omits the REQUIRED credential
-/// / presentation member, carries an unrecognized TOP-LEVEL member, or carries a credential /
-/// presentation that is not a recognized secured shape yields
-/// <see cref="VcalmParseFailure.Malformed"/>; a body whose <c>options</c> object carries a member
-/// the verifier does not understand yields <see cref="VcalmParseFailure.UnknownOption"/>
-/// ("Implementations MUST throw an error if an endpoint receives data, options, or option values
-/// that it does not understand or know how to process"). The parsers never throw to the caller;
-/// every rejection is a typed failure the endpoint maps to its HTTP outcome.
+/// <para>
+/// The parsers are STRICT per <see href="https://www.w3.org/TR/vcalm-1.0/#options">VCALM Section 2.4</see>. A body the
+/// JSON reader refuses yields <see cref="VcalmParseFailure.Unparseable"/>: the reader refuses a text that is not a JSON
+/// text (<see href="https://www.rfc-editor.org/rfc/rfc8259#section-2">RFC 8259 Section 2</see>), and a JSON text that
+/// exceeds a limit the reader sets, which
+/// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-9">RFC 8259 Section 9</see> permits: "An implementation may
+/// set limits on the maximum depth of nesting." The documents are read with the default
+/// <see cref="JsonDocumentOptions"/>, whose maximum depth of nesting is 64.
+/// </para>
+/// <para>
+/// A JSON text that is not an object, omits the REQUIRED credential / presentation member, carries an unrecognized
+/// TOP-LEVEL member, or carries a credential / presentation that is not a recognized secured shape yields
+/// <see cref="VcalmParseFailure.Malformed"/>, and so does a member name or string value whose escape spells no Unicode
+/// string, such as an unpaired surrogate: the reader admits it, reading it as a string throws
+/// <see cref="InvalidOperationException"/>, and each request parse catches that around everything it reads after the
+/// document. A body whose <c>options</c> object carries a member the verifier does not understand yields
+/// <see cref="VcalmParseFailure.UnknownOption"/> ("Implementations MUST throw an error if an endpoint receives data,
+/// options, or option values that it does not understand or know how to process"). The parsers never throw to the
+/// caller; every rejection is a typed failure the endpoint maps to its HTTP outcome.
+/// </para>
 /// </remarks>
 public static class VcalmJsonParsing
 {
@@ -305,58 +317,68 @@ public static class VcalmJsonParsing
         }
         catch(JsonException)
         {
-            return VcalmInviteRequest.Malformed();
+            return VcalmInviteRequest.Unparseable();
         }
 
         using(doc)
         {
-            JsonElement root = doc.RootElement;
-            if(root.ValueKind != JsonValueKind.Object)
+            try
             {
-                return VcalmInviteRequest.Malformed();
-            }
-
-            //§2.4: reject an unrecognized top-level member. The §3.7.5 body has exactly url, purpose,
-            //and the optional referenceId. A member name repeated (RFC 8259 §4 leaves the resolution of
-            //duplicate names to the application) is refused the same way rather than resolved to
-            //whichever occurrence a later lookup would find.
-            HashSet<string> seenMemberNames = new(StringComparer.Ordinal);
-            foreach(JsonProperty property in root.EnumerateObject())
-            {
-                if((!string.Equals(property.Name, VcalmParameterNames.Url, StringComparison.Ordinal)
-                    && !string.Equals(property.Name, VcalmParameterNames.Purpose, StringComparison.Ordinal)
-                    && !string.Equals(property.Name, VcalmParameterNames.ReferenceId, StringComparison.Ordinal))
-                    || !seenMemberNames.Add(property.Name))
+                JsonElement root = doc.RootElement;
+                if(root.ValueKind != JsonValueKind.Object)
                 {
-                    return VcalmInviteRequest.UnknownOption();
+                    return VcalmInviteRequest.Malformed();
                 }
-            }
 
-            //§3.7.5: the url is the member directing where to send the individual; it is REQUIRED for
-            //the invitation to mean anything (format is the implementer's choice, but it must be present).
-            if(!root.TryGetProperty(VcalmParameterNames.Url, out JsonElement urlElement)
-                || urlElement.ValueKind != JsonValueKind.String
-                || string.IsNullOrEmpty(urlElement.GetString()))
+                //Section 2.4: reject an unrecognized top-level member. The Section 3.7.5 body has exactly url, purpose,
+                //and the optional referenceId. A member name repeated (RFC 8259 Section 4 leaves the resolution of
+                //duplicate names to the application) is refused the same way rather than resolved to
+                //whichever occurrence a later lookup would find.
+                HashSet<string> seenMemberNames = new(StringComparer.Ordinal);
+                foreach(JsonProperty property in root.EnumerateObject())
+                {
+                    if((!string.Equals(property.Name, VcalmParameterNames.Url, StringComparison.Ordinal)
+                        && !string.Equals(property.Name, VcalmParameterNames.Purpose, StringComparison.Ordinal)
+                        && !string.Equals(property.Name, VcalmParameterNames.ReferenceId, StringComparison.Ordinal))
+                        || !seenMemberNames.Add(property.Name))
+                    {
+                        return VcalmInviteRequest.UnknownOption();
+                    }
+                }
+
+                //Section 3.7.5: the url is the member directing where to send the individual; it is REQUIRED for
+                //the invitation to mean anything (format is the implementer's choice, but it must be present).
+                if(!root.TryGetProperty(VcalmParameterNames.Url, out JsonElement urlElement)
+                    || urlElement.ValueKind != JsonValueKind.String
+                    || string.IsNullOrEmpty(urlElement.GetString()))
+                {
+                    return VcalmInviteRequest.Malformed();
+                }
+
+                string? purpose = root.TryGetProperty(VcalmParameterNames.Purpose, out JsonElement purposeElement)
+                    && purposeElement.ValueKind == JsonValueKind.String
+                    ? purposeElement.GetString()
+                    : null;
+
+                string? referenceId = root.TryGetProperty(VcalmParameterNames.ReferenceId, out JsonElement referenceIdElement)
+                    && referenceIdElement.ValueKind == JsonValueKind.String
+                    ? referenceIdElement.GetString()
+                    : null;
+
+                return new VcalmInviteRequest
+                {
+                    Url = urlElement.GetString(),
+                    Purpose = purpose,
+                    ReferenceId = referenceId
+                };
+            }
+            catch(InvalidOperationException)
             {
+                //RFC 8259 Section 8.2 lets a member name or a string value carry an escape that spells no Unicode
+                //string, such as an unpaired surrogate. The reader admits it, and reading it as a string throws: the
+                //body is a JSON text whose content is refused.
                 return VcalmInviteRequest.Malformed();
             }
-
-            string? purpose = root.TryGetProperty(VcalmParameterNames.Purpose, out JsonElement purposeElement)
-                && purposeElement.ValueKind == JsonValueKind.String
-                ? purposeElement.GetString()
-                : null;
-
-            string? referenceId = root.TryGetProperty(VcalmParameterNames.ReferenceId, out JsonElement referenceIdElement)
-                && referenceIdElement.ValueKind == JsonValueKind.String
-                ? referenceIdElement.GetString()
-                : null;
-
-            return new VcalmInviteRequest
-            {
-                Url = urlElement.GetString(),
-                Purpose = purpose,
-                ReferenceId = referenceId
-            };
         }
     }
 
@@ -385,111 +407,121 @@ public static class VcalmJsonParsing
         }
         catch(JsonException)
         {
-            return VcalmWorkflowConfiguration.Malformed();
+            return VcalmWorkflowConfiguration.Unparseable();
         }
 
         using(doc)
         {
-            JsonElement root = doc.RootElement;
-            if(root.ValueKind != JsonValueKind.Object)
+            try
             {
-                return VcalmWorkflowConfiguration.Malformed();
-            }
-
-            //§2.4: reject an unrecognized top-level member, and a member name repeated (RFC 8259 §4
-            //leaves the resolution of duplicate names to the application) rather than resolved to
-            //whichever occurrence a later lookup would find.
-            HashSet<string> seenMemberNames = new(StringComparer.Ordinal);
-            foreach(JsonProperty property in root.EnumerateObject())
-            {
-                if((!string.Equals(property.Name, VcalmParameterNames.Id, StringComparison.Ordinal)
-                    && !string.Equals(property.Name, VcalmParameterNames.InitialStep, StringComparison.Ordinal)
-                    && !string.Equals(property.Name, VcalmParameterNames.Steps, StringComparison.Ordinal)
-                    && !string.Equals(property.Name, VcalmParameterNames.CredentialTemplates, StringComparison.Ordinal)
-                    && !string.Equals(property.Name, VcalmParameterNames.Controller, StringComparison.Ordinal)
-                    && !string.Equals(property.Name, VcalmParameterNames.Authorization, StringComparison.Ordinal))
-                    || !seenMemberNames.Add(property.Name))
-                {
-                    return VcalmWorkflowConfiguration.UnknownOption();
-                }
-            }
-
-            if(!root.TryGetProperty(VcalmParameterNames.InitialStep, out JsonElement initialStepElement)
-                || initialStepElement.ValueKind != JsonValueKind.String)
-            {
-                return VcalmWorkflowConfiguration.Malformed();
-            }
-
-            if(!root.TryGetProperty(VcalmParameterNames.Steps, out JsonElement stepsElement)
-                || stepsElement.ValueKind != JsonValueKind.Object)
-            {
-                return VcalmWorkflowConfiguration.Malformed();
-            }
-
-            ImmutableDictionary<string, VcalmWorkflowStep>.Builder steps =
-                ImmutableDictionary.CreateBuilder<string, VcalmWorkflowStep>(StringComparer.Ordinal);
-            foreach(JsonProperty stepProperty in stepsElement.EnumerateObject())
-            {
-                if(stepProperty.Value.ValueKind != JsonValueKind.Object)
+                JsonElement root = doc.RootElement;
+                if(root.ValueKind != JsonValueKind.Object)
                 {
                     return VcalmWorkflowConfiguration.Malformed();
                 }
 
-                (VcalmWorkflowStep? step, VcalmParseFailure stepFailure) = ParseWorkflowStep(stepProperty.Value);
-                if(step is null)
+                //Section 2.4: reject an unrecognized top-level member, and a member name repeated (RFC 8259 Section 4
+                //leaves the resolution of duplicate names to the application) rather than resolved to
+                //whichever occurrence a later lookup would find.
+                HashSet<string> seenMemberNames = new(StringComparer.Ordinal);
+                foreach(JsonProperty property in root.EnumerateObject())
                 {
-                    return stepFailure == VcalmParseFailure.UnknownOption
+                    if((!string.Equals(property.Name, VcalmParameterNames.Id, StringComparison.Ordinal)
+                        && !string.Equals(property.Name, VcalmParameterNames.InitialStep, StringComparison.Ordinal)
+                        && !string.Equals(property.Name, VcalmParameterNames.Steps, StringComparison.Ordinal)
+                        && !string.Equals(property.Name, VcalmParameterNames.CredentialTemplates, StringComparison.Ordinal)
+                        && !string.Equals(property.Name, VcalmParameterNames.Controller, StringComparison.Ordinal)
+                        && !string.Equals(property.Name, VcalmParameterNames.Authorization, StringComparison.Ordinal))
+                        || !seenMemberNames.Add(property.Name))
+                    {
+                        return VcalmWorkflowConfiguration.UnknownOption();
+                    }
+                }
+
+                if(!root.TryGetProperty(VcalmParameterNames.InitialStep, out JsonElement initialStepElement)
+                    || initialStepElement.ValueKind != JsonValueKind.String)
+                {
+                    return VcalmWorkflowConfiguration.Malformed();
+                }
+
+                if(!root.TryGetProperty(VcalmParameterNames.Steps, out JsonElement stepsElement)
+                    || stepsElement.ValueKind != JsonValueKind.Object)
+                {
+                    return VcalmWorkflowConfiguration.Malformed();
+                }
+
+                ImmutableDictionary<string, VcalmWorkflowStep>.Builder steps =
+                    ImmutableDictionary.CreateBuilder<string, VcalmWorkflowStep>(StringComparer.Ordinal);
+                foreach(JsonProperty stepProperty in stepsElement.EnumerateObject())
+                {
+                    if(stepProperty.Value.ValueKind != JsonValueKind.Object)
+                    {
+                        return VcalmWorkflowConfiguration.Malformed();
+                    }
+
+                    (VcalmWorkflowStep? step, VcalmParseFailure stepFailure) = ParseWorkflowStep(stepProperty.Value);
+                    if(step is null)
+                    {
+                        return stepFailure == VcalmParseFailure.UnknownOption
+                            ? VcalmWorkflowConfiguration.UnknownOption()
+                            : VcalmWorkflowConfiguration.Malformed();
+                    }
+
+                    steps[stepProperty.Name] = step;
+                }
+
+                (ImmutableArray<VcalmCredentialTemplate> templates, VcalmParseFailure templatesFailure) =
+                    ParseCredentialTemplates(root);
+                if(templatesFailure != VcalmParseFailure.None)
+                {
+                    return templatesFailure == VcalmParseFailure.UnknownOption
                         ? VcalmWorkflowConfiguration.UnknownOption()
                         : VcalmWorkflowConfiguration.Malformed();
                 }
 
-                steps[stepProperty.Name] = step;
-            }
-
-            (ImmutableArray<VcalmCredentialTemplate> templates, VcalmParseFailure templatesFailure) =
-                ParseCredentialTemplates(root);
-            if(templatesFailure != VcalmParseFailure.None)
-            {
-                return templatesFailure == VcalmParseFailure.UnknownOption
-                    ? VcalmWorkflowConfiguration.UnknownOption()
-                    : VcalmWorkflowConfiguration.Malformed();
-            }
-
-            //§3.6.1 id / controller are both [string]; a present member of any other kind is refused
-            //rather than silently treated as absent.
-            string? id = null;
-            if(root.TryGetProperty(VcalmParameterNames.Id, out JsonElement idElement) && !TryReadString(idElement, out id))
-            {
-                return VcalmWorkflowConfiguration.Malformed();
-            }
-
-            string? controller = null;
-            if(root.TryGetProperty(VcalmParameterNames.Controller, out JsonElement controllerElement) && !TryReadString(controllerElement, out controller))
-            {
-                return VcalmWorkflowConfiguration.Malformed();
-            }
-
-            VcalmWorkflowAuthorization? authorization = null;
-            if(root.TryGetProperty(VcalmParameterNames.Authorization, out JsonElement authorizationElement))
-            {
-                (authorization, VcalmParseFailure authorizationFailure) = ParseWorkflowAuthorization(authorizationElement);
-                if(authorizationFailure != VcalmParseFailure.None)
+                //Section 3.6.1 id / controller are both [string]; a present member of any other kind is refused
+                //rather than silently treated as absent.
+                string? id = null;
+                if(root.TryGetProperty(VcalmParameterNames.Id, out JsonElement idElement) && !TryReadString(idElement, out id))
                 {
-                    return authorizationFailure == VcalmParseFailure.UnknownOption
-                        ? VcalmWorkflowConfiguration.UnknownOption()
-                        : VcalmWorkflowConfiguration.Malformed();
+                    return VcalmWorkflowConfiguration.Malformed();
                 }
-            }
 
-            return new VcalmWorkflowConfiguration
+                string? controller = null;
+                if(root.TryGetProperty(VcalmParameterNames.Controller, out JsonElement controllerElement) && !TryReadString(controllerElement, out controller))
+                {
+                    return VcalmWorkflowConfiguration.Malformed();
+                }
+
+                VcalmWorkflowAuthorization? authorization = null;
+                if(root.TryGetProperty(VcalmParameterNames.Authorization, out JsonElement authorizationElement))
+                {
+                    (authorization, VcalmParseFailure authorizationFailure) = ParseWorkflowAuthorization(authorizationElement);
+                    if(authorizationFailure != VcalmParseFailure.None)
+                    {
+                        return authorizationFailure == VcalmParseFailure.UnknownOption
+                            ? VcalmWorkflowConfiguration.UnknownOption()
+                            : VcalmWorkflowConfiguration.Malformed();
+                    }
+                }
+
+                return new VcalmWorkflowConfiguration
+                {
+                    Id = id,
+                    InitialStep = initialStepElement.GetString()!,
+                    Steps = steps.ToImmutable(),
+                    CredentialTemplates = templates,
+                    Controller = controller,
+                    Authorization = authorization
+                };
+            }
+            catch(InvalidOperationException)
             {
-                Id = id,
-                InitialStep = initialStepElement.GetString()!,
-                Steps = steps.ToImmutable(),
-                CredentialTemplates = templates,
-                Controller = controller,
-                Authorization = authorization
-            };
+                //RFC 8259 Section 8.2 lets a member name or a string value carry an escape that spells no Unicode
+                //string, such as an unpaired surrogate. The reader admits it, and reading it as a string throws: the
+                //body is a JSON text whose content is refused.
+                return VcalmWorkflowConfiguration.Malformed();
+            }
         }
     }
 
@@ -874,27 +906,37 @@ public static class VcalmJsonParsing
         }
         catch(JsonException)
         {
-            return VcalmCallbackRequest.Malformed();
+            return new VcalmCallbackRequest { Failure = VcalmParseFailure.Unparseable };
         }
 
         using(doc)
         {
-            JsonElement root = doc.RootElement;
-            if(root.ValueKind != JsonValueKind.Object
-                || !root.TryGetProperty(VcalmParameterNames.Event, out JsonElement eventElement)
-                || eventElement.ValueKind != JsonValueKind.Object
-                || !eventElement.TryGetProperty(VcalmParameterNames.Data, out JsonElement dataElement)
-                || dataElement.ValueKind != JsonValueKind.Object
-                || !dataElement.TryGetProperty(VcalmParameterNames.ExchangeId, out JsonElement exchangeIdElement)
-                || exchangeIdElement.ValueKind != JsonValueKind.String)
+            try
             {
+                JsonElement root = doc.RootElement;
+                if(root.ValueKind != JsonValueKind.Object
+                    || !root.TryGetProperty(VcalmParameterNames.Event, out JsonElement eventElement)
+                    || eventElement.ValueKind != JsonValueKind.Object
+                    || !eventElement.TryGetProperty(VcalmParameterNames.Data, out JsonElement dataElement)
+                    || dataElement.ValueKind != JsonValueKind.Object
+                    || !dataElement.TryGetProperty(VcalmParameterNames.ExchangeId, out JsonElement exchangeIdElement)
+                    || exchangeIdElement.ValueKind != JsonValueKind.String)
+                {
+                    return VcalmCallbackRequest.Malformed();
+                }
+
+                return new VcalmCallbackRequest
+                {
+                    ExchangeId = exchangeIdElement.GetString()
+                };
+            }
+            catch(InvalidOperationException)
+            {
+                //RFC 8259 Section 8.2 lets a member name or a string value carry an escape that spells no Unicode
+                //string, such as an unpaired surrogate. The reader admits it, and reading it as a string throws: the
+                //body is a JSON text whose content is refused.
                 return VcalmCallbackRequest.Malformed();
             }
-
-            return new VcalmCallbackRequest
-            {
-                ExchangeId = exchangeIdElement.GetString()
-            };
         }
     }
 
@@ -910,84 +952,94 @@ public static class VcalmJsonParsing
         }
         catch(JsonException)
         {
-            return VcalmIssueCredentialRequest.Malformed();
+            return VcalmIssueCredentialRequest.Unparseable();
         }
 
         using(doc)
         {
-            JsonElement root = doc.RootElement;
-            if(root.ValueKind != JsonValueKind.Object)
+            try
             {
-                return VcalmIssueCredentialRequest.Malformed();
-            }
-
-            //§2.4: reject an unrecognized top-level member. The §3.2.1 body has exactly credential
-            //and options. A member name repeated (RFC 8259 §4) is refused the same way rather than
-            //resolved to whichever occurrence a later lookup would find.
-            HashSet<string> seenMemberNames = new(StringComparer.Ordinal);
-            foreach(JsonProperty property in root.EnumerateObject())
-            {
-                if((!string.Equals(property.Name, VcalmParameterNames.Credential, StringComparison.Ordinal)
-                    && !string.Equals(property.Name, VcalmParameterNames.Options, StringComparison.Ordinal))
-                    || !seenMemberNames.Add(property.Name))
+                JsonElement root = doc.RootElement;
+                if(root.ValueKind != JsonValueKind.Object)
                 {
                     return VcalmIssueCredentialRequest.Malformed();
                 }
-            }
 
-            if(!root.TryGetProperty(VcalmParameterNames.Credential, out JsonElement credentialElement)
-                || credentialElement.ValueKind != JsonValueKind.Object)
+                //Section 2.4: reject an unrecognized top-level member. The Section 3.2.1 body has exactly credential
+                //and options. A member name repeated (RFC 8259 Section 4) is refused the same way rather than
+                //resolved to whichever occurrence a later lookup would find.
+                HashSet<string> seenMemberNames = new(StringComparer.Ordinal);
+                foreach(JsonProperty property in root.EnumerateObject())
+                {
+                    if((!string.Equals(property.Name, VcalmParameterNames.Credential, StringComparison.Ordinal)
+                        && !string.Equals(property.Name, VcalmParameterNames.Options, StringComparison.Ordinal))
+                        || !seenMemberNames.Add(property.Name))
+                    {
+                        return VcalmIssueCredentialRequest.Malformed();
+                    }
+                }
+
+                if(!root.TryGetProperty(VcalmParameterNames.Credential, out JsonElement credentialElement)
+                    || credentialElement.ValueKind != JsonValueKind.Object)
+                {
+                    return VcalmIssueCredentialRequest.Malformed();
+                }
+
+                //VC-DM 2.0 Section 4.3: @context MUST be an ordered set, a JSON array; the VC-API issuer interface
+                //likewise requires type to be an array. A core member present with the WRONG JSON shape is a
+                //malformed credential: the issuer MUST NOT coerce a bare scalar (e.g. a single @context URL or
+                //a single type term) into a one-element array and then secure it. Presence, a MISSING member,
+                //is caught later as the structural 400; this gate is the wrong-shape case the typed model cannot
+                //see once the converter has normalized the scalar into a collection.
+                if(credentialElement.TryGetProperty(VcalmParameterNames.Context, out JsonElement contextShape)
+                    && contextShape.ValueKind != JsonValueKind.Array)
+                {
+                    return VcalmIssueCredentialRequest.Malformed();
+                }
+
+                if(credentialElement.TryGetProperty(VcalmParameterNames.Type, out JsonElement typeShape)
+                    && typeShape.ValueKind != JsonValueKind.Array)
+                {
+                    return VcalmIssueCredentialRequest.Malformed();
+                }
+
+                VcalmParseFailure optionsFailure = TryParseIssueOptions(root, out VcalmIssueOptions parsedOptions);
+                if(optionsFailure == VcalmParseFailure.UnknownOption)
+                {
+                    return VcalmIssueCredentialRequest.UnknownOption();
+                }
+
+                //Section 3.2.1: the credential is the unsecured VC-DM 2.0 credential intended for issuance. A
+                //caller MAY supply existing proofs (the existing-proof case the issuer instance handles
+                //per its configuration); record whether the wire carried a proof member.
+                bool hasExistingProof = credentialElement.TryGetProperty(VcalmParameterNames.Proof, out _);
+
+                string credentialJson = credentialElement.GetRawText();
+                VerifiableCredential? credential = TryDeserialize<VerifiableCredential>(credentialJson, options);
+                if(credential is null)
+                {
+                    return VcalmIssueCredentialRequest.Malformed();
+                }
+
+                //The Section 3.2.1 auto-populate source: credential.id when present (the credential model parses
+                //it into Id). The converter upcasts a credential carrying a proof to the secured subtype;
+                //the issuer instance handles those existing proofs (Proof Sets / Chains / Error) at the
+                //endpoint, so the credential is passed through as parsed, including its proof chain.
+                return new VcalmIssueCredentialRequest
+                {
+                    Credential = credential,
+                    CredentialId = credential.Id,
+                    HasExistingProof = hasExistingProof,
+                    Options = parsedOptions
+                };
+            }
+            catch(InvalidOperationException)
             {
+                //RFC 8259 Section 8.2 lets a member name or a string value carry an escape that spells no Unicode
+                //string, such as an unpaired surrogate. The reader admits it, and reading it as a string throws: the
+                //body is a JSON text whose content is refused.
                 return VcalmIssueCredentialRequest.Malformed();
             }
-
-            //VC-DM 2.0 §4.3: @context MUST be an ordered set — a JSON array; the VC-API issuer interface
-            //likewise requires type to be an array. A core member present with the WRONG JSON shape is a
-            //malformed credential: the issuer MUST NOT coerce a bare scalar (e.g. a single @context URL or
-            //a single type term) into a one-element array and then secure it. Presence — a MISSING member —
-            //is caught later as the structural 400; this gate is the wrong-shape case the typed model can no
-            //longer see once the converter has normalized the scalar into a collection.
-            if(credentialElement.TryGetProperty(VcalmParameterNames.Context, out JsonElement contextShape)
-                && contextShape.ValueKind != JsonValueKind.Array)
-            {
-                return VcalmIssueCredentialRequest.Malformed();
-            }
-
-            if(credentialElement.TryGetProperty(VcalmParameterNames.Type, out JsonElement typeShape)
-                && typeShape.ValueKind != JsonValueKind.Array)
-            {
-                return VcalmIssueCredentialRequest.Malformed();
-            }
-
-            VcalmParseFailure optionsFailure = TryParseIssueOptions(root, out VcalmIssueOptions parsedOptions);
-            if(optionsFailure == VcalmParseFailure.UnknownOption)
-            {
-                return VcalmIssueCredentialRequest.UnknownOption();
-            }
-
-            //§3.2.1: the credential is the unsecured VC-DM 2.0 credential intended for issuance. A
-            //caller MAY supply existing proofs (the existing-proof case the issuer instance handles
-            //per its configuration); record whether the wire carried a proof member.
-            bool hasExistingProof = credentialElement.TryGetProperty(VcalmParameterNames.Proof, out _);
-
-            string credentialJson = credentialElement.GetRawText();
-            VerifiableCredential? credential = TryDeserialize<VerifiableCredential>(credentialJson, options);
-            if(credential is null)
-            {
-                return VcalmIssueCredentialRequest.Malformed();
-            }
-
-            //The §3.2.1 auto-populate source: credential.id when present (the credential model parses
-            //it into Id). The converter upcasts a credential carrying a proof to the secured subtype;
-            //the issuer instance handles those existing proofs (Proof Sets / Chains / Error) at the
-            //endpoint, so the credential is passed through as parsed — including its proof chain.
-            return new VcalmIssueCredentialRequest
-            {
-                Credential = credential,
-                CredentialId = credential.Id,
-                HasExistingProof = hasExistingProof,
-                Options = parsedOptions
-            };
         }
     }
 
@@ -1008,59 +1060,69 @@ public static class VcalmJsonParsing
         }
         catch(JsonException)
         {
-            return VcalmDeriveCredentialRequest.Malformed();
+            return VcalmDeriveCredentialRequest.Unparseable();
         }
 
         using(doc)
         {
-            JsonElement root = doc.RootElement;
-            if(root.ValueKind != JsonValueKind.Object)
+            try
             {
-                return VcalmDeriveCredentialRequest.Malformed();
-            }
-
-            //§2.4: reject an unrecognized top-level member. The §3.5.1 body has exactly
-            //verifiableCredential and options. A member name repeated (RFC 8259 §4) is refused the same
-            //way rather than resolved to whichever occurrence a later lookup would find.
-            HashSet<string> seenMemberNames = new(StringComparer.Ordinal);
-            foreach(JsonProperty property in root.EnumerateObject())
-            {
-                if((!string.Equals(property.Name, VcalmParameterNames.VerifiableCredential, StringComparison.Ordinal)
-                    && !string.Equals(property.Name, VcalmParameterNames.Options, StringComparison.Ordinal))
-                    || !seenMemberNames.Add(property.Name))
+                JsonElement root = doc.RootElement;
+                if(root.ValueKind != JsonValueKind.Object)
                 {
                     return VcalmDeriveCredentialRequest.Malformed();
                 }
-            }
 
-            if(!root.TryGetProperty(VcalmParameterNames.VerifiableCredential, out JsonElement credentialElement)
-                || credentialElement.ValueKind != JsonValueKind.Object)
+                //Section 2.4: reject an unrecognized top-level member. The Section 3.5.1 body has exactly
+                //verifiableCredential and options. A member name repeated (RFC 8259 Section 4) is refused the same
+                //way rather than resolved to whichever occurrence a later lookup would find.
+                HashSet<string> seenMemberNames = new(StringComparer.Ordinal);
+                foreach(JsonProperty property in root.EnumerateObject())
+                {
+                    if((!string.Equals(property.Name, VcalmParameterNames.VerifiableCredential, StringComparison.Ordinal)
+                        && !string.Equals(property.Name, VcalmParameterNames.Options, StringComparison.Ordinal))
+                        || !seenMemberNames.Add(property.Name))
+                    {
+                        return VcalmDeriveCredentialRequest.Malformed();
+                    }
+                }
+
+                if(!root.TryGetProperty(VcalmParameterNames.VerifiableCredential, out JsonElement credentialElement)
+                    || credentialElement.ValueKind != JsonValueKind.Object)
+                {
+                    return VcalmDeriveCredentialRequest.Malformed();
+                }
+
+                VcalmParseFailure optionsFailure = TryParseSelectivePointers(root, out ImmutableArray<string> selectivePointers);
+                if(optionsFailure == VcalmParseFailure.UnknownOption)
+                {
+                    return VcalmDeriveCredentialRequest.UnknownOption();
+                }
+
+                string credentialJson = credentialElement.GetRawText();
+                VerifiableCredential? credential = TryDeserialize<VerifiableCredential>(credentialJson, options);
+
+                //The converter upcasts a credential carrying a proof to the secured subtype. A derivable
+                //credential MUST be a DataIntegritySecuredCredential carrying a base proof; one without a
+                //proof is not a derivable selective-disclosure credential.
+                if(credential is not DataIntegritySecuredCredential secured)
+                {
+                    return VcalmDeriveCredentialRequest.Malformed();
+                }
+
+                return new VcalmDeriveCredentialRequest
+                {
+                    Credential = secured,
+                    SelectivePointers = selectivePointers
+                };
+            }
+            catch(InvalidOperationException)
             {
+                //RFC 8259 Section 8.2 lets a member name or a string value carry an escape that spells no Unicode
+                //string, such as an unpaired surrogate. The reader admits it, and reading it as a string throws: the
+                //body is a JSON text whose content is refused.
                 return VcalmDeriveCredentialRequest.Malformed();
             }
-
-            VcalmParseFailure optionsFailure = TryParseSelectivePointers(root, out ImmutableArray<string> selectivePointers);
-            if(optionsFailure == VcalmParseFailure.UnknownOption)
-            {
-                return VcalmDeriveCredentialRequest.UnknownOption();
-            }
-
-            string credentialJson = credentialElement.GetRawText();
-            VerifiableCredential? credential = TryDeserialize<VerifiableCredential>(credentialJson, options);
-
-            //The converter upcasts a credential carrying a proof to the secured subtype. A derivable
-            //credential MUST be a DataIntegritySecuredCredential carrying a base proof; one without a
-            //proof is not a derivable selective-disclosure credential.
-            if(credential is not DataIntegritySecuredCredential secured)
-            {
-                return VcalmDeriveCredentialRequest.Malformed();
-            }
-
-            return new VcalmDeriveCredentialRequest
-            {
-                Credential = secured,
-                SelectivePointers = selectivePointers
-            };
         }
     }
 
@@ -1088,63 +1150,73 @@ public static class VcalmJsonParsing
         }
         catch(JsonException)
         {
-            return VcalmCreatePresentationRequest.Malformed();
+            return VcalmCreatePresentationRequest.Unparseable();
         }
 
         using(doc)
         {
-            JsonElement root = doc.RootElement;
-            if(root.ValueKind != JsonValueKind.Object)
+            try
             {
-                return VcalmCreatePresentationRequest.Malformed();
-            }
-
-            //§2.4: reject an unrecognized top-level member. The §3.5.2 body has exactly presentation
-            //and options. A member name repeated (RFC 8259 §4) is refused the same way rather than
-            //resolved to whichever occurrence a later lookup would find.
-            HashSet<string> seenMemberNames = new(StringComparer.Ordinal);
-            foreach(JsonProperty property in root.EnumerateObject())
-            {
-                if((!string.Equals(property.Name, VcalmParameterNames.Presentation, StringComparison.Ordinal)
-                    && !string.Equals(property.Name, VcalmParameterNames.Options, StringComparison.Ordinal))
-                    || !seenMemberNames.Add(property.Name))
+                JsonElement root = doc.RootElement;
+                if(root.ValueKind != JsonValueKind.Object)
                 {
                     return VcalmCreatePresentationRequest.Malformed();
                 }
-            }
 
-            if(!root.TryGetProperty(VcalmParameterNames.Presentation, out JsonElement presentationElement)
-                || presentationElement.ValueKind != JsonValueKind.Object)
+                //Section 2.4: reject an unrecognized top-level member. The Section 3.5.2 body has exactly presentation
+                //and options. A member name repeated (RFC 8259 Section 4) is refused the same way rather than
+                //resolved to whichever occurrence a later lookup would find.
+                HashSet<string> seenMemberNames = new(StringComparer.Ordinal);
+                foreach(JsonProperty property in root.EnumerateObject())
+                {
+                    if((!string.Equals(property.Name, VcalmParameterNames.Presentation, StringComparison.Ordinal)
+                        && !string.Equals(property.Name, VcalmParameterNames.Options, StringComparison.Ordinal))
+                        || !seenMemberNames.Add(property.Name))
+                    {
+                        return VcalmCreatePresentationRequest.Malformed();
+                    }
+                }
+
+                if(!root.TryGetProperty(VcalmParameterNames.Presentation, out JsonElement presentationElement)
+                    || presentationElement.ValueKind != JsonValueKind.Object)
+                {
+                    return VcalmCreatePresentationRequest.Malformed();
+                }
+
+                VcalmParseFailure optionsFailure = TryParseCreatePresentationOptions(
+                    root, out VcalmCreatePresentationOptions parsedOptions);
+                if(optionsFailure == VcalmParseFailure.UnknownOption)
+                {
+                    return VcalmCreatePresentationRequest.UnknownOption();
+                }
+
+                //Section 3.5.2: "The document MAY include an embedded proof." This holder processes none, so the
+                //presence of a proof member is recorded from the raw JSON: the presentation reader drops a
+                //JSON null member, which the typed presentation then cannot show.
+                bool hasProofMember = presentationElement.TryGetProperty(VcalmParameterNames.Proof, out _);
+
+                string presentationJson = presentationElement.GetRawText();
+                VerifiablePresentation? presentation = TryDeserialize<VerifiablePresentation>(presentationJson, options);
+                if(presentation is null)
+                {
+                    return VcalmCreatePresentationRequest.Malformed();
+                }
+
+                return new VcalmCreatePresentationRequest
+                {
+                    Presentation = presentation,
+                    PresentationId = presentation.Id,
+                    Options = parsedOptions,
+                    HasProofMember = hasProofMember
+                };
+            }
+            catch(InvalidOperationException)
             {
+                //RFC 8259 Section 8.2 lets a member name or a string value carry an escape that spells no Unicode
+                //string, such as an unpaired surrogate. The reader admits it, and reading it as a string throws: the
+                //body is a JSON text whose content is refused.
                 return VcalmCreatePresentationRequest.Malformed();
             }
-
-            VcalmParseFailure optionsFailure = TryParseCreatePresentationOptions(
-                root, out VcalmCreatePresentationOptions parsedOptions);
-            if(optionsFailure == VcalmParseFailure.UnknownOption)
-            {
-                return VcalmCreatePresentationRequest.UnknownOption();
-            }
-
-            //§3.5.2: "The document MAY include an embedded proof." This holder processes none, so the
-            //presence of a proof member is recorded from the raw JSON: the presentation reader drops a
-            //JSON null member, which the typed presentation then cannot show.
-            bool hasProofMember = presentationElement.TryGetProperty(VcalmParameterNames.Proof, out _);
-
-            string presentationJson = presentationElement.GetRawText();
-            VerifiablePresentation? presentation = TryDeserialize<VerifiablePresentation>(presentationJson, options);
-            if(presentation is null)
-            {
-                return VcalmCreatePresentationRequest.Malformed();
-            }
-
-            return new VcalmCreatePresentationRequest
-            {
-                Presentation = presentation,
-                PresentationId = presentation.Id,
-                Options = parsedOptions,
-                HasProofMember = hasProofMember
-            };
         }
     }
 
@@ -1321,76 +1393,86 @@ public static class VcalmJsonParsing
         }
         catch(JsonException)
         {
-            return VcalmUpdateStatusRequest.Malformed();
+            return VcalmUpdateStatusRequest.Unparseable();
         }
 
         using(doc)
         {
-            JsonElement root = doc.RootElement;
-            if(root.ValueKind != JsonValueKind.Object)
+            try
             {
-                return VcalmUpdateStatusRequest.Malformed();
-            }
-
-            //§2.4: reject an unrecognized top-level member. The §C.3 body has exactly credentialId,
-            //credentialStatus, status, and the optional indexAllocator. A member name repeated
-            //(RFC 8259 §4) is refused the same way rather than resolved to whichever occurrence a later
-            //lookup would find.
-            HashSet<string> seenMemberNames = new(StringComparer.Ordinal);
-            foreach(JsonProperty property in root.EnumerateObject())
-            {
-                if((!string.Equals(property.Name, VcalmParameterNames.CredentialId, StringComparison.Ordinal)
-                    && !string.Equals(property.Name, VcalmParameterNames.CredentialStatus, StringComparison.Ordinal)
-                    && !string.Equals(property.Name, VcalmParameterNames.Status, StringComparison.Ordinal)
-                    && !string.Equals(property.Name, VcalmParameterNames.IndexAllocator, StringComparison.Ordinal))
-                    || !seenMemberNames.Add(property.Name))
+                JsonElement root = doc.RootElement;
+                if(root.ValueKind != JsonValueKind.Object)
                 {
                     return VcalmUpdateStatusRequest.Malformed();
                 }
-            }
 
-            if(!root.TryGetProperty(VcalmParameterNames.CredentialId, out JsonElement credentialIdElement)
-                || credentialIdElement.ValueKind != JsonValueKind.String)
+                //Section 2.4: reject an unrecognized top-level member. The Appendix C.3 body has exactly credentialId,
+                //credentialStatus, status, and the optional indexAllocator. A member name repeated
+                //(RFC 8259 Section 4) is refused the same way rather than resolved to whichever occurrence a later
+                //lookup would find.
+                HashSet<string> seenMemberNames = new(StringComparer.Ordinal);
+                foreach(JsonProperty property in root.EnumerateObject())
+                {
+                    if((!string.Equals(property.Name, VcalmParameterNames.CredentialId, StringComparison.Ordinal)
+                        && !string.Equals(property.Name, VcalmParameterNames.CredentialStatus, StringComparison.Ordinal)
+                        && !string.Equals(property.Name, VcalmParameterNames.Status, StringComparison.Ordinal)
+                        && !string.Equals(property.Name, VcalmParameterNames.IndexAllocator, StringComparison.Ordinal))
+                        || !seenMemberNames.Add(property.Name))
+                    {
+                        return VcalmUpdateStatusRequest.Malformed();
+                    }
+                }
+
+                if(!root.TryGetProperty(VcalmParameterNames.CredentialId, out JsonElement credentialIdElement)
+                    || credentialIdElement.ValueKind != JsonValueKind.String)
+                {
+                    return VcalmUpdateStatusRequest.Malformed();
+                }
+
+                if(!root.TryGetProperty(VcalmParameterNames.CredentialStatus, out JsonElement statusEntryElement)
+                    || statusEntryElement.ValueKind != JsonValueKind.Object)
+                {
+                    return VcalmUpdateStatusRequest.Malformed();
+                }
+
+                if(!root.TryGetProperty(VcalmParameterNames.Status, out JsonElement statusElement)
+                    || statusElement.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                {
+                    return VcalmUpdateStatusRequest.Malformed();
+                }
+
+                VcalmParseFailure entryFailure = TryParseStatusEntry(
+                    statusEntryElement, out BitstringStatusListEntry? entry);
+                if(entryFailure == VcalmParseFailure.UnknownOption)
+                {
+                    return VcalmUpdateStatusRequest.UnknownOption();
+                }
+
+                if(entry is null)
+                {
+                    return VcalmUpdateStatusRequest.Malformed();
+                }
+
+                string? indexAllocator = root.TryGetProperty(VcalmParameterNames.IndexAllocator, out JsonElement allocatorElement)
+                    && allocatorElement.ValueKind == JsonValueKind.String
+                    ? allocatorElement.GetString()
+                    : null;
+
+                return new VcalmUpdateStatusRequest
+                {
+                    CredentialId = credentialIdElement.GetString(),
+                    Entry = entry,
+                    Status = statusElement.ValueKind == JsonValueKind.True,
+                    IndexAllocator = indexAllocator
+                };
+            }
+            catch(InvalidOperationException)
             {
+                //RFC 8259 Section 8.2 lets a member name or a string value carry an escape that spells no Unicode
+                //string, such as an unpaired surrogate. The reader admits it, and reading it as a string throws: the
+                //body is a JSON text whose content is refused.
                 return VcalmUpdateStatusRequest.Malformed();
             }
-
-            if(!root.TryGetProperty(VcalmParameterNames.CredentialStatus, out JsonElement statusEntryElement)
-                || statusEntryElement.ValueKind != JsonValueKind.Object)
-            {
-                return VcalmUpdateStatusRequest.Malformed();
-            }
-
-            if(!root.TryGetProperty(VcalmParameterNames.Status, out JsonElement statusElement)
-                || statusElement.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
-            {
-                return VcalmUpdateStatusRequest.Malformed();
-            }
-
-            VcalmParseFailure entryFailure = TryParseStatusEntry(
-                statusEntryElement, out BitstringStatusListEntry? entry);
-            if(entryFailure == VcalmParseFailure.UnknownOption)
-            {
-                return VcalmUpdateStatusRequest.UnknownOption();
-            }
-
-            if(entry is null)
-            {
-                return VcalmUpdateStatusRequest.Malformed();
-            }
-
-            string? indexAllocator = root.TryGetProperty(VcalmParameterNames.IndexAllocator, out JsonElement allocatorElement)
-                && allocatorElement.ValueKind == JsonValueKind.String
-                ? allocatorElement.GetString()
-                : null;
-
-            return new VcalmUpdateStatusRequest
-            {
-                CredentialId = credentialIdElement.GetString(),
-                Entry = entry,
-                Status = statusElement.ValueKind == JsonValueKind.True,
-                IndexAllocator = indexAllocator
-            };
         }
     }
 
@@ -1489,64 +1571,74 @@ public static class VcalmJsonParsing
         }
         catch(JsonException)
         {
-            return VcalmCreateStatusListRequest.Malformed();
+            return VcalmCreateStatusListRequest.Unparseable();
         }
 
         using(doc)
         {
-            JsonElement root = doc.RootElement;
-            if(root.ValueKind != JsonValueKind.Object)
+            try
             {
-                return VcalmCreateStatusListRequest.Malformed();
-            }
-
-            //§2.4: reject an unrecognized top-level member. The §C.1 body has exactly statusPurpose,
-            //the optional id, and the optional options. A member name repeated (RFC 8259 §4) is refused
-            //the same way rather than resolved to whichever occurrence a later lookup would find.
-            HashSet<string> seenMemberNames = new(StringComparer.Ordinal);
-            foreach(JsonProperty property in root.EnumerateObject())
-            {
-                if((!string.Equals(property.Name, VcalmParameterNames.StatusPurpose, StringComparison.Ordinal)
-                    && !string.Equals(property.Name, VcalmParameterNames.Id, StringComparison.Ordinal)
-                    && !string.Equals(property.Name, VcalmParameterNames.Options, StringComparison.Ordinal))
-                    || !seenMemberNames.Add(property.Name))
+                JsonElement root = doc.RootElement;
+                if(root.ValueKind != JsonValueKind.Object)
                 {
                     return VcalmCreateStatusListRequest.Malformed();
                 }
-            }
 
-            if(!root.TryGetProperty(VcalmParameterNames.StatusPurpose, out JsonElement purposeElement)
-                || purposeElement.ValueKind != JsonValueKind.String)
+                //Section 2.4: reject an unrecognized top-level member. The Appendix C.1 body has exactly statusPurpose,
+                //the optional id, and the optional options. A member name repeated (RFC 8259 Section 4) is refused
+                //the same way rather than resolved to whichever occurrence a later lookup would find.
+                HashSet<string> seenMemberNames = new(StringComparer.Ordinal);
+                foreach(JsonProperty property in root.EnumerateObject())
+                {
+                    if((!string.Equals(property.Name, VcalmParameterNames.StatusPurpose, StringComparison.Ordinal)
+                        && !string.Equals(property.Name, VcalmParameterNames.Id, StringComparison.Ordinal)
+                        && !string.Equals(property.Name, VcalmParameterNames.Options, StringComparison.Ordinal))
+                        || !seenMemberNames.Add(property.Name))
+                    {
+                        return VcalmCreateStatusListRequest.Malformed();
+                    }
+                }
+
+                if(!root.TryGetProperty(VcalmParameterNames.StatusPurpose, out JsonElement purposeElement)
+                    || purposeElement.ValueKind != JsonValueKind.String)
+                {
+                    return VcalmCreateStatusListRequest.Malformed();
+                }
+
+                //Appendix C.1 options is an open object on the wire; an options value that is not an object is the
+                //Section 2.4 unknown-option case, but the Appendix C.1 endpoint defines no options members of its own, so
+                //any present member is unknown.
+                if(root.TryGetProperty(VcalmParameterNames.Options, out JsonElement optionsElement))
+                {
+                    if(optionsElement.ValueKind != JsonValueKind.Object)
+                    {
+                        return VcalmCreateStatusListRequest.UnknownOption();
+                    }
+
+                    foreach(JsonProperty _ in optionsElement.EnumerateObject())
+                    {
+                        return VcalmCreateStatusListRequest.UnknownOption();
+                    }
+                }
+
+                string? id = root.TryGetProperty(VcalmParameterNames.Id, out JsonElement idElement)
+                    && idElement.ValueKind == JsonValueKind.String
+                    ? idElement.GetString()
+                    : null;
+
+                return new VcalmCreateStatusListRequest
+                {
+                    StatusPurpose = purposeElement.GetString(),
+                    Id = id
+                };
+            }
+            catch(InvalidOperationException)
             {
+                //RFC 8259 Section 8.2 lets a member name or a string value carry an escape that spells no Unicode
+                //string, such as an unpaired surrogate. The reader admits it, and reading it as a string throws: the
+                //body is a JSON text whose content is refused.
                 return VcalmCreateStatusListRequest.Malformed();
             }
-
-            //§C.1 options is an open object on the wire; an options value that is not an object is the
-            //§2.4 unknown-option case, but the §C.1 endpoint defines no options members of its own, so
-            //any present member is unknown.
-            if(root.TryGetProperty(VcalmParameterNames.Options, out JsonElement optionsElement))
-            {
-                if(optionsElement.ValueKind != JsonValueKind.Object)
-                {
-                    return VcalmCreateStatusListRequest.UnknownOption();
-                }
-
-                foreach(JsonProperty _ in optionsElement.EnumerateObject())
-                {
-                    return VcalmCreateStatusListRequest.UnknownOption();
-                }
-            }
-
-            string? id = root.TryGetProperty(VcalmParameterNames.Id, out JsonElement idElement)
-                && idElement.ValueKind == JsonValueKind.String
-                ? idElement.GetString()
-                : null;
-
-            return new VcalmCreateStatusListRequest
-            {
-                StatusPurpose = purposeElement.GetString(),
-                Id = id
-            };
         }
     }
 
@@ -1582,76 +1674,86 @@ public static class VcalmJsonParsing
         }
         catch(JsonException)
         {
-            return VcalmVerifyCredentialRequest.Malformed();
+            return VcalmVerifyCredentialRequest.Unparseable();
         }
 
         using(doc)
         {
-            JsonElement root = doc.RootElement;
-            if(root.ValueKind != JsonValueKind.Object)
+            try
             {
-                return VcalmVerifyCredentialRequest.Malformed();
-            }
-
-            //§2.4: reject an unrecognized top-level member. The §3.3.1 body has exactly
-            //verifiableCredential and options. A member name repeated (RFC 8259 §4) is refused the same
-            //way rather than resolved to whichever occurrence a later lookup would find.
-            HashSet<string> seenMemberNames = new(StringComparer.Ordinal);
-            foreach(JsonProperty property in root.EnumerateObject())
-            {
-                if((!string.Equals(property.Name, VcalmParameterNames.VerifiableCredential, StringComparison.Ordinal)
-                    && !string.Equals(property.Name, VcalmParameterNames.Options, StringComparison.Ordinal))
-                    || !seenMemberNames.Add(property.Name))
-                {
-                    return VcalmVerifyCredentialRequest.Malformed();
-                }
-            }
-
-            if(!root.TryGetProperty(VcalmParameterNames.VerifiableCredential, out JsonElement credentialElement)
-                || credentialElement.ValueKind != JsonValueKind.Object)
-            {
-                return VcalmVerifyCredentialRequest.Malformed();
-            }
-
-            VcalmParseFailure optionsFailure = TryParseOptions(root, VcalmVerifyOptionsSubject.Credential, out VcalmVerifyOptions parsedOptions);
-            if(optionsFailure == VcalmParseFailure.UnknownOption)
-            {
-                return VcalmVerifyCredentialRequest.UnknownOption();
-            }
-
-            string credentialJson = credentialElement.GetRawText();
-
-            //An EnvelopedVerifiableCredential is discriminated by its EnvelopedVerifiableCredential
-            //type and a data: URL id; otherwise it is an embedded (possibly proofed) credential.
-            if(IsEnvelopedCredential(credentialElement))
-            {
-                EnvelopedVerifiableCredential? enveloped = TryDeserialize<EnvelopedVerifiableCredential>(
-                    credentialJson, options);
-                if(enveloped is null)
+                JsonElement root = doc.RootElement;
+                if(root.ValueKind != JsonValueKind.Object)
                 {
                     return VcalmVerifyCredentialRequest.Malformed();
                 }
 
+                //Section 2.4: reject an unrecognized top-level member. The Section 3.3.1 body has exactly
+                //verifiableCredential and options. A member name repeated (RFC 8259 Section 4) is refused the same
+                //way rather than resolved to whichever occurrence a later lookup would find.
+                HashSet<string> seenMemberNames = new(StringComparer.Ordinal);
+                foreach(JsonProperty property in root.EnumerateObject())
+                {
+                    if((!string.Equals(property.Name, VcalmParameterNames.VerifiableCredential, StringComparison.Ordinal)
+                        && !string.Equals(property.Name, VcalmParameterNames.Options, StringComparison.Ordinal))
+                        || !seenMemberNames.Add(property.Name))
+                    {
+                        return VcalmVerifyCredentialRequest.Malformed();
+                    }
+                }
+
+                if(!root.TryGetProperty(VcalmParameterNames.VerifiableCredential, out JsonElement credentialElement)
+                    || credentialElement.ValueKind != JsonValueKind.Object)
+                {
+                    return VcalmVerifyCredentialRequest.Malformed();
+                }
+
+                VcalmParseFailure optionsFailure = TryParseOptions(root, VcalmVerifyOptionsSubject.Credential, out VcalmVerifyOptions parsedOptions);
+                if(optionsFailure == VcalmParseFailure.UnknownOption)
+                {
+                    return VcalmVerifyCredentialRequest.UnknownOption();
+                }
+
+                string credentialJson = credentialElement.GetRawText();
+
+                //An EnvelopedVerifiableCredential is discriminated by its EnvelopedVerifiableCredential
+                //type and a data: URL id; otherwise it is an embedded (possibly proofed) credential.
+                if(IsEnvelopedCredential(credentialElement))
+                {
+                    EnvelopedVerifiableCredential? enveloped = TryDeserialize<EnvelopedVerifiableCredential>(
+                        credentialJson, options);
+                    if(enveloped is null)
+                    {
+                        return VcalmVerifyCredentialRequest.Malformed();
+                    }
+
+                    return new VcalmVerifyCredentialRequest
+                    {
+                        EnvelopedCredential = enveloped,
+                        CredentialJson = credentialJson,
+                        Options = parsedOptions
+                    };
+                }
+
+                VerifiableCredential? credential = TryDeserialize<VerifiableCredential>(credentialJson, options);
+
+                //The converter upcasts a credential carrying a proof member to the secured subtype; a
+                //credential with no embedded proof deserializes to the open base type, which the verifier
+                //treats as a cryptographic error (no proof to verify) rather than a parse failure.
                 return new VcalmVerifyCredentialRequest
                 {
-                    EnvelopedCredential = enveloped,
+                    DataIntegrityCredential = credential as DataIntegritySecuredCredential
+                        ?? AsUnproofedSecured(credential),
                     CredentialJson = credentialJson,
                     Options = parsedOptions
                 };
             }
-
-            VerifiableCredential? credential = TryDeserialize<VerifiableCredential>(credentialJson, options);
-
-            //The converter upcasts a credential carrying a proof member to the secured subtype; a
-            //credential with no embedded proof deserializes to the open base type, which the verifier
-            //treats as a cryptographic error (no proof to verify) rather than a parse failure.
-            return new VcalmVerifyCredentialRequest
+            catch(InvalidOperationException)
             {
-                DataIntegrityCredential = credential as DataIntegritySecuredCredential
-                    ?? AsUnproofedSecured(credential),
-                CredentialJson = credentialJson,
-                Options = parsedOptions
-            };
+                //RFC 8259 Section 8.2 lets a member name or a string value carry an escape that spells no Unicode
+                //string, such as an unpaired surrogate. The reader admits it, and reading it as a string throws: the
+                //body is a JSON text whose content is refused.
+                return VcalmVerifyCredentialRequest.Malformed();
+            }
         }
     }
 
@@ -1667,127 +1769,137 @@ public static class VcalmJsonParsing
         }
         catch(JsonException)
         {
-            return VcalmVerifyPresentationRequest.Malformed();
+            return VcalmVerifyPresentationRequest.Unparseable();
         }
 
         using(doc)
         {
-            JsonElement root = doc.RootElement;
-            if(root.ValueKind != JsonValueKind.Object)
+            try
             {
-                return VcalmVerifyPresentationRequest.Malformed();
-            }
-
-            //§2.4: reject an unrecognized top-level member. The §3.3.2 body carries one of
-            //verifiablePresentation / presentation, plus options. A member name repeated (RFC 8259 §4)
-            //is refused the same way rather than resolved to whichever occurrence a later lookup would
-            //find — including a second copy of the SAME member name, which the presence checks below
-            //cannot see on their own.
-            HashSet<string> seenMemberNames = new(StringComparer.Ordinal);
-            foreach(JsonProperty property in root.EnumerateObject())
-            {
-                if((!string.Equals(property.Name, VcalmParameterNames.VerifiablePresentation, StringComparison.Ordinal)
-                    && !string.Equals(property.Name, VcalmParameterNames.Presentation, StringComparison.Ordinal)
-                    && !string.Equals(property.Name, VcalmParameterNames.Options, StringComparison.Ordinal))
-                    || !seenMemberNames.Add(property.Name))
-                {
-                    return VcalmVerifyPresentationRequest.Malformed();
-                }
-            }
-
-            VcalmParseFailure optionsFailure = TryParseOptions(root, VcalmVerifyOptionsSubject.Presentation, out VcalmVerifyOptions parsedOptions);
-            if(optionsFailure == VcalmParseFailure.UnknownOption)
-            {
-                return VcalmVerifyPresentationRequest.UnknownOption();
-            }
-
-            //The §3.3.2 unproofed alternative uses the presentation member; the proofed / enveloped
-            //alternatives use verifiablePresentation. §3.3.2 exposes exactly one of the two per request:
-            //a body naming both, or naming either with a value that is not the object each alternative's
-            //own form requires, is data this endpoint does not know how to process (§2.4, A919-920)
-            //rather than a member silently dropped in favour of the other.
-            bool isUnproofedPresent = root.TryGetProperty(VcalmParameterNames.Presentation, out JsonElement unproofedElement);
-            bool isVpPresent = root.TryGetProperty(VcalmParameterNames.VerifiablePresentation, out JsonElement vpElement);
-
-            if(isUnproofedPresent && isVpPresent)
-            {
-                return VcalmVerifyPresentationRequest.Malformed();
-            }
-
-            if(isUnproofedPresent)
-            {
-                if(unproofedElement.ValueKind != JsonValueKind.Object)
+                JsonElement root = doc.RootElement;
+                if(root.ValueKind != JsonValueKind.Object)
                 {
                     return VcalmVerifyPresentationRequest.Malformed();
                 }
 
-                string unproofedJson = unproofedElement.GetRawText();
-                VerifiablePresentation? presentation = TryDeserialize<VerifiablePresentation>(unproofedJson, options);
-                if(presentation is null)
+                //Section 2.4: reject an unrecognized top-level member. The Section 3.3.2 body carries one of
+                //verifiablePresentation / presentation, plus options. A member name repeated (RFC 8259 Section 4)
+                //is refused the same way rather than resolved to whichever occurrence a later lookup would
+                //find, including a second copy of the SAME member name, which the presence checks below
+                //cannot see on their own.
+                HashSet<string> seenMemberNames = new(StringComparer.Ordinal);
+                foreach(JsonProperty property in root.EnumerateObject())
+                {
+                    if((!string.Equals(property.Name, VcalmParameterNames.VerifiablePresentation, StringComparison.Ordinal)
+                        && !string.Equals(property.Name, VcalmParameterNames.Presentation, StringComparison.Ordinal)
+                        && !string.Equals(property.Name, VcalmParameterNames.Options, StringComparison.Ordinal))
+                        || !seenMemberNames.Add(property.Name))
+                    {
+                        return VcalmVerifyPresentationRequest.Malformed();
+                    }
+                }
+
+                VcalmParseFailure optionsFailure = TryParseOptions(root, VcalmVerifyOptionsSubject.Presentation, out VcalmVerifyOptions parsedOptions);
+                if(optionsFailure == VcalmParseFailure.UnknownOption)
+                {
+                    return VcalmVerifyPresentationRequest.UnknownOption();
+                }
+
+                //The Section 3.3.2 unproofed alternative uses the presentation member; the proofed / enveloped
+                //alternatives use verifiablePresentation. Section 3.3.2 exposes exactly one of the two per request:
+                //a body naming both, or naming either with a value that is not the object each alternative's
+                //own form requires, is data this endpoint does not know how to process (Section 2.4, A919-920)
+                //rather than a member silently dropped in favour of the other.
+                bool isUnproofedPresent = root.TryGetProperty(VcalmParameterNames.Presentation, out JsonElement unproofedElement);
+                bool isVpPresent = root.TryGetProperty(VcalmParameterNames.VerifiablePresentation, out JsonElement vpElement);
+
+                if(isUnproofedPresent && isVpPresent)
                 {
                     return VcalmVerifyPresentationRequest.Malformed();
+                }
+
+                if(isUnproofedPresent)
+                {
+                    if(unproofedElement.ValueKind != JsonValueKind.Object)
+                    {
+                        return VcalmVerifyPresentationRequest.Malformed();
+                    }
+
+                    string unproofedJson = unproofedElement.GetRawText();
+                    VerifiablePresentation? presentation = TryDeserialize<VerifiablePresentation>(unproofedJson, options);
+                    if(presentation is null)
+                    {
+                        return VcalmVerifyPresentationRequest.Malformed();
+                    }
+
+                    return new VcalmVerifyPresentationRequest
+                    {
+                        UnproofedPresentation = presentation,
+                        PresentationJson = unproofedJson,
+                        Options = parsedOptions
+                    };
+                }
+
+                if(!isVpPresent || vpElement.ValueKind != JsonValueKind.Object)
+                {
+                    return VcalmVerifyPresentationRequest.Malformed();
+                }
+
+                string presentationJson = vpElement.GetRawText();
+
+                if(IsEnvelopedPresentation(vpElement))
+                {
+                    EnvelopedVerifiablePresentation? enveloped =
+                        TryDeserialize<EnvelopedVerifiablePresentation>(presentationJson, options);
+                    if(enveloped is null)
+                    {
+                        return VcalmVerifyPresentationRequest.Malformed();
+                    }
+
+                    return new VcalmVerifyPresentationRequest
+                    {
+                        EnvelopedPresentation = enveloped,
+                        PresentationJson = presentationJson,
+                        Options = parsedOptions
+                    };
+                }
+
+                VerifiablePresentation? parsed = TryDeserialize<VerifiablePresentation>(presentationJson, options);
+                if(parsed is null)
+                {
+                    return VcalmVerifyPresentationRequest.Malformed();
+                }
+
+                //The converter upcasts a presentation carrying a proof member to the secured subtype. Section 3.3.2
+                //reserves the verifiablePresentation member for the SECURED form, a Data Integrity proof
+                //(here) or an EnvelopedVerifiablePresentation (handled above). A verifiablePresentation that
+                //carries NEITHER is not a secured presentation: it is a Section 3.8.1 cryptographic ERROR
+                //(verified:false), NOT the unproofed alternative, that form has its own 'presentation'
+                //member. (Mirrors a proof-less verifiableCredential, which is likewise an ERROR.)
+                if(parsed is DataIntegritySecuredPresentation secured)
+                {
+                    return new VcalmVerifyPresentationRequest
+                    {
+                        DataIntegrityPresentation = secured,
+                        PresentationJson = presentationJson,
+                        Options = parsedOptions
+                    };
                 }
 
                 return new VcalmVerifyPresentationRequest
                 {
-                    UnproofedPresentation = presentation,
-                    PresentationJson = unproofedJson,
-                    Options = parsedOptions
-                };
-            }
-
-            if(!isVpPresent || vpElement.ValueKind != JsonValueKind.Object)
-            {
-                return VcalmVerifyPresentationRequest.Malformed();
-            }
-
-            string presentationJson = vpElement.GetRawText();
-
-            if(IsEnvelopedPresentation(vpElement))
-            {
-                EnvelopedVerifiablePresentation? enveloped =
-                    TryDeserialize<EnvelopedVerifiablePresentation>(presentationJson, options);
-                if(enveloped is null)
-                {
-                    return VcalmVerifyPresentationRequest.Malformed();
-                }
-
-                return new VcalmVerifyPresentationRequest
-                {
-                    EnvelopedPresentation = enveloped,
+                    UnsecuredVerifiablePresentation = parsed,
                     PresentationJson = presentationJson,
                     Options = parsedOptions
                 };
             }
-
-            VerifiablePresentation? parsed = TryDeserialize<VerifiablePresentation>(presentationJson, options);
-            if(parsed is null)
+            catch(InvalidOperationException)
             {
+                //RFC 8259 Section 8.2 lets a member name or a string value carry an escape that spells no Unicode
+                //string, such as an unpaired surrogate. The reader admits it, and reading it as a string throws: the
+                //body is a JSON text whose content is refused.
                 return VcalmVerifyPresentationRequest.Malformed();
             }
-
-            //The converter upcasts a presentation carrying a proof member to the secured subtype. §3.3.2
-            //reserves the verifiablePresentation member for the SECURED form — a Data Integrity proof
-            //(here) or an EnvelopedVerifiablePresentation (handled above). A verifiablePresentation that
-            //carries NEITHER is not a secured presentation: it is a §3.8.1 cryptographic ERROR
-            //(verified:false), NOT the unproofed alternative — that form has its own 'presentation'
-            //member. (Mirrors a proof-less verifiableCredential, which is likewise an ERROR.)
-            if(parsed is DataIntegritySecuredPresentation secured)
-            {
-                return new VcalmVerifyPresentationRequest
-                {
-                    DataIntegrityPresentation = secured,
-                    PresentationJson = presentationJson,
-                    Options = parsedOptions
-                };
-            }
-
-            return new VcalmVerifyPresentationRequest
-            {
-                UnsecuredVerifiablePresentation = parsed,
-                PresentationJson = presentationJson,
-                Options = parsedOptions
-            };
         }
     }
 
@@ -2112,53 +2224,63 @@ public static class VcalmJsonParsing
         }
         catch(JsonException)
         {
-            return VcalmCreateExchangeRequest.Malformed();
+            return VcalmCreateExchangeRequest.Unparseable();
         }
 
         using(doc)
         {
-            JsonElement root = doc.RootElement;
-            if(root.ValueKind != JsonValueKind.Object)
+            try
             {
+                JsonElement root = doc.RootElement;
+                if(root.ValueKind != JsonValueKind.Object)
+                {
+                    return VcalmCreateExchangeRequest.Malformed();
+                }
+
+                //Section 2.4: reject an unrecognized top-level member. Section 3.6.3 carries exactly expires, variables,
+                //and openId. A member name repeated (RFC 8259 Section 4) is refused the same way rather than
+                //resolved to whichever occurrence a later lookup would find.
+                HashSet<string> seenMemberNames = new(StringComparer.Ordinal);
+                foreach(JsonProperty property in root.EnumerateObject())
+                {
+                    if((!string.Equals(property.Name, VcalmParameterNames.Expires, StringComparison.Ordinal)
+                        && !string.Equals(property.Name, VcalmParameterNames.Variables, StringComparison.Ordinal)
+                        && !string.Equals(property.Name, VcalmParameterNames.OpenId, StringComparison.Ordinal))
+                        || !seenMemberNames.Add(property.Name))
+                    {
+                        return VcalmCreateExchangeRequest.UnknownOption();
+                    }
+                }
+
+                string? expires = root.TryGetProperty(VcalmParameterNames.Expires, out JsonElement expiresElement)
+                    && expiresElement.ValueKind == JsonValueKind.String
+                    ? expiresElement.GetString()
+                    : null;
+
+                string? variablesJson = root.TryGetProperty(VcalmParameterNames.Variables, out JsonElement variablesElement)
+                    && variablesElement.ValueKind == JsonValueKind.Object
+                    ? variablesElement.GetRawText()
+                    : null;
+
+                string? openIdJson = root.TryGetProperty(VcalmParameterNames.OpenId, out JsonElement openIdElement)
+                    && openIdElement.ValueKind == JsonValueKind.Object
+                    ? openIdElement.GetRawText()
+                    : null;
+
+                return new VcalmCreateExchangeRequest
+                {
+                    Expires = expires,
+                    VariablesJson = variablesJson,
+                    OpenIdJson = openIdJson
+                };
+            }
+            catch(InvalidOperationException)
+            {
+                //RFC 8259 Section 8.2 lets a member name or a string value carry an escape that spells no Unicode
+                //string, such as an unpaired surrogate. The reader admits it, and reading it as a string throws: the
+                //body is a JSON text whose content is refused.
                 return VcalmCreateExchangeRequest.Malformed();
             }
-
-            //§2.4: reject an unrecognized top-level member. §3.6.3 carries exactly expires, variables,
-            //and openId. A member name repeated (RFC 8259 §4) is refused the same way rather than
-            //resolved to whichever occurrence a later lookup would find.
-            HashSet<string> seenMemberNames = new(StringComparer.Ordinal);
-            foreach(JsonProperty property in root.EnumerateObject())
-            {
-                if((!string.Equals(property.Name, VcalmParameterNames.Expires, StringComparison.Ordinal)
-                    && !string.Equals(property.Name, VcalmParameterNames.Variables, StringComparison.Ordinal)
-                    && !string.Equals(property.Name, VcalmParameterNames.OpenId, StringComparison.Ordinal))
-                    || !seenMemberNames.Add(property.Name))
-                {
-                    return VcalmCreateExchangeRequest.UnknownOption();
-                }
-            }
-
-            string? expires = root.TryGetProperty(VcalmParameterNames.Expires, out JsonElement expiresElement)
-                && expiresElement.ValueKind == JsonValueKind.String
-                ? expiresElement.GetString()
-                : null;
-
-            string? variablesJson = root.TryGetProperty(VcalmParameterNames.Variables, out JsonElement variablesElement)
-                && variablesElement.ValueKind == JsonValueKind.Object
-                ? variablesElement.GetRawText()
-                : null;
-
-            string? openIdJson = root.TryGetProperty(VcalmParameterNames.OpenId, out JsonElement openIdElement)
-                && openIdElement.ValueKind == JsonValueKind.Object
-                ? openIdElement.GetRawText()
-                : null;
-
-            return new VcalmCreateExchangeRequest
-            {
-                Expires = expires,
-                VariablesJson = variablesJson,
-                OpenIdJson = openIdJson
-            };
         }
     }
 
@@ -2193,84 +2315,94 @@ public static class VcalmJsonParsing
         }
         catch(JsonException)
         {
-            return VcalmExchangeMessage.Malformed();
+            return VcalmExchangeMessage.Unparseable();
         }
 
         using(doc)
         {
-            JsonElement root = doc.RootElement;
-            if(root.ValueKind != JsonValueKind.Object)
+            try
             {
-                return VcalmExchangeMessage.Malformed();
-            }
-
-            //§3.6 / §2.4: reject an unrecognized top-level member. A member name repeated (RFC 8259 §4)
-            //is refused the same way rather than resolved to whichever occurrence a later lookup would
-            //find.
-            HashSet<string> seenMemberNames = new(StringComparer.Ordinal);
-            foreach(JsonProperty property in root.EnumerateObject())
-            {
-                if((!string.Equals(property.Name, VcalmParameterNames.VerifiablePresentation, StringComparison.Ordinal)
-                    && !string.Equals(property.Name, VcalmParameterNames.VerifiablePresentationRequest, StringComparison.Ordinal)
-                    && !string.Equals(property.Name, VcalmParameterNames.RedirectUrl, StringComparison.Ordinal)
-                    && !string.Equals(property.Name, VcalmParameterNames.ReferenceId, StringComparison.Ordinal))
-                    || !seenMemberNames.Add(property.Name))
-                {
-                    return VcalmExchangeMessage.Malformed();
-                }
-            }
-
-            //§2.4: a present member of a shape this parser cannot process refuses the message rather than
-            //reading as absent, which would turn it into the empty initiating message.
-            if(!TryReadOptionalMember(root, VcalmParameterNames.VerifiablePresentation, JsonValueKind.Object, out JsonElement? vpElement)
-                || !TryReadOptionalMember(root, VcalmParameterNames.VerifiablePresentationRequest, JsonValueKind.Object, out JsonElement? vprElement)
-                || !TryReadOptionalMember(root, VcalmParameterNames.RedirectUrl, JsonValueKind.String, out JsonElement? redirectElement)
-                || !TryReadOptionalMember(root, VcalmParameterNames.ReferenceId, JsonValueKind.String, out JsonElement? referenceElement))
-            {
-                return VcalmExchangeMessage.Malformed();
-            }
-
-            DataIntegritySecuredPresentation? presentation = null;
-            string? presentationJson = null;
-            if(vpElement is JsonElement presentationElement)
-            {
-                presentationJson = presentationElement.GetRawText();
-                VerifiablePresentation? parsed = TryDeserialize<VerifiablePresentation>(presentationJson, options);
-
-                //§3.6.5: a presented verifiablePresentation must be a proofed presentation for the
-                //engine to verify it against the bound challenge / domain. The converter upcasts a
-                //presentation carrying a proof to the secured subtype; one without a proof cannot be
-                //verified and is a malformed vcapi message.
-                if(parsed is not DataIntegritySecuredPresentation secured)
+                JsonElement root = doc.RootElement;
+                if(root.ValueKind != JsonValueKind.Object)
                 {
                     return VcalmExchangeMessage.Malformed();
                 }
 
-                presentation = secured;
-            }
-
-            VerifiablePresentationRequest? vpr = null;
-            if(vprElement is JsonElement presentationRequestElement)
-            {
-                vpr = VcalmPresentationRequestJsonParsing.Parse(presentationRequestElement.GetRawText(), options);
-                if(vpr.Failure != VcalmParseFailure.None)
+                //Section 3.6 / Section 2.4: reject an unrecognized top-level member. A member name repeated (RFC 8259 Section 4)
+                //is refused the same way rather than resolved to whichever occurrence a later lookup would
+                //find.
+                HashSet<string> seenMemberNames = new(StringComparer.Ordinal);
+                foreach(JsonProperty property in root.EnumerateObject())
                 {
-                    return vpr.Failure switch
+                    if((!string.Equals(property.Name, VcalmParameterNames.VerifiablePresentation, StringComparison.Ordinal)
+                        && !string.Equals(property.Name, VcalmParameterNames.VerifiablePresentationRequest, StringComparison.Ordinal)
+                        && !string.Equals(property.Name, VcalmParameterNames.RedirectUrl, StringComparison.Ordinal)
+                        && !string.Equals(property.Name, VcalmParameterNames.ReferenceId, StringComparison.Ordinal))
+                        || !seenMemberNames.Add(property.Name))
                     {
-                        VcalmParseFailure.UnknownOption => VcalmExchangeMessage.UnknownOption(),
-                        _ => VcalmExchangeMessage.Malformed()
-                    };
+                        return VcalmExchangeMessage.Malformed();
+                    }
                 }
-            }
 
-            return new VcalmExchangeMessage
+                //Section 2.4: a present member of a shape this parser cannot process refuses the message rather than
+                //reading as absent, which would turn it into the empty initiating message.
+                if(!TryReadOptionalMember(root, VcalmParameterNames.VerifiablePresentation, JsonValueKind.Object, out JsonElement? vpElement)
+                    || !TryReadOptionalMember(root, VcalmParameterNames.VerifiablePresentationRequest, JsonValueKind.Object, out JsonElement? vprElement)
+                    || !TryReadOptionalMember(root, VcalmParameterNames.RedirectUrl, JsonValueKind.String, out JsonElement? redirectElement)
+                    || !TryReadOptionalMember(root, VcalmParameterNames.ReferenceId, JsonValueKind.String, out JsonElement? referenceElement))
+                {
+                    return VcalmExchangeMessage.Malformed();
+                }
+
+                DataIntegritySecuredPresentation? presentation = null;
+                string? presentationJson = null;
+                if(vpElement is JsonElement presentationElement)
+                {
+                    presentationJson = presentationElement.GetRawText();
+                    VerifiablePresentation? parsed = TryDeserialize<VerifiablePresentation>(presentationJson, options);
+
+                    //Section 3.6.5: a presented verifiablePresentation must be a proofed presentation for the
+                    //engine to verify it against the bound challenge / domain. The converter upcasts a
+                    //presentation carrying a proof to the secured subtype; one without a proof cannot be
+                    //verified and is a malformed vcapi message.
+                    if(parsed is not DataIntegritySecuredPresentation secured)
+                    {
+                        return VcalmExchangeMessage.Malformed();
+                    }
+
+                    presentation = secured;
+                }
+
+                VerifiablePresentationRequest? vpr = null;
+                if(vprElement is JsonElement presentationRequestElement)
+                {
+                    vpr = VcalmPresentationRequestJsonParsing.Parse(presentationRequestElement.GetRawText(), options);
+                    if(vpr.Failure != VcalmParseFailure.None)
+                    {
+                        return vpr.Failure switch
+                        {
+                            VcalmParseFailure.UnknownOption => VcalmExchangeMessage.UnknownOption(),
+                            _ => VcalmExchangeMessage.Malformed()
+                        };
+                    }
+                }
+
+                return new VcalmExchangeMessage
+                {
+                    VerifiablePresentation = presentation,
+                    VerifiablePresentationJson = presentationJson,
+                    VerifiablePresentationRequest = vpr,
+                    RedirectUrl = redirectElement?.GetString(),
+                    ReferenceId = referenceElement?.GetString()
+                };
+            }
+            catch(InvalidOperationException)
             {
-                VerifiablePresentation = presentation,
-                VerifiablePresentationJson = presentationJson,
-                VerifiablePresentationRequest = vpr,
-                RedirectUrl = redirectElement?.GetString(),
-                ReferenceId = referenceElement?.GetString()
-            };
+                //RFC 8259 Section 8.2 lets a member name or a string value carry an escape that spells no Unicode
+                //string, such as an unpaired surrogate. The reader admits it, and reading it as a string throws: the
+                //body is a JSON text whose content is refused.
+                return VcalmExchangeMessage.Malformed();
+            }
         }
     }
 
