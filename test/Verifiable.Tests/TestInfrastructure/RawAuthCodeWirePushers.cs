@@ -371,13 +371,35 @@ internal static class RawAuthCodeWirePushers
     /// <param name="accessToken">The client-held registration credential.</param>
     /// <param name="json">The complete metadata replacement for PUT, or null.</param>
     /// <param name="cancellationToken">The bounded exchange lifetime.</param>
-    public static async Task<HttpResponseMessage> SendPinnedRegistrationAsync(
+    public static Task<HttpResponseMessage> SendPinnedRegistrationAsync(
         TestHostShell host, HttpMethod method, Uri uri, string accessToken,
+        string? json, CancellationToken cancellationToken) =>
+        SendPinnedRegistrationFieldAsync(
+            host, method, uri, $"{WellKnownAuthenticationSchemes.Bearer} {accessToken}", json, cancellationToken);
+
+
+    /// <summary>
+    /// Sends a registration management operation over the pinned listener with
+    /// <paramref name="authorization"/> as the whole value of its <c>Authorization</c> field, sent as
+    /// written, or with no such field when it is <see langword="null"/>.
+    /// </summary>
+    /// <param name="host">The fixture owning the certificate.</param>
+    /// <param name="method">The RFC 7592 management verb.</param>
+    /// <param name="uri">The registration management URI.</param>
+    /// <param name="authorization">The <c>Authorization</c> field value, or <see langword="null"/> for none.</param>
+    /// <param name="json">The complete metadata replacement for PUT, or null.</param>
+    /// <param name="cancellationToken">The bounded exchange lifetime.</param>
+    public static async Task<HttpResponseMessage> SendPinnedRegistrationFieldAsync(
+        TestHostShell host, HttpMethod method, Uri uri, string? authorization,
         string? json, CancellationToken cancellationToken)
     {
         using HttpClient client = LoopbackTls.CreateSingleHopPinnedHttpClient(host.ServerCertificate);
         using HttpRequestMessage request = new(method, uri);
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+        if(authorization is not null)
+        {
+            _ = request.Headers.TryAddWithoutValidation(WellKnownHttpHeaderNames.Authorization, authorization);
+        }
+
         if(json is not null)
         {
             request.Content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -385,6 +407,49 @@ internal static class RawAuthCodeWirePushers
 
         return await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
     }
+
+
+    /// <summary>
+    /// Registers a managed client through the host's global registration endpoint over the listener,
+    /// asserts the 201 and that no request fault was captured, and reads the client-held credential and
+    /// the client configuration URI from the response.
+    /// </summary>
+    /// <param name="host">The serving fixture; its default host's listener is started.</param>
+    /// <param name="cancellationToken">The bounded exchange lifetime.</param>
+    /// <returns>The issued client identifier, the registration access token and the client configuration URI.</returns>
+    public static async Task<(string ClientId, string AccessToken, Uri ManagementUri)> RegisterManagedClientAsync(
+        TestHostShell host, CancellationToken cancellationToken)
+    {
+        using HttpResponseMessage response = await SendPinnedJsonPostAsync(host,
+            new Uri(host.Host("default").HttpBaseAddress!, "/connect/register"),
+            "{\"client_name\":\"initial-client\",\"client_uri\":\"https://client.example.test/\",\"redirect_uris\":[\"https://client.example.test/callback\"],\"scope\":\"initial-scope\"}", cancellationToken).ConfigureAwait(false);
+        Exception[] faults = host.Host("default").ConsumeHttpFaults();
+        Assert.AreEqual(201, (int)response.StatusCode, "A committed registration must return HTTP 201.");
+        Assert.IsEmpty(faults, "Successful registration must have no unconsumed request faults.");
+        using JsonDocument body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
+
+        return (body.RootElement.GetProperty("client_id").GetString()!,
+            body.RootElement.GetProperty("registration_access_token").GetString()!,
+            new Uri(body.RootElement.GetProperty("registration_client_uri").GetString()!, UriKind.Absolute));
+    }
+
+
+    /// <summary>
+    /// The issuer the application's issuer resolver names for the client configuration rows of the clients
+    /// <see cref="RegisterManagedClientAsync"/> registers: a dynamically registered client carries no issuer of its
+    /// own and the request context the listener builds carries none, so the realm of the endpoint's challenges is
+    /// the application's configuration, wired through <see cref="TestHostShell.NameIssuerAsync"/>.
+    /// </summary>
+    public static Uri ManagedClientIssuer { get; } = new("https://registration.issuer.test/");
+
+
+    /// <summary>Every <c>WWW-Authenticate</c> field value of <paramref name="response"/>, read as sent; empty when it carries none.</summary>
+    /// <param name="response">The wire response.</param>
+    /// <returns>The field values.</returns>
+    public static IReadOnlyList<string> ChallengesOf(HttpResponseMessage response) =>
+        response.Headers.NonValidated.TryGetValues(WellKnownHttpHeaderNames.WwwAuthenticate, out System.Net.Http.Headers.HeaderStringValues values)
+            ? [.. values]
+            : [];
 
 
     /// <summary>

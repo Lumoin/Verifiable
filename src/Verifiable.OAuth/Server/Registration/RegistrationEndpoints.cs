@@ -4,6 +4,7 @@ using System.Text;
 using Verifiable.Core;
 using Verifiable.JCose;
 using Verifiable.OAuth.Client;
+using Verifiable.OAuth.Oid4Vci;
 
 namespace Verifiable.OAuth.Server.Registration;
 
@@ -42,6 +43,26 @@ namespace Verifiable.OAuth.Server.Registration;
 /// for which no default implementation is shipped — the application
 /// supplies its own JSON layer (see
 /// <see cref="ParseClientMetadataServerDelegate"/>).
+/// </para>
+/// <para>
+/// <strong>Refusals and their challenges.</strong> The client configuration endpoint is an OAuth 2.0
+/// protected resource (<see href="https://www.rfc-editor.org/rfc/rfc7592#section-2">RFC 7592 Section 2</see>),
+/// and the 401 answers of its read, update and delete operations carry one <c>Bearer</c> challenge whose
+/// <c>realm</c> is the issuer the request is served under: a request whose <c>Authorization</c> field holds
+/// no Bearer token is answered with an empty body and <c>Bearer realm="&lt;issuer&gt;"</c>; a registration
+/// access token the application's seam refuses, and a deletion whose client another party deletes while it
+/// runs, are answered with <c>invalid_token</c> in the body and
+/// <c>Bearer realm="&lt;issuer&gt;", error="invalid_token"</c>. The 400 and 500 answers carry no challenge; a
+/// registration that is not a <see cref="ClientRecord"/> when the endpoint runs is answered 500
+/// <c>server_error</c>. A management request whose client does not exist when it arrives meets no registration
+/// and is answered by <see cref="AuthorizationServerIntegration.ResolveMissingRegistrationAsync"/>, 401
+/// <c>invalid_token</c> without a challenge, also when it carries no credential; since a known client's refused
+/// token is challenged and an absent client's is not, the answer tells a caller whether a <c>client_id</c>
+/// exists. The challenged answers need the issuer resolvable: a client this endpoint registers
+/// carries no issuer of its own, so the application's issuer resolver or the request's context names it.
+/// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.5.2">RFC 9110 Section 15.5.2</see>: "The
+/// server generating a 401 response MUST send a WWW-Authenticate header field (Section 11.6.1) containing at
+/// least one challenge applicable to the target resource."
 /// </para>
 /// </remarks>
 public static class RegistrationEndpoints
@@ -517,8 +538,12 @@ public static class RegistrationEndpoints
                 context, cancellationToken).ConfigureAwait(false) as ClientRecord;
             if(current is null || !string.Equals(current.ClientId, registration.ClientId, StringComparison.Ordinal))
             {
+                //The client the presented registration access token was issued to does not exist on
+                //this server: the token authenticates no client, so the refusal is the one a refused
+                //token gets.
 
-                return ServerHttpResponse.Unauthorized(OAuthErrors.InvalidToken, "Registration access token is invalid.");
+                return await RefuseRegistrationAccessTokenAsync(
+                    server, registration, context, cancellationToken).ConfigureAwait(false);
             }
 
             registration = current;
@@ -528,7 +553,23 @@ public static class RegistrationEndpoints
     }
 
 
-    /// <summary>Checks the RFC 7592 §2 management bearer against the required stored credential.</summary>
+    /// <summary>
+    /// Checks the RFC 7592 Section 2 management bearer against the required stored credential. A registration
+    /// that is not a <see cref="ClientRecord"/> when the endpoint runs (an application's materializer may replace
+    /// the one the dispatcher sets) is answered 500 <c>server_error</c> with
+    /// <see cref="WellKnownOAuthErrorDescriptions.ServerNotReady"/> and no challenge, before the token is read. A
+    /// request whose <c>Authorization</c> field holds no Bearer token, as
+    /// <see cref="BearerTokenValidation.TryExtractBearer"/> reads it, is answered 401 with an empty body and the
+    /// challenge <c>Bearer realm="&lt;issuer&gt;"</c>; a token the application's seam refuses is answered by
+    /// <see cref="RefuseRegistrationAccessTokenAsync"/>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.6.1">RFC 9110 Section 15.6.1</see>: "The 500
+    /// (Internal Server Error) status code indicates that the server encountered an unexpected condition that
+    /// prevented it from fulfilling the request."
+    /// </summary>
+    /// <param name="context">The per-request context.</param>
+    /// <param name="server">The authorization server holding the validation seam.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The refusal, or <see langword="null"/> when the presented token authenticates the client.</returns>
     private static async ValueTask<ServerHttpResponse?> ValidateBearerAsync(
         ExchangeContext context,
         EndpointServer server,
@@ -543,39 +584,75 @@ public static class RegistrationEndpoints
                 "ValidateRegistrationAccessTokenAsync is not configured.");
         }
 
-        IncomingRequest? req = context.IncomingRequest;
-        string bearerPrefix = WellKnownAuthenticationSchemes.Bearer + " ";
-        if(req is null
-            || !req.Headers.TryGetSingle(WellKnownHttpHeaderNames.Authorization, out string? authHeader)
-            || authHeader is null
-            || !authHeader.StartsWith(bearerPrefix, StringComparison.Ordinal))
+        //The dispatcher sets the registration before a candidate runs, but an application's materializer
+        //may replace it with a record that is not a ClientRecord; the endpoint cannot serve the request
+        //then, and the fault is the server's wiring, not the caller's, so it is read before the token.
+        ClientRecord? registration = context.ClientRegistration;
+        if(registration is null)
         {
 
-            return ServerHttpResponse.Unauthorized(
-                OAuthErrors.InvalidToken,
-                "Missing or malformed Authorization header.");
+            return ServerHttpResponse.ServerError(
+                OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady);
         }
 
-        string presented = authHeader[bearerPrefix.Length..];
-        ClientRecord registration = context.ClientRegistration!;
+        //RFC 7592 Section 2: "The client MUST use its registration access token in all calls to this
+        //endpoint as an OAuth 2.0 Bearer Token [RFC6750]." A request whose Authorization field holds no
+        //Bearer token (no field, an empty or white-space value, another scheme) lacks the authentication
+        //information this endpoint reads and gets the challenge with no error code and an empty body.
+        //RFC 6750 Section 3.1: "If the request lacks any authentication information (e.g., the client was
+        //unaware that authentication is necessary or attempted using an unsupported authentication
+        //method), the resource server SHOULD NOT include an error code or other error information."
+        if(!BearerTokenValidation.TryExtractBearer(context, out string? presented))
+        {
+
+            return await CredentialEndpointDpopValidation.ChallengedAsync(
+                ServerHttpResponse.Unauthorized(), error: null, server, registration, context, cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         bool isValid = await oauth.ValidateRegistrationAccessTokenAsync(
             registration.TenantId,
             registration.ClientId,
-            presented,
+            presented!,
             context,
             cancellationToken).ConfigureAwait(false);
 
         if(!isValid)
         {
 
-            return ServerHttpResponse.Unauthorized(
-                OAuthErrors.InvalidToken,
-                "Registration access token is invalid.");
+            return await RefuseRegistrationAccessTokenAsync(
+                server, registration, context, cancellationToken).ConfigureAwait(false);
         }
 
         return null;
     }
+
+
+    /// <summary>
+    /// Answers a request whose registration access token authenticates no client, a token the application's
+    /// seam refuses or one whose client does not exist on this server: 401 with the body's error
+    /// <c>invalid_token</c> and the challenge <c>Bearer realm="&lt;issuer&gt;", error="invalid_token"</c>,
+    /// attached by <see cref="CredentialEndpointDpopValidation.ChallengedAsync"/>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7592#section-2.1">RFC 7592 Section 2.1</see>: "If the
+    /// registration access token used to make this request is not valid, the server MUST respond with an error as
+    /// described in the OAuth Bearer Token Usage specification [RFC6750]."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 Section 3</see>: "If the protected
+    /// resource request included an access token and failed authentication, the resource server SHOULD include the
+    /// "error" attribute to provide the client with the reason why the access request was declined."
+    /// </summary>
+    /// <param name="server">The authorization server whose issuer resolver names the realm.</param>
+    /// <param name="registration">The client (tenant) the request was addressed to.</param>
+    /// <param name="context">The per-request context.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The 401 refusal with its challenge.</returns>
+    private static ValueTask<ServerHttpResponse> RefuseRegistrationAccessTokenAsync(
+        EndpointServer server,
+        ClientRecord registration,
+        ExchangeContext context,
+        CancellationToken cancellationToken) =>
+        CredentialEndpointDpopValidation.ChallengedAsync(
+            ServerHttpResponse.Unauthorized(OAuthErrors.InvalidToken, "Registration access token is invalid."),
+            OAuthErrors.InvalidToken, server, registration, context, cancellationToken);
 
 
     /// <summary>Builds the complete RFC 7592 section 3 response, echoing the validated bearer and all accepted metadata.</summary>

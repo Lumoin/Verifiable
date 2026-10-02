@@ -37,6 +37,16 @@ namespace Verifiable.OAuth.Logout;
 /// record both verifies the hint (the keys it lists for ID Token issuance) and supplies the
 /// allowed post-logout redirect URIs.
 /// </para>
+/// <para>
+/// No answer of the endpoint carries a <c>WWW-Authenticate</c> challenge: it authenticates no
+/// credential of the caller. A registration that is not a <see cref="ClientRecord"/> when the
+/// endpoint runs (an application's materializer may replace the one the dispatcher set) is answered
+/// 500 <c>server_error</c> with <see cref="WellKnownOAuthErrorDescriptions.ServerNotReady"/>, since
+/// the fault is the server's wiring and not the caller's.
+/// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.6.1">RFC 9110 Section 15.6.1</see>:
+/// "The 500 (Internal Server Error) status code indicates that the server encountered an unexpected
+/// condition that prevented it from fulfilling the request."
+/// </para>
 /// </remarks>
 public static class EndSessionEndpoints
 {
@@ -98,11 +108,15 @@ public static class EndSessionEndpoints
                 EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
+                //The dispatcher sets the registration before a candidate runs, but an
+                //application's materializer may replace it with a record that is not a
+                //ClientRecord; the endpoint cannot serve the request then, and the fault
+                //is the server's wiring, not the caller's.
                 ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
-                    return (null, ServerHttpResponse.Unauthorized(
-                        OAuthErrors.InvalidClient, "Unknown client."));
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady));
                 }
 
                 //§2/§3: id_token_hint identifies the session (sub/sid) and is the

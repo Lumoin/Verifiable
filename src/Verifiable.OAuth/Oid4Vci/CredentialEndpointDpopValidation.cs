@@ -414,11 +414,81 @@ internal static class CredentialEndpointDpopValidation
 
 
     /// <summary>
+    /// Attaches to <paramref name="refusal"/> the <c>WWW-Authenticate</c> challenge
+    /// <c>Bearer realm="&lt;issuer&gt;"</c>, with <c>error="&lt;error&gt;"</c> when
+    /// <paramref name="error"/> is given and <c>resource_metadata="&lt;URL&gt;"</c> when
+    /// <paramref name="resourceMetadata"/> is given, built by <see cref="BearerTokenChallenge.BuildChallenge"/>.
+    /// The realm is <see cref="HeaderSafeIssuer"/> of the resolved <paramref name="issuer"/>, so an
+    /// internationalized issuer is written in its URI form; <see cref="HeaderSafeIssuer"/> throws for an issuer
+    /// whose host IDNA cannot map, and that issuer is the application's own configuration, the one its tokens are
+    /// issued under. The caller resolves the issuer once for the refusal, through <see cref="ChallengedAsync"/> or
+    /// <see cref="ResolveIssuerAsync"/>, so every parameter the challenge derives from the issuer is read from that
+    /// one resolution. The Bearer refusals of <see cref="Logout.GlobalTokenRevocationEndpoints"/>,
+    /// <see cref="Server.Registration.RegistrationEndpoints"/> and <see cref="Ssf.SsfTransmitterEndpoints"/> are
+    /// challenged through this one body.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.5.2">RFC 9110 Section 15.5.2</see>:
+    /// "The server generating a 401 response MUST send a WWW-Authenticate header field (Section 11.6.1)
+    /// containing at least one challenge applicable to the target resource."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 Section 3</see>: "All
+    /// challenges defined by this specification MUST use the auth-scheme value "Bearer"." The
+    /// <c>error</c> is the <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750
+    /// Section 3.1</see> code of the refusal, the same code its body carries.
+    /// </summary>
+    /// <param name="refusal">The 401 or 403 refusal the challenge is attached to.</param>
+    /// <param name="error">The RFC 6750 Section 3.1 error code, or <see langword="null"/> when the request carried no access token.</param>
+    /// <param name="issuer">The issuer the request is served under, resolved once for the refusal; the realm.</param>
+    /// <param name="resourceMetadata">
+    /// The <see href="https://www.rfc-editor.org/rfc/rfc9728#section-5.1">RFC 9728 Section 5.1</see> protected
+    /// resource metadata URL the challenge names, or <see langword="null"/> for none.
+    /// </param>
+    /// <returns>The refusal with its challenge.</returns>
+    internal static ServerHttpResponse Challenged(
+        ServerHttpResponse refusal,
+        string? error,
+        Uri issuer,
+        Uri? resourceMetadata = null)
+    {
+        string challenge = BearerTokenChallenge.BuildChallenge(
+            realm: HeaderSafeIssuer(issuer), error: error, resourceMetadata: resourceMetadata);
+
+        return refusal.WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, challenge);
+    }
+
+
+    /// <summary>
+    /// Resolves the issuer the request is served under once, through <see cref="ResolveIssuerAsync"/>, and attaches
+    /// the challenge through <see cref="Challenged"/>, the one body. The default issuer resolver throws
+    /// <see cref="InvalidOperationException"/> when no issuer resolves.
+    /// </summary>
+    /// <param name="refusal">The 401 or 403 refusal the challenge is attached to.</param>
+    /// <param name="error">The RFC 6750 Section 3.1 error code, or <see langword="null"/> when the request carried no access token.</param>
+    /// <param name="server">The authorization server whose issuer resolver names the realm.</param>
+    /// <param name="registration">The client (tenant) the request belongs to.</param>
+    /// <param name="context">The per-request context.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The refusal with its challenge.</returns>
+    internal static async ValueTask<ServerHttpResponse> ChallengedAsync(
+        ServerHttpResponse refusal,
+        string? error,
+        EndpointServer server,
+        ClientRecord registration,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+    {
+        Uri issuer = await ResolveIssuerAsync(
+            server, registration, context, cancellationToken).ConfigureAwait(false);
+
+        return Challenged(refusal, error, issuer);
+    }
+
+
+    /// <summary>
     /// Resolves the issuer the request is served under, through the application's
     /// <c>ResolveIssuerAsync</c> seam when wired and the default resolver otherwise; its authority is
-    /// the one the proof's <c>htu</c> is compared against, and its <see cref="HeaderSafeIssuer"/> form is
-    /// the <c>realm</c> of the challenges this class and
-    /// <see cref="Logout.GlobalTokenRevocationEndpoints"/> answer with.
+    /// the one the proof's <c>htu</c> is compared against, its <see cref="HeaderSafeIssuer"/> form is
+    /// the <c>realm</c> of the challenges this class answers with and <see cref="Challenged"/>
+    /// attaches, and <see cref="Ssf.SsfTransmitterEndpoints"/> reads it for its configuration document
+    /// and, once per refusal, for the realm and the <c>resource_metadata</c> URL of its challenge.
     /// </summary>
     /// <param name="server">The authorization server holding the resolver seam.</param>
     /// <param name="registration">The client (tenant) the request belongs to.</param>

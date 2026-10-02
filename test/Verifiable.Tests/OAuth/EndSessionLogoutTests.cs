@@ -15,6 +15,7 @@ using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Metadata;
 using Verifiable.Tests.TestInfrastructure;
+using Verifiable.Tests.WebFinger;
 
 namespace Verifiable.Tests.OAuth;
 
@@ -1035,6 +1036,46 @@ internal sealed class EndSessionLogoutTests
         (string deliveredSubject, string? deliveredSessionId) = Assert.ContainsSingle(delivered);
         Assert.AreEqual(SubjectId, deliveredSubject);
         Assert.IsNull(deliveredSessionId, "A blank sid must reach the back-channel delivery as no session identifier.");
+    }
+
+
+    /// <summary>
+    /// An end-session request sent over the wire whose registration the application's materialization seam replaces
+    /// with a record that is not an OAuth client registration is answered 500 with the body's error
+    /// <c>server_error</c> and no challenge, and no session is terminated: the endpoint cannot serve the request, and
+    /// the cause is the server's wiring, not the caller.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.6.1">RFC 9110 Section 15.6.1</see>: "The 500
+    /// (Internal Server Error) status code indicates that the server encountered an unexpected condition that
+    /// prevented it from fulfilling the request."
+    /// </summary>
+    [TestMethod]
+    public async Task AnEndSessionServedUnderARegistrationTheEndpointCannotUseIsAServerErrorAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities).ConfigureAwait(false);
+        List<string> terminated = await WireTerminateSeamAsync(host).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.MaterializeRegistrationAsync = static (registration, _, _) => ValueTask.FromResult(new RegistrationMaterialization
+            {
+                Registration = new WebFingerHttpApplication.PlainRegistration
+                {
+                    ClientId = registration.ClientId,
+                    TenantId = registration.TenantId,
+                    AllowedCapabilities = registration.AllowedCapabilities
+                }
+            });
+        }).ConfigureAwait(false);
+
+        using HttpResponseMessage response = await EndSessionOverWireAsync(host, material, "any-hint", "n1").ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.InternalServerError, response.StatusCode, body);
+        Assert.AreEqual(
+            /*lang=json,strict*/ "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}", body);
+        Assert.IsFalse(response.Headers.Contains("WWW-Authenticate"), "A fault of the server carries no challenge.");
+        Assert.IsEmpty(terminated, "A request the endpoint cannot serve must not terminate a session.");
     }
 
 

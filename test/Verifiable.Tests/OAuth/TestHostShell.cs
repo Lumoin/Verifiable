@@ -4518,6 +4518,21 @@ internal sealed class TestHostShell: IAsyncDisposable
     }
 
 
+    /// <summary>
+    /// Wires the application's issuer resolver to answer <paramref name="issuer"/> for every request, through
+    /// <see cref="AlterAsync"/>: the composition of a deployment that names its issuer in configuration, for
+    /// registrations that carry no issuer of their own (a dynamically registered client) served over the listener,
+    /// whose request context carries none.
+    /// </summary>
+    /// <param name="server">The fixture server.</param>
+    /// <param name="issuer">The issuer every request is served under.</param>
+    public static Task NameIssuerAsync(EndpointServer server, Uri issuer) =>
+        AlterAsync(server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveIssuerAsync = (_, _, _) => ValueTask.FromResult<Uri?>(issuer);
+        });
+
+
     /// <summary>Publishes a coherent family alteration and completes when it is applied.</summary>
     /// <param name="server">The host whose family wiring changes.</param>
     /// <param name="alter">The edits applied to the independent family candidate.</param>

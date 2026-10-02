@@ -373,7 +373,17 @@ internal sealed class SsfStreamManagementEndpointTests
     /// the real HTTP wire: an absent or unrecognised token is rejected (401), a token granted only
     /// ssf.read cannot perform a management operation (403) but can read status, and a token
     /// granted ssf.manage can perform both — the §2.7.3 scope lattice enforced end to end rather
-    /// than asserted against the pure predicate alone.
+    /// than asserted against the pure predicate alone. The 403 carries the body's error
+    /// <c>insufficient_scope</c> and the one challenge
+    /// <c>Bearer realm="https://issuer.test/&lt;segment&gt;", error="insufficient_scope"</c>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 Section 3</see>: "If the protected
+    /// resource request does not include authentication credentials or does not contain an access token that enables
+    /// access to the protected resource, the resource server MUST include the HTTP "WWW-Authenticate" response header
+    /// field; it MAY include it in response to other conditions as well."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>,
+    /// <c>insufficient_scope</c>: "The request requires higher privileges than provided by the access token. The
+    /// resource server SHOULD respond with the HTTP 403 (Forbidden) status code and MAY include the "scope" attribute
+    /// with the scope necessary to access the protected resource."
     /// </summary>
     /// <remarks>
     /// Proves <see href="https://openid.net/specs/openid-caep-interoperability-profile-1_0-01.html">
@@ -388,8 +398,374 @@ internal sealed class SsfStreamManagementEndpointTests
         using VerifierKeyMaterial _ = material;
         Assert.IsEmpty(store);
 
-        //An interop-profile §2.7.3 authorizer: each bearer token names its granted
-        //scope and coverage follows SsfScopeSatisfies (manage includes read).
+        await WireBearerScopeAuthorizerAsync(app).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        string segment = material.Registration.TenantId.Value;
+        HttpClient http = host.SharedHttpClient!;
+        Uri streamUrl = new(host.HttpBaseAddress!, $"/connect/{segment}/ssf/stream");
+        Uri statusUrl = new(host.HttpBaseAddress!, $"/connect/{segment}/ssf/status");
+
+        //No token → 401 (§8.1.1.1 error table).
+        Assert.AreEqual(401, (int)(await SendAsync(http, HttpMethod.Post, streamUrl, body: string.Empty, token: null)
+            .ConfigureAwait(false)).StatusCode);
+
+        //A read-scoped token cannot create: management operations accept ssf.manage. The token does not
+        //enable access, so the 403 names insufficient_scope in the body and in its challenge.
+        using HttpResponseMessage forbidden = await SendAsync(http, HttpMethod.Post, streamUrl, body: string.Empty, token: "read-token")
+            .ConfigureAwait(false);
+        string forbiddenBody = await forbidden.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(403, (int)forbidden.StatusCode, forbiddenBody);
+        using(JsonDocument forbiddenError = JsonDocument.Parse(forbiddenBody))
+        {
+            Assert.AreEqual("insufficient_scope", forbiddenError.RootElement.GetProperty("error").GetString(), forbiddenBody);
+        }
+
+        Assert.AreEqual(
+            $"Bearer realm=\"https://issuer.test/{segment}\", error=\"insufficient_scope\"",
+            Assert.ContainsSingle(RawAuthCodeWirePushers.ChallengesOf(forbidden)));
+
+        //A manage-scoped token creates.
+        using HttpResponseMessage created = await SendAsync(http, HttpMethod.Post, streamUrl, body: string.Empty, token: "manage-token")
+            .ConfigureAwait(false);
+        string createdBody = await created.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(201, (int)created.StatusCode, createdBody);
+        SsfStreamConfiguration? stream = SsfStreamJsonParsing.ParseStreamConfiguration(createdBody);
+        Assert.IsNotNull(stream);
+
+        //A read-scoped token reads status; a manage token covers read too.
+        Assert.AreEqual(200, (int)(await SendAsync(
+            http, HttpMethod.Get, new Uri($"{statusUrl}?stream_id={stream.StreamId}"), body: null, token: "read-token")
+            .ConfigureAwait(false)).StatusCode);
+        Assert.AreEqual(200, (int)(await SendAsync(
+            http, HttpMethod.Get, new Uri($"{streamUrl}?stream_id={stream.StreamId}"), body: null, token: "manage-token")
+            .ConfigureAwait(false)).StatusCode);
+
+        //An unknown token → 401.
+        Assert.AreEqual(401, (int)(await SendAsync(
+            http, HttpMethod.Get, new Uri($"{statusUrl}?stream_id={stream.StreamId}"), body: null, token: "forged-token")
+            .ConfigureAwait(false)).StatusCode);
+    }
+
+
+    /// <summary>
+    /// A Create Stream request sent over the wire with no <c>Authorization</c> field, which the authorization seam
+    /// answers <see cref="SsfRequestDenialReason.AuthenticationRequired"/>, is answered 401 with an empty body and
+    /// the one challenge <c>Bearer realm="&lt;issuer&gt;"</c>, which carries no error code.
+    /// <see href="https://openid.net/specs/openid-sharedsignals-framework-1_0.html#section-8">Shared Signals
+    /// Framework 1.0 Section 8</see>: "Unless there exists some other method of establishing trust between a
+    /// Transmitter and Receiver, all Stream Management API endpoints MUST use standard HTTP authentication and
+    /// authorization schemes, as per [RFC9110]." Its Section 8.1.1.1 table of Create Stream errors names 401 for a
+    /// failed or missing authorization.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>: "If the request
+    /// lacks any authentication information (e.g., the client was unaware that authentication is necessary or
+    /// attempted using an unsupported authentication method), the resource server SHOULD NOT include an error code
+    /// or other error information."
+    /// </summary>
+    [TestMethod]
+    public async Task AStreamManagementRequestWithoutACredentialIsChallengedWithoutAnErrorCode()
+    {
+        (int statusCode, string body, IReadOnlyList<string> challenges, string segment) =
+            await SendRefusableCreateAsync(authorization: null).ConfigureAwait(false);
+
+        Assert.AreEqual(401, statusCode, body);
+        Assert.AreEqual(string.Empty, body, "No error code or other error information.");
+        Assert.AreEqual($"Bearer realm=\"https://issuer.test/{segment}\"", Assert.ContainsSingle(challenges));
+    }
+
+
+    /// <summary>
+    /// A Create Stream request sent over the wire whose <c>Authorization</c> field carries no access token, an empty
+    /// value, a value of white space or a credential of the <c>Basic</c> scheme, which the authorization seam
+    /// answers <see cref="SsfRequestDenialReason.AuthenticationRequired"/>, is answered 401 with an empty body and
+    /// the one challenge <c>Bearer realm="&lt;issuer&gt;"</c>, which carries no error code.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>: "If the request
+    /// lacks any authentication information (e.g., the client was unaware that authentication is necessary or
+    /// attempted using an unsupported authentication method), the resource server SHOULD NOT include an error code
+    /// or other error information."
+    /// </summary>
+    /// <param name="authorization">The value of the request's <c>Authorization</c> field.</param>
+    [TestMethod]
+    [DataRow("", DisplayName = "an empty Authorization value")]
+    [DataRow(" ", DisplayName = "an Authorization value of white space")]
+    [DataRow("Basic dXNlcjpwYXNz", DisplayName = "an Authorization value of the Basic scheme")]
+    public async Task AStreamManagementRequestWhoseAuthorizationFieldCarriesNoAccessTokenIsChallengedWithoutAnErrorCode(string authorization)
+    {
+        (int statusCode, string body, IReadOnlyList<string> challenges, string segment) =
+            await SendRefusableCreateAsync(authorization).ConfigureAwait(false);
+
+        Assert.AreEqual(401, statusCode, body);
+        Assert.AreEqual(string.Empty, body, "No error code or other error information.");
+        Assert.AreEqual($"Bearer realm=\"https://issuer.test/{segment}\"", Assert.ContainsSingle(challenges));
+    }
+
+
+    /// <summary>
+    /// A Create Stream request sent over the wire with an access token presented under the <c>DPoP</c> scheme, which
+    /// the authorization seam answers <see cref="SsfRequestDenialReason.AuthenticationRequired"/> for, is answered 401
+    /// with an empty body and the one challenge <c>Bearer realm="https://issuer.test/&lt;segment&gt;"</c>, which
+    /// carries no error code: the transmitter's one challenge is <c>Bearer</c> and it reads a Bearer token only, so a
+    /// presentation under another scheme lacks the authentication information the transmitter reads.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>: "If the request
+    /// lacks any authentication information (e.g., the client was unaware that authentication is necessary or
+    /// attempted using an unsupported authentication method), the resource server SHOULD NOT include an error code
+    /// or other error information."
+    /// </summary>
+    [TestMethod]
+    public async Task AStreamManagementRequestPresentingATokenUnderTheDPoPSchemeIsChallengedWithoutAnErrorCode()
+    {
+        (int statusCode, string body, IReadOnlyList<string> challenges, string segment) =
+            await SendRefusableCreateAsync("DPoP forged-token").ConfigureAwait(false);
+
+        Assert.AreEqual(401, statusCode, body);
+        Assert.AreEqual(string.Empty, body, "No error code or other error information.");
+        Assert.AreEqual($"Bearer realm=\"https://issuer.test/{segment}\"", Assert.ContainsSingle(challenges));
+    }
+
+
+    /// <summary>
+    /// A Create Stream request sent over the wire with a Bearer token the authorization seam answers
+    /// <see cref="SsfRequestDenialReason.AuthenticationRequired"/> for is answered 401 with the body's error
+    /// <c>invalid_token</c> and the one challenge <c>Bearer realm="&lt;issuer&gt;", error="invalid_token"</c>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 Section 3</see>: "If the protected
+    /// resource request included an access token and failed authentication, the resource server SHOULD include the
+    /// "error" attribute to provide the client with the reason why the access request was declined."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>, <c>invalid_token</c>:
+    /// "The access token provided is expired, revoked, malformed, or invalid for other reasons. The resource SHOULD
+    /// respond with the HTTP 401 (Unauthorized) status code."
+    /// </summary>
+    [TestMethod]
+    public async Task AStreamManagementRequestWhoseAccessTokenIsRefusedIsAnInvalidToken()
+    {
+        (int statusCode, string body, IReadOnlyList<string> challenges, string segment) =
+            await SendRefusableCreateAsync("Bearer forged-token").ConfigureAwait(false);
+
+        Assert.AreEqual(401, statusCode, body);
+        Assert.AreEqual($"Bearer realm=\"https://issuer.test/{segment}\", error=\"invalid_token\"", Assert.ContainsSingle(challenges));
+        using JsonDocument error = JsonDocument.Parse(body);
+        Assert.AreEqual("invalid_token", error.RootElement.GetProperty("error").GetString(), body);
+    }
+
+
+    /// <summary>
+    /// A Create Stream request sent over the wire with a Bearer token the authorization seam refuses, to a
+    /// transmitter whose registration serves its protected resource metadata, is answered 401 with the one challenge
+    /// <c>Bearer realm="&lt;issuer&gt;", error="invalid_token", resource_metadata="&lt;metadata URL&gt;"</c>: the
+    /// challenge keeps the metadata URL beside the realm and the error.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-5.1">RFC 9728 Section 5.1</see> defines the
+    /// <c>resource_metadata</c> parameter of the challenge.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 Section 3</see>: "Other auth-param
+    /// attributes MAY be used as well."
+    /// </summary>
+    [TestMethod]
+    public async Task TheChallengeOfATransmitterServingItsResourceMetadataKeepsTheMetadataUrl()
+    {
+        (int statusCode, string body, IReadOnlyList<string> challenges, string segment) =
+            await SendRefusableCreateAsync("Bearer forged-token", isResourceMetadataServed: true).ConfigureAwait(false);
+
+        Assert.AreEqual(401, statusCode, body);
+        Assert.AreEqual(
+            $"Bearer realm=\"https://issuer.test/{segment}\", error=\"invalid_token\", resource_metadata=\"https://issuer.test/.well-known/oauth-protected-resource/{segment}\"",
+            Assert.ContainsSingle(challenges));
+    }
+
+
+    /// <summary>
+    /// A Create Stream request sent over the wire with a Bearer token the authorization seam refuses, to a
+    /// transmitter whose registration serves its protected resource metadata and whose application issuer resolver
+    /// is wired, consults that resolver once for the refusal, beside the one resolution the server's dispatch makes
+    /// for every request it serves: the challenge's realm and its <c>resource_metadata</c> URL are read from the one
+    /// issuer the refusal resolves, and the answer is the one challenge
+    /// <c>Bearer realm="https://issuer.test/&lt;segment&gt;", error="invalid_token", resource_metadata="https://issuer.test/.well-known/oauth-protected-resource/&lt;segment&gt;"</c>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.5.2">RFC 9110 Section 15.5.2</see>: "The server
+    /// generating a 401 response MUST send a WWW-Authenticate header field (Section 11.6.1) containing at least one
+    /// challenge applicable to the target resource."
+    /// </summary>
+    [TestMethod]
+    public async Task ARefusalOfTheTransmitterResolvesItsIssuerOnce()
+    {
+        int resolutionCount = 0;
+        (int statusCode, string body, IReadOnlyList<string> challenges, string segment) = await SendRefusableCreateAsync(
+            "Bearer forged-token",
+            isResourceMetadataServed: true,
+            issuerResolver: (registration, _, _) =>
+            {
+                _ = Interlocked.Increment(ref resolutionCount);
+
+                return ValueTask.FromResult(((ClientRecord)registration).IssuerUri);
+            }).ConfigureAwait(false);
+
+        Assert.AreEqual(401, statusCode, body);
+        Assert.AreEqual(
+            $"Bearer realm=\"https://issuer.test/{segment}\", error=\"invalid_token\", resource_metadata=\"https://issuer.test/.well-known/oauth-protected-resource/{segment}\"",
+            Assert.ContainsSingle(challenges));
+        //One resolution by the dispatch, which places the issuer on the request's context, and one by the refusal.
+        Assert.AreEqual(2, Volatile.Read(ref resolutionCount), "The refusal resolves its issuer once.");
+    }
+
+
+    /// <summary>
+    /// A Create Stream request sent over the wire with no <c>Authorization</c> field, which the authorization seam
+    /// answers <see cref="SsfRequestDenialReason.AuthenticationRequired"/> for, served where no issuer resolves (no
+    /// application issuer resolver, a registration without an issuer and no issuer on the request's context, so the
+    /// default issuer resolver raises <see cref="InvalidOperationException"/>), is answered 401 with an empty body and
+    /// no <c>WWW-Authenticate</c> field: the stated deviation of the design document's transmitter entry, since the
+    /// realm is the issuer.
+    /// <see href="https://openid.net/specs/openid-sharedsignals-framework-1_0.html#section-8.1.2.1">Shared Signals
+    /// Framework 1.0 Section 8.1.2.1</see>: "If a Receiver makes an unauthorized request, then the Transmitter MUST
+    /// respond with a 401 error status."
+    /// </summary>
+    [TestMethod]
+    public async Task AStreamManagementRequestWithoutACredentialServedWhereNoIssuerResolvesIsUnchallenged()
+    {
+        (int statusCode, string body, IReadOnlyList<string> challenges, _) = await SendRefusableCreateAsync(
+            authorization: null, isIssuerWithdrawn: true).ConfigureAwait(false);
+
+        Assert.AreEqual(401, statusCode, body);
+        Assert.AreEqual(string.Empty, body, "No error code or other error information.");
+        Assert.IsEmpty(challenges, "No issuer resolves for the realm.");
+    }
+
+
+    /// <summary>
+    /// A Create Stream request sent over the wire with a Bearer token the authorization seam answers
+    /// <see cref="SsfRequestDenialReason.AuthenticationRequired"/> for, served where no issuer resolves (no
+    /// application issuer resolver, a registration without an issuer and no issuer on the request's context, so the
+    /// default issuer resolver raises <see cref="InvalidOperationException"/>), is answered 401 with the body's error
+    /// <c>invalid_token</c> and no <c>WWW-Authenticate</c> field: the stated deviation of the design document's
+    /// transmitter entry, since the realm is the issuer.
+    /// <see href="https://openid.net/specs/openid-sharedsignals-framework-1_0.html#section-8.1.2.1">Shared Signals
+    /// Framework 1.0 Section 8.1.2.1</see>: "If a Receiver makes an unauthorized request, then the Transmitter MUST
+    /// respond with a 401 error status."
+    /// </summary>
+    [TestMethod]
+    public async Task AStreamManagementRequestWhoseAccessTokenIsRefusedServedWhereNoIssuerResolvesIsUnchallenged()
+    {
+        (int statusCode, string body, IReadOnlyList<string> challenges, _) = await SendRefusableCreateAsync(
+            "Bearer forged-token", isIssuerWithdrawn: true).ConfigureAwait(false);
+
+        Assert.AreEqual(401, statusCode, body);
+        using JsonDocument error = JsonDocument.Parse(body);
+        Assert.AreEqual("invalid_token", error.RootElement.GetProperty("error").GetString(), body);
+        Assert.IsEmpty(challenges, "No issuer resolves for the realm.");
+    }
+
+
+    /// <summary>
+    /// A Create Stream request sent over the wire with a Bearer token granted only <c>ssf.read</c>, which the
+    /// authorization seam answers <see cref="SsfRequestDenialReason.InsufficientScope"/> for, served where no issuer
+    /// resolves (no application issuer resolver, a registration without an issuer and no issuer on the request's
+    /// context, so the default issuer resolver raises <see cref="InvalidOperationException"/>), is answered 403 with
+    /// the body's error <c>insufficient_scope</c> and no <c>WWW-Authenticate</c> field: the stated deviation of the
+    /// design document's transmitter entry, since the realm is the issuer.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>,
+    /// <c>insufficient_scope</c>: "The request requires higher privileges than provided by the access token. The
+    /// resource server SHOULD respond with the HTTP 403 (Forbidden) status code and MAY include the "scope" attribute
+    /// with the scope necessary to access the protected resource."
+    /// </summary>
+    [TestMethod]
+    public async Task AStreamManagementRequestWhoseScopeIsInsufficientServedWhereNoIssuerResolvesIsUnchallenged()
+    {
+        (int statusCode, string body, IReadOnlyList<string> challenges, _) = await SendRefusableCreateAsync(
+            "Bearer read-token", isIssuerWithdrawn: true).ConfigureAwait(false);
+
+        Assert.AreEqual(403, statusCode, body);
+        using JsonDocument error = JsonDocument.Parse(body);
+        Assert.AreEqual("insufficient_scope", error.RootElement.GetProperty("error").GetString(), body);
+        Assert.IsEmpty(challenges, "No issuer resolves for the realm.");
+    }
+
+
+    /// <summary>
+    /// A Create Stream request sent over the wire with a Bearer token the authorization seam permits is answered 201
+    /// and carries no <c>WWW-Authenticate</c> field: the challenge belongs to a refusal only.
+    /// <see href="https://openid.net/specs/openid-sharedsignals-framework-1_0.html#section-8.1.1.1">Shared Signals
+    /// Framework 1.0 Section 8.1.1.1</see> defines the Create Stream response.
+    /// </summary>
+    [TestMethod]
+    public async Task AStreamManagementRequestTheSeamPermitsCarriesNoChallenge()
+    {
+        (int statusCode, string body, IReadOnlyList<string> challenges, _) =
+            await SendRefusableCreateAsync("Bearer manage-token").ConfigureAwait(false);
+
+        Assert.AreEqual(201, statusCode, body);
+        Assert.IsEmpty(challenges, "An accepted request carries no challenge.");
+    }
+
+
+    /// <summary>
+    /// Registers a transmitter with <see cref="WireBearerScopeAuthorizerAsync"/>'s authorization seam, starts the
+    /// listener and posts an empty Create Stream request with <paramref name="authorization"/> as the whole value of
+    /// its <c>Authorization</c> field, or with no such field when it is <see langword="null"/>.
+    /// </summary>
+    /// <param name="authorization">The <c>Authorization</c> field value, or <see langword="null"/> for none.</param>
+    /// <param name="isResourceMetadataServed">Whether the registration serves its protected resource metadata.</param>
+    /// <param name="issuerResolver">
+    /// The application's issuer resolver wired for the request, or <see langword="null"/> to leave it unwired, so the
+    /// default resolver reads the registration's issuer <c>https://issuer.test/&lt;segment&gt;</c>.
+    /// </param>
+    /// <param name="isIssuerWithdrawn">
+    /// Whether the application's materialization seam serves the request under the registration without its issuer,
+    /// so that with no application issuer resolver and no issuer on the listener's request context none resolves.
+    /// </param>
+    /// <returns>
+    /// The status code and body of the answer, every <c>WWW-Authenticate</c> field value it carries and the
+    /// registration's tenant segment.
+    /// </returns>
+    private async Task<(int StatusCode, string Body, IReadOnlyList<string> Challenges, string Segment)> SendRefusableCreateAsync(
+        string? authorization,
+        bool isResourceMetadataServed = false,
+        ResolveServerIssuerDelegate? issuerResolver = null,
+        bool isIssuerWithdrawn = false)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        (_, VerifierKeyMaterial registeredMaterial) = await RegisterTransmitterAsync(
+            app, isResourceMetadataServed: isResourceMetadataServed).ConfigureAwait(false);
+        using VerifierKeyMaterial material = registeredMaterial;
+        await WireBearerScopeAuthorizerAsync(app).ConfigureAwait(false);
+        if(issuerResolver is not null || isIssuerWithdrawn)
+        {
+            await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+            {
+                if(issuerResolver is not null)
+                {
+                    candidateIntegration.ResolveIssuerAsync = issuerResolver;
+                }
+
+                if(isIssuerWithdrawn)
+                {
+                    candidateIntegration.MaterializeRegistrationAsync = static (registration, _, _) =>
+                        ValueTask.FromResult(new RegistrationMaterialization
+                        {
+                            Registration = ((ClientRecord)registration) with { IssuerUri = null }
+                        });
+                }
+            }).ConfigureAwait(false);
+        }
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        string segment = material.Registration.TenantId.Value;
+        Uri streamUrl = new(host.HttpBaseAddress!, $"/connect/{segment}/ssf/stream");
+
+        using HttpResponseMessage response = await SendAsync(
+            host.SharedHttpClient!, HttpMethod.Post, streamUrl, body: string.Empty, token: null, authorization: authorization).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        return ((int)response.StatusCode, body, RawAuthCodeWirePushers.ChallengesOf(response), segment);
+    }
+
+
+    /// <summary>
+    /// Wires an interop-profile authorization seam (CAEP Interoperability Profile 1.0 Section 2.7.3): each Bearer
+    /// token names its granted scope (<c>manage-token</c> grants <c>ssf.manage</c>, <c>read-token</c> grants
+    /// <c>ssf.read</c>) and coverage follows <see cref="WellKnownScopes.SsfScopeSatisfies"/>, manage including read;
+    /// a request without an <c>Authorization</c> field, or with any other value, is answered
+    /// <see cref="SsfRequestDenialReason.AuthenticationRequired"/>.
+    /// </summary>
+    /// <param name="app">The fixture whose integration is altered.</param>
+    private static async Task WireBearerScopeAuthorizerAsync(TestHostShell app) =>
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
             candidateIntegration.AuthorizeSsfRequestAsync = static (evaluation, registration, context, ct) =>
@@ -417,43 +793,6 @@ internal sealed class SsfStreamManagementEndpointTests
                     : SsfRequestDecision.Deny(SsfRequestDenialReason.InsufficientScope));
             };
         }).ConfigureAwait(false);
-
-        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
-        HostedAuthorizationServer host = app.Host("default");
-        string segment = material.Registration.TenantId.Value;
-        HttpClient http = host.SharedHttpClient!;
-        Uri streamUrl = new(host.HttpBaseAddress!, $"/connect/{segment}/ssf/stream");
-        Uri statusUrl = new(host.HttpBaseAddress!, $"/connect/{segment}/ssf/status");
-
-        //No token → 401 (§8.1.1.1 error table).
-        Assert.AreEqual(401, (int)(await SendAsync(http, HttpMethod.Post, streamUrl, body: string.Empty, token: null)
-            .ConfigureAwait(false)).StatusCode);
-
-        //A read-scoped token cannot create — management operations accept ssf.manage.
-        Assert.AreEqual(403, (int)(await SendAsync(http, HttpMethod.Post, streamUrl, body: string.Empty, token: "read-token")
-            .ConfigureAwait(false)).StatusCode);
-
-        //A manage-scoped token creates.
-        using HttpResponseMessage created = await SendAsync(http, HttpMethod.Post, streamUrl, body: string.Empty, token: "manage-token")
-            .ConfigureAwait(false);
-        string createdBody = await created.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(201, (int)created.StatusCode, createdBody);
-        SsfStreamConfiguration? stream = SsfStreamJsonParsing.ParseStreamConfiguration(createdBody);
-        Assert.IsNotNull(stream);
-
-        //A read-scoped token reads status; a manage token covers read too.
-        Assert.AreEqual(200, (int)(await SendAsync(
-            http, HttpMethod.Get, new Uri($"{statusUrl}?stream_id={stream.StreamId}"), body: null, token: "read-token")
-            .ConfigureAwait(false)).StatusCode);
-        Assert.AreEqual(200, (int)(await SendAsync(
-            http, HttpMethod.Get, new Uri($"{streamUrl}?stream_id={stream.StreamId}"), body: null, token: "manage-token")
-            .ConfigureAwait(false)).StatusCode);
-
-        //An unknown token → 401.
-        Assert.AreEqual(401, (int)(await SendAsync(
-            http, HttpMethod.Get, new Uri($"{statusUrl}?stream_id={stream.StreamId}"), body: null, token: "forged-token")
-            .ConfigureAwait(false)).StatusCode);
-    }
 
 
     /// <summary>
@@ -1498,8 +1837,20 @@ internal sealed class SsfStreamManagementEndpointTests
         };
 
 
+    /// <summary>
+    /// Sends a Stream Management API request over the listener: with <paramref name="token"/> as a Bearer token in
+    /// the <c>Authorization</c> field when it is given, otherwise with <paramref name="authorization"/> as the whole
+    /// value of that field when it is given, and with no such field when neither is.
+    /// </summary>
+    /// <param name="http">The listener's pinned client.</param>
+    /// <param name="method">The HTTP method.</param>
+    /// <param name="url">The endpoint URL.</param>
+    /// <param name="body">The JSON request body, or <see langword="null"/> for none.</param>
+    /// <param name="token">The Bearer token, or <see langword="null"/>.</param>
+    /// <param name="authorization">The whole <c>Authorization</c> field value sent when no token is given, or <see langword="null"/>.</param>
+    /// <returns>The wire response; the caller disposes it.</returns>
     private async Task<HttpResponseMessage> SendAsync(
-        HttpClient http, HttpMethod method, Uri url, string? body, string? token)
+        HttpClient http, HttpMethod method, Uri url, string? body, string? token, string? authorization = null)
     {
         using HttpRequestMessage request = new(method, url);
         if(body is not null)
@@ -1507,9 +1858,10 @@ internal sealed class SsfStreamManagementEndpointTests
             request.Content = new StringContent(body, Encoding.UTF8, WellKnownMediaTypes.Application.Json);
         }
 
-        if(token is not null)
+        string? field = token is not null ? $"Bearer {token}" : authorization;
+        if(field is not null)
         {
-            _ = request.Headers.TryAddWithoutValidation(WellKnownHttpHeaderNames.Authorization, $"Bearer {token}");
+            _ = request.Headers.TryAddWithoutValidation(WellKnownHttpHeaderNames.Authorization, field);
         }
 
         return await http.SendAsync(request, TestContext.CancellationToken).ConfigureAwait(false);
@@ -1529,15 +1881,22 @@ internal sealed class SsfStreamManagementEndpointTests
     /// than authorization. <see langword="false"/> leaves the seam unwired, so the Stream
     /// Management API candidates fail closed (SSF 1.0 §8-3).
     /// </param>
+    /// <param name="isResourceMetadataServed">
+    /// Whether the registration also allows <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>,
+    /// so the transmitter serves its RFC 9728 protected resource metadata.
+    /// </param>
     private static async Task<(Dictionary<string, SsfStreamConfiguration> Store, VerifierKeyMaterial Material)> RegisterTransmitterAsync(
-        TestHostShell app, bool wireAuthorizationSeam = true)
+        TestHostShell app, bool wireAuthorizationSeam = true, bool isResourceMetadataServed = false)
     {
+        ImmutableHashSet<CapabilityIdentifier> capabilities = ImmutableHashSet.Create(
+            WellKnownCapabilityIdentifiers.SsfTransmitter,
+            WellKnownCapabilityIdentifiers.OAuthJwksEndpoint);
         VerifierKeyMaterial material = await app.RegisterClientAsync(
             ClientId,
             new Uri(ClientId),
-            ImmutableHashSet.Create(
-                WellKnownCapabilityIdentifiers.SsfTransmitter,
-                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
+            isResourceMetadataServed
+                ? capabilities.Add(WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata)
+                : capabilities).ConfigureAwait(false);
 
         Dictionary<string, SsfStreamConfiguration> store = new(StringComparer.Ordinal);
         Dictionary<string, SsfStreamStatus> statusByStream = new(StringComparer.Ordinal);

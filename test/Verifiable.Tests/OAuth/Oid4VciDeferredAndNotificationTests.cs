@@ -10,6 +10,7 @@ using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestInfrastructure;
+using Verifiable.Tests.WebFinger;
 
 namespace Verifiable.Tests.OAuth;
 
@@ -594,6 +595,77 @@ internal sealed class Oid4VciDeferredAndNotificationTests
     }
 
 
+    /// <summary>
+    /// A request to the Credential, the Deferred Credential or the Notification endpoint sent over the wire, whose
+    /// registration the application's materialization seam replaces with a record that is not an OAuth client
+    /// registration, is answered 500 with the body's error <c>server_error</c> and no challenge, and the endpoint's
+    /// own seam is not called: the endpoint cannot serve the request, and the cause is the server's wiring, not the
+    /// caller.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.6.1">RFC 9110 Section 15.6.1</see>: "The 500
+    /// (Internal Server Error) status code indicates that the server encountered an unexpected condition that
+    /// prevented it from fulfilling the request."
+    /// </summary>
+    /// <param name="endpointName">The protected endpoint addressed.</param>
+    [TestMethod]
+    [DataRow(CredentialEndpointRow)]
+    [DataRow(DeferredEndpointRow)]
+    [DataRow(NotificationEndpointRow)]
+    public async Task AProtectedRequestServedUnderARegistrationTheEndpointCannotUseIsAServerErrorAsync(string endpointName)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce,
+            EndpointCapabilities.Add(WellKnownCapabilityIdentifiers.Oid4VciCredentialEndpoint)).ConfigureAwait(false);
+        await WireProtectedEndpointSeamsAsync(host).ConfigureAwait(false);
+
+        int seamCallCount = 0;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultCredentialRequestJsonParsing();
+            candidateIntegration.IssueCredentialAsync = (_, _, _, _, _) =>
+            {
+                _ = Interlocked.Increment(ref seamCallCount);
+
+                return ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
+            };
+            candidateIntegration.ResolveDeferredCredentialAsync = (_, _, _, _, _) =>
+            {
+                _ = Interlocked.Increment(ref seamCallCount);
+
+                return ValueTask.FromResult(DeferredCredentialDecision.Defer(60));
+            };
+            candidateIntegration.ProcessCredentialNotificationAsync = (_, _, _, _, _) =>
+            {
+                _ = Interlocked.Increment(ref seamCallCount);
+
+                return ValueTask.FromResult(CredentialNotificationDecision.Accept);
+            };
+            candidateIntegration.MaterializeRegistrationAsync = static (registration, _, _) => ValueTask.FromResult(new RegistrationMaterialization
+            {
+                Registration = new WebFingerHttpApplication.PlainRegistration
+                {
+                    ClientId = registration.ClientId,
+                    TenantId = registration.TenantId,
+                    AllowedCapabilities = registration.AllowedCapabilities
+                }
+            });
+        }).ConfigureAwait(false);
+
+        using HttpResponseMessage response = await SendProtectedOverWireAsync(
+            host, material, endpointName, "Bearer any-token", ProtectedRequestBody(endpointName)).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.InternalServerError, response.StatusCode, body);
+        Assert.AreEqual(
+            /*lang=json,strict*/ "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}", body);
+        Assert.IsFalse(response.Headers.Contains("WWW-Authenticate"), "A fault of the server carries no challenge.");
+        Assert.AreEqual(0, seamCallCount, "A request the endpoint cannot serve must not reach the endpoint's seam.");
+    }
+
+
+    /// <summary>The row addressing the Credential Endpoint.</summary>
+    private const string CredentialEndpointRow = "oid4vci-credential";
+
     /// <summary>The row addressing the Deferred Credential Endpoint.</summary>
     private const string DeferredEndpointRow = "oid4vci-deferred-credential";
 
@@ -614,6 +686,7 @@ internal sealed class Oid4VciDeferredAndNotificationTests
     /// <returns>The endpoint name.</returns>
     private static string EndpointNameOf(string row) => row switch
     {
+        CredentialEndpointRow => WellKnownEndpointNames.Oid4VciCredential,
         DeferredEndpointRow => WellKnownEndpointNames.Oid4VciDeferredCredential,
         NotificationEndpointRow => WellKnownEndpointNames.Oid4VciNotification,
         _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown endpoint row.")
@@ -625,6 +698,7 @@ internal sealed class Oid4VciDeferredAndNotificationTests
     /// <returns>The JSON body.</returns>
     private static string ProtectedRequestBody(string row) => row switch
     {
+        CredentialEndpointRow => "{\"credential_configuration_id\":\"UniversityDegree_dc_sd_jwt\"}",
         DeferredEndpointRow => $"{{\"transaction_id\":\"{TransactionId}\"}}",
         NotificationEndpointRow => $"{{\"notification_id\":\"{NotificationId}\",\"event\":\"credential_accepted\"}}",
         _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown endpoint row.")

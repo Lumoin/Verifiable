@@ -1,7 +1,5 @@
 using System.Text;
-using Verifiable.Core;
 using Verifiable.OAuth.Oid4Vci;
-using Verifiable.OAuth.ProtectedResource;
 using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.Logout;
@@ -141,11 +139,11 @@ public static class GlobalTokenRevocationEndpoints
                     //or other error information." Either way the 401 carries its challenge.
                     bool isAccessTokenCarried = BearerTokenValidation.TryExtractAccessToken(context, out _, out _);
                     ServerHttpResponse refusal = isAccessTokenCarried
-                        ? await ChallengedAsync(
+                        ? await CredentialEndpointDpopValidation.ChallengedAsync(
                             ServerHttpResponse.Unauthorized(
                                 OAuthErrors.InvalidToken, WellKnownOAuthErrorDescriptions.ClientAuthenticationFailed),
                             OAuthErrors.InvalidToken, server, registration, context, ct).ConfigureAwait(false)
-                        : await ChallengedAsync(
+                        : await CredentialEndpointDpopValidation.ChallengedAsync(
                             ServerHttpResponse.Unauthorized(), error: null, server, registration, context, ct).ConfigureAwait(false);
 
                     return (null, refusal);
@@ -189,7 +187,7 @@ public static class GlobalTokenRevocationEndpoints
                     GlobalTokenRevocationOutcome.SubjectNotFound =>
                         (null, ServerHttpResponse.NotFound()),
                     GlobalTokenRevocationOutcome.Forbidden =>
-                        (null, await ChallengedAsync(
+                        (null, await CredentialEndpointDpopValidation.ChallengedAsync(
                             ServerHttpResponse.Forbidden(
                                 OAuthErrors.InsufficientScope, "Not authorized to revoke this subject."),
                             OAuthErrors.InsufficientScope, server, registration, context, ct).ConfigureAwait(false)),
@@ -205,46 +203,4 @@ public static class GlobalTokenRevocationEndpoints
             BuildResponse = static (state, _, _) =>
                 ServerHttpResponse.ServerError(OAuthErrors.ServerError, "Not reached.")
         };
-
-
-    /// <summary>
-    /// Attaches to <paramref name="refusal"/> the <c>WWW-Authenticate</c> challenge
-    /// <c>Bearer realm="&lt;issuer&gt;"</c>, with <c>error="&lt;error&gt;"</c> when
-    /// <paramref name="error"/> is given, built by <see cref="BearerTokenChallenge.BuildChallenge"/>.
-    /// The realm is <see cref="CredentialEndpointDpopValidation.HeaderSafeIssuer"/> of the issuer
-    /// <see cref="CredentialEndpointDpopValidation.ResolveIssuerAsync"/> resolves, so an internationalized
-    /// issuer is written in its URI form. <see cref="CredentialEndpointDpopValidation.HeaderSafeIssuer"/>
-    /// throws for an issuer whose host IDNA cannot map, and the default issuer resolver throws
-    /// <see cref="InvalidOperationException"/> when no issuer resolves; either issuer is the application's
-    /// own configuration, the one its tokens are issued under.
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.5.2">RFC 9110 Section 15.5.2</see>:
-    /// "The server generating a 401 response MUST send a WWW-Authenticate header field (Section 11.6.1)
-    /// containing at least one challenge applicable to the target resource."
-    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 Section 3</see>: "All
-    /// challenges defined by this specification MUST use the auth-scheme value "Bearer"." The
-    /// <c>error</c> is the <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750
-    /// Section 3.1</see> code of the refusal, the same code its body carries.
-    /// </summary>
-    /// <param name="refusal">The 401 or 403 refusal the challenge is attached to.</param>
-    /// <param name="error">The RFC 6750 Section 3.1 error code, or <see langword="null"/> when the request carried no access token.</param>
-    /// <param name="server">The authorization server whose issuer resolver names the realm.</param>
-    /// <param name="registration">The client (tenant) the request belongs to.</param>
-    /// <param name="context">The per-request context.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The refusal with its challenge.</returns>
-    private static async ValueTask<ServerHttpResponse> ChallengedAsync(
-        ServerHttpResponse refusal,
-        string? error,
-        EndpointServer server,
-        ClientRecord registration,
-        ExchangeContext context,
-        CancellationToken cancellationToken)
-    {
-        Uri issuer = await CredentialEndpointDpopValidation.ResolveIssuerAsync(
-            server, registration, context, cancellationToken).ConfigureAwait(false);
-        string challenge = BearerTokenChallenge.BuildChallenge(
-            realm: CredentialEndpointDpopValidation.HeaderSafeIssuer(issuer), error: error);
-
-        return refusal.WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, challenge);
-    }
 }

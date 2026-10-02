@@ -4217,7 +4217,16 @@ countingMetadataBuilder
 
 
     /// <summary>
-    /// Proves deletion authentication under <see href="https://www.rfc-editor.org/rfc/rfc7592#section-2.1">RFC 7592 section 2.1</see>.
+    /// Proves management authentication over the wire for read, update and delete under
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7592#section-2.1">RFC 7592 Section 2.1</see>,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7592#section-2.2">RFC 7592 Section 2.2</see> and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7592#section-2.3">RFC 7592 Section 2.3</see>, each of which states:
+    /// "If the registration access token used to make this request is not valid, the server MUST respond with an
+    /// error as described in the OAuth Bearer Token Usage specification [RFC6750]." A refused token of a known client
+    /// is answered 401 with the body's error <c>invalid_token</c> and the one challenge
+    /// <c>Bearer realm="https://registration.issuer.test/", error="invalid_token"</c>. A request whose client does
+    /// not exist is answered 401 with no <c>WWW-Authenticate</c> field, the stated deviation of the design document's
+    /// client configuration entry.
     /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Section 4.1</see>:
     /// "Management requests for absent clients or with invalid registration access tokens return HTTP 401."
     /// </summary>
@@ -4233,6 +4242,7 @@ countingMetadataBuilder
         using CancellationTokenSource deadline = CreateTestCancellation();
         await using TestHostShell app = new(TimeProvider);
         await app.StartHttpHostAsync(deadline.Token).ConfigureAwait(false);
+        await TestHostShell.NameIssuerAsync(app.Server, RawAuthCodeWirePushers.ManagedClientIssuer).ConfigureAwait(false);
         using CancellationTokenSource exchange = CreateTestCancellation();
         var client = await RegisterManagedClientOverWireAsync(app).ConfigureAwait(false);
         if(isAbsent)
@@ -4245,7 +4255,21 @@ countingMetadataBuilder
         using HttpResponseMessage response = await RawAuthCodeWirePushers.SendPinnedRegistrationAsync(app,
             new HttpMethod(method), client.ManagementUri, isAbsent ? client.AccessToken : "invalid-bearer",
             method == "PUT" ? ManagementDocument(client.ClientId, "refused") : null, exchange.Token).ConfigureAwait(false);
-        Assert.AreEqual(401, (int)response.StatusCode);
+        string body = await response.Content.ReadAsStringAsync(exchange.Token).ConfigureAwait(false);
+        Assert.AreEqual(401, (int)response.StatusCode, body);
+        using JsonDocument error = JsonDocument.Parse(body);
+        Assert.AreEqual("invalid_token", error.RootElement.GetProperty("error").GetString(), body);
+        if(isAbsent)
+        {
+            //The stated deviation: no registration names the issuer for a client that does not exist.
+            Assert.IsEmpty(RawAuthCodeWirePushers.ChallengesOf(response), "An absent client's refusal carries no challenge.");
+        }
+        else
+        {
+            Assert.AreEqual(
+                "Bearer realm=\"https://registration.issuer.test/\", error=\"invalid_token\"",
+                Assert.ContainsSingle(RawAuthCodeWirePushers.ChallengesOf(response)));
+        }
     }
 
 
@@ -4354,6 +4378,8 @@ countingMetadataBuilder
 
     /// <summary>
     /// Proves identity isolation under <see href="https://www.rfc-editor.org/rfc/rfc7592#section-2.3">RFC 7592 section 2.3</see>.
+    /// The stale deletion, whose client another party deletes and replaces while it runs, is refused 401 with the one
+    /// challenge <c>Bearer realm="https://registration.issuer.test/", error="invalid_token"</c>.
     /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Section 4.1</see>:
     /// "A delayed deletion cannot remove a different client's reused tenant index or grant state."
     /// </summary>
@@ -4363,6 +4389,7 @@ countingMetadataBuilder
         using CancellationTokenSource deadline = CreateTestCancellation();
         await using TestHostShell app = new(TimeProvider);
         await app.StartHttpHostAsync(deadline.Token).ConfigureAwait(false);
+        await TestHostShell.NameIssuerAsync(app.Server, RawAuthCodeWirePushers.ManagedClientIssuer).ConfigureAwait(false);
         using CancellationTokenSource exchange = CreateTestCancellation();
         var client = await RegisterManagedClientOverWireAsync(app).ConfigureAwait(false);
         TaskCompletionSource entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -4394,6 +4421,9 @@ countingMetadataBuilder
 
         using HttpResponseMessage stale = await delayed.ConfigureAwait(false);
         Assert.AreEqual(401, (int)stale.StatusCode);
+        Assert.AreEqual(
+            "Bearer realm=\"https://registration.issuer.test/\", error=\"invalid_token\"",
+            Assert.ContainsSingle(RawAuthCodeWirePushers.ChallengesOf(stale)));
         Assert.AreNotEqual(client.ClientId, replacement.ClientId);
         Assert.AreSame(app.RegistrationStore[replacement.ClientId], app.RegistrationStore["dynamic-clients"]);
         using HttpResponseMessage read = await RawAuthCodeWirePushers.SendPinnedRegistrationAsync(app,
@@ -4621,18 +4651,8 @@ countingMetadataBuilder
         TestHostShell app, CancellationToken? cancellationToken = null)
     {
         using CancellationTokenSource? deadline = cancellationToken.HasValue ? null : CreateTestCancellation();
-        CancellationToken exchangeToken = cancellationToken ?? deadline!.Token;
-        using HttpResponseMessage response = await RawAuthCodeWirePushers.SendPinnedJsonPostAsync(app,
-            new Uri(app.Host("default").HttpBaseAddress!, "/connect/register"),
-            "{\"client_name\":\"initial-client\",\"client_uri\":\"https://client.example.test/\",\"redirect_uris\":[\"https://client.example.test/callback\"],\"scope\":\"initial-scope\"}", exchangeToken).ConfigureAwait(false);
-        Exception[] faults = app.Host("default").ConsumeHttpFaults();
-        Assert.AreEqual(201, (int)response.StatusCode, "A committed registration must return HTTP 201.");
-        Assert.IsEmpty(faults, "Successful registration must have no unconsumed request faults.");
-        using JsonDocument body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(exchangeToken).ConfigureAwait(false));
 
-        return (body.RootElement.GetProperty("client_id").GetString()!,
-            body.RootElement.GetProperty("registration_access_token").GetString()!,
-            new Uri(body.RootElement.GetProperty("registration_client_uri").GetString()!, UriKind.Absolute));
+        return await RawAuthCodeWirePushers.RegisterManagedClientAsync(app, cancellationToken ?? deadline!.Token).ConfigureAwait(false);
     }
 
 

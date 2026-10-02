@@ -15,11 +15,25 @@ namespace Verifiable.OAuth.Oid4Vci;
 /// Register at startup via <see cref="Verifiable.Server.ServerConfiguration.EndpointBuilders"/>.
 /// </summary>
 /// <remarks>
+/// <para>
 /// The Credential Issuer is, in OAuth terms, a resource server that MAY also be the
 /// Authorization Server; its endpoints dispatch through the same capability + candidate +
 /// integration-seam pipeline as the rest of the server. This module currently contributes the
 /// <b>Nonce Endpoint</b> (OID4VCI 1.0 §7); the Credential, Deferred, Notification, and
 /// Credential Offer endpoints land here as the issuance loop is built out.
+/// </para>
+/// <para>
+/// The 401 refusals of a presented or missing access token at the Credential, Deferred Credential
+/// and Notification endpoints carry the challenges <see cref="CredentialEndpointDpopValidation"/>
+/// composes, in the scheme the request was presented under. A registration that is not a
+/// <see cref="ClientRecord"/> when one of those endpoints runs (an application's materializer may
+/// replace the one the dispatcher set) is answered 500 <c>server_error</c> with
+/// <see cref="WellKnownOAuthErrorDescriptions.ServerNotReady"/> and no challenge, since the fault is
+/// the server's wiring and not the caller's.
+/// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.6.1">RFC 9110 Section 15.6.1</see>:
+/// "The 500 (Internal Server Error) status code indicates that the server encountered an unexpected
+/// condition that prevented it from fulfilling the request."
+/// </para>
 /// </remarks>
 public static class Oid4VciEndpoints
 {
@@ -288,11 +302,15 @@ public static class Oid4VciEndpoints
                 EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
+                //The dispatcher sets the registration before a candidate runs, but an
+                //application's materializer may replace it with a record that is not a
+                //ClientRecord; the endpoint cannot serve the request then, and the fault
+                //is the server's wiring, not the caller's.
                 ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
-                    return Respond(ServerHttpResponse.Unauthorized(
-                        OAuthErrors.InvalidClient, "Unknown client."));
+                    return Respond(ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady));
                 }
 
                 //§8.3.1.1: the Credential Request must carry an Access Token that enables
@@ -596,11 +614,15 @@ public static class Oid4VciEndpoints
                 EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
+                //The dispatcher sets the registration before a candidate runs, but an
+                //application's materializer may replace it with a record that is not a
+                //ClientRecord; the endpoint cannot serve the request then, and the fault
+                //is the server's wiring, not the caller's.
                 ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
-                    return Respond(ServerHttpResponse.Unauthorized(
-                        OAuthErrors.InvalidClient, "Unknown client."));
+                    return Respond(ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady));
                 }
 
                 //§9: the Wallet presents an access token valid for the issuance previously
@@ -1519,11 +1541,15 @@ public static class Oid4VciEndpoints
                 EndpointServer server = context.RequestServer!;
                 var oauth = server.OAuth();
 
+                //The dispatcher sets the registration before a candidate runs, but an
+                //application's materializer may replace it with a record that is not a
+                //ClientRecord; the endpoint cannot serve the request then, and the fault
+                //is the server's wiring, not the caller's.
                 ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
-                    return Respond(ServerHttpResponse.Unauthorized(
-                        OAuthErrors.InvalidClient, "Unknown client."));
+                    return Respond(ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady));
                 }
 
                 //§11.3: a missing or invalid access token answers an RFC 6750 §3

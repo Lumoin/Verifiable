@@ -2,9 +2,8 @@ using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.SecurityEvents;
 using Verifiable.JCose;
-using Verifiable.OAuth.ProtectedResource;
+using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Server;
-using Verifiable.OAuth.Server.Pipeline;
 
 namespace Verifiable.OAuth.Ssf;
 
@@ -28,6 +27,28 @@ namespace Verifiable.OAuth.Ssf;
 /// subjects) arrives through the
 /// <see cref="AuthorizationServerIntegration.ContributeSsfTransmitterMetadataAsync"/>
 /// seam.
+/// </para>
+/// <para>
+/// <strong>Refusals and their challenges.</strong> A Stream Management API request the authorization seam
+/// answers <see cref="SsfRequestDenialReason.AuthenticationRequired"/> for is answered 401 with one
+/// <c>Bearer</c> challenge whose <c>realm</c> is the issuer the request is served under: with
+/// <c>invalid_token</c> in the body and the challenge when its <c>Authorization</c> field holds a Bearer
+/// token, and with an empty body and no error code otherwise, a token presented under another scheme
+/// included, since the transmitter's one challenge is <c>Bearer</c>. A request the seam answers
+/// <see cref="SsfRequestDenialReason.InsufficientScope"/> for is answered 403 with <c>insufficient_scope</c> in
+/// the body and the challenge. Either challenge carries the <c>resource_metadata</c> URL when the registration
+/// serves its protected resource metadata; its realm and that URL come from one resolution of the issuer. When
+/// no issuer resolves, the refusal carries no challenge. No other answer of the transmitter carries one.
+/// The 401 row of the error tables of
+/// <see href="https://openid.net/specs/openid-sharedsignals-framework-1_0.html#section-8.1.1.1">Shared Signals
+/// Framework 1.0 Section 8.1.1.1</see> and of the other Stream Management operations reads "if authorization
+/// failed or it is missing".
+/// <see href="https://openid.net/specs/openid-sharedsignals-framework-1_0.html#section-8.1.2.1">Shared
+/// Signals Framework 1.0 Section 8.1.2.1</see>: "If a Receiver makes an unauthorized request, then the
+/// Transmitter MUST respond with a 401 error status."
+/// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.5.2">RFC 9110 Section 15.5.2</see>: "The
+/// server generating a 401 response MUST send a WWW-Authenticate header field (Section 11.6.1) containing at
+/// least one challenge applicable to the target resource."
 /// </para>
 /// </remarks>
 public static class SsfTransmitterEndpoints
@@ -189,11 +210,8 @@ public static class SsfTransmitterEndpoints
                 Uri issuer;
                 try
                 {
-                    issuer = oauth.ResolveIssuerAsync is not null
-                        ? (await oauth.ResolveIssuerAsync(registration, context, ct)
-                            .ConfigureAwait(false))!
-                        : await DefaultIssuerResolver.ResolveAsync(registration, context, ct)
-                            .ConfigureAwait(false);
+                    issuer = await CredentialEndpointDpopValidation.ResolveIssuerAsync(
+                        server, registration, context, ct).ConfigureAwait(false);
                 }
                 catch(InvalidOperationException)
                 {
@@ -1103,8 +1121,17 @@ public static class SsfTransmitterEndpoints
             SsfRequestDenialReason.AuthenticationRequired => await UnauthorizedWithChallengeAsync(
                 server, registration, context, cancellationToken).ConfigureAwait(false),
 
-            SsfRequestDenialReason.InsufficientScope => ServerHttpResponse.Forbidden(
-                OAuthErrors.InvalidScope, "The granted scope does not permit this operation."),
+            //RFC 6750 Section 3: "If the protected resource request does not include authentication
+            //credentials or does not contain an access token that enables access to the protected resource,
+            //the resource server MUST include the HTTP "WWW-Authenticate" response header field; it MAY
+            //include it in response to other conditions as well." Section 3.1, insufficient_scope: "The
+            //request requires higher privileges than provided by the access token. The resource server
+            //SHOULD respond with the HTTP 403 (Forbidden) status code and MAY include the "scope" attribute
+            //with the scope necessary to access the protected resource."
+            SsfRequestDenialReason.InsufficientScope => await ChallengedRefusalAsync(
+                ServerHttpResponse.Forbidden(
+                    OAuthErrors.InsufficientScope, "The granted scope does not permit this operation."),
+                OAuthErrors.InsufficientScope, server, registration, context, cancellationToken).ConfigureAwait(false),
 
             SsfRequestDenialReason.StreamNotAvailableToReceiver => ServerHttpResponse.NotFound(),
 
@@ -1152,51 +1179,92 @@ public static class SsfTransmitterEndpoints
 
 
     /// <summary>
-    /// Builds the <c>401</c> for a failed or missing authorization. The
-    /// Transmitter is a protected resource (CAEP interop: Bearer in the
-    /// Authorization header), so when its RFC 9728 metadata document is also
-    /// served, the <c>WWW-Authenticate</c> challenge carries the
-    /// <c>resource_metadata</c> URL (RFC 9728 §5.1) — the Receiver fetches it
-    /// to discover the SSF scopes and authorization servers. The parameter is
-    /// attached only when the metadata capability is active; advertising a
-    /// URL that would 404 helps nobody.
+    /// Builds the <c>401</c> for a failed or missing authorization, with one <c>Bearer</c> challenge attached by
+    /// <see cref="ChallengedRefusalAsync"/>. The transmitter's one challenge is <c>Bearer</c>, so it reads a Bearer
+    /// token only: a request whose <c>Authorization</c> field holds a Bearer token, as
+    /// <see cref="BearerTokenValidation.TryExtractBearer"/> reads it, is answered with <c>invalid_token</c> in the
+    /// body and <c>Bearer realm="&lt;issuer&gt;", error="invalid_token"</c>; every other request (no field, an
+    /// empty or white-space value, a credential of another scheme, <c>DPoP</c> included) with an empty body and
+    /// <c>Bearer realm="&lt;issuer&gt;"</c>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 Section 3</see>: "If the protected
+    /// resource request included an access token and failed authentication, the resource server SHOULD include
+    /// the "error" attribute to provide the client with the reason why the access request was declined."
     /// </summary>
-    private static async ValueTask<ServerHttpResponse> UnauthorizedWithChallengeAsync(
+    /// <param name="server">The authorization server whose issuer resolver names the realm.</param>
+    /// <param name="registration">The transmitter registration the request belongs to.</param>
+    /// <param name="context">The per-request context.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The 401 refusal.</returns>
+    private static ValueTask<ServerHttpResponse> UnauthorizedWithChallengeAsync(
         EndpointServer server,
         ClientRecord registration,
         ExchangeContext context,
         CancellationToken cancellationToken)
     {
-        var oauth = server.OAuth();
-        ServerHttpResponse response = ServerHttpResponse.Unauthorized(
-            OAuthErrors.InvalidRequest, "Authorization failed or is missing.");
+        //A refused request carried a credential when its Authorization field holds a Bearer token, as
+        //the library's extractor reads that field: it is told why, invalid_token in the body and in the
+        //challenge. Every other refused request (no Authorization field, an empty or white-space value,
+        //another scheme) lacks the authentication information this endpoint reads and gets the challenge
+        //with no error code and an empty body. RFC 6750 Section 3.1: "If the request lacks any
+        //authentication information (e.g., the client was unaware that authentication is necessary or
+        //attempted using an unsupported authentication method), the resource server SHOULD NOT include
+        //an error code or other error information."
+        bool isBearerTokenCarried = BearerTokenValidation.TryExtractBearer(context, out _);
+        ServerHttpResponse refusal = isBearerTokenCarried
+            ? ServerHttpResponse.Unauthorized(OAuthErrors.InvalidToken, "Authorization failed or is missing.")
+            : ServerHttpResponse.Unauthorized();
 
-        if(!registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata))
-        {
-            return response;
-        }
+        return ChallengedRefusalAsync(
+            refusal, isBearerTokenCarried ? OAuthErrors.InvalidToken : null, server, registration, context, cancellationToken);
+    }
 
-        //The same identity the metadata document derives its resource value
-        //from, so the §3.3 validation holds by construction; the §3
-        //path-insertion computation mirrors the consumer's.
+
+    /// <summary>
+    /// Attaches the transmitter's one <c>Bearer</c> challenge to <paramref name="refusal"/> through
+    /// <see cref="CredentialEndpointDpopValidation.Challenged"/>. The issuer is resolved once, through
+    /// <see cref="CredentialEndpointDpopValidation.ResolveIssuerAsync"/>, and the challenge's <c>realm</c> and its
+    /// <c>resource_metadata</c> URL both come from that one resolution. The Transmitter is a protected resource
+    /// (CAEP interop: Bearer in the Authorization header), so when its RFC 9728 metadata document is also served,
+    /// the challenge carries the <c>resource_metadata</c> URL
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-5.1">RFC 9728 Section 5.1</see>); the Receiver
+    /// fetches it to discover the SSF scopes and authorization servers. The parameter is attached only when the
+    /// metadata capability is active; advertising a URL that would 404 helps nobody. When no issuer resolves, the
+    /// resolution's <see cref="InvalidOperationException"/> is met here, once, and the refusal is answered without
+    /// a challenge.
+    /// </summary>
+    /// <param name="refusal">The 401 or 403 refusal the challenge is attached to.</param>
+    /// <param name="error">The RFC 6750 Section 3.1 error code, or <see langword="null"/> when the request carried no Bearer token.</param>
+    /// <param name="server">The authorization server whose issuer resolver names the realm.</param>
+    /// <param name="registration">The transmitter registration the request belongs to.</param>
+    /// <param name="context">The per-request context.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The refusal with its challenge, or without one when no issuer resolves.</returns>
+    private static async ValueTask<ServerHttpResponse> ChallengedRefusalAsync(
+        ServerHttpResponse refusal,
+        string? error,
+        EndpointServer server,
+        ClientRecord registration,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+    {
+        //The same identity the metadata document derives its resource value from, so the RFC 9728
+        //Section 3.3 validation holds by construction; the Section 3 path-insertion computation mirrors
+        //the consumer's.
         Uri issuer;
         try
         {
-            issuer = oauth.ResolveIssuerAsync is not null
-                ? (await oauth.ResolveIssuerAsync(registration, context, cancellationToken)
-                    .ConfigureAwait(false))!
-                : await DefaultIssuerResolver.ResolveAsync(registration, context, cancellationToken)
-                    .ConfigureAwait(false);
+            issuer = await CredentialEndpointDpopValidation.ResolveIssuerAsync(
+                server, registration, context, cancellationToken).ConfigureAwait(false);
         }
         catch(InvalidOperationException)
         {
-            return response;
+            return refusal;
         }
 
-        Uri metadataUrl = WellKnownPaths.OAuthProtectedResource.ComputeUri(issuer.OriginalString);
+        Uri? metadataUrl = registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata)
+            ? WellKnownPaths.OAuthProtectedResource.ComputeUri(issuer.OriginalString)
+            : null;
 
-        return response.WithHeader(
-            WellKnownHttpHeaderNames.WwwAuthenticate,
-            ProtectedResourceChallenge.BuildChallenge(WellKnownAuthenticationSchemes.Bearer, metadataUrl));
+        return CredentialEndpointDpopValidation.Challenged(refusal, error, issuer, metadataUrl);
     }
 }
