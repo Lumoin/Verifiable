@@ -20,7 +20,14 @@ namespace Verifiable.JCose;
 /// <para>
 /// A verification the library runs is chosen by the key's algorithm, so a declared <c>alg</c> outside
 /// the key's own algorithms names an operation that never ran. Each elliptic-curve, Edwards-curve and
-/// ML-DSA algorithm binds the one key algorithm it is defined over. The RSASSA-PKCS1-v1_5 and RSASSA-PSS
+/// ML-DSA algorithm binds the one key algorithm it is defined over. <c>EdDSA</c> and <c>Ed25519</c>
+/// both bind the Ed25519 key:
+/// <see href="https://www.rfc-editor.org/rfc/rfc9864#section-4.1.1">RFC 9864 section 4.1.1</see>
+/// registers <c>Ed25519</c> as "EdDSA using the Ed25519 parameter set in Section 5.1 of [RFC8032]",
+/// and the deprecation of <c>EdDSA</c> beside it refuses nothing, since
+/// <see href="https://www.rfc-editor.org/rfc/rfc9864#section-4.4">RFC 9864 section 4.4</see> defines
+/// it as a preference: "this replacement functionality SHOULD be utilized in new deployments in
+/// preference to the deprecated identifier". The RSASSA-PKCS1-v1_5 and RSASSA-PSS
 /// algorithms all bind an RSA key of either size the library tags: the key's algorithm does not tell
 /// them apart, so a caller that holds an RSA key to exactly one of them does so by the key's own
 /// <c>alg</c> member (<see href="https://www.rfc-editor.org/rfc/rfc7517#section-4.4">RFC 7517 section
@@ -34,11 +41,11 @@ public static class JwsAlgorithmKeyBinding
     /// <summary>
     /// Whether <paramref name="alg"/> is an algorithm of a key tagged <paramref name="keyAlgorithm"/>:
     /// <c>ES256</c> over P-256, <c>ES384</c> over P-384, <c>ES512</c> over P-521, <c>ES256K</c> over
-    /// secp256k1, <c>EdDSA</c> over Ed25519, <c>RS256</c> to <c>RS512</c> and <c>PS256</c> to
-    /// <c>PS512</c> over an RSA 2048 or RSA 4096 key, <c>ESB256</c>, <c>ESB320</c>, <c>ESB384</c> and
-    /// <c>ESB512</c> over brainpoolP256r1, brainpoolP320r1, brainpoolP384r1 and brainpoolP512r1, and
-    /// <c>ML-DSA-44</c>, <c>ML-DSA-65</c> and <c>ML-DSA-87</c> over the ML-DSA key of the same parameter
-    /// set.
+    /// secp256k1, <c>EdDSA</c> and <c>Ed25519</c> over Ed25519, <c>RS256</c> to <c>RS512</c> and
+    /// <c>PS256</c> to <c>PS512</c> over an RSA 2048 or RSA 4096 key, <c>ESB256</c>, <c>ESB320</c>,
+    /// <c>ESB384</c> and <c>ESB512</c> over brainpoolP256r1, brainpoolP320r1, brainpoolP384r1 and
+    /// brainpoolP512r1, and <c>ML-DSA-44</c>, <c>ML-DSA-65</c> and <c>ML-DSA-87</c> over the ML-DSA key
+    /// of the same parameter set.
     /// </summary>
     /// <param name="alg">
     /// The declared algorithm, compared as the case-sensitive string RFC 7515 section 4.1.1 makes it.
@@ -56,6 +63,7 @@ public static class JwsAlgorithmKeyBinding
         string when WellKnownJwaValues.IsEs512(alg) => keyAlgorithm == CryptoAlgorithm.P521,
         string when WellKnownJwaValues.IsEs256K(alg) => keyAlgorithm == CryptoAlgorithm.Secp256k1,
         string when WellKnownJwaValues.IsEdDsa(alg) => keyAlgorithm == CryptoAlgorithm.Ed25519,
+        string when WellKnownJwaValues.IsEd25519(alg) => keyAlgorithm == CryptoAlgorithm.Ed25519,
         string when WellKnownJwaValues.IsRs256(alg)
             || WellKnownJwaValues.IsRs384(alg)
             || WellKnownJwaValues.IsRs512(alg)
