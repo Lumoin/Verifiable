@@ -270,14 +270,7 @@ public static class ClientIdMetadataDocumentReader
     //no existing primitive that returns member names for every element of an object array.
     private static bool JwksContainsPrivateOrSymmetricMember(ReadOnlySpan<byte> jwksDocument)
     {
-        int keysStart = JwkJsonReader.IndexOfKey(jwksDocument, WellKnownJwkMemberNames.KeysUtf8);
-        if(keysStart < 0)
-        {
-            return false;
-        }
-
-        int afterKeysKey = keysStart + WellKnownJwkMemberNames.KeysUtf8.Length + 1;
-        afterKeysKey = JwkJsonReader.SkipWhitespaceAndColon(jwksDocument, afterKeysKey);
+        int afterKeysKey = JwkJsonReader.IndexOfValue(jwksDocument, WellKnownJwkMemberNames.KeysUtf8);
         if(afterKeysKey < 0 || afterKeysKey >= jwksDocument.Length || jwksDocument[afterKeysKey] != (byte)'[')
         {
             return false;

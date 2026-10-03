@@ -70,6 +70,21 @@ internal sealed class JwkJsonReaderWellFormedObjectContentTests
     }
 
 
+    /// <summary>
+    /// Object content shares the document pass's I-JSON character rules: an unpaired surrogate escape and
+    /// an escaped U+0000 are refused in content without its braces too.
+    /// </summary>
+    /// <param name="content">The brace-less object content.</param>
+    [TestMethod]
+    [DataRow("\"sub\":\"\\ud800\"", DisplayName = "an unpaired surrogate escape")]
+    [DataRow("\"sub\":\"\\u0000\"", DisplayName = "an escaped U+0000")]
+    [DataRow("\"s\\udc00\":1", DisplayName = "an unpaired surrogate escape in a member name")]
+    public void RejectsContentOutsideTheIJsonCharacterRules(string content)
+    {
+        Assert.IsFalse(JwkJsonReader.IsWellFormedJsonObjectContent(Utf8(content)));
+    }
+
+
     [TestMethod]
     public void RejectsATrailingComma()
     {
