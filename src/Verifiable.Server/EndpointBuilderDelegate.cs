@@ -5,7 +5,7 @@ namespace Verifiable.Server;
 /// <summary>
 /// Builds <see cref="EndpointCandidate"/> records for a given registration,
 /// leaving URI resolution to
-/// <see cref="Pipeline.EndpointChain.BuildForRequestAsync"/> which projects
+/// the dispatcher's chain build, which projects
 /// each candidate to a complete <see cref="ServerEndpoint"/> after resolving its
 /// endpoint URI.
 /// </summary>
@@ -16,8 +16,9 @@ namespace Verifiable.Server;
 /// modules use the same delegate shape and are treated identically.
 /// </para>
 /// <para>
-/// The delegate is called once per request by
-/// <see cref="Pipeline.EndpointChain.BuildForRequestAsync"/>. Return an empty
+/// The delegate is called once by each chain build the dispatcher runs for a request: the build
+/// for the registration it loaded and, when one follows, the build for a materialized registration.
+/// Return an empty
 /// list when the registration does not have the capabilities your flow
 /// requires, or when per-request signals on <paramref name="context"/>
 /// indicate this flow's endpoints should not be active for this request.
@@ -40,8 +41,21 @@ namespace Verifiable.Server;
 /// </remarks>
 /// <param name="registration">
 /// The registration whose capabilities determine which endpoints to produce.
-/// Check <see cref="IRegistrationRecord.AllowedCapabilities"/> before emitting
-/// candidates.
+/// The capabilities the request is served under are the set the chain build
+/// writes on <paramref name="context"/> before it calls any builder, read as
+/// <c>ResolvedCapabilities</c> of <see cref="ExchangeContextServerExtensions"/>:
+/// the library's immutable copy of the capability resolver's answer for this
+/// registration, held to the bound when the dispatcher judges a materialized
+/// registration. The chain's capability filter drops every candidate whose
+/// <see cref="EndpointCandidate.Capability"/> is outside that set, so a gate
+/// that admits a candidate on the capability the candidate carries may read
+/// <see cref="IRegistrationRecord.AllowedCapabilities"/>, as the library's
+/// single-capability gates do. A gate that reads a capability beside the one
+/// its candidate carries, or that records what a capability admits for use
+/// beyond its own candidate, reads the set on the context, so a capability the
+/// resolver withholds or a materialized registration adds admits nothing; in
+/// the library's builders such a read of the set on a context that carries
+/// none, as for a call outside a chain build, allows no capability.
 /// </param>
 /// <param name="context">
 /// The per-request context. Carries the typed <see cref="IncomingRequest"/>

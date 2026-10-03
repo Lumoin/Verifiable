@@ -200,12 +200,38 @@ registration's type, policy and issuer are resolved again for it, with every ent
 registration's policy resolution wrote first returned to the value the request arrived with, or removed
 when the request arrived without it, so the materialized record's resolution starts from the request's
 arriving state and a policy axis its profile does not set reads the arriving value or its strict
-default. The chain is built again for the materialized record (`EndpointChain.BuildBoundedForRequestAsync`)
-when it does not allow every capability the loaded registration allows, or when its policy resolution
-leaves a policy entry at another value than the loaded registration's resolution left it; the resolved
-set and the chain are then stashed again and the request is matched again. Otherwise the chain built
-for the loaded registration is kept, and a kept chain is the loaded registration's in every input: its
-capability resolution, its endpoint addresses and whatever else its builders read of the registration.
+default. For a record of the loaded registration's type that is another reference, its capabilities are
+resolved through `ResolveCapabilitiesAsync` in every case and held to the bound: the set resolved for the
+loaded registration that both records allow. The set the chain build stores on the context is the
+library's immutable copy of the resolution: it is made by walking the bound, or without one the
+registration's own allowed capabilities, and asking the answer for each capability, never from the
+answer's own subset test or enumeration. A capability resolution can only narrow what the registration
+allows. The readers listed below act on that set, so an answer that held a capability beyond the
+registration's would widen what they do, which reading the record could not; the walk leaves such a
+capability out of the set. What the library holds of that set: its own pipeline cannot widen it, since
+it is the library's immutable copy and a capability resolution and a materialization can only narrow
+it; no public member replaces it; the chain build stores it in the context entry named
+`server.resolvedCapabilities` inside an entry of the library's own that records the context it was
+written for, so a value under that name that is not the library's own entry for the context read, an
+entry carried from another request's context included, reads as no set, and a reader of no set allows
+no capability; and the public `EndpointChain.BuildForRequestAsync` refuses a context that already
+carries a set, while the dispatcher builds through the internal `BuildBoundedForRequestAsync`. Code that
+holds a request's context is the application: it can replace the context's registration and endpoint
+chain through their public setters, and it answers for what it stores in the context. The bound and the
+check that keeps the chain read that copy and ask the materialized record's answer for each capability,
+so an answer the application changes after handing it back, or whose own subset test reaches beyond the
+bound, adds nothing. The chain is built again for the materialized record
+(`EndpointChain.BuildBoundedForRequestAsync`) when it does not allow every capability the loaded
+registration allows, when its policy resolution leaves a policy entry at another
+value than the loaded registration's resolution left it, or when its resolved capabilities held to the
+bound are fewer than those resolved for the loaded registration; the resolved set and the chain are then
+stashed again and the request is matched again, and a rebuild that follows the resolution of a record
+keeping every capability is handed that answer, so the resolution is asked once for the loaded and once
+for the materialized record. Otherwise the chain built for the loaded registration and its resolved set
+are kept, and a kept chain is the loaded registration's in every input: its capability resolution, its
+endpoint addresses and whatever else its builders read of the registration. A resolution that answers
+more than the bound is held by it; a resolution that throws for the materialized record leaves the
+dispatch as one that throws for the loaded registration does, with no answer of the library's.
 A materialization may narrow the capabilities: a capability it removes is answered exactly as one the
 registration never held (a request no candidate matches answers the dispatcher's `404`; a grant the
 client lost answers the token endpoint's `unauthorized_client`). A policy change alone builds the chain
@@ -216,65 +242,113 @@ the chain is built again, the match-decision inspection runs again for the decis
 before it is executed, so a request's last announced decision is the one executed (`MatchedStage`), and
 a request no endpoint matches carries no trace of the first match on the context or the dispatch
 activity. A materialization never widens the capabilities or the chain: the set resolved for the
-materialized record is held to the set resolved for the loaded registration that both records allow,
-and the chain built again is held to the endpoints of the chain built for the loaded registration, each
-identified by its name, HTTP method and flow kind together, an endpoint that chain lacks being dropped
-and recorded as capability-filtered. Each capability a materialization adds is absent from the resolved set the
-endpoints and token producers read and is recorded as `ServerEventNames.MaterializedCapabilityDropped`,
-and a candidate a builder's gate admits for it, a gate that reads two capabilities while its candidate
-carries one, is dropped unless the loaded chain holds an endpoint of that same name, HTTP method and
-flow kind. A name alone does not identify an endpoint: an application's builder may yield candidates
-that share a name across HTTP method or flow kind, one of them behind such a gate, and a name bound
-would admit the gated one where the loaded chain holds only the other. The capability is held by the
-capability bound and is not part of the identity, since the token endpoint's grant-type refusal takes
-its capability from the record's own capabilities and moves to a kept one when a materialization
-removes the one it carried. The bound does not tell apart a builder that yields, under one name, HTTP
-method and flow kind, a candidate whose handler depends on a capability beyond the one it carries: the
-bound compares what a chain records of an endpoint, and a builder is handed the record as the
-materialization answered it. The bound holds the chain and the resolved set; an endpoint that reads the
-record's own capabilities as it runs reads the materialized record's
-(the discovery document's `backchannel_logout_supported`, `backchannel_logout_session_supported` and
-`client_id_metadata_document_supported`,
-the end-session back-channel logout fan-out, the federation entity configuration's
-`client_registration_types_supported` and the shared signals challenge's `resource_metadata`). A record
-of another type than the loaded one is a fault of the application's wiring whatever its capabilities:
-no endpoint runs over it, and it is answered `500` `server_error` with the description the library
-answers a fault of the server's own wiring with (`WellKnownOAuthErrorDescriptions.ServerNotReady`) and the
-fault on the dispatch activity. That answer and a failure the materialization answers are sent without
-the announced endpoint running, the context carrying the capability of the endpoint the request
-matched. Two cases are not answered as never held, both whenever the chain is built
-again, for a capability removed or for a policy change alone. First, a token-serving grant the
-materialization adds and the server serves answers the dispatcher's `404` where a registration that never
-held it answers `unauthorized_client`: the token endpoint's module registers the grant from the record's
-own capabilities, so its grant-type refusal declines the grant, while the bound drops the grant's own
-candidate. Second, when the added capability precedes every kept one in the order the token endpoint
-takes its grant-type refusal's capability from, the refusal itself carries the added capability and is
-dropped, so every token request no kept grant candidate owns answers the `404`: a missing or blank
-`grant_type`, a grant the server serves that the materialized record does not hold, the removed one
-included, and a grant the server does not serve, where a registration that never held the added
-capability answers `invalid_request`, `unauthorized_client` and `unsupported_grant_type`. The cause
-of both is the token endpoint's module, which reads the record's own capabilities for its registered
-grants and for the capability its refusal carries.
+materialized record is held to the bound, and the chain built again is held to the endpoints of the
+chain built for the loaded registration, each identified by its name, HTTP method and flow kind
+together, an endpoint that chain lacks being dropped and recorded as capability-filtered. Each
+capability a materialization adds is absent from the resolved set and is recorded as
+`ServerEventNames.MaterializedCapabilityDropped`, and a candidate a builder's gate admits for it, a gate
+that reads two capabilities while its candidate carries one, is dropped unless the loaded chain holds an
+endpoint of that same name, HTTP method and flow kind. A name alone does not identify an endpoint: an
+application's builder may yield candidates that share a name across HTTP method or flow kind, one of
+them behind such a gate, and a name bound would admit the gated one where the loaded chain holds only
+the other. The capability is held by the capability bound and is not part of the identity, since the
+token endpoint's grant-type refusal takes its capability from the resolved set and stays under a kept
+one when a materialization removes the one it carried or adds one ahead of it.
+
+The readers that act on a capability read the bounded set, the resolved set the chain build writes on
+the context (`ResolvedCapabilities`) before it calls any builder, not the record: the token endpoint's
+module (the grants it registers, which its grant-type refusal declines, and the capability the refusal
+carries), the two request-object gates (a pushed request carrying a request object and an authorization
+request carrying one by value, each reading a second capability beside the one its candidate carries),
+the end-session back-channel logout fan-out, the discovery document's `backchannel_logout_supported`,
+`backchannel_logout_session_supported` and `client_id_metadata_document_supported`, the federation
+entity configuration's `client_registration_types_supported`, and the shared signals challenge's
+`resource_metadata`. Each of these reads, on a context that carries no resolved set, allows nothing. So
+a capability a materialization adds, and a capability the capability resolution withholds with no
+materialization at all, is answered
+by each of them as one the registration never held: a grant the materialization adds and the server
+serves answers `unauthorized_client`, and a capability added ahead of every kept one in the order the
+refusal takes its capability from leaves the refusal under a kept one, so a missing `grant_type`, a
+grant the server does not serve and the added grant answer `invalid_request`, `unsupported_grant_type`
+and `unauthorized_client`. The builder gates that admit a candidate on the capability that candidate
+itself carries read the record's own capabilities, and that changes no answer: the chain's capability
+filter drops a candidate whose capability is outside the resolved set, so such a gate can only admit a
+candidate the filter then holds, and `EndpointChain.CapabilityFilteredCandidateNames` names it among the
+dropped. An application's builder or endpoint that reads the record's own capabilities for anything
+beyond the candidate it gates reads the materialized record's and is held by the endpoint bound only.
+One reader stays on the loaded record, a limit of the library: the client ID metadata materialization
+(`ClientIdMetadataMaterialization`) decides whether to fetch the client's document from the loaded
+record's `OAuthClientIdMetadataDocument` capability. The resolved set is on the context when it runs,
+but it does not read it, so a capability resolution that withholds that capability does not stop the
+fetch, while the discovery document served under that resolution does not advertise
+`client_id_metadata_document_supported`. The registration management endpoints read and write the
+registration as stored, not the materialized record (Section 8, the registration management entry).
+
+A record of another type than the loaded one is a fault of the application's wiring whatever its
+capabilities: no endpoint runs over it, and it is answered `500` `server_error` with the description the
+library answers a fault of the server's own wiring with (`WellKnownOAuthErrorDescriptions.ServerNotReady`)
+and the fault on the dispatch activity. That answer and a failure the materialization answers are sent
+without the announced endpoint running, the context carrying the capability of the endpoint the request
+matched.
 - Proven over the listener by `IdJagGrantTests.AMaterializationThatNarrowsAwayTheTokenExchangeIsUnauthorizedClient`,
   `AMaterializationThatNarrowsAwayTheIdJagCapabilityMintsNothing`,
   `AMaterializationThatAddsACapabilityServesNothingItAddsAndRecordsItAsync`,
   `ACapabilityTheMaterializationChangesIsAnsweredAsOneNeverHeldAsync` (removed or added: no token-serving
-  capability left, another kept, a grant the server does not serve, each compared byte for byte with a
-  registration that never held it, with the match decisions announced),
+  capability left, another kept, a grant the server does not serve, one removed and a served grant
+  added, and a capability added ahead of every kept one with a missing `grant_type`, an unserved grant
+  and the added grant, each compared byte for byte with a registration that never held it, with the
+  match decisions announced),
+  `AGrantTheCapabilityResolutionWithholdsIsAnsweredAsOneNeverHeldAsync`,
+  `TheRefusalsCapabilityTheResolutionWithholdsIsAnsweredAsOneNeverHeldAsync` (the first token-serving
+  capability withheld, a request without `grant_type` answered `invalid_request` as never held),
   `AGrantTheMaterializationRemovesIsRefusedAndTheRefusalIsAnnouncedAsync`,
   `ACandidateOfALoadedEndpointsNameUnderAnotherMethodOrFlowKindIsNotRunAsync` (a composed builder's
   second candidate of a loaded endpoint's name by another HTTP method, or of another flow kind, behind a
   gate that reads a second capability),
   `AnEndpointOnlyAnAddedCapabilityAdmitsIsNotRunAsync`,
+  `ARequestObjectTheCapabilityResolutionWithholdsIsAnsweredAsOneNeverHeldAsync` (by value and pushed),
   `APolicyAxisTheMaterializedProfileDoesNotSetReadsItsStrictDefaultAsync`,
   `AnEntryTheLoadedProfileOverwroteReadsTheValueTheRequestArrivedWithAsync`,
   `AProfileTheMaterializationChangesAnswersAsTheProfileHeldFromTheStartAsync`,
   `AMaterializedRecordOfAnotherFamilyIsAServerErrorAsync` (the description read from the wire),
   `AMaterializedRecordOfAnotherFamilyKeepingEveryCapabilityIsAServerErrorAsync`,
   `TheMaterializedRecordsPolicyAndIssuerServeTheRequestAsync` and
-  `AMaterializationThatChangesNoCapabilityBuildsOneChainAsync`, and by
-  `ResolveCapabilitiesAsyncTests.AMaterializedResolutionBeyondTheLoadedResolutionAddsNoEndpointAsync` and
-  `TheRequestCarriesTheBoundedResolutionOfAMaterializedRegistrationAsync`.
+  `AMaterializationThatChangesNoCapabilityBuildsOneChainAsync` (one chain build, two resolutions), by
+  `ResolveCapabilitiesAsyncTests.AMaterializedResolutionBeyondTheLoadedResolutionAddsNoEndpointAsync`,
+  `TheRequestCarriesTheBoundedResolutionOfAMaterializedRegistrationAsync`,
+  `AMaterializationKeepingEveryCapabilityIsResolvedUnderTheBoundAsync` (exactly two resolutions),
+  `AResolutionThatNarrowsTheSetItHandedBackIsHeldToItsSecondAnswerAsync` (one mutable set handed back by
+  both resolutions and narrowed between them: discovery answered as never held),
+  `AnAnswerClaimingToBeWithinTheBoundIsHeldToTheBoundAsync` (an answer whose subset test claims every set:
+  the stored set holds nothing outside the bound) and
+  `AResolutionThatThrowsForTheMaterializedRegistrationFaultsAsForTheLoadedOneAsync` (answered byte for byte
+  as a resolution that throws for the loaded registration, the fault recorded once),
+  `AResolutionBeyondWhatTheRegistrationAllowsAddsNothingAsync` (a resolution that answers the token
+  exchange capability the registration does not allow, with no materialization: the token endpoint
+  answered byte for byte as under a resolution of what the registration allows, `404`, and the stored
+  set holding the registration's capabilities alone),
+  `ASetAnApplicationWritesUnderTheResolvedCapabilitiesEntryServesNothingAsync` (a materialization that
+  stores its own set under `server.resolvedCapabilities`, holding back-channel logout, and answers the
+  registration it was given, the capability withheld by the resolution or not allowed by the registration:
+  the discovery document answered byte for byte as at a registration that never held it, and no set read),
+  `AResolvedCapabilitiesEntryCarriedFromAnotherRequestServesNothingAsync` (the library's entry of a request
+  under back-channel logout, read by its outgoing inspection and stored by the materialization of a
+  request whose registration does not allow it: answered byte for byte as under a set of the
+  application's own, and no set read),
+  `APublicChainBuildOnTheRequestsContextWidensNothingAsync` (a materialization that calls the public chain
+  build on the request's context with its registration widened by back-channel logout: `500`, the one
+  fault an `InvalidOperationException`, and no part of the answer carrying the capability) and
+  `ASecondPublicChainBuildOnOneContextIsRefusedAsync` (the public chain build again on one context
+  refused, on a fresh context built), and, each in the two forms (a materialization that adds the
+  capability; a capability resolution that withholds it) compared with a registration that never held
+  it, by
+  `EndSessionLogoutTests.ABackChannelLogoutOutsideTheServedCapabilitiesIsNotDeliveredAsync`,
+  `DiscoveryEndpointTests.ADiscoveryMemberOutsideTheServedCapabilitiesIsNotAdvertisedAsync`,
+  `FederationEntityConfigurationEndpointTests.ARegistrationTypeOutsideTheServedCapabilitiesIsNotListedAsync`
+  (the signed statement's complete decoded claims, the key identifier and coordinates each registration
+  generates replaced) and
+  `SsfStreamManagementEndpointTests.TheChallengeNamesNoResourceMetadataOutsideTheServedCapabilitiesAsync`
+  (the whole answer).
 
 `HandleCoreAsync` runs an 8-step state-machine loop:
 
@@ -447,7 +521,7 @@ A subscription made inside a candidate callback attaches to its shared stream im
 
 Observer failure reports receive a detached context containing no request, headers, body, live registration or management bearer. The stage contains only selected event data and the supplied exception. Outgoing inspection runs after the handler completes on every dispatch; its exceptions are recorded on the request Activity and the response returns as built. Incoming and matched inspection exceptions propagate before commitment.
 
-Deletion retries a lost conditional race and emits a tombstone one revision beyond the atomically removed record, so delayed updates cannot repopulate a deleted cache entry. `DeleteAsync(record, expectedRevision, context, cancellationToken)` atomically returns the removed record or null without mutation. After a lost race the handler reloads the same identity; an absent or replaced identity receives HTTP 401 without another event. Consumers retain tombstone revisions after removing cached data. A delayed deletion cannot remove a different client's reused tenant index or grant state. For a persisted registration, an absent grant set or a different current client identity grants no capabilities to an overlapping request. A request-derived registration is resolved through the endpoint chain and materialized per request without being committed to ClientRegistrationStore. Capability effects apply only to their source identity and revision, so a delayed signal cannot overwrite a newer grant decision.
+Deletion makes one conditional pass at the revision it loaded and emits a tombstone one revision beyond the atomically removed record, so delayed updates cannot repopulate a deleted cache entry. `DeleteAsync(record, expectedRevision, context, cancellationToken)` atomically returns the removed record or null without mutation. A lost race is answered HTTP 400 `invalid_client_metadata` with the description "The registration changed during this deletion." and no event, and the handler loads nothing again; a deletion the client sends again is authenticated against the record it finds, and an absent or replaced identity receives HTTP 401. Consumers retain tombstone revisions after removing cached data. A delayed deletion cannot remove a different client's reused tenant index or grant state. For a persisted registration, an absent grant set or a different current client identity grants no capabilities to an overlapping request. A request-derived registration is resolved through the endpoint chain and materialized per request without being committed to ClientRegistrationStore. Capability effects apply only to their source identity and revision, so a delayed signal cannot overwrite a newer grant decision.
 
 A management PUT requires the issued client_id; a missing or different identifier returns invalid_client_metadata without mutation or notification. The client update handler includes its issued client identifier in the complete replacement document. Management requests for absent clients or with invalid registration access tokens return HTTP 401. Registration responses carry an absolute configuration URI, the management bearer, the client identifier and every accepted metadata field. Read and update share the complete client-information response defined by RFC 7592 section 3. The validated presented bearer is echoed without requiring the store to recover its protected credential. The registered metadata retains copied immutable collections, and omitted replacement metadata is unset. The shared client/server metadata writer covers every supported field. `ClientRegistrationEvent.ClientId` and `TenantId` are computed get-only properties supplied through the required `Projection`; they have no independent init accessors or required-member obligations.
 
@@ -569,14 +643,16 @@ The scale assumption notes that agents may run the AS themselves. This implies a
 - **Post-handler inspection and registration management.** Outgoing inspection failures are recorded on the request Activity and preserve the built response; incoming and matched failures propagate. Observer diagnostics receive detached contexts. Conditional deletion returns the final removed record and publishes its next revision as a tombstone. Management authentication uses HTTP 401 for absent clients and invalid bearers, requires the issued identifier in PUT, and emits complete RFC 7592 section 3 responses with absolute configuration URIs. See [Live configuration](#41-live-configuration).
   - **The client configuration endpoint's refusals and their challenges.** The endpoint is an OAuth 2.0 protected resource ([RFC 7592 Section 2](https://www.rfc-editor.org/rfc/rfc7592#section-2)), and the 401 answers of its read, update and delete operations carry one `Bearer` challenge, attached by `CredentialEndpointDpopValidation.Challenged`, the body the Global Token Revocation endpoint's refusals are challenged through, reached through `CredentialEndpointDpopValidation.ChallengedAsync`, which resolves the issuer once for the refusal; its `realm` is the issuer the request is served under. [RFC 9110 Section 15.5.2](https://www.rfc-editor.org/rfc/rfc9110#section-15.5.2): "The server generating a 401 response MUST send a WWW-Authenticate header field (Section 11.6.1) containing at least one challenge applicable to the target resource."
     - A request whose `Authorization` field holds no Bearer token, as `BearerTokenValidation.TryExtractBearer` reads it (no field, an empty or white-space value, a credential of another scheme), lacks the authentication information the endpoint reads and is answered 401 with an empty body and the challenge `Bearer realm="<issuer>"`, which carries no error code. [RFC 7592 Section 2](https://www.rfc-editor.org/rfc/rfc7592#section-2): "The client MUST use its registration access token in all calls to this endpoint as an OAuth 2.0 Bearer Token [RFC6750]." [RFC 6750 Section 3.1](https://www.rfc-editor.org/rfc/rfc6750#section-3.1): "If the request lacks any authentication information (e.g., the client was unaware that authentication is necessary or attempted using an unsupported authentication method), the resource server SHOULD NOT include an error code or other error information."
-    - A registration access token the application's `ValidateRegistrationAccessTokenAsync` refuses, and a deletion whose client another party deletes or replaces while it runs, are answered 401, the body's error `invalid_token` with the description "Registration access token is invalid.", and the challenge `Bearer realm="<issuer>", error="invalid_token"`, at read, update and delete alike. [RFC 7592 Section 2.1](https://www.rfc-editor.org/rfc/rfc7592#section-2.1), and in the same words [Section 2.2](https://www.rfc-editor.org/rfc/rfc7592#section-2.2) and [Section 2.3](https://www.rfc-editor.org/rfc/rfc7592#section-2.3): "If the registration access token used to make this request is not valid, the server MUST respond with an error as described in the OAuth Bearer Token Usage specification [RFC6750]." [RFC 6750 Section 3](https://www.rfc-editor.org/rfc/rfc6750#section-3): "If the protected resource request included an access token and failed authentication, the resource server SHOULD include the "error" attribute to provide the client with the reason why the access request was declined."
-    - The 400 and 500 answers carry no challenge, and neither does an accepted request's answer.
+    - A registration access token the application's `ValidateRegistrationAccessTokenAsync` refuses is answered 401, the body's error `invalid_token` with the description "Registration access token is invalid.", and the challenge `Bearer realm="<issuer>", error="invalid_token"`, at read, update and delete alike. A deletion whose client another party deletes or replaces while it runs is answered as a lost race (400 `invalid_client_metadata`, "The registration changed during this deletion."), and a deletion sent after it is answered by the state it finds. [RFC 7592 Section 2.1](https://www.rfc-editor.org/rfc/rfc7592#section-2.1), and in the same words [Section 2.2](https://www.rfc-editor.org/rfc/rfc7592#section-2.2) and [Section 2.3](https://www.rfc-editor.org/rfc/rfc7592#section-2.3): "If the registration access token used to make this request is not valid, the server MUST respond with an error as described in the OAuth Bearer Token Usage specification [RFC6750]." [RFC 6750 Section 3](https://www.rfc-editor.org/rfc/rfc6750#section-3): "If the protected resource request included an access token and failed authentication, the resource server SHOULD include the "error" attribute to provide the client with the reason why the access request was declined."
+    - The 400 for an `Authorization` field sent on two lines carries the challenge `Bearer realm="<issuer>", error="invalid_request"`; the other 400 and 500 answers carry no challenge, and neither does an accepted request's answer.
     - A registration that is not a `ClientRecord` when the endpoint runs (the dispatcher sets the registration before a candidate runs, and an application's materializer may replace it with a record of another family) is answered 500 `server_error` with `WellKnownOAuthErrorDescriptions.ServerNotReady` and no challenge, before the token is read, since the fault is the server's wiring and not the caller's. [RFC 9110 Section 15.6.1](https://www.rfc-editor.org/rfc/rfc9110#section-15.6.1): "The 500 (Internal Server Error) status code indicates that the server encountered an unexpected condition that prevented it from fulfilling the request."
     - The challenged answers need the issuer resolvable, as the credential endpoint's refusals do: a client the endpoint registers carries no issuer of its own, so the application's issuer resolver or the request's context names it; where neither does, the default resolver throws, and the host's HTTP application answers the refusal 500 `server_error` without a challenge.
+  - **The management operations act on the registration as stored.** The read and the update are built from the registration as stored, loaded again through `LoadRegistrationAsync`, not from the record an application's materialization answered for the request, so nothing a materialization changes is answered as registered or written to the store. The update sets the RFC 7591 metadata members it sets and no other member of the stored record, its conditional replacement is against the stored revision, and the update notification receives the stored record as the earlier one. The read, the update and the deletion each make one pass, in one order: the `Authorization` field is read, and a request without a Bearer token is challenged with no store call; the registration as stored is loaded; the registration access token is checked through `ValidateRegistrationAccessTokenAsync` for that stored record's tenant and client identifier; and the operation acts on that record: the read answers the metadata of the revision it loaded, the update replaces it conditioned on that revision, and the deletion deletes it conditioned on that revision. A change another party commits between the load and the conditional write fails the write: the update's conditional replacement, answered 400 `invalid_client_metadata` with the description "The registration changed during this update.", and the deletion's conditional deletion, answered 400 `invalid_client_metadata` with the description "The registration changed during this deletion." and no event; neither loads the registration or checks the token again, and a deletion the client sends again is authenticated against the record it finds. A replacement or revocation of a registration access token is such a change only when the application commits it as the registration's next revision, which is the application's to guarantee (`IClientRegistrationStore`). What a materialization can change of these steps is the registration they start from: the tenant the load is asked for and the client identifier the stored record must name are those of the context's registration, which the materialization answered. The field, the stored record, the token check and the record the operation acts on are the request's, the store's and the application's seam's, so a materialization that names another client of the same tenant is answered as a stored record naming another client, one that names another tenant has that tenant's record loaded and the presented token checked for it, and no materialization makes an operation act on a record other than the one whose tenant and client identifier the token was checked for. A stored record that is gone, or names another client, is answered 401 `invalid_token` with the challenge, as a refused token is. [RFC 7592 Section 2.1](https://www.rfc-editor.org/rfc/rfc7592#section-2.1): "If the client does not exist on this server, the server MUST respond with HTTP 401 Unauthorized and the registration access token used to make this request SHOULD be immediately revoked." [RFC 7592 Section 2.2](https://www.rfc-editor.org/rfc/rfc7592#section-2.2): "If the client does not exist on this server, the server MUST respond with HTTP 401 Unauthorized, and the registration access token used to make this request SHOULD be immediately revoked." [RFC 7592 Section 2.2](https://www.rfc-editor.org/rfc/rfc7592#section-2.2): "Valid values of client metadata fields in this request MUST replace, not augment, the values previously associated with this client." [RFC 7592 Section 3](https://www.rfc-editor.org/rfc/rfc7592#section-3): "Additionally, the authorization server MUST return all registered metadata about this client, including any fields provisioned by the authorization server itself."
+    - Proven over the listener by `DynamicRegistrationEndToEndTests.AnUpdateUnderAMaterializationReplacesTheMetadataOfTheRegistrationAsStoredAsync` (a materialization that adds the token exchange capability, on a server wired to serve the token exchange grant, and one that gives `logo_uri`, a member the update does not set, a value: the PUT answered as without a materialization, the stored record keeping its capabilities and its `logo_uri`, and a later token exchange request with no materialization wired answered byte for byte as at a registration that never held the capability, `404`, where an update that wrote the added capability has that request served by the grant), `AnUpdateUnderAMaterializationAnnouncesTheRegistrationAsStoredAsTheEarlierOneAsync` (the one update notification's earlier registration the stored record, not the materialized one), `AReadUnderAMaterializationAnswersTheRegistrationAsStoredAsync` (the read answered byte for byte as without a materialization), `AnUpdateWhoseTokenIsReplacedAfterItsCheckWritesNothingAsync` (the token replaced and a revision committed after the seam answers valid: 400 "The registration changed during this update.", the other party's revision kept), `AReadWhoseTokenIsReplacedAfterItsCheckAnswersTheRevisionItCheckedAsync` (the read answering the revision it loaded), `ADeletionWhoseTokenIsReplacedBeforeItsDeletionCommitsLosesItsRaceAsync` (the token replaced and a revision committed after the check and before the deletion commits: 400 "The registration changed during this deletion.", the seam asked once, the other party's revision kept, and the deletion sent again with the token valid for the stored record answered 204), `ARequestWhoseTokenIsReplacedBeforeItsCheckIsAnInvalidTokenAsync` (read, update and delete, each answered as a refused token), `AManagementRequestWhoseClientIsNotStoredWhenItIsLoadedIsAnInvalidTokenAsync` (the read and the update of a client gone or of a stored record naming another client, each answered byte for byte as a refused token) and `ADeletionWhoseClientIsGoneWhileItRunsLosesItsRaceAsync` (the client removed after the check and before the deletion commits: 400 "The registration changed during this deletion.", the seam asked once, and the deletion sent again answered 401 `invalid_token` as a client that does not exist); and by `LiveServerAlterationTests.ConditionalDeletionKeepsCacheDeletedAcrossCommitAndDeliveryOrdersOverWire` (an update committed first: the deletion answered 400 "The registration changed during this deletion." with nothing committed and no event, the deletion sent again answered 204, and the tombstone one revision beyond the removed record retained in either delivery order).
   - **Deviations.** Each is named with its reason.
     - A management request whose client does not exist when it arrives meets no registration and is answered by `AuthorizationServerIntegration.ResolveMissingRegistrationAsync`, 401 `invalid_token` with no `WWW-Authenticate` field, where [RFC 9110 Section 15.5.2](https://www.rfc-editor.org/rfc/rfc9110#section-15.5.2) says: "The server generating a 401 response MUST send a WWW-Authenticate header field (Section 11.6.1) containing at least one challenge applicable to the target resource." The reason: no registration names the issuer there, and without an application issuer resolver or an issuer on the request's context none resolves for the realm.
       - Its consequences: a known client's refused token is challenged and an absent client's is not, so the answer tells a caller whether a `client_id` exists on the server; and the absent client's answer carries `invalid_token` also when the request carries no credential, where [RFC 6750 Section 3.1](https://www.rfc-editor.org/rfc/rfc6750#section-3.1) says: "If the request lacks any authentication information (e.g., the client was unaware that authentication is necessary or attempted using an unsupported authentication method), the resource server SHOULD NOT include an error code or other error information."
-  - Proven over the listener by `DynamicRegistrationEndToEndTests.AClientConfigurationRequestWithoutATokenIsChallenged` (no `Authorization` field: 401, an empty body, the literal challenge without `error`), `AClientConfigurationRequestWhoseAuthorizationFieldCarriesNoBearerTokenIsChallenged` (an empty value, a value of white space and a `Basic` credential: the same answer), `AClientConfigurationRequestPresentingItsTokenUnderTheDPoPSchemeIsChallengedWithoutAnErrorCode` (the client's valid registration access token under the `DPoP` scheme: the same answer, no client metadata), `AClientConfigurationRequestWhoseTokenIsRefusedIsAnInvalidToken` (401, `invalid_token`, the literal challenge with `error`), `ADeletionWhoseClientIsGoneWhileItRunsIsAnInvalidToken` (the client removed between the request's authentication and its deletion: 401, `invalid_token`, the literal challenge with `error`), `AClientConfigurationRequestServedUnderARegistrationTheEndpointCannotUseIsAServerError` (a materializer that answers a registration of another family, with and without a token: 500 `server_error`, no challenge, no fault reaching the host), `AClientConfigurationRefusalServedWhereNoIssuerResolvesIsAServerFault` (a refused token where no issuer resolves: the default resolver's throw, answered 500 `server_error` by the host, no challenge) and `AClientConfigurationReadWithItsTokenCarriesNoChallenge` (200, no `WWW-Authenticate` field); and by `LiveServerAlterationTests.MissingClientOrInvalidManagementBearerReturnsUnauthorizedOverWire` (a refused token of a known client at read, update and delete: 401, `invalid_token`, the literal challenge with `error`; an absent client's token: 401, `invalid_token`, no `WWW-Authenticate` field) and `DelayedDeletionPreservesReusedTenantOverWire` (the stale deletion: 401, the literal challenge with `error`), each served with an application issuer resolver.
+  - Proven over the listener by `DynamicRegistrationEndToEndTests.AClientConfigurationRequestWithoutATokenIsChallenged` (no `Authorization` field: 401, an empty body, the literal challenge without `error`), `AClientConfigurationRequestWhoseAuthorizationFieldCarriesNoBearerTokenIsChallenged` (an empty value, a value of white space and a `Basic` credential: the same answer), `AClientConfigurationRequestPresentingItsTokenUnderTheDPoPSchemeIsChallengedWithoutAnErrorCode` (the client's valid registration access token under the `DPoP` scheme: the same answer, no client metadata), `AClientConfigurationRequestWhoseTokenIsRefusedIsAnInvalidToken` (401, `invalid_token`, the literal challenge with `error`), `ADeletionWhoseClientIsGoneWhileItRunsLosesItsRaceAsync` (the client removed between the request's authentication and its deletion: the lost race's 400 without a challenge, and the deletion sent again 401 `invalid_token` with no `WWW-Authenticate` field), `AClientConfigurationRequestServedUnderARegistrationTheEndpointCannotUseIsAServerError` (a materializer that answers a registration of another family, with and without a token: 500 `server_error`, no challenge, no fault reaching the host), `AClientConfigurationRefusalServedWhereNoIssuerResolvesIsAServerFault` (a refused token where no issuer resolves: the default resolver's throw, answered 500 `server_error` by the host, no challenge) and `AClientConfigurationReadWithItsTokenCarriesNoChallenge` (200, no `WWW-Authenticate` field); and by `LiveServerAlterationTests.MissingClientOrInvalidManagementBearerReturnsUnauthorizedOverWire` (a refused token of a known client at read, update and delete: 401, `invalid_token`, the literal challenge with `error`; an absent client's token: 401, `invalid_token`, no `WWW-Authenticate` field) and `DelayedDeletionPreservesReusedTenantOverWire` (the stale deletion: the lost race's 400 without a challenge and no event, the reused tenant's registration kept), each served with an application issuer resolver.
 
 Decisions in this section are foundational enough that they need no re-discussion. Move items here from §7 when they're settled across the codebase and tests, or split into ADRs in `/documents/ADRs/` when they deserve their own decision record.
 

@@ -45,17 +45,40 @@ namespace Verifiable.OAuth.Server.Registration;
 /// <see cref="ParseClientMetadataServerDelegate"/>).
 /// </para>
 /// <para>
+/// <strong>The registration as stored.</strong> The read, the update and the deletion act on the registration
+/// as stored, loaded through <see cref="Verifiable.Server.ServerIntegration.LoadRegistrationAsync"/>, not on the
+/// record an application's materialization answered for the request, and each checks the presented
+/// registration access token through
+/// <see cref="AuthorizationServerIntegration.ValidateRegistrationAccessTokenAsync"/> for that stored record's
+/// tenant and client identifier: the read answers the metadata of the revision it loaded, the update replaces it
+/// conditioned on that revision, and the deletion deletes it conditioned on that revision, each in one pass that loads
+/// and checks once. A change another party commits between the load and the conditional write fails the write, and
+/// the update and the deletion answer such a lost race 400 <c>invalid_client_metadata</c> and load nothing again; a
+/// replacement or revocation of a registration access token is such a change only when the application commits it
+/// as the registration's next revision (<see cref="IClientRegistrationStore"/>). A read, an update or a deletion
+/// whose client does not exist when the operation loads it, or whose stored record names another client, is
+/// answered 401 with <c>invalid_token</c> in the body and the challenge
+/// <c>Bearer realm="&lt;issuer&gt;", error="invalid_token"</c>, as a refused token is.
+/// <see href="https://www.rfc-editor.org/rfc/rfc7592#section-2.1">RFC 7592 Section 2.1</see>: "If the client
+/// does not exist on this server, the server MUST respond with HTTP 401 Unauthorized and the registration access
+/// token used to make this request SHOULD be immediately revoked."
+/// <see href="https://www.rfc-editor.org/rfc/rfc7592#section-2.2">RFC 7592 Section 2.2</see>: "If the client
+/// does not exist on this server, the server MUST respond with HTTP 401 Unauthorized, and the registration access
+/// token used to make this request SHOULD be immediately revoked."
+/// </para>
+/// <para>
 /// <strong>Refusals and their challenges.</strong> The client configuration endpoint is an OAuth 2.0
 /// protected resource (<see href="https://www.rfc-editor.org/rfc/rfc7592#section-2">RFC 7592 Section 2</see>),
 /// and the 401 answers of its read, update and delete operations carry one <c>Bearer</c> challenge whose
 /// <c>realm</c> is the issuer the request is served under: a request whose <c>Authorization</c> field holds
-/// no Bearer token is answered with an empty body and <c>Bearer realm="&lt;issuer&gt;"</c>; a registration
-/// access token the application's seam refuses, and a deletion whose client another party deletes while it
-/// runs, are answered with <c>invalid_token</c> in the body and
-/// <c>Bearer realm="&lt;issuer&gt;", error="invalid_token"</c>. The 400 and 500 answers carry no challenge; a
-/// registration that is not a <see cref="ClientRecord"/> when the endpoint runs is answered 500
-/// <c>server_error</c>. A management request whose client does not exist when it arrives meets no registration
-/// and is answered by <see cref="AuthorizationServerIntegration.ResolveMissingRegistrationAsync"/>, 401
+/// no Bearer token is answered with an empty body and <c>Bearer realm="&lt;issuer&gt;"</c>, with no store
+/// call; a registration access token the application's seam refuses, and a read, an update or a deletion whose
+/// client is not stored when the operation loads it, are answered with <c>invalid_token</c> in the body and
+/// <c>Bearer realm="&lt;issuer&gt;", error="invalid_token"</c>. The 400 for an <c>Authorization</c> field sent on
+/// two lines carries the challenge <c>Bearer realm="&lt;issuer&gt;", error="invalid_request"</c>; the other 400 and
+/// 500 answers carry no challenge; a registration that is not a <see cref="ClientRecord"/> when the endpoint runs is
+/// answered 500 <c>server_error</c>. A management request whose client does not exist when it arrives meets no
+/// registration and is answered by <see cref="AuthorizationServerIntegration.ResolveMissingRegistrationAsync"/>, 401
 /// <c>invalid_token</c> without a challenge, also when it carries no credential; since a known client's refused
 /// token is challenged and an absent client's is not, the answer tells a caller whether a <c>client_id</c>
 /// exists. The challenged answers need the issuer resolvable: a client this endpoint registers
@@ -369,23 +392,36 @@ public static class RegistrationEndpoints
         CancellationToken cancellationToken);
 
 
-    /// <summary>Returns the stored RFC 7592 §2.1 client metadata after bearer authentication.</summary>
+    /// <summary>
+    /// Answers the RFC 7592 Section 2.1 read with the client metadata of the registration as stored, the revision
+    /// <see cref="AuthenticateStoredRegistrationAsync"/> loaded and whose tenant and client identifier it checked the
+    /// presented registration access token for, not the record an application's materialization answered for the
+    /// request.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7592#section-3">RFC 7592 Section 3</see>: "Additionally, the
+    /// authorization server MUST return all registered metadata about this client, including any fields provisioned
+    /// by the authorization server itself."
+    /// </summary>
+    /// <param name="context">The per-request context.</param>
+    /// <param name="server">The authorization server serving the request.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>
+    /// The refusal <see cref="AuthenticateStoredRegistrationAsync"/> answers, or 200 with the stored registration's
+    /// RFC 7592 Section 3 response.
+    /// </returns>
     private static async ValueTask<ServerHttpResponse> HandleReadAsync(
         ExchangeContext context,
         EndpointServer server,
         CancellationToken cancellationToken)
     {
-        (ServerHttpResponse? authFailure, string? validatedBearer) = await ValidateBearerAsync(
-            context, server, cancellationToken).ConfigureAwait(false);
-        if(authFailure is not null)
+        (ServerHttpResponse? refusal, ClientRecord? registration, string? validatedBearer) =
+            await AuthenticateStoredRegistrationAsync(context, server, cancellationToken).ConfigureAwait(false);
+        if(refusal is not null)
         {
 
-            return authFailure;
+            return refusal;
         }
 
-
-        ClientRecord registration = context.ClientRegistration!;
-        string body = BuildReadResponseJson(registration, validatedBearer!);
+        string body = BuildReadResponseJson(registration!, validatedBearer!);
         //The client-information response carries the authenticated management bearer.
 
         return ServerHttpResponse
@@ -394,19 +430,39 @@ public static class RegistrationEndpoints
     }
 
 
-    /// <summary>Commits one conditional RFC 7592 §2.2 replacement before optional notification; a stale revision receives invalid_client_metadata.</summary>
+    /// <summary>
+    /// Commits one conditional RFC 7592 Section 2.2 replacement before optional notification; a stale revision receives
+    /// invalid_client_metadata. The next revision is built from the registration as stored, the revision
+    /// <see cref="AuthenticateStoredRegistrationAsync"/> loaded and whose tenant and client identifier it checked the
+    /// presented registration access token for, not from the record an application's materialization answered for
+    /// the request: the update sets the RFC 7591 metadata members <see cref="BuildUpdatedRecord"/> sets and no other
+    /// member of the stored record, the conditional replacement is against that revision, so a registration another
+    /// party changes between the load and the replacement is not replaced, and the notification receives the stored
+    /// record as the earlier one, so nothing a materialization changes is written to the store.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7592#section-2.2">RFC 7592 Section 2.2</see>: "Valid values of
+    /// client metadata fields in this request MUST replace, not augment, the values previously associated with this
+    /// client."
+    /// </summary>
+    /// <param name="context">The per-request context.</param>
+    /// <param name="server">The authorization server serving the request.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>
+    /// The refusal <see cref="AuthenticateStoredRegistrationAsync"/> answers, 400 <c>invalid_client_metadata</c> for a
+    /// body that is not a replacement document or a revision that changed between the load and the replacement, or
+    /// 200 with the replaced registration's RFC 7592 Section 3 response.
+    /// </returns>
     private static async ValueTask<ServerHttpResponse> HandleUpdateAsync(
         ExchangeContext context,
         EndpointServer server,
         CancellationToken cancellationToken)
     {
         var oauth = server.OAuth();
-        (ServerHttpResponse? authFailure, string? validatedBearer) = await ValidateBearerAsync(
-            context, server, cancellationToken).ConfigureAwait(false);
-        if(authFailure is not null)
+        (ServerHttpResponse? refusal, ClientRecord? stored, string? validatedBearer) =
+            await AuthenticateStoredRegistrationAsync(context, server, cancellationToken).ConfigureAwait(false);
+        if(refusal is not null)
         {
 
-            return authFailure;
+            return refusal;
         }
 
         if(oauth.ParseClientMetadataAsync is null)
@@ -451,7 +507,7 @@ public static class RegistrationEndpoints
                 "Request body did not parse as a valid RFC 7591 client metadata document.");
         }
 
-        ClientRecord previous = context.ClientRegistration!;
+        ClientRecord previous = stored!;
         if(!string.Equals(newMetadata.ClientId, previous.ClientId, StringComparison.Ordinal))
         {
 
@@ -507,73 +563,92 @@ public static class RegistrationEndpoints
     }
 
 
-    /// <summary>Commits RFC 7592 §2.3 deletion before notifying optional observers.</summary>
+    /// <summary>
+    /// Commits the RFC 7592 Section 2.3 deletion of the registration as stored before notifying optional observers, in
+    /// one pass: it authenticates once through <see cref="AuthenticateStoredRegistrationAsync"/>, which loads the
+    /// registration with its revision and checks the presented registration access token for its tenant and client
+    /// identifier, and deletes it once, conditioned on that revision. A conditional deletion that removes nothing,
+    /// because another party changed or removed the registration after the load, commits nothing and emits nothing,
+    /// and is answered as the update's lost race is answered; the registration is not loaded, checked or deleted again.
+    /// A client that sends the deletion again is authenticated against the record it then finds.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7592#section-2.3">RFC 7592 Section 2.3</see>: "This request is
+    /// authenticated by the registration access token issued to the client."
+    /// </summary>
+    /// <param name="context">The per-request context.</param>
+    /// <param name="server">The authorization server serving the request.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>
+    /// The refusal <see cref="AuthenticateStoredRegistrationAsync"/> answers, 400 <c>invalid_client_metadata</c> with the
+    /// description "The registration changed during this deletion." for a registration another party changed or removed
+    /// after the load, or 204.
+    /// </returns>
     private static async ValueTask<ServerHttpResponse> HandleDeleteAsync(
         ExchangeContext context,
         EndpointServer server,
         CancellationToken cancellationToken)
     {
-        (ServerHttpResponse? authFailure, _) = await ValidateBearerAsync(
-            context, server, cancellationToken).ConfigureAwait(false);
-        if(authFailure is not null)
+        (ServerHttpResponse? refusal, ClientRecord? stored, _) =
+            await AuthenticateStoredRegistrationAsync(context, server, cancellationToken).ConfigureAwait(false);
+        if(refusal is not null)
         {
 
-            return authFailure;
+            return refusal;
         }
 
-        ClientRecord registration = context.ClientRegistration!;
         IClientRegistrationStore store = server.OAuth().ClientRegistrationStore
             ?? throw new InvalidOperationException("Registration requires ClientRegistrationStore.");
-        while(true)
+        ClientRecord? deleted = await store.DeleteAsync(stored!, stored!.Revision, context, cancellationToken).ConfigureAwait(false);
+        if(deleted is null)
         {
-            ClientRecord? deleted = await store.DeleteAsync(registration, registration.Revision, context, cancellationToken).ConfigureAwait(false);
-            if(deleted is not null)
-            {
-                await server.DeregisterClientAsync(deleted, "RFC 7592 DELETE", context).ConfigureAwait(false);
-                break;
-            }
 
-            cancellationToken.ThrowIfCancellationRequested();
-            ClientRecord? current = await server.Integration.LoadRegistrationAsync!(registration.TenantId,
-                context, cancellationToken).ConfigureAwait(false) as ClientRecord;
-            if(current is null || !string.Equals(current.ClientId, registration.ClientId, StringComparison.Ordinal))
-            {
-                //The client the presented registration access token was issued to does not exist on
-                //this server: the token authenticates no client, so the refusal is the one a refused
-                //token gets.
-
-                return await RefuseRegistrationAccessTokenAsync(
-                    server, registration, context, cancellationToken).ConfigureAwait(false);
-            }
-
-            registration = current;
+            return ServerHttpResponse.BadRequest(OAuthErrors.InvalidClientMetadata,
+                "The registration changed during this deletion.");
         }
+
+        await server.DeregisterClientAsync(deleted, "RFC 7592 DELETE", context).ConfigureAwait(false);
 
         return ServerHttpResponse.NoContent();
     }
 
 
     /// <summary>
-    /// Checks the RFC 7592 Section 2 management bearer against the required stored credential. A registration
-    /// that is not a <see cref="ClientRecord"/> when the endpoint runs (an application's materializer may replace
-    /// the one the dispatcher sets) is answered 500 <c>server_error</c> with
-    /// <see cref="WellKnownOAuthErrorDescriptions.ServerNotReady"/> and no challenge, before the token is read. A
-    /// request whose <c>Authorization</c> field holds no Bearer token, as
-    /// <see cref="BearerTokenValidation.TryExtractBearer(ExchangeContext, out string?)"/> reads it, is answered 401 with an empty body and the
-    /// challenge <c>Bearer realm="&lt;issuer&gt;"</c>; a token the application's seam refuses is answered by
-    /// <see cref="RefuseRegistrationAccessTokenAsync"/>.
+    /// Authenticates an RFC 7592 Section 2 management request against the registration as stored, in one order for
+    /// the read, the update and the deletion, each of which calls it once. First the <c>Authorization</c> field is
+    /// read: a request whose field holds no Bearer token, as
+    /// <see cref="BearerTokenValidation.TryExtractBearer(ExchangeContext, out string?)"/> reads it, is answered 401
+    /// with an empty body and the challenge <c>Bearer realm="&lt;issuer&gt;"</c>, and a field sent on two lines 400
+    /// <c>invalid_request</c> with the challenge <c>Bearer realm="&lt;issuer&gt;", error="invalid_request"</c>, both
+    /// with no store call. Then the registration as stored is loaded, with its revision, through
+    /// <see cref="Verifiable.Server.ServerIntegration.LoadRegistrationAsync"/> by the tenant of the request's
+    /// registration. Then the presented token is checked through
+    /// <see cref="AuthorizationServerIntegration.ValidateRegistrationAccessTokenAsync"/> for that stored record's
+    /// tenant and client identifier, and the record is answered for the operation to act on, whose replacement or
+    /// deletion is conditioned on the loaded revision. A stored record that is gone,
+    /// is not a <see cref="ClientRecord"/> or names another client than the request's registration, and a token the
+    /// seam refuses, are each answered by <see cref="RefuseRegistrationAccessTokenAsync"/>: the client the presented
+    /// token was issued to does not exist on this server, or the token is not valid. A registration that is not a
+    /// <see cref="ClientRecord"/> when the endpoint runs (an application's materializer may replace the one the
+    /// dispatcher sets) is answered 500 <c>server_error</c> with
+    /// <see cref="WellKnownOAuthErrorDescriptions.ServerNotReady"/> and no challenge, before the field is read.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7592#section-2.1">RFC 7592 Section 2.1</see>: "If the client does
+    /// not exist on this server, the server MUST respond with HTTP 401 Unauthorized and the registration access token
+    /// used to make this request SHOULD be immediately revoked."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7592#section-2.2">RFC 7592 Section 2.2</see>: "If the client does
+    /// not exist on this server, the server MUST respond with HTTP 401 Unauthorized, and the registration access token
+    /// used to make this request SHOULD be immediately revoked."
     /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.6.1">RFC 9110 Section 15.6.1</see>: "The 500
     /// (Internal Server Error) status code indicates that the server encountered an unexpected condition that
     /// prevented it from fulfilling the request."
     /// </summary>
     /// <param name="context">The per-request context.</param>
-    /// <param name="server">The authorization server holding the validation seam.</param>
+    /// <param name="server">The authorization server holding the load and validation seams.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>
-    /// The refusal and no token, or no refusal and the Bearer token that authenticated the client, which the
-    /// read and the update echo in their response without reading the field again.
+    /// The refusal, no record and no token; or no refusal, the registration as stored whose token was checked, and the
+    /// Bearer token that authenticated the client, which the read and the update echo in their response without
+    /// reading the field again.
     /// </returns>
-    private static async ValueTask<(ServerHttpResponse? Failure, string? ValidatedBearer)> ValidateBearerAsync(
+    private static async ValueTask<(ServerHttpResponse? Refusal, ClientRecord? Stored, string? ValidatedBearer)> AuthenticateStoredRegistrationAsync(
         ExchangeContext context,
         EndpointServer server,
         CancellationToken cancellationToken)
@@ -584,18 +659,18 @@ public static class RegistrationEndpoints
 
             return (ServerHttpResponse.ServerError(
                 OAuthErrors.ServerError,
-                "ValidateRegistrationAccessTokenAsync is not configured."), null);
+                "ValidateRegistrationAccessTokenAsync is not configured."), null, null);
         }
 
         //The dispatcher sets the registration before a candidate runs, but an application's materializer
         //may replace it with a record that is not a ClientRecord; the endpoint cannot serve the request
-        //then, and the fault is the server's wiring, not the caller's, so it is read before the token.
+        //then, and the fault is the server's wiring, not the caller's, so it is read before the field.
         ClientRecord? registration = context.ClientRegistration;
         if(registration is null)
         {
 
             return (ServerHttpResponse.ServerError(
-                OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady), null);
+                OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady), null, null);
         }
 
         //RFC 7592 Section 2: "The client MUST use its registration access token in all calls to this
@@ -605,14 +680,14 @@ public static class RegistrationEndpoints
         //RFC 6750 Section 3.1: "If the request lacks any authentication information (e.g., the client was
         //unaware that authentication is necessary or attempted using an unsupported authentication
         //method), the resource server SHOULD NOT include an error code or other error information."
-        //The field is read once; sent on two lines it is no credential (RFC 9110 Section 11.6.2) and the
-        //request is refused 400 invalid_request with the Bearer challenge, the one scheme this endpoint reads.
+        //Sent on two lines the field is no credential (RFC 9110 Section 11.6.2) and the request is refused
+        //400 invalid_request with the Bearer challenge, the one scheme this endpoint reads.
         AuthorizationFieldReading authorization = BearerTokenValidation.ReadAuthorizationField(context);
         if(authorization.IsRepeated)
         {
 
             return (await CredentialEndpointDpopValidation.RefuseRepeatedAuthorizationAsync(
-                server, registration, context, isDpopAccepted: false, cancellationToken).ConfigureAwait(false), null);
+                server, registration, context, isDpopAccepted: false, cancellationToken).ConfigureAwait(false), null, null);
         }
 
         if(!BearerTokenValidation.TryExtractBearer(authorization, out string? presented))
@@ -620,12 +695,24 @@ public static class RegistrationEndpoints
 
             return (await CredentialEndpointDpopValidation.ChallengedAsync(
                 ServerHttpResponse.Unauthorized(), error: null, server, registration, context, cancellationToken)
-                .ConfigureAwait(false), null);
+                .ConfigureAwait(false), null, null);
+        }
+
+        //The registration as stored is loaded with its revision before the token is checked, the token is checked for
+        //that record's tenant and client identifier, and the operation's write is conditioned on the loaded revision,
+        //so a change another party commits as the registration's next revision between the load and the write fails it.
+        ClientRecord? stored = await server.Integration.LoadRegistrationAsync!(registration.TenantId,
+            context, cancellationToken).ConfigureAwait(false) as ClientRecord;
+        if(stored is null || !string.Equals(stored.ClientId, registration.ClientId, StringComparison.Ordinal))
+        {
+
+            return (await RefuseRegistrationAccessTokenAsync(
+                server, registration, context, cancellationToken).ConfigureAwait(false), null, null);
         }
 
         bool isValid = await oauth.ValidateRegistrationAccessTokenAsync(
-            registration.TenantId,
-            registration.ClientId,
+            stored.TenantId,
+            stored.ClientId,
             presented!,
             context,
             cancellationToken).ConfigureAwait(false);
@@ -634,10 +721,10 @@ public static class RegistrationEndpoints
         {
 
             return (await RefuseRegistrationAccessTokenAsync(
-                server, registration, context, cancellationToken).ConfigureAwait(false), null);
+                server, registration, context, cancellationToken).ConfigureAwait(false), null, null);
         }
 
-        return (null, presented);
+        return (null, stored, presented);
     }
 
 
@@ -669,7 +756,7 @@ public static class RegistrationEndpoints
 
 
     /// <summary>
-    /// Builds the complete RFC 7592 section 3 response, echoing the bearer <see cref="ValidateBearerAsync"/>
+    /// Builds the complete RFC 7592 section 3 response, echoing the bearer <see cref="AuthenticateStoredRegistrationAsync"/>
     /// validated for this request, handed over by the handler so the field is read once, and all accepted metadata.
     /// </summary>
     /// <param name="registration">The registration whose metadata the response carries.</param>

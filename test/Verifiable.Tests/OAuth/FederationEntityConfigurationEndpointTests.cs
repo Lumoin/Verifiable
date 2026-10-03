@@ -2,6 +2,7 @@ using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Collections.Immutable;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
@@ -354,6 +355,144 @@ internal sealed class FederationEntityConfigurationEndpointTests
             VerificationKeyResolution resolution = Assert.ContainsSingle(host.ResolutionsOf(publishedKeyId));
             Assert.AreEqual(KeyUsageContext.FederationEntitySignature, resolution.Usage);
         }
+    }
+
+
+    /// <summary>
+    /// A client registration type the library lists from a capability is left out of
+    /// <c>client_registration_types_supported</c> when the capability is outside the capabilities the Entity
+    /// Configuration request is served under, in two forms: the application's materialization answers a
+    /// registration without it with the capability added, which the dispatcher's bound withholds, or the
+    /// application's capability resolution withholds it from a registration that allows it. The types are
+    /// <c>automatic</c> and <c>explicit</c> of
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-5.1.3">OpenID Federation 1.0 section
+    /// 5.1.3</see>. The Entity Configuration fetched over the wire is a signed statement, so its complete decoded
+    /// claims are compared: the status, every header field and the decoded claims are the same as those of a
+    /// registration that never held the capability, the time claims read from the one injected clock, and in the
+    /// <c>jwks</c> claim only the values each registration generates afresh replaced, its key identifier and its
+    /// public key's coordinates, each asserted well-formed. A materialization narrows what the server serves and never
+    /// widens it, and a capability the resolution withholds is not served, which is this library's rule:
+    /// <see href="../../../documents/AuthorizationServerDesign.md#23-per-endpoint-loop-stage">Server design</see>.
+    /// </summary>
+    /// <param name="registrationType"><c>automatic</c> or <c>explicit</c>.</param>
+    /// <param name="form">
+    /// <c>materializationAdds</c> or <c>resolutionWithholds</c>, as <see cref="CapabilityBounds"/> names them.
+    /// </param>
+    [TestMethod]
+    [DataRow("automatic", "materializationAdds", DisplayName = "automatic, the materialization adds the capability")]
+    [DataRow("automatic", "resolutionWithholds", DisplayName = "automatic, the capability resolution withholds the capability")]
+    [DataRow("explicit", "materializationAdds", DisplayName = "explicit, the materialization adds the capability")]
+    [DataRow("explicit", "resolutionWithholds", DisplayName = "explicit, the capability resolution withholds the capability")]
+    public async Task ARegistrationTypeOutsideTheServedCapabilitiesIsNotListedAsync(string registrationType, string form)
+    {
+        CapabilityIdentifier capability = registrationType switch
+        {
+            "automatic" => WellKnownFederationCapabilityIdentifiers.RegisterClientsAutomatically,
+            "explicit" => WellKnownFederationCapabilityIdentifiers.RegisterClientsExplicitly,
+            _ => throw new ArgumentOutOfRangeException(nameof(registrationType), registrationType, "Unknown registration type.")
+        };
+        ImmutableHashSet<CapabilityIdentifier> neverHeld = ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.OAuthAuthorizationCode);
+
+        (string underTheBound, string claims) = await GetEntityConfigurationUnderTheBoundAsync(
+            CapabilityBounds.Registered(form, neverHeld, capability),
+            CapabilityBounds.Wire(form, capability)).ConfigureAwait(false);
+        (string neverHeldAnswer, _) = await GetEntityConfigurationUnderTheBoundAsync(neverHeld, bound: null).ConfigureAwait(false);
+
+        Assert.AreEqual(neverHeldAnswer, underTheBound);
+        Assert.StartsWith("200\n", underTheBound);
+        Assert.DoesNotContain("client_registration_types_supported", claims);
+    }
+
+
+    /// <summary>
+    /// Registers a federation-capable client with <paramref name="capabilities"/> and a fresh P-256 federation
+    /// signing key under the entity identifier <c>https://bounded-op.example.com</c>, applies <paramref name="bound"/>
+    /// to the server's integration when given, then fetches the Entity Configuration over the listener.
+    /// </summary>
+    /// <param name="capabilities">The capabilities the loaded registration allows besides publishing.</param>
+    /// <param name="bound">
+    /// The wiring that sets the capabilities the request is served under, from <see cref="CapabilityBounds.Wire"/>,
+    /// or <see langword="null"/> for none.
+    /// </param>
+    /// <returns>
+    /// The answer as <see cref="OAuthTestTransport.ProjectWireAnswer"/> projects it with the complete decoded claims,
+    /// the values <see cref="ReplaceGeneratedKeyValues"/> names replaced, in place of the compact statement, and those
+    /// claims as JSON text.
+    /// </returns>
+    private async Task<(string WireAnswer, string Claims)> GetEntityConfigurationUnderTheBoundAsync(
+        ImmutableHashSet<CapabilityIdentifier> capabilities, Action<AuthorizationServerIntegration>? bound)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> federationKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using VerifierKeyMaterial keys = await app.RegisterFederationCapableClientAsync(
+            "https://bounded-op.example.com",
+            new Uri("https://bounded-op.example.com"),
+            new Uri("https://bounded-op.example.com"),
+            federationKeys,
+            capabilities).ConfigureAwait(false);
+        if(bound is not null)
+        {
+            await TestHostShell.AlterAsync(app.Server, bound).ConfigureAwait(false);
+        }
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri url = new(host.HttpBaseAddress!, $"/connect/{keys.Registration.TenantId.Value}/.well-known/openid-federation");
+
+        using System.Net.Http.HttpResponseMessage response = await host.SharedHttpClient!
+            .GetAsync(url, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        string[] parts = body.Split('.');
+        Assert.HasCount(3, parts, $"The Entity Configuration is a compact JWS. Body: {body}");
+        using IMemoryOwner<byte> payloadBytes = TestSetup.Base64UrlDecoder(parts[1], Pool);
+        JsonObject claims = JsonNode.Parse(payloadBytes.Memory.Span)!.AsObject();
+        ReplaceGeneratedKeyValues(claims);
+        string claimsText = claims.ToJsonString();
+
+        return (OAuthTestTransport.ProjectWireAnswer(response, claimsText), claimsText);
+    }
+
+
+    /// <summary>
+    /// Replaces, in each JSON Web Key of the <c>jwks</c> claim of <paramref name="claims"/>, the values a registration
+    /// generates afresh, each asserted well-formed first, and nothing else: the key identifier, a
+    /// <c>urn:uuid:</c> URN of a UUID the fixture draws per registration, by <c>{kid}</c>, and the public key's
+    /// coordinates <c>x</c> and <c>y</c>, each the base64url encoding of 32 octets of a fresh P-256 signing key, by
+    /// <c>{x}</c> and <c>{y}</c>. Every other member of the claim, and the claim itself, is compared.
+    /// </summary>
+    /// <param name="claims">The decoded claims of the Entity Configuration, changed in place.</param>
+    private static void ReplaceGeneratedKeyValues(JsonObject claims)
+    {
+        JsonArray jsonWebKeys = claims["jwks"]![WellKnownJwkMemberNames.Keys]!.AsArray();
+        Assert.IsNotEmpty(jsonWebKeys, "The Entity Configuration publishes its signing key.");
+        foreach(JsonNode? jsonWebKey in jsonWebKeys)
+        {
+            JsonObject jwk = jsonWebKey!.AsObject();
+            string kid = jwk[WellKnownJwkMemberNames.Kid]!.GetValue<string>();
+            Assert.IsTrue(
+                kid.StartsWith("urn:uuid:", StringComparison.Ordinal) && Guid.TryParse(kid["urn:uuid:".Length..], out _), kid);
+            jwk[WellKnownJwkMemberNames.Kid] = "{kid}";
+            jwk[WellKnownJwkMemberNames.X] = ReplaceCoordinate(jwk[WellKnownJwkMemberNames.X]!.GetValue<string>(), "{x}");
+            jwk[WellKnownJwkMemberNames.Y] = ReplaceCoordinate(jwk[WellKnownJwkMemberNames.Y]!.GetValue<string>(), "{y}");
+        }
+    }
+
+
+    /// <summary>
+    /// Asserts that <paramref name="coordinate"/> is the base64url encoding of the 32 octets of a P-256 coordinate and
+    /// answers <paramref name="placeholder"/> in its place.
+    /// </summary>
+    /// <param name="coordinate">The coordinate as the JSON Web Key publishes it.</param>
+    /// <param name="placeholder">The text that stands for it in the compared claims.</param>
+    /// <returns><paramref name="placeholder"/>.</returns>
+    private static string ReplaceCoordinate(string coordinate, string placeholder)
+    {
+        using IMemoryOwner<byte> octets = TestSetup.Base64UrlDecoder(coordinate, Pool);
+        Assert.HasCount(32, octets.Memory.ToArray(), coordinate);
+
+        return placeholder;
     }
 
 

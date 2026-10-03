@@ -7699,6 +7699,10 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         context.SetRequestServer(host.Server);
         context.SetRequirePushedAuthorizationRequests(true);
 
+        //The chain build writes the capabilities the request is served under before it calls a builder, so the
+        //builder called directly below reads the set the library resolved for the registration.
+        _ = await EndpointChain.BuildForRequestAsync(
+            material.Registration, context, TestContext.CancellationToken).ConfigureAwait(false);
         IReadOnlyList<EndpointCandidate> candidates = await AuthCodeEndpoints.Builder(
             material.Registration, context, TestContext.CancellationToken).ConfigureAwait(false);
         EndpointCandidate authorizeCandidate = candidates.Single(
@@ -7802,6 +7806,10 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         context.SetRequestServer(host.Server);
         context.SetRequirePushedAuthorizationRequests(true);
 
+        //The chain build writes the capabilities the request is served under before it calls a builder, so the
+        //builder called directly below reads the set the library resolved for the registration.
+        _ = await EndpointChain.BuildForRequestAsync(
+            material.Registration, context, TestContext.CancellationToken).ConfigureAwait(false);
         IReadOnlyList<EndpointCandidate> candidates = await AuthCodeEndpoints.Builder(
             material.Registration, context, TestContext.CancellationToken).ConfigureAwait(false);
         EndpointCandidate authorizeCandidate = candidates.Single(

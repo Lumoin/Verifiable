@@ -66,7 +66,15 @@ internal static class ServerContextKeys
     /// <summary>Key for the per-request <see cref="EndpointChain"/> built during dispatch.</summary>
     public const string EndpointChainKey = "server.endpointChain";
 
-    /// <summary>Key for the per-request set of allowed capabilities returned by the capability resolver.</summary>
+    /// <summary>
+    /// Name of the context entry for the per-request set of capabilities the request is served under, the library's
+    /// copy of the capability resolver's answer, which the chain build stores under it inside the library's own
+    /// <see cref="ResolvedCapabilitiesEntry"/>, bound to the context it was written for. The name is a string any code
+    /// that holds the context can write under; <c>ResolvedCapabilities</c> of
+    /// <see cref="ExchangeContextServerExtensions"/> reads a value under it that is not the library's own entry for
+    /// the context read, including an entry carried from another request's context, as no set, which allows no
+    /// capability.
+    /// </summary>
     public const string ResolvedCapabilitiesKey = "server.resolvedCapabilities";
 
     /// <summary>

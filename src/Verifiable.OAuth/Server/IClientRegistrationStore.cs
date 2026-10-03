@@ -9,6 +9,9 @@ namespace Verifiable.OAuth.Server;
 /// <remarks>
 /// Operations run under traffic, independently of wiring alterations. Implementations synchronize
 /// all indexes and reads in one storage domain. Exceptions propagate before event delivery.
+/// A replacement or revocation of a registration access token committed after an RFC 7592 replacement
+/// or deletion has checked the token fails that operation's conditional write only when the application
+/// commits it as the registration's next revision, which is the application's to guarantee.
 /// </remarks>
 public interface IClientRegistrationStore
 {
@@ -45,8 +48,8 @@ public interface IClientRegistrationStore
     /// <summary>
     /// Conditionally removes the authenticated identity only at its expected revision, atomically
     /// removing all routing indexes, grants and the management credential. Returns the final removed
-    /// record, or null without mutation when identity or revision changed. The caller reloads the same
-    /// identity after a lost race; an absent or replaced client receives HTTP 401. The deletion event
+    /// record, or null without mutation when identity or revision changed. The caller answers a lost
+    /// race as a registration that changed during the deletion and loads nothing again. The deletion event
     /// uses the removed record's revision plus one as a monotonic tombstone.
     /// <see href="https://www.rfc-editor.org/rfc/rfc7592#section-2.3">RFC 7592 §2.3</see>
     /// says the server "MUST respond with an HTTP 204 No Content message" after successful deletion.
@@ -54,8 +57,8 @@ public interface IClientRegistrationStore
     /// <param name="registration">The authenticated registration to remove.</param>
     /// <param name="context">The operation context.</param>
     /// <param name="cancellationToken">Cancellation before commitment.</param>
-    /// <param name="expectedRevision">The revision authenticated and loaded by this attempt.</param>
-    /// <returns>The atomically removed record, or null when this attempt committed nothing.</returns>
+    /// <param name="expectedRevision">The revision authenticated and loaded by this deletion.</param>
+    /// <returns>The atomically removed record, or null when this deletion committed nothing.</returns>
     ValueTask<ClientRecord?> DeleteAsync(ClientRecord registration, long expectedRevision,
         ExchangeContext context, CancellationToken cancellationToken);
 }

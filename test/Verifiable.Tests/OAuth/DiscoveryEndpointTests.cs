@@ -706,6 +706,63 @@ internal sealed class DiscoveryEndpointTests
     }
 
 
+    /// <summary>
+    /// A discovery member the library writes from a capability is left out when the capability is outside the
+    /// capabilities the discovery request is served under, in two forms: the application's materialization answers a
+    /// registration without it with the capability added, which the dispatcher's bound withholds, or the
+    /// application's capability resolution withholds it from a registration that allows it. The members are
+    /// <c>backchannel_logout_supported</c> and <c>backchannel_logout_session_supported</c> of
+    /// <see href="https://openid.net/specs/openid-connect-backchannel-1_0.html#BCSupport">OpenID Connect Back-Channel
+    /// Logout 1.0 section 2.1</see>, with the delivery seam wired, and <c>client_id_metadata_document_supported</c> of
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-client-id-metadata-document-02#section-6">draft-ietf-oauth-client-id-metadata-document-02
+    /// section 6</see>, with the client metadata resolution wired. The document fetched over the wire is the same
+    /// bytes as the
+    /// document of a registration that never held the capability, the tenant segment of each registration's
+    /// addresses read as one placeholder. A materialization narrows what the server serves and never widens it, and a
+    /// capability the resolution withholds is not served, which is this library's rule:
+    /// <see href="../../../documents/AuthorizationServerDesign.md#23-per-endpoint-loop-stage">Server design</see>.
+    /// </summary>
+    /// <param name="member"><c>backChannelLogout</c> or <c>clientIdMetadataDocument</c>.</param>
+    /// <param name="form">
+    /// <c>materializationAdds</c> or <c>resolutionWithholds</c>, as <see cref="CapabilityBounds"/> names them.
+    /// </param>
+    [TestMethod]
+    [DataRow("backChannelLogout", "materializationAdds", DisplayName = "back-channel logout, the materialization adds the capability")]
+    [DataRow("backChannelLogout", "resolutionWithholds", DisplayName = "back-channel logout, the capability resolution withholds the capability")]
+    [DataRow("clientIdMetadataDocument", "materializationAdds", DisplayName = "client ID metadata document, the materialization adds the capability")]
+    [DataRow("clientIdMetadataDocument", "resolutionWithholds", DisplayName = "client ID metadata document, the capability resolution withholds the capability")]
+    public async Task ADiscoveryMemberOutsideTheServedCapabilitiesIsNotAdvertisedAsync(string member, string form)
+    {
+        CapabilityIdentifier capability = member switch
+        {
+            "backChannelLogout" => WellKnownCapabilityIdentifiers.OidcBackChannelLogout,
+            "clientIdMetadataDocument" => WellKnownCapabilityIdentifiers.OAuthClientIdMetadataDocument,
+            _ => throw new ArgumentOutOfRangeException(nameof(member), member, "Unknown member.")
+        };
+        ImmutableHashSet<CapabilityIdentifier> neverHeld = ImmutableHashSet.Create(
+            WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
+            WellKnownCapabilityIdentifiers.OAuthPushedAuthorization,
+            WellKnownCapabilityIdentifiers.OidcOpenIdConnect,
+            WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
+            WellKnownCapabilityIdentifiers.OAuthJwksEndpoint);
+
+        (string underTheBound, string body) = await GetDiscoveryUnderTheBoundAsync(
+            CapabilityBounds.Registered(form, neverHeld, capability),
+            CapabilityBounds.Wire(form, capability)).ConfigureAwait(false);
+        (string neverHeldAnswer, _) = await GetDiscoveryUnderTheBoundAsync(neverHeld, bound: null).ConfigureAwait(false);
+
+        Assert.AreEqual(neverHeldAnswer, underTheBound);
+        Assert.StartsWith("200\nContent-Type: application/json\n", underTheBound);
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.IsFalse(document.RootElement.TryGetProperty(
+            AuthorizationServerMetadataParameterNames.BackchannelLogoutSupported, out _), body);
+        Assert.IsFalse(document.RootElement.TryGetProperty(
+            AuthorizationServerMetadataParameterNames.BackchannelLogoutSessionSupported, out _), body);
+        Assert.IsFalse(document.RootElement.TryGetProperty(
+            AuthorizationServerMetadataParameterNames.ClientIdMetadataDocumentSupported, out _), body);
+    }
+
+
     [TestMethod]
     public async Task DiscoveryAdvertisesDpopSigningAlgValuesWhenDpopIsWired()
     {
@@ -949,6 +1006,49 @@ internal sealed class DiscoveryEndpointTests
         string expected = material.Registration.IssuerUri!.OriginalString;
         Assert.AreEqual(expected, issuer,
             "The appended openid-configuration mount must keep emitting the exact tenant issuer after the oauth-authorization-server mount is added.");
+    }
+
+
+    /// <summary>
+    /// Registers the client with <paramref name="capabilities"/> under <see cref="PolicyProfile.Rfc6749WithPkce"/>,
+    /// wires the back-channel delivery seam and a client metadata resolution that discovery never calls, applies
+    /// <paramref name="bound"/> to the server's integration when given, then fetches the discovery document over the
+    /// listener.
+    /// </summary>
+    /// <param name="capabilities">The capabilities the loaded registration allows.</param>
+    /// <param name="bound">
+    /// The wiring that sets the capabilities the discovery request is served under, from
+    /// <see cref="CapabilityBounds.Wire"/>, or <see langword="null"/> for none.
+    /// </param>
+    /// <returns>
+    /// The answer as <see cref="OAuthTestTransport.ProjectWireAnswer"/> projects it, with the registration's tenant
+    /// segment replaced by <c>{segment}</c> so two registrations' answers compare, and the body as received.
+    /// </returns>
+    private async Task<(string WireAnswer, string Body)> GetDiscoveryUnderTheBoundAsync(
+        ImmutableHashSet<CapabilityIdentifier> capabilities, Action<AuthorizationServerIntegration>? bound)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: capabilities).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.DeliverBackChannelLogoutAsync = static (_, _, _, _, _) => ValueTask.CompletedTask;
+            candidateIntegration.ResolveClientMetadataAsync = static (_, _, _) =>
+                throw new NotImplementedException("Discovery emission never invokes the client metadata resolution.");
+            bound?.Invoke(candidateIntegration);
+        }).ConfigureAwait(false);
+
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer hosted = host.Host("default");
+        string segment = material.Registration.TenantId.Value;
+        Uri discoveryUrl = new(hosted.HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.MetadataDiscovery, segment));
+
+        using HttpResponseMessage response = await hosted.SharedHttpClient!.GetAsync(discoveryUrl, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        return (OAuthTestTransport.ProjectWireAnswer(response, body).Replace(segment, "{segment}", StringComparison.Ordinal), body);
     }
 
 

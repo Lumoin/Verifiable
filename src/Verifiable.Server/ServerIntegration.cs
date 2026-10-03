@@ -329,8 +329,9 @@ public class ServerIntegration: WiringComponent
 
 
     /// <summary>
-    /// Resolves the per-request capability set active for a registration. Consulted once
-    /// per request by <see cref="Pipeline.EndpointChain.BuildForRequestAsync"/>; the
+    /// Resolves the per-request capability set active for a registration. Consulted by the dispatcher
+    /// once for the registration it loaded, in its chain build, and once more for a registration
+    /// <see cref="MaterializeRegistrationAsync"/> answers; the
     /// returned set filters which builder-produced candidates land in the chain. Required.
     /// </summary>
     /// <remarks>

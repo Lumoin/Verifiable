@@ -252,18 +252,42 @@ public static class ExchangeContextServerExtensions
 
 
         /// <summary>
-        /// Gets the per-request set of allowed capabilities returned by the capability
-        /// resolver during chain build.
+        /// Gets the per-request set of capabilities the request is served under, which the chain build
+        /// writes before it calls any endpoint builder: the library's immutable copy of the capability
+        /// resolver's answer for the registration the request is judged by, made by walking the
+        /// registration's own allowed capabilities, or the bound when the dispatcher judges a
+        /// materialized registration, and asking the answer for each, so it holds nothing the
+        /// registration does not allow, and the chain's capability filter, the dispatcher's judgement of
+        /// a materialized registration, and the builders and handlers that read it read one set. The set
+        /// lies in the context entry named <c>server.resolvedCapabilities</c>, inside the library's own
+        /// entry, which records the context it was written for. <see langword="null"/> before a chain build
+        /// and whenever the value under that entry's name is not the library's own entry for this context.
         /// </summary>
+        /// <remarks>
+        /// The library's own pipeline cannot widen the set: it is the library's immutable copy, and a
+        /// capability resolution and a materialization can only narrow it. No public member replaces it,
+        /// and the public <see cref="EndpointChain.BuildForRequestAsync"/> refuses a context that
+        /// already carries a set. A value under <c>server.resolvedCapabilities</c> that is not the library's
+        /// own entry for this context, whatever its type and including an entry carried from another
+        /// request's context, reads as no set, and a reader of no set allows no capability. Code that holds a
+        /// request's context is the application's: it can replace the context's registration and endpoint
+        /// chain through their public setters, and it is answerable for what it stores in the context.
+        /// </remarks>
         public IReadOnlySet<CapabilityIdentifier>? ResolvedCapabilities =>
             context.TryGetValue(ServerContextKeys.ResolvedCapabilitiesKey, out object? v)
-                && v is IReadOnlySet<CapabilityIdentifier> caps ? caps : null;
+                && v is ResolvedCapabilitiesEntry entry
+                && ReferenceEquals(entry.Context, context) ? entry.Capabilities : null;
 
-        /// <summary>Sets the per-request resolved capability set. Called by the chain build.</summary>
-        public void SetResolvedCapabilities(IReadOnlySet<CapabilityIdentifier> capabilities)
+        /// <summary>
+        /// Writes the per-request resolved capability set that <c>ResolvedCapabilities</c> reads, inside
+        /// the <see cref="ResolvedCapabilitiesEntry"/> that only this write creates, bound to this context.
+        /// The chain build is its one caller, with its immutable copy, before it calls any endpoint builder.
+        /// </summary>
+        /// <param name="capabilities">The set the request is served under.</param>
+        internal void SetResolvedCapabilities(IReadOnlySet<CapabilityIdentifier> capabilities)
         {
             ArgumentNullException.ThrowIfNull(capabilities);
-            context[ServerContextKeys.ResolvedCapabilitiesKey] = capabilities;
+            context[ServerContextKeys.ResolvedCapabilitiesKey] = new ResolvedCapabilitiesEntry(context, capabilities);
         }
 
 

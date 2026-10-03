@@ -466,7 +466,7 @@ internal sealed class SsfStreamManagementEndpointTests
     [TestMethod]
     public async Task AStreamManagementRequestWithoutACredentialIsChallengedWithoutAnErrorCode()
     {
-        (int statusCode, string body, IReadOnlyList<string> challenges, string segment) =
+        (int statusCode, string body, IReadOnlyList<string> challenges, string segment, _) =
             await SendRefusableCreateAsync(authorization: null).ConfigureAwait(false);
 
         Assert.AreEqual(401, statusCode, body);
@@ -492,7 +492,7 @@ internal sealed class SsfStreamManagementEndpointTests
     [DataRow("Basic dXNlcjpwYXNz", DisplayName = "an Authorization value of the Basic scheme")]
     public async Task AStreamManagementRequestWhoseAuthorizationFieldCarriesNoAccessTokenIsChallengedWithoutAnErrorCode(string authorization)
     {
-        (int statusCode, string body, IReadOnlyList<string> challenges, string segment) =
+        (int statusCode, string body, IReadOnlyList<string> challenges, string segment, _) =
             await SendRefusableCreateAsync(authorization).ConfigureAwait(false);
 
         Assert.AreEqual(401, statusCode, body);
@@ -515,7 +515,7 @@ internal sealed class SsfStreamManagementEndpointTests
     [TestMethod]
     public async Task AStreamManagementRequestPresentingATokenUnderTheDPoPSchemeIsChallengedWithoutAnErrorCode()
     {
-        (int statusCode, string body, IReadOnlyList<string> challenges, string segment) =
+        (int statusCode, string body, IReadOnlyList<string> challenges, string segment, _) =
             await SendRefusableCreateAsync("DPoP forged-token").ConfigureAwait(false);
 
         Assert.AreEqual(401, statusCode, body);
@@ -538,7 +538,7 @@ internal sealed class SsfStreamManagementEndpointTests
     [TestMethod]
     public async Task AStreamManagementRequestWhoseAccessTokenIsRefusedIsAnInvalidToken()
     {
-        (int statusCode, string body, IReadOnlyList<string> challenges, string segment) =
+        (int statusCode, string body, IReadOnlyList<string> challenges, string segment, _) =
             await SendRefusableCreateAsync("Bearer forged-token").ConfigureAwait(false);
 
         Assert.AreEqual(401, statusCode, body);
@@ -561,13 +561,54 @@ internal sealed class SsfStreamManagementEndpointTests
     [TestMethod]
     public async Task TheChallengeOfATransmitterServingItsResourceMetadataKeepsTheMetadataUrl()
     {
-        (int statusCode, string body, IReadOnlyList<string> challenges, string segment) =
+        (int statusCode, string body, IReadOnlyList<string> challenges, string segment, _) =
             await SendRefusableCreateAsync("Bearer forged-token", isResourceMetadataServed: true).ConfigureAwait(false);
 
         Assert.AreEqual(401, statusCode, body);
         Assert.AreEqual(
             $"Bearer realm=\"https://issuer.test/{segment}\", error=\"invalid_token\", resource_metadata=\"https://issuer.test/.well-known/oauth-protected-resource/{segment}\"",
             Assert.ContainsSingle(challenges));
+    }
+
+
+    /// <summary>
+    /// A Create Stream request sent over the wire with a Bearer token the authorization seam refuses is answered 401
+    /// with a challenge that names no <c>resource_metadata</c> when the protected resource metadata capability is
+    /// outside the capabilities the request is served under, in two forms: the application's materialization answers
+    /// a registration without it with the capability added, which the dispatcher's bound withholds, or the
+    /// application's capability resolution withholds it from a registration that allows it. The whole answer, status,
+    /// every header field and body, is the answer of a registration that never held the capability, the tenant
+    /// segment of each registration's issuer read as one placeholder, and its one challenge is
+    /// <c>Bearer realm="https://issuer.test/{segment}", error="invalid_token"</c>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-5.1">RFC 9728 Section 5.1</see> defines the
+    /// <c>resource_metadata</c> parameter of the challenge, the URL of the metadata document, which a capability
+    /// outside the served set does not serve. A materialization narrows what the server serves and never widens it,
+    /// and a capability the resolution withholds is not served, which is this library's rule:
+    /// <see href="../../../documents/AuthorizationServerDesign.md#23-per-endpoint-loop-stage">Server design</see>.
+    /// </summary>
+    /// <param name="form">
+    /// <c>materializationAdds</c> or <c>resolutionWithholds</c>, as <see cref="CapabilityBounds"/> names them.
+    /// </param>
+    [TestMethod]
+    [DataRow("materializationAdds", DisplayName = "the materialization adds the protected resource metadata capability")]
+    [DataRow("resolutionWithholds", DisplayName = "the capability resolution withholds the protected resource metadata capability")]
+    public async Task TheChallengeNamesNoResourceMetadataOutsideTheServedCapabilitiesAsync(string form)
+    {
+        (int statusCode, string body, IReadOnlyList<string> challenges, string segment, string wireAnswer) = await SendRefusableCreateAsync(
+            "Bearer forged-token",
+            isResourceMetadataServed: string.Equals(form, CapabilityBounds.ResolutionWithholds, StringComparison.Ordinal),
+            bound: CapabilityBounds.Wire(form, WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata)).ConfigureAwait(false);
+        (_, _, IReadOnlyList<string> neverHeldChallenges, string neverHeldSegment, string neverHeldWireAnswer) =
+            await SendRefusableCreateAsync("Bearer forged-token").ConfigureAwait(false);
+
+        Assert.AreEqual(
+            neverHeldWireAnswer.Replace(neverHeldSegment, "{segment}", StringComparison.Ordinal),
+            wireAnswer.Replace(segment, "{segment}", StringComparison.Ordinal));
+        string neverHeldChallenge = Assert.ContainsSingle(neverHeldChallenges).Replace(neverHeldSegment, "{segment}", StringComparison.Ordinal);
+        string challenge = Assert.ContainsSingle(challenges).Replace(segment, "{segment}", StringComparison.Ordinal);
+        Assert.AreEqual(neverHeldChallenge, challenge);
+        Assert.AreEqual("Bearer realm=\"https://issuer.test/{segment}\", error=\"invalid_token\"", challenge);
+        Assert.AreEqual(401, statusCode, body);
     }
 
 
@@ -586,7 +627,7 @@ internal sealed class SsfStreamManagementEndpointTests
     public async Task ARefusalOfTheTransmitterResolvesItsIssuerOnce()
     {
         int resolutionCount = 0;
-        (int statusCode, string body, IReadOnlyList<string> challenges, string segment) = await SendRefusableCreateAsync(
+        (int statusCode, string body, IReadOnlyList<string> challenges, string segment, _) = await SendRefusableCreateAsync(
             "Bearer forged-token",
             isResourceMetadataServed: true,
             issuerResolver: (registration, _, _) =>
@@ -619,7 +660,7 @@ internal sealed class SsfStreamManagementEndpointTests
     [TestMethod]
     public async Task AStreamManagementRequestWithoutACredentialServedWhereNoIssuerResolvesIsUnchallenged()
     {
-        (int statusCode, string body, IReadOnlyList<string> challenges, _) = await SendRefusableCreateAsync(
+        (int statusCode, string body, IReadOnlyList<string> challenges, _, _) = await SendRefusableCreateAsync(
             authorization: null, isIssuerWithdrawn: true).ConfigureAwait(false);
 
         Assert.AreEqual(401, statusCode, body);
@@ -642,7 +683,7 @@ internal sealed class SsfStreamManagementEndpointTests
     [TestMethod]
     public async Task AStreamManagementRequestWhoseAccessTokenIsRefusedServedWhereNoIssuerResolvesIsUnchallenged()
     {
-        (int statusCode, string body, IReadOnlyList<string> challenges, _) = await SendRefusableCreateAsync(
+        (int statusCode, string body, IReadOnlyList<string> challenges, _, _) = await SendRefusableCreateAsync(
             "Bearer forged-token", isIssuerWithdrawn: true).ConfigureAwait(false);
 
         Assert.AreEqual(401, statusCode, body);
@@ -667,7 +708,7 @@ internal sealed class SsfStreamManagementEndpointTests
     [TestMethod]
     public async Task AStreamManagementRequestWhoseScopeIsInsufficientServedWhereNoIssuerResolvesIsUnchallenged()
     {
-        (int statusCode, string body, IReadOnlyList<string> challenges, _) = await SendRefusableCreateAsync(
+        (int statusCode, string body, IReadOnlyList<string> challenges, _, _) = await SendRefusableCreateAsync(
             "Bearer read-token", isIssuerWithdrawn: true).ConfigureAwait(false);
 
         Assert.AreEqual(403, statusCode, body);
@@ -686,7 +727,7 @@ internal sealed class SsfStreamManagementEndpointTests
     [TestMethod]
     public async Task AStreamManagementRequestTheSeamPermitsCarriesNoChallenge()
     {
-        (int statusCode, string body, IReadOnlyList<string> challenges, _) =
+        (int statusCode, string body, IReadOnlyList<string> challenges, _, _) =
             await SendRefusableCreateAsync("Bearer manage-token").ConfigureAwait(false);
 
         Assert.AreEqual(201, statusCode, body);
@@ -709,21 +750,31 @@ internal sealed class SsfStreamManagementEndpointTests
     /// Whether the application's materialization seam serves the request under the registration without its issuer,
     /// so that with no application issuer resolver and no issuer on the listener's request context none resolves.
     /// </param>
+    /// <param name="bound">
+    /// The wiring that sets the capabilities the request is served under, from <see cref="CapabilityBounds.Wire"/>,
+    /// or <see langword="null"/> for none.
+    /// </param>
     /// <returns>
-    /// The status code and body of the answer, every <c>WWW-Authenticate</c> field value it carries and the
-    /// registration's tenant segment.
+    /// The status code and body of the answer, every <c>WWW-Authenticate</c> field value it carries, the
+    /// registration's tenant segment, and the answer as <see cref="OAuthTestTransport.ProjectWireAnswer"/> projects it.
     /// </returns>
-    private async Task<(int StatusCode, string Body, IReadOnlyList<string> Challenges, string Segment)> SendRefusableCreateAsync(
+    private async Task<(int StatusCode, string Body, IReadOnlyList<string> Challenges, string Segment, string WireAnswer)> SendRefusableCreateAsync(
         string? authorization,
         bool isResourceMetadataServed = false,
         ResolveServerIssuerDelegate? issuerResolver = null,
-        bool isIssuerWithdrawn = false)
+        bool isIssuerWithdrawn = false,
+        Action<AuthorizationServerIntegration>? bound = null)
     {
         await using TestHostShell app = new(TimeProvider);
         (_, VerifierKeyMaterial registeredMaterial) = await RegisterTransmitterAsync(
             app, isResourceMetadataServed: isResourceMetadataServed).ConfigureAwait(false);
         using VerifierKeyMaterial material = registeredMaterial;
         await WireBearerScopeAuthorizerAsync(app).ConfigureAwait(false);
+        if(bound is not null)
+        {
+            await TestHostShell.AlterAsync(app.Server, bound).ConfigureAwait(false);
+        }
+
         if(issuerResolver is not null || isIssuerWithdrawn)
         {
             await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
@@ -753,7 +804,8 @@ internal sealed class SsfStreamManagementEndpointTests
             host.SharedHttpClient!, HttpMethod.Post, streamUrl, body: string.Empty, token: null, authorization: authorization).ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        return ((int)response.StatusCode, body, RawAuthCodeWirePushers.ChallengesOf(response), segment);
+        return ((int)response.StatusCode, body, RawAuthCodeWirePushers.ChallengesOf(response), segment,
+            OAuthTestTransport.ProjectWireAnswer(response, body));
     }
 
 

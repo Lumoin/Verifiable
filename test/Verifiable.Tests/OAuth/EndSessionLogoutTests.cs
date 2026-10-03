@@ -1079,6 +1079,43 @@ internal sealed class EndSessionLogoutTests
     }
 
 
+    /// <summary>
+    /// The back-channel logout capability is outside the capabilities the end-session request is served under, in
+    /// two forms: the application's materialization answers a registration without it with the capability added,
+    /// which the dispatcher's bound withholds, or the application's capability resolution withholds it from a
+    /// registration that allows it. The end-session request over the wire with a verified ID Token hint terminates
+    /// the session and does not call the back-channel delivery seam, and its answer is the same bytes as the answer
+    /// for a registration that never held the capability. A materialization narrows what the server serves and never
+    /// widens it, and a capability the resolution withholds is not served, which is this library's rule:
+    /// <see href="../../../documents/AuthorizationServerDesign.md#23-per-endpoint-loop-stage">Server design</see>.
+    /// </summary>
+    /// <param name="form">
+    /// <c>materializationAdds</c> or <c>resolutionWithholds</c>, as <see cref="CapabilityBounds"/> names them.
+    /// </param>
+    [TestMethod]
+    [DataRow("materializationAdds", DisplayName = "the materialization adds the back-channel logout capability")]
+    [DataRow("resolutionWithholds", DisplayName = "the capability resolution withholds the back-channel logout capability")]
+    public async Task ABackChannelLogoutOutsideTheServedCapabilitiesIsNotDeliveredAsync(string form)
+    {
+        ImmutableHashSet<CapabilityIdentifier> neverHeld =
+            LogoutCapabilities.Remove(WellKnownCapabilityIdentifiers.OidcBackChannelLogout);
+
+        (string underTheBound, int terminatedUnderTheBound, int deliveredUnderTheBound) = await EndSessionUnderTheBoundAsync(
+            CapabilityBounds.Registered(form, neverHeld, WellKnownCapabilityIdentifiers.OidcBackChannelLogout),
+            CapabilityBounds.Wire(form, WellKnownCapabilityIdentifiers.OidcBackChannelLogout)).ConfigureAwait(false);
+        (string neverHeldAnswer, _, int deliveredNeverHeld) = await EndSessionUnderTheBoundAsync(
+            neverHeld, bound: null).ConfigureAwait(false);
+
+        Assert.AreEqual(0, deliveredNeverHeld, "A registration that never held the capability delivers no back-channel logout.");
+        Assert.AreEqual(1, terminatedUnderTheBound, "The session is terminated.");
+        Assert.AreEqual(0, deliveredUnderTheBound, "The back-channel delivery seam is not called.");
+        Assert.AreEqual(neverHeldAnswer, underTheBound);
+        Assert.AreEqual(
+            "302\nContent-Length: 0\nLocation: https://client.example.com/post-logout?state=n2\nServer: Kestrel\n\n",
+            underTheBound);
+    }
+
+
     /// <summary>The client identifier of the second registration whose signing key the foreign-key hint borrows.</summary>
     private const string OtherClientId = "https://other.client.example.com";
 
@@ -1138,6 +1175,43 @@ internal sealed class EndSessionLogoutTests
         }).ConfigureAwait(false);
 
         return (terminated, delivered);
+    }
+
+
+    /// <summary>
+    /// Registers the client with <paramref name="capabilities"/>, wires the terminate seam and the back-channel
+    /// delivery seam, issues an ID Token for a session through the authorization code flow, then applies
+    /// <paramref name="bound"/> to the server's integration when given and sends the end-session request over the
+    /// listener with that ID Token as the hint, the registered post-logout URI and the <c>state</c> <c>n2</c>.
+    /// </summary>
+    /// <param name="capabilities">The capabilities the loaded registration allows.</param>
+    /// <param name="bound">
+    /// The wiring that sets the capabilities the end-session request is served under, from
+    /// <see cref="CapabilityBounds.Wire"/>, or <see langword="null"/> for none.
+    /// </param>
+    /// <returns>
+    /// The answer as <see cref="OAuthTestTransport.ProjectWireAnswer"/> projects it, and how many times the terminate
+    /// seam and the delivery seam were called for the end-session request.
+    /// </returns>
+    private async Task<(string WireAnswer, int Terminated, int Delivered)> EndSessionUnderTheBoundAsync(
+        ImmutableHashSet<CapabilityIdentifier> capabilities, Action<AuthorizationServerIntegration>? bound)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: capabilities).ConfigureAwait(false);
+        (List<(string Subject, string? SessionId)> terminated, List<(string Subject, string? SessionId)> delivered) =
+            await WireTerminateAndDeliverSeamsAsync(host).ConfigureAwait(false);
+        string idToken = await IssueIdTokenAsync(host, material, "session-N").ConfigureAwait(false);
+        if(bound is not null)
+        {
+            await TestHostShell.AlterAsync(host.Server, bound).ConfigureAwait(false);
+        }
+
+        using HttpResponseMessage response = await EndSessionOverWireAsync(host, material, idToken, "n2").ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        return (OAuthTestTransport.ProjectWireAnswer(response, body), terminated.Count, delivered.Count);
     }
 
 

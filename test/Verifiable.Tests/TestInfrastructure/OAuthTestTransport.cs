@@ -161,4 +161,25 @@ internal static class OAuthTestTransport
 
         return (retryResponse, retryBody);
     }
+
+
+    /// <summary>
+    /// The text an answer carries on the wire, for a byte-for-byte comparison of two answers: the status code, every
+    /// response and content header field in ordinal name order, and the body. The <c>Date</c> field is left out: the
+    /// listener stamps it from the machine's clock as it writes the answer, so it differs between two answers that
+    /// are otherwise the same bytes.
+    /// </summary>
+    /// <param name="response">The answer as the client received it.</param>
+    /// <param name="body">The body of <paramref name="response"/>, read once.</param>
+    /// <returns>The status code, one <c>name: value</c> line per header field, an empty line and the body.</returns>
+    public static string ProjectWireAnswer(HttpResponseMessage response, string body)
+    {
+        IEnumerable<string> fields = response.Headers
+            .Concat(response.Content.Headers)
+            .Where(static field => !string.Equals(field.Key, "Date", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(static field => field.Key, StringComparer.Ordinal)
+            .Select(static field => $"{field.Key}: {string.Join(", ", field.Value)}");
+
+        return $"{(int)response.StatusCode}\n{string.Join("\n", fields)}\n\n{body}";
+    }
 }

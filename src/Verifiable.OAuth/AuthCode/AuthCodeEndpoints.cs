@@ -120,22 +120,29 @@ public static class AuthCodeEndpoints
             candidates.Add(BuildDirectAuthorize());
         }
 
-        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthPushedAuthorization)
-            && ((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthJwtSecuredAuthorizationRequest))
+        //The request-object endpoints read a second capability beside the one their candidate carries, which the
+        //chain's capability filter does not see, so both are read from the capabilities the request is served under:
+        //a capability the resolution withholds, or a materialization adds, admits neither endpoint.
+        if(context.IsBoundedCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthPushedAuthorization)
+            && context.IsBoundedCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthJwtSecuredAuthorizationRequest))
         {
             candidates.Add(BuildJarPar());
         }
 
-        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthDirectAuthorization)
-            && ((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthJwtSecuredAuthorizationRequest))
+        if(context.IsBoundedCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthDirectAuthorization)
+            && context.IsBoundedCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthJwtSecuredAuthorizationRequest))
         {
             candidates.Add(BuildAuthorizeJarByValue());
         }
 
+        //The token endpoint's grants, the grant types registeredGrantTypes records and the capability the grant-type
+        //refusal carries are read from the capabilities the request is served under, the set the chain's capability
+        //filter applies, so a grant the bound withholds is neither registered nor the refusal's tag, and the refusal
+        //answers it as for a registration that never held it.
         bool hasTokenCapability =
-            ((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthAuthorizationCode) ||
-            ((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthClientCredentials) ||
-            ((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthTokenExchange);
+            context.IsBoundedCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthAuthorizationCode) ||
+            context.IsBoundedCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthClientCredentials) ||
+            context.IsBoundedCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthTokenExchange);
 
         //Grant types this registration actually materializes a candidate for below.
         //BuildTokenGrantTypeRefusal reads this set to tell "this registration is not
@@ -194,7 +201,7 @@ public static class AuthCodeEndpoints
         //when that candidate survives EndpointChain's capability filter for THIS registration;
         //otherwise the grant_type refusal below answers it with unauthorized_client
         //(RFC 6749 §5.2).
-        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthAuthorizationCode))
+        if(context.IsBoundedCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthAuthorizationCode))
         {
             candidates.Add(BuildToken());
             _ = registeredGrantTypes.Add(WellKnownGrantTypes.AuthorizationCode);
@@ -205,7 +212,7 @@ public static class AuthCodeEndpoints
         //Activates only when BOTH the capability and the client-authentication
         //seam are present: an unauthenticated client-credentials grant would
         //mint tokens for anyone claiming a client_id.
-        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthClientCredentials)
+        if(context.IsBoundedCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthClientCredentials)
             && clientCredentialsSeamWired)
         {
             candidates.Add(BuildClientCredentials());
@@ -218,7 +225,7 @@ public static class AuthCodeEndpoints
         //seams (subject-token validation and the impersonation policy decision) are present:
         //an advertised grant missing either seam would mint tokens for any subject-token
         //string or skip the authorization decision (fail-closed, like client_credentials).
-        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthTokenExchange)
+        if(context.IsBoundedCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthTokenExchange)
             && tokenExchangeSeamWired)
         {
             candidates.Add(BuildTokenExchange());
@@ -232,7 +239,7 @@ public static class AuthCodeEndpoints
         //token-exchange/client_credentials, client AUTHENTICATION is OPTIONAL for this grant (§3.1),
         //so the client-authentication seam is NOT required to materialize it — the assertion is the
         //grant; the endpoint validates client credentials only if the request carries them.
-        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthJwtBearer)
+        if(context.IsBoundedCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthJwtBearer)
             && jwtBearerSeamWired)
         {
             candidates.Add(BuildJwtBearer());
@@ -244,7 +251,7 @@ public static class AuthCodeEndpoints
         //BOTH the capability and the code-validation seam are present: an advertised
         //pre-authorized grant with no seam would mint access tokens for any code string
         //(fail-closed, like client_credentials).
-        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.Oid4VciPreAuthorizedCodeGrant)
+        if(context.IsBoundedCapabilityAllowed(WellKnownCapabilityIdentifiers.Oid4VciPreAuthorizedCodeGrant)
             && preAuthorizedCodeSeamWired)
         {
             candidates.Add(BuildPreAuthorizedCodeToken());
@@ -254,7 +261,7 @@ public static class AuthCodeEndpoints
         //Refresh-token grant per RFC 6749 §6 is enabled whenever the
         //registration allows AuthorizationCode capability. RFC 9700 §2.2.2
         //rotation is enforced unconditionally on every successful refresh.
-        if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthAuthorizationCode))
+        if(context.IsBoundedCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthAuthorizationCode))
         {
             candidates.Add(BuildRefreshToken());
             _ = registeredGrantTypes.Add(WellKnownGrantTypes.RefreshToken);
@@ -270,13 +277,13 @@ public static class AuthCodeEndpoints
         //fall through every candidate above and reach the host's generic 404.
         bool hasAnyTokenServingCapability =
             hasTokenCapability ||
-            ((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthJwtBearer) ||
-            ((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.Oid4VciPreAuthorizedCodeGrant);
+            context.IsBoundedCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthJwtBearer) ||
+            context.IsBoundedCapabilityAllowed(WellKnownCapabilityIdentifiers.Oid4VciPreAuthorizedCodeGrant);
 
         if(hasAnyTokenServingCapability)
         {
             CapabilityIdentifier tokenEndpointCapability =
-                SelectTokenEndpointCapability((ClientRecord)registration);
+                SelectTokenEndpointCapability(context);
 
             candidates.Add(BuildTokenGrantTypeRefusal(
                 tokenEndpointCapability, serverServedGrantTypes, registeredGrantTypes));
@@ -1484,20 +1491,23 @@ public static class AuthCodeEndpoints
     /// <summary>
     /// Picks the <see cref="CapabilityIdentifier"/> the token endpoint's grant_type
     /// refusal candidate (<see cref="BuildTokenGrantTypeRefusal"/>) advertises, from the
-    /// first token-serving capability <paramref name="registration"/> is allowed, in a
-    /// fixed precedence order.
+    /// first token-serving capability the request is served under, in a fixed precedence
+    /// order.
     /// </summary>
-    /// <param name="registration">The registration the token endpoint is building candidates for.</param>
+    /// <param name="context">
+    /// The per-request context, carrying the capabilities the chain build resolved for the
+    /// registration and held to the bound.
+    /// </param>
     /// <returns>The first allowed capability among the token-serving capabilities, in precedence order.</returns>
     /// <remarks>
-    /// The tag must be one <paramref name="registration"/> is actually allowed:
-    /// <see cref="EndpointChain"/> filters every candidate in a chain by whether its
-    /// <see cref="EndpointCandidate.Capability"/> is allowed, so a tag the registration
-    /// is not allowed would make the refusal candidate itself unreachable. Called only
-    /// when the builder already found at least one token-serving capability allowed, so
-    /// the loop always returns before falling through.
+    /// The tag must be one the request is served under: <see cref="EndpointChain"/> filters
+    /// every candidate in a chain by whether its <see cref="EndpointCandidate.Capability"/>
+    /// is in that same set, so a tag outside it, such as a capability a materialized
+    /// registration adds or the resolution withholds, would make the refusal candidate itself
+    /// unreachable. Called only when the builder already found at least one token-serving
+    /// capability in that set, so the loop always returns before falling through.
     /// </remarks>
-    private static CapabilityIdentifier SelectTokenEndpointCapability(ClientRecord registration)
+    private static CapabilityIdentifier SelectTokenEndpointCapability(ExchangeContext context)
     {
         CapabilityIdentifier[] tokenServingCapabilitiesInPrecedenceOrder =
         [
@@ -1510,7 +1520,7 @@ public static class AuthCodeEndpoints
 
         foreach(CapabilityIdentifier capability in tokenServingCapabilitiesInPrecedenceOrder)
         {
-            if(registration.IsCapabilityAllowed(capability))
+            if(context.IsBoundedCapabilityAllowed(capability))
             {
 
                 return capability;
@@ -1518,7 +1528,7 @@ public static class AuthCodeEndpoints
         }
 
         throw new InvalidOperationException(
-            "SelectTokenEndpointCapability requires the registration to allow at least one token-serving capability.");
+            "SelectTokenEndpointCapability requires the request to be served under at least one token-serving capability.");
     }
 
 
@@ -1527,7 +1537,7 @@ public static class AuthCodeEndpoints
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 §5.2</see>.
     /// </summary>
     /// <param name="capability">
-    /// A capability this registration is actually allowed, chosen by
+    /// A capability the request is served under, chosen by
     /// <see cref="SelectTokenEndpointCapability"/>, so this candidate survives
     /// <see cref="EndpointChain"/>'s own per-request capability filter alongside the grant
     /// candidates above.
@@ -2678,9 +2688,8 @@ public static class AuthCodeEndpoints
             //producer's own grant/scope-aware decision (for example the ID Token producer's
             //openid + end-user-authenticating-grant check). Together these replace the single
             //endpoint-level capability match, which only gated the grant itself.
-            IReadOnlySet<CapabilityIdentifier>? resolved = context.ResolvedCapabilities;
             if(producer.RequiredCapability is { } requiredCapability
-                && (resolved is null || !resolved.Contains(requiredCapability)))
+                && !context.IsBoundedCapabilityAllowed(requiredCapability))
             {
                 continue;
             }
@@ -5830,8 +5839,7 @@ public static class AuthCodeEndpoints
         //The id-jag mint is gated per-client by the OAuthIdJag capability. The authorization seam
         //selecting the id-jag issued type for a client that lacks the capability is an AS
         //misconfiguration → server_error, mirroring the producer-walk capability filter.
-        IReadOnlySet<CapabilityIdentifier>? resolved = context.ResolvedCapabilities;
-        if(resolved is null || !resolved.Contains(WellKnownCapabilityIdentifiers.OAuthIdJag))
+        if(!context.IsBoundedCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthIdJag))
         {
             return (null, ServerHttpResponse.ServerError(
                 OAuthErrors.ServerError,
