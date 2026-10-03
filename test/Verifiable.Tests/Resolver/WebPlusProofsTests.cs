@@ -215,4 +215,30 @@ internal sealed class WebPlusProofsTests
 
         Assert.IsNotNull(error, "A tampered proof signature MUST fail verification.");
     }
+
+
+    /// <summary>
+    /// A proof whose protected header names an algorithm that is not the algorithm its <c>kid</c> MBPubKey
+    /// fixes is refused on that mismatch (WP-PRF-3) before its signature is checked: the header names
+    /// ES256 for the worked example's Ed25519 key.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.1">RFC 8725 section 3.1</see>: "The
+    /// library MUST ensure that the "alg" or "enc" header specifies the same algorithm that is used for
+    /// the cryptographic operation."
+    /// </summary>
+    [TestMethod]
+    public async Task RejectsAProofWhoseAlgIsNotTheAlgorithmOfItsKey()
+    {
+        string[] segments = Proof.Split('.');
+        string headerJson = System.Text.Encoding.UTF8.GetString(System.Buffers.Text.Base64Url.DecodeFromChars(segments[0]));
+        string rewrittenHeaderJson = headerJson.Replace("\"alg\":\"Ed25519\"", "\"alg\":\"ES256\"", StringComparison.Ordinal);
+        Assert.AreNotEqual(headerJson, rewrittenHeaderJson, "The worked example's header names Ed25519.");
+
+        string rewrittenProof = $"{Base64UrlEncoder(System.Text.Encoding.UTF8.GetBytes(rewrittenHeaderJson))}..{segments[2]}";
+        string document = NonRootDidDocument.Replace(Proof, rewrittenProof, StringComparison.Ordinal);
+
+        string? error = await VerifyAsync(document, NonRootSelfHash).ConfigureAwait(false);
+
+        Assert.IsNotNull(error, "A proof whose alg is not its key's algorithm MUST be refused.");
+        Assert.Contains("does not match its key algorithm", error);
+    }
 }

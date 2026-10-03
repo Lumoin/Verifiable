@@ -152,6 +152,34 @@ internal sealed class DpopProofValidatorTests
     }
 
 
+    /// <summary>
+    /// A proof whose header names an algorithm RFC 9449 admits, but not an algorithm of the key its
+    /// <c>jwk</c> carries, is refused as <see cref="DpopProofValidationFailureReason.InvalidAlg"/> though
+    /// that key's own signature covers the header.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.1">RFC 8725 section 3.1</see>: "The
+    /// library MUST ensure that the "alg" or "enc" header specifies the same algorithm that is used for
+    /// the cryptographic operation."
+    /// </summary>
+    /// <param name="declaredAlgorithm">The algorithm the header names over a P-256 key's ES256 signature.</param>
+    [TestMethod]
+    [DataRow("ES384")]
+    [DataRow("RS256")]
+    public async Task ValidateAsyncRejectsAnAlgThatIsNotOfTheProofKey(string declaredAlgorithm)
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey key = new(keys, WellKnownJwaValues.Es256);
+
+        string proof = await BuildProofWithCustomHeaderAsync(key, BuildClaims(),
+            header => new Dictionary<string, object>(header)
+            {
+                [WellKnownJwkMemberNames.Alg] = declaredAlgorithm
+            }).ConfigureAwait(false);
+
+        DpopProofValidationResult result = await ValidateAsync(proof).ConfigureAwait(false);
+        Assert.AreEqual(DpopProofValidationFailureReason.InvalidAlg, result.FailureReason);
+    }
+
+
     [TestMethod]
     public async Task ValidateAsyncRejectsMissingJwkInHeader()
     {
