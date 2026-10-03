@@ -536,9 +536,9 @@ internal sealed class CredentialBearingRedirectTests
             parseRegistrationResponseAsync: (body, ct) =>
                 throw new InvalidOperationException("A registration answer the flow refused must never reach the parser."),
             resolveAuthorizationServerMetadataAsync: (_, _, _) =>
-                ValueTask.FromResult(new AuthorizationServerMetadataResolution
+                ValueTask.FromResult<AuthorizationServerMetadataResolution>(new AuthorizationServerMetadataResolved
                 {
-                    Outcome = AuthorizationServerMetadataResolutionOutcome.Resolved,
+                    MetadataLocation = WellKnownPaths.OAuthAuthorizationServer.ComputeUri(Issuer.OriginalString),
                     Metadata = new AuthorizationServerMetadata
                     {
                         Issuer = Issuer,
