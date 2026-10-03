@@ -130,6 +130,24 @@ public readonly struct HttpResponseData: IEquatable<HttpResponseData>
         StatusCode is >= 200 and <= 299;
 
 
+    /// <summary>The first status code of the 3xx (Redirection) class.</summary>
+    private const int FirstRedirectionStatusCode = 300;
+
+    /// <summary>The last status code of the 3xx (Redirection) class.</summary>
+    private const int LastRedirectionStatusCode = 399;
+
+
+    /// <summary>
+    /// Returns <see langword="true"/> when the status code is of the 3xx (Redirection) class (300–399).
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.4">RFC 9110 §15.4</see>: "The 3xx
+    /// (Redirection) class of status code indicates that further action needs to be taken by the user
+    /// agent in order to fulfill the request." A client flow that sent a credential refuses such a
+    /// response as an <see cref="OAuthRedirectRefused"/> and sends nothing further.
+    /// </summary>
+    public bool IsRedirection =>
+        StatusCode is >= FirstRedirectionStatusCode and <= LastRedirectionStatusCode;
+
+
     /// <summary>
     /// Returns <see langword="true"/> when the <c>transport.content_type</c>
     /// metadata entry names the RFC 9457 <see cref="WellKnownMediaTypes.Application.ProblemJson"/>

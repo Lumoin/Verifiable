@@ -15,6 +15,7 @@ public static class DynamicRegistrationHandlers
     /// parses the response, and constructs a runtime
     /// <see cref="ClientRegistration"/>.
     /// </summary>
+    /// <exception cref="OAuthRedirectRefusedException">The endpoint answered with a redirect, which the flow did not follow.</exception>
     public static async ValueTask<DynamicRegistrationResult> HandleRegisterAsync(
         RegisterClientOptions options,
         OAuthClientInfrastructure infrastructure,
@@ -37,6 +38,10 @@ public static class DynamicRegistrationHandlers
 
         HttpResponseData response = await infrastructure.SendJsonPostAsync(
             options.RegistrationEndpoint, body, OutgoingHeaders.Empty, context, cancellationToken).ConfigureAwait(false);
+
+        //The request carries the client's metadata and keys; a redirect followed would re-send them to the
+        //origin its Location field names (RFC 9110 Section 15.4.8), so the flow refuses it.
+        CredentialBearingRedirect.ThrowIfRedirection(options.RegistrationEndpoint, response);
 
         if(response.StatusCode is < 200 or >= 300)
         {
@@ -61,6 +66,7 @@ public static class DynamicRegistrationHandlers
     /// Handles RFC 7592 §2.1 client read. GETs the management URI with the
     /// registration's bearer token, parses the echoed metadata.
     /// </summary>
+    /// <exception cref="OAuthRedirectRefusedException">The endpoint answered with a redirect, which the flow did not follow.</exception>
     public static async ValueTask<ClientMetadata> HandleReadAsync(
         ClientRegistration registration,
         OAuthClientInfrastructure infrastructure,
@@ -93,6 +99,10 @@ public static class DynamicRegistrationHandlers
         HttpResponseData response = await infrastructure.SendJsonGetAsync(
             registration.ManagementUri, headers, context, cancellationToken).ConfigureAwait(false);
 
+        //The request carries the registration access token; a redirect followed would re-send it to the
+        //origin its Location field names (RFC 9110 Section 15.4.8), so the flow refuses it.
+        CredentialBearingRedirect.ThrowIfRedirection(registration.ManagementUri, response);
+
         if(response.StatusCode is < 200 or >= 300)
         {
             throw new InvalidOperationException(
@@ -108,6 +118,7 @@ public static class DynamicRegistrationHandlers
     /// Handles RFC 7592 §2.2 client update. PUTs the new metadata with the
     /// registration's bearer token and issued client identifier, then parses the complete echoed metadata.
     /// </summary>
+    /// <exception cref="OAuthRedirectRefusedException">The endpoint answered with a redirect, which the flow did not follow.</exception>
     public static async ValueTask<ClientMetadata> HandleUpdateAsync(
         ClientRegistration registration,
         ClientMetadata newMetadata,
@@ -144,6 +155,10 @@ public static class DynamicRegistrationHandlers
         HttpResponseData response = await infrastructure.SendJsonPutAsync(
             registration.ManagementUri, body, headers, context, cancellationToken).ConfigureAwait(false);
 
+        //The request carries the registration access token; a redirect followed would re-send it to the
+        //origin its Location field names (RFC 9110 Section 15.4.8), so the flow refuses it.
+        CredentialBearingRedirect.ThrowIfRedirection(registration.ManagementUri, response);
+
         if(response.StatusCode is < 200 or >= 300)
         {
             throw new InvalidOperationException(
@@ -159,6 +174,7 @@ public static class DynamicRegistrationHandlers
     /// Handles RFC 7592 §2.3 client deregistration. DELETEs the management URI
     /// with the registration's bearer token.
     /// </summary>
+    /// <exception cref="OAuthRedirectRefusedException">The endpoint answered with a redirect, which the flow did not follow.</exception>
     public static async ValueTask HandleDeregisterAsync(
         ClientRegistration registration,
         OAuthClientInfrastructure infrastructure,
@@ -185,6 +201,10 @@ public static class DynamicRegistrationHandlers
 
         HttpResponseData response = await infrastructure.SendJsonDeleteAsync(
             registration.ManagementUri, headers, context, cancellationToken).ConfigureAwait(false);
+
+        //The request carries the registration access token; a redirect followed would re-send it to the
+        //origin its Location field names (RFC 9110 Section 15.4.8), so the flow refuses it.
+        CredentialBearingRedirect.ThrowIfRedirection(registration.ManagementUri, response);
 
         if(response.StatusCode is < 200 or >= 300)
         {

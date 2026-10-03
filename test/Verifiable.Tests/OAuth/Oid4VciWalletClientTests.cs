@@ -2020,6 +2020,266 @@ internal sealed class Oid4VciWalletClientTests
     }
 
 
+    /// <summary>
+    /// The §6 Token Request carries the pre-authorized code, so a token endpoint answering it with a
+    /// redirect is refused as <see cref="Oid4VciRequestFailureKind.RedirectRefused"/>: the request was sent
+    /// once and nothing followed, neither to the location nor to any later step (RFC 9110 §15.4.8).
+    /// </summary>
+    [TestMethod]
+    public async Task PreAuthorizedTokenRequestAnsweredWithARedirectIsRefusedAndNothingFollows()
+    {
+        Uri tokenEndpoint = new("https://issuer.example.com/token");
+        List<Uri> formPosts = [];
+        List<Uri> jsonPosts = [];
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+
+        Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
+            sendFormPost: (endpoint, _, _, _, _) =>
+            {
+                formPosts.Add(endpoint);
+
+                return ValueTask.FromResult(RedirectResponse(TemporaryRedirectStatusCode));
+            },
+            sendJsonPost: (endpoint, _, _, _, _) =>
+            {
+                jsonPosts.Add(endpoint);
+
+                throw new InvalidOperationException("Nothing may follow a refused §6 Token Request.");
+            });
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await walletClient.IssuePreAuthorizedDetailedAsync(
+            new CredentialOffer
+            {
+                CredentialIssuer = new Uri("https://issuer.example.com"),
+                CredentialConfigurationIds = [ConfigurationId],
+                PreAuthorizedCodeGrant = new PreAuthorizedCodeOfferGrant { PreAuthorizedCode = PreAuthorizedCode }
+            },
+            ConfigurationId,
+            holderPrivate,
+            holderPublic,
+            new Oid4VciIssuanceEndpoints
+            {
+                TokenEndpoint = tokenEndpoint,
+                NonceEndpoint = new Uri("https://issuer.example.com/nonce"),
+                CredentialEndpoint = new Uri("https://issuer.example.com/credential")
+            },
+            transactionCode: null,
+            responseEncryption: null,
+            new ExchangeContext(),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(outcome.IsSuccess);
+        AssertRedirectRefused(outcome.Error, tokenEndpoint, TemporaryRedirectStatusCode);
+        Assert.HasCount(1, formPosts, "The pre-authorized code is sent once and nothing after the redirect.");
+        Assert.IsEmpty(jsonPosts, "No later step follows a refused token request.");
+    }
+
+
+    /// <summary>
+    /// The §7 Nonce Request carries the access token, so a nonce endpoint answering it with a redirect is
+    /// refused as <see cref="Oid4VciRequestFailureKind.RedirectRefused"/>: the request was sent once and the
+    /// §8 Credential Request never followed.
+    /// </summary>
+    [TestMethod]
+    public async Task NonceRequestAnsweredWithARedirectIsRefusedAndNothingFollows()
+    {
+        Uri nonceEndpoint = new("https://issuer.example.com/nonce");
+        List<Uri> jsonPosts = [];
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+
+        Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
+            sendJsonPost: (endpoint, _, _, _, _) =>
+            {
+                jsonPosts.Add(endpoint);
+
+                return ValueTask.FromResult(RedirectResponse(PermanentRedirectStatusCode));
+            });
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await walletClient.IssueWithAccessTokenDetailedAsync(
+            "access-token",
+            WellKnownAuthenticationSchemes.Bearer,
+            accessTokenExpiresAt: null,
+            new Uri("https://issuer.example.com"),
+            ConfigurationId,
+            holderPrivate,
+            holderPublic,
+            new Oid4VciIssuanceEndpoints
+            {
+                TokenEndpoint = new Uri("https://issuer.example.com/token"),
+                NonceEndpoint = nonceEndpoint,
+                CredentialEndpoint = new Uri("https://issuer.example.com/credential")
+            },
+            responseEncryption: null,
+            new ExchangeContext(),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(outcome.IsSuccess);
+        AssertRedirectRefused(outcome.Error, nonceEndpoint, PermanentRedirectStatusCode);
+        Assert.HasCount(1, jsonPosts, "The access token is sent once and nothing after the redirect.");
+    }
+
+
+    /// <summary>
+    /// The §8 Credential Request carries the access token and the key proof, so a credential endpoint
+    /// answering it with a redirect is refused as <see cref="Oid4VciRequestFailureKind.RedirectRefused"/>:
+    /// after the §7 Nonce Request, the Credential Request was sent once and nothing followed.
+    /// </summary>
+    [TestMethod]
+    public async Task CredentialRequestAnsweredWithARedirectIsRefusedAndNothingFollows()
+    {
+        Uri nonceEndpoint = new("https://issuer.example.com/nonce");
+        Uri credentialEndpoint = new("https://issuer.example.com/credential");
+        List<Uri> jsonPosts = [];
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+
+        Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
+            sendJsonPost: (endpoint, _, _, _, _) =>
+            {
+                jsonPosts.Add(endpoint);
+
+                return ValueTask.FromResult(endpoint == nonceEndpoint
+                    ? JsonResponse(200, "{\"c_nonce\":\"nonce-value\"}")
+                    : RedirectResponse(TemporaryRedirectStatusCode));
+            });
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await walletClient.IssueWithAccessTokenDetailedAsync(
+            "access-token",
+            WellKnownAuthenticationSchemes.Bearer,
+            accessTokenExpiresAt: null,
+            new Uri("https://issuer.example.com"),
+            ConfigurationId,
+            holderPrivate,
+            holderPublic,
+            new Oid4VciIssuanceEndpoints
+            {
+                TokenEndpoint = new Uri("https://issuer.example.com/token"),
+                NonceEndpoint = nonceEndpoint,
+                CredentialEndpoint = credentialEndpoint
+            },
+            responseEncryption: null,
+            new ExchangeContext(),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(outcome.IsSuccess);
+        AssertRedirectRefused(outcome.Error, credentialEndpoint, TemporaryRedirectStatusCode);
+        Assert.HasCount(2, jsonPosts, "The nonce request and the one credential request, and nothing after the redirect.");
+        Assert.AreEqual(credentialEndpoint, jsonPosts[1]);
+    }
+
+
+    /// <summary>
+    /// The §9 Deferred Credential Request carries the access token, so a deferred credential endpoint
+    /// answering it with a redirect is refused as <see cref="Oid4VciRequestFailureKind.RedirectRefused"/>
+    /// and the poll was sent once.
+    /// </summary>
+    [TestMethod]
+    public async Task DeferredPollAnsweredWithARedirectIsRefusedAndNothingFollows()
+    {
+        Uri deferredEndpoint = new("https://issuer.example.com/deferred");
+        List<Uri> jsonPosts = [];
+        Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
+            sendJsonPost: (endpoint, _, _, _, _) =>
+            {
+                jsonPosts.Add(endpoint);
+
+                return ValueTask.FromResult(RedirectResponse(TemporaryRedirectStatusCode));
+            });
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await walletClient.PollDeferredCredentialAsync(
+            "txn-redirected",
+            "access-token",
+            WellKnownAuthenticationSchemes.Bearer,
+            accessTokenExpiresAt: null,
+            deferredEndpoint,
+            responseEncryption: null,
+            new ExchangeContext(),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(outcome.IsSuccess);
+        AssertRedirectRefused(outcome.Error, deferredEndpoint, TemporaryRedirectStatusCode);
+        Assert.HasCount(1, jsonPosts, "The access token is sent once and nothing after the redirect.");
+    }
+
+
+    /// <summary>
+    /// The §11 Notification Request carries the access token, so a notification endpoint answering it with
+    /// a redirect is refused as <see cref="Oid4VciRequestFailureKind.RedirectRefused"/> rather than read as
+    /// acknowledged, and the notification was sent once.
+    /// </summary>
+    [TestMethod]
+    public async Task NotificationAnsweredWithARedirectIsRefusedAndNothingFollows()
+    {
+        Uri notificationEndpoint = new("https://issuer.example.com/notification");
+        List<Uri> jsonPosts = [];
+        Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
+            sendJsonPost: (endpoint, _, _, _, _) =>
+            {
+                jsonPosts.Add(endpoint);
+
+                return ValueTask.FromResult(RedirectResponse(PermanentRedirectStatusCode));
+            });
+
+        Oid4VciRequestFailure? failure = await walletClient.SendCredentialNotificationAsync(
+            "notification-redirected",
+            Oid4VciNotificationEvents.CredentialAccepted,
+            "access-token",
+            WellKnownAuthenticationSchemes.Bearer,
+            notificationEndpoint,
+            eventDescription: null,
+            new ExchangeContext(),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsNotNull(failure, "A redirect is not an acknowledgement.");
+        AssertRedirectRefused(failure, notificationEndpoint, PermanentRedirectStatusCode);
+        Assert.HasCount(1, jsonPosts, "The access token is sent once and nothing after the redirect.");
+    }
+
+
+    /// <summary>The 307 (Temporary Redirect) status, RFC 9110 §15.4.8.</summary>
+    private const int TemporaryRedirectStatusCode = 307;
+
+    /// <summary>The 308 (Permanent Redirect) status, RFC 9110 §15.4.9.</summary>
+    private const int PermanentRedirectStatusCode = 308;
+
+    /// <summary>The origin the redirect rows' answers name: another origin than the endpoint's.</summary>
+    private const string ElsewhereLocation = "https://elsewhere.example.net/collect";
+
+
+    /// <summary>Builds a redirect answer naming <see cref="ElsewhereLocation"/>.</summary>
+    /// <param name="statusCode">The 3xx status.</param>
+    /// <returns>The answer.</returns>
+    private static HttpResponseData RedirectResponse(int statusCode) =>
+        JsonResponse(statusCode, string.Empty, (WellKnownHttpHeaderNames.Location, ElsewhereLocation));
+
+
+    /// <summary>
+    /// Asserts <paramref name="failure"/> is the Wallet's refusal of a redirect from
+    /// <paramref name="endpoint"/>, carrying the typed refusal with the status and the location.
+    /// </summary>
+    /// <param name="failure">The failure the request answered.</param>
+    /// <param name="endpoint">The endpoint the request was sent to.</param>
+    /// <param name="statusCode">The redirect status the endpoint answered with.</param>
+    private static void AssertRedirectRefused(Oid4VciRequestFailure failure, Uri endpoint, int statusCode)
+    {
+        Assert.AreEqual(Oid4VciRequestFailureKind.RedirectRefused, failure.Kind);
+        Assert.AreEqual(endpoint, failure.Endpoint);
+        Assert.AreEqual(statusCode, failure.StatusCode);
+        Assert.IsNotNull(failure.RedirectRefusal);
+        Assert.AreEqual(endpoint, failure.RedirectRefusal.Endpoint);
+        Assert.AreEqual(statusCode, failure.RedirectRefusal.StatusCode);
+        Assert.AreEqual(ElsewhereLocation, failure.RedirectRefusal.Location);
+    }
+
+
     //Builds a wallet client over in-process spy delegates that never touch the network — the
     //refusal proofs above assert on invocation counts, not wire behaviour, so no HTTP host is
     //needed. Unwired seams default to a delegate that fails loudly if reached.

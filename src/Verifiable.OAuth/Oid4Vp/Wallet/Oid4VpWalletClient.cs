@@ -125,6 +125,10 @@ public sealed class Oid4VpWalletClient
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The compact JWE that was POSTed and the terminal PDA state.</returns>
+    /// <exception cref="OAuthRedirectRefusedException">
+    /// The <c>response_uri</c> or the <c>request_uri</c> answered the wallet's post with a redirect, which
+    /// the wallet did not follow.
+    /// </exception>
     public async ValueTask<PresentationResult> PresentJarAsync(
         PresentJarOptions presentJarOptions,
         ExchangeContext context,
@@ -753,6 +757,10 @@ public sealed class Oid4VpWalletClient
             context,
             cancellationToken).ConfigureAwait(false);
 
+        //The post carries the presentation; a redirect followed would re-send it to the origin its Location
+        //field names (RFC 9110 Section 15.4.8), so the wallet refuses it.
+        CredentialBearingRedirect.ThrowIfRedirection(request.ResponseUri, postResponse);
+
         //OID4VP 1.0 §8.2: "Additional response parameters MAY be defined and used. The Wallet MUST ignore
         //any unrecognized parameters." The client reads only the HTTP status code here and never decodes
         //the 200 response body's JSON object — redirect_uri or any other member the Response URI's answer
@@ -839,6 +847,10 @@ public sealed class Oid4VpWalletClient
             OutgoingHeaders.Empty,
             context,
             cancellationToken).ConfigureAwait(false);
+
+        //The post carries the wallet's nonce and metadata, which the request object it answers must bind;
+        //the wallet reads that answer only from the endpoint it posted to, never from a redirect.
+        CredentialBearingRedirect.ThrowIfRedirection(presentJarOptions.RequestUri, response);
 
         if(response.StatusCode is < 200 or >= 300)
         {

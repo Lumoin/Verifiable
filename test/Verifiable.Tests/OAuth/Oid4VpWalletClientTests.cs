@@ -153,6 +153,130 @@ internal sealed class Oid4VpWalletClientTests
     }
 
 
+    /// <summary>
+    /// The <c>direct_post</c> carries the presentation, so a <c>response_uri</c> answering it with a redirect
+    /// is refused: <see cref="Oid4VpWalletClient.PresentJarAsync(PresentJarOptions, ExchangeContext, CancellationToken)"/>
+    /// throws <see cref="OAuthRedirectRefusedException"/> naming the endpoint, the status and the
+    /// <c>Location</c> value, and the presentation was posted once and nothing followed
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.4.8">RFC 9110 §15.4.8</see>).
+    /// </summary>
+    [TestMethod]
+    public async Task DirectPostAnsweredWithARedirectIsRefusedAndNothingFollows()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
+
+        (string serializedSdJwt, PrivateKeyMemory holderPrivateKey, PublicKeyMemory issuerPublicKey) =
+            await IssuePidCredentialAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        using PrivateKeyMemory holderKey = holderPrivateKey;
+        using PublicKeyMemory issuerKey = issuerPublicKey;
+        app.RegisterIssuerTrust(IssuerId, issuerKey);
+
+        (Uri requestUri, _, string compactJar) = await IssueJarAsync(
+            app, verifierKeys).ConfigureAwait(false);
+
+        //The direct_post POST is the wallet client's only outbound call in this flow, so the decorator
+        //answers every call with the redirect and records each.
+        List<Uri> posts = [];
+        (OAuthClient oauthClient, _, _) = app.CreateInProcessOAuthClientAndRegistration(
+            verifierKeys.Registration,
+            "https://client.example.com/callback",
+            verifierKeys.Registration.IssuerUri!.ToString(),
+            decorateSendFormPostAsync: _ => (endpoint, _, _, _, _) =>
+            {
+                posts.Add(endpoint);
+
+                return ValueTask.FromResult(RedirectResponse(TemporaryRedirectStatusCode));
+            });
+
+        ProduceVpTokenPresentationsDelegate produce =
+            TestHostShell.BuildSdJwtProduceDelegate(serializedSdJwt, holderKey);
+
+        Oid4VpWalletClient walletClient = new(
+            oauthClient.Infrastructure,
+            TestHostShell.BuildSlimOid4VpWalletConfiguration(
+                produce,
+                TestHostShell.PinnedVerifierKeyResolver(verifierKeys.SigningPublicKey)));
+
+        OAuthRedirectRefusedException refused = await Assert.ThrowsExactlyAsync<OAuthRedirectRefusedException>(
+            async () => await walletClient.PresentJarAsync(
+                new PresentJarOptions
+                {
+                    CompactJar = compactJar,
+                    RequestUri = requestUri,
+                    ExpectedVerifierClientId = VerifierClientId,
+                    FlowId = $"wallet-redirected-{Guid.NewGuid():N}"
+                },
+                new ExchangeContext(),
+                TestContext.CancellationToken).ConfigureAwait(false))
+            .ConfigureAwait(false);
+
+        Assert.HasCount(1, posts, "The presentation is posted once and nothing after the redirect.");
+        Assert.AreEqual(posts[0], refused.Refusal.Endpoint);
+        Assert.AreEqual(TemporaryRedirectStatusCode, refused.Refusal.StatusCode);
+        Assert.AreEqual(ElsewhereLocation, refused.Refusal.Location);
+    }
+
+
+    /// <summary>
+    /// The §5.10 <c>request_uri_method=post</c> fetch is posted through the same single-hop transport, and a
+    /// <c>request_uri</c> answering it with a redirect is refused with
+    /// <see cref="OAuthRedirectRefusedException"/>: the wallet reads the request object only from the
+    /// endpoint it posted to, and the post was sent once.
+    /// </summary>
+    [TestMethod]
+    public async Task RequestUriMethodPostAnsweredWithARedirectIsRefusedAndNothingFollows()
+    {
+        Uri requestUri = new("https://verifier.example.com/request");
+        List<Uri> posts = [];
+        (Oid4VpWalletClient walletClient, PublicKeyMemory exchangeKey) = BuildWalletPostFetchClient(
+            sendFormPost: (endpoint, _, _, _, _) =>
+            {
+                posts.Add(endpoint);
+
+                return ValueTask.FromResult(RedirectResponse(PermanentRedirectStatusCode));
+            });
+
+        using(exchangeKey)
+        {
+            OAuthRedirectRefusedException refused = await Assert.ThrowsExactlyAsync<OAuthRedirectRefusedException>(
+                async () => await walletClient.PresentJarAsync(
+                    BuildWalletPostFetchOptions(requestUri, exchangeKey),
+                    new ExchangeContext(),
+                    TestContext.CancellationToken).ConfigureAwait(false))
+                .ConfigureAwait(false);
+
+            Assert.HasCount(1, posts, "The request_uri post is sent once and nothing after the redirect.");
+            Assert.AreEqual(requestUri, refused.Refusal.Endpoint);
+            Assert.AreEqual(PermanentRedirectStatusCode, refused.Refusal.StatusCode);
+            Assert.AreEqual(ElsewhereLocation, refused.Refusal.Location);
+        }
+    }
+
+
+    /// <summary>The 307 (Temporary Redirect) status, RFC 9110 §15.4.8.</summary>
+    private const int TemporaryRedirectStatusCode = 307;
+
+    /// <summary>The 308 (Permanent Redirect) status, RFC 9110 §15.4.9.</summary>
+    private const int PermanentRedirectStatusCode = 308;
+
+    /// <summary>The origin the redirect rows' answers name: another origin than the endpoint's.</summary>
+    private const string ElsewhereLocation = "https://elsewhere.example.net/collect";
+
+
+    /// <summary>Builds a redirect answer naming <see cref="ElsewhereLocation"/>.</summary>
+    /// <param name="statusCode">The 3xx status.</param>
+    /// <returns>The answer.</returns>
+    private static HttpResponseData RedirectResponse(int statusCode) =>
+        new()
+        {
+            StatusCode = statusCode,
+            Body = string.Empty,
+            Headers = new ResponseHeaders { Headers = HttpHeaderSet.FromPairs((WellKnownHttpHeaderNames.Location, ElsewhereLocation)) }
+        };
+
+
     [TestMethod]
     public async Task RejectsJarWhoseClientIdDoesNotMatchExpectedVerifier()
     {

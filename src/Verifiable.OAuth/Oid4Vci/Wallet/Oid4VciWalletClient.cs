@@ -674,6 +674,13 @@ public sealed class Oid4VciWalletClient
         HttpResponseData response = await SendTokenRequestAsync(
             formFields, tokenEndpoint, context, cancellationToken).ConfigureAwait(false);
 
+        //The request carries the pre-authorized code; a redirect followed would re-send it to the origin
+        //its Location field names (RFC 9110 Section 15.4.8), so the Wallet refuses it.
+        if(RefuseRedirection(tokenEndpoint, response) is Oid4VciRequestFailure tokenRedirectRefusal)
+        {
+            return Result<(string, string, DateTimeOffset?), Oid4VciRequestFailure>.Failure(tokenRedirectRefusal);
+        }
+
         if(response.StatusCode is < 200 or >= 300)
         {
             return Result<(string, string, DateTimeOffset?), Oid4VciRequestFailure>.Failure(
@@ -809,6 +816,13 @@ public sealed class Oid4VciWalletClient
         HttpResponseData response = await SendAuthorizedJsonPostAsync(
             nonceEndpoint, string.Empty, accessToken, tokenType, context, cancellationToken).ConfigureAwait(false);
 
+        //The request carries the access token; a redirect followed would re-send it to the origin its
+        //Location field names (RFC 9110 Section 15.4.8), so the Wallet refuses it.
+        if(RefuseRedirection(nonceEndpoint, response) is Oid4VciRequestFailure nonceRedirectRefusal)
+        {
+            return Result<string, Oid4VciRequestFailure>.Failure(nonceRedirectRefusal);
+        }
+
         if(response.StatusCode is < 200 or >= 300)
         {
             return Result<string, Oid4VciRequestFailure>.Failure(
@@ -878,6 +892,13 @@ public sealed class Oid4VciWalletClient
 
         HttpResponseData response = await SendAuthorizedJsonPostAsync(
             credentialEndpoint, requestBody, accessToken, tokenType, context, cancellationToken).ConfigureAwait(false);
+
+        //The request carries the access token and the key proof; a redirect followed would re-send both to
+        //the origin its Location field names (RFC 9110 Section 15.4.8), so the Wallet refuses it.
+        if(RefuseRedirection(credentialEndpoint, response) is Oid4VciRequestFailure credentialRedirectRefusal)
+        {
+            return Result<CredentialIssuanceResult, Oid4VciRequestFailure>.Failure(credentialRedirectRefusal);
+        }
 
         //§8.3: a deferral answers HTTP 202 with transaction_id + interval (plaintext metadata, not the
         //encrypted credential payload); the Wallet later polls the Deferred Credential Endpoint.
@@ -960,6 +981,13 @@ public sealed class Oid4VciWalletClient
         HttpResponseData response = await SendAuthorizedJsonPostAsync(
             deferredCredentialEndpoint, requestBody, accessToken, tokenType, context, cancellationToken).ConfigureAwait(false);
 
+        //The request carries the access token; a redirect followed would re-send it to the origin its
+        //Location field names (RFC 9110 Section 15.4.8), so the Wallet refuses it.
+        if(RefuseRedirection(deferredCredentialEndpoint, response) is Oid4VciRequestFailure deferredRedirectRefusal)
+        {
+            return Result<CredentialIssuanceResult, Oid4VciRequestFailure>.Failure(deferredRedirectRefusal);
+        }
+
         //§9.2: still pending answers HTTP 202 echoing the transaction_id with a fresh interval.
         if(response.StatusCode == HttpAcceptedStatusCode)
         {
@@ -1005,8 +1033,9 @@ public sealed class Oid4VciWalletClient
     /// <see langword="null"/> when the Issuer acknowledged the notification — §11.2 requires an HTTP
     /// status in the 2xx range, with 204 (No Content) RECOMMENDED; otherwise the
     /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-11.3">§11.3</see>
-    /// failure — the policy's <see cref="Oid4VciRequestFailureKind.OutboundPolicyDenied"/> refusal, or
-    /// the endpoint's own <see cref="Oid4VciRequestFailureKind.ErrorResponse"/> such as <c>invalid_notification_id</c>.
+    /// failure — the policy's <see cref="Oid4VciRequestFailureKind.OutboundPolicyDenied"/> refusal, the
+    /// <see cref="Oid4VciRequestFailureKind.RedirectRefused"/> refusal of a redirect answer, or the
+    /// endpoint's own <see cref="Oid4VciRequestFailureKind.ErrorResponse"/> such as <c>invalid_notification_id</c>.
     /// </returns>
     public async ValueTask<Oid4VciRequestFailure?> SendCredentialNotificationAsync(
         string notificationId,
@@ -1035,6 +1064,13 @@ public sealed class Oid4VciWalletClient
 
         HttpResponseData response = await SendAuthorizedJsonPostAsync(
             notificationEndpoint, requestBody, accessToken, tokenType, context, cancellationToken).ConfigureAwait(false);
+
+        //The request carries the access token; a redirect followed would re-send it to the origin its
+        //Location field names (RFC 9110 Section 15.4.8), so the Wallet refuses it.
+        if(RefuseRedirection(notificationEndpoint, response) is Oid4VciRequestFailure notificationRedirectRefusal)
+        {
+            return notificationRedirectRefusal;
+        }
 
         //§11.2: success is HTTP 204 No Content; §11.3 maps failures to error bodies.
         if(response.StatusCode is < 200 or >= 300)
@@ -1275,6 +1311,29 @@ public sealed class Oid4VciWalletClient
             ErrorCode = null,
             ErrorDescription = rule
         };
+
+
+    /// <summary>
+    /// Builds the <see cref="Oid4VciRequestFailureKind.RedirectRefused"/> failure when
+    /// <paramref name="response"/> is a redirect, an HTTP status of the 3xx class, answering a request
+    /// that carried a credential: the refusal is recorded and typed by
+    /// <see cref="CredentialBearingRedirect.Refuse"/> and the Wallet sends nothing further.
+    /// </summary>
+    /// <param name="endpoint">The endpoint the request was sent to.</param>
+    /// <param name="response">The endpoint's answer, as the single-hop transport returned it.</param>
+    /// <returns>The failure, or <see langword="null"/> when the status is not of the 3xx class.</returns>
+    private static Oid4VciRequestFailure? RefuseRedirection(Uri endpoint, HttpResponseData response) =>
+        CredentialBearingRedirect.Refuse(endpoint, response) is OAuthRedirectRefused refusal
+            ? new Oid4VciRequestFailure
+            {
+                Kind = Oid4VciRequestFailureKind.RedirectRefused,
+                Endpoint = endpoint,
+                StatusCode = response.StatusCode,
+                ErrorCode = null,
+                ErrorDescription = refusal.Support.Summary,
+                RedirectRefusal = refusal
+            }
+            : null;
 
 
     /// <summary>

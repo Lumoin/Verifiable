@@ -233,4 +233,54 @@ public static class OAuthEventNames
     /// </summary>
     public static string ResourceIndicatorFaultTagName { get; } =
         Utf8Constants.ToInternedString(ResourceIndicatorFaultTagNameUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="CredentialBearingRedirectRefused"/>.</summary>
+    public static ReadOnlySpan<byte> CredentialBearingRedirectRefusedUtf8 =>
+        "oauth.client.credential_bearing_redirect_refused"u8;
+
+    /// <summary>
+    /// A client flow sent a request carrying a credential and the endpoint answered with a redirect, an
+    /// HTTP status of the 3xx class; the flow refused the answer as an <see cref="OAuthRedirectRefused"/>
+    /// without following it or sending anything further. The endpoint, the status and the
+    /// <c>Location</c> value the endpoint sent ride this event's
+    /// <see cref="RedirectRefusalEndpointTagName"/>, <see cref="RedirectRefusalStatusCodeTagName"/> and
+    /// <see cref="RedirectRefusalLocationTagName"/> tags, for deployments that want the detail in their
+    /// own traces.
+    /// </summary>
+    public static string CredentialBearingRedirectRefused { get; } =
+        Utf8Constants.ToInternedString(CredentialBearingRedirectRefusedUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="RedirectRefusalEndpointTagName"/>.</summary>
+    public static ReadOnlySpan<byte> RedirectRefusalEndpointTagNameUtf8 =>
+        "oauth.client.redirect_refusal_endpoint"u8;
+
+    /// <summary>
+    /// The <see cref="System.Diagnostics.ActivityTagsCollection"/> key carrying the URL of the endpoint
+    /// that answered with a redirect, for a <see cref="CredentialBearingRedirectRefused"/> event.
+    /// </summary>
+    public static string RedirectRefusalEndpointTagName { get; } =
+        Utf8Constants.ToInternedString(RedirectRefusalEndpointTagNameUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="RedirectRefusalStatusCodeTagName"/>.</summary>
+    public static ReadOnlySpan<byte> RedirectRefusalStatusCodeTagNameUtf8 =>
+        "oauth.client.redirect_refusal_status_code"u8;
+
+    /// <summary>
+    /// The <see cref="System.Diagnostics.ActivityTagsCollection"/> key carrying the 3xx status the
+    /// endpoint answered with, for a <see cref="CredentialBearingRedirectRefused"/> event.
+    /// </summary>
+    public static string RedirectRefusalStatusCodeTagName { get; } =
+        Utf8Constants.ToInternedString(RedirectRefusalStatusCodeTagNameUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="RedirectRefusalLocationTagName"/>.</summary>
+    public static ReadOnlySpan<byte> RedirectRefusalLocationTagNameUtf8 =>
+        "oauth.client.redirect_refusal_location"u8;
+
+    /// <summary>
+    /// The <see cref="System.Diagnostics.ActivityTagsCollection"/> key carrying the <c>Location</c> value
+    /// the endpoint sent with its redirect, for a <see cref="CredentialBearingRedirectRefused"/> event.
+    /// Recorded only when the answer carried one.
+    /// </summary>
+    public static string RedirectRefusalLocationTagName { get; } =
+        Utf8Constants.ToInternedString(RedirectRefusalLocationTagNameUtf8);
 }

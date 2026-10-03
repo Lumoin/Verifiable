@@ -19,6 +19,7 @@ namespace Verifiable.OAuth.Oid4Vci.Wallet;
 /// types.
 /// </summary>
 /// <remarks>
+/// <para>
 /// <paramref name="endpoint"/> is issuer-named — read out of discovered §12.2 Credential Issuer
 /// Metadata or Authorization Server Metadata, not chosen by this library — and may share an
 /// origin with the application's own backend. A browser host therefore sends every request this
@@ -28,6 +29,16 @@ namespace Verifiable.OAuth.Oid4Vci.Wallet;
 /// 'same-origin', or 'include'. Unless stated otherwise, it is 'same-origin'." The library places
 /// no origin restriction on <paramref name="endpoint"/> and evaluates only <paramref name="context"/>'s
 /// <see cref="Verifiable.Core.Outbound.OutboundFetchPolicy"/>.
+/// </para>
+/// <para>
+/// <strong>Single hop.</strong> The implementation performs exactly one request and response, must
+/// not follow a redirect, and returns a 3xx answer as received, the contract
+/// <see cref="Verifiable.OAuth.AuthCode.SendFormPostDelegate"/> states: the request carries the
+/// pre-authorized code, and a handler that follows a 307 or 308 re-sends it to whatever origin the
+/// <c>Location</c> field names (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.4.8">RFC 9110
+/// §15.4.8</see>). The Wallet refuses a 3xx answer as <see cref="Oid4VciRequestFailureKind.RedirectRefused"/>
+/// and sends nothing further.
+/// </para>
 /// </remarks>
 /// <param name="endpoint">The token endpoint URL.</param>
 /// <param name="formFields">The form fields to URL-encode into the request body.</param>
@@ -59,6 +70,7 @@ public delegate ValueTask<HttpResponseData> Oid4VciFormPostDelegate(
 /// no <c>System.Net</c> in the library.
 /// </summary>
 /// <remarks>
+/// <para>
 /// <paramref name="endpoint"/> is issuer-named — read out of discovered §12.2 Credential Issuer
 /// Metadata, not chosen by this library — and may share an origin with the application's own
 /// backend. A browser host therefore sends every request this implementation builds with
@@ -68,6 +80,15 @@ public delegate ValueTask<HttpResponseData> Oid4VciFormPostDelegate(
 /// 'same-origin', or 'include'. Unless stated otherwise, it is 'same-origin'." The library places
 /// no origin restriction on <paramref name="endpoint"/> and evaluates only <paramref name="context"/>'s
 /// <see cref="Verifiable.Core.Outbound.OutboundFetchPolicy"/>.
+/// </para>
+/// <para>
+/// <strong>Single hop.</strong> The implementation performs exactly one request and response, must
+/// not follow a redirect, and returns a 3xx answer as received, the contract
+/// <see cref="Verifiable.OAuth.AuthCode.SendFormPostDelegate"/> states: the request carries the access
+/// token and, for a Credential Request, the key proof, and a handler that follows a 307 or 308
+/// re-sends them to whatever origin the <c>Location</c> field names. The Wallet refuses a 3xx answer
+/// as <see cref="Oid4VciRequestFailureKind.RedirectRefused"/> and sends nothing further.
+/// </para>
 /// </remarks>
 /// <param name="endpoint">The endpoint URL.</param>
 /// <param name="jsonBody">The JSON request body. Empty for the §7 Nonce Request, which carries no body.</param>

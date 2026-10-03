@@ -285,6 +285,14 @@ public static class AuthCodeFlowHandlers
             };
         }
 
+        //The pushed request carries the whole authorization request; a redirect followed would re-send it
+        //to the origin its Location field names (RFC 9110 Section 15.4.8), so the flow refuses it and
+        //stores nothing.
+        if(TokenEndpointClientOperations.RefuseRedirection(metadata.PushedAuthorizationRequestEndpoint!, parHttpResponse) is AuthCodeFlowEndpointResult parRedirectRefusal)
+        {
+            return parRedirectRefusal;
+        }
+
         Result<ParResponse, OAuthParseError> parResult =
             infrastructure.ParseParResponseAsync(parHttpResponse);
 
@@ -950,12 +958,19 @@ public static class AuthCodeFlowHandlers
         //RFC 7009 §2.2 — the revocation endpoint returns 200 with an empty body on
         //success. The response body is not parsed; transport errors are surfaced via
         //exception from the delegate.
-        _ = await infrastructure.SendFormPostAsync(
+        HttpResponseData revocationResponse = await infrastructure.SendFormPostAsync(
             metadata.RevocationEndpoint,
             revocationFields,
             OutgoingHeaders.Empty,
             context,
             cancellationToken).ConfigureAwait(false);
+
+        //The request carries the token to revoke; a redirect followed would re-send it to the origin its
+        //Location field names (RFC 9110 Section 15.4.8), so the flow refuses it rather than answer Ok.
+        if(TokenEndpointClientOperations.RefuseRedirection(metadata.RevocationEndpoint, revocationResponse) is AuthCodeFlowEndpointResult revocationRedirectRefusal)
+        {
+            return revocationRedirectRefusal;
+        }
 
         return new AuthCodeFlowEndpointResult
         {
@@ -1198,6 +1213,14 @@ public static class AuthCodeFlowHandlers
                 ErrorCode = "server_error",
                 ErrorDescription = "The pushed authorization request could not be sent."
             };
+        }
+
+        //The pushed request carries the signed request object; a redirect followed would re-send it to the
+        //origin its Location field names (RFC 9110 Section 15.4.8), so the flow refuses it and stores
+        //nothing.
+        if(TokenEndpointClientOperations.RefuseRedirection(metadata.PushedAuthorizationRequestEndpoint!, parHttpResponse) is AuthCodeFlowEndpointResult jarParRedirectRefusal)
+        {
+            return jarParRedirectRefusal;
         }
 
         Result<ParResponse, OAuthParseError> parResult =

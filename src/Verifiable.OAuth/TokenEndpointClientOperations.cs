@@ -259,7 +259,8 @@ internal static class TokenEndpointClientOperations
     /// Sends a token-endpoint request with a DPoP proof attached when
     /// <paramref name="infrastructure"/> has DPoP wired, retrying once on a
     /// <c>use_dpop_nonce</c> challenge per RFC 9449 §8.1. Evaluates the outbound-fetch policy via
-    /// <see cref="EvaluateOutboundPolicy"/> before the first send.
+    /// <see cref="EvaluateOutboundPolicy"/> before the first send, and refuses a 3xx answer via
+    /// <see cref="RefuseRedirection"/> after it, sending nothing further.
     /// </summary>
     /// <param name="infrastructure">The long-lived infrastructure carrying transport, DPoP, and time delegates.</param>
     /// <param name="tokenEndpoint">The token endpoint to dial.</param>
@@ -300,6 +301,13 @@ internal static class TokenEndpointClientOperations
         HttpResponseData response = await SendWithDpopRetryAsync(
             infrastructure, tokenEndpoint, tokenFields, attachClientAuthenticationAsync, context, cancellationToken)
             .ConfigureAwait(false);
+
+        //The request carries a grant and the client's authentication; a redirect followed would re-send
+        //both to the origin its Location field names (RFC 9110 Section 15.4.8), so the flow refuses it.
+        if(RefuseRedirection(tokenEndpoint, response) is AuthCodeFlowEndpointResult redirectRefusal)
+        {
+            return Result<HttpResponseData, AuthCodeFlowEndpointResult>.Failure(redirectRefusal);
+        }
 
         return Result<HttpResponseData, AuthCodeFlowEndpointResult>.Success(response);
     }
@@ -428,7 +436,12 @@ internal static class TokenEndpointClientOperations
     /// <summary>
     /// Maps an <see cref="OAuthParseError"/> to an <see cref="AuthCodeFlowEndpointResult"/>,
     /// surfacing the decision support summary as the error description so callers have actionable
-    /// information without needing to pattern-match the full error hierarchy.
+    /// information without needing to pattern-match the full error hierarchy, and carrying the error
+    /// itself as <see cref="AuthCodeFlowEndpointResult.ResponseError"/> for a caller that does. An
+    /// <see cref="OAuthRedirectRefused"/> is the flow's own refusal of an answer it did not follow, so it
+    /// maps to <see cref="AuthCodeFlowEndpointOutcome.InternalError"/> with the fixed
+    /// <see cref="RedirectRefusalDescription"/>: the <c>Location</c> value the endpoint chose rides the
+    /// typed error and the trace event, never the description.
     /// </summary>
     internal static AuthCodeFlowEndpointResult BuildEndpointResultFromParseError(
         OAuthParseError error)
@@ -439,28 +452,62 @@ internal static class TokenEndpointClientOperations
             {
                 Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
                 ErrorCode = pe.ErrorCode,
-                ErrorDescription = pe.ErrorDescription ?? pe.Support.Summary
+                ErrorDescription = pe.ErrorDescription ?? pe.Support.Summary,
+                ResponseError = error
             },
             OAuthInvalidFieldValue ifv => new AuthCodeFlowEndpointResult
             {
                 Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
                 ErrorCode = "invalid_response",
-                ErrorDescription = $"{ifv.FieldName}: {ifv.Reason}"
+                ErrorDescription = $"{ifv.FieldName}: {ifv.Reason}",
+                ResponseError = error
             },
             OAuthMalformedResponse mr => new AuthCodeFlowEndpointResult
             {
                 Outcome = AuthCodeFlowEndpointOutcome.InternalError,
                 ErrorCode = "server_error",
-                ErrorDescription = mr.Support.Summary
+                ErrorDescription = mr.Support.Summary,
+                ResponseError = error
+            },
+            OAuthRedirectRefused => new AuthCodeFlowEndpointResult
+            {
+                Outcome = AuthCodeFlowEndpointOutcome.InternalError,
+                ErrorCode = "server_error",
+                ErrorDescription = RedirectRefusalDescription,
+                ResponseError = error
             },
             _ => new AuthCodeFlowEndpointResult
             {
                 Outcome = AuthCodeFlowEndpointOutcome.InternalError,
                 ErrorCode = "server_error",
-                ErrorDescription = error.Support.Summary
+                ErrorDescription = error.Support.Summary,
+                ResponseError = error
             }
         };
     }
+
+
+    /// <summary>
+    /// The <see cref="AuthCodeFlowEndpointResult.ErrorDescription"/> of a flow that refused an endpoint's
+    /// redirect answer to a request carrying a credential (<see cref="OAuthRedirectRefused"/>).
+    /// </summary>
+    internal static string RedirectRefusalDescription { get; } =
+        "The endpoint answered with a redirect, which this client does not follow.";
+
+
+    /// <summary>
+    /// Refuses <paramref name="response"/> when the endpoint answered with a redirect, for a flow that
+    /// answers in an <see cref="AuthCodeFlowEndpointResult"/>: the refusal (see
+    /// <see cref="CredentialBearingRedirect.Refuse"/>) mapped by
+    /// <see cref="BuildEndpointResultFromParseError"/>, or <see langword="null"/> for any other status.
+    /// </summary>
+    /// <param name="endpoint">The endpoint the credential-bearing request was sent to.</param>
+    /// <param name="response">The endpoint's answer, as the single-hop transport returned it.</param>
+    /// <returns>The flow's refusal result, or <see langword="null"/>.</returns>
+    internal static AuthCodeFlowEndpointResult? RefuseRedirection(Uri endpoint, HttpResponseData response) =>
+        CredentialBearingRedirect.Refuse(endpoint, response) is OAuthRedirectRefused refusal
+            ? BuildEndpointResultFromParseError(refusal)
+            : null;
 
 
     /// <summary>

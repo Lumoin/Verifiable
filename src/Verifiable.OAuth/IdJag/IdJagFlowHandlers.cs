@@ -97,6 +97,13 @@ public static class IdJagFlowHandlers
             },
             context, cancellationToken).ConfigureAwait(false);
 
+        //The request carries the subject token and the signed client assertion; a redirect followed would
+        //re-send both to the origin its Location field names (RFC 9110 Section 15.4.8).
+        if(CredentialBearingRedirect.Refuse(tokenEndpoint, response) is OAuthRedirectRefused mintRedirectRefusal)
+        {
+            return Result<TokenResponse, OAuthParseError>.Failure(mintRedirectRefusal);
+        }
+
         return infrastructure.ParseTokenResponseAsync(response, now);
     }
 
@@ -159,6 +166,13 @@ public static class IdJagFlowHandlers
                 return OutgoingHeaders.Empty;
             },
             context, cancellationToken).ConfigureAwait(false);
+
+        //The request carries the ID-JAG and the signed client assertion; a redirect followed would re-send
+        //both to the origin its Location field names (RFC 9110 Section 15.4.8).
+        if(CredentialBearingRedirect.Refuse(tokenEndpoint, response) is OAuthRedirectRefused redeemRedirectRefusal)
+        {
+            return Result<TokenResponse, OAuthParseError>.Failure(redeemRedirectRefusal);
+        }
 
         return infrastructure.ParseTokenResponseAsync(response, now);
     }
