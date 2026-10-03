@@ -4,12 +4,14 @@ using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Globalization;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace Verifiable.Tests.TestInfrastructure;
 
@@ -247,6 +249,53 @@ internal sealed class LoopbackKestrelTests
         Assert.AreNotEqual(timeWaitLocalEndPoint.Port, ((IPEndPoint)connected.LocalEndPoint!).Port,
             "The connected socket must hold a local port other than the one whose four-tuple rests in TIME_WAIT.");
         AssertRetriedAfterTheFirstAttempt(preparedAttempts, diagnostics.Captured, listenerEndPoint.ToString());
+    }
+
+
+    /// <summary>
+    /// Proves <see cref="LoopbackConnect"/> counts the connects it makes and the retries it takes, and
+    /// that <see cref="LoopbackConnect.WriteRunSummaryAsync(LoopbackKestrelDiagnostics)"/> writes one line
+    /// through the diagnostics it is given that prints both counts. The diagnostics only capture, so the
+    /// run's output carries the one summary of the assembly cleanup and no second copy. The first attempt's
+    /// preparation throws <see cref="SocketError.AddressAlreadyInUse"/> so that one retry happens on any
+    /// platform. Other tests of the process connect at the same time, and the counts only rise, so the row
+    /// reads each count before the connect and after the write and holds each number the line prints
+    /// between its own two readings (the connect's share at least, never an exact total).
+    /// </summary>
+    [TestMethod]
+    public async Task RunSummaryLineNamesTheConnectsAndRetriesOfTheProcess()
+    {
+        using Socket listener = CreateLoopbackListener();
+        long connectsBefore = LoopbackConnect.ConnectCount;
+        long retriesBefore = LoopbackConnect.RetryCount;
+        using LoopbackKestrelDiagnostics diagnostics = LoopbackKestrelDiagnostics.CreateCapturingOnly();
+
+        using Socket connected = await LoopbackConnect.ConnectAsync(
+            (IPEndPoint)listener.LocalEndPoint!,
+            LoopbackConnect.DefaultMaxAttempts,
+            static (_, attempt) =>
+            {
+                if(attempt == 1)
+                {
+                    throw new SocketException((int)SocketError.AddressAlreadyInUse);
+                }
+            },
+            diagnostics,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        await LoopbackConnect.WriteRunSummaryAsync(diagnostics).ConfigureAwait(false);
+        long connectsAfter = LoopbackConnect.ConnectCount;
+        long retriesAfter = LoopbackConnect.RetryCount;
+
+        string summary = Assert.ContainsSingle(
+            diagnostics.Captured.Where(line => line.Contains(LoopbackConnect.RunSummaryEventId.Name!, StringComparison.Ordinal)));
+        Match printed = Regex.Match(summary, @"this process made (\d+) connects and took (\d+) retries after AddressAlreadyInUse$", RegexOptions.CultureInvariant);
+        Assert.IsTrue(printed.Success, $"The line must print both counts in its fixed words. Actual: '{summary}'.");
+        long printedConnects = long.Parse(printed.Groups[1].Value, CultureInfo.InvariantCulture);
+        long printedRetries = long.Parse(printed.Groups[2].Value, CultureInfo.InvariantCulture);
+        Assert.IsGreaterThanOrEqualTo(connectsBefore + 1, printedConnects, "The printed connects must include this row's connect.");
+        Assert.IsLessThanOrEqualTo(connectsAfter, printedConnects, "The printed connects cannot exceed the count read after the write.");
+        Assert.IsGreaterThanOrEqualTo(retriesBefore + 1, printedRetries, "The printed retries must include this row's retry.");
+        Assert.IsLessThanOrEqualTo(retriesAfter, printedRetries, "The printed retries cannot exceed the count read after the write.");
     }
 
 

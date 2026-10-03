@@ -4473,12 +4473,19 @@ internal sealed class TestHostShell: IAsyncDisposable
         public bool IsParked { get; private set; }
 
 
-        /// <summary>Waits for the checkpoint or completed publication before the request can continue.</summary>
+        /// <summary>
+        /// Waits for the checkpoint or completed publication before the request can continue. The
+        /// worker invokes <c>DrainWaitStarted</c> before it completes <paramref name="alteration"/>
+        /// (a drain with no request in flight completes at once, so the drain itself can end first),
+        /// so the wait ends with <paramref name="alteration"/>'s own outcome when that request ends
+        /// first (a fault of the worker, a cancelled or refused request) instead of waiting for an
+        /// observation nothing will write.
+        /// </summary>
         /// <param name="alteration">The publication task whose completed wait must finish before continuation.</param>
         /// <param name="cancellationToken">The bounded test lifetime.</param>
         public async Task ReachAsync(Task alteration, CancellationToken cancellationToken)
         {
-            Task wait = await Entered.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            Task wait = await HookEntryWait.WaitForValueAsync(Entered.Task, [alteration], cancellationToken).ConfigureAwait(false);
             IsParked = !wait.IsCompleted;
             if(wait.IsCompleted)
             {

@@ -851,7 +851,7 @@ internal static class VcalmWireFixtures
 
         using CancellationTokenSource caller = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         Task<HttpResponseMessage> request = sendRequest(host, caller.Token);
-        await hasEnteredDependency.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await HookEntryWait.WaitForEntryAsync(hasEnteredDependency, request, cancellationToken).ConfigureAwait(false);
         await caller.CancelAsync().ConfigureAwait(false);
         _ = await Assert.ThrowsExactlyAsync<TaskCanceledException>(() => request).ConfigureAwait(false);
         await hasObservedCancellation.WaitAsync(cancellationToken).ConfigureAwait(false);

@@ -2,6 +2,7 @@ using Microsoft.Extensions.Time.Testing;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
+using System.Net.Sockets;
 using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.OAuth;
@@ -229,14 +230,57 @@ internal sealed class HostedAuthorizationServerOrderingTests
     private static async Task<GrantOrderObservation> ExpectObservationAsync(
         HostedAuthorizationServer hosted, GrantOrderEventKind kind, string grantKey, CancellationToken cancellationToken)
     {
-        GrantOrderObservation observation = await hosted.GrantOrderObservations.Reader
-            .ReadAsync(cancellationToken).ConfigureAwait(false);
+        GrantOrderObservation observation = await ReadNextObservationAsync(hosted, cancellationToken).ConfigureAwait(false);
+        AssertObservation(observation, kind, grantKey);
+
+        return observation;
+    }
+
+
+    /// <summary>
+    /// <see cref="ExpectObservationAsync(HostedAuthorizationServer, GrantOrderEventKind, string, CancellationToken)"/>
+    /// for an observation that <paramref name="inFlight"/>, a request the test has in flight, must
+    /// produce before it can end: <see cref="GrantOrderEventKind.Enqueued"/> and
+    /// <see cref="GrantOrderEventKind.Admitted"/> are written by the host's gate before it dispatches the
+    /// request and before it writes the response. The read goes through
+    /// <see cref="HookEntryWait.WaitForValueAsync"/>, so a request that ends first (a fault at its
+    /// connect, a refused request) ends the read with the request's own outcome instead of leaving it
+    /// waiting for an observation nothing will write. A read of <see cref="GrantOrderEventKind.Released"/>,
+    /// <see cref="GrantOrderEventKind.Left"/> or <see cref="GrantOrderEventKind.Retired"/> uses the overload without a request:
+    /// the host writes those after the response is written or after the client's own cancellation, so a request
+    /// can end before them.
+    /// </summary>
+    private static async Task<GrantOrderObservation> ExpectObservationAsync(
+        HostedAuthorizationServer hosted, GrantOrderEventKind kind, string grantKey, IReadOnlyList<Task> inFlight, CancellationToken cancellationToken)
+    {
+        GrantOrderObservation observation = await HookEntryWait.WaitForValueAsync(
+            ReadNextObservationAsync(hosted, cancellationToken), inFlight, cancellationToken).ConfigureAwait(false);
+        AssertObservation(observation, kind, grantKey);
+
+        return observation;
+    }
+
+
+    /// <summary>Reads <paramref name="hosted"/>'s next gate observation, nothing filtered and nothing discarded.</summary>
+    /// <param name="hosted">The host whose observation stream is read.</param>
+    /// <param name="cancellationToken">The test's own token.</param>
+    private static Task<GrantOrderObservation> ReadNextObservationAsync(HostedAuthorizationServer hosted, CancellationToken cancellationToken) =>
+        hosted.GrantOrderObservations.Reader.ReadAsync(cancellationToken).AsTask();
+
+
+    /// <summary>
+    /// Asserts <paramref name="observation"/> is the expected <paramref name="kind"/> for the expected
+    /// <paramref name="grantKey"/>; the failure message names both the expected and the actual pair.
+    /// </summary>
+    /// <param name="observation">The observation read.</param>
+    /// <param name="kind">The expected point of the gate.</param>
+    /// <param name="grantKey">The expected grant key.</param>
+    private static void AssertObservation(GrantOrderObservation observation, GrantOrderEventKind kind, string grantKey)
+    {
         Assert.AreEqual(kind, observation.Kind,
             $"Expected {kind} for grant key '{grantKey}'; observed {observation.Kind} for grant key '{observation.GrantKey}'.");
         Assert.AreEqual(grantKey, observation.GrantKey,
             $"Expected {kind} for grant key '{grantKey}'; observed {observation.Kind} for grant key '{observation.GrantKey}'.");
-
-        return observation;
     }
 
 
@@ -290,15 +334,15 @@ internal sealed class HostedAuthorizationServerOrderingTests
             Task<(int StatusCode, string Body)> firstTask = RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
                 host, segment, refreshFields, TestContext.CancellationToken);
             _ = await ExpectObservationAsync(
-                hosted, GrantOrderEventKind.Enqueued, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
+                hosted, GrantOrderEventKind.Enqueued, grantFlowId, [firstTask], TestContext.CancellationToken).ConfigureAwait(false);
             GrantOrderObservation firstAdmitted = await ExpectObservationAsync(
-                hosted, GrantOrderEventKind.Admitted, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
-            await firstEnteredLibrary.Task.WaitAsync(TestContext.CancellationToken).ConfigureAwait(false);
+                hosted, GrantOrderEventKind.Admitted, grantFlowId, [firstTask], TestContext.CancellationToken).ConfigureAwait(false);
+            await HookEntryWait.WaitForEntryAsync(firstEnteredLibrary.Task, firstTask, TestContext.CancellationToken).ConfigureAwait(false);
 
             Task<(int StatusCode, string Body)> secondTask = RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
                 host, segment, refreshFields, TestContext.CancellationToken);
             GrantOrderObservation secondEnqueued = await ExpectObservationAsync(
-                hosted, GrantOrderEventKind.Enqueued, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
+                hosted, GrantOrderEventKind.Enqueued, grantFlowId, [secondTask], TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.AreEqual(1, Volatile.Read(ref secondLoadCount),
                 "The second, still-queued presentation must not have reached the library's own load yet.");
@@ -308,6 +352,8 @@ internal sealed class HostedAuthorizationServerOrderingTests
 
             GrantOrderObservation firstReleased = await ExpectObservationAsync(
                 hosted, GrantOrderEventKind.Released, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
+            //The request is not held when it is admitted and a channel read completes on a queued
+            //continuation, so this read is not raced against its request, which can end first.
             GrantOrderObservation secondAdmitted = await ExpectObservationAsync(
                 hosted, GrantOrderEventKind.Admitted, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -385,7 +431,7 @@ internal sealed class HostedAuthorizationServerOrderingTests
             Task<(int StatusCode, string Body)> firstTask = RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
                 host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, firstGrantRefreshToken),
                 TestContext.CancellationToken);
-            await firstEnteredLibrary.Task.WaitAsync(TestContext.CancellationToken).ConfigureAwait(false);
+            await HookEntryWait.WaitForEntryAsync(firstEnteredLibrary.Task, firstTask, TestContext.CancellationToken).ConfigureAwait(false);
 
             //A request of the OTHER grant must be admitted and complete while the first is still held.
             (int SecondStatusCode, string SecondBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
@@ -447,17 +493,17 @@ internal sealed class HostedAuthorizationServerOrderingTests
             Task<(int StatusCode, string Body)> firstTask = RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
                 host, segment, refreshFields, TestContext.CancellationToken);
             _ = await ExpectObservationAsync(
-                hosted, GrantOrderEventKind.Enqueued, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
+                hosted, GrantOrderEventKind.Enqueued, grantFlowId, [firstTask], TestContext.CancellationToken).ConfigureAwait(false);
             _ = await ExpectObservationAsync(
-                hosted, GrantOrderEventKind.Admitted, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
-            await firstEnteredLibrary.Task.WaitAsync(TestContext.CancellationToken).ConfigureAwait(false);
+                hosted, GrantOrderEventKind.Admitted, grantFlowId, [firstTask], TestContext.CancellationToken).ConfigureAwait(false);
+            await HookEntryWait.WaitForEntryAsync(firstEnteredLibrary.Task, firstTask, TestContext.CancellationToken).ConfigureAwait(false);
 
             using CancellationTokenSource cancelledWaiterSource =
                 CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
             Task<(int StatusCode, string Body)> cancelledTask = RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
                 host, segment, refreshFields, cancelledWaiterSource.Token);
             _ = await ExpectObservationAsync(
-                hosted, GrantOrderEventKind.Enqueued, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
+                hosted, GrantOrderEventKind.Enqueued, grantFlowId, [cancelledTask], TestContext.CancellationToken).ConfigureAwait(false);
 
             await cancelledWaiterSource.CancelAsync().ConfigureAwait(false);
             _ = await Assert.ThrowsExactlyAsync<TaskCanceledException>(
@@ -473,11 +519,13 @@ internal sealed class HostedAuthorizationServerOrderingTests
             Task<(int StatusCode, string Body)> thirdTask = RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
                 host, segment, refreshFields, TestContext.CancellationToken);
             _ = await ExpectObservationAsync(
-                hosted, GrantOrderEventKind.Enqueued, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
+                hosted, GrantOrderEventKind.Enqueued, grantFlowId, [thirdTask], TestContext.CancellationToken).ConfigureAwait(false);
 
             _ = releaseFirst.TrySetResult();
             GrantOrderObservation firstReleased = await ExpectObservationAsync(
                 hosted, GrantOrderEventKind.Released, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
+            //The request is not held when it is admitted and a channel read completes on a queued
+            //continuation, so this read is not raced against its request, which can end first.
             GrantOrderObservation thirdAdmitted = await ExpectObservationAsync(
                 hosted, GrantOrderEventKind.Admitted, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
             (int FirstStatusCode, string FirstBody) = await firstTask.ConfigureAwait(false);
@@ -676,16 +724,16 @@ internal sealed class HostedAuthorizationServerOrderingTests
                 host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, oldestRefreshToken),
                 TestContext.CancellationToken);
             _ = await ExpectObservationAsync(
-                hosted, GrantOrderEventKind.Enqueued, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
+                hosted, GrantOrderEventKind.Enqueued, grantFlowId, [reuseTask], TestContext.CancellationToken).ConfigureAwait(false);
             _ = await ExpectObservationAsync(
-                hosted, GrantOrderEventKind.Admitted, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
-            await reuseAdmittedAndHeld.Task.WaitAsync(TestContext.CancellationToken).ConfigureAwait(false);
+                hosted, GrantOrderEventKind.Admitted, grantFlowId, [reuseTask], TestContext.CancellationToken).ConfigureAwait(false);
+            await HookEntryWait.WaitForEntryAsync(reuseAdmittedAndHeld.Task, reuseTask, TestContext.CancellationToken).ConfigureAwait(false);
 
             Task<(int StatusCode, string Body)> rotateTask = RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
                 host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, currentRefreshToken),
                 TestContext.CancellationToken);
             GrantOrderObservation rotateEnqueued = await ExpectObservationAsync(
-                hosted, GrantOrderEventKind.Enqueued, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
+                hosted, GrantOrderEventKind.Enqueued, grantFlowId, [rotateTask], TestContext.CancellationToken).ConfigureAwait(false);
             Assert.AreEqual(grantFlowId, rotateEnqueued.GrantKey,
                 "BOTH requests must have been enqueued under the SAME grant key.");
             Assert.AreEqual(0, Volatile.Read(ref rotateLoadCount),
@@ -695,6 +743,8 @@ internal sealed class HostedAuthorizationServerOrderingTests
             (int ReuseStatusCode, string ReuseBody) = await reuseTask.ConfigureAwait(false);
             GrantOrderObservation reuseReleased = await ExpectObservationAsync(
                 hosted, GrantOrderEventKind.Released, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
+            //The request is not held when it is admitted and a channel read completes on a queued
+            //continuation, so this read is not raced against its request, which can end first.
             GrantOrderObservation rotateAdmitted = await ExpectObservationAsync(
                 hosted, GrantOrderEventKind.Admitted, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
             (int RotateStatusCode, string RotateBody) = await rotateTask.ConfigureAwait(false);
@@ -784,16 +834,16 @@ internal sealed class HostedAuthorizationServerOrderingTests
                 host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, currentRefreshToken),
                 TestContext.CancellationToken);
             _ = await ExpectObservationAsync(
-                hosted, GrantOrderEventKind.Enqueued, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
+                hosted, GrantOrderEventKind.Enqueued, grantFlowId, [rotateTask], TestContext.CancellationToken).ConfigureAwait(false);
             _ = await ExpectObservationAsync(
-                hosted, GrantOrderEventKind.Admitted, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
-            await rotationAdmittedAndHeld.Task.WaitAsync(TestContext.CancellationToken).ConfigureAwait(false);
+                hosted, GrantOrderEventKind.Admitted, grantFlowId, [rotateTask], TestContext.CancellationToken).ConfigureAwait(false);
+            await HookEntryWait.WaitForEntryAsync(rotationAdmittedAndHeld.Task, rotateTask, TestContext.CancellationToken).ConfigureAwait(false);
 
             Task<(int StatusCode, string Body)> reuseTask = RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
                 host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, oldestRefreshToken),
                 TestContext.CancellationToken);
             GrantOrderObservation reuseEnqueued = await ExpectObservationAsync(
-                hosted, GrantOrderEventKind.Enqueued, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
+                hosted, GrantOrderEventKind.Enqueued, grantFlowId, [reuseTask], TestContext.CancellationToken).ConfigureAwait(false);
             Assert.AreEqual(grantFlowId, reuseEnqueued.GrantKey,
                 "BOTH requests must have been enqueued under the SAME grant key.");
             Assert.AreEqual(0, Volatile.Read(ref reuseLoadCount),
@@ -803,6 +853,8 @@ internal sealed class HostedAuthorizationServerOrderingTests
             (int RotateStatusCode, string RotateBody) = await rotateTask.ConfigureAwait(false);
             GrantOrderObservation rotationReleased = await ExpectObservationAsync(
                 hosted, GrantOrderEventKind.Released, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
+            //The request is not held when it is admitted and a channel read completes on a queued
+            //continuation, so this read is not raced against its request, which can end first.
             GrantOrderObservation reuseAdmitted = await ExpectObservationAsync(
                 hosted, GrantOrderEventKind.Admitted, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
             (int ReuseStatusCode, string ReuseBody) = await reuseTask.ConfigureAwait(false);
@@ -899,16 +951,16 @@ internal sealed class HostedAuthorizationServerOrderingTests
                 host, segment, RawAuthCodeWirePushers.BuildTokenFields(ClientId, code, pkceVerifier, RedirectUri.OriginalString),
                 TestContext.CancellationToken);
             _ = await ExpectObservationAsync(
-                hosted, GrantOrderEventKind.Enqueued, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
+                hosted, GrantOrderEventKind.Enqueued, grantFlowId, [replayTask], TestContext.CancellationToken).ConfigureAwait(false);
             _ = await ExpectObservationAsync(
-                hosted, GrantOrderEventKind.Admitted, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
-            await replayAdmittedAndHeld.Task.WaitAsync(TestContext.CancellationToken).ConfigureAwait(false);
+                hosted, GrantOrderEventKind.Admitted, grantFlowId, [replayTask], TestContext.CancellationToken).ConfigureAwait(false);
+            await HookEntryWait.WaitForEntryAsync(replayAdmittedAndHeld.Task, replayTask, TestContext.CancellationToken).ConfigureAwait(false);
 
             Task<(int StatusCode, string Body)> refreshTask = RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
                 host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, refreshToken),
                 TestContext.CancellationToken);
             GrantOrderObservation refreshEnqueued = await ExpectObservationAsync(
-                hosted, GrantOrderEventKind.Enqueued, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
+                hosted, GrantOrderEventKind.Enqueued, grantFlowId, [refreshTask], TestContext.CancellationToken).ConfigureAwait(false);
             Assert.AreEqual(grantFlowId, refreshEnqueued.GrantKey,
                 "BOTH requests must have been enqueued under the SAME grant key.");
             Assert.AreEqual(0, Volatile.Read(ref refreshLoadCount),
@@ -918,6 +970,8 @@ internal sealed class HostedAuthorizationServerOrderingTests
             (int ReplayStatusCode, string ReplayBody) = await replayTask.ConfigureAwait(false);
             GrantOrderObservation replayReleased = await ExpectObservationAsync(
                 hosted, GrantOrderEventKind.Released, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
+            //The request is not held when it is admitted and a channel read completes on a queued
+            //continuation, so this read is not raced against its request, which can end first.
             GrantOrderObservation refreshAdmitted = await ExpectObservationAsync(
                 hosted, GrantOrderEventKind.Admitted, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
             (int RefreshStatusCode, string RefreshBody) = await refreshTask.ConfigureAwait(false);
@@ -1007,16 +1061,16 @@ internal sealed class HostedAuthorizationServerOrderingTests
                 host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, refreshToken),
                 TestContext.CancellationToken);
             _ = await ExpectObservationAsync(
-                hosted, GrantOrderEventKind.Enqueued, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
+                hosted, GrantOrderEventKind.Enqueued, grantFlowId, [refreshTask], TestContext.CancellationToken).ConfigureAwait(false);
             _ = await ExpectObservationAsync(
-                hosted, GrantOrderEventKind.Admitted, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
-            await refreshAdmittedAndHeld.Task.WaitAsync(TestContext.CancellationToken).ConfigureAwait(false);
+                hosted, GrantOrderEventKind.Admitted, grantFlowId, [refreshTask], TestContext.CancellationToken).ConfigureAwait(false);
+            await HookEntryWait.WaitForEntryAsync(refreshAdmittedAndHeld.Task, refreshTask, TestContext.CancellationToken).ConfigureAwait(false);
 
             Task<(int StatusCode, string Body)> replayTask = RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
                 host, segment, RawAuthCodeWirePushers.BuildTokenFields(ClientId, code, pkceVerifier, RedirectUri.OriginalString),
                 TestContext.CancellationToken);
             GrantOrderObservation replayEnqueued = await ExpectObservationAsync(
-                hosted, GrantOrderEventKind.Enqueued, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
+                hosted, GrantOrderEventKind.Enqueued, grantFlowId, [replayTask], TestContext.CancellationToken).ConfigureAwait(false);
             Assert.AreEqual(grantFlowId, replayEnqueued.GrantKey,
                 "BOTH requests must have been enqueued under the SAME grant key.");
             Assert.AreEqual(0, Volatile.Read(ref replayLoadCount),
@@ -1026,6 +1080,8 @@ internal sealed class HostedAuthorizationServerOrderingTests
             (int RefreshStatusCode, string RefreshBody) = await refreshTask.ConfigureAwait(false);
             GrantOrderObservation refreshReleased = await ExpectObservationAsync(
                 hosted, GrantOrderEventKind.Released, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
+            //The request is not held when it is admitted and a channel read completes on a queued
+            //continuation, so this read is not raced against its request, which can end first.
             GrantOrderObservation replayAdmitted = await ExpectObservationAsync(
                 hosted, GrantOrderEventKind.Admitted, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
             (int ReplayStatusCode, string ReplayBody) = await replayTask.ConfigureAwait(false);
@@ -1102,16 +1158,16 @@ internal sealed class HostedAuthorizationServerOrderingTests
                 host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, currentRefreshToken),
                 TestContext.CancellationToken);
             _ = await ExpectObservationAsync(
-                hosted, GrantOrderEventKind.Enqueued, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
+                hosted, GrantOrderEventKind.Enqueued, grantFlowId, [rotationTask], TestContext.CancellationToken).ConfigureAwait(false);
             _ = await ExpectObservationAsync(
-                hosted, GrantOrderEventKind.Admitted, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
-            await rotationReachedSuccessorSave.Task.WaitAsync(TestContext.CancellationToken).ConfigureAwait(false);
+                hosted, GrantOrderEventKind.Admitted, grantFlowId, [rotationTask], TestContext.CancellationToken).ConfigureAwait(false);
+            await HookEntryWait.WaitForEntryAsync(rotationReachedSuccessorSave.Task, rotationTask, TestContext.CancellationToken).ConfigureAwait(false);
 
             Task<(int StatusCode, string Body)> reuseTask = RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
                 host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, oldestRefreshToken),
                 TestContext.CancellationToken);
             GrantOrderObservation reuseEnqueued = await ExpectObservationAsync(
-                hosted, GrantOrderEventKind.Enqueued, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
+                hosted, GrantOrderEventKind.Enqueued, grantFlowId, [reuseTask], TestContext.CancellationToken).ConfigureAwait(false);
             Assert.AreEqual(grantFlowId, reuseEnqueued.GrantKey,
                 "BOTH requests must have been enqueued under the SAME grant key.");
 
@@ -1119,6 +1175,8 @@ internal sealed class HostedAuthorizationServerOrderingTests
             (int RotationStatusCode, string RotationBody) = await rotationTask.ConfigureAwait(false);
             GrantOrderObservation rotationReleased = await ExpectObservationAsync(
                 hosted, GrantOrderEventKind.Released, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
+            //The request is not held when it is admitted and a channel read completes on a queued
+            //continuation, so this read is not raced against its request, which can end first.
             GrantOrderObservation reuseAdmitted = await ExpectObservationAsync(
                 hosted, GrantOrderEventKind.Admitted, grantFlowId, TestContext.CancellationToken).ConfigureAwait(false);
             (int ReuseStatusCode, string ReuseBody) = await reuseTask.ConfigureAwait(false);
@@ -1137,6 +1195,72 @@ internal sealed class HostedAuthorizationServerOrderingTests
             GrantStateSnapshot grantState = GrantStateOracle.SnapshotGrant(hosted, grantFlowId, ClientId);
             Assert.AreEqual(0, grantState.RedeemableRecordCount,
                 $"With ordering on, the interleaving that test records cannot occur, and the final state has no survivor. Live refresh flow ids: {string.Join(", ", grantState.RedeemableRefreshFlowIds)}.");
+        }
+    }
+
+
+    /// <summary>
+    /// A refresh request whose connect fails never reaches the host's gate, so the gate writes no
+    /// observation for it. The read of the observation that request must produce, asked after the request
+    /// ended, is completed when it is returned and ends with the request's own
+    /// <see cref="HttpRequestException"/> over the <see cref="SocketException"/> of the failed connect; a
+    /// plain read of the next observation, what a test awaiting the stream alone holds, is not
+    /// completed. The connect fails with a code the connect retry does not cover, injected through the
+    /// connect preparation of <see cref="LoopbackTls"/>'s pinned client. This is a test of the fixture's
+    /// own wait, not of a protocol or format this repository implements, so it carries no normative
+    /// clause anchor.
+    /// </summary>
+    [TestMethod]
+    public async Task ObservationReadOfARequestThatFailsAtItsConnectEndsWithItsFaultAsync()
+    {
+        OneRotationFixture fixture = await SetupOneRotationAsync().ConfigureAwait(false);
+        await using(fixture.Host)
+        using(fixture.Material)
+        {
+            (TestHostShell host, _, HostedAuthorizationServer hosted, _, string segment,
+                _, string currentRefreshToken, _, string grantFlowId, _) = fixture;
+            using LoopbackKestrelDiagnostics diagnostics = LoopbackKestrelDiagnostics.CreateIsolated();
+            using HttpClient failingClient = LoopbackTls.CreatePinnedHttpClient(
+                [host.ServerCertificate],
+                LoopbackConnect.DefaultMaxAttempts,
+                static (_, _) => throw new SocketException((int)SocketError.NoBufferSpaceAvailable),
+                diagnostics);
+
+            Task SendTheRequestAsync() => HttpClientTransport.SendFormPostAsync(
+                failingClient,
+                RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment),
+                RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, currentRefreshToken),
+                OutgoingHeaders.Empty,
+                TestContext.CancellationToken).AsTask();
+
+            Task request = SendTheRequestAsync();
+            Task ended = await Task.WhenAny(request).WaitAsync(TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(ended.IsFaulted, "The request whose connect failed ends by itself, faulted.");
+            Task<GrantOrderObservation> plainRead = ReadNextObservationAsync(hosted, TestContext.CancellationToken);
+
+            Task<GrantOrderObservation> ReadTheObservationAsync() => ExpectObservationAsync(
+                hosted, GrantOrderEventKind.Enqueued, grantFlowId, [request], TestContext.CancellationToken);
+
+            Task<GrantOrderObservation> read = ReadTheObservationAsync();
+
+            Assert.IsTrue(read.IsCompleted, "The request had ended before the read was asked, so the read must be completed when it is returned.");
+            Assert.IsFalse(plainRead.IsCompleted, "The plain read does not end with the request: awaiting it alone waits without end.");
+            HttpRequestException thrown = await Assert.ThrowsExactlyAsync<HttpRequestException>(() => read).ConfigureAwait(false);
+
+            HttpRequestException? requestFault = null;
+            try
+            {
+                await request.ConfigureAwait(false);
+            }
+            catch(HttpRequestException exception)
+            {
+                requestFault = exception;
+            }
+
+            Assert.AreSame(requestFault, thrown);
+            SocketException socketFailure = Assert.IsInstanceOfType<SocketException>(thrown.InnerException,
+                $"The request must fail at its connect. Actual: '{thrown}'.");
+            Assert.AreEqual(SocketError.NoBufferSpaceAvailable, socketFailure.SocketErrorCode);
         }
     }
 }

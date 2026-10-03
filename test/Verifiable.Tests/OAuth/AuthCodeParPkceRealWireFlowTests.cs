@@ -3859,7 +3859,7 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         Task<(int StatusCode, string Body)> staleTask = RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
             host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, liveRefreshToken),
             TestContext.CancellationToken);
-        await stalePresentationAtClaim.Task.WaitAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        await HookEntryWait.WaitForEntryAsync(stalePresentationAtClaim.Task, staleTask, TestContext.CancellationToken).ConfigureAwait(false);
 
         (int ReuseStatusCode, string ReuseBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
             host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, retiredRefreshToken),
@@ -4220,7 +4220,7 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         {
             rotateTask = RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
                 host, segment, rotateFields, TestContext.CancellationToken);
-            await walkObservedLive.Task.WaitAsync(TestContext.CancellationToken).ConfigureAwait(false);
+            await HookEntryWait.WaitForEntryAsync(walkObservedLive.Task, rotateTask, TestContext.CancellationToken).ConfigureAwait(false);
             reuseTask = RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
                 host, segment, reuseFields, TestContext.CancellationToken);
         }
@@ -4228,7 +4228,7 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         {
             reuseTask = RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
                 host, segment, reuseFields, TestContext.CancellationToken);
-            await walkObservedLive.Task.WaitAsync(TestContext.CancellationToken).ConfigureAwait(false);
+            await HookEntryWait.WaitForEntryAsync(walkObservedLive.Task, reuseTask, TestContext.CancellationToken).ConfigureAwait(false);
             rotateTask = RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
                 host, segment, rotateFields, TestContext.CancellationToken);
         }
@@ -4405,7 +4405,7 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         Task<(int StatusCode, string Body)> rotationTask = RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
             host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, currentRefreshToken),
             TestContext.CancellationToken);
-        await rotationReachedSuccessorSave.Task.WaitAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        await HookEntryWait.WaitForEntryAsync(rotationReachedSuccessorSave.Task, rotationTask, TestContext.CancellationToken).ConfigureAwait(false);
 
         //A VALID reuse of the OLDER retired token runs to completion while the rotation is held —
         //its own bounded retry may still lose both claim attempts on currentFlowId, since the
