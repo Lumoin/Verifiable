@@ -776,7 +776,7 @@ public sealed class Oid4VciWalletClient
         //its Location field names (RFC 9110 Section 15.4.8), so the Wallet refuses it.
         if(RefuseRedirection(tokenEndpoint, response) is Oid4VciRequestFailure tokenRedirectRefusal)
         {
-            return Result<(string, string, DateTimeOffset?), Oid4VciRequestFailure>.Failure(tokenRedirectRefusal);
+            return Result<(string, string, DateTimeOffset?, CredentialRequestTarget), Oid4VciRequestFailure>.Failure(tokenRedirectRefusal);
         }
 
         if(response.StatusCode is < 200 or >= 300)

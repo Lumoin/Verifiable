@@ -2509,7 +2509,7 @@ internal sealed class Oid4VciWalletClientTests
             WellKnownAuthenticationSchemes.Bearer,
             accessTokenExpiresAt: null,
             new Uri("https://issuer.example.com"),
-            ConfigurationId,
+            CredentialRequestTarget.ForConfiguration(ConfigurationId),
             holderPrivate,
             holderPublic,
             new Oid4VciIssuanceEndpoints
@@ -2559,7 +2559,7 @@ internal sealed class Oid4VciWalletClientTests
             WellKnownAuthenticationSchemes.Bearer,
             accessTokenExpiresAt: null,
             new Uri("https://issuer.example.com"),
-            ConfigurationId,
+            CredentialRequestTarget.ForConfiguration(ConfigurationId),
             holderPrivate,
             holderPublic,
             new Oid4VciIssuanceEndpoints
