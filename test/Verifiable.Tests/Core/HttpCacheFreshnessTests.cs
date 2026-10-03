@@ -332,6 +332,60 @@ internal sealed class HttpCacheFreshnessTests
     }
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2.2.7">RFC 9111 §5.2.2.7</see>: "The
+    /// unqualified private response directive indicates that a shared cache MUST NOT store the response",
+    /// whatever freshness the response also states and in any case; an argument that lists no field name
+    /// qualifies nothing.
+    /// </summary>
+    /// <param name="cacheControl">The <c>Cache-Control</c> field value.</param>
+    [TestMethod]
+    [DataRow("private")]
+    [DataRow("private, max-age=600")]
+    [DataRow("max-age=600, PRIVATE")]
+    [DataRow("Private=\"\", s-maxage=600")]
+    public void AnUnqualifiedPrivateIsNotStorable(string cacheControl)
+    {
+        HttpCacheFreshness result = HttpCacheFreshness.Compute(Response(("Cache-Control", cacheControl)));
+
+        Assert.IsFalse(result.IsStorable, "A shared cache must not store a response carrying an unqualified private.");
+        Assert.AreEqual(TimeSpan.Zero, result.FreshnessLifetime);
+    }
+
+
+    /// <summary>
+    /// An unqualified <c>private</c> on a second <c>Cache-Control</c> field line folds into the first line's
+    /// directives (RFC 9111 §5.2's list syntax), so the response is not storable.
+    /// </summary>
+    [TestMethod]
+    public void AnUnqualifiedPrivateOnASecondCacheControlFieldLineIsNotStorable()
+    {
+        OutboundResponse response = Response(
+            ("Cache-Control", "max-age=600"),
+            ("Cache-Control", "private"));
+
+        HttpCacheFreshness result = HttpCacheFreshness.Compute(response);
+
+        Assert.IsFalse(result.IsStorable);
+    }
+
+
+    /// <summary>
+    /// A qualified <c>private</c> lists the header fields a shared cache must not store; RFC 9111 §5.2.2.7
+    /// lets the cache "store the remainder of the response message without those header fields", so the
+    /// response stays storable with the freshness it states.
+    /// </summary>
+    [TestMethod]
+    public void AQualifiedPrivateKeepsTheResponseStorable()
+    {
+        HttpCacheFreshness result = HttpCacheFreshness.Compute(
+            Response(("Cache-Control", "private=\"Set-Cookie, X-Session\", max-age=600")));
+
+        Assert.IsTrue(result.IsStorable);
+        Assert.AreEqual(TimeSpan.FromSeconds(600), result.FreshnessLifetime);
+    }
+
+
     [TestMethod]
     public void DeltaSecondsOverflowClampsRatherThanRejects()
     {

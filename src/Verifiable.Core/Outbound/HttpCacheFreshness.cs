@@ -7,7 +7,7 @@ namespace Verifiable.Core.Outbound;
 /// Cacheability and remaining freshness lifetime of an <see cref="OutboundResponse"/>,
 /// computed purely from its headers per the subset of
 /// <see href="https://www.rfc-editor.org/rfc/rfc9111">RFC 9111 (HTTP Caching)</see> a
-/// shared-cache consumer needs: the <c>Cache-Control</c> <c>no-store</c>/<c>no-cache</c>/
+/// shared-cache consumer needs: the <c>Cache-Control</c> <c>no-store</c>/<c>private</c>/<c>no-cache</c>/
 /// <c>max-age</c>/<c>s-maxage</c> directives (RFC 9111 §5.2.2), the <c>Age</c> header
 /// (RFC 9111 §5.1), and the <c>Expires</c>/<c>Date</c> fallback (RFC 9111 §5.3, §4.2.1).
 /// Consumed by the Client ID Metadata Document cache described in
@@ -35,11 +35,14 @@ public readonly record struct HttpCacheFreshness
 
 
     /// <summary>
-    /// Whether a cache may retain the response at all. <see langword="false"/> only when
-    /// <c>Cache-Control: no-store</c> is present (RFC 9111 §5.2.2.5). A response with
-    /// <c>no-cache</c> (RFC 9111 §5.2.2.4) is still storable — it simply carries zero
-    /// <see cref="FreshnessLifetime"/>, so a cache that revalidates on every use can keep
-    /// the entry as a validation target.
+    /// Whether a shared cache may retain the response at all. <see langword="false"/> when
+    /// <c>Cache-Control: no-store</c> is present (RFC 9111 §5.2.2.5) and when an unqualified
+    /// <c>private</c> is present (RFC 9111 §5.2.2.7: "The unqualified private response directive
+    /// indicates that a shared cache MUST NOT store the response"). A qualified <c>private</c>, one that
+    /// lists field names, limits only those header fields, and the response stays storable without
+    /// them. A response with <c>no-cache</c> (RFC 9111 §5.2.2.4) is still storable — it simply carries
+    /// zero <see cref="FreshnessLifetime"/>, so a cache that revalidates on every use can keep the entry
+    /// as a validation target.
     /// </summary>
     public bool IsStorable { get; }
 
@@ -62,6 +65,10 @@ public readonly record struct HttpCacheFreshness
 
 
     private const string NoStoreDirective = "no-store";
+
+    /// <summary>The <c>private</c> response directive, RFC 9111 §5.2.2.7.</summary>
+    private const string PrivateDirective = "private";
+
     private const string NoCacheDirective = "no-cache";
     private const string MaxAgeDirective = "max-age";
     private const string SharedMaxAgeDirective = "s-maxage";
@@ -90,7 +97,7 @@ public readonly record struct HttpCacheFreshness
         CacheControlDirectives directives = ParseCacheControlDirectives(
             response.Headers.GetValues(WellKnownHttpHeaderNames.CacheControl));
 
-        if(directives.HasNoStore)
+        if(directives.HasNoStore || directives.HasUnqualifiedPrivate)
         {
             return new HttpCacheFreshness(false, TimeSpan.Zero, mustRevalidate: false);
         }
@@ -147,13 +154,15 @@ public readonly record struct HttpCacheFreshness
     }
 
 
-    //Recognizes the four directives this subset tracks and folds a match into
+    //Recognizes the five directives this subset tracks and folds a match into
     //directives via a non-destructive `with`; an unrecognized directive passes directives
     //through unchanged per RFC 9111 §5.2.3 ("a cache MUST ignore unrecognized cache
     //directives"). A max-age/s-maxage directive present with a value that fails to parse
     //as delta-seconds is folded to zero rather than left absent: RFC 9111 §4.2.1
     //encourages treating a response with invalid freshness information (its own example is
-    //"a max-age directive with non-integer content") as stale.
+    //"a max-age directive with non-integer content") as stale. A private directive counts
+    //only unqualified, with no argument or an empty one: a qualified private names the header
+    //fields a shared cache must not store, and the rest of the response stays storable.
     private static CacheControlDirectives ApplyDirective(CacheControlDirectives directives, ReadOnlySpan<char> token)
     {
         int equalsIndex = token.IndexOf('=');
@@ -164,6 +173,9 @@ public readonly record struct HttpCacheFreshness
         {
             _ when name.Equals(NoStoreDirective, StringComparison.OrdinalIgnoreCase) =>
                 directives with { HasNoStore = true },
+
+            _ when name.Equals(PrivateDirective, StringComparison.OrdinalIgnoreCase) && Unquote(value).Trim().IsEmpty =>
+                directives with { HasUnqualifiedPrivate = true },
 
             _ when name.Equals(NoCacheDirective, StringComparison.OrdinalIgnoreCase) =>
                 directives with { HasNoCache = true },
@@ -333,5 +345,6 @@ public readonly record struct HttpCacheFreshness
         bool HasNoStore,
         bool HasNoCache,
         long? MaxAgeSeconds,
-        long? SharedMaxAgeSeconds);
+        long? SharedMaxAgeSeconds,
+        bool HasUnqualifiedPrivate = false);
 }
