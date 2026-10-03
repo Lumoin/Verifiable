@@ -193,7 +193,90 @@ in `EndpointChain.BuildForRequestAsync`, at chain-build time, before matching, b
 `Integration.MaterializeRegistrationAsync` runs, and before `HandleCoreAsync` is ever entered — a
 capability-filtered candidate never reaches the loop below. `Integration.MaterializeRegistrationAsync`,
 when wired, then updates `context`'s registration from the wire `client_id`, so every step below
-sees the materialized record. `HandleCoreAsync` runs an 8-step state-machine loop:
+sees the materialized record.
+
+The materialized record is the one the request is judged by. For a record of the loaded
+registration's type, policy and issuer are resolved again for it, with every entry the loaded
+registration's policy resolution wrote first returned to the value the request arrived with, or removed
+when the request arrived without it, so the materialized record's resolution starts from the request's
+arriving state and a policy axis its profile does not set reads the arriving value or its strict
+default. The chain is built again for the materialized record (`EndpointChain.BuildBoundedForRequestAsync`)
+when it does not allow every capability the loaded registration allows, or when its policy resolution
+leaves a policy entry at another value than the loaded registration's resolution left it; the resolved
+set and the chain are then stashed again and the request is matched again. Otherwise the chain built
+for the loaded registration is kept, and a kept chain is the loaded registration's in every input: its
+capability resolution, its endpoint addresses and whatever else its builders read of the registration.
+A materialization may narrow the capabilities: a capability it removes is answered exactly as one the
+registration never held (a request no candidate matches answers the dispatcher's `404`; a grant the
+client lost answers the token endpoint's `unauthorized_client`). A policy change alone builds the chain
+again because the endpoint builders read the per-request policy as they build their candidates: the
+authorization endpoint's candidate takes the pushed-authorization requirement into its claim of a
+request that names no reference and into the error it answers an unresolved reference with. Whenever
+the chain is built again, the match-decision inspection runs again for the decision that is executed,
+before it is executed, so a request's last announced decision is the one executed (`MatchedStage`), and
+a request no endpoint matches carries no trace of the first match on the context or the dispatch
+activity. A materialization never widens the capabilities or the chain: the set resolved for the
+materialized record is held to the set resolved for the loaded registration that both records allow,
+and the chain built again is held to the endpoints of the chain built for the loaded registration, each
+identified by its name, HTTP method and flow kind together, an endpoint that chain lacks being dropped
+and recorded as capability-filtered. Each capability a materialization adds is absent from the resolved set the
+endpoints and token producers read and is recorded as `ServerEventNames.MaterializedCapabilityDropped`,
+and a candidate a builder's gate admits for it, a gate that reads two capabilities while its candidate
+carries one, is dropped unless the loaded chain holds an endpoint of that same name, HTTP method and
+flow kind. A name alone does not identify an endpoint: an application's builder may yield candidates
+that share a name across HTTP method or flow kind, one of them behind such a gate, and a name bound
+would admit the gated one where the loaded chain holds only the other. The capability is held by the
+capability bound and is not part of the identity, since the token endpoint's grant-type refusal takes
+its capability from the record's own capabilities and moves to a kept one when a materialization
+removes the one it carried. The bound does not tell apart a builder that yields, under one name, HTTP
+method and flow kind, a candidate whose handler depends on a capability beyond the one it carries: the
+bound compares what a chain records of an endpoint, and a builder is handed the record as the
+materialization answered it. The bound holds the chain and the resolved set; an endpoint that reads the
+record's own capabilities as it runs reads the materialized record's
+(the discovery document's `backchannel_logout_supported`, `backchannel_logout_session_supported` and
+`client_id_metadata_document_supported`,
+the end-session back-channel logout fan-out, the federation entity configuration's
+`client_registration_types_supported` and the shared signals challenge's `resource_metadata`). A record
+of another type than the loaded one is a fault of the application's wiring whatever its capabilities:
+no endpoint runs over it, and it is answered `500` `server_error` with the description the library
+answers a fault of the server's own wiring with (`WellKnownOAuthErrorDescriptions.ServerNotReady`) and the
+fault on the dispatch activity. That answer and a failure the materialization answers are sent without
+the announced endpoint running, the context carrying the capability of the endpoint the request
+matched. Two cases are not answered as never held, both whenever the chain is built
+again, for a capability removed or for a policy change alone. First, a token-serving grant the
+materialization adds and the server serves answers the dispatcher's `404` where a registration that never
+held it answers `unauthorized_client`: the token endpoint's module registers the grant from the record's
+own capabilities, so its grant-type refusal declines the grant, while the bound drops the grant's own
+candidate. Second, when the added capability precedes every kept one in the order the token endpoint
+takes its grant-type refusal's capability from, the refusal itself carries the added capability and is
+dropped, so every token request no kept grant candidate owns answers the `404`: a missing or blank
+`grant_type`, a grant the server serves that the materialized record does not hold, the removed one
+included, and a grant the server does not serve, where a registration that never held the added
+capability answers `invalid_request`, `unauthorized_client` and `unsupported_grant_type`. The cause
+of both is the token endpoint's module, which reads the record's own capabilities for its registered
+grants and for the capability its refusal carries.
+- Proven over the listener by `IdJagGrantTests.AMaterializationThatNarrowsAwayTheTokenExchangeIsUnauthorizedClient`,
+  `AMaterializationThatNarrowsAwayTheIdJagCapabilityMintsNothing`,
+  `AMaterializationThatAddsACapabilityServesNothingItAddsAndRecordsItAsync`,
+  `ACapabilityTheMaterializationChangesIsAnsweredAsOneNeverHeldAsync` (removed or added: no token-serving
+  capability left, another kept, a grant the server does not serve, each compared byte for byte with a
+  registration that never held it, with the match decisions announced),
+  `AGrantTheMaterializationRemovesIsRefusedAndTheRefusalIsAnnouncedAsync`,
+  `ACandidateOfALoadedEndpointsNameUnderAnotherMethodOrFlowKindIsNotRunAsync` (a composed builder's
+  second candidate of a loaded endpoint's name by another HTTP method, or of another flow kind, behind a
+  gate that reads a second capability),
+  `AnEndpointOnlyAnAddedCapabilityAdmitsIsNotRunAsync`,
+  `APolicyAxisTheMaterializedProfileDoesNotSetReadsItsStrictDefaultAsync`,
+  `AnEntryTheLoadedProfileOverwroteReadsTheValueTheRequestArrivedWithAsync`,
+  `AProfileTheMaterializationChangesAnswersAsTheProfileHeldFromTheStartAsync`,
+  `AMaterializedRecordOfAnotherFamilyIsAServerErrorAsync` (the description read from the wire),
+  `AMaterializedRecordOfAnotherFamilyKeepingEveryCapabilityIsAServerErrorAsync`,
+  `TheMaterializedRecordsPolicyAndIssuerServeTheRequestAsync` and
+  `AMaterializationThatChangesNoCapabilityBuildsOneChainAsync`, and by
+  `ResolveCapabilitiesAsyncTests.AMaterializedResolutionBeyondTheLoadedResolutionAddsNoEndpointAsync` and
+  `TheRequestCarriesTheBoundedResolutionOfAMaterializedRegistrationAsync`.
+
+`HandleCoreAsync` runs an 8-step state-machine loop:
 
 1. The endpoint's own pre-correlation step (`endpoint.BeforeCorrelationAsync`), when set — the
    endpoint's own check needing only the request, the materialized registration, and the server,

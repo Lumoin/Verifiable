@@ -1064,17 +1064,13 @@ public sealed class EndpointServer: IDisposable
 
                 _ = (activity?.SetTag(ServerTagNames.RegistrationId, registration.ClientId));
 
-                //2.5 Resolve per-request policy and place it on the context.
-                await Integration.ResolvePolicyAsync!(
-                    registration, context, cancellationToken).ConfigureAwait(false);
-
-                //2.6 Resolve the issuer URI for downstream emitters.
-                Uri? issuer = Integration.ResolveIssuerAsync is not null
-                    ? await Integration.ResolveIssuerAsync(
-                        registration, context, cancellationToken).ConfigureAwait(false)
-                    : context.Issuer;
-
-                if(issuer is not null) { context.SetIssuer(issuer); }
+                //2.5 and 2.6 Resolve per-request policy and the issuer URI for downstream emitters
+                //and place them on the context. The issuer the request arrived with and the entries
+                //the policy resolution wrote are kept so a materialized registration resolves its
+                //policy and issuer from the same starting point.
+                Uri? requestIssuer = context.Issuer;
+                PolicyEntries loadedPolicy = await ResolvePolicyAndIssuerAsync(
+                    registration, requestIssuer, earlierPolicy: null, context, cancellationToken).ConfigureAwait(false);
 
                 //3. Build the registration's active endpoint chain and walk it.
                 EndpointChain chain = await EndpointChain.BuildForRequestAsync(
@@ -1086,12 +1082,7 @@ public sealed class EndpointServer: IDisposable
 
                 if(matched is not null)
                 {
-                    context.SetMatchPayload(matched.Payload);
-                    context.SetCapability(matched.Endpoint.Capability);
-
-                    _ = (activity?.SetTag(ServerTagNames.FlowKind, matched.Endpoint.Kind.Name));
-                    _ = (activity?.SetTag(ServerTagNames.HttpMethod, matched.Endpoint.HttpMethod));
-                    _ = (activity?.SetTag(ServerTagNames.StartsNewFlow, matched.Endpoint.StartsNewFlow));
+                    RecordMatch(matched, context, activity);
                 }
 
                 //Inspection stage 2 of 4 — match decision.
@@ -1101,39 +1092,12 @@ public sealed class EndpointServer: IDisposable
 
                 if(matched is null)
                 {
-                    string noMatchCategory = chain.Count > 0
-                        ? NoMatchCategories.MatcherDeclined
-                        : chain.CapabilityFilteredCandidateNames.Count > 0
-                            ? NoMatchCategories.CapabilityFiltered
-                            : chain.UnresolvedUriCandidateNames.Count > 0
-                                ? NoMatchCategories.EndpointNameUnresolved
-                                : NoMatchCategories.NoCandidateForPathAndMethod;
-
-                    string[] declinedCandidateNames = new string[chain.Count];
-                    for(int i = 0; i < chain.Count; i++)
-                    {
-                        declinedCandidateNames[i] = chain[i].Name;
-                    }
-
-                    _ = (activity?.AddEvent(new ActivityEvent(ServerEventNames.NoMatch,
-                        tags: new ActivityTagsCollection
-                        {
-                            [ServerEventNames.NoMatchCategoryTagName] = noMatchCategory,
-                            [ServerEventNames.NoMatchCandidateCountTagName] =
-                                chain.Count.ToString(CultureInfo.InvariantCulture),
-                            [ServerEventNames.NoMatchCapabilityFilteredTagName] =
-                                string.Join(' ', chain.CapabilityFilteredCandidateNames),
-                            [ServerEventNames.NoMatchEndpointNameUnresolvedTagName] =
-                                string.Join(' ', chain.UnresolvedUriCandidateNames),
-                            [ServerEventNames.NoMatchDeclinedTagName] =
-                                string.Join(' ', declinedCandidateNames)
-                        })));
-
-                    response = ServerHttpResponse.NotFound();
+                    response = NoMatchResponse(chain, activity);
                 }
                 else
                 {
                     ServerHttpResponse? materializationFailure = null;
+                    IRegistrationRecord? materialized = null;
                     if(Integration.MaterializeRegistrationAsync is not null)
                     {
                         RegistrationMaterialization materialization = await Integration.MaterializeRegistrationAsync(
@@ -1142,14 +1106,19 @@ public sealed class EndpointServer: IDisposable
                         materializationFailure = materialization.Failure;
                         if(materializationFailure is null && materialization.Registration is not null)
                         {
-                            registration = materialization.Registration;
-                            context.SetRegistration(registration);
+                            materialized = materialization.Registration;
+                            context.SetRegistration(materialized);
                         }
                     }
 
-                    response = materializationFailure ?? await HandleCoreAsync(
-                        matched.Endpoint, request.Fields, context, activity, cancellationToken)
-                        .ConfigureAwait(false);
+                    response = materializationFailure
+                        ?? (materialized is null || ReferenceEquals(materialized, registration)
+                            ? await HandleCoreAsync(
+                                matched.Endpoint, request.Fields, context, activity, cancellationToken)
+                                .ConfigureAwait(false)
+                            : await JudgeMaterializedAsync(
+                                registration, materialized, requestIssuer, loadedPolicy, chain, matched, request.Fields, context, activity, cancellationToken)
+                                .ConfigureAwait(false));
                 }
             }
         }
@@ -1178,6 +1147,446 @@ public sealed class EndpointServer: IDisposable
 
         return response;
     }
+
+
+    /// <summary>
+    /// Resolves the per-request policy and the issuer URI for <paramref name="registration"/> and places them on
+    /// <paramref name="context"/>: once for the loaded registration, and again for a registration the application's
+    /// materialization answers in its place, so the request is served under the values of the registration the
+    /// endpoint runs with.
+    /// </summary>
+    /// <remarks>
+    /// A policy axis a registration's profile does not set is absent from the context and reads its strict default,
+    /// unless the request arrived with the entry. When the application's
+    /// <see cref="ServerIntegration.MaterializeRegistrationAsync"/> is wired, the values of the entries present
+    /// before the loaded registration's policy resolution are recorded with the entries that resolution wrote. Before
+    /// the materialized registration's policy is resolved, every entry the loaded registration's resolution wrote is
+    /// returned to the value the request arrived with, or removed when the request arrived without it, an entry
+    /// written under such a name between the two resolutions included, so the
+    /// materialized registration's resolution starts from the request's arriving state, as its issuer does: an axis
+    /// its profile does not set reads the value the request arrived with or its strict default, never the loaded
+    /// registration's value.
+    /// </remarks>
+    /// <param name="registration">The registration the policy and the issuer are resolved for.</param>
+    /// <param name="requestIssuer">
+    /// The issuer the context carried as the request arrived, or <see langword="null"/> for none. Every resolution
+    /// starts from it, and it stays when no issuer seam is wired.
+    /// </param>
+    /// <param name="earlierPolicy">
+    /// The entries an earlier registration's policy resolution found and wrote on <paramref name="context"/> for this
+    /// request, returned to their arriving values before this resolution; <see langword="null"/> for the loaded
+    /// registration.
+    /// </param>
+    /// <param name="context">The per-request context the values are placed on.</param>
+    /// <param name="cancellationToken">Cancellation of request processing.</param>
+    /// <returns>
+    /// The entries <paramref name="context"/> held before this policy resolution and the entries it wrote, when the
+    /// application's <see cref="ServerIntegration.MaterializeRegistrationAsync"/> is wired, so a materialized
+    /// registration's resolution can start from the arriving state and be compared with this one;
+    /// <see cref="PolicyEntries.None"/> when it is not wired.
+    /// </returns>
+    private async ValueTask<PolicyEntries> ResolvePolicyAndIssuerAsync(
+        IRegistrationRecord registration,
+        Uri? requestIssuer,
+        PolicyEntries? earlierPolicy,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+    {
+        //The issuer one registration resolved is never the starting point of another's resolution.
+        if(!Equals(context.Issuer, requestIssuer))
+        {
+            if(requestIssuer is not null)
+            {
+                context.SetIssuer(requestIssuer);
+            }
+            else
+            {
+                _ = context.Remove(ServerContextKeys.IssuerKey);
+            }
+        }
+
+        //The policy one registration resolved is never the starting point of another's resolution: every entry it
+        //wrote returns to the value the request arrived with.
+        if(earlierPolicy is not null)
+        {
+            foreach(string entryName in earlierPolicy.Written.Keys)
+            {
+                if(earlierPolicy.Before.TryGetValue(entryName, out object? arrivingValue))
+                {
+                    context[entryName] = arrivingValue;
+                }
+                else
+                {
+                    _ = context.Remove(entryName);
+                }
+            }
+        }
+
+        //The entries present before the resolution are recorded only when a materialization can follow.
+        Dictionary<string, object>? entriesBefore = Integration.MaterializeRegistrationAsync is not null
+            ? new Dictionary<string, object>(context, StringComparer.Ordinal)
+            : null;
+
+        await Integration.ResolvePolicyAsync!(
+            registration, context, cancellationToken).ConfigureAwait(false);
+
+        PolicyEntries policy = entriesBefore is null
+            ? PolicyEntries.None
+            : new PolicyEntries
+            {
+                Before = entriesBefore,
+                Written = WrittenEntries(entriesBefore, context)
+            };
+
+        Uri? issuer = Integration.ResolveIssuerAsync is not null
+            ? await Integration.ResolveIssuerAsync(
+                registration, context, cancellationToken).ConfigureAwait(false)
+            : requestIssuer;
+
+        if(issuer is not null)
+        {
+            context.SetIssuer(issuer);
+        }
+
+        return policy;
+    }
+
+
+    /// <summary>
+    /// The entries a policy resolution wrote on <paramref name="context"/>: every entry it added or set to a value
+    /// other than the one it held before, with the value it holds after, and every entry it removed, with
+    /// <see langword="null"/>. An entry set to the value it already held is not among them, since the context reads
+    /// the same either way.
+    /// </summary>
+    /// <param name="entriesBefore">The entries <paramref name="context"/> held before the resolution.</param>
+    /// <param name="context">The context after the resolution.</param>
+    /// <returns>The entries written, by name.</returns>
+    private static Dictionary<string, object?> WrittenEntries(
+        Dictionary<string, object> entriesBefore, ExchangeContext context)
+    {
+        Dictionary<string, object?> written = new(StringComparer.Ordinal);
+        foreach(KeyValuePair<string, object> entry in context)
+        {
+            if(!entriesBefore.TryGetValue(entry.Key, out object? valueBefore) || !Equals(valueBefore, entry.Value))
+            {
+                written[entry.Key] = entry.Value;
+            }
+        }
+
+        foreach(string entryName in entriesBefore.Keys)
+        {
+            if(!context.ContainsKey(entryName))
+            {
+                written[entryName] = null;
+            }
+        }
+
+        return written;
+    }
+
+
+    /// <summary>
+    /// Whether two registrations' policy resolutions for one request leave any policy entry at a different value: an
+    /// entry either resolution wrote is read as that resolution left it, and an entry it did not write as the request
+    /// arrived with it. The endpoint builders read the per-request policy as they build their candidates, so a
+    /// different policy builds a different chain.
+    /// </summary>
+    /// <param name="loadedPolicy">The entries the loaded registration's policy resolution found and wrote.</param>
+    /// <param name="materializedPolicy">The entries the materialized registration's policy resolution found and wrote.</param>
+    /// <returns><see langword="true"/> when an entry differs between the two resolutions.</returns>
+    private static bool IsPolicyChanged(PolicyEntries loadedPolicy, PolicyEntries materializedPolicy)
+    {
+        foreach(string entryName in loadedPolicy.Written.Keys.Concat(materializedPolicy.Written.Keys))
+        {
+            object? loadedValue = loadedPolicy.Written.TryGetValue(entryName, out object? writtenByLoaded)
+                ? writtenByLoaded
+                : loadedPolicy.Before.GetValueOrDefault(entryName);
+            object? materializedValue = materializedPolicy.Written.TryGetValue(entryName, out object? writtenByMaterialized)
+                ? writtenByMaterialized
+                : materializedPolicy.Before.GetValueOrDefault(entryName);
+            if(!Equals(loadedValue, materializedValue))
+            {
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+
+    /// <summary>
+    /// The policy entries one registration's policy resolution found on the request's context and the entries it
+    /// wrote, recorded so the resolution for a registration the application's materialization answers in place of the
+    /// loaded one starts from the request's arriving state and is compared with the loaded registration's.
+    /// </summary>
+    private sealed class PolicyEntries
+    {
+        /// <summary>
+        /// The entries recorded for no resolution, when the application's
+        /// <see cref="ServerIntegration.MaterializeRegistrationAsync"/> is not wired and no second resolution follows.
+        /// </summary>
+        internal static PolicyEntries None { get; } = new()
+        {
+            Before = new Dictionary<string, object>(StringComparer.Ordinal),
+            Written = new Dictionary<string, object?>(StringComparer.Ordinal)
+        };
+
+        /// <summary>The entries the context held before the resolution, by name.</summary>
+        internal required Dictionary<string, object> Before { get; init; }
+
+        /// <summary>
+        /// The entries the resolution wrote, by name, with the value each holds after it, or <see langword="null"/>
+        /// for an entry it removed.
+        /// </summary>
+        internal required Dictionary<string, object?> Written { get; init; }
+    }
+
+
+    /// <summary>
+    /// Judges a matched request by the registration the application's
+    /// <see cref="ServerIntegration.MaterializeRegistrationAsync"/> answered in place of the loaded one, so one
+    /// registration is judged per request: policy and issuer are resolved for the materialized registration, and when
+    /// it does not allow every capability the loaded registration allows or its policy differs from the loaded
+    /// registration's, the endpoint chain is built again for it and the request matched again.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A materialization narrows the endpoint chain and the resolved capabilities and never widens them. Each
+    /// capability the materialized registration adds is recorded as
+    /// <see cref="ServerEventNames.MaterializedCapabilityDropped"/>. When the materialization removes no capability and
+    /// its policy resolution leaves every policy entry at the value the loaded registration's resolution left it, the
+    /// chain built for the loaded registration and its resolved capabilities are kept. A kept chain is the loaded
+    /// registration's in every input: its capability resolution, its endpoint addresses and whatever else its builders
+    /// read of the registration. It is kept only when the materialized registration allows every loaded capability
+    /// under an unchanged policy. Otherwise the chain is built again with
+    /// <see cref="EndpointChain.BuildBoundedForRequestAsync"/>: its resolved capabilities are held to the capabilities
+    /// resolved for the loaded registration that both registrations allow, and its endpoints to the endpoints of the
+    /// chain built for the loaded registration, each identified by its name, HTTP method and flow kind together, so an
+    /// endpoint that chain lacks is dropped and recorded among
+    /// <see cref="EndpointChain.CapabilityFilteredCandidateNames"/>. A candidate that a builder's gate admits for a
+    /// capability the materialized registration adds, a gate that reads two capabilities of the registration while its
+    /// candidate carries one of them, is therefore dropped unless the loaded chain holds an endpoint of that same name,
+    /// HTTP method and flow kind. The bound does not tell apart a builder that yields, under one name, HTTP method and
+    /// flow kind, a candidate whose handler depends on a capability beyond the one it carries: the bound compares what
+    /// a chain records of an endpoint, and a builder is handed the registration as the materialization answered it. An
+    /// endpoint that reads the registration's own capabilities as it runs reads the materialized ones.
+    /// </para>
+    /// <para>
+    /// A policy change alone builds the chain again, since the endpoint builders read the per-request policy as they
+    /// build their candidates: the authorization endpoint's candidate takes the pushed-authorization requirement into
+    /// its claim of a request that names no reference and into the error it answers an unresolved reference with, so a
+    /// chain kept from the loaded registration would answer under the loaded registration's policy.
+    /// </para>
+    /// <para>
+    /// A capability the materialization removes is answered as one the registration never held: the chain built again
+    /// has no candidate for it, so the request is answered as a request no candidate matches or by the candidate that
+    /// refuses what the registration is not allowed. Two cases do not hold, both whenever the chain is built again,
+    /// for a capability removed or for a policy change alone. First, a token-serving grant the materialization adds
+    /// and the server serves answers the dispatcher's <c>404</c> where a registration that never held it answers
+    /// <c>unauthorized_client</c>: the token endpoint's module registers the grant from the record's own capabilities,
+    /// so its grant-type refusal declines the grant, while the bound drops the grant's own candidate. Second, when the
+    /// added capability precedes every kept one in the order the token endpoint takes its grant-type refusal's
+    /// capability from, the refusal itself carries the added capability and is dropped, so every token request no kept
+    /// grant candidate owns answers the <c>404</c>: a missing or blank <c>grant_type</c>, a grant the server serves
+    /// that the materialized registration does not hold, the removed one included, and a grant the server does not
+    /// serve, where a registration that never held the added capability answers <c>invalid_request</c>,
+    /// <c>unauthorized_client</c> and <c>unsupported_grant_type</c>. The cause of both is the token endpoint's module,
+    /// which reads the record's own capabilities for its registered grants and for the capability its refusal
+    /// carries.
+    /// </para>
+    /// <para>
+    /// Whenever the chain is built again, the match-decision inspection (<see cref="MatchedStage"/>) runs again for
+    /// the decision that is executed, the endpoint matched in the chain built again or none, before the endpoint runs
+    /// or the no-match answer is sent, whether or not that decision equals the first; a request's last announced
+    /// decision is the one executed. A request no endpoint of the chain built again matches carries neither the first
+    /// match's payload and capability on the context nor its flow kind, method and starts-flow tags on the dispatch
+    /// activity.
+    /// </para>
+    /// <para>
+    /// The endpoint builders and handlers read the registration as their own family's record. A materialized record of
+    /// another type than the loaded one is a fault of the application's wiring whatever its capabilities: no endpoint
+    /// runs over it, the request is answered <c>500</c> <c>server_error</c> with the description the library answers a
+    /// fault of the server's own wiring with, and the fault is recorded on the dispatch activity.
+    /// </para>
+    /// </remarks>
+    /// <param name="loaded">The registration the application's load seam answered.</param>
+    /// <param name="materialized">The registration the materialization answered in its place.</param>
+    /// <param name="requestIssuer">The issuer the context carried as the request arrived, or <see langword="null"/>.</param>
+    /// <param name="loadedPolicy">
+    /// The entries the policy resolution of <paramref name="loaded"/> found on the context and the entries it wrote.
+    /// </param>
+    /// <param name="loadedChain">The endpoint chain built for <paramref name="loaded"/>.</param>
+    /// <param name="matched">The endpoint matched in <paramref name="loadedChain"/>.</param>
+    /// <param name="fields">The request fields the chain is matched against.</param>
+    /// <param name="context">The exclusively owned request context.</param>
+    /// <param name="activity">The dispatch activity, or <see langword="null"/> when none is recorded.</param>
+    /// <param name="cancellationToken">Cancellation of request processing.</param>
+    /// <returns>The response for the request.</returns>
+    private async ValueTask<ServerHttpResponse> JudgeMaterializedAsync(
+        IRegistrationRecord loaded,
+        IRegistrationRecord materialized,
+        Uri? requestIssuer,
+        PolicyEntries loadedPolicy,
+        EndpointChain loadedChain,
+        MatchedEndpoint matched,
+        RequestFields fields,
+        ExchangeContext context,
+        Activity? activity,
+        CancellationToken cancellationToken)
+    {
+        foreach(CapabilityIdentifier capability in materialized.AllowedCapabilities)
+        {
+            if(!loaded.AllowedCapabilities.Contains(capability))
+            {
+                _ = (activity?.AddEvent(new ActivityEvent(ServerEventNames.MaterializedCapabilityDropped,
+                    tags: new ActivityTagsCollection
+                    {
+                        [ServerEventNames.MaterializedCapabilityTagName] = capability.Urn
+                    })));
+            }
+        }
+
+        if(!loaded.GetType().IsInstanceOfType(materialized))
+        {
+            _ = activity?.AddException(new InvalidOperationException(
+                "The materialized registration is a record of another type than the loaded registration, "
+                + "so no endpoint can run over it."));
+
+            return ServerHttpResponse.ServerError(ServerErrors.ServerError, ServerNotReadyDescription);
+        }
+
+        PolicyEntries materializedPolicy = await ResolvePolicyAndIssuerAsync(
+            materialized, requestIssuer, loadedPolicy, context, cancellationToken).ConfigureAwait(false);
+
+        if(!IsPolicyChanged(loadedPolicy, materializedPolicy)
+            && materialized.AllowedCapabilities.IsSupersetOf(loaded.AllowedCapabilities))
+        {
+
+            return await HandleCoreAsync(
+                matched.Endpoint, fields, context, activity, cancellationToken).ConfigureAwait(false);
+        }
+
+        IReadOnlySet<CapabilityIdentifier> loadedResolved =
+            context.ResolvedCapabilities ?? ImmutableHashSet<CapabilityIdentifier>.Empty;
+        HashSet<CapabilityIdentifier> upperBound = [.. loadedResolved.Where(capability =>
+            loaded.AllowedCapabilities.Contains(capability) && materialized.AllowedCapabilities.Contains(capability))];
+
+        EndpointChain chain = await EndpointChain.BuildBoundedForRequestAsync(
+            materialized, upperBound, loadedChain, context, cancellationToken).ConfigureAwait(false);
+        context.SetEndpointChain(chain);
+
+        MatchedEndpoint? rematched = await chain.MatchAsync(
+            fields, context, cancellationToken).ConfigureAwait(false);
+        if(rematched is null)
+        {
+            ClearMatch(context, activity);
+        }
+        else
+        {
+            RecordMatch(rematched, context, activity);
+        }
+
+        //Inspection stage 2 of 4 again: the match decision that is executed, announced after every rebuild.
+        await Integration.InspectAsync!(
+            new MatchedStage(rematched?.Endpoint, rematched?.Payload),
+            context, cancellationToken).ConfigureAwait(false);
+
+        return rematched is null
+            ? NoMatchResponse(chain, activity)
+            : await HandleCoreAsync(
+                rematched.Endpoint, fields, context, activity, cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Places a matched endpoint's payload and capability on the context and tags the dispatch activity with the
+    /// endpoint's flow kind, method and whether it starts a flow. Called for the match in the chain built for the
+    /// loaded registration and again for the match in a chain built for a materialized registration.
+    /// </summary>
+    /// <param name="matched">The matched endpoint and its payload.</param>
+    /// <param name="context">The per-request context.</param>
+    /// <param name="activity">The dispatch activity, or <see langword="null"/> when none is recorded.</param>
+    private static void RecordMatch(MatchedEndpoint matched, ExchangeContext context, Activity? activity)
+    {
+        context.SetMatchPayload(matched.Payload);
+        context.SetCapability(matched.Endpoint.Capability);
+
+        _ = (activity?.SetTag(ServerTagNames.FlowKind, matched.Endpoint.Kind.Name));
+        _ = (activity?.SetTag(ServerTagNames.HttpMethod, matched.Endpoint.HttpMethod));
+        _ = (activity?.SetTag(ServerTagNames.StartsNewFlow, matched.Endpoint.StartsNewFlow));
+    }
+
+
+    /// <summary>
+    /// Removes the match payload and the capability <see cref="RecordMatch"/> placed on the context and the flow kind,
+    /// method and starts-flow tags it placed on the dispatch activity. Called when the chain built for a materialized
+    /// registration matches no endpoint, so the outgoing inspection and the trace see a request no candidate matched.
+    /// </summary>
+    /// <param name="context">The per-request context.</param>
+    /// <param name="activity">The dispatch activity, or <see langword="null"/> when none is recorded.</param>
+    private static void ClearMatch(ExchangeContext context, Activity? activity)
+    {
+        _ = context.Remove(ServerContextKeys.MatchPayloadKey);
+        _ = context.Remove(ServerContextKeys.CapabilityKey);
+
+        _ = (activity?.SetTag(ServerTagNames.FlowKind, null));
+        _ = (activity?.SetTag(ServerTagNames.HttpMethod, null));
+        _ = (activity?.SetTag(ServerTagNames.StartsNewFlow, null));
+    }
+
+
+    /// <summary>
+    /// Answers a request no candidate of <paramref name="chain"/> matched: <c>404</c> with
+    /// <see cref="ServerHttpResponse.NotFound()"/>'s empty shape, and a <see cref="ServerEventNames.NoMatch"/> event on
+    /// the dispatch activity naming why, from the chain's own record of the candidates it filtered, could not resolve
+    /// or walked. The one answer for a request the chain built for the loaded registration does not match and for one
+    /// the chain built for a materialized registration does not match.
+    /// </summary>
+    /// <param name="chain">The chain the request was walked through.</param>
+    /// <param name="activity">The dispatch activity, or <see langword="null"/> when none is recorded.</param>
+    /// <returns>The <c>404</c> response.</returns>
+    private static ServerHttpResponse NoMatchResponse(EndpointChain chain, Activity? activity)
+    {
+        string noMatchCategory = chain.Count > 0
+            ? NoMatchCategories.MatcherDeclined
+            : chain.CapabilityFilteredCandidateNames.Count > 0
+                ? NoMatchCategories.CapabilityFiltered
+                : chain.UnresolvedUriCandidateNames.Count > 0
+                    ? NoMatchCategories.EndpointNameUnresolved
+                    : NoMatchCategories.NoCandidateForPathAndMethod;
+
+        string[] declinedCandidateNames = new string[chain.Count];
+        for(int i = 0; i < chain.Count; i++)
+        {
+            declinedCandidateNames[i] = chain[i].Name;
+        }
+
+        _ = (activity?.AddEvent(new ActivityEvent(ServerEventNames.NoMatch,
+            tags: new ActivityTagsCollection
+            {
+                [ServerEventNames.NoMatchCategoryTagName] = noMatchCategory,
+                [ServerEventNames.NoMatchCandidateCountTagName] =
+                    chain.Count.ToString(CultureInfo.InvariantCulture),
+                [ServerEventNames.NoMatchCapabilityFilteredTagName] =
+                    string.Join(' ', chain.CapabilityFilteredCandidateNames),
+                [ServerEventNames.NoMatchEndpointNameUnresolvedTagName] =
+                    string.Join(' ', chain.UnresolvedUriCandidateNames),
+                [ServerEventNames.NoMatchDeclinedTagName] =
+                    string.Join(' ', declinedCandidateNames)
+            })));
+
+        return ServerHttpResponse.NotFound();
+    }
+
+
+    /// <summary>
+    /// The <c>error_description</c> the dispatcher answers beside <see cref="ServerErrors.ServerError"/> when the
+    /// application's materialization answers a record of another type than the loaded registration: the fault is the
+    /// server's wiring, not the request. The same text as the description the library answers a fault of the server's
+    /// own wiring with; it names no seam, configuration or internal cause.
+    /// </summary>
+    private static string ServerNotReadyDescription { get; } = "The server is not ready to serve this request.";
 
 
     /// <summary>Runs a matched endpoint using the wiring retained by its admission lease.</summary>
