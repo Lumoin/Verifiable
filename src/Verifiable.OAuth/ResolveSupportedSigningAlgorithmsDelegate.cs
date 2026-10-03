@@ -36,6 +36,9 @@ namespace Verifiable.OAuth;
 /// <see cref="KeyUsageContext.ClientAssertion"/>. The last two describe signatures
 /// accepted from clients. Existing endpoint and validation gates still apply;
 /// supplying algorithms does not introduce a request-object or other new member.
+/// The <see cref="KeyUsageContext.ClientAssertion"/> list is also the set the validators
+/// <see cref="PrivateKeyJwtClientAuthentication"/> builds hold a client assertion's
+/// <c>alg</c> to, so what discovery publishes is what client authentication accepts.
 /// </para>
 /// <para>
 /// When no delegate is supplied, <see cref="DefaultSupportedSigningAlgorithms.ResolveAsync"/>

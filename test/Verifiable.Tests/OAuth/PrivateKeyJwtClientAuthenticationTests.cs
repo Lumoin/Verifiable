@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
+using System.Collections.Frozen;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using Verifiable.Core;
@@ -9,6 +11,7 @@ using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
+using Verifiable.OAuth.Diagnostics;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
@@ -895,6 +898,372 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
 
 
     /// <summary>
+    /// The converse of <see cref="AssertionWithRs256HeaderAndEs256SignatureIsRefused"/>: an assertion
+    /// declaring ES256 whose signature is the registered RSA key's own signature over that header is
+    /// refused as <see cref="ClientAssertionAlgorithmFault.AlgorithmNotOfKey"/>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.1">RFC 8725 section 3.1</see>: "The
+    /// library MUST ensure that the "alg" or "enc" header specifies the same algorithm that is used for
+    /// the cryptographic operation."
+    /// </summary>
+    [TestMethod]
+    public async Task AssertionWithEs256HeaderAndRs256SignatureIsRefused()
+    {
+        await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> clientKeys =
+            TestKeyMaterialProvider.CreateRsa2048KeyMaterial();
+        try
+        {
+            ClientRecord registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator();
+            string assertion = await SignAssertionAsync(
+                app.Server, registration.ClientId, registration.IssuerUri!.OriginalString, clientKeys.PrivateKey)
+                .ConfigureAwait(false);
+
+            (bool isOriginalAuthenticated, string[] originalFaults) = await ValidateRecordingAlgorithmFaultsAsync(
+                validator, assertion, registration, app.Server).ConfigureAwait(false);
+            Assert.IsTrue(isOriginalAuthenticated, "The correctly declared RS256 assertion must authenticate.");
+            Assert.IsEmpty(originalFaults);
+
+            string mismatchedAssertion = await SignUnderHeaderAlgorithmAsync(
+                assertion, WellKnownJwaValues.Es256, clientKeys.PrivateKey).ConfigureAwait(false);
+            (bool isAuthenticated, string[] faults) = await ValidateRecordingAlgorithmFaultsAsync(
+                validator, mismatchedAssertion, registration, app.Server).ConfigureAwait(false);
+
+            Assert.IsFalse(isAuthenticated,
+                "The algorithm named by the assertion must be the algorithm that verifies its signature.");
+            Assert.HasCount(1, faults);
+            Assert.AreEqual(nameof(ClientAssertionAlgorithmFault.AlgorithmNotOfKey), faults[0]);
+        }
+        finally
+        {
+            clientKeys.PublicKey.Dispose();
+            clientKeys.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// A header naming an algorithm the authorization server supports for client assertions, but that
+    /// the selected key cannot be used with, is refused as
+    /// <see cref="ClientAssertionAlgorithmFault.AlgorithmNotOfKey"/> before the key verifies anything:
+    /// the verification function the validator was built with is never called for it. Both directions
+    /// are rows, across key families and across curves of one family. The same assertion declaring the
+    /// key's own algorithm authenticates through that function.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.1">RFC 8725 section 3.1</see>: "The
+    /// library MUST ensure that the "alg" or "enc" header specifies the same algorithm that is used for
+    /// the cryptographic operation."
+    /// </summary>
+    /// <param name="keyKind">The kind of the client's registered key.</param>
+    /// <param name="headerAlgorithm">The supported algorithm the header names, not one of the key's.</param>
+    [TestMethod]
+    [DataRow("P-256", "RS256")]
+    [DataRow("RSA-2048", "ES256")]
+    [DataRow("P-256", "ES384")]
+    [DataRow("P-384", "ES256")]
+    public async Task ASupportedAlgorithmItsKeyCannotUseIsRefusedBeforeTheKeyVerifies(string keyKind, string headerAlgorithm)
+    {
+        await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> clientKeys = CreateKeyMaterial(keyKind);
+        try
+        {
+            string keyAlgorithm = CryptoFormatConversions.DefaultTagToJwaConverter(clientKeys.PublicKey.Tag);
+            await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+            {
+                candidateIntegration.ClientAssertionSigningAlgorithmsSupported = [keyAlgorithm, headerAlgorithm];
+            }).ConfigureAwait(false);
+
+            VerificationDelegate keyVerification = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(
+                clientKeys.PublicKey.Tag.Get<CryptoAlgorithm>(), Purpose.Verification);
+            int verificationCount = 0;
+
+            ValueTask<(bool IsVerified, CryptoEvent? Event)> CountedVerification(
+                ReadOnlyMemory<byte> data,
+                ReadOnlyMemory<byte> signature,
+                ReadOnlyMemory<byte> publicKeyMaterial,
+                FrozenDictionary<string, object>? verificationContext,
+                CancellationToken cancellationToken)
+            {
+                verificationCount++;
+
+                return keyVerification(data, signature, publicKeyMaterial, verificationContext, cancellationToken);
+            }
+
+            ClientRecord registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(CountedVerification);
+            string assertion = await SignAssertionAsync(
+                app.Server, registration.ClientId, registration.IssuerUri!.OriginalString, clientKeys.PrivateKey)
+                .ConfigureAwait(false);
+
+            (bool isOriginalAuthenticated, string[] originalFaults) = await ValidateRecordingAlgorithmFaultsAsync(
+                validator, assertion, registration, app.Server).ConfigureAwait(false);
+            Assert.IsTrue(isOriginalAuthenticated, $"The assertion declaring the key's own {keyAlgorithm} must authenticate.");
+            Assert.IsEmpty(originalFaults);
+            Assert.AreEqual(1, verificationCount, "The key's own algorithm is verified once.");
+
+            string mismatchedAssertion = await SignUnderHeaderAlgorithmAsync(
+                assertion, headerAlgorithm, clientKeys.PrivateKey).ConfigureAwait(false);
+            (bool isAuthenticated, string[] faults) = await ValidateRecordingAlgorithmFaultsAsync(
+                validator, mismatchedAssertion, registration, app.Server).ConfigureAwait(false);
+
+            Assert.IsFalse(isAuthenticated, $"A {keyKind} key must not authenticate an assertion declaring {headerAlgorithm}.");
+            Assert.HasCount(1, faults);
+            Assert.AreEqual(nameof(ClientAssertionAlgorithmFault.AlgorithmNotOfKey), faults[0]);
+            Assert.AreEqual(1, verificationCount, "The refused assertion must reach no verification.");
+        }
+        finally
+        {
+            clientKeys.PublicKey.Dispose();
+            clientKeys.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// An assertion naming an algorithm the authorization server does not support for client
+    /// assertions is refused as <see cref="ClientAssertionAlgorithmFault.UnsupportedAlgorithm"/>, though
+    /// the algorithm is its key's own and its signature good, and authenticates once the server states
+    /// the algorithm. The statement is read as discovery reads it: through the integration's
+    /// declaration, and through the host's resolution for client assertions where one is wired.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.1">RFC 8725 section 3.1</see>:
+    /// "Libraries MUST enable the caller to specify a supported set of algorithms and MUST NOT use any
+    /// other algorithms when performing cryptographic operations."
+    /// </summary>
+    /// <param name="isStatedByTheHostsResolution">
+    /// Whether the statement comes from the host's resolution rather than the integration's declaration.
+    /// </param>
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task AnAlgorithmTheServerDoesNotSupportForClientAssertionsIsRefused(bool isStatedByTheHostsResolution)
+    {
+        await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> clientKeys =
+            TestKeyMaterialProvider.CreateP384KeyMaterial();
+        try
+        {
+            await StateClientAssertionAlgorithmsAsync(app.Server, [WellKnownJwaValues.Es256], isStatedByTheHostsResolution).ConfigureAwait(false);
+
+            ClientRecord registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator();
+            string assertion = await SignAssertionAsync(
+                app.Server, registration.ClientId, registration.IssuerUri!.OriginalString, clientKeys.PrivateKey)
+                .ConfigureAwait(false);
+
+            (bool isAuthenticated, string[] faults) = await ValidateRecordingAlgorithmFaultsAsync(
+                validator, assertion, registration, app.Server).ConfigureAwait(false);
+            Assert.IsFalse(isAuthenticated, "An ES384 assertion must not authenticate where only ES256 is supported.");
+            Assert.HasCount(1, faults);
+            Assert.AreEqual(nameof(ClientAssertionAlgorithmFault.UnsupportedAlgorithm), faults[0]);
+
+            await StateClientAssertionAlgorithmsAsync(
+                app.Server, [WellKnownJwaValues.Es256, WellKnownJwaValues.Es384], isStatedByTheHostsResolution).ConfigureAwait(false);
+            (bool isSupportedAuthenticated, string[] supportedFaults) = await ValidateRecordingAlgorithmFaultsAsync(
+                validator, assertion, registration, app.Server).ConfigureAwait(false);
+            Assert.IsTrue(isSupportedAuthenticated, "The same assertion must authenticate once ES384 is supported.");
+            Assert.IsEmpty(supportedFaults);
+        }
+        finally
+        {
+            clientKeys.PublicKey.Dispose();
+            clientKeys.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// A registered key that names its algorithm in its <c>alg</c> member is used with that algorithm
+    /// alone: an RSA key published as <c>PS256</c> refuses a correctly signed <c>RS256</c> assertion as
+    /// <see cref="ClientAssertionAlgorithmFault.KeyAlgorithmMismatch"/>, though both algorithms bind an
+    /// RSA key, and the same key published as <c>RS256</c> authenticates it.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7517#section-4.4">RFC 7517 section 4.4</see>: "The
+    /// "alg" (algorithm) parameter identifies the algorithm intended for use with the key."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.1">RFC 8725 section 3.1</see>: "each
+    /// key MUST be used with exactly one algorithm".
+    /// </summary>
+    [TestMethod]
+    public async Task AKeyThatNamesAnotherAlgorithmRefusesTheAssertion()
+    {
+        await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> clientKeys =
+            TestKeyMaterialProvider.CreateRsa2048KeyMaterial();
+        try
+        {
+            ClientRecord baseline = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator();
+            string assertion = await SignAssertionAsync(
+                app.Server, baseline.ClientId, baseline.IssuerUri!.OriginalString, clientKeys.PrivateKey)
+                .ConfigureAwait(false);
+
+            ClientRecord pssKeyRegistration = baseline with
+            {
+                ClientJwks = BuildJwksJson((JwkNamingAlgorithm(clientKeys.PublicKey, WellKnownJwaValues.Ps256), SigningKeyId))
+            };
+            (bool isAuthenticated, string[] faults) = await ValidateRecordingAlgorithmFaultsAsync(
+                validator, assertion, pssKeyRegistration, app.Server).ConfigureAwait(false);
+            Assert.IsFalse(isAuthenticated, "A key published for PS256 must not authenticate an RS256 assertion.");
+            Assert.HasCount(1, faults);
+            Assert.AreEqual(nameof(ClientAssertionAlgorithmFault.KeyAlgorithmMismatch), faults[0]);
+
+            ClientRecord pkcs1KeyRegistration = baseline with
+            {
+                ClientJwks = BuildJwksJson((JwkNamingAlgorithm(clientKeys.PublicKey, WellKnownJwaValues.Rs256), SigningKeyId))
+            };
+            (bool isPkcs1Authenticated, string[] pkcs1Faults) = await ValidateRecordingAlgorithmFaultsAsync(
+                validator, assertion, pkcs1KeyRegistration, app.Server).ConfigureAwait(false);
+            Assert.IsTrue(isPkcs1Authenticated, "A key published for RS256 must authenticate the RS256 assertion.");
+            Assert.IsEmpty(pkcs1Faults);
+        }
+        finally
+        {
+            clientKeys.PublicKey.Dispose();
+            clientKeys.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// A client whose registration names its <c>token_endpoint_auth_signing_alg</c> authenticates only
+    /// assertions declaring that algorithm: a correctly signed ES256 assertion is refused as
+    /// <see cref="ClientAssertionAlgorithmFault.RegisteredAlgorithmMismatch"/> when the registration
+    /// names ES384, and authenticates when it names ES256.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.1">RFC 8725 section 3.1</see>:
+    /// "Libraries MUST enable the caller to specify a supported set of algorithms and MUST NOT use any
+    /// other algorithms when performing cryptographic operations."
+    /// </summary>
+    [TestMethod]
+    public async Task AnAlgorithmOtherThanTheClientRegisteredIsRefused()
+    {
+        await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> clientKeys =
+            TestKeyMaterialProvider.CreateP256KeyMaterial();
+        try
+        {
+            ClientRecord baseline = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator();
+            string assertion = await SignAssertionAsync(
+                app.Server, baseline.ClientId, baseline.IssuerUri!.OriginalString, clientKeys.PrivateKey)
+                .ConfigureAwait(false);
+
+            ClientRecord es384Registration = baseline with
+            {
+                RegisteredMetadata = new ClientMetadata { TokenEndpointAuthSigningAlg = WellKnownJwaValues.Es384 }
+            };
+            (bool isAuthenticated, string[] faults) = await ValidateRecordingAlgorithmFaultsAsync(
+                validator, assertion, es384Registration, app.Server).ConfigureAwait(false);
+            Assert.IsFalse(isAuthenticated, "A client registered for ES384 must not authenticate with an ES256 assertion.");
+            Assert.HasCount(1, faults);
+            Assert.AreEqual(nameof(ClientAssertionAlgorithmFault.RegisteredAlgorithmMismatch), faults[0]);
+
+            ClientRecord es256Registration = baseline with
+            {
+                RegisteredMetadata = new ClientMetadata { TokenEndpointAuthSigningAlg = WellKnownJwaValues.Es256 }
+            };
+            (bool isEs256Authenticated, string[] es256Faults) = await ValidateRecordingAlgorithmFaultsAsync(
+                validator, assertion, es256Registration, app.Server).ConfigureAwait(false);
+            Assert.IsTrue(isEs256Authenticated, "A client registered for ES256 must authenticate with its ES256 assertion.");
+            Assert.IsEmpty(es256Faults);
+        }
+        finally
+        {
+            clientKeys.PublicKey.Dispose();
+            clientKeys.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// A correct client of every key kind the library verifies authenticates under its key's own
+    /// algorithm, whether no hold is stated (no supported set, no registered algorithm, no <c>alg</c>
+    /// member on the key) or every hold is stated and names that algorithm: the holds refuse no
+    /// assertion whose algorithm is its key's.
+    /// </summary>
+    /// <param name="keyKind">The kind of the client's registered key.</param>
+    /// <param name="isEveryHoldStated">Whether the server, the registration and the key each name the algorithm.</param>
+    [TestMethod]
+    [DataRow("P-256", false)]
+    [DataRow("P-256", true)]
+    [DataRow("P-384", false)]
+    [DataRow("P-384", true)]
+    [DataRow("P-521", false)]
+    [DataRow("P-521", true)]
+    [DataRow("secp256k1", false)]
+    [DataRow("secp256k1", true)]
+    [DataRow("Ed25519", false)]
+    [DataRow("Ed25519", true)]
+    [DataRow("RSA-2048", false)]
+    [DataRow("RSA-2048", true)]
+    [DataRow("RSA-4096", false)]
+    [DataRow("RSA-4096", true)]
+    [DataRow("brainpoolP256r1", false)]
+    [DataRow("brainpoolP256r1", true)]
+    [DataRow("brainpoolP320r1", false)]
+    [DataRow("brainpoolP320r1", true)]
+    [DataRow("brainpoolP384r1", false)]
+    [DataRow("brainpoolP384r1", true)]
+    [DataRow("brainpoolP512r1", false)]
+    [DataRow("brainpoolP512r1", true)]
+    [DataRow("ML-DSA-44", false)]
+    [DataRow("ML-DSA-44", true)]
+    [DataRow("ML-DSA-65", false)]
+    [DataRow("ML-DSA-65", true)]
+    [DataRow("ML-DSA-87", false)]
+    [DataRow("ML-DSA-87", true)]
+    public async Task EveryKeyKindAuthenticatesUnderItsOwnAlgorithm(string keyKind, bool isEveryHoldStated)
+    {
+        await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> clientKeys = CreateKeyMaterial(keyKind);
+        try
+        {
+            string keyAlgorithm = CryptoFormatConversions.DefaultTagToJwaConverter(clientKeys.PublicKey.Tag);
+            ClientRecord registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
+            if(isEveryHoldStated)
+            {
+                await StateClientAssertionAlgorithmsAsync(app.Server, [keyAlgorithm], isStatedByTheHostsResolution: false).ConfigureAwait(false);
+                registration = registration with
+                {
+                    ClientJwks = BuildJwksJson((JwkNamingAlgorithm(clientKeys.PublicKey, keyAlgorithm), SigningKeyId)),
+                    RegisteredMetadata = new ClientMetadata { TokenEndpointAuthSigningAlg = keyAlgorithm }
+                };
+            }
+
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator();
+            string assertion = await SignAssertionAsync(
+                app.Server, registration.ClientId, registration.IssuerUri!.OriginalString, clientKeys.PrivateKey)
+                .ConfigureAwait(false);
+
+            (bool isAuthenticated, string[] faults) = await ValidateRecordingAlgorithmFaultsAsync(
+                validator, assertion, registration, app.Server).ConfigureAwait(false);
+
+            Assert.IsTrue(isAuthenticated, $"A {keyKind} client signing {keyAlgorithm} must authenticate.");
+            Assert.IsEmpty(faults);
+        }
+        finally
+        {
+            clientKeys.PublicKey.Dispose();
+            clientKeys.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
     /// An RSA assertion must verify under the registered modulus AND public exponent. Changing only
     /// the registered exponent leaves no registered key that verifies the original signature. A
     /// success carrying that registration's kid would therefore misidentify the key that verified it.
@@ -1682,4 +2051,133 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
 
         return context;
     }
+
+
+    /// <summary>
+    /// Runs <paramref name="validator"/> on <paramref name="assertion"/> inside an activity of this row's
+    /// own, so the events the validator records on <see cref="Activity.Current"/> are this call's alone,
+    /// and answers the outcome with the <see cref="ClientAssertionAlgorithmFault"/> names of the
+    /// <see cref="OAuthEventNames.ClientAssertionAlgorithmRefused"/> events it recorded.
+    /// </summary>
+    /// <param name="validator">The validator under test.</param>
+    /// <param name="assertion">The assertion in JWS Compact Serialization.</param>
+    /// <param name="registration">The registration the request claims to be.</param>
+    /// <param name="server">The server the request's context is bound to.</param>
+    /// <returns>Whether the client authenticated, and the recorded fault names in order.</returns>
+    private async Task<(bool IsAuthenticated, string[] Faults)> ValidateRecordingAlgorithmFaultsAsync(
+        ValidateClientCredentialsDelegate validator, string assertion, ClientRecord registration, EndpointServer server)
+    {
+        using Activity call = new(nameof(ValidateRecordingAlgorithmFaultsAsync));
+        _ = call.Start();
+        bool isAuthenticated = await validator(
+            null, BuildFields(assertion), registration, BuildContext(server), TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        call.Stop();
+
+        string[] faults = [.. call.Events
+            .Where(activityEvent => string.Equals(
+                activityEvent.Name, OAuthEventNames.ClientAssertionAlgorithmRefused, StringComparison.Ordinal))
+            .Select(activityEvent => activityEvent.Tags.Single(tag => string.Equals(
+                tag.Key, OAuthEventNames.ClientAssertionAlgorithmFaultTagName, StringComparison.Ordinal)).Value?.ToString() ?? string.Empty)];
+
+        return (isAuthenticated, faults);
+    }
+
+
+    /// <summary>
+    /// Re-signs <paramref name="assertion"/>'s payload under a protected header declaring
+    /// <paramref name="headerAlgorithm"/>, <see cref="SigningKeyId"/> and type <c>JWT</c>, with
+    /// <paramref name="signingKey"/>'s own signing function: the signature covers the declared header and
+    /// verifies under the signing key's public key whatever algorithm the header declares.
+    /// </summary>
+    /// <param name="assertion">A signed assertion whose payload is kept.</param>
+    /// <param name="headerAlgorithm">The algorithm the new header declares.</param>
+    /// <param name="signingKey">The key that signs the new header and the payload.</param>
+    /// <returns>The re-signed assertion in JWS Compact Serialization.</returns>
+    private static async Task<string> SignUnderHeaderAlgorithmAsync(
+        string assertion, string headerAlgorithm, PrivateKeyMemory signingKey)
+    {
+        string[] segments = assertion.Split('.');
+        Assert.HasCount(3, segments);
+        Dictionary<string, string> header = new(StringComparer.Ordinal)
+        {
+            [WellKnownJwkMemberNames.Alg] = headerAlgorithm,
+            [WellKnownJwkMemberNames.Kid] = SigningKeyId,
+            [WellKnownJoseHeaderNames.Typ] = WellKnownJwkValues.TypeJwt
+        };
+        string headerSegment = TestSetup.Base64UrlEncoder(JsonSerializer.SerializeToUtf8Bytes(header));
+        byte[] signingInput = Encoding.ASCII.GetBytes($"{headerSegment}.{segments[1]}");
+        using Signature signature = await signingKey.SignAsync(signingInput, BaseMemoryPool.Shared).ConfigureAwait(false);
+
+        return $"{headerSegment}.{segments[1]}.{TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan())}";
+    }
+
+
+    /// <summary>
+    /// States <paramref name="algorithms"/> as the algorithms <paramref name="server"/> supports for
+    /// client assertions: through
+    /// <see cref="AuthorizationServerIntegration.ClientAssertionSigningAlgorithmsSupported"/>, or, when
+    /// <paramref name="isStatedByTheHostsResolution"/>, through the host's
+    /// <see cref="AuthorizationServerCryptography.ResolveSupportedSigningAlgorithmsAsync"/> for
+    /// <see cref="KeyUsageContext.ClientAssertion"/> over a declaration that names every table algorithm
+    /// the rows sign with.
+    /// </summary>
+    /// <param name="server">The server altered.</param>
+    /// <param name="algorithms">The supported algorithms stated.</param>
+    /// <param name="isStatedByTheHostsResolution">Whether the host's resolution states them.</param>
+    private static Task StateClientAssertionAlgorithmsAsync(
+        EndpointServer server, string[] algorithms, bool isStatedByTheHostsResolution) =>
+        TestHostShell.AlterAsync(server, candidateIntegration =>
+        {
+            if(isStatedByTheHostsResolution)
+            {
+                candidateIntegration.ClientAssertionSigningAlgorithmsSupported =
+                    [WellKnownJwaValues.Es256, WellKnownJwaValues.Es384, WellKnownJwaValues.Es512, WellKnownJwaValues.Rs256];
+                candidateIntegration.Cryptography.ResolveSupportedSigningAlgorithmsAsync = (registration, usage, context, cancellationToken) =>
+                    ValueTask.FromResult<IReadOnlyList<string>>(usage == KeyUsageContext.ClientAssertion ? algorithms : []);
+            }
+            else
+            {
+                candidateIntegration.ClientAssertionSigningAlgorithmsSupported = algorithms;
+            }
+        });
+
+
+    /// <summary>
+    /// The JWK of <paramref name="publicKey"/> carrying <paramref name="algorithm"/> as its <c>alg</c>
+    /// member (RFC 7517 section 4.4).
+    /// </summary>
+    /// <param name="publicKey">The key the JWK publishes.</param>
+    /// <param name="algorithm">The algorithm the key names for its use.</param>
+    /// <returns>The JWK members.</returns>
+    private static Dictionary<string, string> JwkNamingAlgorithm(PublicKeyMemory publicKey, string algorithm) =>
+        new(JwkOf(publicKey), StringComparer.Ordinal)
+        {
+            [WellKnownJwkMemberNames.Alg] = algorithm
+        };
+
+
+    /// <summary>
+    /// A disposable copy of the shared key material of the named kind.
+    /// </summary>
+    /// <param name="keyKind">The key kind as the rows name it.</param>
+    /// <returns>The key pair.</returns>
+    private static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateKeyMaterial(string keyKind) => keyKind switch
+    {
+        "P-256" => TestKeyMaterialProvider.CreateP256KeyMaterial(),
+        "P-384" => TestKeyMaterialProvider.CreateP384KeyMaterial(),
+        "P-521" => TestKeyMaterialProvider.CreateP521KeyMaterial(),
+        "secp256k1" => TestKeyMaterialProvider.CreateSecp256k1KeyMaterial(),
+        "Ed25519" => TestKeyMaterialProvider.CreateEd25519KeyMaterial(),
+        "RSA-2048" => TestKeyMaterialProvider.CreateRsa2048KeyMaterial(),
+        "RSA-4096" => TestKeyMaterialProvider.CreateRsa4096KeyMaterial(),
+        "brainpoolP256r1" => TestKeyMaterialProvider.CreateBrainpoolP256r1KeyMaterial(),
+        "brainpoolP320r1" => TestKeyMaterialProvider.CreateBrainpoolP320r1KeyMaterial(),
+        "brainpoolP384r1" => TestKeyMaterialProvider.CreateBrainpoolP384r1KeyMaterial(),
+        "brainpoolP512r1" => TestKeyMaterialProvider.CreateBrainpoolP512r1KeyMaterial(),
+        "ML-DSA-44" => TestKeyMaterialProvider.CreateMlDsa44KeyMaterial(),
+        "ML-DSA-65" => TestKeyMaterialProvider.CreateMlDsa65KeyMaterial(),
+        "ML-DSA-87" => TestKeyMaterialProvider.CreateMlDsa87KeyMaterial(),
+        _ => throw new ArgumentOutOfRangeException(nameof(keyKind), keyKind, "No key material of this kind.")
+    };
 }

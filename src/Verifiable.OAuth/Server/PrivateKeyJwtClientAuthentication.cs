@@ -3,11 +3,13 @@ using System.Diagnostics;
 using System.Text;
 using Verifiable.Core;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.OAuth.AuthCode.Server;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Federation;
 using Verifiable.OAuth.JwtBearer;
+using Verifiable.OAuth.Server.Metadata;
 using Verifiable.OAuth.Server.Pipeline;
 
 namespace Verifiable.OAuth.Server;
@@ -120,6 +122,18 @@ public sealed record PrivateKeyJwtClientAuthenticationResult
 /// <see cref="CryptoFormatConversions.DefaultJwkToAlgorithmConverter"/> (through
 /// <see cref="DpopJwkUtilities.PublicKeyFromJwk"/>), verify with <see cref="Jws.VerifyAsync(string,DecodeDelegate,BaseMemoryPool,PublicKeyMemory,CancellationToken)"/>,
 /// and only then apply <see cref="Validate"/>.
+/// </para>
+/// <para>
+/// Before the key verifies anything, the assertion's <c>alg</c> header is held to the algorithms the
+/// authorization server supports for client assertions where it states them, to the client's
+/// registered <c>token_endpoint_auth_signing_alg</c> where its registration carries one, to the
+/// selected key's own <c>alg</c> member where the key carries one, and to the key through
+/// <see cref="JwsAlgorithmKeyBinding.IsAlgorithmOfKey"/>; a failed hold refuses the assertion with its
+/// <see cref="ClientAssertionAlgorithmFault"/> recorded as an
+/// <see cref="OAuthEventNames.ClientAssertionAlgorithmRefused"/> event.
+/// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.1">RFC 8725 section 3.1</see>: "The
+/// library MUST ensure that the "alg" or "enc" header specifies the same algorithm that is used for
+/// the cryptographic operation."
 /// </para>
 /// <para>
 /// The <see cref="ClientAssertionAudiencePolicy"/> is applied by the validators
@@ -541,6 +555,26 @@ public static class PrivateKeyJwtClientAuthentication
                     return false;
                 }
 
+                //RFC 8725 Section 3.1: "Libraries MUST enable the caller to specify a supported set of
+                //algorithms and MUST NOT use any other algorithms when performing cryptographic
+                //operations." The set is the one discovery publishes as
+                //token_endpoint_auth_signing_alg_values_supported, read through the same resolution; a
+                //host that states none for client assertions leaves the assertion to the holds below.
+                IReadOnlyList<string> supportedAlgorithms = await ResolveClientAssertionAlgorithmsAsync(
+                    oauth, registration, context, cancellationToken).ConfigureAwait(false);
+                if(supportedAlgorithms.Count > 0 && !ContainsOrdinal(supportedAlgorithms, alg))
+                {
+                    return RefuseAlgorithm(ClientAssertionAlgorithmFault.UnsupportedAlgorithm);
+                }
+
+                //The client's registered token_endpoint_auth_signing_alg is the one algorithm the
+                //registration admits for its assertions, a supported set of one under the same clause.
+                if(registration.RegisteredMetadata?.TokenEndpointAuthSigningAlg is string registeredAlgorithm
+                    && !WellKnownJwaValues.Equals(registeredAlgorithm, alg))
+                {
+                    return RefuseAlgorithm(ClientAssertionAlgorithmFault.RegisteredAlgorithmMismatch);
+                }
+
                 string? kid = header.TryGetValue(WellKnownJwkMemberNames.Kid, out object? kidObj)
                     && kidObj is string kidValue
                     ? kidValue
@@ -558,6 +592,15 @@ public static class PrivateKeyJwtClientAuthentication
                     return false;
                 }
 
+                //RFC 7517 Section 4.4: "The "alg" (algorithm) parameter identifies the algorithm intended
+                //for use with the key." RFC 8725 Section 3.1: "each key MUST be used with exactly one
+                //algorithm". A selected key that names its algorithm is used with that one alone.
+                if(jwkMembers.TryGetValue(WellKnownJwkMemberNames.Alg, out string? keyAlgorithm)
+                    && !WellKnownJwaValues.Equals(keyAlgorithm, alg))
+                {
+                    return RefuseAlgorithm(ClientAssertionAlgorithmFault.KeyAlgorithmMismatch);
+                }
+
                 PublicKeyMemory publicKey;
                 try
                 {
@@ -571,6 +614,15 @@ public static class PrivateKeyJwtClientAuthentication
 
                 using(publicKey)
                 {
+                    //RFC 8725 Section 3.1: "The library MUST ensure that the "alg" or "enc" header
+                    //specifies the same algorithm that is used for the cryptographic operation." The
+                    //verification below is chosen by the key, so an alg that is not an algorithm of the
+                    //key is refused before the key verifies anything.
+                    if(!JwsAlgorithmKeyBinding.IsAlgorithmOfKey(alg, publicKey.Tag.Get<CryptoAlgorithm>()))
+                    {
+                        return RefuseAlgorithm(ClientAssertionAlgorithmFault.AlgorithmNotOfKey);
+                    }
+
                     bool signatureValid;
                     try
                     {
@@ -923,5 +975,50 @@ public static class PrivateKeyJwtClientAuthentication
             : JwkJsonReader.SelectKeyByKeyId(json, kid, WellKnownJwkValues.UseSigUtf8);
 
         return result.IsSelected ? result.Members : null;
+    }
+
+
+    /// <summary>
+    /// The algorithms the authorization server supports for client assertions, resolved as discovery
+    /// resolves its <c>token_endpoint_auth_signing_alg_values_supported</c>: the host's
+    /// <see cref="AuthorizationServerCryptography.ResolveSupportedSigningAlgorithmsAsync"/> for
+    /// <see cref="KeyUsageContext.ClientAssertion"/> where it is wired, otherwise
+    /// <see cref="DefaultSupportedSigningAlgorithms.ResolveAsync"/>, which reads
+    /// <see cref="AuthorizationServerIntegration.ClientAssertionSigningAlgorithmsSupported"/>.
+    /// </summary>
+    /// <param name="oauth">The integration admitted for the request.</param>
+    /// <param name="registration">The registration the request claims to be.</param>
+    /// <param name="context">The per-request context.</param>
+    /// <param name="cancellationToken">Cancellation token passed to the resolution.</param>
+    /// <returns>The supported JWA names; an empty list states none.</returns>
+    private static ValueTask<IReadOnlyList<string>> ResolveClientAssertionAlgorithmsAsync(
+        AuthorizationServerIntegration oauth,
+        ClientRecord registration,
+        ExchangeContext context,
+        CancellationToken cancellationToken) =>
+        oauth.Cryptography.ResolveSupportedSigningAlgorithmsAsync is ResolveSupportedSigningAlgorithmsDelegate resolveSupportedAlgorithms
+            ? resolveSupportedAlgorithms(registration, KeyUsageContext.ClientAssertion, context, cancellationToken)
+            : DefaultSupportedSigningAlgorithms.ResolveAsync(
+                oauth, registration, KeyUsageContext.ClientAssertion, context, cancellationToken);
+
+
+    /// <summary>
+    /// Records <paramref name="fault"/> on <see cref="Activity.Current"/> as an
+    /// <see cref="OAuthEventNames.ClientAssertionAlgorithmRefused"/> event carrying the fault's name
+    /// under <see cref="OAuthEventNames.ClientAssertionAlgorithmFaultTagName"/>, and answers the
+    /// refusal: the client is not authenticated.
+    /// </summary>
+    /// <param name="fault">The hold the assertion's <c>alg</c> failed.</param>
+    /// <returns><see langword="false"/>, always.</returns>
+    private static bool RefuseAlgorithm(ClientAssertionAlgorithmFault fault)
+    {
+        _ = Activity.Current?.AddEvent(new ActivityEvent(
+            OAuthEventNames.ClientAssertionAlgorithmRefused,
+            tags: new ActivityTagsCollection
+            {
+                [OAuthEventNames.ClientAssertionAlgorithmFaultTagName] = fault.ToString()
+            }));
+
+        return false;
     }
 }

@@ -271,4 +271,31 @@ public static class OAuthEventNames
     /// </summary>
     public static string RedirectRefusalLocationTagName { get; } =
         Utf8Constants.ToInternedString(RedirectRefusalLocationTagNameUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="ClientAssertionAlgorithmRefused"/>.</summary>
+    public static ReadOnlySpan<byte> ClientAssertionAlgorithmRefusedUtf8 =>
+        "oauth.client_assertion.algorithm_refused"u8;
+
+    /// <summary>
+    /// A <c>private_key_jwt</c> client assertion's <c>alg</c> header failed one of the holds the
+    /// validators <see cref="Server.PrivateKeyJwtClientAuthentication"/> builds apply, so the assertion
+    /// was refused before any key verified its signature and the client was not authenticated. The hold
+    /// it failed rides <see cref="ClientAssertionAlgorithmFaultTagName"/> as a
+    /// <see cref="Server.ClientAssertionAlgorithmFault"/> name; neither the assertion nor any of its
+    /// values is carried.
+    /// </summary>
+    public static string ClientAssertionAlgorithmRefused { get; } =
+        Utf8Constants.ToInternedString(ClientAssertionAlgorithmRefusedUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="ClientAssertionAlgorithmFaultTagName"/>.</summary>
+    public static ReadOnlySpan<byte> ClientAssertionAlgorithmFaultTagNameUtf8 =>
+        "oauth.client_assertion.algorithm_fault"u8;
+
+    /// <summary>
+    /// The <see cref="System.Diagnostics.ActivityTagsCollection"/> key carrying the name of the
+    /// <see cref="Server.ClientAssertionAlgorithmFault"/> that refused the assertion, for a
+    /// <see cref="ClientAssertionAlgorithmRefused"/> event.
+    /// </summary>
+    public static string ClientAssertionAlgorithmFaultTagName { get; } =
+        Utf8Constants.ToInternedString(ClientAssertionAlgorithmFaultTagNameUtf8);
 }

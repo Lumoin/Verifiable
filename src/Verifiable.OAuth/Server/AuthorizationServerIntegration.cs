@@ -1589,8 +1589,11 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// <c>token_endpoint_auth_signing_alg_values_supported</c> (RFC 8414, Section 2) is
     /// emitted from whenever it is non-empty. RFC 8414, Section 2: "Servers SHOULD
     /// support "RS256"." — which algorithms to declare beyond that SHOULD is the
-    /// deployment's own choice; the algorithm set is not itself validated against the
-    /// presented assertion's <c>alg</c> here, only advertised. Empty by default; a
+    /// deployment's own choice. The validators
+    /// <see cref="PrivateKeyJwtClientAuthentication"/> builds refuse an assertion whose
+    /// <c>alg</c> the declaration discovery publishes does not name
+    /// (<see cref="ClientAssertionAlgorithmFault.UnsupportedAlgorithm"/>); an empty
+    /// declaration states none and leaves the assertion to its key. Empty by default; a
     /// deployment that declares <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/> or
     /// <see cref="ClientAuthenticationMethod.ClientSecretJwt"/> on
     /// <see cref="ClientAuthenticationMethodsSupported"/> must populate this with at
