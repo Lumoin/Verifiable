@@ -562,13 +562,16 @@ public static class PrivateKeyJwtClientAuthentication
                 //host that states none for client assertions leaves the assertion to the holds below.
                 IReadOnlyList<string> supportedAlgorithms = await ResolveClientAssertionAlgorithmsAsync(
                     oauth, registration, context, cancellationToken).ConfigureAwait(false);
-                if(supportedAlgorithms.Count > 0 && !ContainsOrdinal(supportedAlgorithms, alg))
+                if(supportedAlgorithms.Count > 0
+                    && !supportedAlgorithms.Any(supportedAlgorithm => WellKnownJwaValues.Equals(supportedAlgorithm, alg)))
                 {
                     return RefuseAlgorithm(ClientAssertionAlgorithmFault.UnsupportedAlgorithm);
                 }
 
-                //The client's registered token_endpoint_auth_signing_alg is the one algorithm the
-                //registration admits for its assertions, a supported set of one under the same clause.
+                //OpenID Connect Dynamic Client Registration 1.0 Section 2 on token_endpoint_auth_signing_alg,
+                //the algorithm a client signs its private_key_jwt and client_secret_jwt assertions with: "All
+                //Token Requests using these authentication methods from this Client MUST be rejected, if the
+                //JWT is not signed with this algorithm."
                 if(registration.RegisteredMetadata?.TokenEndpointAuthSigningAlg is string registeredAlgorithm
                     && !WellKnownJwaValues.Equals(registeredAlgorithm, alg))
                 {

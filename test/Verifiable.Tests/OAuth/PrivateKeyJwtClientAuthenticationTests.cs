@@ -1138,9 +1138,10 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
     /// assertions declaring that algorithm: a correctly signed ES256 assertion is refused as
     /// <see cref="ClientAssertionAlgorithmFault.RegisteredAlgorithmMismatch"/> when the registration
     /// names ES384, and authenticates when it names ES256.
-    /// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.1">RFC 8725 section 3.1</see>:
-    /// "Libraries MUST enable the caller to specify a supported set of algorithms and MUST NOT use any
-    /// other algorithms when performing cryptographic operations."
+    /// <see href="https://openid.net/specs/openid-connect-registration-1_0.html#ClientMetadata">OpenID
+    /// Connect Dynamic Client Registration 1.0 section 2</see> on <c>token_endpoint_auth_signing_alg</c>:
+    /// "All Token Requests using these authentication methods from this Client MUST be rejected, if the
+    /// JWT is not signed with this algorithm."
     /// </summary>
     [TestMethod]
     public async Task AnAlgorithmOtherThanTheClientRegisteredIsRefused()
@@ -2111,6 +2112,16 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
 
 
     /// <summary>
+    /// What one run of a validator answered: whether the client authenticated, and the
+    /// <see cref="ClientAssertionAlgorithmFault"/> names of the
+    /// <see cref="OAuthEventNames.ClientAssertionAlgorithmRefused"/> events the validator recorded.
+    /// </summary>
+    /// <param name="IsAuthenticated">Whether the client authenticated.</param>
+    /// <param name="Faults">The recorded fault names in order.</param>
+    private sealed record RecordedValidation(bool IsAuthenticated, string[] Faults);
+
+
+    /// <summary>
     /// Runs <paramref name="validator"/> on <paramref name="assertion"/> inside an activity of this row's
     /// own, so the events the validator records on <see cref="Activity.Current"/> are this call's alone,
     /// and answers the outcome with the <see cref="ClientAssertionAlgorithmFault"/> names of the
@@ -2121,7 +2132,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
     /// <param name="registration">The registration the request claims to be.</param>
     /// <param name="server">The server the request's context is bound to.</param>
     /// <returns>Whether the client authenticated, and the recorded fault names in order.</returns>
-    private async Task<(bool IsAuthenticated, string[] Faults)> ValidateRecordingAlgorithmFaultsAsync(
+    private async Task<RecordedValidation> ValidateRecordingAlgorithmFaultsAsync(
         ValidateClientCredentialsDelegate validator, string assertion, ClientRecord registration, EndpointServer server)
     {
         using Activity call = new(nameof(ValidateRecordingAlgorithmFaultsAsync));
@@ -2137,7 +2148,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             .Select(activityEvent => activityEvent.Tags.Single(tag => string.Equals(
                 tag.Key, OAuthEventNames.ClientAssertionAlgorithmFaultTagName, StringComparison.Ordinal)).Value?.ToString() ?? string.Empty)];
 
-        return (isAuthenticated, faults);
+        return new RecordedValidation(isAuthenticated, faults);
     }
 
 
@@ -2162,6 +2173,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             [WellKnownJwkMemberNames.Kid] = SigningKeyId,
             [WellKnownJoseHeaderNames.Typ] = WellKnownJwkValues.TypeJwt
         };
+
         string headerSegment = TestSetup.Base64UrlEncoder(JsonSerializer.SerializeToUtf8Bytes(header));
         byte[] signingInput = Encoding.ASCII.GetBytes($"{headerSegment}.{segments[1]}");
         using Signature signature = await signingKey.SignAsync(signingInput, BaseMemoryPool.Shared).ConfigureAwait(false);

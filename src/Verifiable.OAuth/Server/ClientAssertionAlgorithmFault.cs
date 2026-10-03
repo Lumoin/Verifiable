@@ -27,6 +27,10 @@ public enum ClientAssertionAlgorithmFault
     /// <summary>
     /// The client's registered metadata names a <c>token_endpoint_auth_signing_alg</c> and the
     /// assertion names another.
+    /// <see href="https://openid.net/specs/openid-connect-registration-1_0.html#ClientMetadata">OpenID
+    /// Connect Dynamic Client Registration 1.0 section 2</see>: "All Token Requests using these
+    /// authentication methods from this Client MUST be rejected, if the JWT is not signed with this
+    /// algorithm."
     /// </summary>
     RegisteredAlgorithmMismatch,
 

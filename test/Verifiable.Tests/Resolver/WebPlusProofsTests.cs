@@ -1,5 +1,8 @@
+using System.Buffers.Text;
+using System.Text;
 using Verifiable.Core.Did.Methods.WebPlus;
 using Verifiable.Cryptography;
+using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -229,11 +232,13 @@ internal sealed class WebPlusProofsTests
     public async Task RejectsAProofWhoseAlgIsNotTheAlgorithmOfItsKey()
     {
         string[] segments = Proof.Split('.');
-        string headerJson = System.Text.Encoding.UTF8.GetString(System.Buffers.Text.Base64Url.DecodeFromChars(segments[0]));
-        string rewrittenHeaderJson = headerJson.Replace("\"alg\":\"Ed25519\"", "\"alg\":\"ES256\"", StringComparison.Ordinal);
+        string headerJson = Encoding.UTF8.GetString(Base64Url.DecodeFromChars(segments[0]));
+        string ed25519Member = $"\"{WellKnownJoseHeaderNames.Alg}\":\"{WellKnownJwaValues.Ed25519}\"";
+        string es256Member = $"\"{WellKnownJoseHeaderNames.Alg}\":\"{WellKnownJwaValues.Es256}\"";
+        string rewrittenHeaderJson = headerJson.Replace(ed25519Member, es256Member, StringComparison.Ordinal);
         Assert.AreNotEqual(headerJson, rewrittenHeaderJson, "The worked example's header names Ed25519.");
 
-        string rewrittenProof = $"{Base64UrlEncoder(System.Text.Encoding.UTF8.GetBytes(rewrittenHeaderJson))}..{segments[2]}";
+        string rewrittenProof = $"{Base64UrlEncoder(Encoding.UTF8.GetBytes(rewrittenHeaderJson))}..{segments[2]}";
         string document = NonRootDidDocument.Replace(Proof, rewrittenProof, StringComparison.Ordinal);
 
         string? error = await VerifyAsync(document, NonRootSelfHash).ConfigureAwait(false);
