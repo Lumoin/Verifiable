@@ -150,6 +150,17 @@ namespace Verifiable.JCose
         /// </remarks>
         public static string EdDsa { get; } = Utf8Constants.ToInternedString(EdDsaUtf8);
 
+        /// <summary>The UTF-8 source literal of <see cref="Ed25519"/>.</summary>
+        public static ReadOnlySpan<byte> Ed25519Utf8 => "Ed25519"u8;
+
+        /// <summary>
+        /// EdDSA over Ed25519, fully specified: the algorithm
+        /// <see href="https://www.rfc-editor.org/rfc/rfc9864#section-2.2">RFC 9864 Section 2.2</see>
+        /// defines and the JSON Web Signature and Encryption Algorithms registry describes as "EdDSA using
+        /// the Ed25519 parameter set in Section 5.1 of [RFC8032]".
+        /// </summary>
+        public static string Ed25519 { get; } = Utf8Constants.ToInternedString(Ed25519Utf8);
+
 
         /// <summary>The UTF-8 source literal of <see cref="Ecdha"/>.</summary>
         public static ReadOnlySpan<byte> EcdhaUtf8 => "ECDH-ES"u8;
@@ -394,6 +405,17 @@ namespace Verifiable.JCose
         public static bool IsEdDsa(string alg)
         {
             return Equals(EdDsa, alg);
+        }
+
+
+        /// <summary>
+        /// If <paramref name="alg"/> is <see cref="Ed25519"/> or not.
+        /// </summary>
+        /// <param name="alg">The algorithm.</param>
+        /// <returns><see langword="true" /> if <paramref name="alg"/> is <see cref="Ed25519"/>; otherwise, <see langword="false" />.</returns>
+        public static bool IsEd25519(string alg)
+        {
+            return Equals(Ed25519, alg);
         }
 
 
