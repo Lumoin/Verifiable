@@ -5802,7 +5802,7 @@ public static class AuthCodeEndpoints
             || authorization.Audience is { Count: > 1 }
             || (authorization.SubjectIdentifier is { } chosenIdentifier && !chosenIdentifier.IsWellFormed())
             || (authorization.Resource is { Count: > 0 } chosenResources
-                && chosenResources.Any(static chosenResource => !ResourceIndicatorSyntax.IsAbsoluteResourceIndicator(chosenResource)))
+                && chosenResources.Any(static chosenResource => !ResourceIndicator.Parse(chosenResource).IsSuccess))
             || (authorization.Scope is { Length: > 0 } chosenScope && !ScopeTokenSyntax.IsScopeList(chosenScope))
             || (authorization.Tenant is { Length: > 0 } chosenTenant && string.IsNullOrWhiteSpace(chosenTenant))
             || (authorization.AudienceTenant is { Length: > 0 } chosenAudienceTenant && string.IsNullOrWhiteSpace(chosenAudienceTenant))
