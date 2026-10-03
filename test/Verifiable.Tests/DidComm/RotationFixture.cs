@@ -426,6 +426,51 @@ internal sealed class RotationFixture: IAsyncDisposable
     }
 
 
+    /// <summary>
+    /// Builds a resolver that answers, for the prior DID, a document whose authentication method under the
+    /// prior <c>kid</c> carries a fresh X25519 key agreement public key in place of the prior DID's Ed25519
+    /// public key. The <c>kid</c> is authorized for authentication, so the rotation reaches the signature
+    /// check, and the method reads as the pair (X25519, key agreement), for which no signature verification
+    /// is served. Every other DID resolves through <see cref="KeyDidResolver"/>.
+    /// </summary>
+    /// <param name="cancellationToken">The token the document build observes.</param>
+    /// <returns>The resolver the unpack uses in place of the fixture's own.</returns>
+    public async ValueTask<DidResolver> BuildKeyAgreementAuthenticationPriorResolverAsync(CancellationToken cancellationToken)
+    {
+        (_, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyAgreementMaterial, DidDocument keyAgreementDocument) =
+            await CreateX25519DidAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        keyAgreementMaterial.PublicKey.Dispose();
+        keyAgreementMaterial.PrivateKey.Dispose();
+
+        VerificationMethod keyAgreementMethod = keyAgreementDocument.GetLocalKeyAgreementMethods()[0];
+        var priorMethod = new VerificationMethod
+        {
+            Id = PriorKid,
+            Type = keyAgreementMethod.Type,
+            Controller = PriorDid,
+            KeyFormat = keyAgreementMethod.KeyFormat
+        };
+
+        var keyAgreementPriorDocument = new DidDocument
+        {
+            Id = PriorDocument.Id,
+            Context = PriorDocument.Context,
+            VerificationMethod = [priorMethod],
+            Authentication = [new AuthenticationMethod(PriorKid)]
+        };
+
+        DidMethodResolverDelegate keyResolver = KeyDidResolver.Build(Pool);
+
+        return new DidResolver(DidMethodSelectors.FromResolvers(
+            (WellKnownDidMethodPrefixes.KeyDidMethodPrefix,
+                (did, options, exchangeContext, resolveCancellationToken) =>
+                    string.Equals(did, PriorDid, StringComparison.Ordinal)
+                        ? ValueTask.FromResult(DidResolutionResult.Success(keyAgreementPriorDocument, DidDocumentMetadata.Empty))
+                        : keyResolver(did, options, exchangeContext, resolveCancellationToken))));
+    }
+
+
     //Mints a fresh did:key X25519 (key-agreement) DID and returns its keyAgreement kid, the keypair, and
     //the built document.
     private async ValueTask<(string Kid, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> Keys, DidDocument Document)> CreateX25519DidAsync(CancellationToken cancellationToken)

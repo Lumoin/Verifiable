@@ -867,15 +867,37 @@ namespace Verifiable.JCose
         };
 
 
-        //Decodes a base64url-encoded multibase payload into pooled memory, mirroring the shape the
-        //base58 DecodeDelegate produces (the full multicodec-prefixed key bytes).
+        /// <summary>
+        /// Decodes the base64url payload of a <c>u</c> multibase public key into pooled memory, the shape the base58
+        /// <see cref="DecodeDelegate"/> produces (the full multicodec-prefixed public key octets). It keeps the
+        /// <see cref="DecodeDelegate"/> contract: a payload that is empty or of one character, which no octet
+        /// sequence of one octet or more encodes to, a payload that is not base64url, and one that decodes to no
+        /// octets (white space alone, which the .NET decoder skips) are refused with <see cref="FormatException"/>
+        /// before any buffer of no octets is rented
+        /// (<see href="https://www.rfc-editor.org/rfc/rfc7515#section-2">RFC 7515 Section 2</see>: "Note that the
+        /// base64url encoding of the empty octet sequence is the empty string.").
+        /// </summary>
+        /// <param name="payload">The characters after the <c>u</c> prefix.</param>
+        /// <param name="memoryPool">The pool the decoded octets are rented from.</param>
+        /// <returns>The decoded octets, exactly as many as the payload encodes.</returns>
+        /// <exception cref="FormatException">Thrown when the payload decodes to no octet sequence of one octet or more.</exception>
         private static IMemoryOwner<byte> DecodeBase64UrlPayload(ReadOnlySpan<char> payload, BaseMemoryPool memoryPool)
         {
             int maxLength = System.Buffers.Text.Base64Url.GetMaxDecodedLength(payload.Length);
+            if(maxLength == 0)
+            {
+                throw new FormatException("The base64url 'u' multibase payload encodes no octets.");
+            }
+
             using IMemoryOwner<byte> buffer = memoryPool.Rent(maxLength);
             if(System.Buffers.Text.Base64Url.DecodeFromChars(payload, buffer.Memory.Span, out _, out int bytesWritten) != System.Buffers.OperationStatus.Done)
             {
                 throw new FormatException("The base64url 'u' multibase payload is not valid base64url.");
+            }
+
+            if(bytesWritten == 0)
+            {
+                throw new FormatException("The base64url 'u' multibase payload encodes no octets.");
             }
 
             IMemoryOwner<byte> exact = memoryPool.Rent(bytesWritten);

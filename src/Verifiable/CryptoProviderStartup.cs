@@ -69,7 +69,8 @@ internal static class CryptoProviderStartup
     /// resolves from a COSE_Key's <c>alg</c> parameter. RSA-2048/4096 signing and EdDSA (Ed25519)
     /// verification are not wired here — RSA signing has no CLI caller yet, and EdDSA verification
     /// needs an Ed25519 backend (<c>Verifiable.Libsodium</c> or <c>Verifiable.BouncyCastle</c>) that this
-    /// project does not currently reference.
+    /// project does not reference. Each matcher's last arm answers <see langword="null"/> for a pair
+    /// this backend does not serve, as <see cref="PatternMatcher{T, TDiscriminator1, TDiscriminator2}"/> states.
     /// </summary>
     /// <param name="timeProvider">The composition root's clock, captured into every registered signing and verification closure.</param>
     private static void RegisterSigningAndVerification(TimeProvider timeProvider)
@@ -87,8 +88,7 @@ internal static class CryptoProviderStartup
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P521) && p.Equals(Purpose.Signing) =>
                         (privateKeyBytes, dataToSign, signaturePool, context, cancellationToken) =>
                             MicrosoftCryptographicFunctions.SignP521Async(privateKeyBytes, dataToSign, signaturePool, timeProvider, context, cancellationToken),
-                    _ => throw new ArgumentException(
-                        $"No signing function registered for '{algorithm}', '{purpose}' with qualifier '{qualifier}'.")
+                    _ => null
                 },
             (algorithm, purpose, qualifier) =>
                 (algorithm, purpose) switch
@@ -126,8 +126,7 @@ internal static class CryptoProviderStartup
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha512Pss) && p.Equals(Purpose.Verification) =>
                         (dataToVerify, signature, publicKeyMaterial, context, cancellationToken) =>
                             MicrosoftCryptographicFunctions.VerifyRsaSha512PssAsync(dataToVerify, signature, publicKeyMaterial, timeProvider, context, cancellationToken),
-                    _ => throw new ArgumentException(
-                        $"No verification function registered for '{algorithm}', '{purpose}' with qualifier '{qualifier}'.")
+                    _ => null
                 });
     }
 

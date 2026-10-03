@@ -116,7 +116,12 @@ internal static class TestSetup
             : null;
 
 
-    /// <summary>Base64url decoder using built-in .NET APIs.</summary>
+    /// <summary>
+    /// Base64url decoder using built-in .NET APIs. It keeps the <see cref="DecodeDelegate"/> contract: input it
+    /// cannot decode, a single character and a non-empty input that decodes to no octets are refused with
+    /// <see cref="FormatException"/>, and no buffer of no octets is rented; it accepts padding and skips white space
+    /// as the .NET decoder does.
+    /// </summary>
     public static DecodeDelegate Base64UrlDecoder { get; } = (source, pool) =>
     {
         if(source.Length == 0)
@@ -124,7 +129,14 @@ internal static class TestSetup
             throw new ArgumentException("Encoded input cannot be empty.", nameof(source));
         }
 
+        //One base64url character carries six bits, no whole octet: no base64url decodes from it, so it is
+        //refused as the decoder refuses every input it cannot decode, before a zero-length rental.
         int maxDecodedLength = Base64Url.GetMaxDecodedLength(source.Length);
+        if(maxDecodedLength == 0)
+        {
+            throw new FormatException("Base64Url decoding failed.");
+        }
+
         var buffer = pool.Rent(maxDecodedLength);
 
         bool success;
@@ -139,7 +151,10 @@ internal static class TestSetup
             throw;
         }
 
-        if(!success)
+        //A non-empty source that decodes to no octets (white space alone, which the .NET decoder skips) encodes
+        //no octet sequence, since the encoding of the empty sequence is the empty string; it is refused as the
+        //decoder refuses every input it cannot decode, before a zero-length rental.
+        if(!success || bytesWritten == 0)
         {
             buffer.Dispose();
             throw new FormatException("Base64Url decoding failed.");
@@ -239,8 +254,7 @@ internal static class TestSetup
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.BrainpoolP320r1) && p.Equals(Purpose.Signing) => BouncyCastleCryptographicFunctionsAdapter.SignBrainpoolP320r1Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.BrainpoolP384r1) && p.Equals(Purpose.Signing) => BouncyCastleCryptographicFunctionsAdapter.SignBrainpoolP384r1Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.BrainpoolP512r1) && p.Equals(Purpose.Signing) => BouncyCastleCryptographicFunctionsAdapter.SignBrainpoolP512r1Async,
-                    _ => throw new ArgumentException(
-                        $"No signing function registered for '{algorithm}', '{purpose}' with qualifier '{qualifier}'.")
+                    _ => null
                 };
             },
             (algorithm, purpose, qualifier) =>
@@ -268,8 +282,7 @@ internal static class TestSetup
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.BrainpoolP320r1) && p.Equals(Purpose.Verification) => BouncyCastleCryptographicFunctionsAdapter.VerifyBrainpoolP320r1Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.BrainpoolP384r1) && p.Equals(Purpose.Verification) => BouncyCastleCryptographicFunctionsAdapter.VerifyBrainpoolP384r1Async,
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.BrainpoolP512r1) && p.Equals(Purpose.Verification) => BouncyCastleCryptographicFunctionsAdapter.VerifyBrainpoolP512r1Async,
-                    _ => throw new ArgumentException(
-                        $"No verification function registered for '{algorithm}', '{purpose}' with qualifier '{qualifier}'.")
+                    _ => null
                 };
             });
     }

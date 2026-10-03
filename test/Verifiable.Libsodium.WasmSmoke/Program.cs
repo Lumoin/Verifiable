@@ -42,7 +42,7 @@ try
                 (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Ed25519) && p.Equals(Purpose.Signing) =>
                     (privateKeyBytes, dataToSign, signaturePool, context, cancellationToken) =>
                         LibsodiumCryptographicFunctions.SignEd25519Async(privateKeyBytes, dataToSign, signaturePool, timeProvider, context, cancellationToken),
-                _ => throw new ArgumentException($"No signing function registered for '{algorithm}', '{purpose}' with qualifier '{qualifier}'.")
+                _ => null
             },
         (CryptoAlgorithm algorithm, Purpose purpose, string? qualifier) =>
             (algorithm, purpose) switch
@@ -50,7 +50,7 @@ try
                 (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Ed25519) && p.Equals(Purpose.Verification) =>
                     (dataToVerify, signature, publicKeyMaterial, context, cancellationToken) =>
                         LibsodiumCryptographicFunctions.VerifyEd25519Async(dataToVerify, signature, publicKeyMaterial, timeProvider, context, cancellationToken),
-                _ => throw new ArgumentException($"No verification function registered for '{algorithm}', '{purpose}' with qualifier '{qualifier}'.")
+                _ => null
             });
 
     KeyCreationFunctionRegistry<CryptoAlgorithm, Purpose>.Initialize(

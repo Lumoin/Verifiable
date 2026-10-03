@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.Cryptography;
 
@@ -117,8 +118,18 @@ public delegate ValueTask<(bool IsVerified, CryptoEvent? Event)> VerificationDel
 /// <param name="algorithm">The cryptographic algorithm.</param>
 /// <param name="purpose">The purpose of the operation.</param>
 /// <param name="qualifier">Optional qualifier for backend selection or other routing decisions.</param>
-/// <returns>A delegate that performs the cryptographic operation.</returns>
-public delegate T PatternMatcher<T, TDiscriminator1, TDiscriminator2>(
+/// <returns>
+/// A delegate that performs the cryptographic operation, or <see langword="null"/> for a pair the backend does
+/// not serve.
+/// </returns>
+/// <remarks>
+/// A <see langword="null"/> answer names a pair the backend does not serve, and a matcher never throws for
+/// such a pair: the pair can come from presented input (a public key a verifier reads from a token header), and
+/// <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}.TryResolveVerification"/> turns the
+/// <see langword="null"/> into a "no function" answer the verifier refuses with. A matcher's last arm answers
+/// <see langword="null"/>; a matcher that throws for an unserved pair faults its caller instead.
+/// </remarks>
+public delegate T? PatternMatcher<T, TDiscriminator1, TDiscriminator2>(
     TDiscriminator1 algorithm,
     TDiscriminator2 purpose,
     string? qualifier = null) where T : Delegate;
@@ -133,6 +144,26 @@ public delegate T PatternMatcher<T, TDiscriminator1, TDiscriminator2>(
 /// functions. It enables format-independent cryptographic operations where the same high-level
 /// code can work with different backends (BouncyCastle, Microsoft CNG, Libsodium, TPM) based on
 /// runtime configuration.
+/// </para>
+/// <para>
+/// <strong>An unserved pair is a value.</strong> A registered <see cref="PatternMatcher{T, TDiscriminator1, TDiscriminator2}"/>
+/// answers <see langword="null"/> for an (algorithm, purpose) pair its backend does not serve.
+/// <see cref="TryResolveVerification"/> answers <see langword="false"/> for such a pair and for a registry
+/// that has not been initialized, so a verifier whose pair comes from presented input (a public key read from
+/// a token header) and that resolves through it refuses the input as not verified:
+/// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.3">RFC 8725 Section 3.3</see> says "All
+/// cryptographic operations used in the JWT MUST be validated and the entire JWT MUST be rejected if any of
+/// them fail to validate."
+/// </para>
+/// <para>
+/// <see cref="ResolveSigning"/> and <see cref="ResolveVerification"/> take the pair as the caller's argument
+/// and throw <see cref="ArgumentException"/> naming the algorithm, the purpose and the qualifier when the
+/// matcher answers <see langword="null"/>. A caller that resolves a pair read from presented input through
+/// <see cref="ResolveVerification"/> fails closed only where it catches that <see cref="ArgumentException"/>,
+/// which is why the type is <see cref="ArgumentException"/>. A registry that has not been initialized makes
+/// both throw <see cref="InvalidOperationException"/>: that is the deployment's composition, never input.
+/// An application's matcher that throws for an unserved pair faults every caller, a verifier of presented
+/// input through <see cref="TryResolveVerification"/> included; its last arm answers <see langword="null"/>.
 /// </para>
 /// </remarks>
 /// <typeparam name="TDiscriminator1">First discriminator type, typically <see cref="Context.CryptoAlgorithm"/>.</typeparam>
@@ -188,6 +219,10 @@ public static class CryptoFunctionRegistry<TDiscriminator1, TDiscriminator2>
     /// <param name="qualifier">Optional qualifier for backend selection.</param>
     /// <returns>A delegate that performs the signing operation.</returns>
     /// <exception cref="InvalidOperationException">Thrown if the registry has not been initialized.</exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when the registered matcher answers <see langword="null"/> for the pair: the pair is the
+    /// caller's argument, and the message names the algorithm, the purpose and the qualifier.
+    /// </exception>
     public static SigningDelegate ResolveSigning(TDiscriminator1 algorithm, TDiscriminator2 purpose, string? qualifier = null)
     {
         if(SigningMatcher == null)
@@ -197,7 +232,9 @@ public static class CryptoFunctionRegistry<TDiscriminator1, TDiscriminator2>
                 "Call CryptoFunctionRegistry.Initialize() during application startup.");
         }
 
-        return SigningMatcher(algorithm, purpose, qualifier);
+        return SigningMatcher(algorithm, purpose, qualifier)
+            ?? throw new ArgumentException(
+                $"No signing function is registered for algorithm '{algorithm}', purpose '{purpose}' and qualifier '{qualifier}'.");
     }
 
 
@@ -208,7 +245,17 @@ public static class CryptoFunctionRegistry<TDiscriminator1, TDiscriminator2>
     /// <param name="purpose">The purpose of the operation.</param>
     /// <param name="qualifier">Optional qualifier for backend selection.</param>
     /// <returns>A delegate that performs the verification operation.</returns>
+    /// <remarks>
+    /// The pair is the caller's argument. A verifier of presented input resolves through
+    /// <see cref="TryResolveVerification"/>, which answers an unserved pair as a value; a caller that resolves
+    /// a pair read from presented input through this member fails closed only where it catches the
+    /// <see cref="ArgumentException"/> this member throws for an unserved pair.
+    /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown if the registry has not been initialized.</exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when the registered matcher answers <see langword="null"/> for the pair; the message names the
+    /// algorithm, the purpose and the qualifier.
+    /// </exception>
     public static VerificationDelegate ResolveVerification(TDiscriminator1 algorithm, TDiscriminator2 purpose, string? qualifier = null)
     {
         if(VerificationMatcher == null)
@@ -218,7 +265,43 @@ public static class CryptoFunctionRegistry<TDiscriminator1, TDiscriminator2>
                 "Call CryptoFunctionRegistry.Initialize() during application startup.");
         }
 
-        return VerificationMatcher(algorithm, purpose, qualifier);
+        return VerificationMatcher(algorithm, purpose, qualifier)
+            ?? throw new ArgumentException(
+                $"No verification function is registered for algorithm '{algorithm}', purpose '{purpose}' and qualifier '{qualifier}'.");
+    }
+
+
+    /// <summary>
+    /// Resolves a verification function for the specified algorithm and purpose when the registered
+    /// matcher serves the pair, answering a pair it does not serve as a value rather than a fault.
+    /// </summary>
+    /// <param name="algorithm">The cryptographic algorithm.</param>
+    /// <param name="purpose">The purpose of the operation.</param>
+    /// <param name="verification">
+    /// The function that performs the verification when the pair is served; otherwise <see langword="null"/>.
+    /// </param>
+    /// <param name="qualifier">Optional qualifier for backend selection.</param>
+    /// <returns>
+    /// <see langword="true"/> when the matcher serves the pair; <see langword="false"/> when it answers
+    /// <see langword="null"/> for the pair or when the registry has not been initialized.
+    /// </returns>
+    /// <remarks>
+    /// The resolution for a verifier whose pair comes from presented input: an unserved pair is an answer the
+    /// verifier refuses the input with, never an exception, so
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.3">RFC 8725 Section 3.3</see>'s rejection is
+    /// the verifier's own outcome. An exception the registered matcher raises is not caught: a matcher that
+    /// throws for an unserved pair faults this caller, which is why a matcher's last arm answers
+    /// <see langword="null"/>.
+    /// </remarks>
+    public static bool TryResolveVerification(
+        TDiscriminator1 algorithm,
+        TDiscriminator2 purpose,
+        [NotNullWhen(true)] out VerificationDelegate? verification,
+        string? qualifier = null)
+    {
+        verification = VerificationMatcher?.Invoke(algorithm, purpose, qualifier);
+
+        return verification is not null;
     }
 
 

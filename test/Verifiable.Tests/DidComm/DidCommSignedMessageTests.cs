@@ -57,6 +57,9 @@ internal sealed class DidCommSignedMessageTests
     private const string AliceKey3PublicX = "aToW5EaTq5mlAf8C5ECYDSkqsJycrW-e1SQ6_GJcAOk";
     private const string AliceKey3PublicY = "JAGX94caA21WKreXwYUaOCYTBMrqaX4KWIlsQZTHWCk";
 
+    /// <summary>Alice's Appendix A.1 X25519 key agreement public coordinate (her <c>key-x25519-1</c> <c>x</c>).</summary>
+    private static string AliceX25519PublicX { get; } = "avH0O2Y4tqLAq8y9zpianr8ajii5m4F_mICrzNlatXs";
+
 
     /// <summary>
     /// The three DIDComm v2.1 Appendix C.2 signed vectors (EdDSA / ES256 / ES256K) verify against
@@ -745,6 +748,48 @@ internal sealed class DidCommSignedMessageTests
         {
             Id = new GenericDidMethod("did:example:alice"),
             VerificationMethod = [key],
+            Authentication = [new AuthenticationMethod(EdDsaKid)]
+        };
+    }
+
+
+    /// <summary>
+    /// A signer whose DID document lists, as the authentication method the signature's <c>kid</c> names,
+    /// an X25519 key agreement public key is rejected with
+    /// <see cref="DidCommSignatureVerificationError.SignerResolutionFailed"/>, and nothing is raised: no
+    /// signature verification is served for a key agreement public key, so the signature cannot be
+    /// verified under that method. The DID document is the signer's own and reached through the presented
+    /// <c>kid</c>, so its shape is presented input. A signed DIDComm message is a JWS, and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7515#section-5.2">RFC 7515 Section 5.2</see> says "If any of
+    /// the listed steps fails, then the signature or MAC cannot be validated."; its step 8 validates the JWS
+    /// Signature in the way the algorithm in use defines, and an X25519 key agreement public key serves no
+    /// signature algorithm.
+    /// </summary>
+    [TestMethod]
+    public async Task AuthenticationMethodCarryingKeyAgreementPublicKeyFailsSignerResolution()
+    {
+        using DidCommSignedMessage signed = GeneralJsonSigned(EdDsaProtectedBase64Url, EdDsaSignatureBase64Url, EdDsaKid);
+
+        DidCommSignedVerificationResult result = await UnpackAsync(signed, CreateResolver(CreateAliceDidDocumentKeyAgreementAuthenticationMethod())).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsVerified, "A signer method carrying a key agreement public key MUST NOT verify and MUST NOT throw.");
+        Assert.AreEqual(DidCommSignatureVerificationError.SignerResolutionFailed, result.Error);
+        Assert.IsNull(result.Message, "Fail-closed: a signer method that cannot verify a signature yields no message.");
+    }
+
+
+    /// <summary>
+    /// Alice's document whose <c>key-1</c> authentication method is a JsonWebKey2020 carrying her
+    /// Appendix A.1 X25519 key agreement public key (<c>key-x25519-1</c>), so the signer's method reads as
+    /// the pair (X25519, key agreement), for which no signature verification is served.
+    /// </summary>
+    /// <returns>The DID document the resolver answers for <c>did:example:alice</c>.</returns>
+    private static DidDocument CreateAliceDidDocumentKeyAgreementAuthenticationMethod()
+    {
+        return new DidDocument
+        {
+            Id = new GenericDidMethod("did:example:alice"),
+            VerificationMethod = [VerificationMethodFor(EdDsaKid, "OKP", "X25519", "ECDH-ES", AliceX25519PublicX, publicKeyY: null)],
             Authentication = [new AuthenticationMethod(EdDsaKid)]
         };
     }

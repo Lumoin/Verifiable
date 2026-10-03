@@ -23,9 +23,30 @@ public delegate string EncodeDelegate(ReadOnlySpan<byte> data);
 /// <param name="pool">The memory pool to use for allocating the result buffer.</param>
 /// <returns>An owned memory buffer containing the decoded bytes.</returns>
 /// <remarks>
+/// <para>
 /// This delegate requires implementations to handle buffer size calculation and allocation
 /// from the provided memory pool. The caller is responsible for disposing the returned
 /// <see cref="IMemoryOwner{T}"/> to return the buffer to the pool.
+/// </para>
+/// <para>
+/// A decoder refuses encoded input it cannot decode with <see cref="FormatException"/>: a character it does not
+/// read and a length no encoding has. A base64url decoder also refuses a non-empty input that decodes to no octets
+/// (<see href="https://www.rfc-editor.org/rfc/rfc7515#section-2">RFC 7515 Section 2</see>: "Note that the
+/// base64url encoding of the empty octet sequence is the empty string.") and never rents a buffer of no octets
+/// from <paramref name="pool"/>; that rule is stated for base64url, and this file's two adapters of a
+/// <see cref="SimpleDecodeDelegate"/> for the base58btc multibase form rent as many octets as the simple decoder
+/// answers. A caller that decodes presented input answers the refusal as malformed input. Any other exception a
+/// decoder raises is the decoder's own fault, not a property of the input, and propagates to the caller.
+/// </para>
+/// <para>
+/// The throwing .NET <c>Base64Url</c> overloads (<c>DecodeFromChars</c> returning the octets, and
+/// <c>TryDecodeFromChars</c>) accept the padding character <c>=</c>, skip white space, and refuse a character
+/// outside the alphabet and a length of 1 modulo 4 with <see cref="FormatException"/>; the overload that answers
+/// an <c>OperationStatus</c> answers <c>InvalidData</c> instead. A decoder built on them reads one octet sequence
+/// from several spellings. A caller that holds presented input to one spelling checks the form itself before it
+/// decodes: the compact JWS verify bodies of <c>Jws</c> refuse padding, white space, any character outside the
+/// unpadded base64url alphabet and a set bit that carries no octet before any decoder runs.
+/// </para>
 /// </remarks>
 public delegate IMemoryOwner<byte> DecodeDelegate(ReadOnlySpan<char> source, BaseMemoryPool pool);
 
