@@ -1264,6 +1264,63 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
 
 
     /// <summary>
+    /// A client whose Ed25519 key signs an assertion naming the fully-specified <c>Ed25519</c>
+    /// authenticates, whether no hold is stated or the server, the registration and the key each name
+    /// <c>Ed25519</c>: the name is an algorithm of the Ed25519 key as <c>EdDSA</c> is, so no hold refuses
+    /// it. <see href="https://www.rfc-editor.org/rfc/rfc9864#section-4.1.1">RFC 9864 section 4.1.1</see>
+    /// registers <c>Ed25519</c> as "EdDSA using the Ed25519 parameter set in Section 5.1 of [RFC8032]".
+    /// </summary>
+    /// <param name="isEveryHoldStated">Whether the server, the registration and the key each name <c>Ed25519</c>.</param>
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task AnAssertionNamingTheFullySpecifiedEd25519AuthenticatesUnderAnEd25519Key(bool isEveryHoldStated)
+    {
+        await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> clientKeys =
+            TestKeyMaterialProvider.CreateEd25519KeyMaterial();
+        try
+        {
+            ClientRecord registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
+
+            if(isEveryHoldStated)
+            {
+                await StateClientAssertionAlgorithmsAsync(app.Server, [WellKnownJwaValues.Ed25519], isStatedByTheHostsResolution: false).ConfigureAwait(false);
+
+                registration = registration with
+                {
+                    ClientJwks = BuildJwksJson((JwkNamingAlgorithm(clientKeys.PublicKey, WellKnownJwaValues.Ed25519), SigningKeyId)),
+                    RegisteredMetadata = new ClientMetadata { TokenEndpointAuthSigningAlg = WellKnownJwaValues.Ed25519 }
+                };
+            }
+
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator();
+
+            string assertion = await SignAssertionAsync(
+                app.Server, registration.ClientId, registration.IssuerUri!.OriginalString, clientKeys.PrivateKey)
+                .ConfigureAwait(false);
+
+            string ed25519Assertion = await SignUnderHeaderAlgorithmAsync(
+                assertion, WellKnownJwaValues.Ed25519, clientKeys.PrivateKey).ConfigureAwait(false);
+
+            (bool isAuthenticated, string[] faults) = await ValidateRecordingAlgorithmFaultsAsync(
+                validator, ed25519Assertion, registration, app.Server).ConfigureAwait(false);
+
+            Assert.IsTrue(isAuthenticated, $"An Ed25519 client signing Ed25519 must authenticate; it was refused as [{string.Join(", ", faults)}].");
+            Assert.IsEmpty(faults);
+        }
+        finally
+        {
+            clientKeys.PublicKey.Dispose();
+            clientKeys.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
     /// An RSA assertion must verify under the registered modulus AND public exponent. Changing only
     /// the registered exponent leaves no registered key that verifies the original signature. A
     /// success carrying that registration's kid would therefore misidentify the key that verified it.
