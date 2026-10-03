@@ -184,7 +184,9 @@ internal sealed class AttachmentDataResolutionTests
 
         bool pinned = false;
         bool dialed = false;
-        async ValueTask<OutboundResponse> transport(OutboundRequest request, ExchangeContext context, CancellationToken cancellationToken)
+
+        //Checks resolved addresses before offering an attachment response to the guarded reader.
+        async ValueTask<OutboundTransportResult> transport(OutboundRequest request, ExchangeContext context, OutboundResponseReaderDelegate readResponse, CancellationToken cancellationToken)
         {
             pinned = true;
 
@@ -194,7 +196,7 @@ internal sealed class AttachmentDataResolutionTests
                 request.Target.Host, context.OutboundFetchPolicy, rebindToLoopback, cancellationToken).ConfigureAwait(false);
             dialed = true;
 
-            return new OutboundResponse { StatusCode = 200 };
+            return await ScriptedOutboundTransport.ReadAsync(readResponse, new OutboundResponse { StatusCode = 200 }, cancellationToken).ConfigureAwait(false);
         }
 
         byte[] content = "internal secret"u8.ToArray();
@@ -494,7 +496,7 @@ transport,
         //The hash commits to the oversized body, so only the size bound (not a hash mismatch) rejects it.
         FakeTransport transport = new(new() { [Url] = (200, oversized) });
 
-        var data = new AttachmentData
+        AttachmentData data = new()
         {
             Hash = MultibaseSha256Multihash(oversized),
             Links = [Url]
@@ -503,7 +505,8 @@ transport,
         using AttachmentResolutionResult result = await ResolveAsync(data, OutboundFetchPolicy.SecureDefault, transport);
 
         Assert.IsFalse(result.IsResolved, "An over-bound fetched body MUST fail closed.");
-        Assert.AreEqual(AttachmentResolutionError.AllLinksFailed, result.Error);
+        Assert.AreEqual(AttachmentResolutionError.TooLarge, result.Error);
+        Assert.AreEqual(new OutboundResponseTooLarge(AttachmentDataResolutionExtensions.MaximumFetchedAttachmentLength, oversized.Length, OutboundResponseLengthKind.Observed), result.TooLarge);
         Assert.IsTrue(result.Payload.IsEmpty, "An over-bound body MUST NOT be returned.");
         Assert.HasCount(1, transport.Calls);
     }
@@ -605,7 +608,7 @@ transport,
         //so a caller that never sets an entry here sees the same header-less OutboundResponse as before.
         public Dictionary<string, HttpHeaderSet> ResponseHeaders { get; } = new(StringComparer.Ordinal);
 
-        public OutboundTransportDelegate Delegate => (request, context, cancellationToken) =>
+        public OutboundTransportDelegate Delegate => (request, context, readResponse, cancellationToken) =>
         {
             Calls.Add(request);
 
@@ -623,12 +626,12 @@ transport,
                 ? configuredHeaders
                 : HttpHeaderSet.Empty;
 
-            return ValueTask.FromResult(new OutboundResponse
+            return ScriptedOutboundTransport.ReadAsync(readResponse, new OutboundResponse
             {
                 StatusCode = route.Status,
                 Body = new TaggedMemory<byte>(route.Body, Tag.Empty),
                 Headers = headers
-            });
+            }, cancellationToken);
         };
     }
 }

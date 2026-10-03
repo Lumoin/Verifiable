@@ -60,8 +60,6 @@ public sealed class CardVerifiableCertificate: SensitiveMemory
     private const int RsaModulusTag = 0x81;
     private const int RsaExponentTag = 0x82;
 
-    private const int DerSequenceTag = 0x30;
-    private const int DerIntegerTag = 0x02;
 
     //BSI TR-03110-3 Terminal Authentication public-key OID value bytes (after the 0x06 tag and length),
     //less the final hash/scheme arc. id-TA-ECDSA = 0.4.0.127.0.7.2.2.2.2, id-TA-RSA = 0.4.0.127.0.7.2.2.2.1.
@@ -362,18 +360,11 @@ public sealed class CardVerifiableCertificate: SensitiveMemory
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the returned RsaPublicKey; the catch disposes it on failure.")]
     private static RsaPublicKey EncodeRsaPublicKey(ReadOnlySpan<byte> modulus, ReadOnlySpan<byte> exponent, BaseMemoryPool pool)
     {
-        int modulusContent = DerIntegerContentLength(modulus);
-        int exponentContent = DerIntegerContentLength(exponent);
-        int sequenceContent = BerTlvWriter.ElementSize(DerIntegerTag, modulusContent) + BerTlvWriter.ElementSize(DerIntegerTag, exponentContent);
-        int total = BerTlvWriter.ElementSize(DerSequenceTag, sequenceContent);
-
-        IMemoryOwner<byte> owner = pool.Rent(total);
+        byte[] encoded = RsaPublicKeyEncoding.Encode(modulus, exponent);
+        IMemoryOwner<byte> owner = pool.Rent(encoded.Length);
         try
         {
-            var writer = new BerTlvWriter(owner.Memory.Span[..total]);
-            writer.WriteHeader(DerSequenceTag, sequenceContent);
-            WriteDerInteger(ref writer, modulus, modulusContent);
-            WriteDerInteger(ref writer, exponent, exponentContent);
+            encoded.CopyTo(owner.Memory.Span);
 
             return new RsaPublicKey(owner);
         }
@@ -383,29 +374,6 @@ public sealed class CardVerifiableCertificate: SensitiveMemory
             throw;
         }
     }
-
-
-    /// <summary>
-    /// Writes a DER INTEGER from an unsigned big-endian value, prepending a <c>0x00</c> sign octet when the
-    /// leading bit is set so the value stays positive.
-    /// </summary>
-    private static void WriteDerInteger(ref BerTlvWriter writer, ReadOnlySpan<byte> value, int contentLength)
-    {
-        writer.WriteHeader(DerIntegerTag, contentLength);
-        if(value.Length > 0 && value[0] >= 0x80)
-        {
-            writer.WriteValue([0x00]);
-        }
-
-        writer.WriteValue(value);
-    }
-
-
-    /// <summary>
-    /// The DER INTEGER content length of an unsigned big-endian value — its length plus a sign octet when the leading bit is set.
-    /// </summary>
-    private static int DerIntegerContentLength(ReadOnlySpan<byte> value) =>
-        value.Length + (value.Length > 0 && value[0] >= 0x80 ? 1 : 0);
 
 
     /// <summary>

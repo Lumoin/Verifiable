@@ -13262,7 +13262,9 @@ public static class TpmLifecycleTransitions
             TpmAlgIdConstants.TPM_ALG_ECC when !key.PublicPoint.IsEmpty =>
                 new TpmMakeCredentialAction(request.Credential, request.ObjectName, key.PublicPoint.AsReadOnlyMemory(), key.Curve, TpmiAlgHash.FromValue(TpmAlgIdConstants.TPM_ALG_SHA256)),
             TpmAlgIdConstants.TPM_ALG_RSA when !key.PublicModulus.IsEmpty =>
-                new TpmRsaMakeCredentialAction(request.Credential, request.ObjectName, key.PublicModulus, TpmiAlgHash.FromValue(TpmAlgIdConstants.TPM_ALG_SHA256)),
+                new TpmRsaMakeCredentialAction(
+                    request.Credential, request.ObjectName, key.PublicModulus, key.PublicArea.PublicArea.Parameters.RsaDetail!.Value.EffectiveExponent,
+                    TpmiAlgHash.FromValue(TpmAlgIdConstants.TPM_ALG_SHA256)),
             TpmAlgIdConstants.TPM_ALG_ECC or
             TpmAlgIdConstants.TPM_ALG_RSA or
             TpmAlgIdConstants.TPM_ALG_ERROR or
@@ -25739,7 +25741,8 @@ public static class TpmLifecycleTransitions
                     hasNewParent ? newParent!.KeyType : default,
                     hasNewParent ? newParent!.Curve : default,
                     hasNewParent ? newParent!.PublicPoint.AsReadOnlyMemory() : ReadOnlyMemory<byte>.Empty,
-                    hasNewParent ? newParent!.PublicModulus : Tpm2bPublicKeyRsa.Empty),
+                    hasNewParent ? newParent!.PublicModulus : Tpm2bPublicKeyRsa.Empty,
+                    newParent?.PublicArea.PublicArea.Parameters.RsaDetail?.EffectiveExponent ?? default),
                 ResponseIntent = null
             },
             "Duplicate:Requested");

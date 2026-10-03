@@ -66,6 +66,7 @@ public static class ClientIdMetadataDocuments
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(transport);
         ArgumentNullException.ThrowIfNull(options);
+        cancellationToken.ThrowIfCancellationRequested();
 
         //Step 1 (CIMD-001/002/004/005/006/007/011): Section 3 validation on the raw
         //candidate string — System.Uri normalization would erase exactly the distinctions
@@ -90,23 +91,15 @@ public static class ClientIdMetadataDocuments
             MaxResponseBytes = options.MaximumDocumentBytes
         };
 
-        OutboundFetchResult fetch;
-        try
-        {
-            //Fully qualified: within Verifiable.* the bare name binds to the OutboundFetch
-            //namespace, not the static class of the same leaf name.
-            fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(
-                request, context, transport, cancellationToken).ConfigureAwait(false);
-        }
-        catch(OperationCanceledException)
-        {
-            throw;
-        }
-        catch
+        OutboundFetchResult fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(
+            request, context, transport, cancellationToken).ConfigureAwait(false);
+
+        if(fetch.FailureKind is Type failureKind)
         {
             return new ClientIdMetadataResolution
             {
-                Outcome = ClientIdMetadataResolutionOutcome.FetchFailed,
+                Outcome = ClientIdMetadataResolutionOutcome.Unreachable,
+                FailureKind = failureKind,
                 Defect = "Transport failure while fetching the Client ID Metadata Document."
             };
         }
@@ -114,6 +107,15 @@ public static class ClientIdMetadataDocuments
         //Step 2 (CIMD-001/034/054): a policy denial (special-use IP, disallowed scheme,
         //host list) is distinct from an unfollowed or excessive redirect chain — both are
         //non-fetched, but only the former is a policy denial for the caller's diagnostics.
+        if(fetch.TooLarge is OutboundResponseTooLarge tooLarge)
+        {
+            return new ClientIdMetadataResolution
+            {
+                Outcome = ClientIdMetadataResolutionOutcome.TooLarge,
+                TooLarge = tooLarge
+            };
+        }
+
         if(!fetch.IsFetched || fetch.Response is null)
         {
             return new ClientIdMetadataResolution
@@ -145,17 +147,6 @@ public static class ClientIdMetadataDocuments
             {
                 Outcome = ClientIdMetadataResolutionOutcome.InvalidDocument,
                 Defect = $"The document content type '{contentType}' is not application/json or a +json suffix."
-            };
-        }
-
-        //Step 5 (CIMD-059): the authoritative post-read size check — MaxResponseBytes above
-        //is only a transport hint a hostile or non-conforming transport may not honor.
-        if(response.Body.Length > options.MaximumDocumentBytes)
-        {
-            return new ClientIdMetadataResolution
-            {
-                Outcome = ClientIdMetadataResolutionOutcome.FetchFailed,
-                Defect = "The document exceeds the configured maximum size."
             };
         }
 
@@ -230,10 +221,10 @@ public static class ClientIdMetadataDocuments
         //failure never fails the resolution.
         if(options.PrefetchLogo && resolution.Document!.LogoUri is not null)
         {
-            (ReadOnlyMemory<byte>? logo, string? logoContentType) = await PrefetchLogoAsync(
+            (ReadOnlyMemory<byte>? logo, string? logoContentType, OutboundResponseTooLarge? logoTooLarge, Type? logoFailureKind) = await PrefetchLogoAsync(
                 resolution.Document.LogoUri, options, context, transport, cancellationToken).ConfigureAwait(false);
 
-            resolution = resolution with { PrefetchedLogo = logo, PrefetchedLogoContentType = logoContentType };
+            resolution = resolution with { PrefetchedLogo = logo, PrefetchedLogoContentType = logoContentType, LogoTooLarge = logoTooLarge, LogoFailureKind = logoFailureKind };
         }
 
         //Step 10 (CIMD-030/036/037/038/039/040/061): the document response's own freshness, per
@@ -268,6 +259,7 @@ public static class ClientIdMetadataDocuments
         ArgumentNullException.ThrowIfNull(resolution);
         ArgumentNullException.ThrowIfNull(resolveJwksUri);
         ArgumentNullException.ThrowIfNull(context);
+        cancellationToken.ThrowIfCancellationRequested();
 
         if(resolution.Document is not { JwksUri: Uri jwksUri })
         {
@@ -279,18 +271,18 @@ public static class ClientIdMetadataDocuments
         {
             _ = (Activity.Current?.AddEvent(new ActivityEvent(JwksDiscoveryFailedEventName)));
 
-            return resolution;
+            return resolution with { KeySetResolution = jwksResolution };
         }
 
-        return resolution with { Document = resolution.Document with { Jwks = jwksResolution.Jwks } };
+        return resolution with { Document = resolution.Document with { Jwks = jwksResolution.Jwks }, KeySetResolution = jwksResolution };
     }
 
 
     //Fetches logo_uri through the same guarded policy path (CIMD-054 "URLs contained within"
-    //applies to it exactly as to the document URL itself); every failure mode collapses to
-    //(null, null) rather than a thrown exception, since a prefetch failure is SHOULD-tier and
-    //must never fail the surrounding document resolution.
-    private static async ValueTask<(ReadOnlyMemory<byte>? Logo, string? ContentType)> PrefetchLogoAsync(
+    //applies to it exactly as to the document URL itself). A prefetch failure is nonfatal; size
+    //evidence and transport failure kind remain available on the surrounding resolution.
+    /// <summary>Prefetches an optional logo while retaining a size refusal or transport failure kind.</summary>
+    private static async ValueTask<(ReadOnlyMemory<byte>? Logo, string? ContentType, OutboundResponseTooLarge? TooLarge, Type? FailureKind)> PrefetchLogoAsync(
         Uri logoUri,
         ClientIdMetadataDocumentResolverOptions options,
         ExchangeContext context,
@@ -304,36 +296,28 @@ public static class ClientIdMetadataDocuments
             MaxResponseBytes = options.MaximumLogoBytes
         };
 
-        OutboundFetchResult fetch;
-        try
-        {
-            fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(
-                request, context, transport, cancellationToken).ConfigureAwait(false);
-        }
-        catch(OperationCanceledException)
-        {
-            throw;
-        }
-        catch
+        OutboundFetchResult fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(
+            request, context, transport, cancellationToken).ConfigureAwait(false);
+
+        if(fetch.FailureKind is Type failureKind)
         {
             //A transport-level failure prefetching the logo is fail-soft: the caller treats a null result
-            //as "logo unavailable", cancellation excepted above; recorded via the observability seam.
+            //as "logo unavailable"; the guarded fetch has already handled caller cancellation.
             _ = (Activity.Current?.AddEvent(new ActivityEvent(LogoPrefetchFailedEventName)));
 
-            return (null, null);
+            return (null, null, null, failureKind);
         }
 
-        if(!fetch.IsFetched || fetch.Response is null || fetch.Response.StatusCode != 200
-            || fetch.Response.Body.Length > options.MaximumLogoBytes)
+        if(!fetch.IsFetched || fetch.Response is null || fetch.Response.StatusCode != 200)
         {
             _ = (Activity.Current?.AddEvent(new ActivityEvent(LogoPrefetchFailedEventName)));
 
-            return (null, null);
+            return (null, null, fetch.TooLarge, null);
         }
 
         _ = fetch.Response.Headers.TryGetValue(WellKnownHttpHeaderNames.ContentType, out string? contentType);
 
-        return (fetch.Response.Body.Memory, contentType);
+        return (fetch.Response.Body.Memory, contentType, null, null);
     }
 
 

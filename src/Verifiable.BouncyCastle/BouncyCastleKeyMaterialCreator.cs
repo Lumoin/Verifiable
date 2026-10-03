@@ -684,6 +684,7 @@ public static class BouncyCastleKeyMaterialCreator
     }
 
 
+    /// <summary>Creates an RSA pair, retaining the generated public exponent in its DER public key.</summary>
     private static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> CreateRsaKeys(
         int keySizeInBits,
         BaseMemoryPool memoryPool)
@@ -717,7 +718,7 @@ public static class BouncyCastleKeyMaterialCreator
         var privateKeyParam = (RsaPrivateCrtKeyParameters)keyPair.Private;
 
         byte[] modulusBytes = publicKeyParam.Modulus.ToByteArrayUnsigned();
-        byte[] derEncodedPublicKey = RsaUtilities.Encode(modulusBytes);
+        byte[] derEncodedPublicKey = RsaPublicKeyEncoding.Encode(modulusBytes, publicKeyParam.Exponent.ToByteArrayUnsigned());
         byte[] privateKeyBytes = RsaPrivateKeyStructure.GetInstance(new RsaPrivateKeyStructure(
             privateKeyParam.Modulus,
             privateKeyParam.PublicExponent,

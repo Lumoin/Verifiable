@@ -22,7 +22,7 @@ internal static class TokenEndpointClientOperations
     /// <summary>
     /// Resolves the authorization server's metadata via
     /// <see cref="OAuthClientInfrastructure.ResolveAuthorizationServerMetadataAsync"/>, maps a
-    /// non-<see cref="AuthorizationServerMetadataResolutionOutcome.Resolved"/> outcome to the
+    /// non-<see cref="AuthorizationServerMetadataResolved"/> outcome to the
     /// caller's own <see cref="AuthCodeFlowEndpointResult"/> failure, and otherwise verifies the
     /// resolved <see cref="AuthorizationServerMetadata.Issuer"/> against the pinned
     /// <see cref="ClientRegistration.AuthorizationServerIssuer"/> via
@@ -43,13 +43,13 @@ internal static class TokenEndpointClientOperations
             .ResolveAuthorizationServerMetadataAsync(registration.AuthorizationServerIssuer, context, cancellationToken)
             .ConfigureAwait(false);
 
-        if(!resolution.IsResolved)
+        if(resolution is not AuthorizationServerMetadataResolved resolved)
         {
             return Result<AuthorizationServerMetadata, AuthCodeFlowEndpointResult>.Failure(
                 BuildAuthorizationServerMetadataResolutionFailure(resolution));
         }
 
-        AuthorizationServerMetadata metadata = resolution.Metadata!;
+        AuthorizationServerMetadata metadata = resolved.Metadata;
 
         if(!AuthorizationServerMetadataValidation.IsIssuerMatch(metadata, registration.AuthorizationServerIssuer))
         {
@@ -69,26 +69,16 @@ internal static class TokenEndpointClientOperations
 
 
     /// <summary>
-    /// Builds the fixed, non-revealing <c>server_error</c> for a non-
-    /// <see cref="AuthorizationServerMetadataResolutionOutcome.Resolved"/>
-    /// <paramref name="resolution"/>. The response never names the outcome or the resolver's
-    /// internal <see cref="AuthorizationServerMetadataResolution.Defect"/> — the metadata document a
-    /// defect quotes from is served from a URL the authorization server itself controls — so both
-    /// ride an <see cref="OAuthEventNames.AuthorizationServerMetadataResolutionFailed"/> trace event
-    /// instead, for deployments that want the detail in their own traces.
+    /// Builds the fixed, non-revealing server error for a failed resolution. Only the outcome type
+    /// name enters the trace; server-controlled values never enter the wire response.
     /// </summary>
     private static AuthCodeFlowEndpointResult BuildAuthorizationServerMetadataResolutionFailure(
         AuthorizationServerMetadataResolution resolution)
     {
         ActivityTagsCollection tags = new()
         {
-            [OAuthEventNames.AuthorizationServerMetadataResolutionOutcomeTagName] = resolution.Outcome.ToString()
+            [OAuthEventNames.AuthorizationServerMetadataResolutionOutcomeTagName] = resolution.GetType().Name
         };
-
-        if(resolution.Defect is not null)
-        {
-            tags[OAuthEventNames.AuthorizationServerMetadataResolutionDefectTagName] = resolution.Defect;
-        }
 
         _ = (Activity.Current?.AddEvent(new ActivityEvent(
             OAuthEventNames.AuthorizationServerMetadataResolutionFailed, tags: tags)));

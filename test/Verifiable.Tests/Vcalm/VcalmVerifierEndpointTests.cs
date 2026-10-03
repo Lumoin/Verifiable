@@ -268,11 +268,11 @@ internal sealed class VcalmVerifierEndpointTests
         bool hasParsedResponse = false;
         DidResolver resolver = new(DidMethodSelectors.FromResolvers((WellKnownDidMethodPrefixes.WebDidMethodPrefix,
             WebDidResolver.BuildResolving(
-                (_, _, _) => ValueTask.FromResult(new OutboundResponse
+                (_, _, readResponse, cancellationToken) => ScriptedOutboundTransport.ReadAsync(readResponse, new OutboundResponse
                 {
                     StatusCode = 200,
                     Body = new TaggedMemory<byte>(body.Memory[..written], BufferTags.Json)
-                }),
+                }, cancellationToken),
                 bytes =>
                 {
                     hasParsedResponse = true;

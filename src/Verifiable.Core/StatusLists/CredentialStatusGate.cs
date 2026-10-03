@@ -19,7 +19,8 @@ namespace Verifiable.Core.StatusLists;
 /// <returns>
 /// The verified Status List Token together with the instant this resolution reports it as valid from
 /// (<see cref="ResolvedStatusListToken.ResolvedAt"/> — a fresh fetch reports its fetch instant, a cache
-/// reports the cached instant), or <see langword="null"/> when no Status List Token could be obtained.
+/// reports the cached instant), a <see cref="StatusListTokenResolutionFailure"/> with fetch evidence,
+/// or <see langword="null"/> when an application resolver has no token.
 /// </returns>
 /// <remarks>
 /// An implementation composed over <c>Verifiable.OAuth.StatusList.StatusListTokenFetch.FetchAsync</c> reads
@@ -29,7 +30,7 @@ namespace Verifiable.Core.StatusLists;
 /// (<see href="https://www.rfc-editor.org/rfc/rfc9111#section-4.2.4">RFC 9111 §4.2.4</see>). The library
 /// stores nothing itself; this delegate's implementation is the cache.
 /// </remarks>
-public delegate ValueTask<ResolvedStatusListToken?> ResolveVerifiedStatusListTokenDelegate(
+public delegate ValueTask<StatusListTokenResolution?> ResolveVerifiedStatusListTokenDelegate(
     StatusListResolutionContext context,
     CancellationToken cancellationToken = default);
 
@@ -121,7 +122,9 @@ public static class CredentialStatusGate
     /// against the resolution's <see cref="ResolvedStatusListToken.ResolvedAt"/>.
     /// </param>
     /// <param name="cancellationToken">A cancellation token.</param>
-    /// <returns>The status value, whether the credential is valid, and whether the caller's cache should refresh.</returns>
+    /// <returns>
+    /// The status value, validity and refresh hint, or the resolver's typed fetch failure with its evidence.
+    /// </returns>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="context"/> or <paramref name="resolveVerifiedStatusListToken"/> is
     /// <see langword="null"/>.
@@ -135,7 +138,7 @@ public static class CredentialStatusGate
     /// be made" outcome as every other check this gate runs. A resolver that throws its own exception
     /// for a fetch or trust failure is not wrapped here; it propagates as whatever the resolver raised.
     /// </exception>
-    public static async ValueTask<CredentialStatusOutcome> CheckAsync(
+    public static async ValueTask<Result<CredentialStatusOutcome, StatusListTokenResolutionFailure>> CheckAsync(
         StatusListResolutionContext context,
         ResolveVerifiedStatusListTokenDelegate resolveVerifiedStatusListToken,
         DateTimeOffset currentTime,
@@ -145,11 +148,17 @@ public static class CredentialStatusGate
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(resolveVerifiedStatusListToken);
+        cancellationToken.ThrowIfCancellationRequested();
 
         StatusListReference reference = context.Reference;
 
-        ResolvedStatusListToken? resolution = await resolveVerifiedStatusListToken(context, cancellationToken).ConfigureAwait(false);
-        if(resolution is null)
+        StatusListTokenResolution? result = await resolveVerifiedStatusListToken(context, cancellationToken).ConfigureAwait(false);
+        if(result is StatusListTokenResolutionFailure failure)
+        {
+            return Result<CredentialStatusOutcome, StatusListTokenResolutionFailure>.Failure(failure);
+        }
+
+        if(result is not ResolvedStatusListToken resolution)
         {
             throw new StatusListResolutionException(
                 reference.Uri, $"The resolver returned no Status List Token for '{reference.Uri}'.");
@@ -165,12 +174,12 @@ public static class CredentialStatusGate
             byte status = StatusListValidation.GetStatus(resolution.Token, reference, currentTime, freshnessPolicy);
             bool shouldRefresh = StatusListValidation.ShouldRefresh(resolution.Token, resolution.ResolvedAt, currentTime, cachingBounds);
 
-            return new CredentialStatusOutcome
+            return Result<CredentialStatusOutcome, StatusListTokenResolutionFailure>.Success(new CredentialStatusOutcome
             {
                 Status = status,
                 IsValid = status == StatusTypes.Valid,
                 ShouldRefresh = shouldRefresh
-            };
+            });
         }
     }
 }

@@ -110,7 +110,8 @@ internal sealed class WebFingerHardeningTests
     [TestMethod]
     public async Task AGuardedFetchPolicyDenialSurfacesAsPolicyDeniedNotNotFound()
     {
-        static ValueTask<OutboundResponse> transport(OutboundRequest request, ExchangeContext context, CancellationToken cancellationToken) =>
+        //Rejects an unexpected transport invocation after the policy should have refused the target.
+        static ValueTask<OutboundTransportResult> transport(OutboundRequest request, ExchangeContext context, OutboundResponseReaderDelegate readResponse, CancellationToken cancellationToken) =>
             throw new InvalidOperationException("the transport MUST NOT be reached when the policy denies the target");
         WebFingerResolveDelegate resolve = WebFingerClient.BuildResolving(transport, WebFingerJrdJsonParsing.ParseJrd);
 

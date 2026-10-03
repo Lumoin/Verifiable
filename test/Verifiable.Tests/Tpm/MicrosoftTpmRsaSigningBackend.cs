@@ -136,7 +136,7 @@ internal static class MicrosoftTpmRsaSigningBackend
     /// <see cref="SignDigestAsync"/>/<see cref="VerifyDigestAsync"/> identically.
     /// </summary>
     /// <param name="modulus">The public modulus, unsigned big-endian.</param>
-    /// <param name="exponent">The public exponent (zero meaning the default 65537).</param>
+    /// <param name="exponent">The public exponent the loaded public area states, its zero encoding already resolved by the simulator.</param>
     /// <param name="prime">The supplied prime factor <c>P</c>, unsigned big-endian.</param>
     /// <param name="pool">The memory pool backing the returned key.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
@@ -152,7 +152,7 @@ internal static class MicrosoftTpmRsaSigningBackend
         ArgumentNullException.ThrowIfNull(pool);
 
         var n = new BigInteger(modulus.Span, isUnsigned: true, isBigEndian: true);
-        var e = new BigInteger(exponent == 0 ? TpmsRsaParms.DefaultExponent : exponent);
+        var e = new BigInteger(exponent);
         var p = new BigInteger(prime.Span, isUnsigned: true, isBigEndian: true);
 
         if(BigInteger.Remainder(n, p) != BigInteger.Zero)
@@ -240,13 +240,12 @@ internal static class MicrosoftTpmRsaSigningBackend
     }
 
     /// <summary>
-    /// Encodes a TPM-wire RSA exponent (zero meaning the default) as the minimal big-endian octets
-    /// <see cref="RSAParameters.Exponent"/> expects.
+    /// Encodes an RSA public exponent as the minimal big-endian octets <see cref="RSAParameters.Exponent"/> expects.
     /// </summary>
-    /// <param name="exponent">The wire exponent (zero meaning 65537).</param>
+    /// <param name="exponent">The public exponent the key's public area states, its zero encoding already resolved by the simulator.</param>
     /// <returns>The minimal big-endian encoding.</returns>
     private static byte[] EncodeExponent(uint exponent) =>
-        new BigInteger(exponent == 0 ? TpmsRsaParms.DefaultExponent : exponent).ToByteArray(isUnsigned: true, isBigEndian: true);
+        new BigInteger(exponent).ToByteArray(isUnsigned: true, isBigEndian: true);
 
     /// <summary>
     /// Computes the modular inverse of <paramref name="value"/> modulo <paramref name="modulus"/> via the

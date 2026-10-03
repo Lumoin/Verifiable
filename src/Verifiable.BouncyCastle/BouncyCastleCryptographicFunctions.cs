@@ -13,7 +13,6 @@ using System.Buffers;
 using System.Collections.Frozen;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Formats.Asn1;
 using System.Security.Cryptography;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -1102,7 +1101,7 @@ namespace Verifiable.BouncyCastle
 
         /// <summary>
         /// Verifies an RSA PKCS#1 v1.5 signature. The public key is expected in the
-        /// DID-compatible format produced by <see cref="RsaUtilities.Encode"/>.
+        /// DER PKCS#1 format produced by <see cref="RsaPublicKeyEncoding.Encode"/>.
         /// </summary>
         /// <param name="dataToVerify">The original data that was signed.</param>
         /// <param name="signature">The RSA PKCS#1 v1.5 signature to verify.</param>
@@ -1175,7 +1174,7 @@ namespace Verifiable.BouncyCastle
 
         /// <summary>
         /// Verifies an RSA PSS signature. The public key is expected in the
-        /// DID-compatible format produced by <see cref="RsaUtilities.Encode"/>.
+        /// DER PKCS#1 format produced by <see cref="RsaPublicKeyEncoding.Encode"/>.
         /// The salt length is set to the digest size.
         /// </summary>
         /// <param name="dataToVerify">The original data that was signed.</param>
@@ -1397,25 +1396,16 @@ namespace Verifiable.BouncyCastle
 
 
         /// <summary>
-        /// Parses an RSA public key either from a raw big-endian modulus (the did:key convention
-        /// produced by <see cref="RsaUtilities.Encode"/>, which always assumes the standard 65537
-        /// public exponent) or from a DER PKCS#1 <c>RSAPublicKey ::= SEQUENCE { modulus INTEGER,
+        /// Parses an RSA public key from a DER PKCS#1 <c>RSAPublicKey ::= SEQUENCE { modulus INTEGER,
         /// publicExponent INTEGER }</c> (RFC 8017 Appendix A.1.1, the same shape RFC 8230 §4's
         /// COSE RSA <c>n</c>/<c>e</c> labels round-trip through). The DER form carries whatever
         /// public exponent the key actually uses, so it is parsed rather than assumed.
         /// </summary>
-        /// <param name="publicKeyMaterial">The raw modulus or DER-encoded RSA public key.</param>
+        /// <param name="publicKeyMaterial">The DER-encoded RSA public key.</param>
         /// <returns>The parsed public key parameters.</returns>
         private static RsaKeyParameters ParseRsaPublicKey(ReadOnlySpan<byte> publicKeyMaterial)
         {
-            if(publicKeyMaterial.Length == RsaUtilities.Rsa2048ModulusLength || publicKeyMaterial.Length == RsaUtilities.Rsa4096ModulusLength)
-            {
-                return new RsaKeyParameters(isPrivate: false, new BigInteger(1, publicKeyMaterial.ToArray()), BigInteger.ValueOf(65537));
-            }
-
-            AsnReader sequenceReader = new AsnReader(publicKeyMaterial.ToArray(), AsnEncodingRules.DER).ReadSequence();
-            System.Numerics.BigInteger modulus = sequenceReader.ReadInteger();
-            System.Numerics.BigInteger exponent = sequenceReader.ReadInteger();
+            (byte[] modulus, byte[] exponent) = RsaPublicKeyEncoding.Decode(publicKeyMaterial);
 
             //The sign-magnitude constructor (sign = 1) is used rather than the two's-complement one,
             //since System.Numerics.BigInteger's unsigned big-endian byte form always encodes a
@@ -1423,8 +1413,8 @@ namespace Verifiable.BouncyCastle
             //MSB-set modulus as negative.
             return new RsaKeyParameters(
                 isPrivate: false,
-                new BigInteger(1, modulus.ToByteArray(isUnsigned: true, isBigEndian: true)),
-                new BigInteger(1, exponent.ToByteArray(isUnsigned: true, isBigEndian: true)));
+                new BigInteger(1, modulus),
+                new BigInteger(1, exponent));
         }
 
 

@@ -192,6 +192,8 @@ public static class WebFingerClient
 
         return async (resource, host, relFilters, context, cancellationToken) =>
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             Uri target;
             try
             {
@@ -204,22 +206,15 @@ public static class WebFingerClient
 
             OutboundRequest request = new() { Target = target, Method = "GET" };
 
-            OutboundFetchResult fetch;
-            try
+            OutboundFetchResult fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(
+                request, context, transport, cancellationToken).ConfigureAwait(false);
+
+            if(fetch.FailureKind is Type failureKind)
             {
-                //Fully qualified: within Verifiable.* the bare name binds to the OutboundFetch namespace, not
-                //the static class of the same leaf name.
-                fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(
-                    request, context, transport, cancellationToken).ConfigureAwait(false);
-            }
-            catch(OperationCanceledException)
-            {
-                throw;
-            }
-            catch
-            {
-                //§4.2/§9.1: the HTTPS query failed; accept the failure and do not retry over a non-secure connection.
-                return WebFingerResolutionResult.Failure(WebFingerResolutionErrors.TransportFailure);
+                return WebFingerResolutionResult.Failure(WebFingerResolutionErrors.TransportFailure) with
+                {
+                    FailureKind = failureKind
+                };
             }
 
             if(!fetch.IsFetched)

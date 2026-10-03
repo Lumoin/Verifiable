@@ -41,13 +41,13 @@ internal sealed class FederationHttpTransportTests
 
     /// <summary>Builds a single-hop transport that answers with a fixed status, body, and response headers.</summary>
     private static OutboundTransportDelegate CannedTransport(int statusCode, string body, HttpHeaderSet headers) =>
-        (request, context, cancellationToken) =>
-            ValueTask.FromResult(new OutboundResponse
+        (request, context, readResponse, cancellationToken) =>
+            ScriptedOutboundTransport.ReadAsync(readResponse, new OutboundResponse
             {
                 StatusCode = statusCode,
                 Body = new TaggedMemory<byte>(Encoding.UTF8.GetBytes(body), Tag.Empty),
                 Headers = headers
-            });
+            }, cancellationToken);
 
 
     [TestMethod]

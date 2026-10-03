@@ -229,6 +229,8 @@ public static class WebPlusDidResolver
 
         return async (did, options, context, cancellationToken) =>
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             string logUrl;
             try
             {
@@ -251,18 +253,11 @@ public static class WebPlusDidResolver
                 return DidResolutionResult.Failure(DidResolutionErrors.InvalidDid);
             }
 
-            OutboundResponse? microledgerResponse = await TryFetchMicroledgerAsync(target, transport, context, cancellationToken).ConfigureAwait(false);
+            (OutboundResponse? microledgerResponse, DidProblemDetails? fetchError) =
+                await TryFetchMicroledgerAsync(target, transport, context, cancellationToken).ConfigureAwait(false);
             if(microledgerResponse is null)
             {
-                return DidResolutionResult.Failure(DidResolutionErrors.NotFound);
-            }
-
-            //Bound the fetched microledger so an oversized payload is rejected before it is parsed, rather than
-            //driving unbounded allocation and CPU through the entry parser: verifying every document is a JCS
-            //canonicalization, a hash and a signature check per proof.
-            if(microledgerResponse.Body.Memory.Length > OutboundFetchPolicy.DefaultMaxResponseBytes)
-            {
-                return DidResolutionResult.Failure(InvalidDid("The did:webplus microledger exceeds the maximum permitted size."));
+                return DidResolutionResult.Failure(fetchError!);
             }
 
             List<LogEntry<WebPlusRawEntry, string>> entries;
@@ -457,16 +452,15 @@ public static class WebPlusDidResolver
 
     /// <summary>
     /// Drives one guarded fetch for the microledger, returning the response only on a successful 200, or
-    /// <see langword="null"/> on a transport failure or any non-200 status. Cancellation is always propagated, bare or
-    /// carried inside the transport's own exception (<see cref="WrappedCancellation"/>), so the caller can tell its own
-    /// cancellation from a fetch that ended on its own budget.
+    /// typed problem details on a refusal, transport failure, or non-200 status. The guarded fetch propagates
+    /// caller cancellation and returns the transport's own timeout with the other transport failure kinds.
     /// </summary>
     /// <param name="target">The microledger URL to fetch.</param>
     /// <param name="transport">The single-hop transport the guarded fetch drives.</param>
     /// <param name="context">The per-operation context carrying the SSRF outbound-fetch policy.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>The successful response, or <see langword="null"/> when the fetch did not yield a 200.</returns>
-    private static async ValueTask<OutboundResponse?> TryFetchMicroledgerAsync(
+    /// <returns>The successful response, or problem details retaining any size or transport failure evidence.</returns>
+    private static async ValueTask<(OutboundResponse? Response, DidProblemDetails? Error)> TryFetchMicroledgerAsync(
         Uri target,
         OutboundTransportDelegate transport,
         ExchangeContext context,
@@ -474,26 +468,20 @@ public static class WebPlusDidResolver
     {
         OutboundRequest request = new() { Target = target, Method = "GET", MaxResponseBytes = OutboundFetchPolicy.DefaultMaxResponseBytes };
 
-        OutboundFetchResult fetch;
-        try
-        {
-            fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(request, context, transport, cancellationToken).ConfigureAwait(false);
-        }
-        catch(OperationCanceledException)
-        {
-            throw;
-        }
-        catch(Exception exception)
-        {
-            //A transport/network failure is a not-found from this helper's perspective, cancellation
-            //excepted above. A cancellation the transport carries inside its own exception propagates as that
-            //cancellation, as a bare one does.
-            WrappedCancellation.ThrowIfCarried(exception);
+        OutboundFetchResult fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(request, context, transport, cancellationToken).ConfigureAwait(false);
 
-            return null;
+        if(fetch.FailureKind is Type failureKind)
+        {
+            return (null, DidResolutionErrors.NotFound with { RetrievalFailure = new DidRetrievalUnreachable(failureKind) });
         }
 
-        return fetch is { IsFetched: true, Response: { StatusCode: 200 } response } ? response : null;
+        if(fetch.TooLarge is OutboundResponseTooLarge tooLarge)
+        {
+            return (null, DidResolutionErrors.NotFound with { RetrievalFailure = new DidRetrievalTooLarge(tooLarge) });
+        }
+
+        return fetch is { IsFetched: true, Response: { StatusCode: 200 } response }
+            ? (response, null) : (null, DidResolutionErrors.NotFound);
     }
 
 

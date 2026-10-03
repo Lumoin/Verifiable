@@ -1,3 +1,5 @@
+using Verifiable.Core.Outbound;
+
 namespace Verifiable.DidComm.Transport;
 
 /// <summary>
@@ -17,7 +19,10 @@ public enum DidCommTransmitError
     Rejected,
 
     /// <summary>The message could not be delivered — a socket/DNS/connection error, or no response was produced.</summary>
-    TransportFailed
+    TransportFailed,
+
+    /// <summary>The guarded response reader refused a declared or observed length.</summary>
+    TooLarge
 }
 
 
@@ -58,6 +63,12 @@ public sealed class DidCommTransmitResult
     /// <summary>The reason the transmission did not succeed, or <see cref="DidCommTransmitError.None"/> when it was accepted.</summary>
     public DidCommTransmitError Error { get; }
 
+    /// <summary>The guarded fetch's evidence when Error is TooLarge.</summary>
+    public OutboundResponseTooLarge? TooLarge { get; private init; }
+
+    /// <summary>The concrete transport exception type when available.</summary>
+    public Type? FailureKind { get; private init; }
+
 
     /// <summary>Mints an accepted outcome, optionally carrying the transport's numeric code.</summary>
     /// <param name="transportStatusCode">The transport's numeric code, or <see langword="null"/> for a channel without one.</param>
@@ -82,6 +93,22 @@ public sealed class DidCommTransmitResult
     public static DidCommTransmitResult DeniedByPolicy()
     {
         return new DidCommTransmitResult(false, null, DidCommTransmitError.DeniedByPolicy);
+    }
+
+
+    /// <summary>Creates a size refusal with the evidence from the guarded reader.</summary>
+    public static DidCommTransmitResult ResponseTooLarge(OutboundResponseTooLarge evidence)
+    {
+        ArgumentNullException.ThrowIfNull(evidence);
+        return new DidCommTransmitResult(false, null, DidCommTransmitError.TooLarge) { TooLarge = evidence };
+    }
+
+
+    /// <summary>Creates a transport failure retaining its concrete kind.</summary>
+    public static DidCommTransmitResult Unreachable(Type failureKind)
+    {
+        ArgumentNullException.ThrowIfNull(failureKind);
+        return new DidCommTransmitResult(false, null, DidCommTransmitError.TransportFailed) { FailureKind = failureKind };
     }
 
 

@@ -88,6 +88,8 @@ public static class WebVhDidUrlDereferencer
 
         return async (baseDid, path, query, options, context, cancellationToken) =>
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             //The resolver dispatches a method dereferencer only for a DID URL with a path; a null path here is a
             //defensive guard, not a reachable state.
             if(path is null)
@@ -139,7 +141,7 @@ public static class WebVhDidUrlDereferencer
     /// <c>serviceEndpoint</c> and retrieves the resource. A non-HTTP(S) scheme is an <c>invalidDid</c> and a resource that
     /// cannot be retrieved a <c>notFound</c>, per
     /// <see href="https://identity.foundation/didwebvh/v1.0/#did-url-path-resolution">did:webvh v1.0 DID URL Path
-    /// Resolution</see>; a cancellation of the retrieval propagates (<see cref="TryFetchAsync"/>).
+    /// Resolution</see>; the caller's cancellation of the retrieval propagates (<see cref="TryFetchAsync"/>).
     /// </summary>
     /// <param name="document">The resolved and verified DID document carrying the <c>#files</c> service.</param>
     /// <param name="path">The DID URL path, with its leading <c>/</c>.</param>
@@ -166,7 +168,15 @@ public static class WebVhDidUrlDereferencer
             return DidDereferencingResult.Failure(DidResolutionErrors.InvalidDid);
         }
 
-        OutboundFetchResult? fetch = await TryFetchAsync(target, transport, context, cancellationToken).ConfigureAwait(false);
+        OutboundFetchResult fetch = await TryFetchAsync(target, transport, context, cancellationToken).ConfigureAwait(false);
+        if(fetch.FailureKind is Type failureKind)
+        {
+            return DidDereferencingResult.Failure(DidResolutionErrors.NotFound with
+            {
+                RetrievalFailure = new DidRetrievalUnreachable(failureKind)
+            });
+        }
+
         if(fetch is not { IsFetched: true, Response: { StatusCode: 200 } response })
         {
             return DidDereferencingResult.Failure(DidResolutionErrors.NotFound);
@@ -188,7 +198,7 @@ public static class WebVhDidUrlDereferencer
     /// domain) and confirms it contains at least one credential whose <c>credentialSubject.id</c> is the DID, per
     /// <see href="https://identity.foundation/didwebvh/v1.0/#whois-resolution">did:webvh v1.0 WHOIS Resolution</see>. A
     /// non-HTTP(S) scheme is an <c>invalidDid</c>, a file that cannot be retrieved a <c>notFound</c>, and a found but
-    /// non-conforming presentation an <c>invalidDid</c>. A cancellation of the retrieval or of the parse propagates,
+    /// non-conforming presentation an <c>invalidDid</c>. Caller cancellation of retrieval or cancellation of the parse propagates,
     /// bare or carried inside the parser's own exception (<see cref="WrappedCancellation"/>): a cancelled parse has
     /// shown nothing about the presentation.
     /// </summary>
@@ -234,7 +244,15 @@ public static class WebVhDidUrlDereferencer
             return DidDereferencingResult.Failure(DidResolutionErrors.InvalidDid);
         }
 
-        OutboundFetchResult? fetch = await TryFetchAsync(target, transport, context, cancellationToken).ConfigureAwait(false);
+        OutboundFetchResult fetch = await TryFetchAsync(target, transport, context, cancellationToken).ConfigureAwait(false);
+        if(fetch.FailureKind is Type failureKind)
+        {
+            return DidDereferencingResult.Failure(DidResolutionErrors.NotFound with
+            {
+                RetrievalFailure = new DidRetrievalUnreachable(failureKind)
+            });
+        }
+
         if(fetch is not { IsFetched: true, Response: { StatusCode: 200 } response })
         {
             return DidDereferencingResult.Failure(DidResolutionErrors.NotFound);
@@ -647,18 +665,15 @@ public static class WebVhDidUrlDereferencer
 
 
     /// <summary>
-    /// Drives the guarded outbound fetch of a DID URL's resource. A transport failure is no resource, which the caller
-    /// maps to <c>notFound</c>; a cancellation is not a "not found" condition and always propagates, bare or carried
-    /// inside the transport's own exception, as the inner exception of its own fault or among an aggregate's inner
-    /// exceptions (<see cref="WrappedCancellation"/>), so the caller tells its own cancellation from a fetch that ended
-    /// on its own budget.
+    /// Drives the guarded outbound fetch of a DID URL's resource. Its transport failure kind, including
+    /// timeout, comes from the guarded fetch; only the caller's own cancellation propagates.
     /// </summary>
     /// <param name="target">The resource URL.</param>
     /// <param name="transport">The single-hop transport the guarded fetch drives.</param>
     /// <param name="context">The per-operation context carrying the SSRF outbound-fetch policy.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>The fetch result, or <see langword="null"/> when the transport failed.</returns>
-    private static async ValueTask<OutboundFetchResult?> TryFetchAsync(
+    /// <returns>The guarded fetch result, including any transport failure kind.</returns>
+    private static async ValueTask<OutboundFetchResult> TryFetchAsync(
         Uri target,
         OutboundTransportDelegate transport,
         ExchangeContext context,
@@ -666,22 +681,6 @@ public static class WebVhDidUrlDereferencer
     {
         OutboundRequest request = new() { Target = target, Method = "GET" };
 
-        try
-        {
-            return await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(request, context, transport, cancellationToken).ConfigureAwait(false);
-        }
-        catch(OperationCanceledException)
-        {
-            throw;
-        }
-        catch(Exception exception)
-        {
-            //A transport/network failure is a not-found from this helper's perspective, cancellation
-            //excepted above. A cancellation the transport carries inside its own exception propagates as that
-            //cancellation, as a bare one does.
-            WrappedCancellation.ThrowIfCarried(exception);
-
-            return null;
-        }
+        return await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(request, context, transport, cancellationToken).ConfigureAwait(false);
     }
 }

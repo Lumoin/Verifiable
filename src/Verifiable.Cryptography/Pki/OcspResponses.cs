@@ -163,9 +163,6 @@ public static class OcspResponseVerification
     /// <summary>The SHA-1 digest output length in bytes (FIPS 180-4).</summary>
     private const int Sha1DigestByteLength = 20;
 
-    /// <summary>The only RSA public exponent the registered RSA verification seam supports (RFC 8017), matching the constraint <see cref="ManagedCmsVerification"/> enforces for the same reason.</summary>
-    private static ReadOnlySpan<byte> Exponent65537 => [0x01, 0x00, 0x01];
-
     /// <summary>The smallest RSA modulus bit length a responder key is verified at, the same band <see cref="ManagedCmsVerification"/> verifies under for the same reason.</summary>
     private static int MinimumRsaModulusBitLength => 2048;
 
@@ -1045,15 +1042,6 @@ public static class OcspResponseVerification
             return false;
         }
 
-        //The registered RSA verification seam hard-codes public exponent 65537 (RFC 8017) regardless of what a
-        //certificate's own subjectPublicKey states, exactly as ManagedCmsVerification.VerifyRsaAsync documents;
-        //a certificate declaring any other exponent must fail closed here rather than being verified against a
-        //key it does not actually name.
-        if(!signer.RsaExponent.Span.SequenceEqual(Exponent65537))
-        {
-            return false;
-        }
-
         //The modulus is accepted by the same policy band ManagedCmsVerification.VerifyRsaAsync verifies under
         //rather than a 2048-/4096-bit whitelist: any non-degenerate RSA public key between the bounds, so a
         //3072-bit responder key is inside the band.
@@ -1063,7 +1051,7 @@ public static class OcspResponseVerification
         }
 
         VerificationDelegate verify = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(algorithm.Value, Purpose.Verification);
-        (bool isVerified, CryptoEvent? evt) = await verify(message, signatureValue, signer.RsaModulus, null, cancellationToken).ConfigureAwait(false);
+        (bool isVerified, CryptoEvent? evt) = await verify(message, signatureValue, signer.SubjectPublicKeyBitStringContent, null, cancellationToken).ConfigureAwait(false);
         CryptographicKeyEvents.Emit(evt);
 
         return isVerified;

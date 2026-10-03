@@ -527,6 +527,7 @@ public static class MicrosoftX509Functions
     }
 
 
+    /// <summary>Extracts an EC or RSA certificate key in its canonical internal encoding.</summary>
     private static PublicKeyMemory ExtractPublicKey(
         X509Certificate2 certificate,
         BaseMemoryPool pool)
@@ -550,7 +551,8 @@ public static class MicrosoftX509Functions
                 //bare two-INTEGER sequence, matching the shape CoseKeyExtensions.ToPublicKeyMemory
                 //already builds for the COSE_Key RSA path (CryptoTags.Rsa2048PublicKey/Rsa4096PublicKey
                 //carry no AlgorithmIdentifier wrapper for either source).
-                byte[] rsaPublicKey = rsa.ExportRSAPublicKey();
+                RSAParameters parameters = rsa.ExportParameters(includePrivateParameters: false);
+                byte[] rsaPublicKey = RsaPublicKeyEncoding.Encode(parameters.Modulus, parameters.Exponent);
                 IMemoryOwner<byte> owner = pool.Rent(rsaPublicKey.Length);
                 rsaPublicKey.CopyTo(owner.Memory);
 

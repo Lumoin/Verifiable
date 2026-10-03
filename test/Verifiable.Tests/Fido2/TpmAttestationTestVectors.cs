@@ -222,6 +222,30 @@ internal static class TpmAttestationTestVectors
 
 
     /// <summary>
+    /// Marshals a TPMT_PUBLIC (the WebAuthn <c>pubArea</c> field) for an RSA-2048 RSASSA/SHA-256 signing key whose
+    /// <c>unique</c> field carries <paramref name="modulus"/> and whose exponent is the TPM's zero encoding, via
+    /// <see cref="TpmtPublic.CreateRsaSigningKey"/> and its own <see cref="TpmtPublic.WriteTo"/>.
+    /// </summary>
+    /// <param name="modulus">The 256-octet modulus the public area's <c>unique</c> field carries.</param>
+    /// <returns>The marshaled TPMT_PUBLIC bytes.</returns>
+    internal static byte[] BuildRsaPubAreaBytes(ReadOnlySpan<byte> modulus)
+    {
+        const TpmaObject Attributes =
+            TpmaObject.FIXED_TPM | TpmaObject.FIXED_PARENT | TpmaObject.SENSITIVE_DATA_ORIGIN
+            | TpmaObject.USER_WITH_AUTH | TpmaObject.SIGN_ENCRYPT;
+
+        using TpmtPublic pubArea = TpmtPublic.CreateRsaSigningKey(
+            TpmAlgIdConstants.TPM_ALG_SHA256, Attributes, keyBits: 2048, TpmtRsaScheme.Rsassa(TpmAlgIdConstants.TPM_ALG_SHA256), modulus, BaseMemoryPool.Shared);
+
+        byte[] buffer = new byte[pubArea.GetSerializedSize()];
+        var writer = new TpmWriter(buffer);
+        pubArea.WriteTo(ref writer);
+
+        return buffer;
+    }
+
+
+    /// <summary>
     /// Computes the TPM object Name for a marshaled TPMT_PUBLIC: <c>nameAlg (2 bytes, big-endian)
     /// || H_nameAlg(pubArea)</c> (TPM 2.0 Library Part 1, clause 16).
     /// </summary>

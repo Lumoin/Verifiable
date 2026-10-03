@@ -3,6 +3,7 @@ using Verifiable.Core;
 using Verifiable.Core.Outbound;
 using Verifiable.DidComm;
 using Verifiable.DidComm.Transport;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Core;
 
@@ -27,6 +28,9 @@ namespace Verifiable.Tests.Core;
 [TestClass]
 internal sealed class WellKnownHttpHeaderNamesTests
 {
+    /// <summary>The runner's cancellation context.</summary>
+    public TestContext TestContext { get; set; } = null!;
+
     /// <summary>The shared <see cref="BaseMemoryPool"/> used to compose an encrypted message.</summary>
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
@@ -85,6 +89,7 @@ internal sealed class WellKnownHttpHeaderNamesTests
         new(nameof(WellKnownHttpHeaderNames.Accept), WellKnownHttpHeaderNames.Accept, "Accept", "accept", "ACCEPT", WellKnownHttpHeaderNames.IsAccept),
         new(nameof(WellKnownHttpHeaderNames.AcceptLanguage), WellKnownHttpHeaderNames.AcceptLanguage, "Accept-Language", "accept-language", "ACCEPT-LANGUAGE", WellKnownHttpHeaderNames.IsAcceptLanguage),
         new(nameof(WellKnownHttpHeaderNames.ContentLanguage), WellKnownHttpHeaderNames.ContentLanguage, "Content-Language", "content-language", "CONTENT-LANGUAGE", WellKnownHttpHeaderNames.IsContentLanguage),
+        new(nameof(WellKnownHttpHeaderNames.ContentLength), WellKnownHttpHeaderNames.ContentLength, "Content-Length", "content-length", "CONTENT-LENGTH", WellKnownHttpHeaderNames.IsContentLength),
         new(nameof(WellKnownHttpHeaderNames.ContentType), WellKnownHttpHeaderNames.ContentType, "Content-Type", "content-type", "CONTENT-TYPE", WellKnownHttpHeaderNames.IsContentType),
         new(nameof(WellKnownHttpHeaderNames.ContentLength), WellKnownHttpHeaderNames.ContentLength, "Content-Length", "content-length", "CONTENT-LENGTH", WellKnownHttpHeaderNames.IsContentLength),
         new(nameof(WellKnownHttpHeaderNames.DPoP), WellKnownHttpHeaderNames.DPoP, "DPoP", "dpop", "DPOP", WellKnownHttpHeaderNames.IsDPoP),
@@ -169,6 +174,7 @@ internal sealed class WellKnownHttpHeaderNamesTests
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.Accept), WellKnownHttpHeaderNames.Accept, WellKnownHttpHeaderNames.AcceptUtf8);
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.AcceptLanguage), WellKnownHttpHeaderNames.AcceptLanguage, WellKnownHttpHeaderNames.AcceptLanguageUtf8);
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.ContentLanguage), WellKnownHttpHeaderNames.ContentLanguage, WellKnownHttpHeaderNames.ContentLanguageUtf8);
+        AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.ContentLength), WellKnownHttpHeaderNames.ContentLength, WellKnownHttpHeaderNames.ContentLengthUtf8);
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.ContentType), WellKnownHttpHeaderNames.ContentType, WellKnownHttpHeaderNames.ContentTypeUtf8);
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.ContentLength), WellKnownHttpHeaderNames.ContentLength, WellKnownHttpHeaderNames.ContentLengthUtf8);
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.DPoP), WellKnownHttpHeaderNames.DPoP, WellKnownHttpHeaderNames.DPoPUtf8);
@@ -326,11 +332,13 @@ internal sealed class WellKnownHttpHeaderNamesTests
     public async Task TheDidCommPostsContentTypeIsTheFieldThisTableNames()
     {
         OutboundRequest? composed = null;
-        ValueTask<OutboundResponse> Capture(OutboundRequest request, ExchangeContext context, CancellationToken cancellationToken)
+
+        //Records the composed request and returns the guarded reader's receipt.
+        ValueTask<OutboundTransportResult> Capture(OutboundRequest request, ExchangeContext context, OutboundResponseReaderDelegate readResponse, CancellationToken cancellationToken)
         {
             composed = request;
 
-            return ValueTask.FromResult(new OutboundResponse { StatusCode = 202 });
+            return ScriptedOutboundTransport.ReadAsync(readResponse, new OutboundResponse { StatusCode = 202 }, cancellationToken);
         }
 
         using DidCommEncryptedMessage message = DidCommEncryptedMessage.Create(
@@ -340,7 +348,7 @@ internal sealed class WellKnownHttpHeaderNamesTests
             DidCommEndpoint,
             [],
             DidCommHttpTransport.CreateSendDelegate(Capture),
-            CancellationToken.None).ConfigureAwait(false);
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsAccepted, "The canned transport answers 202, so the transmit must be an accepted receipt.");
         Assert.IsNotNull(composed, "The binding must compose an outbound request for the POST.");

@@ -538,6 +538,7 @@ namespace Verifiable.Microsoft
             return ValueTask.FromResult<(Signature, CryptoEvent?)>((signatureResult, evt));
         }
 
+        /// <summary>Verifies an RSA signature using both parameters read from the DER PKCS#1 public key.</summary>
         private static ValueTask<(bool IsVerified, CryptoEvent? Event)> VerifyRsaAsync(ReadOnlySpan<byte> dataToVerify, ReadOnlySpan<byte> signature, ReadOnlySpan<byte> publicKeyMaterial, CryptoAlgorithm algorithm, HashAlgorithmName hashAlgorithmName, RSASignaturePadding padding, TimeProvider timeProvider)
         {
             ProviderOperation operation = new(nameof(VerifyRsaAsync));
@@ -550,22 +551,13 @@ namespace Verifiable.Microsoft
 
             using(RSA rsa = RSA.Create())
             {
-                try
+                (byte[] modulus, byte[] exponent) = RsaPublicKeyEncoding.Decode(publicKeyMaterial);
+                RSAParameters parameters = new()
                 {
-                    rsa.ImportRSAPublicKey(publicKeyMaterial, out _);
-                }
-                catch
-                {
-                    //publicKeyMaterial did not parse as a PKCS#1 RSAPublicKey DER structure; some callers
-                    //hand this verifier a bare modulus instead, which this fallback imports directly with
-                    //the standard F4 public exponent 65537 (0x10001).
-                    var parameters = new RSAParameters
-                    {
-                        Modulus = publicKeyMaterial.ToArray(),
-                        Exponent = [0x01, 0x00, 0x01]
-                    };
-                    rsa.ImportParameters(parameters);
-                }
+                    Modulus = modulus,
+                    Exponent = exponent
+                };
+                rsa.ImportParameters(parameters);
 
                 bool isVerified = rsa.VerifyData(dataToVerify, signature, hashAlgorithmName, padding);
 

@@ -31,7 +31,7 @@ namespace Verifiable.Core.StatusLists;
 /// </para>
 /// See <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-status-list-21.html#section-8.3">Token Status List, Section 8.3</see>.
 /// </remarks>
-public sealed class ResolvedStatusListToken: IDisposable
+public sealed class ResolvedStatusListToken: StatusListTokenResolution, IDisposable
 {
     /// <summary>The already-verified Status List Token.</summary>
     public required StatusListToken Token { get; init; }

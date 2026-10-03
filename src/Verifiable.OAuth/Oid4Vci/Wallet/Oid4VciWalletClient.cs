@@ -161,7 +161,7 @@ public sealed class Oid4VciWalletClient
     /// GET request to the URI to retrieve the referenced Credential Offer Object ... and parse it
     /// to recreate the Credential Offer parameters." Follows the same fetch-validate shape
     /// <see cref="Client.AuthorizationServerMetadataDocuments.ResolveAsync"/> applies to its own
-    /// document fetch: a transport hint plus an authoritative post-read size check, an exact
+    /// document fetch: a guarded response read with one size decision, an exact
     /// <c>200</c> status, and a media-type gate — so <see cref="OutboundFetch.FetchAsync"/>'s own
     /// redirect re-validation and per-hop policy evaluation cover this GET exactly as they cover
     /// that resolver's.
@@ -180,11 +180,12 @@ public sealed class Oid4VciWalletClient
     /// to follow the redirect at all; <see cref="Oid4VciRequestFailureKind.ErrorResponse"/> for a
     /// non-<c>200</c> status (§4.1.3 defines no error body for this GET, so <see cref="Oid4VciRequestFailure.ErrorCode"/>
     /// is always <see langword="null"/>); <see cref="Oid4VciRequestFailureKind.MalformedResponse"/>
-    /// when the content type is not <c>application/json</c>, the body exceeds
-    /// <see cref="Oid4VciWalletConfiguration.MaximumCredentialOfferBytes"/>, or the body does not
+    /// when the content type is not <c>application/json</c> or the body does not
     /// satisfy §4.1.1's <c>credential_issuer</c> and <c>credential_configuration_ids</c> rules —
     /// the same rules <see cref="CredentialOfferSerializer.FromJson"/> raises for a caller-supplied
     /// offer, answered here as a value since the body is the Issuer's own.
+    /// <see cref="Oid4VciRequestFailureKind.TooLarge"/> retains a declared or observed excess, and
+    /// <see cref="Oid4VciRequestFailureKind.Unreachable"/> retains an unrelated transport failure kind.
     /// </returns>
     /// <exception cref="InvalidOperationException">
     /// Thrown when no <see cref="Oid4VciWalletConfiguration.FetchCredentialOffer"/> transport is configured.
@@ -196,6 +197,7 @@ public sealed class Oid4VciWalletClient
     {
         ArgumentNullException.ThrowIfNull(credentialOfferUri);
         ArgumentNullException.ThrowIfNull(context);
+        cancellationToken.ThrowIfCancellationRequested();
 
         if(Configuration.FetchCredentialOffer is null)
         {
@@ -217,10 +219,30 @@ public sealed class Oid4VciWalletClient
             MaxResponseBytes = Configuration.MaximumCredentialOfferBytes
         };
 
-        //A transport exception propagates as itself; the guarded fetch chokepoint answers policy
-        //and redirect refusals as OutboundFetchResult values, not exceptions.
         OutboundFetchResult fetch = await OutboundFetch.FetchAsync(
             request, context, Configuration.FetchCredentialOffer, cancellationToken).ConfigureAwait(false);
+
+        if(fetch.FailureKind is Type failureKind)
+        {
+            return Result<CredentialOffer, Oid4VciRequestFailure>.Failure(new Oid4VciRequestFailure
+            {
+                Kind = Oid4VciRequestFailureKind.Unreachable,
+                Endpoint = credentialOfferUri,
+                StatusCode = null,
+                FailureKind = failureKind
+            });
+        }
+
+        if(fetch.TooLarge is OutboundResponseTooLarge tooLarge)
+        {
+            return Result<CredentialOffer, Oid4VciRequestFailure>.Failure(new Oid4VciRequestFailure
+            {
+                Kind = Oid4VciRequestFailureKind.TooLarge,
+                Endpoint = credentialOfferUri,
+                StatusCode = null,
+                TooLarge = tooLarge
+            });
+        }
 
         if(!fetch.IsFetched || fetch.Response is null)
         {
@@ -256,17 +278,6 @@ public sealed class Oid4VciWalletClient
                     credentialOfferUri,
                     response.StatusCode,
                     $"§4.1.3 the response content type was '{contentType}', not application/json."));
-        }
-
-        //The authoritative post-read size check — MaxResponseBytes above is only a transport hint a
-        //hostile or non-conforming transport may not honor.
-        if(response.Body.Length > Configuration.MaximumCredentialOfferBytes)
-        {
-            return Result<CredentialOffer, Oid4VciRequestFailure>.Failure(
-                MalformedResponseFailure(
-                    credentialOfferUri,
-                    response.StatusCode,
-                    "§4.1.3 the response exceeded the configured maximum size."));
         }
 
         //The offer body is remote input, so a malformed parse answers MalformedResponse rather

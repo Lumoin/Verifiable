@@ -545,7 +545,7 @@ internal sealed class DidResolutionHttpBindingTests
             this.Routes = routes;
         }
 
-        public OutboundTransportDelegate Delegate => (request, context, cancellationToken) =>
+        public OutboundTransportDelegate Delegate => (request, context, readResponse, cancellationToken) =>
         {
             if(!Routes.TryGetValue(request.Target.AbsoluteUri, out (int Status, byte[]? Body, string? ContentType) route))
             {
@@ -560,7 +560,7 @@ internal sealed class DidResolutionHttpBindingTests
                 ? HttpHeaderSet.Empty
                 : HttpHeaderSet.FromPairs((WellKnownHttpHeaderNames.ContentType, route.ContentType));
 
-            return ValueTask.FromResult(new OutboundResponse { StatusCode = route.Status, Body = body, Headers = headers });
+            return ScriptedOutboundTransport.ReadAsync(readResponse, new OutboundResponse { StatusCode = route.Status, Body = body, Headers = headers }, cancellationToken);
         };
     }
 

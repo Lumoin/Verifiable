@@ -134,7 +134,7 @@ public static class AuthCodeRequestObjectExtensions
     /// A sentinel returned for a JAR <c>resource</c> claim that is present but does not parse to
     /// either RFC 8707 section 2.1 wire shape, or that parses to the shape but carries a blank,
     /// non-string, or whitespace-bearing element. Deliberately shaped to fail
-    /// <see cref="ResourceIndicatorSyntax.Check(ReadOnlySpan{char})"/> (it carries a fragment,
+    /// <see cref="ResourceIndicator.Parse"/> (it carries a fragment,
     /// which RFC 8707 section 2 forbids) so the SAME downstream <c>ValidateResourceIndicatorsShape</c>
     /// gate every other malformed resource value goes through rejects this one too, with
     /// <c>invalid_target</c> rather than a distinct parse-time error code.
@@ -158,7 +158,7 @@ public static class AuthCodeRequestObjectExtensions
     /// whitespace is not "several indicators sent as one" to recover by splitting; it is malformed.
     /// A malformed claim returns <see cref="MalformedResourceClaimSentinel"/>, carrying the defect
     /// through to the existing shape gate instead of dropping it silently. Each accepted element is
-    /// folded with <see cref="ResourceIndicatorSyntax.Fold(string)"/> before the set is
+    /// folded with <see cref="ResourceIndicator.ComparisonKey"/> before the set is
     /// space-joined into the convention <c>ParseResourceIndicators</c> recovers at every other seam
     /// (PAR/authorize query strings, the token-exchange grant).
     /// </summary>
@@ -173,7 +173,7 @@ public static class AuthCodeRequestObjectExtensions
         {
             return string.IsNullOrEmpty(single) || single.Any(char.IsWhiteSpace)
                 ? MalformedResourceClaimSentinel
-                : ResourceIndicatorSyntax.Fold(single);
+                : ResourceIndicator.Parse(single).Match(static value => value.ComparisonKey, _ => single);
         }
 
         if(raw is IEnumerable<object> elements)
@@ -186,7 +186,7 @@ public static class AuthCodeRequestObjectExtensions
                     return MalformedResourceClaimSentinel;
                 }
 
-                folded.Add(ResourceIndicatorSyntax.Fold(value));
+                folded.Add(ResourceIndicator.Parse(value).Match(static indicator => indicator.ComparisonKey, _ => value));
             }
 
             return folded.Count == 0 ? MalformedResourceClaimSentinel : string.Join(' ', folded);

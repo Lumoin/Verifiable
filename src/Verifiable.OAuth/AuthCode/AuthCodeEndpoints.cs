@@ -4969,28 +4969,25 @@ public static class AuthCodeEndpoints
                     //invalid_target; that instruction is the authorization request's, and this
                     //library applies the same reading at the token endpoint as its own reading,
                     //one error code per parameter at every endpoint this library answers with.
-                    foreach(string indicator in resourceIndicators)
+                    for(int i = 0; i < resourceIndicators.Length; i++)
                     {
-                        ResourceIndicatorFault fault = ResourceIndicatorSyntax.Check(indicator);
-                        if(fault != ResourceIndicatorFault.None)
+                        Result<ResourceIndicator, ResourceIndicatorFault> parsed = ResourceIndicator.Parse(resourceIndicators[i]);
+                        if(!parsed.IsSuccess)
                         {
-                            RecordMalformedResourceIndicator(fault);
+                            RecordMalformedResourceIndicator(parsed.Error);
 
                             return (null, ServerHttpResponse.BadRequest(
                                 OAuthErrors.InvalidTarget, MalformedResourceDescription));
                         }
+
+                        resourceIndicators[i] = parsed.Value.ComparisonKey;
                     }
 
                     //Folded once, at ingress: an accepted indicator's scheme and host ASCII
-                    //letters are lowered here (ResourceIndicatorSyntax.Fold), so a stored grant
+                    //letters are lowered in ResourceIndicator.ComparisonKey, so a stored grant
                     //holds the folded spelling. Section 2's resource set is a SET, so
                     //the folded set is then deduplicated (ordinal) so a repeated indicator never
                     //reaches the authorization seam or a resulting aud twice.
-                    for(int i = 0; i < resourceIndicators.Length; i++)
-                    {
-                        resourceIndicators[i] = ResourceIndicatorSyntax.Fold(resourceIndicators[i]);
-                    }
-
                     resource = DeduplicateOrdinal(resourceIndicators);
                 }
 
@@ -5623,7 +5620,7 @@ public static class AuthCodeEndpoints
             //single spacey audience name into several bogus "indicators". The carry is
             //therefore gated: it populates Resource ONLY when every audience entry parses as an
             //absolute, whitespace-free URI with no fragment component (IsCarriedAudienceEntry).
-            //That is the carry rule, not the grammar ResourceIndicatorSyntax reads an incoming
+            //That is the carry rule, not the grammar ResourceIndicator.Parse reads an incoming
             //resource by: it admits entries that grammar refuses (a userinfo in an https value,
             //a host that is not ASCII), and each entry is carried as the seam spelled it.
             //Otherwise Resource stays null, the same fail-closed outcome as "nothing was
@@ -7211,15 +7208,15 @@ public static class AuthCodeEndpoints
     /// occurrence that embeds whitespace is not "two indicators sent as one" to recover by
     /// splitting, so neither is altered or dropped here: each is kept exactly as received, and
     /// the shape decision belongs to <see cref="ValidateResourceOccurrences"/>, which runs
-    /// <see cref="ResourceIndicatorSyntax.Check(ReadOnlySpan{char})"/> on every occurrence
+    /// <see cref="ResourceIndicator.Parse"/> on every occurrence
     /// <see cref="ReadResourceOccurrences"/> returns and records the fault of the first that
     /// fails. Once past that check, every occurrence is a whitespace-free indicator, so joining
     /// the aggregated set with a space (the convention this library also uses for <c>scope</c>
     /// and <c>acr_values</c>) is lossless: <see cref="ParseResourceIndicators"/> splits it back
     /// to exactly the individual indicators. Each occurrence is folded with
-    /// <see cref="ResourceIndicatorSyntax.Fold(string)"/> before the join, so an accepted
-    /// indicator's scheme and host ASCII letters are lowered at the ingress; a value the fold's
-    /// own check refuses comes back unchanged. A <c>resource</c> value enters from the wire at
+    /// <see cref="ResourceIndicator.ComparisonKey"/> before the join, so an accepted
+    /// indicator's scheme and host ASCII letters are lowered at the ingress; a refused value
+    /// is kept unchanged for the shape gate. A <c>resource</c> value enters from the wire at
     /// three sites, each of which folds at its own site: this reader for the form field,
     /// <c>AuthCodeRequestObjectExtensions.ReadResourceClaim</c> for the request object's
     /// <c>resource</c> claim, and the token exchange grant for its own <c>resource</c>
@@ -7231,7 +7228,8 @@ public static class AuthCodeEndpoints
 
         return occurrences.Count == 0
             ? null
-            : string.Join(' ', occurrences.Select(ResourceIndicatorSyntax.Fold));
+            : string.Join(' ', occurrences.Select(static occurrence =>
+                ResourceIndicator.Parse(occurrence).Match(static indicator => indicator.ComparisonKey, _ => occurrence)));
     }
 
 
@@ -7323,7 +7321,7 @@ public static class AuthCodeEndpoints
     /// Shape-validates every space-delimited RFC 8707 section 2 indicator in
     /// <paramref name="resource"/>, the joined form a request object's <c>resource</c> claim
     /// reaches the endpoint in at the pushed and by-value request object ingresses, with
-    /// <see cref="ResourceIndicatorSyntax.Check(ReadOnlySpan{char})"/>. The claim path answers
+    /// <see cref="ResourceIndicator.Parse"/>. The claim path answers
     /// <see cref="OAuthErrors.InvalidTarget"/> with <see cref="MalformedResourceDescription"/>, the
     /// same error and the same fixed description as every other ingress: section 2.1 directs the
     /// authorization server to reject a value it fails to parse with <c>invalid_target</c>, the
@@ -7357,17 +7355,17 @@ public static class AuthCodeEndpoints
 
         if(indicators.Length == 0)
         {
-            RecordMalformedResourceIndicator(ResourceIndicatorSyntax.Check(resource));
+            RecordMalformedResourceIndicator(ResourceIndicator.Parse(resource).Error);
 
             return ServerHttpResponse.BadRequest(OAuthErrors.InvalidTarget, MalformedResourceDescription);
         }
 
         foreach(string indicator in indicators)
         {
-            ResourceIndicatorFault fault = ResourceIndicatorSyntax.Check(indicator);
-            if(fault != ResourceIndicatorFault.None)
+            Result<ResourceIndicator, ResourceIndicatorFault> parsed = ResourceIndicator.Parse(indicator);
+            if(!parsed.IsSuccess)
             {
-                RecordMalformedResourceIndicator(fault);
+                RecordMalformedResourceIndicator(parsed.Error);
 
                 return ServerHttpResponse.BadRequest(OAuthErrors.InvalidTarget, MalformedResourceDescription);
             }
@@ -7413,7 +7411,7 @@ public static class AuthCodeEndpoints
     /// is intended to be used at multiple resources.") and fixes each value's grammar ("Its value
     /// MUST be an absolute URI, as specified by Section 4.3 of [RFC3986]"), so every other
     /// occurrence, a whitespace-only one included, is run through
-    /// <see cref="ResourceIndicatorSyntax.Check(ReadOnlySpan{char})"/> exactly as received and the
+    /// <see cref="ResourceIndicator.Parse"/> exactly as received and the
     /// first that fails is refused, facts <see cref="ResolveEffectiveResource"/> would otherwise
     /// discover only after loading the stored grant. At the token endpoint it runs in each step
     /// endpoint's pre-correlation step, so the answer is byte-identical for a grant that does not
@@ -7426,7 +7424,7 @@ public static class AuthCodeEndpoints
     /// <param name="fields">The inbound request's form fields.</param>
     /// <returns>
     /// The <c>invalid_target</c> refusal, carrying <see cref="MalformedResourceDescription"/>, when
-    /// an occurrence <see cref="ResourceIndicatorSyntax.Check(ReadOnlySpan{char})"/> refuses is
+    /// an occurrence <see cref="ResourceIndicator.Parse"/> refuses is
     /// present; <see langword="null"/> when the field is absent, carries only empty occurrences, or
     /// every occurrence is well-formed: the granted-set subset comparison that also lives in
     /// <see cref="ResolveEffectiveResource"/> stays there, since it needs the stored grant.
@@ -7435,10 +7433,10 @@ public static class AuthCodeEndpoints
     {
         foreach(string occurrence in ReadResourceOccurrences(fields))
         {
-            ResourceIndicatorFault fault = ResourceIndicatorSyntax.Check(occurrence);
-            if(fault != ResourceIndicatorFault.None)
+            Result<ResourceIndicator, ResourceIndicatorFault> parsed = ResourceIndicator.Parse(occurrence);
+            if(!parsed.IsSuccess)
             {
-                RecordMalformedResourceIndicator(fault);
+                RecordMalformedResourceIndicator(parsed.Error);
 
                 return ServerHttpResponse.BadRequest(OAuthErrors.InvalidTarget, MalformedResourceDescription);
             }
@@ -7458,8 +7456,8 @@ public static class AuthCodeEndpoints
     /// from, and any indicator not present in the granted set fails closed with
     /// <c>invalid_target</c> and one fixed <c>error_description</c> that names no value. A
     /// malformed token-request value is refused before this method ever
-    /// runs, by <see cref="ValidateResourceOccurrences"/>'s pre-correlation step, so no
-    /// separate shape check is needed here. Section 2's resource set is a SET: the granted and
+    /// runs, by <see cref="ValidateResourceOccurrences"/>'s pre-correlation step. Requested entries
+    /// are parsed into accepted values for equality below. Section 2's resource set is a SET: the granted and
     /// requested lists are each deduplicated by exact spelling before use, via
     /// <see cref="DeduplicateOrdinal"/>, and the effective list holds each matched granted entry
     /// once, so a client or stored grant that repeated an entry never surfaces a duplicate
@@ -7474,7 +7472,7 @@ public static class AuthCodeEndpoints
     /// <para>
     /// A requested indicator matches the granted entry of its identical spelling first and, when no
     /// granted entry has that spelling, the first granted entry whose
-    /// <see cref="ResourceIndicatorSyntax.ComparisonKey(string)"/> equals its own: the scheme and
+    /// <see cref="ResourceIndicator.ComparisonKey"/> equals its own: the scheme and
     /// host folded to lowercase ASCII when the value is an accepted indicator
     /// (<see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.1">RFC 3986 section
     /// 6.2.2.1</see>: the scheme and host are case-insensitive), every other component compared
@@ -7483,7 +7481,7 @@ public static class AuthCodeEndpoints
     /// simple string comparison: a requested indicator a looser comparison would have matched but
     /// this one does not is refused, never silently accepted. A token request's <c>resource</c>
     /// occurrences are folded at their ingress (<see cref="ReadResource"/> runs every occurrence
-    /// through <see cref="ResourceIndicatorSyntax.Fold(string)"/> before the join), so this method
+    /// through <see cref="ResourceIndicator.ComparisonKey"/> before the join), so this method
     /// never sees an unfolded requested value: a requested indicator matches the granted entry
     /// stored in its folded spelling when there is one and otherwise the first granted entry with
     /// its comparison key, and the issued token carries the STORED spelling (the matched
@@ -7498,7 +7496,7 @@ public static class AuthCodeEndpoints
     /// <para>
     /// The granted entries are deduplicated by exact spelling, not by comparison key, because a
     /// stored entry has two sources. A resource indicator is folded before it is stored
-    /// (<see cref="ResourceIndicatorSyntax.Fold(string)"/>), so for it the exact spelling and the
+    /// (<see cref="ResourceIndicator.ComparisonKey"/>), so for it the exact spelling and the
     /// comparison key agree, and two stored indicators with one comparison key are one spelling. An
     /// audience the token exchange's authorization seam authorized is carried into the same slot as
     /// the seam spelled it (<see cref="BuildRefreshTokenExchangeResponseAsync"/>), and
@@ -7541,7 +7539,7 @@ public static class AuthCodeEndpoints
         string[] requested = DeduplicateOrdinal(ParseResourceIndicators(requestedResource) ?? []);
         if(requested.Length == 0)
         {
-            RecordMalformedResourceIndicator(ResourceIndicatorSyntax.Check(requestedResource));
+            RecordMalformedResourceIndicator(ResourceIndicator.Parse(requestedResource).Error);
 
             return (null, ServerHttpResponse.BadRequest(OAuthErrors.InvalidTarget, MalformedResourceDescription));
         }
@@ -7561,28 +7559,41 @@ public static class AuthCodeEndpoints
         //remarks above. The effective list carries each matched GRANTED entry's spelling in the
         //requested order, each once, since the requested values arrive folded and deduplicated by
         //exact spelling and so no two of them select one granted entry.
+        List<ResourceIndicator> acceptedGrants = new(grantedIndicators.Length);
+        foreach(string granted in grantedIndicators)
+        {
+            Result<ResourceIndicator, ResourceIndicatorFault> parsedGrant = ResourceIndicator.Parse(granted);
+            if(parsedGrant.IsSuccess)
+            {
+                acceptedGrants.Add(parsedGrant.Value);
+            }
+        }
+
         List<string> effective = new(requested.Length);
         foreach(string indicator in requested)
         {
-            string? matchedGrantedSpelling = Array.Find(
-                grantedIndicators, granted => string.Equals(granted, indicator, StringComparison.Ordinal));
-
-            if(matchedGrantedSpelling is null)
+            Result<ResourceIndicator, ResourceIndicatorFault> parsedRequest = ResourceIndicator.Parse(indicator);
+            if(!parsedRequest.IsSuccess)
             {
-                string requestedKey = ResourceIndicatorSyntax.ComparisonKey(indicator);
-                matchedGrantedSpelling = Array.Find(
-                    grantedIndicators,
-                    granted => string.Equals(ResourceIndicatorSyntax.ComparisonKey(granted), requestedKey, StringComparison.Ordinal));
+                RecordMalformedResourceIndicator(parsedRequest.Error);
+
+                return (null, ServerHttpResponse.BadRequest(OAuthErrors.InvalidTarget, MalformedResourceDescription));
             }
 
-            if(matchedGrantedSpelling is null)
+            ResourceIndicator requestedIndicator = parsedRequest.Value;
+            ResourceIndicator? matchedGrant = acceptedGrants.Find(granted =>
+                granted == requestedIndicator
+                && string.Equals(granted.OriginalString, requestedIndicator.OriginalString, StringComparison.Ordinal))
+                ?? acceptedGrants.Find(granted => granted == requestedIndicator);
+
+            if(matchedGrant is null)
             {
                 return (null, ServerHttpResponse.BadRequest(
                     OAuthErrors.InvalidTarget,
                     "The resource parameter must be a subset of the resource(s) originally granted."));
             }
 
-            effective.Add(matchedGrantedSpelling);
+            effective.Add(matchedGrant.OriginalString);
         }
 
         return ([.. effective], null);
@@ -9913,7 +9924,7 @@ public static class AuthCodeEndpoints
     /// independently maintained code paths agreeing coincidentally. Returns
     /// <see langword="null"/> when resolution fails — no issuer configured, or the configured
     /// value fails the RFC 9207 §2 https/no-query/no-fragment shape
-    /// (<see cref="IssuerIdentifierValidation.IsValidIssuerShape"/>) — so the caller omits the
+    /// (<see cref="IssuerIdentifier.Parse"/>) — so the caller omits the
     /// <c>iss</c> parameter rather than failing the redirect.
     /// </summary>
     private static async ValueTask<Uri?> TryResolveRedirectIssuerAsync(

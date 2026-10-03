@@ -2,21 +2,22 @@ namespace Verifiable.OAuth;
 
 /// <summary>
 /// The part of a <c>resource</c> indicator that
-/// <see cref="ResourceIndicatorSyntax.Check(System.ReadOnlySpan{char})"/> found unusable, in the
+/// <see cref="ResourceIndicator.Parse"/> found unusable, in the
 /// order the reader inspects the value. Only the first part that fails is named; later parts are
 /// never inspected once one has already failed.
 /// </summary>
-internal enum ResourceIndicatorFault
+public enum ResourceIndicatorFault
 {
     /// <summary>
     /// Every part admitted the value: it is an ASCII
     /// <see href="https://www.rfc-editor.org/rfc/rfc3986#appendix-A"><c>absolute-URI</c></see>
     /// with no fragment, and, when its scheme is <c>http</c> or <c>https</c>, a non-empty authority
-    /// with no <c>userinfo</c>.
+    /// with no <c>userinfo</c>. This is the reader's success marker, never a refusal returned by
+    /// <see cref="ResourceIndicator.Parse"/>.
     /// </summary>
     None,
 
-    /// <summary>The indicator is a zero-length span; there is no scheme for
+    /// <summary>The original indicator is null or empty; there is no scheme for
     /// <see href="https://www.rfc-editor.org/rfc/rfc3986#appendix-A"><c>absolute-URI</c></see>
     /// to begin with.</summary>
     Empty,

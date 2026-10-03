@@ -261,12 +261,13 @@ internal sealed class WebFingerCrossWireFlowTests
         public OutboundTransportDelegate Delegate => InvokeAsync;
 
 
-        private async ValueTask<OutboundResponse> InvokeAsync(
-            OutboundRequest request, ExchangeContext context, CancellationToken cancellationToken)
+        /// <summary>Records the request and completed response while forwarding the guarded reader.</summary>
+        private async ValueTask<OutboundTransportResult> InvokeAsync(
+            OutboundRequest request, ExchangeContext context, OutboundResponseReaderDelegate readResponse, CancellationToken cancellationToken)
         {
             LastRequest = request;
-            OutboundResponse response = await Inner(request, context, cancellationToken).ConfigureAwait(false);
-            LastResponse = response;
+            OutboundTransportResult response = await Inner(request, context, readResponse, cancellationToken).ConfigureAwait(false);
+            LastResponse = response.Response;
 
             return response;
         }

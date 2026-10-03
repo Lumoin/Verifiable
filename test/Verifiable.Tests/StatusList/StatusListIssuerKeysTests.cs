@@ -169,9 +169,9 @@ internal sealed class StatusListIssuerKeysTests
         ResolveVerifiedStatusListTokenDelegate resolve = ResolverOver(
             transport.Delegate, StatusListIssuerKeys.FromReferencedToken(NeverConsulted()));
 
-        ResolvedStatusListToken? resolved = await resolve(
+        ResolvedStatusListToken resolved = Assert.IsInstanceOfType<ResolvedStatusListToken>(await resolve(
             StatusListFixtures.ContextFor(new StatusListReference(RevokedIndex, ListUrl), ReferencedTokenIssuer, referencedTokenIssuerKey),
-            TestContext.CancellationToken).ConfigureAwait(false);
+            TestContext.CancellationToken).ConfigureAwait(false));
 
         Assert.IsNotNull(resolved, "A Status List Token the Referenced Token's own issuer signed verifies under that same key.");
 

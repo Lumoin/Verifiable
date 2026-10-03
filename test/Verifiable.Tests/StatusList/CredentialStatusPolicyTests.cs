@@ -1,3 +1,4 @@
+using Verifiable.Core;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.StatusLists;
 using Verifiable.Tests.TestInfrastructure;
@@ -476,10 +477,14 @@ internal sealed class CredentialStatusPolicyTests
 
         StatusListToken token = new(ListUri, Now, list) { TimeToLive = timeToLive };
 
-        return await CredentialStatusGate.CheckAsync(
+        Result<CredentialStatusOutcome, StatusListTokenResolutionFailure> result = await CredentialStatusGate.CheckAsync(
             StatusListFixtures.ContextFor(CredentialIndex, ListUri),
             StatusListFixtures.ResolverFor(token, resolvedAt ?? Now),
             Now,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsSuccess);
+        Assert.IsNotNull(result.Value);
+        return result.Value;
     }
 }

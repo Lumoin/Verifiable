@@ -278,7 +278,8 @@ internal sealed class DidCommHttpTransportTests
         public DidCommSendDelegate Send => DidCommHttpTransport.CreateSendDelegate(SendAsync);
 
 
-        public ValueTask<OutboundResponse> SendAsync(OutboundRequest request, ExchangeContext context, CancellationToken cancellationToken)
+        /// <summary>Records the request and gives the guarded reader the scripted receipt.</summary>
+        public ValueTask<OutboundTransportResult> SendAsync(OutboundRequest request, ExchangeContext context, OutboundResponseReaderDelegate readResponse, CancellationToken cancellationToken)
         {
             Calls.Add(request);
             if(ThrowCancellation)
@@ -295,7 +296,7 @@ internal sealed class DidCommHttpTransportTests
                 ? new OutboundResponse { StatusCode = StatusCode }
                 : new OutboundResponse { StatusCode = StatusCode, Body = new TaggedMemory<byte>(ResponseBody, BufferTags.Json) };
 
-            return ValueTask.FromResult(response);
+            return ScriptedOutboundTransport.ReadAsync(readResponse, response, cancellationToken);
         }
     }
 }

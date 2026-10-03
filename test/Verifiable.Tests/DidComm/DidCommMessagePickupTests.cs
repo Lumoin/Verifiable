@@ -1,4 +1,3 @@
-using System.Net.Http.Headers;
 using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.Outbound;
@@ -130,16 +129,13 @@ internal sealed class DidCommMessagePickupTests
 
     /// <summary>
     /// <see href="https://identity.foundation/didcomm-messaging/spec/v2.1/#https">DIDComm Messaging v2.1 §HTTPS</see>:
-    /// <c>maxReplyBytes</c> on the outbound request is only a transport HINT
-    /// (<see cref="Verifiable.Core.Outbound.OutboundRequest.MaxResponseBytes"/>) a hostile or
-    /// non-conforming transport may ignore, so <c>CreateExchangeDelegate</c> re-checks the read-back reply
-    /// against the caller's cap as the authoritative backstop: a reply one byte over MUST be refused as a
-    /// transport failure, carrying no reply, exactly as a cooperating transport's mid-read abort would.
+    /// The guarded reader refuses a reply one byte over the caller's cap, retaining size evidence
+    /// without returning a partial reply.
     /// </summary>
     [TestMethod]
-    public async Task ExchangeReplyOverTheCapIsTransportFailedWithNoReply()
+    public async Task ExchangeReplyOverTheCapRetainsSizeEvidenceWithNoReply()
     {
-        var transport = new FakeExchangeTransport(statusCode: 200, replyBody: new byte[5]);
+        FakeExchangeTransport transport = new(statusCode: 200, replyBody: new byte[5]);
         using DidCommEncryptedMessage message = Encrypted("{\"ciphertext\":\"x\"}"u8);
         DidCommMessage request = ReturnRouteAllRequest();
 
@@ -147,7 +143,8 @@ internal sealed class DidCommMessagePickupTests
         using DidCommExchangeResult result = await message.ExchangeAsync(request, Endpoint, new ExchangeContext(), exchange, default).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsAccepted);
-        Assert.AreEqual(DidCommTransmitError.TransportFailed, result.Error);
+        Assert.AreEqual(DidCommTransmitError.TooLarge, result.Error);
+        Assert.AreEqual(new OutboundResponseTooLarge(4, 5, OutboundResponseLengthKind.Observed), result.TooLarge);
         Assert.IsFalse(result.HasReply, "A reply over the cap MUST NOT reach the caller.");
         Assert.IsTrue(result.ReplyBody.IsEmpty);
     }
@@ -155,7 +152,7 @@ internal sealed class DidCommMessagePickupTests
 
     /// <summary>
     /// <see href="https://identity.foundation/didcomm-messaging/spec/v2.1/#https">DIDComm Messaging v2.1 §HTTPS</see>:
-    /// the boundary of the post-read backstop — a reply exactly AT the caller's cap is not oversized and MUST
+    /// the boundary of the guarded read — a reply exactly AT the caller's cap is not oversized and MUST
     /// be accepted with its reply intact.
     /// </summary>
     [TestMethod]
@@ -419,50 +416,9 @@ internal sealed class DidCommMessagePickupTests
     //A single-hop HttpClient transport that, unlike DidCommHttpTransportRealWireFlowTests.BuildPostTransport,
     //also reads back the response body/Content-Type — the exchange seam's HTTPS binding needs both to
     //surface a same-response reply.
-    private static OutboundTransportDelegate BuildExchangeTransport(HttpClient httpClient)
-    {
-        return async (request, context, cancellationToken) =>
-        {
-            using var httpRequest = new HttpRequestMessage(new HttpMethod(request.Method), request.Target);
-            if(request.Body is { } body)
-            {
-                var content = new ReadOnlyMemoryContent(body.Memory);
-                if(request.Headers.TryGetValue("Content-Type", out string? contentType))
-                {
-                    content.Headers.ContentType = MediaTypeHeaderValue.Parse(contentType);
-                }
-
-                httpRequest.Content = content;
-            }
-
-            using HttpResponseMessage httpResponse = await httpClient
-                .SendAsync(httpRequest, HttpCompletionOption.ResponseContentRead, cancellationToken)
-                .ConfigureAwait(false);
-
-            byte[] responseBytes = await httpResponse.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
-
-            //Read the raw header values (mirrors GuardedHttpClientTransport.BuildSingleHopTransport) rather than
-            //round-tripping through MediaTypeHeaderValue.ToString() — the exact Content-Type string the host
-            //sent MUST reach DidCommMediaTypes.IsEncrypted unchanged, since that comparison is exact (no charset
-            //tolerance). FromReceived (not the composing-side Builder) takes RFC 9110 §5.5's recipient arm
-            //rather than throwing on a hostile line.
-            List<(string Name, string Value)> responsePairs = [];
-            foreach(KeyValuePair<string, IEnumerable<string>> header in httpResponse.Content.Headers)
-            {
-                foreach(string value in header.Value)
-                {
-                    responsePairs.Add((header.Key, value));
-                }
-            }
-
-            return new OutboundResponse
-            {
-                StatusCode = (int)httpResponse.StatusCode,
-                Headers = HttpHeaderSet.FromReceived(responsePairs),
-                Body = responseBytes.Length == 0 ? TaggedMemory<byte>.Empty : new TaggedMemory<byte>(responseBytes, BufferTags.Json)
-            };
-        };
-    }
+    /// <summary>Uses the shared single-hop adapter to hand live response bytes to the guarded reader.</summary>
+    private static OutboundTransportDelegate BuildExchangeTransport(HttpClient httpClient) =>
+        GuardedHttpClientTransport.BuildSingleHopTransport(httpClient);
 
 
     /// <summary>
@@ -1848,22 +1804,22 @@ internal sealed class DidCommMessagePickupTests
 
     /// <summary>
     /// <see href="https://identity.foundation/didcomm-messaging/spec/v2.1/#https">DIDComm Messaging v2.1 §HTTPS</see>:
-    /// a reply over the caller's accepted size bound is refused as a transport failure before the pooled copy
-    /// ever happens, so a counting pool proves nothing was ever rented for it — the reply-less
-    /// <see cref="DidCommExchangeResult.TransportFailed"/> outcome carries no lease to leak.
+    /// A reply over the caller's accepted size bound is refused before the pooled copy, with the size
+    /// evidence preserved. The typed refusal carries no reply lease to leak.
     /// </summary>
     [TestMethod]
-    public async Task OversizedReplyMapsToTransportFailedWithNoLeakedLease()
+    public async Task OversizedReplyRetainsEvidenceWithNoLeakedLease()
     {
-        using var metered = new MeteredHousePool();
-        var transport = new FakeExchangeTransport(statusCode: 200, replyBody: new byte[5]);
+        using MeteredHousePool metered = new();
+        FakeExchangeTransport transport = new(statusCode: 200, replyBody: new byte[5]);
         using DidCommEncryptedMessage message = Encrypted("{\"ciphertext\":\"x\"}"u8);
         DidCommMessage request = ReturnRouteAllRequest();
 
         DidCommExchangeDelegate exchange = DidCommHttpTransport.CreateExchangeDelegate(transport.SendAsync, metered.Pool, maxReplyBytes: 4);
-        using DidCommExchangeResult result = await message.ExchangeAsync(request, Endpoint, new ExchangeContext(), exchange, default).ConfigureAwait(false);
+        using DidCommExchangeResult result = await message.ExchangeAsync(request, Endpoint, new ExchangeContext(), exchange, TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(DidCommTransmitError.TransportFailed, result.Error);
+        Assert.AreEqual(DidCommTransmitError.TooLarge, result.Error);
+        Assert.AreEqual(new OutboundResponseTooLarge(4, 5, OutboundResponseLengthKind.Observed), result.TooLarge);
         Assert.IsFalse(result.HasReply);
         Assert.AreEqual(0L, metered.RentedCount, "The oversized reply is refused before PooledMemory.FromBytes ever rents a buffer for it.");
         Assert.AreEqual(0L, metered.OutstandingCount);
@@ -1901,7 +1857,8 @@ internal sealed class DidCommMessagePickupTests
         public List<OutboundRequest> Calls { get; } = [];
 
 
-        public ValueTask<OutboundResponse> SendAsync(OutboundRequest request, ExchangeContext context, CancellationToken cancellationToken)
+        /// <summary>Records the request and gives the guarded reader the scripted exchange reply.</summary>
+        public ValueTask<OutboundTransportResult> SendAsync(OutboundRequest request, ExchangeContext context, OutboundResponseReaderDelegate readResponse, CancellationToken cancellationToken)
         {
             Calls.Add(request);
             if(ThrowCancellation)
@@ -1922,7 +1879,7 @@ internal sealed class DidCommMessagePickupTests
                 ? new OutboundResponse { StatusCode = StatusCode, Headers = headers }
                 : new OutboundResponse { StatusCode = StatusCode, Headers = headers, Body = new TaggedMemory<byte>(ReplyBody, BufferTags.Json) };
 
-            return ValueTask.FromResult(response);
+            return ScriptedOutboundTransport.ReadAsync(readResponse, response, cancellationToken);
         }
     }
 }

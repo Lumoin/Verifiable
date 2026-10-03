@@ -165,15 +165,13 @@ public sealed record OAuthInvalidFieldValue(
 /// grant-exchange call needed before a request could even be built.
 /// </summary>
 /// <remarks>
-/// Carries the <see cref="Verifiable.OAuth.Client.ResolveAuthorizationServerMetadataDelegate"/>'s own
-/// <see cref="Verifiable.OAuth.Client.AuthorizationServerMetadataResolutionOutcome"/> rather than an
-/// HTTP status or a parsed field, since no usable document — sometimes no document at all, for
-/// <see cref="Verifiable.OAuth.Client.AuthorizationServerMetadataResolutionOutcome.InvalidIssuer"/> or
-/// <see cref="Verifiable.OAuth.Client.AuthorizationServerMetadataResolutionOutcome.PolicyDenied"/> —
-/// was ever obtained to parse.
+/// Carries the resolver's complete typed evidence, allowing the application to inspect the failure
+/// without parsing a diagnostic sentence or repeating the library's metadata decision.
 /// </remarks>
+/// <param name="Resolution">The metadata resolution failure and its evidence.</param>
+/// <param name="Support">Guidance for the calling application.</param>
 public sealed record OAuthAuthorizationServerMetadataUnresolved(
-    Verifiable.OAuth.Client.AuthorizationServerMetadataResolutionOutcome Outcome,
+    Verifiable.OAuth.Client.AuthorizationServerMetadataResolution Resolution,
     DecisionSupport Support): OAuthParseError(Support);
 
 

@@ -1,9 +1,7 @@
 using System.Text;
-using Verifiable.Core;
-using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.OAuth.Client;
-using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Server.Pipeline;
 namespace Verifiable.OAuth.Server.Metadata;
 
@@ -155,7 +153,7 @@ public static class MetadataEndpoints
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
                 EndpointServer server = context.RequestServer!;
-                var oauth = server.OAuth();
+                AuthorizationServerIntegration oauth = server.OAuth();
 
                 if(oauth.Cryptography.BuildJwksDocumentAsync is null)
                 {
@@ -264,7 +262,7 @@ public static class MetadataEndpoints
             BuildInputAsync = static async (fields, context, currentState, ct) =>
             {
                 EndpointServer server = context.RequestServer!;
-                var oauth = server.OAuth();
+                AuthorizationServerIntegration oauth = server.OAuth();
 
                 ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
@@ -291,6 +289,12 @@ public static class MetadataEndpoints
                             OAuthErrors.InvalidRequest,
                             "Issuer URI not found in context."));
                 }
+
+                ResolveSupportedSigningAlgorithmsDelegate resolveSigningAlgorithms =
+                    oauth.Cryptography.ResolveSupportedSigningAlgorithmsAsync
+                    ?? ((resolvedRegistration, usage, requestContext, cancellationToken) =>
+                        DefaultSupportedSigningAlgorithms.ResolveAsync(
+                            oauth, resolvedRegistration, usage, requestContext, cancellationToken));
 
                 StringBuilder sb = JsonAppender.Rent();
                 string discoveryJson;
@@ -424,14 +428,11 @@ public static class MetadataEndpoints
                             emittedFieldNames);
                     }
 
-                    //id_token_signing_alg_values_supported — derived from the
-                    //registration's IdTokenIssuance signing keys. Each KeyId is
-                    //resolved through the verification-key resolver and its tag
-                    //mapped to a JWA identifier; the deduped set forms the
-                    //advertised list.
-                    IReadOnlyList<string> idTokenAlgs = await ResolveSigningAlgValuesAsync(
-                        Verifiable.Cryptography.Context.KeyUsageContext.IdTokenIssuance,
-                        server, registration, context, ct).ConfigureAwait(false);
+                    //All signing-algorithm members use the same per-usage input.
+                    //The default resolves current key tags; a host can supply the
+                    //complete set independently of per-consumer key selection.
+                    IReadOnlyList<string> idTokenAlgs = await resolveSigningAlgorithms(
+                        registration, KeyUsageContext.IdTokenIssuance, context, ct).ConfigureAwait(false);
                     if(idTokenAlgs.Count > 0)
                     {
                         AppendStringArrayField(
@@ -548,14 +549,13 @@ public static class MetadataEndpoints
                     }
 
                     //JARM §4: advertise the JWT-secured response modes and signing algorithms
-                    //when the authorize endpoint is on the chain AND this registration carries
-                    //an authorization-response signing key — an advertisement without the key
+                    //when the authorize endpoint is on the chain AND the input declares
+                    //authorization-response signing support — an advertisement without support
                     //would invite response_mode requests the server refuses with invalid_request.
                     if(authorizationCodeOnChain)
                     {
-                        IReadOnlyList<string> jarmAlgs = await ResolveSigningAlgValuesAsync(
-                            Verifiable.Cryptography.Context.KeyUsageContext.AuthorizationResponseSigning,
-                            server, registration, context, ct).ConfigureAwait(false);
+                        IReadOnlyList<string> jarmAlgs = await resolveSigningAlgorithms(
+                            registration, KeyUsageContext.AuthorizationResponseSigning, context, ct).ConfigureAwait(false);
                         if(jarmAlgs.Count > 0)
                         {
                             AppendStringArrayField(
@@ -580,15 +580,14 @@ public static class MetadataEndpoints
                     }
 
                     //RFC 9701 §7: advertise the introspection-response signing algorithms when
-                    //the introspection endpoint is on the chain AND this registration carries
-                    //an introspection-response signing key — an advertisement without the key
+                    //the introspection endpoint is on the chain AND the input declares
+                    //introspection-response signing support — an advertisement without support
                     //would invite Accept: application/token-introspection+jwt requests the
                     //server refuses with invalid_request.
                     if(introspectionOnChain)
                     {
-                        IReadOnlyList<string> introspectionAlgs = await ResolveSigningAlgValuesAsync(
-                            Verifiable.Cryptography.Context.KeyUsageContext.IntrospectionResponseSigning,
-                            server, registration, context, ct).ConfigureAwait(false);
+                        IReadOnlyList<string> introspectionAlgs = await resolveSigningAlgorithms(
+                            registration, KeyUsageContext.IntrospectionResponseSigning, context, ct).ConfigureAwait(false);
                         if(introspectionAlgs.Count > 0)
                         {
                             AppendStringArrayField(
@@ -628,10 +627,12 @@ public static class MetadataEndpoints
                     //tokens). Independent of the authorize-endpoint chain.
                     if(oauth.ValidateDpopProofAsync is not null)
                     {
+                        IReadOnlyList<string> dpopAlgs = await resolveSigningAlgorithms(
+                            registration, KeyUsageContext.DpopProof, context, ct).ConfigureAwait(false);
                         AppendStringArrayField(
                             sb,
                             AuthorizationServerMetadataParameterNames.DpopSigningAlgValuesSupported,
-                            WellKnownDpopValues.SupportedSigningAlgorithms,
+                            dpopAlgs,
                             emittedFieldNames);
                     }
 
@@ -692,23 +693,16 @@ public static class MetadataEndpoints
                             emittedFieldNames);
 
                         //token_endpoint_auth_signing_alg_values_supported (RFC 8414 §2
-                        //OPTIONAL): "This metadata entry MUST be present if either of
-                        //these authentication methods are specified in the
-                        //'token_endpoint_auth_methods_supported' entry. ... Servers
-                        //SHOULD support 'RS256'." Emitted whenever the deployment
-                        //declared at least one algorithm; Validate() refuses a
-                        //PrivateKeyJwt/ClientSecretJwt declaration with an empty
-                        //algorithm set, so the MUST is met structurally. The RS256
-                        //SHOULD is the deployment's own choice of which algorithms to
-                        //declare — the validator does not demand RS256 specifically.
-                        if(oauth.ClientAssertionSigningAlgorithmsSupported.Count > 0)
-                        {
-                            AppendStringArrayField(
-                                sb,
-                                AuthorizationServerMetadataParameterNames.TokenEndpointAuthSigningAlgValuesSupported,
-                                [.. oauth.ClientAssertionSigningAlgorithmsSupported],
-                                emittedFieldNames);
-                        }
+                        //OPTIONAL) describes accepted client signatures. The default
+                        //retains ClientAssertionSigningAlgorithmsSupported; an override
+                        //must describe the algorithms the host actually accepts.
+                        IReadOnlyList<string> clientAssertionAlgs = await resolveSigningAlgorithms(
+                            registration, KeyUsageContext.ClientAssertion, context, ct).ConfigureAwait(false);
+                        AppendStringArrayField(
+                            sb,
+                            AuthorizationServerMetadataParameterNames.TokenEndpointAuthSigningAlgValuesSupported,
+                            clientAssertionAlgs,
+                            emittedFieldNames);
                     }
 
                     //scopes_supported (OIDC Discovery §3 RECOMMENDED). Derived
@@ -938,70 +932,6 @@ public static class MetadataEndpoints
         //RFC 7800 / RFC 9449 §6.1 confirmation (CnfClaimContributor).
         WellKnownJwtClaimNames.Cnf
     ];
-
-
-    /// <summary>
-    /// Derives the signing algorithms a discovery field advertises from the
-    /// registration's current signing keys of <paramref name="usage"/>:
-    /// <see cref="Verifiable.Cryptography.Context.KeyUsageContext.IdTokenIssuance"/> for
-    /// <c>id_token_signing_alg_values_supported</c>,
-    /// <see cref="Verifiable.Cryptography.Context.KeyUsageContext.AuthorizationResponseSigning"/> for
-    /// <c>authorization_signing_alg_values_supported</c> and
-    /// <see cref="Verifiable.Cryptography.Context.KeyUsageContext.IntrospectionResponseSigning"/> for
-    /// <c>introspection_signing_alg_values_supported</c>. Each <see cref="KeyId"/> in the
-    /// <see cref="SigningKeySet"/> is resolved through the verification-key
-    /// resolver under <paramref name="usage"/>, the set being published, and its
-    /// <c>Tag</c> mapped to a JWA identifier via
-    /// <see cref="CryptoFormatConversions.DefaultTagToJwaConverter"/>.
-    /// The set is deduplicated by ordinal equality and stable across the
-    /// rotation-slot order.
-    /// </summary>
-    /// <param name="usage">The key set whose algorithms are derived, and the usage every resolution names.</param>
-    /// <param name="server">The server whose cryptography holds the verification-key resolver.</param>
-    /// <param name="registration">The registration whose signing keys are read.</param>
-    /// <param name="context">The per-request context threaded to the resolver.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The distinct JWA identifiers, or an empty list when none resolve.</returns>
-    /// <remarks>
-    /// Returns an empty list when the registration has no signing keys of
-    /// <paramref name="usage"/> configured, or when the resolver produces none
-    /// of them for that usage. The discovery emitter omits the field entirely
-    /// in that case rather than emitting an empty array.
-    /// </remarks>
-    private static async ValueTask<IReadOnlyList<string>> ResolveSigningAlgValuesAsync(
-        Verifiable.Cryptography.Context.KeyUsageContext usage,
-        EndpointServer server,
-        ClientRecord registration,
-        ExchangeContext context,
-        CancellationToken cancellationToken)
-    {
-        var oauth = server.OAuth();
-        if(!registration.SigningKeys.TryGetValue(usage, out SigningKeySet? signingKeySet))
-        {
-            return [];
-        }
-
-        ServerVerificationKeyResolverDelegate? resolver =
-            oauth.Cryptography.VerificationKeyResolver;
-        if(resolver is null)
-        {
-            return [];
-        }
-
-        HashSet<string> algorithms = new(StringComparer.Ordinal);
-        foreach(KeyId keyId in signingKeySet.Current)
-        {
-            Verifiable.Cryptography.PublicKeyMemory? key =
-                await resolver(keyId, usage, registration.TenantId, context, cancellationToken)
-                    .ConfigureAwait(false);
-            if(key is null) { continue; }
-
-            string jwa = Verifiable.JCose.CryptoFormatConversions.DefaultTagToJwaConverter(key.Tag);
-            _ = algorithms.Add(jwa);
-        }
-
-        return algorithms.Count == 0 ? [] : algorithms.ToArray();
-    }
 
 
     /// <summary>

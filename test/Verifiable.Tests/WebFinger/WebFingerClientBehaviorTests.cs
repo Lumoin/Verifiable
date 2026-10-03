@@ -2,6 +2,7 @@ using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.Outbound;
 using Verifiable.Json;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.WebFinger;
 
 namespace Verifiable.Tests.WebFinger;
@@ -204,7 +205,7 @@ internal sealed class WebFingerClientBehaviorTests
         public static FakeTransport ThrowingWith(Exception exception) => new(exception);
 
 
-        public OutboundTransportDelegate Delegate => (request, context, cancellationToken) =>
+        public OutboundTransportDelegate Delegate => (request, context, readResponse, cancellationToken) =>
         {
             Calls.Add(request);
 
@@ -226,7 +227,7 @@ internal sealed class WebFingerClientBehaviorTests
                 ? configuredHeaders
                 : HttpHeaderSet.Empty;
 
-            return ValueTask.FromResult(new OutboundResponse { StatusCode = route.Status, Body = body, Headers = headers });
+            return ScriptedOutboundTransport.ReadAsync(readResponse, new OutboundResponse { StatusCode = route.Status, Body = body, Headers = headers }, cancellationToken);
         };
     }
 }

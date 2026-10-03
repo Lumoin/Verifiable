@@ -268,8 +268,10 @@ internal sealed class CoseKeyRsaTests
         modulus[0] = 0x80;
         CoseKey coseKey = new(kty: CoseKeyTypes.Rsa, n: modulus);
 
-        _ = Assert.ThrowsExactly<ArgumentException>(() =>
+        RsaPublicKeyException exception = Assert.ThrowsExactly<RsaPublicKeyException>(() =>
             coseKey.ToPublicKeyMemory(BaseMemoryPool.Shared));
+
+        Assert.AreEqual(RsaPublicKeyFailureKind.InvalidPublicExponent, exception.FailureKind);
     }
 
 

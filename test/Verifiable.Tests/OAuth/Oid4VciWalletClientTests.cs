@@ -709,7 +709,7 @@ internal sealed class Oid4VciWalletClientTests
     {
         List<Uri> invocations = [];
         Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
-            fetchCredentialOffer: (request, _, _) =>
+            fetchCredentialOffer: (request, _, readResponse, cancellationToken) =>
             {
                 invocations.Add(request.Target);
                 throw new InvalidOperationException("The offer GET must never be dialed once the policy denies it.");
@@ -1652,7 +1652,7 @@ internal sealed class Oid4VciWalletClientTests
         OutboundFetchPolicy loopbackAllowing = OutboundFetchPolicy.SecureDefault with { BlockPrivateAndLoopback = false };
 
         Oid4VciWalletClient deniedClient = BuildInProcessWalletClient(
-            fetchCredentialOffer: (request, _, _) =>
+            fetchCredentialOffer: (request, _, readResponse, cancellationToken) =>
                 throw new InvalidOperationException("The offer GET must never be dialed once the policy denies it."));
 
         Result<CredentialOffer, Oid4VciRequestFailure> denial = await deniedClient.FetchCredentialOfferAsync(
@@ -1669,7 +1669,7 @@ internal sealed class Oid4VciWalletClientTests
         string offerJson = CredentialOfferSerializer.ToJson(minimalOffer);
 
         Oid4VciWalletClient allowedClient = BuildInProcessWalletClient(
-            fetchCredentialOffer: (request, _, _) => ValueTask.FromResult(JsonOfferResponse(offerJson)),
+            fetchCredentialOffer: (request, _, readResponse, cancellationToken) => ScriptedOutboundTransport.ReadAsync(readResponse, JsonOfferResponse(offerJson), cancellationToken),
             outboundFetchPolicy: loopbackAllowing);
 
         Result<CredentialOffer, Oid4VciRequestFailure> allowed = await allowedClient.FetchCredentialOfferAsync(
@@ -1692,7 +1692,7 @@ internal sealed class Oid4VciWalletClientTests
         OutboundFetchPolicy loopbackAllowing = OutboundFetchPolicy.SecureDefault with { BlockPrivateAndLoopback = false };
 
         Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
-            fetchCredentialOffer: (request, _, _) =>
+            fetchCredentialOffer: (request, _, readResponse, cancellationToken) =>
                 throw new InvalidOperationException("The offer GET must never be dialed once the policy denies it."),
             outboundFetchPolicy: loopbackAllowing);
 
@@ -1718,15 +1718,15 @@ internal sealed class Oid4VciWalletClientTests
     {
         int invocationCount = 0;
         Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
-            fetchCredentialOffer: (request, _, _) =>
+            fetchCredentialOffer: (request, _, readResponse, cancellationToken) =>
             {
                 invocationCount++;
-                return ValueTask.FromResult(new OutboundResponse
+                return ScriptedOutboundTransport.ReadAsync(readResponse, new OutboundResponse
                 {
                     StatusCode = 302,
                     Headers = HttpHeaderSet.FromPairs(
                         (WellKnownHttpHeaderNames.Location, "https://elsewhere.example.com/credential-offer"))
-                });
+                }, cancellationToken);
             });
 
         Result<CredentialOffer, Oid4VciRequestFailure> outcome = await walletClient.FetchCredentialOfferAsync(
@@ -1742,13 +1742,9 @@ internal sealed class Oid4VciWalletClientTests
 
 
     /// <summary>
-    /// The authoritative post-read size check in
-    /// <see cref="Oid4VciWalletClient.FetchCredentialOfferAsync"/> rejects a response exceeding
-    /// <see cref="Oid4VciWalletConfiguration.MaximumCredentialOfferBytes"/> even when the transport
-    /// disregards the <see cref="OutboundRequest.MaxResponseBytes"/> hint and returns the full,
-    /// oversize body — the same defense
-    /// <see cref="AuthorizationServerMetadataDocuments.ResolveAsync"/> applies to its own
-    /// document fetch.
+    /// The guarded reader rejects an offer exceeding
+    /// <see cref="Oid4VciWalletConfiguration.MaximumCredentialOfferBytes"/> and the wallet preserves
+    /// its declared or observed size evidence.
     /// </summary>
     [TestMethod]
     public async Task ByReferenceOfferGetRefusesOversizeBody()
@@ -1757,12 +1753,12 @@ internal sealed class Oid4VciWalletClientTests
         {
             SendFormPost = (_, _, _, _, _) => throw new InvalidOperationException("No §6 Token Request is expected in this test."),
             SendJsonPost = (_, _, _, _, _) => throw new InvalidOperationException("No §7/§8/§9 request is expected in this test."),
-            FetchCredentialOffer = (request, _, _) => ValueTask.FromResult(new OutboundResponse
+            FetchCredentialOffer = (request, _, readResponse, cancellationToken) => ScriptedOutboundTransport.ReadAsync(readResponse, new OutboundResponse
             {
                 StatusCode = 200,
                 Headers = HttpHeaderSet.FromPairs((WellKnownHttpHeaderNames.ContentType, "application/json")),
                 Body = new TaggedMemory<byte>(new byte[128], Tag.Empty)
-            }),
+            }, cancellationToken),
             JwtHeaderSerializer = HeaderSerializer,
             JwtPayloadSerializer = PayloadSerializer,
             Base64UrlEncoder = TestSetup.Base64UrlEncoder,
@@ -1777,9 +1773,8 @@ internal sealed class Oid4VciWalletClientTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(outcome.IsSuccess, "A body exceeding MaximumCredentialOfferBytes must be a refusal.");
-        Assert.AreEqual(Oid4VciRequestFailureKind.MalformedResponse, outcome.Error.Kind);
-        Assert.AreEqual(200, outcome.Error.StatusCode, "The size check runs after a 200 was received.");
-        Assert.Contains("maximum size", outcome.Error.ErrorDescription!, StringComparison.OrdinalIgnoreCase);
+        Assert.AreEqual(Oid4VciRequestFailureKind.TooLarge, outcome.Error.Kind);
+        Assert.AreEqual(new OutboundResponseTooLarge(64, 65, OutboundResponseLengthKind.Observed), outcome.Error.TooLarge);
     }
 
 
@@ -1791,8 +1786,8 @@ internal sealed class Oid4VciWalletClientTests
     public async Task ByReferenceOfferGetNotFoundAnswersErrorResponseWithNullCode()
     {
         Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
-            fetchCredentialOffer: (request, _, _) =>
-                ValueTask.FromResult(new OutboundResponse { StatusCode = 404 }));
+            fetchCredentialOffer: (request, _, readResponse, cancellationToken) =>
+                ScriptedOutboundTransport.ReadAsync(readResponse, new OutboundResponse { StatusCode = 404 }, cancellationToken));
 
         Result<CredentialOffer, Oid4VciRequestFailure> outcome = await walletClient.FetchCredentialOfferAsync(
             new Uri("https://issuer.example.com/credential-offer"), new ExchangeContext(),
@@ -1815,8 +1810,8 @@ internal sealed class Oid4VciWalletClientTests
     public async Task ByReferenceOfferGetWithNonJsonBodyAnswersMalformedResponseNamingTheRule()
     {
         Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
-            fetchCredentialOffer: (request, _, _) =>
-                ValueTask.FromResult(JsonOfferResponse("not-a-json-object")));
+            fetchCredentialOffer: (request, _, readResponse, cancellationToken) =>
+                ScriptedOutboundTransport.ReadAsync(readResponse, JsonOfferResponse("not-a-json-object"), cancellationToken));
 
         Result<CredentialOffer, Oid4VciRequestFailure> outcome = await walletClient.FetchCredentialOfferAsync(
             new Uri("https://issuer.example.com/credential-offer"), new ExchangeContext(),
@@ -1838,9 +1833,9 @@ internal sealed class Oid4VciWalletClientTests
     public async Task ByReferenceOfferGetWithNoCredentialIssuerAnswersMalformedResponseNamingTheRule()
     {
         Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
-            fetchCredentialOffer: (request, _, _) =>
-                ValueTask.FromResult(JsonOfferResponse(
-                    "{\"credential_configuration_ids\":[\"" + ConfigurationId + "\"]}")));
+            fetchCredentialOffer: (request, _, readResponse, cancellationToken) =>
+                ScriptedOutboundTransport.ReadAsync(readResponse, JsonOfferResponse(
+                    "{\"credential_configuration_ids\":[\"" + ConfigurationId + "\"]}"), cancellationToken));
 
         Result<CredentialOffer, Oid4VciRequestFailure> outcome = await walletClient.FetchCredentialOfferAsync(
             new Uri("https://issuer.example.com/credential-offer"), new ExchangeContext(),
@@ -1863,9 +1858,9 @@ internal sealed class Oid4VciWalletClientTests
     public async Task ByReferenceOfferGetWithUnparseableCredentialIssuerAnswersMalformedResponseNamingTheRule()
     {
         Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
-            fetchCredentialOffer: (request, _, _) =>
-                ValueTask.FromResult(JsonOfferResponse(
-                    "{\"credential_issuer\":\"http://\",\"credential_configuration_ids\":[\"" + ConfigurationId + "\"]}")));
+            fetchCredentialOffer: (request, _, readResponse, cancellationToken) =>
+                ScriptedOutboundTransport.ReadAsync(readResponse, JsonOfferResponse(
+                    "{\"credential_issuer\":\"http://\",\"credential_configuration_ids\":[\"" + ConfigurationId + "\"]}"), cancellationToken));
 
         Result<CredentialOffer, Oid4VciRequestFailure> outcome = await walletClient.FetchCredentialOfferAsync(
             new Uri("https://issuer.example.com/credential-offer"), new ExchangeContext(),
@@ -1887,8 +1882,8 @@ internal sealed class Oid4VciWalletClientTests
     public async Task ByReferenceOfferGetWithWrongContentTypeAnswersMalformedResponse()
     {
         Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
-            fetchCredentialOffer: (request, _, _) =>
-                ValueTask.FromResult(OfferResponseWithContentType(MinimalOfferJson(), "text/html")));
+            fetchCredentialOffer: (request, _, readResponse, cancellationToken) =>
+                ScriptedOutboundTransport.ReadAsync(readResponse, OfferResponseWithContentType(MinimalOfferJson(), "text/html"), cancellationToken));
 
         Result<CredentialOffer, Oid4VciRequestFailure> outcome = await walletClient.FetchCredentialOfferAsync(
             new Uri("https://issuer.example.com/credential-offer"), new ExchangeContext(),
@@ -1906,8 +1901,8 @@ internal sealed class Oid4VciWalletClientTests
     public async Task ByReferenceOfferGetWithNoContentTypeHeaderAnswersMalformedResponse()
     {
         Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
-            fetchCredentialOffer: (request, _, _) =>
-                ValueTask.FromResult(OfferResponseWithContentType(MinimalOfferJson(), contentType: null)));
+            fetchCredentialOffer: (request, _, readResponse, cancellationToken) =>
+                ScriptedOutboundTransport.ReadAsync(readResponse, OfferResponseWithContentType(MinimalOfferJson(), contentType: null), cancellationToken));
 
         Result<CredentialOffer, Oid4VciRequestFailure> outcome = await walletClient.FetchCredentialOfferAsync(
             new Uri("https://issuer.example.com/credential-offer"), new ExchangeContext(),
@@ -1929,8 +1924,8 @@ internal sealed class Oid4VciWalletClientTests
     public async Task ByReferenceOfferGetWithContentTypeParameterIsAccepted()
     {
         Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
-            fetchCredentialOffer: (request, _, _) =>
-                ValueTask.FromResult(OfferResponseWithContentType(MinimalOfferJson(), "application/json; charset=utf-8")));
+            fetchCredentialOffer: (request, _, readResponse, cancellationToken) =>
+                ScriptedOutboundTransport.ReadAsync(readResponse, OfferResponseWithContentType(MinimalOfferJson(), "application/json; charset=utf-8"), cancellationToken));
 
         Result<CredentialOffer, Oid4VciRequestFailure> outcome = await walletClient.FetchCredentialOfferAsync(
             new Uri("https://issuer.example.com/credential-offer"), new ExchangeContext(),

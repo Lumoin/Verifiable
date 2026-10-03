@@ -170,7 +170,7 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
 
     /// <summary>
     /// CIMD-059: a response larger than the configured maximum is treated as an error, even though
-    /// the transport itself reported 200 — the resolver's post-read size check runs before the
+    /// the transport itself reported 200 — the guarded reader stops before the
     /// document is even parsed, so the body need not be well-formed JSON.
     /// </summary>
     [TestMethod]
@@ -1588,11 +1588,11 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
 
         public int CallCount => Volatile.Read(ref callCount);
 
-        public OutboundTransportDelegate Delegate => (request, context, cancellationToken) =>
+        public OutboundTransportDelegate Delegate => (request, context, readResponse, cancellationToken) =>
         {
             _ = Interlocked.Increment(ref callCount);
 
-            return ValueTask.FromResult(new OutboundResponse { StatusCode = 200 });
+            return ScriptedOutboundTransport.ReadAsync(readResponse, new OutboundResponse { StatusCode = 200 }, cancellationToken);
         };
     }
 }

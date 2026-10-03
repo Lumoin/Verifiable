@@ -1024,7 +1024,7 @@ internal sealed class StatusListTokenSeatFlowTests
         bool isReferencedKeyPresent = false;
         bool isReferencedKeyTheMdocIssuers = false;
 
-        ValueTask<ResolvedStatusListToken?> resolver(StatusListResolutionContext context, CancellationToken cancellationToken = default)
+        ValueTask<StatusListTokenResolution?> resolver(StatusListResolutionContext context, CancellationToken cancellationToken = default)
         {
             resolutions++;
             seenReferenceUri = context.Reference.Uri;
@@ -1314,11 +1314,11 @@ internal sealed class StatusListTokenSeatFlowTests
     public async Task AStatusListReferenceWithARelativeUriIsRefusedAsMalformed()
     {
         int resolverCalls = 0;
-        ValueTask<ResolvedStatusListToken?> countingResolver(StatusListResolutionContext context, CancellationToken cancellationToken = default)
+        ValueTask<StatusListTokenResolution?> countingResolver(StatusListResolutionContext context, CancellationToken cancellationToken = default)
         {
             resolverCalls++;
 
-            return ValueTask.FromResult<ResolvedStatusListToken?>(null);
+            return ValueTask.FromResult<StatusListTokenResolution?>(null);
         }
 
         await using TestHostShell app = new(TimeProvider, resolveVerifiedStatusListToken: countingResolver);
@@ -1357,11 +1357,11 @@ internal sealed class StatusListTokenSeatFlowTests
     public async Task AStatusListReferenceWithANegativeIndexIsRefusedAsMalformed()
     {
         int resolverCalls = 0;
-        ValueTask<ResolvedStatusListToken?> countingResolver(StatusListResolutionContext context, CancellationToken cancellationToken = default)
+        ValueTask<StatusListTokenResolution?> countingResolver(StatusListResolutionContext context, CancellationToken cancellationToken = default)
         {
             resolverCalls++;
 
-            return ValueTask.FromResult<ResolvedStatusListToken?>(null);
+            return ValueTask.FromResult<StatusListTokenResolution?>(null);
         }
 
         await using TestHostShell app = new(TimeProvider, resolveVerifiedStatusListToken: countingResolver);
@@ -1403,11 +1403,11 @@ internal sealed class StatusListTokenSeatFlowTests
     public async Task AStatusObjectNamingOnlyAnUnmodelledMechanismIsNotCheckedWhenSurfacingIsChosen()
     {
         int resolverCalls = 0;
-        ValueTask<ResolvedStatusListToken?> countingResolver(StatusListResolutionContext context, CancellationToken cancellationToken = default)
+        ValueTask<StatusListTokenResolution?> countingResolver(StatusListResolutionContext context, CancellationToken cancellationToken = default)
         {
             resolverCalls++;
 
-            return ValueTask.FromResult<ResolvedStatusListToken?>(null);
+            return ValueTask.FromResult<StatusListTokenResolution?>(null);
         }
 
         await using TestHostShell app = new(
@@ -1599,10 +1599,10 @@ internal sealed class StatusListTokenSeatFlowTests
         /// <summary>The resolver a host is built with.</summary>
         public ResolveVerifiedStatusListTokenDelegate Resolve => async (context, cancellationToken) =>
         {
-            ResolvedStatusListToken? resolved = await inner(context, cancellationToken).ConfigureAwait(false);
-            if(resolved is null)
+            StatusListTokenResolution? result = await inner(context, cancellationToken).ConfigureAwait(false);
+            if(result is not ResolvedStatusListToken resolved)
             {
-                return null;
+                return result;
             }
 
             ResolvedTokens.Add(resolved.Token);

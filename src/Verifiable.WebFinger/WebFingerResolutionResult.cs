@@ -16,6 +16,9 @@ public sealed record WebFingerResolutionResult
     /// <summary>The failure diagnostic when unsuccessful; otherwise <see langword="null"/>.</summary>
     public WebFingerResolutionError? Error { get; init; }
 
+    /// <summary>The guarded fetch's transport kind, including TimeoutException for own-budget cancellation.</summary>
+    public Type? FailureKind { get; init; }
+
     /// <summary>
     /// The freshness the JRD response's headers imply, per
     /// <see href="https://www.rfc-editor.org/rfc/rfc9111#section-5.2">RFC 9111 §5.2</see>, when

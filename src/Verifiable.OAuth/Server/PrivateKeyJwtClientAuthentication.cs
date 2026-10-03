@@ -564,7 +564,7 @@ public static class PrivateKeyJwtClientAuthentication
                     publicKey = DpopJwkUtilities.PublicKeyFromJwk(
                         jwkMembers, alg, oauth.Codecs.Decoder, oauth.MemoryPool!);
                 }
-                catch(Exception ex) when(ex is FormatException or InvalidOperationException or ArgumentException or NotSupportedException)
+                catch(Exception ex) when(ex is FormatException or InvalidOperationException or ArgumentException or NotSupportedException or RsaPublicKeyException)
                 {
                     return false;
                 }
