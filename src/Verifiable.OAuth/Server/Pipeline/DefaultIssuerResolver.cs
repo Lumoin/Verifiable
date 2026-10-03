@@ -74,7 +74,7 @@ internal static class DefaultIssuerResolver
     /// <summary>
     /// The resolution of <see cref="ResolveAsync"/>, which completes without waiting, for a caller that composes
     /// its answer synchronously: the registration's issuer, else the context's, each checked by
-    /// <see cref="IssuerIdentifierValidation.IsValidIssuerShape"/>.
+    /// <see cref="IssuerIdentifier.Parse"/>.
     /// </summary>
     /// <param name="registration">The registration for the current request.</param>
     /// <param name="context">The per-request context bag.</param>

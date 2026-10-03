@@ -453,7 +453,7 @@ public static class ClientIdMetadataMaterialization
     /// resolver declined, a value an earlier step placed on the context, which the dispatcher leaves in place. With
     /// none wired the dispatcher places nothing, and the library's default resolution
     /// (<see cref="DefaultIssuerResolver.Resolve"/>, the registration's issuer, else the context's, checked by
-    /// <see cref="IssuerIdentifierValidation.IsValidIssuerShape"/>) names it, as it does for every other refusal
+    /// <see cref="IssuerIdentifier.Parse"/>) names it, as it does for every other refusal
     /// of the library; <see langword="null"/> when it names no valid issuer. The library's own materialization
     /// resolves its realm through <see cref="RefuseAsync"/>.
     /// </summary>
