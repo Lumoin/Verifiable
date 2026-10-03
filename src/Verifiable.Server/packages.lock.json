@@ -25,7 +25,7 @@
         "dependencies": {
           "Lumoin.Veridical.Backends.Managed": "[0.0.7, )",
           "Lumoin.Veridical.Bbs": "[0.0.7, )",
-          "Lumoin.Veritas.JsonPointer": "[0.0.2-local.be47a9ff, )",
+          "Lumoin.Veritas.JsonPointer": "[0.0.3-local.5fa78938, )",
           "Verifiable.Foundation": "[0.0.0, )",
           "Verifiable.JCose": "[0.0.0, )"
         }
@@ -98,11 +98,11 @@
       },
       "Lumoin.Veritas.JsonPointer": {
         "type": "CentralTransitive",
-        "requested": "[0.0.2-local.be47a9ff, )",
-        "resolved": "0.0.2-local.be47a9ff",
-        "contentHash": "HECRatfPq8USqLLNTN01AAhrIcvKsScXSDHnZ9fNpP+X4UVzcnx00MYmqw8QMmXjU21oFuSirl/TJXG0wzicFA==",
+        "requested": "[0.0.3-local.5fa78938, )",
+        "resolved": "0.0.3-local.5fa78938",
+        "contentHash": "KU+/tw+khQPoY783zEkP0czjZGWVD/dX0x9iCH4RkMGEPi19bqrZ1e/e3cS7NsKW9wqTm2IfKqZunDGX3t9cTg==",
         "dependencies": {
-          "Lumoin.Base": "0.0.12"
+          "Lumoin.Base": "0.0.14"
         }
       }
     }
