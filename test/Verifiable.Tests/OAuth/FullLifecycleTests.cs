@@ -445,6 +445,11 @@ internal sealed class FullLifecycleTests
             };
         }).ConfigureAwait(false);
 
+        //Section 8.2: the Credential Issuer indicates support for encrypted responses in its
+        //metadata, so the catalogue advertises the ECDH-ES with A256GCM the wallet asks for.
+        await TestHostShell.AdvertiseCredentialResponseEncryptionAsync(
+            host.Server, [WellKnownJweAlgorithms.EcdhEs], [WellKnownJweEncryptionAlgorithms.A256Gcm]).ConfigureAwait(false);
+
         return issuerState;
     }
 

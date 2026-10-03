@@ -242,10 +242,14 @@ internal sealed class Oid4VciPostQuantumEncryptionTests
     /// Wires the §10 response-encryption seam with ML-KEM-768 key encapsulation + AES-GCM
     /// content encryption: encapsulate to the Wallet's <c>pub</c>, use the shared secret as
     /// the content encryption key directly, and carry the encapsulation in the JWE
-    /// encrypted-key segment.
+    /// encrypted-key segment. The catalogue advertises ML-KEM-768 with A256GCM for encrypted
+    /// responses.
     /// </summary>
+    /// <param name="host">The host whose integration is altered.</param>
     private static async Task WireMlKemResponseEncryptionSeamAsync(TestHostShell host)
     {
+        await TestHostShell.AdvertiseCredentialResponseEncryptionAsync(
+            host.Server, [MlKem768JweAlgorithm], [WellKnownJweEncryptionAlgorithms.A256Gcm]).ConfigureAwait(false);
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
             candidateIntegration.EncryptCredentialResponseAsync = async (responseJson, encryption, _, _, ct) =>

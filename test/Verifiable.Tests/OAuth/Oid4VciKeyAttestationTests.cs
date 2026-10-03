@@ -276,7 +276,12 @@ internal sealed class Oid4VciKeyAttestationTests
                 ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
         }).ConfigureAwait(false);
 
-        Dictionary<string, object> jwtProofConfig = new(StringComparer.Ordinal);
+        //Section 12.2.4: a proof type carries its REQUIRED non-empty proof_signing_alg_values_supported,
+        //so the catalogue is one the metadata endpoint publishes.
+        Dictionary<string, object> jwtProofConfig = new(StringComparer.Ordinal)
+        {
+            ["proof_signing_alg_values_supported"] = new List<object> { "ES256" }
+        };
         if(keyAttestationsRequired)
         {
             jwtProofConfig["key_attestations_required"] = new Dictionary<string, object>(StringComparer.Ordinal);

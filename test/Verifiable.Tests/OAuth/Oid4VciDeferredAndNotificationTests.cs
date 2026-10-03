@@ -220,6 +220,37 @@ internal sealed class Oid4VciDeferredAndNotificationTests
 
 
     /// <summary>
+    /// A server whose Credential Issuer metadata seam is not wired does not serve the Deferred
+    /// Credential Endpoint, as it does not serve the Credential Endpoint: without the catalogue the
+    /// encryption a Deferred Credential Request asks for cannot be judged against what the Credential
+    /// Issuer advertises.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-9.1">OID4VCI 1.0 Section 9.1</see>:
+    /// "The Credential Issuer indicates support for encrypted responses by including the
+    /// credential_response_encryption parameter in the Credential Issuer Metadata."
+    /// </summary>
+    [TestMethod]
+    public async Task ADeferredCredentialEndpointWithoutTheCatalogueIsNotServed()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, EndpointCapabilities).ConfigureAwait(false);
+        await WireProtectedEndpointSeamsAsync(host).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeCredentialIssuerMetadataAsync = null;
+        }).ConfigureAwait(false);
+
+        string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
+        using HttpResponseMessage response = await SendProtectedOverWireAsync(
+            host, material, DeferredEndpointRow, "Bearer " + accessToken, ProtectedRequestBody(DeferredEndpointRow))
+            .ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.NotFound, response.StatusCode, body);
+    }
+
+
+    /// <summary>
     /// §11.2: an accepted notification answers 204 No Content with an empty body, and the seam
     /// receives the parsed notification. §11 idempotency is the seam's contract — a repeated
     /// identical call answers success again.

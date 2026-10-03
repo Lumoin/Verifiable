@@ -122,6 +122,293 @@ internal sealed class Oid4VciWalletClientTests
 
 
     /// <summary>
+    /// A Pre-Authorized Code journey whose Token Response returns two <c>credential_identifiers</c> for
+    /// the requested configuration spends the token on a Credential Request naming the first of them,
+    /// with no <c>credential_configuration_id</c>, and the wallet holds the credential the Issuer minted.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.2">OID4VCI 1.0 Section 6.2</see>:
+    /// "The Wallet MUST use these identifiers together with an Access Token in subsequent Credential
+    /// Requests."
+    /// </summary>
+    [TestMethod]
+    public async Task APreAuthorizedJourneyRequestsByTheGrantedIdentifier()
+    {
+        const string GrantedIdentifier = "pid-dataset-1";
+
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuerCapabilities).ConfigureAwait(false);
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
+        IssuerSeamObservations observations = await WireIssuerSeamsAsync(host).ConfigureAwait(false);
+        await WireCredentialAuthorizationAsync(host, ConfigurationId, GrantedIdentifier, "pid-dataset-2").ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+
+        Oid4VciWalletClient walletClient = BuildWalletClient(
+            host,
+            tokenRequestAuthorizationDetails:
+                "[{\"type\":\"openid_credential\",\"credential_configuration_id\":\"" + ConfigurationId + "\"}]");
+
+        Result<string, Oid4VciRequestFailure> issued = await walletClient.IssuePreAuthorizedAsync(
+            ComposeOffer(material),
+            ConfigurationId,
+            holderPrivate,
+            holderPublic,
+            ResolveEndpoints(host, material),
+            transactionCode: null,
+            responseEncryption: null,
+            TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(issued.IsSuccess, "The issuance by the granted identifier must succeed over the wire.");
+        Assert.AreEqual(IssuedCredential, issued.Value);
+        Assert.AreEqual(GrantedIdentifier, observations.RequestedIdentifier,
+            "The Credential Request must name the identifier the Token Response returned.");
+        Assert.IsNull(observations.RequestedConfigurationId,
+            "The Credential Request must not name a credential_configuration_id beside the identifier.");
+    }
+
+
+    /// <summary>
+    /// A Pre-Authorized Code Token Response whose <c>credential_identifiers</c> belong to another
+    /// configuration than the one the wallet was asked to request leaves the wallet no conformant
+    /// Credential Request for it: the wallet answers a malformed-response failure and sends none.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-8.2">OID4VCI 1.0 Section 8.2</see>:
+    /// "credential_configuration_id: REQUIRED if a credential_identifiers parameter was not returned
+    /// from the Token Response as part of the authorization_details parameter. It MUST NOT be used
+    /// otherwise."
+    /// </summary>
+    [TestMethod]
+    public async Task APreAuthorizedTokenGrantingAnotherConfigurationIsNotSpentOnIt()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuerCapabilities).ConfigureAwait(false);
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
+        IssuerSeamObservations observations = await WireIssuerSeamsAsync(host).ConfigureAwait(false);
+        await WireCredentialAuthorizationAsync(host, "eu.europa.ec.eudi.mdl.1", "mdl-dataset-1").ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+
+        Oid4VciWalletClient walletClient = BuildWalletClient(
+            host,
+            tokenRequestAuthorizationDetails:
+                "[{\"type\":\"openid_credential\",\"credential_configuration_id\":\"" + ConfigurationId + "\"}]");
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await walletClient.IssuePreAuthorizedDetailedAsync(
+            ComposeOffer(material),
+            ConfigurationId,
+            holderPrivate,
+            holderPublic,
+            ResolveEndpoints(host, material),
+            transactionCode: null,
+            responseEncryption: null,
+            TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(outcome.IsSuccess, "A token granting another configuration must not be spent on this one.");
+        Assert.AreEqual(Oid4VciRequestFailureKind.MalformedResponse, outcome.Error.Kind);
+        Assert.AreEqual(0, observations.IssuanceRequests, "No Credential Request may reach the Issuer.");
+    }
+
+
+    /// <summary>
+    /// A Token Response granting the requested configuration a <c>credential_identifiers</c> value that is
+    /// empty or white space names no Credential Dataset: the wallet answers a malformed-response failure,
+    /// raises nothing and sends no Credential Request.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.2">OID4VCI 1.0 Section 6.2</see>:
+    /// "credential_identifiers: REQUIRED. A non-empty array of strings, each uniquely identifying a
+    /// Credential Dataset that can be issued using the Access Token returned in this response."
+    /// </summary>
+    /// <param name="grantedIdentifier">The identifier the Authorization Server grants.</param>
+    [TestMethod]
+    [DataRow("")]
+    [DataRow(" \t")]
+    public async Task AGrantedIdentifierThatNamesNoDatasetIsAMalformedTokenResponse(string grantedIdentifier)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuerCapabilities).ConfigureAwait(false);
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
+        IssuerSeamObservations observations = await WireIssuerSeamsAsync(host).ConfigureAwait(false);
+        await WireCredentialAuthorizationAsync(host, ConfigurationId, grantedIdentifier).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+
+        Oid4VciWalletClient walletClient = BuildWalletClient(
+            host,
+            tokenRequestAuthorizationDetails:
+                "[{\"type\":\"openid_credential\",\"credential_configuration_id\":\"" + ConfigurationId + "\"}]");
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await walletClient.IssuePreAuthorizedDetailedAsync(
+            ComposeOffer(material),
+            ConfigurationId,
+            holderPrivate,
+            holderPublic,
+            ResolveEndpoints(host, material),
+            transactionCode: null,
+            responseEncryption: null,
+            TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(outcome.IsSuccess, "A granted identifier naming no dataset must not be spent.");
+        Assert.AreEqual(Oid4VciRequestFailureKind.MalformedResponse, outcome.Error.Kind);
+        Assert.AreEqual(0, observations.IssuanceRequests, "No Credential Request may reach the Issuer.");
+    }
+
+
+    /// <summary>
+    /// A Token Response whose <c>authorization_details</c> carry a valid grant for the requested
+    /// configuration followed by an entry that is not a conformant <c>openid_credential</c> object (a
+    /// scalar, or an object without <c>credential_identifiers</c>) is malformed as a whole: the wallet
+    /// answers a malformed-response failure and sends no further request. The library's Authorization
+    /// Server emits no such entry, so the response is delivered through the wallet's transport delegate.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.2">OID4VCI 1.0 Section 6.2</see>:
+    /// "It is a non-empty array of objects, as defined in Section 7 of [RFC9396]." And:
+    /// "credential_identifiers: REQUIRED."
+    /// </summary>
+    /// <param name="trailingEntry">The entry that follows the valid grant.</param>
+    [TestMethod]
+    [DataRow("42")]
+    [DataRow("{\"type\":\"openid_credential\",\"credential_configuration_id\":\"eu.europa.ec.eudi.mdl.1\"}")]
+    public async Task AMalformedEntryAfterAValidGrantIsAMalformedTokenResponse(string trailingEntry)
+    {
+        GrantedDetailsIssuance issuance = await IssueOverGrantedDetailsAsync(
+            "[{\"type\":\"openid_credential\",\"credential_configuration_id\":\"" + ConfigurationId + "\","
+            + "\"credential_identifiers\":[\"pid-dataset-1\"]}," + trailingEntry + "]").ConfigureAwait(false);
+
+        Assert.IsFalse(issuance.Outcome.IsSuccess, "A malformed authorization_details member must not be spent.");
+        Assert.AreEqual(Oid4VciRequestFailureKind.MalformedResponse, issuance.Outcome.Error.Kind);
+        Assert.IsEmpty(issuance.LaterRequests, "No Nonce or Credential Request may follow a malformed Token Response.");
+    }
+
+
+    /// <summary>
+    /// A Token Response whose <c>authorization_details</c> member is an empty array is malformed: the
+    /// wallet answers a malformed-response failure and sends no Nonce or Credential Request, by the
+    /// configuration or otherwise. The library's Authorization Server emits no such member, so the
+    /// response is delivered through the wallet's transport delegate.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.2">OID4VCI 1.0 Section 6.2</see>:
+    /// "It is a non-empty array of objects, as defined in Section 7 of [RFC9396]."
+    /// </summary>
+    [TestMethod]
+    public async Task AnEmptyAuthorizationDetailsArrayIsAMalformedTokenResponse()
+    {
+        GrantedDetailsIssuance issuance = await IssueOverGrantedDetailsAsync("[]").ConfigureAwait(false);
+
+        Assert.IsFalse(issuance.Outcome.IsSuccess, "An empty authorization_details member must not be spent.");
+        Assert.AreEqual(Oid4VciRequestFailureKind.MalformedResponse, issuance.Outcome.Error.Kind);
+        Assert.IsEmpty(issuance.LaterRequests, "No Nonce or Credential Request may follow a malformed Token Response.");
+    }
+
+
+    /// <summary>
+    /// A Token Response whose <c>authorization_details</c> hold an entry without a <c>type</c>, or whose
+    /// <c>type</c> is not a JSON string, is malformed wherever that entry stands beside a valid grant
+    /// for the requested configuration: the wallet answers a malformed-response failure and sends no
+    /// Nonce or Credential Request. The library's Authorization Server emits no such entry, so the
+    /// response is delivered through the wallet's transport delegate.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9396#section-2">RFC 9396 Section 2</see>:
+    /// "type: An identifier for the authorization details type as a string. The value of the type field
+    /// determines the allowable contents of the object that contains it. The value is unique for the
+    /// described API in the context of the AS. This field is REQUIRED."
+    /// </summary>
+    /// <param name="authorizationDetails">The whole <c>authorization_details</c> member the Token Response returns.</param>
+    [TestMethod]
+    [DataRow("[{\"type\":\"openid_credential\",\"credential_configuration_id\":\"eu.europa.ec.eudi.pid.1\",\"credential_identifiers\":[\"pid-dataset-1\"]},{}]")]
+    [DataRow("[{},{\"type\":\"openid_credential\",\"credential_configuration_id\":\"eu.europa.ec.eudi.pid.1\",\"credential_identifiers\":[\"pid-dataset-1\"]}]")]
+    [DataRow("[{\"type\":\"openid_credential\",\"credential_configuration_id\":\"eu.europa.ec.eudi.pid.1\",\"credential_identifiers\":[\"pid-dataset-1\"]},{\"type\":42}]")]
+    public async Task AnEntryWithoutAStringTypeIsAMalformedTokenResponse(string authorizationDetails)
+    {
+        GrantedDetailsIssuance issuance = await IssueOverGrantedDetailsAsync(authorizationDetails).ConfigureAwait(false);
+
+        Assert.IsFalse(issuance.Outcome.IsSuccess, "An entry without a string type must not be skipped as another type.");
+        Assert.AreEqual(Oid4VciRequestFailureKind.MalformedResponse, issuance.Outcome.Error.Kind);
+        Assert.IsEmpty(issuance.LaterRequests, "No Nonce or Credential Request may follow a malformed Token Response.");
+    }
+
+
+    /// <summary>
+    /// A Token Response whose <c>authorization_details</c> hold an entry of another authorization details
+    /// type beside a valid <c>openid_credential</c> grant for the requested configuration is read for
+    /// that grant: the entry of the other type is skipped and the Credential Request names the granted
+    /// identifier alone. The library's Authorization Server emits no such entry, so the response is
+    /// delivered through the wallet's transport delegate.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9396#section-2">RFC 9396 Section 2</see>:
+    /// "type: An identifier for the authorization details type as a string. The value of the type field
+    /// determines the allowable contents of the object that contains it. The value is unique for the
+    /// described API in the context of the AS. This field is REQUIRED."
+    /// </summary>
+    [TestMethod]
+    public async Task AnEntryOfAnotherTypeBesideAValidGrantIsSkipped()
+    {
+        GrantedDetailsIssuance issuance = await IssueOverGrantedDetailsAsync(
+            "[{\"type\":\"payment_initiation\"},"
+            + "{\"type\":\"openid_credential\",\"credential_configuration_id\":\"" + ConfigurationId + "\","
+            + "\"credential_identifiers\":[\"pid-dataset-1\"]}]").ConfigureAwait(false);
+
+        Assert.IsTrue(issuance.Outcome.IsSuccess, "The valid grant beside an entry of another type must be spent.");
+        Assert.HasCount(1, issuance.CredentialRequestBodies, "Exactly one Credential Request must be sent.");
+        byte[] credentialRequest = Encoding.UTF8.GetBytes(issuance.CredentialRequestBodies[0]);
+        Assert.AreEqual("pid-dataset-1", JwkJsonReader.ExtractStringValue(credentialRequest, "credential_identifier"u8));
+        Assert.IsFalse(JwkJsonReader.ContainsKey(credentialRequest, "credential_configuration_id"u8),
+            "The Credential Request must not name a credential_configuration_id beside the identifier.");
+    }
+
+
+    /// <summary>
+    /// A configuration identifier carrying a quotation mark and a reverse solidus reaches the Issuer as the
+    /// wallet was given it, alone: the Credential Request body escapes the value and names no
+    /// <c>credential_identifier</c>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-7">RFC 8259 Section 7</see>:
+    /// "All Unicode characters may be placed within the quotation marks, except for the characters that
+    /// MUST be escaped: quotation mark, reverse solidus, and the control characters (U+0000 through
+    /// U+001F)."
+    /// </summary>
+    [TestMethod]
+    public async Task AConfigurationIdentifierIsWrittenAloneAndEscaped()
+    {
+        const string QuotedConfigurationId = "eu.europa.ec.eudi.pid.1\"quoted\\path";
+
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuerCapabilities).ConfigureAwait(false);
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
+        IssuerSeamObservations observations = await WireIssuerSeamsAsync(host, QuotedConfigurationId).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+
+        Oid4VciWalletClient walletClient = BuildWalletClient(host);
+        Result<string, Oid4VciRequestFailure> issued = await walletClient.IssuePreAuthorizedAsync(
+            ComposeOffer(material),
+            QuotedConfigurationId,
+            holderPrivate,
+            holderPublic,
+            ResolveEndpoints(host, material),
+            transactionCode: null,
+            responseEncryption: null,
+            TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(issued.IsSuccess, "The escaped Credential Request must be issued over the wire.");
+        Assert.AreEqual(QuotedConfigurationId, observations.RequestedConfigurationId);
+        Assert.IsNull(observations.RequestedIdentifier,
+            "The Credential Request must not name a credential_identifier beside the configuration.");
+    }
+
+
+    /// <summary>
     /// §6.3: a Pre-Authorized Code Token Request the hosted Issuer refuses over the real wire
     /// answers the Issuer's own <c>invalid_grant</c> error as a value, rather than throwing. The
     /// Issuer's <see cref="ValidatePreAuthorizedCodeDelegate"/> seam denies the wrong code with
@@ -422,6 +709,76 @@ internal sealed class Oid4VciWalletClientTests
             "The wallet must decrypt the §10 JWE response and read the credential.");
         Assert.IsTrue(observations.IsProofVerified,
             "The issuance seam must have verified the holder proof even on the encrypted path.");
+    }
+
+
+    /// <summary>
+    /// A response-encryption JWK member whose value carries a quotation mark and a reverse solidus
+    /// reaches the Issuer as the wallet was given it: the Credential Request body escapes the
+    /// <c>credential_response_encryption</c> object's members, so the Issuer parses the request and
+    /// issues.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-7">RFC 8259 Section 7</see>:
+    /// "All Unicode characters may be placed within the quotation marks, except for the characters that
+    /// MUST be escaped: quotation mark, reverse solidus, and the control characters (U+0000 through
+    /// U+001F)."
+    /// </summary>
+    [TestMethod]
+    public async Task AResponseEncryptionJwkMemberIsWrittenEscaped()
+    {
+        const string QuotedKeyId = "wallet\"response\\key";
+
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuerCapabilities).ConfigureAwait(false);
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
+        IssuerSeamObservations observations = await WireIssuerSeamsAsync(host).ConfigureAwait(false);
+        await WireResponseEncryptionSeamAsync(host).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+
+        var responseKeys = TestKeyMaterialProvider.CreateFreshP256ExchangeKeyMaterial();
+        using PublicKeyMemory responsePublic = responseKeys.PublicKey;
+        using PrivateKeyMemory responsePrivate = responseKeys.PrivateKey;
+
+        var requestKeys = TestKeyMaterialProvider.CreateFreshP256ExchangeKeyMaterial();
+        using PublicKeyMemory requestPublic = requestKeys.PublicKey;
+        using PrivateKeyMemory requestPrivate = requestKeys.PrivateKey;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
+                await DecryptAsync(jwe, requestPrivate, ct).ConfigureAwait(false);
+        }).ConfigureAwait(false);
+
+        Oid4VciWalletClient walletClient = BuildWalletClient(
+            host,
+            decryptResponse: (compactJwe, ct) => DecryptAsync(compactJwe, responsePrivate, ct),
+            encryptRequest: (requestBody, ct) => EncryptToIssuerAsync(requestBody, requestPublic, ct));
+
+        Dictionary<string, object> responseJwk = EcJwkMembers(responsePublic);
+        responseJwk[WellKnownJwkMemberNames.Kid] = QuotedKeyId;
+        CredentialResponseEncryption responseEncryption = new()
+        {
+            Jwk = responseJwk,
+            Enc = WellKnownJweEncryptionAlgorithms.A256Gcm
+        };
+
+        Result<string, Oid4VciRequestFailure> issued = await walletClient.IssuePreAuthorizedAsync(
+            ComposeOffer(material),
+            ConfigurationId,
+            holderPrivate,
+            holderPublic,
+            ResolveEndpoints(host, material),
+            transactionCode: null,
+            responseEncryption,
+            TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(issued.IsSuccess, "The Credential Request with the escaped response-encryption JWK must be issued over the wire.");
+        Assert.AreEqual(QuotedKeyId, observations.ResponseEncryptionKeyId,
+            "The Issuer must read the response-encryption JWK member the wallet was given.");
     }
 
 
@@ -762,7 +1119,7 @@ internal sealed class Oid4VciWalletClientTests
             WellKnownAuthenticationSchemes.Bearer,
             accessTokenExpiresAt: null,
             new Uri("https://issuer.example.com"),
-            ConfigurationId,
+            CredentialRequestTarget.ForConfiguration(ConfigurationId),
             holderPrivate,
             holderPublic,
             new Oid4VciIssuanceEndpoints
@@ -808,7 +1165,7 @@ internal sealed class Oid4VciWalletClientTests
             WellKnownAuthenticationSchemes.Bearer,
             accessTokenExpiresAt: null,
             new Uri("https://issuer.example.com"),
-            ConfigurationId,
+            CredentialRequestTarget.ForConfiguration(ConfigurationId),
             holderPrivate,
             holderPublic,
             new Oid4VciIssuanceEndpoints
@@ -1631,6 +1988,57 @@ internal sealed class Oid4VciWalletClientTests
     }
 
 
+    /// <summary>
+    /// Drives a Pre-Authorized Code issuance over the in-process transport whose Token Response returns
+    /// <paramref name="authorizationDetails"/> as its <c>authorization_details</c> member, and records
+    /// every Nonce and Credential Request that follows it, answered by
+    /// <see cref="CredentialFlowStub"/>.
+    /// </summary>
+    /// <param name="authorizationDetails">The whole <c>authorization_details</c> member, as JSON text.</param>
+    /// <returns>The issuance outcome and the requests that followed the Token Request.</returns>
+    private async ValueTask<GrantedDetailsIssuance> IssueOverGrantedDetailsAsync(string authorizationDetails)
+    {
+        Uri tokenEndpoint = new("https://issuer.example.com/token");
+        Uri nonceEndpoint = new("https://issuer.example.com/nonce");
+        Uri credentialEndpoint = new("https://issuer.example.com/credential");
+        List<Uri> laterRequests = [];
+        List<string> credentialRequestBodies = [];
+        Oid4VciJsonPostDelegate flow = CredentialFlowStub(nonceEndpoint, credentialEndpoint);
+
+        Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
+            sendFormPost: (_, _, _, _, _) =>
+                ValueTask.FromResult(JsonResponse(
+                    200,
+                    "{\"access_token\":\"tok\",\"token_type\":\"Bearer\",\"authorization_details\":"
+                    + authorizationDetails + "}")),
+            sendJsonPost: (endpoint, jsonBody, headers, context, ct) =>
+            {
+                laterRequests.Add(endpoint);
+                if(endpoint == credentialEndpoint)
+                {
+                    credentialRequestBodies.Add(jsonBody);
+                }
+
+                return flow(endpoint, jsonBody, headers, context, ct);
+            });
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await IssueViaTokenEndpointAsync(
+            walletClient, tokenEndpoint, nonceEndpoint, credentialEndpoint).ConfigureAwait(false);
+
+        return new GrantedDetailsIssuance(outcome, laterRequests, credentialRequestBodies);
+    }
+
+
+    /// <summary>What <see cref="IssueOverGrantedDetailsAsync"/> observed of one issuance.</summary>
+    /// <param name="Outcome">The issuance outcome the wallet answered.</param>
+    /// <param name="LaterRequests">The endpoints of the Nonce and Credential Requests sent after the Token Request, in order.</param>
+    /// <param name="CredentialRequestBodies">The bodies of the Credential Requests sent, in order.</param>
+    private sealed record GrantedDetailsIssuance(
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> Outcome,
+        IReadOnlyList<Uri> LaterRequests,
+        IReadOnlyList<string> CredentialRequestBodies);
+
+
     //A §7/§8 JSON-POST spy: the first call (the Nonce Request, empty body) answers c_nonce; every
     //other call (the Credential Request) answers one issued credential.
     private static Oid4VciJsonPostDelegate CredentialFlowStub(Uri nonceEndpoint, Uri credentialEndpoint) =>
@@ -2076,6 +2484,18 @@ internal sealed class Oid4VciWalletClientTests
     {
         public bool IsProofVerified { get; set; }
         public string? ProofAudience { get; set; }
+
+        /// <summary>The <c>credential_identifier</c> the last Credential Request named, if any.</summary>
+        public string? RequestedIdentifier { get; set; }
+
+        /// <summary>The <c>credential_configuration_id</c> the last Credential Request named, if any.</summary>
+        public string? RequestedConfigurationId { get; set; }
+
+        /// <summary>How many Credential Requests reached the issuance seam.</summary>
+        public int IssuanceRequests { get; set; }
+
+        /// <summary>The <c>kid</c> of the last Credential Request's response-encryption JWK, if any.</summary>
+        public string? ResponseEncryptionKeyId { get; set; }
     }
 
 
@@ -2126,25 +2546,49 @@ internal sealed class Oid4VciWalletClientTests
             WellKnownEndpointNames.Oid4VciNotification);
 
 
-    //Builds the wallet client over HttpClient-backed transport delegates that close over the
-    //started host's SharedHttpClient. The wallet library stays System.Net-free; the test reuses
-    //HttpClientTransport (the same real-HttpClient transport the AuthCode real-wire tests use) for
-    //wire-faithful status/body/header round-tripping, including the DPoP-Nonce response header the
-    //DPoP-bound cases read.
+    /// <summary>
+    /// Builds the wallet client over HttpClient-backed transport delegates that close over the started
+    /// host's SharedHttpClient. The wallet library stays System.Net-free; the test reuses
+    /// <see cref="HttpClientTransport"/> (the same real-HttpClient transport the authorization-code
+    /// real-wire tests use) for wire-faithful status, body and header round-tripping, including the
+    /// DPoP-Nonce response header the DPoP-bound cases read. A
+    /// <paramref name="tokenRequestAuthorizationDetails"/> value rides every form post the wallet sends
+    /// (its section 6 Token Request) as the section 6.1.1 <c>authorization_details</c> field, the way a
+    /// wallet application's transport asks the Authorization Server for <c>credential_identifiers</c>.
+    /// </summary>
+    /// <param name="host">The started host whose SharedHttpClient carries every request.</param>
+    /// <param name="decryptResponse">The wallet's response-decryption seam, or <see langword="null"/>.</param>
+    /// <param name="encryptRequest">The wallet's request-encryption seam, or <see langword="null"/>.</param>
+    /// <param name="fetchCredentialOffer">The by-reference Credential Offer transport, or <see langword="null"/>.</param>
+    /// <param name="constructDpopProofAsync">The DPoP proof constructor, or <see langword="null"/>.</param>
+    /// <param name="dpopKey">The DPoP signing pair, or <see langword="null"/>.</param>
+    /// <param name="tokenRequestAuthorizationDetails">The <c>authorization_details</c> every form post carries, or <see langword="null"/>.</param>
+    /// <returns>The wallet client.</returns>
     private Oid4VciWalletClient BuildWalletClient(
         TestHostShell host,
         Oid4VciDecryptResponseDelegate? decryptResponse = null,
         Oid4VciEncryptRequestDelegate? encryptRequest = null,
         OutboundTransportDelegate? fetchCredentialOffer = null,
         ConstructDpopProofDelegate? constructDpopProofAsync = null,
-        DpopKey? dpopKey = null)
+        DpopKey? dpopKey = null,
+        string? tokenRequestAuthorizationDetails = null)
     {
         HttpClient httpClient = host.Host("default").SharedHttpClient!;
 
         Oid4VciWalletConfiguration configuration = new()
         {
             SendFormPost = (endpoint, formFields, headers, _, ct) =>
-                HttpClientTransport.SendFormPostAsync(httpClient, endpoint, formFields, headers, ct),
+                HttpClientTransport.SendFormPostAsync(
+                    httpClient,
+                    endpoint,
+                    tokenRequestAuthorizationDetails is null
+                        ? formFields
+                        : new Dictionary<string, string>(formFields, StringComparer.Ordinal)
+                        {
+                            [OAuthRequestParameterNames.AuthorizationDetails] = tokenRequestAuthorizationDetails
+                        },
+                    headers,
+                    ct),
             SendJsonPost = (endpoint, body, headers, _, ct) =>
                 HttpClientTransport.SendJsonPostAsync(httpClient, endpoint, body, headers, ct),
             FetchCredentialOffer = fetchCredentialOffer,
@@ -2224,9 +2668,13 @@ internal sealed class Oid4VciWalletClientTests
 
 
     /// <summary>
-    /// Installs the issuer delegates needed by the wallet credential-request cases.
+    /// Installs the issuer delegates needed by the wallet credential-request cases: the Credential
+    /// Issuer catalogue listing <paramref name="configurationId"/>, the request parser, the
+    /// Pre-Authorized Code validation, the nonce and the issuance seam, which records what each
+    /// Credential Request named.
     /// </summary>
-    private static async Task<IssuerSeamObservations> WireIssuerSeamsAsync(TestHostShell host)
+    private static async Task<IssuerSeamObservations> WireIssuerSeamsAsync(
+        TestHostShell host, string configurationId = ConfigurationId)
     {
         IssuerSeamObservations observations = new();
         string? mintedNonce = null;
@@ -2234,6 +2682,12 @@ internal sealed class Oid4VciWalletClientTests
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
             _ = candidateIntegration.UseDefaultCredentialRequestJsonParsing();
+
+            candidateIntegration.ContributeCredentialIssuerMetadataAsync = (_, _, _) =>
+                ValueTask.FromResult(new CredentialIssuerMetadataContribution
+                {
+                    CredentialConfigurationsSupported = TestHostShell.ListCredentialConfigurations(configurationId)
+                });
 
 
             candidateIntegration.ValidatePreAuthorizedCodeAsync = (code, txCode, clientId, _, _, _) =>
@@ -2252,6 +2706,13 @@ internal sealed class Oid4VciWalletClientTests
 
             candidateIntegration.IssueCredentialAsync = async (request, _, _, _, ct) =>
             {
+                observations.IssuanceRequests++;
+                observations.RequestedIdentifier = request.CredentialIdentifier;
+                observations.RequestedConfigurationId = request.CredentialConfigurationId;
+                observations.ResponseEncryptionKeyId = request.ResponseEncryption?.Jwk is { } responseJwk
+                    && responseJwk.TryGetValue(WellKnownJwkMemberNames.Kid, out object? keyId)
+                        ? keyId as string
+                        : null;
                 string proof = request.Proofs[Oid4VciCredentialParameterNames.JwtProofType][0];
                 (PublicKeyMemory proofKey, string? proofNonce, string? proofAudience) = ReadProof(proof);
 
@@ -2283,10 +2744,44 @@ internal sealed class Oid4VciWalletClientTests
 
 
     /// <summary>
-    /// Installs the response-encryption delegate so the wallet can exercise encrypted credential responses.
+    /// Installs the section 6.1.1 authorization-details seams: the default parser and an authorization
+    /// decision that grants <paramref name="grantedConfigurationId"/> with the
+    /// <c>credential_identifiers</c> values <paramref name="grantedIdentifiers"/> in their order, whatever
+    /// the Token Request asked for.
     /// </summary>
+    /// <param name="host">The host whose integration is altered.</param>
+    /// <param name="grantedConfigurationId">The configuration the granted object names.</param>
+    /// <param name="grantedIdentifiers">The granted identifiers, in the order the Token Response returns them.</param>
+    /// <returns>A task that completes when the alteration is applied.</returns>
+    private static async Task WireCredentialAuthorizationAsync(
+        TestHostShell host, string grantedConfigurationId, params string[] grantedIdentifiers)
+    {
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
+            candidateIntegration.ResolveCredentialAuthorizationAsync = (_, _, _, _, _) =>
+                ValueTask.FromResult(CredentialAuthorizationDecision.Grant(
+                [
+                    new GrantedCredentialAuthorization
+                    {
+                        CredentialConfigurationId = grantedConfigurationId,
+                        CredentialIdentifiers = grantedIdentifiers
+                    }
+                ]));
+        }).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Installs the response-encryption delegate so the wallet can exercise encrypted credential
+    /// responses, and makes the catalogue the issuer seams wired advertise ECDH-ES with A256GCM for
+    /// encrypted responses.
+    /// </summary>
+    /// <param name="host">The host whose integration is altered.</param>
     private static async Task WireResponseEncryptionSeamAsync(TestHostShell host)
     {
+        await TestHostShell.AdvertiseCredentialResponseEncryptionAsync(
+            host.Server, [WellKnownJweAlgorithms.EcdhEs], [WellKnownJweEncryptionAlgorithms.A256Gcm]).ConfigureAwait(false);
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
             candidateIntegration.EncryptCredentialResponseAsync = async (responseJson, encryption, _, _, ct) =>

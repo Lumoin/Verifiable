@@ -1500,11 +1500,17 @@ public delegate ValueTask<Oid4Vci.CredentialAuthorizationDecision> ResolveCreden
 /// </summary>
 /// <remarks>
 /// Required when <see cref="WellKnownCapabilityIdentifiers.Oid4VciCredentialIssuerMetadata"/> is
-/// advertised: only the application knows which Credentials it issues. The library derives
-/// <c>credential_issuer</c>, <c>credential_endpoint</c>, and <c>nonce_endpoint</c> itself and
-/// merges this contribution over them. Return
-/// <see cref="Oid4Vci.CredentialIssuerMetadataContribution.Empty"/> to emit only the derivable
-/// fields (with an empty <c>credential_configurations_supported</c> object).
+/// advertised: only the application knows which Credentials it issues. Required as well by the
+/// Credential Endpoint, which is served only when this seam,
+/// <see cref="AuthorizationServerIntegration.ParseCredentialRequestAsync"/> and
+/// <see cref="AuthorizationServerIntegration.IssueCredentialAsync"/> are wired, and by the Deferred
+/// Credential Endpoint: each judges every request against the catalogue this seam answers. The
+/// library derives <c>credential_issuer</c>, <c>credential_endpoint</c>, and <c>nonce_endpoint</c>
+/// itself and merges this contribution over them. Returning
+/// <see cref="Oid4Vci.CredentialIssuerMetadataContribution.Empty"/> emits only the derivable fields
+/// (with an empty <c>credential_configurations_supported</c> object), and the Credential Endpoint
+/// then issues no Credential: a request that passes the earlier rules is refused
+/// <c>unknown_credential_configuration</c>.
 /// </remarks>
 /// <param name="registration">The <see cref="ClientRecord"/> the metadata document describes.</param>
 /// <param name="context">The per-request context bag.</param>

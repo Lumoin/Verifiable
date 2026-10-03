@@ -305,6 +305,10 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
         string segment = material.Registration.TenantId.Value;
 
         await WireChainEndpointSeamsAsync(host).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeCredentialIssuerMetadataAsync = null;
+        }).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchMetadataAsync(host, segment).ConfigureAwait(false);
 
