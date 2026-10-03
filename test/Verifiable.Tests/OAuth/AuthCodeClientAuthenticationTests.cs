@@ -18,6 +18,7 @@ using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
 using Verifiable.OAuth.Server.States;
+using Verifiable.Server.Routing;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -78,9 +79,9 @@ internal sealed class AuthCodeClientAuthenticationTests
 
             await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
             {
-                candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+                candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
                     ValueTask.FromResult(
-                        fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                        reading.ClientSecret is string secret
                         && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
             }).ConfigureAwait(false);
 
@@ -131,12 +132,13 @@ internal sealed class AuthCodeClientAuthenticationTests
             string? observedScope = null;
             await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
             {
-                candidateIntegration.ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+                candidateIntegration.ValidateClientCredentialsAsync = (reading, registration, context, ct) =>
                 {
-                    _ = fields.TryGetValue(OAuthRequestParameterNames.Scope, out observedScope);
+                    //The scope is no credential: the seam reads it from the request on the context.
+                    _ = context.IncomingRequest!.Fields.TryGetValue(OAuthRequestParameterNames.Scope, out observedScope);
 
                     return ValueTask.FromResult(
-                        fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                        reading.ClientSecret is string secret
                         && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
                 };
             }).ConfigureAwait(false);
@@ -214,7 +216,9 @@ internal sealed class AuthCodeClientAuthenticationTests
     /// authenticates (HTTP 201), while the token endpoint URL, the pushed authorization request
     /// endpoint URL, an array naming the issuer and the token endpoint together, an array naming
     /// the issuer twice, the issuer with an appended <c>/</c>, and the issuer with its scheme
-    /// upper-cased are each refused with HTTP 401 <c>invalid_client</c>. The fixture's issuer host is
+    /// upper-cased are each refused with HTTP 400 <c>invalid_client</c>, the default status of <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see> for a
+    /// request that authenticated through no <c>Authorization</c> field at a server that advertises no <c>client_secret_basic</c>.
+    /// The fixture's issuer host is
     /// the IP literal <c>127.0.0.1</c>, which upper-casing leaves unchanged, so the upper-cased case
     /// varies the scheme only.
     /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.3">RFC 7519 Section 4.1.3</see>
@@ -226,7 +230,7 @@ internal sealed class AuthCodeClientAuthenticationTests
     /// 4</see>: "In the absence of an application profile specifying otherwise, applications MUST
     /// compare the audience values using the Simple String Comparison method defined in Section 6.2.1
     /// of RFC 3986", so a value that differs from the issuer identifier only by a trailing slash or by
-    /// the letter case of its scheme is a different value. Every 401 body carries an <c>error_description</c> member that
+    /// the letter case of its scheme is a different value. Every 400 body carries an <c>error_description</c> member that
     /// is a non-empty string within the character set
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see> gives
     /// it (<c>%x20-21 / %x23-5B / %x5D-7E</c>), following
@@ -243,12 +247,12 @@ internal sealed class AuthCodeClientAuthenticationTests
     [TestMethod]
     [DataRow("issuer", 201, DisplayName = "the issuer as a string")]
     [DataRow("issuerArray", 201, DisplayName = "the issuer as a one-element array")]
-    [DataRow("tokenEndpoint", 401, DisplayName = "the token endpoint URL as a string")]
-    [DataRow("parEndpoint", 401, DisplayName = "the pushed authorization endpoint URL as a string")]
-    [DataRow("issuerAndTokenEndpoint", 401, DisplayName = "the issuer and the token endpoint URL as a two-element array")]
-    [DataRow("issuerTwice", 401, DisplayName = "the issuer duplicated as a two-element array")]
-    [DataRow("issuerWithTrailingSlash", 401, DisplayName = "the issuer with an appended slash")]
-    [DataRow("issuerWithUpperCasedScheme", 401, DisplayName = "the issuer with its scheme upper-cased")]
+    [DataRow("tokenEndpoint", 400, DisplayName = "the token endpoint URL as a string")]
+    [DataRow("parEndpoint", 400, DisplayName = "the pushed authorization endpoint URL as a string")]
+    [DataRow("issuerAndTokenEndpoint", 400, DisplayName = "the issuer and the token endpoint URL as a two-element array")]
+    [DataRow("issuerTwice", 400, DisplayName = "the issuer duplicated as a two-element array")]
+    [DataRow("issuerWithTrailingSlash", 400, DisplayName = "the issuer with an appended slash")]
+    [DataRow("issuerWithUpperCasedScheme", 400, DisplayName = "the issuer with its scheme upper-cased")]
     public async Task IssuerOnlyPolicyAcceptsOnlyTheIssuerAsSoleAudienceAsync(string audienceShape, int expectedStatusCode)
     {
         //Opt in to the issuer-only rule: with no additionalAcceptedAudiences, only this exact
@@ -272,7 +276,7 @@ internal sealed class AuthCodeClientAuthenticationTests
 
         (int parStatusCode, string parBody) = pushes[0];
         Assert.AreEqual(expectedStatusCode, parStatusCode, $"aud={audienceShape} Body={parBody}");
-        if(expectedStatusCode == 401)
+        if(expectedStatusCode == 400)
         {
             using JsonDocument errorBody = JsonDocument.Parse(parBody);
             Assert.AreEqual("invalid_client", errorBody.RootElement.GetProperty("error").GetString(),
@@ -411,8 +415,9 @@ internal sealed class AuthCodeClientAuthenticationTests
     /// as defined in OAuth 2.0 [RFC6749]. The value of the &quot;error&quot; parameter MUST be the
     /// &quot;invalid_client&quot; error code. The authorization server MAY include additional
     /// information regarding the reasons the JWT was considered invalid using the
-    /// &quot;error_description&quot; or &quot;error_uri&quot; parameters." — the answer is HTTP 401
-    /// <c>invalid_client</c> with an <c>error_description</c> string.
+    /// &quot;error_description&quot; or &quot;error_uri&quot; parameters." The answer is HTTP 400
+    /// <c>invalid_client</c> with an <c>error_description</c> string, the default status of <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see> at a
+    /// server that advertises no <c>client_secret_basic</c> for a request that used no <c>Authorization</c> field.
     /// </summary>
     [TestMethod]
     public async Task FutureNotBeforeIsRefusedAtThePushedRequestAsync()
@@ -432,7 +437,7 @@ internal sealed class AuthCodeClientAuthenticationTests
 
     /// <summary>
     /// A client assertion that breaks one claim rule is refused at the pushed authorization endpoint
-    /// over the real wire under the default audience policy: HTTP 401 <c>invalid_client</c> with an
+    /// over the real wire under the default audience policy: HTTP 400 <c>invalid_client</c> with an
     /// <c>error_description</c> string
     /// (<see href="https://www.rfc-editor.org/rfc/rfc7523#section-3.2">RFC 7523 Section 3.2</see>).
     /// The rules: OpenID Connect Core
@@ -571,7 +576,8 @@ internal sealed class AuthCodeClientAuthenticationTests
 
 
     /// <summary>
-    /// Asserts that a push was refused as a failed client authentication: HTTP 401, an <c>error</c>
+    /// Asserts that a push was refused as a failed client authentication at a server that advertises no
+    /// <c>client_secret_basic</c>: HTTP 400, the default status of <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>, an <c>error</c>
     /// member of <c>invalid_client</c> and an <c>error_description</c> member that is a non-empty string
     /// (<see href="https://www.rfc-editor.org/rfc/rfc7523#section-3.2">RFC 7523 Section 3.2</see>).
     /// </summary>
@@ -580,7 +586,7 @@ internal sealed class AuthCodeClientAuthenticationTests
     /// <param name="label">Names the case in each failure message.</param>
     private static void AssertRefusedAsInvalidClient(int statusCode, string body, string label)
     {
-        Assert.AreEqual(401, statusCode, $"{label} Body={body}");
+        Assert.AreEqual(400, statusCode, $"{label} Body={body}");
 
         using JsonDocument errorBody = JsonDocument.Parse(body);
         Assert.AreEqual("invalid_client", errorBody.RootElement.GetProperty("error").GetString(),
@@ -957,7 +963,7 @@ internal sealed class AuthCodeClientAuthenticationTests
 
             (int hostileStatusCode, string hostileBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
                 host, segment, hostileFields, TestContext.CancellationToken).ConfigureAwait(false);
-            Assert.AreEqual(401, hostileStatusCode, hostileBody);
+            Assert.AreEqual(400, hostileStatusCode, hostileBody);
             Assert.Contains(OAuthErrors.InvalidClient, hostileBody, StringComparison.Ordinal);
 
             //The code survives: the registration's own valid assertion still redeems it.
@@ -990,7 +996,7 @@ internal sealed class AuthCodeClientAuthenticationTests
     /// §5.2</see> Basic-challenge obligation to the pushed request: a confidential registration's
     /// own <c>client_id</c> with a wrong <c>client_secret_basic</c> secret is refused at PAR with
     /// the same <c>401 invalid_client</c> and <c>WWW-Authenticate</c> challenge the token endpoint
-    /// would carry for the identical failure.
+    /// would carry for the identical failure, <c>Basic realm="&lt;issuer&gt;"</c>.
     /// </summary>
     [TestMethod]
     public async Task PushedRequestWithWrongBasicSecretReturns401WithWwwAuthenticateChallenge()
@@ -1001,8 +1007,8 @@ internal sealed class AuthCodeClientAuthenticationTests
 
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
-                ValueTask.FromResult(AuthCodeFlowDriver.DecodeAndMatchBasicHeader(request, registration.ClientId, ClientSecret));
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
+                ValueTask.FromResult(AuthCodeFlowDriver.DecodeAndMatchBasicHeader(reading, registration.ClientId, ClientSecret));
         }).ConfigureAwait(false);
 
         await DeclareServerSideAuthMethodAsync(host, material, ClientAuthenticationMethod.ClientSecretBasic).ConfigureAwait(false);
@@ -1031,7 +1037,7 @@ internal sealed class AuthCodeClientAuthenticationTests
             Assert.AreEqual(401, parResponse.StatusCode, parResponse.Body);
             Assert.Contains(OAuthErrors.InvalidClient, parResponse.Body, StringComparison.Ordinal);
             string? challenge = parResponse.Headers.TryGetSingle(WellKnownHttpHeaderNames.WwwAuthenticate);
-            Assert.AreEqual(WellKnownAuthenticationSchemes.Basic, challenge,
+            Assert.AreEqual($"Basic realm=\"{registration.AuthorizationServerIssuer.OriginalString}\"", challenge,
                 "The pushed request's own authentication failure over Basic must carry the matching challenge.");
         }
         finally
@@ -1060,8 +1066,8 @@ internal sealed class AuthCodeClientAuthenticationTests
 
             await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
             {
-                candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
-                    ValueTask.FromResult(AuthCodeFlowDriver.DecodeAndMatchBasicHeader(request, registration.ClientId, ClientSecret));
+                candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
+                    ValueTask.FromResult(AuthCodeFlowDriver.DecodeAndMatchBasicHeader(reading, registration.ClientId, ClientSecret));
             }).ConfigureAwait(false);
 
             await DeclareServerSideAuthMethodAsync(host, material, ClientAuthenticationMethod.ClientSecretBasic).ConfigureAwait(false);
@@ -1704,7 +1710,7 @@ internal sealed class AuthCodeClientAuthenticationTests
                 hosted, client, registration, segment, RedirectUri, scope: null, additionalParFields: default,
                 clientAssertionOptions, TestContext.CancellationToken).ConfigureAwait(false);
 
-            Assert.AreEqual(401, parResponse.StatusCode, $"{context} Body={parResponse.Body}");
+            Assert.AreEqual(400, parResponse.StatusCode, $"{context} Body={parResponse.Body}");
             Assert.Contains(OAuthErrors.InvalidClient, parResponse.Body, StringComparison.Ordinal);
 
             return;
@@ -1782,7 +1788,7 @@ internal sealed class AuthCodeClientAuthenticationTests
 
         if(!expectAccepted)
         {
-            Assert.AreEqual(401, parStatusCode, $"{context} Body={parBody}");
+            Assert.AreEqual(400, parStatusCode, $"{context} Body={parBody}");
             Assert.Contains(OAuthErrors.InvalidClient, parBody, StringComparison.Ordinal);
 
             return;
@@ -2030,9 +2036,9 @@ internal sealed class AuthCodeClientAuthenticationTests
 
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
                 ValueTask.FromResult(
-                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    reading.ClientSecret is string secret
                     && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
         }).ConfigureAwait(false);
 
@@ -2082,9 +2088,9 @@ internal sealed class AuthCodeClientAuthenticationTests
 
             await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
             {
-                candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+                candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
                     ValueTask.FromResult(
-                        fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                        reading.ClientSecret is string secret
                         && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
             }).ConfigureAwait(false);
 
@@ -2109,7 +2115,7 @@ internal sealed class AuthCodeClientAuthenticationTests
                 hosted, client, registration, segment, RedirectUri, scope: null, additionalParFields: default,
                 clientAssertionOptions: null, TestContext.CancellationToken).ConfigureAwait(false);
 
-            Assert.AreEqual(401, parResponse.StatusCode, parResponse.Body);
+            Assert.AreEqual(400, parResponse.StatusCode, parResponse.Body);
             Assert.Contains(OAuthErrors.InvalidClient, parResponse.Body, StringComparison.Ordinal);
         }
         finally
@@ -2141,9 +2147,9 @@ internal sealed class AuthCodeClientAuthenticationTests
 
             await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
             {
-                candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+                candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
                     ValueTask.FromResult(
-                        fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                        reading.ClientSecret is string secret
                         && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
             }).ConfigureAwait(false);
 
@@ -2211,7 +2217,7 @@ internal sealed class AuthCodeClientAuthenticationTests
                 hosted, client, registration, segment, RedirectUri, scope: null, additionalParFields: default,
                 clientAssertionOptions: null, TestContext.CancellationToken).ConfigureAwait(false);
 
-            Assert.AreEqual(401, parResponse.StatusCode, parResponse.Body);
+            Assert.AreEqual(400, parResponse.StatusCode, parResponse.Body);
             Assert.Contains(OAuthErrors.InvalidClient, parResponse.Body, StringComparison.Ordinal);
         }
         finally
@@ -2352,7 +2358,7 @@ internal sealed class AuthCodeClientAuthenticationTests
                 },
                 TestContext.CancellationToken).ConfigureAwait(false);
 
-            Assert.AreEqual(401, parResponse.StatusCode,
+            Assert.AreEqual(400, parResponse.StatusCode,
                 $"A malformed registered key set must not authenticate the client. Key set: {malformedJwksJson}");
             Assert.Contains(OAuthErrors.InvalidClient, parResponse.Body, StringComparison.Ordinal,
                 "RFC 8259 §2/§4: a registered key set that is not one well-formed JSON document with " +
@@ -2766,7 +2772,7 @@ internal sealed class AuthCodeClientAuthenticationTests
     /// A confidential registration's wrong <c>client_secret_basic</c> secret at CODE REDEMPTION:
     /// the endpoint's pre-correlation step authenticates the declared method before the presented
     /// <c>code</c> is ever looked up, so an unknown code and a live one answer byte-identically —
-    /// <c>401 invalid_client</c> with the <c>WWW-Authenticate: Basic</c> challenge. A presented
+    /// <c>401 invalid_client</c> with the <c>WWW-Authenticate: Basic realm="&lt;issuer&gt;"</c> challenge. A presented
     /// <c>client_id</c> naming a registration other than this tenant's own is identification, not
     /// authentication, and never reaches this answer at all — it is refused with the code
     /// endpoint's own not-found constant instead. The live code is unconsumed: it still
@@ -2785,8 +2791,8 @@ internal sealed class AuthCodeClientAuthenticationTests
 
             await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
             {
-                candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
-                    ValueTask.FromResult(AuthCodeFlowDriver.DecodeAndMatchBasicHeader(request, registration.ClientId, ClientSecret));
+                candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
+                    ValueTask.FromResult(AuthCodeFlowDriver.DecodeAndMatchBasicHeader(reading, registration.ClientId, ClientSecret));
             }).ConfigureAwait(false);
 
             await DeclareServerSideAuthMethodAsync(host, material, ClientAuthenticationMethod.ClientSecretBasic).ConfigureAwait(false);
@@ -2827,7 +2833,7 @@ internal sealed class AuthCodeClientAuthenticationTests
             Assert.AreEqual(401, liveResponse.StatusCode, liveResponse.Body);
             Assert.Contains(OAuthErrors.InvalidClient, liveResponse.Body, StringComparison.Ordinal);
             string? liveChallenge = liveResponse.Headers.TryGetSingle(WellKnownHttpHeaderNames.WwwAuthenticate);
-            Assert.AreEqual(WellKnownAuthenticationSchemes.Basic, liveChallenge);
+            Assert.AreEqual($"Basic realm=\"{registration.AuthorizationServerIssuer.OriginalString}\"", liveChallenge);
             Assert.AreEqual(liveResponse.StatusCode, unknownResponse.StatusCode);
             Assert.AreEqual(liveResponse.Body, unknownResponse.Body,
                 "An unknown code and a live one must answer byte-identically for a wrong Basic secret.");
@@ -2864,9 +2870,11 @@ internal sealed class AuthCodeClientAuthenticationTests
 
 
     /// <summary>
-    /// A confidential registration presenting NO credentials at all at CODE REDEMPTION — with and
-    /// without the <c>client_id</c> field — is refused <c>401 invalid_client</c> with NO
-    /// <c>WWW-Authenticate</c> challenge (no <c>Authorization: Basic</c> header was ever attempted),
+    /// A confidential registration presenting NO credentials at all at CODE REDEMPTION, with and
+    /// without the <c>client_id</c> field, is refused <c>400 invalid_client</c> with NO
+    /// <c>WWW-Authenticate</c> challenge (no <c>Authorization</c> field was attempted and the server advertises no
+    /// <c>client_secret_basic</c>, so the default status of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see> holds),
     /// identically for an unknown code and a live one, because the declared-method authentication
     /// call in the endpoint's pre-correlation step runs regardless of whether any credential or
     /// <c>client_id</c> is present. The live code is unconsumed: it still redeems once its
@@ -2885,9 +2893,9 @@ internal sealed class AuthCodeClientAuthenticationTests
 
             await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
             {
-                candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+                candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
                     ValueTask.FromResult(
-                        fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                        reading.ClientSecret is string secret
                         && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
             }).ConfigureAwait(false);
 
@@ -2947,7 +2955,8 @@ internal sealed class AuthCodeClientAuthenticationTests
     /// <summary>
     /// Pushes <paramref name="liveFields"/> and <paramref name="unknownFields"/> over the real
     /// wire with no <c>Authorization</c> header and no credential form fields, and asserts both
-    /// answer <c>401 invalid_client</c> with no <c>WWW-Authenticate</c> challenge, byte-identically.
+    /// answer <c>400 invalid_client</c> with no <c>WWW-Authenticate</c> challenge, byte-identically: no
+    /// <c>Authorization</c> field was attempted and the server advertises no <c>client_secret_basic</c>.
     /// </summary>
     private static async Task AssertNoCredentialRefusalAsync(
         HostedAuthorizationServer hosted, Uri tokenUri,
@@ -2959,10 +2968,10 @@ internal sealed class AuthCodeClientAuthenticationTests
         HttpResponseData unknownResponse = await HttpClientTransport.SendFormPostAsync(
             hosted.SharedHttpClient!, tokenUri, unknownFields, OutgoingHeaders.Empty, cancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(401, liveResponse.StatusCode, liveResponse.Body);
+        Assert.AreEqual(400, liveResponse.StatusCode, liveResponse.Body);
         Assert.Contains(OAuthErrors.InvalidClient, liveResponse.Body, StringComparison.Ordinal);
         Assert.IsNull(liveResponse.Headers.TryGetSingle(WellKnownHttpHeaderNames.WwwAuthenticate),
-            "No Authorization header was attempted, so no Basic challenge is added.");
+            "No Authorization field was attempted and no client_secret_basic is advertised, so no challenge is sent.");
         Assert.AreEqual(liveResponse.StatusCode, unknownResponse.StatusCode);
         Assert.AreEqual(liveResponse.Body, unknownResponse.Body,
             "An unknown code and a live one must answer byte-identically when no credentials are presented.");
@@ -3212,11 +3221,11 @@ internal sealed class AuthCodeClientAuthenticationTests
 
                     return originalNonceValidator(presented, audience, tenantId, ctx, ct);
                 };
-                candidateIntegration.ValidateClientCredentialsAsync = async (request, fields, reg, ctx, ct) =>
+                candidateIntegration.ValidateClientCredentialsAsync = async (reading, reg, ctx, ct) =>
                 {
                     assertionValidatorCallCount++;
 
-                    return await originalAssertionValidator(request, fields, reg, ctx, ct).ConfigureAwait(false);
+                    return await originalAssertionValidator(reading, reg, ctx, ct).ConfigureAwait(false);
                 };
                 candidateIntegration.SaveFlowStateAsync = (tenant, key, state, step, ctx, ct) =>
                 {
@@ -3316,8 +3325,8 @@ internal sealed class AuthCodeClientAuthenticationTests
 
             await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
             {
-                candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
-                    ValueTask.FromResult(AuthCodeFlowDriver.DecodeAndMatchBasicHeader(request, registration.ClientId, ClientSecret));
+                candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
+                    ValueTask.FromResult(AuthCodeFlowDriver.DecodeAndMatchBasicHeader(reading, registration.ClientId, ClientSecret));
             }).ConfigureAwait(false);
 
             await DeclareServerSideAuthMethodAsync(host, material, ClientAuthenticationMethod.ClientSecretBasic).ConfigureAwait(false);
@@ -3363,7 +3372,7 @@ internal sealed class AuthCodeClientAuthenticationTests
 
             Assert.AreEqual(401, liveResponse.StatusCode, liveResponse.Body);
             Assert.Contains(OAuthErrors.InvalidClient, liveResponse.Body, StringComparison.Ordinal);
-            Assert.AreEqual(WellKnownAuthenticationSchemes.Basic,
+            Assert.AreEqual($"Basic realm=\"{registration.AuthorizationServerIssuer.OriginalString}\"",
                 liveResponse.Headers.TryGetSingle(WellKnownHttpHeaderNames.WwwAuthenticate));
             Assert.AreEqual(liveResponse.StatusCode, unknownResponse.StatusCode);
             Assert.AreEqual(liveResponse.Body, unknownResponse.Body,
@@ -3382,5 +3391,434 @@ internal sealed class AuthCodeClientAuthenticationTests
             secretMaterial.PublicKey.Dispose();
             secretMaterial.PrivateKey.Dispose();
         }
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749 Section 3.2</see>: "Request and
+    /// response parameters MUST NOT be included more than once." A pushed request of a registration that
+    /// declares no authentication method, carrying <c>client_assertion</c> twice beside its
+    /// <c>client_assertion_type</c>, is refused over the wire with 400 <c>invalid_request</c>, the code
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see> names for a
+    /// request that repeats a parameter, and is not served as a request without a credential.
+    /// </summary>
+    [TestMethod]
+    public async Task ARepeatedClientAssertionIsAnInvalidRequest()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
+                ValueTask.FromResult(false);
+        }).ConfigureAwait(false);
+
+        HttpResponseData response = await PushParWithCredentialsAsync(
+            host, material,
+            [
+                new(OAuthRequestParameterNames.ClientAssertionType, WellKnownClientAssertionTypes.JwtBearer),
+                new(OAuthRequestParameterNames.ClientAssertion, "first.client.assertion"),
+                new(OAuthRequestParameterNames.ClientAssertion, "second.client.assertion")
+            ],
+            OutgoingHeaders.Empty).ConfigureAwait(false);
+
+        Assert.AreEqual(400, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            "{\"error\":\"invalid_request\",\"error_description\":\"The request repeats a client authentication parameter.\"}",
+            response.Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.3">RFC 9110 Section 5.3</see>: "This means
+    /// that, aside from the well-known exception noted below, a sender MUST NOT generate multiple field lines with
+    /// the same name in a message (whether in the headers or trailers) or append a field line when a field line of
+    /// the same name already exists in the message, unless that field's definition allows multiple field line
+    /// values to be recombined as a comma-separated list (i.e., at least one alternative of the field's definition
+    /// allows a comma-separated list, such as an ABNF rule of #(values) defined in Section 5.6.1).", and
+    /// <c>Authorization = credentials</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.6.2">RFC 9110 Section 11.6.2</see>) is
+    /// no list. A pushed request of a <c>client_secret_basic</c> registration sent over a raw TLS connection
+    /// with two <c>Authorization: Basic</c> field lines is refused with 400 <c>invalid_request</c>, the
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see> code for a
+    /// request that includes multiple credentials. The token endpoint answers a repeated field and a single
+    /// malformed value with the same description, so this row does not tell the two branches apart; the bearer
+    /// resource rows do (<see cref="UserInfoEndpointTests.UserInfoRefusesTwoAuthorizationLinesWithBothChallengesAsync"/>,
+    /// <see cref="Oid4VciDpopCredentialEndpointTests.CredentialEndpointRefusesTwoAuthorizationLinesWithBothChallengesAsync"/>),
+    /// where only the repeated field is answered 400 and a single value outside the grammar 401.
+    /// </summary>
+    [TestMethod]
+    public async Task TwoAuthorizationLinesAreAnInvalidRequest()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
+                ValueTask.FromResult(AuthCodeFlowDriver.DecodeAndMatchBasicHeader(reading, registration.ClientId, ClientSecret));
+        }).ConfigureAwait(false);
+
+        await DeclareServerSideAuthMethodAsync(host, material, ClientAuthenticationMethod.ClientSecretBasic).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        string segment = material.Registration.TenantId.Value;
+        Uri parEndpoint = new(
+            host.Host("default").HttpBaseAddress!, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodePar, segment));
+        string basic = WellKnownAuthenticationSchemes.Basic + " " + Convert.ToBase64String(
+            Encoding.UTF8.GetBytes(Uri.EscapeDataString(ClientId) + ":" + Uri.EscapeDataString(ClientSecret)));
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, Pool);
+        string form = string.Join('&',
+            new KeyValuePair<string, string>[]
+            {
+                new(OAuthRequestParameterNames.ResponseType, WellKnownResponseTypes.Code),
+                new(OAuthRequestParameterNames.ClientId, ClientId),
+                new(OAuthRequestParameterNames.CodeChallenge, pkce.EncodedChallenge),
+                new(OAuthRequestParameterNames.CodeChallengeMethod, WellKnownCodeChallengeMethods.S256),
+                new(OAuthRequestParameterNames.RedirectUri, RedirectUri.OriginalString)
+            }.Select(static pair => Uri.EscapeDataString(pair.Key) + "=" + Uri.EscapeDataString(pair.Value)));
+
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Post, parEndpoint,
+            [
+                new(WellKnownHttpHeaderNames.ContentType, WellKnownMediaTypes.Application.FormUrlEncoded),
+                new(WellKnownHttpHeaderNames.Authorization, basic),
+                new(WellKnownHttpHeaderNames.Authorization, basic)
+            ],
+            Encoding.ASCII.GetBytes(form), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            "{\"error\":\"invalid_request\",\"error_description\":\"The Authorization header is not a single well-formed credential.\"}",
+            response.Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-2.3">RFC 6749 Section 2.3</see>: "The client
+    /// MUST NOT use more than one authentication method in each request." A pushed request of a
+    /// <c>client_secret_post</c> registration carrying its valid <c>client_secret</c> beside a
+    /// <c>client_assertion</c> is refused over the wire with 400 <c>invalid_request</c>, the
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see> code for a
+    /// request that utilizes more than one mechanism for authenticating the client.
+    /// </summary>
+    [TestMethod]
+    public async Task ASecretBesideAnAssertionIsAnInvalidRequest()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
+                ValueTask.FromResult(
+                    reading.ClientSecret is string secret
+                    && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+        }).ConfigureAwait(false);
+
+        await DeclareServerSideAuthMethodAsync(host, material, ClientAuthenticationMethod.ClientSecretPost).ConfigureAwait(false);
+
+        HttpResponseData response = await PushParWithCredentialsAsync(
+            host, material,
+            [
+                new(OAuthRequestParameterNames.ClientSecret, ClientSecret),
+                new(OAuthRequestParameterNames.ClientAssertionType, WellKnownClientAssertionTypes.JwtBearer),
+                new(OAuthRequestParameterNames.ClientAssertion, "a.client.assertion")
+            ],
+            OutgoingHeaders.Empty).ConfigureAwait(false);
+
+        Assert.AreEqual(400, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            "{\"error\":\"invalid_request\",\"error_description\":\"The request authenticates the client by more than one method.\"}",
+            response.Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>: "If the
+    /// client attempted to authenticate via the "Authorization" request header field, the authorization
+    /// server MUST respond with an HTTP 401 (Unauthorized) status code and include the "WWW-Authenticate"
+    /// response header field matching the authentication scheme used by the client." and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7617#section-2">RFC 7617 Section 2</see>: "The
+    /// authentication parameter 'realm' is REQUIRED ([RFC7235], Section 2.2)." A pushed request of a <c>client_secret_basic</c>
+    /// registration with a wrong secret in <c>Authorization: Basic</c> is refused over the wire with 401
+    /// <c>invalid_client</c> and the one challenge <c>Basic realm="https://basic-realm.issuer.test/"</c>, the
+    /// issuer the request is served under.
+    /// </summary>
+    [TestMethod]
+    public async Task AFailedBasicAttemptIsChallengedWithItsRealm()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
+                ValueTask.FromResult(AuthCodeFlowDriver.DecodeAndMatchBasicHeader(reading, registration.ClientId, ClientSecret));
+        }).ConfigureAwait(false);
+
+        await DeclareServerSideAuthMethodAsync(host, material, ClientAuthenticationMethod.ClientSecretBasic).ConfigureAwait(false);
+        await TestHostShell.NameIssuerAsync(host.Server, new Uri("https://basic-realm.issuer.test/")).ConfigureAwait(false);
+
+        HttpResponseData response = await PushParWithCredentialsAsync(
+            host, material, [],
+            OutgoingHeaders.Empty.WithClientSecretBasic(ClientId, Encoding.UTF8.GetBytes(WrongClientSecret))).ConfigureAwait(false);
+
+        Assert.AreEqual(401, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            "{\"error\":\"invalid_client\",\"error_description\":\"Client authentication failed.\"}", response.Body);
+        Assert.AreEqual("Basic realm=\"https://basic-realm.issuer.test/\"",
+            Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.5.2">RFC 9110 Section 15.5.2</see>: "The
+    /// server generating a 401 response MUST send a WWW-Authenticate header field (Section 11.6.1)
+    /// containing at least one challenge applicable to the target resource.", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>: "The
+    /// authorization server responds with an HTTP 400 (Bad Request) status code (unless specified
+    /// otherwise) and includes the following parameters with the response:". A pushed request of a <c>client_secret_post</c> registration with a wrong
+    /// <c>client_secret</c>, at a server that does not advertise <c>client_secret_basic</c> and so has no
+    /// challenge to send, is refused over the wire with 400 <c>invalid_client</c> and no challenge.
+    /// </summary>
+    [TestMethod]
+    public async Task AFailedFormAuthenticationWithoutBasicAdvertisedIsABadRequest()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
+                ValueTask.FromResult(
+                    reading.ClientSecret is string secret
+                    && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+        }).ConfigureAwait(false);
+
+        await DeclareServerSideAuthMethodAsync(host, material, ClientAuthenticationMethod.ClientSecretPost).ConfigureAwait(false);
+
+        HttpResponseData response = await PushParWithCredentialsAsync(
+            host, material, [new(OAuthRequestParameterNames.ClientSecret, WrongClientSecret)],
+            OutgoingHeaders.Empty).ConfigureAwait(false);
+
+        Assert.AreEqual(400, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            "{\"error\":\"invalid_client\",\"error_description\":\"Client authentication failed.\"}", response.Body);
+        Assert.IsEmpty(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate));
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749 Section 3.2</see>: "Parameters
+    /// sent without a value MUST be treated as if they were omitted from the request." A pushed request of
+    /// a registration that declares no authentication method, carrying <c>client_secret=</c> with no value,
+    /// is answered over the wire as the same request without the parameter: 201 both times.
+    /// </summary>
+    [TestMethod]
+    public async Task AnEmptyClientSecretIsTheOmittedParameter()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
+                ValueTask.FromResult(false);
+        }).ConfigureAwait(false);
+
+        HttpResponseData withEmptySecret = await PushParWithCredentialsAsync(
+            host, material, [new(OAuthRequestParameterNames.ClientSecret, string.Empty)], OutgoingHeaders.Empty).ConfigureAwait(false);
+        HttpResponseData withoutSecret = await PushParWithCredentialsAsync(
+            host, material, [], OutgoingHeaders.Empty).ConfigureAwait(false);
+
+        Assert.AreEqual(201, withoutSecret.StatusCode, withoutSecret.Body);
+        Assert.AreEqual(withoutSecret.StatusCode, withEmptySecret.StatusCode, withEmptySecret.Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749 Section 3.2</see>: "Request and
+    /// response parameters MUST NOT be included more than once." A pushed request of a
+    /// <c>client_secret_post</c> registration carrying <c>client_secret</c> twice, its valid secret and a
+    /// second value, is refused over the wire with 400 <c>invalid_request</c> before the application's
+    /// authentication seam runs: the seam is called zero times.
+    /// </summary>
+    [TestMethod]
+    public async Task ARepeatedClientSecretNeverReachesTheSeam()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        CallCounter seamCalls = new();
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = (reading, registration, context, ct) =>
+            {
+                seamCalls.Count++;
+
+                return ValueTask.FromResult(true);
+            };
+        }).ConfigureAwait(false);
+
+        await DeclareServerSideAuthMethodAsync(host, material, ClientAuthenticationMethod.ClientSecretPost).ConfigureAwait(false);
+
+        HttpResponseData response = await PushParWithCredentialsAsync(
+            host, material,
+            [
+                new(OAuthRequestParameterNames.ClientSecret, ClientSecret),
+                new(OAuthRequestParameterNames.ClientSecret, WrongClientSecret)
+            ],
+            OutgoingHeaders.Empty).ConfigureAwait(false);
+
+        Assert.AreEqual(400, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            "{\"error\":\"invalid_request\",\"error_description\":\"The request repeats a client authentication parameter.\"}",
+            response.Body);
+        Assert.AreEqual(0, seamCalls.Count, "A request the library refuses never reaches the authentication seam.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-2.3.1">RFC 6749 Section 2.3.1</see>: a
+    /// client in possession of a password authenticates with the HTTP Basic scheme. A pushed request of a
+    /// <c>client_secret_basic</c> registration carrying its valid <c>Authorization: Basic</c> credential is
+    /// served over the wire, and the application's seam receives one reading whose <c>Basic</c> mechanism is
+    /// present, whose credentials are the ones sent, and whose form secret is absent.
+    /// </summary>
+    [TestMethod]
+    public async Task AValidBasicCredentialReachesTheSeamAsTheBasicMechanismAlone()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        List<ClientCredentialReading> receivedReadings = [];
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = (reading, registration, context, ct) =>
+            {
+                receivedReadings.Add(reading);
+
+                return ValueTask.FromResult(AuthCodeFlowDriver.DecodeAndMatchBasicHeader(reading, registration.ClientId, ClientSecret));
+            };
+        }).ConfigureAwait(false);
+
+        await DeclareServerSideAuthMethodAsync(host, material, ClientAuthenticationMethod.ClientSecretBasic).ConfigureAwait(false);
+
+        HttpResponseData response = await PushParWithCredentialsAsync(
+            host, material, [],
+            OutgoingHeaders.Empty.WithClientSecretBasic(ClientId, Encoding.UTF8.GetBytes(ClientSecret))).ConfigureAwait(false);
+
+        Assert.AreEqual(201, response.StatusCode, response.Body);
+        ClientCredentialReading received = Assert.ContainsSingle(receivedReadings);
+        Assert.IsTrue(received.HasBasicAuthorization);
+        Assert.IsFalse(received.HasOtherAuthorization);
+        Assert.IsNull(received.ClientSecret);
+        Assert.IsNull(received.ClientAssertion);
+        Assert.IsFalse(received.IsMalformed);
+        Assert.AreEqual(
+            Convert.ToBase64String(Encoding.UTF8.GetBytes(Uri.EscapeDataString(ClientId) + ":" + Uri.EscapeDataString(ClientSecret))),
+            received.Authorization.Credentials);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749 Section 3.2</see>: "Parameters
+    /// sent without a value MUST be treated as if they were omitted from the request." A pushed request of a
+    /// registration that declares no authentication method, carrying its <c>client_id</c> beside a second
+    /// <c>client_id=</c> with no value, names the one client identifier and is served over the wire: 201.
+    /// </summary>
+    [TestMethod]
+    public async Task AnEmptyClientIdBesideTheClientIdIsTheOneIdentifierAtThePushedRequest()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
+                ValueTask.FromResult(false);
+        }).ConfigureAwait(false);
+
+        HttpResponseData response = await PushParWithCredentialsAsync(
+            host, material, [new(OAuthRequestParameterNames.ClientId, string.Empty)], OutgoingHeaders.Empty).ConfigureAwait(false);
+
+        Assert.AreEqual(201, response.StatusCode, response.Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749 Section 3.2</see>: "Request and
+    /// response parameters MUST NOT be included more than once." A pushed request of a registration that
+    /// declares no authentication method, carrying its <c>client_id</c> twice, is refused over the wire with 400
+    /// <c>invalid_request</c> and the description of a repeated client authentication parameter, the code
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see> names for a
+    /// request that repeats a parameter.
+    /// </summary>
+    [TestMethod]
+    public async Task ARepeatedClientIdIsAnInvalidRequestAtThePushedRequest()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
+                ValueTask.FromResult(false);
+        }).ConfigureAwait(false);
+
+        HttpResponseData response = await PushParWithCredentialsAsync(
+            host, material, [new(OAuthRequestParameterNames.ClientId, ClientId)], OutgoingHeaders.Empty).ConfigureAwait(false);
+
+        Assert.AreEqual(400, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            "{\"error\":\"invalid_request\",\"error_description\":\"The request repeats a client authentication parameter.\"}",
+            response.Body);
+    }
+
+
+    /// <summary>
+    /// Pushes an authorization request for <paramref name="material"/>'s registration over the real wire,
+    /// starting the listener first: <c>response_type</c>, <c>client_id</c>, a fresh S256
+    /// <c>code_challenge</c> and <c>redirect_uri</c>, then <paramref name="credentialFields"/> in the order
+    /// given (a name may repeat), with <paramref name="headers"/>.
+    /// </summary>
+    /// <param name="host">The fixture serving the registration.</param>
+    /// <param name="material">The registration the request is made for.</param>
+    /// <param name="credentialFields">The client authentication fields, sent as given.</param>
+    /// <param name="headers">The request headers.</param>
+    /// <returns>The wire response.</returns>
+    private async Task<HttpResponseData> PushParWithCredentialsAsync(
+        TestHostShell host,
+        VerifierKeyMaterial material,
+        IReadOnlyList<KeyValuePair<string, string>> credentialFields,
+        OutgoingHeaders headers)
+    {
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, Pool);
+        List<KeyValuePair<string, string>> fields =
+        [
+            new(OAuthRequestParameterNames.ResponseType, WellKnownResponseTypes.Code),
+            new(OAuthRequestParameterNames.ClientId, ClientId),
+            new(OAuthRequestParameterNames.CodeChallenge, pkce.EncodedChallenge),
+            new(OAuthRequestParameterNames.CodeChallengeMethod, WellKnownCodeChallengeMethods.S256),
+            new(OAuthRequestParameterNames.RedirectUri, RedirectUri.OriginalString),
+            .. credentialFields
+        ];
+
+        return await RawAuthCodeWirePushers.PushRawParRequestAsync(
+            host.Host("default"), material.Registration.TenantId.Value, fields, headers,
+            TestContext.CancellationToken).ConfigureAwait(false);
     }
 }

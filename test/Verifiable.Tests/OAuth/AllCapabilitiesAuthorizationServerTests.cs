@@ -113,7 +113,7 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
         //grant — without it the grant endpoint does not exist (fail-closed).
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(true);
 
 

@@ -332,6 +332,7 @@ internal sealed class Oid4VciEncryptionTests
             candidateIntegration.ContributeCredentialIssuerMetadataAsync = static (_, _, _) =>
                 ValueTask.FromResult(new CredentialIssuerMetadataContribution
                 {
+                    CredentialConfigurationsSupported = TestHostShell.ListCredentialConfigurations(ConfigurationId),
                     CredentialResponseEncryption = new Dictionary<string, object>(StringComparer.Ordinal)
                     {
                         ["alg_values_supported"] = new List<object> { WellKnownJweAlgorithms.EcdhEs },
@@ -388,23 +389,22 @@ internal sealed class Oid4VciEncryptionTests
 
             candidateIntegration.IssueCredentialAsync = static (_, _, _, _, _) =>
                 ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
-
-            candidateIntegration.ContributeCredentialIssuerMetadataAsync = static (_, _, _) =>
-                ValueTask.FromResult(new CredentialIssuerMetadataContribution
-                {
-                    CredentialRequestEncryption = new Dictionary<string, object>(StringComparer.Ordinal)
-                    {
-                        ["enc_values_supported"] = new List<object> { WellKnownJweEncryptionAlgorithms.A256Gcm },
-                        ["encryption_required"] = true
-                    }
-                });
         }).ConfigureAwait(false);
 
+        //The issuer's request-decryption key is advertised as credential_request_encryption.jwks.
         var issuerKeys = TestKeyMaterialProvider.CreateFreshP256ExchangeKeyMaterial();
         using PublicKeyMemory issuerPublic = issuerKeys.PublicKey;
         using PrivateKeyMemory issuerPrivate = issuerKeys.PrivateKey;
+        Dictionary<string, object> requestEncryption =
+            TestHostShell.ComposeCredentialRequestEncryptionObject(issuerPublic, isEncryptionRequired: true);
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
+            candidateIntegration.ContributeCredentialIssuerMetadataAsync = (_, _, _) =>
+                ValueTask.FromResult(new CredentialIssuerMetadataContribution
+                {
+                    CredentialConfigurationsSupported = TestHostShell.ListCredentialConfigurations(ConfigurationId),
+                    CredentialRequestEncryption = requestEncryption
+                });
             candidateIntegration.DecryptCredentialRequestAsync = async (jwe, _, _, ct) =>
                 await DecryptAsync(jwe, issuerPrivate).ConfigureAwait(false);
         }).ConfigureAwait(false);
@@ -439,10 +439,14 @@ internal sealed class Oid4VciEncryptionTests
     /// <summary>
     /// Wires the issuer's response-encryption seam with real ECDH-ES + AES-GCM: the recipient
     /// key is reconstructed from the request's <c>jwk</c> and the JWE composed with the same
-    /// provider delegates the OID4VP <c>direct_post.jwt</c> path uses.
+    /// provider delegates the OID4VP <c>direct_post.jwt</c> path uses. The catalogue advertises
+    /// ECDH-ES with A256GCM for encrypted responses.
     /// </summary>
+    /// <param name="host">The host whose integration is altered.</param>
     private static async Task WireResponseEncryptionSeamAsync(TestHostShell host)
     {
+        await TestHostShell.AdvertiseCredentialResponseEncryptionAsync(
+            host.Server, [WellKnownJweAlgorithms.EcdhEs], [WellKnownJweEncryptionAlgorithms.A256Gcm]).ConfigureAwait(false);
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
             candidateIntegration.EncryptCredentialResponseAsync = async (responseJson, encryption, _, _, ct) =>

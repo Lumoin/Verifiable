@@ -20,71 +20,71 @@
       },
       "Lumoin.Veritas.Canonicalization": {
         "type": "Direct",
-        "requested": "[0.0.2-local.be47a9ff, )",
-        "resolved": "0.0.2-local.be47a9ff",
-        "contentHash": "CmTuHpQpy+DqAtmI7UQ/y/uyklG+3n7VepvxC0XddNU3BaPeOxt5y3zR2nlFlk/yul7n5GeoOdGRVPyE3e106w==",
+        "requested": "[0.0.3-local.5fa78938, )",
+        "resolved": "0.0.3-local.5fa78938",
+        "contentHash": "9MXexMam8PRowmKmmCEjWeeb+icozNdShWoClQ5jCYgbkit4AoI3AjEWMICWfF2XF7lhzcQrc0gBq2zxUHKCgw==",
         "dependencies": {
-          "Lumoin.Base": "0.0.12",
-          "Lumoin.Veritas.Core": "0.0.2-local.be47a9ff",
-          "System.IO.Hashing": "10.0.11"
+          "Lumoin.Base": "0.0.14",
+          "Lumoin.Veritas.Core": "0.0.3-local.5fa78938",
+          "System.IO.Hashing": "11.0.0-rc.1.26425.128"
         }
       },
       "Lumoin.Veritas.Json": {
         "type": "Direct",
-        "requested": "[0.0.2-local.be47a9ff, )",
-        "resolved": "0.0.2-local.be47a9ff",
-        "contentHash": "bNG5NcN3Q37sE3u74FTTRXOlcSe7w2oFT+wsl5tlMcZitY6vPgrEZW+f6e9geRDIMf81ve58hnQnJm4YjEPQYQ==",
+        "requested": "[0.0.3-local.5fa78938, )",
+        "resolved": "0.0.3-local.5fa78938",
+        "contentHash": "aZGO6mloIdDjJJv5VwHvNKHgbRCYH/6JtZI5PTMjclxhTpQs4G+Qkbtk59mbYrRZTrtkhmhmxgmzqaf9JUuRfg==",
         "dependencies": {
-          "Lumoin.Base": "0.0.12"
+          "Lumoin.Base": "0.0.14"
         }
       },
       "Lumoin.Veritas.Json.Stj": {
         "type": "Direct",
-        "requested": "[0.0.2-local.be47a9ff, )",
-        "resolved": "0.0.2-local.be47a9ff",
-        "contentHash": "1UHCtPVxCKRoiNqUYTZsw3K+msVoVB/kt6Za/rL3LxpcA7RxF+Pz4Anlq/hv9cpWOMN6RKhoeNLpIsES6D9Ujw==",
+        "requested": "[0.0.3-local.5fa78938, )",
+        "resolved": "0.0.3-local.5fa78938",
+        "contentHash": "jbfTaNR5GAaV33xRkgJiIKmk0kH3SsNlEsyczVMX83Pz4839vurAoe9zySPRIW1wsRojjG/M7HYnqIScCfMAuQ==",
         "dependencies": {
-          "Lumoin.Base": "0.0.12",
-          "Lumoin.Veritas.Json": "0.0.2-local.be47a9ff"
+          "Lumoin.Base": "0.0.14",
+          "Lumoin.Veritas.Json": "0.0.3-local.5fa78938"
         }
       },
       "Lumoin.Veritas.Jsonata": {
         "type": "Direct",
-        "requested": "[0.0.2-local.be47a9ff, )",
-        "resolved": "0.0.2-local.be47a9ff",
-        "contentHash": "ryf4tS37MHIQ80yYcbHPSTJOMA6NYZfo8/V0RS09cBvp8iKwRKvBY7Ew0E1UqwNr07WLg4+pvnAe3ltc3ZAeiw==",
+        "requested": "[0.0.3-local.5fa78938, )",
+        "resolved": "0.0.3-local.5fa78938",
+        "contentHash": "ZKn0B14DPZVXYsTxWu42PtWjC3PZOF8g7xqv++GRyMq9J2UtiGQoQUcdY6H32KYCJUkzYrIGeHmNMZlkp2SXMQ==",
         "dependencies": {
-          "Lumoin.Base": "0.0.12",
-          "Lumoin.Veritas.Core": "0.0.2-local.be47a9ff",
-          "Lumoin.Veritas.Json": "0.0.2-local.be47a9ff",
-          "System.IO.Hashing": "10.0.11"
+          "Lumoin.Base": "0.0.14",
+          "Lumoin.Veritas.Core": "0.0.3-local.5fa78938",
+          "Lumoin.Veritas.Json": "0.0.3-local.5fa78938",
+          "System.IO.Hashing": "11.0.0-rc.1.26425.128"
         }
       },
       "Lumoin.Veritas.JsonLd": {
         "type": "Direct",
-        "requested": "[0.0.2-local.be47a9ff, )",
-        "resolved": "0.0.2-local.be47a9ff",
-        "contentHash": "3tRsvYKOhtn1EUrqnlWQU83v0V6+j9/1bxBnU4L+WSGHG93OgU4oJIv/e2qHkq9XBHWkVHQKD6LUPEYEe4HWxg==",
+        "requested": "[0.0.3-local.5fa78938, )",
+        "resolved": "0.0.3-local.5fa78938",
+        "contentHash": "KWO5v7Rf1w2UXhWKiQK91ZmSQiX3VenMU1kmcB4JRaB3tBpG6rTqcWLTRG66B4uw4mfPLt3oxuXW05EQ3MaEJg==",
         "dependencies": {
-          "Lumoin.Base": "0.0.12",
-          "Lumoin.Veritas.CborLd": "0.0.2-local.be47a9ff",
-          "Lumoin.Veritas.Core": "0.0.2-local.be47a9ff",
-          "Lumoin.Veritas.Json": "0.0.2-local.be47a9ff",
-          "Lumoin.Veritas.LinkedData": "0.0.2-local.be47a9ff",
-          "System.IO.Hashing": "10.0.11"
+          "Lumoin.Base": "0.0.14",
+          "Lumoin.Veritas.CborLd": "0.0.3-local.5fa78938",
+          "Lumoin.Veritas.Core": "0.0.3-local.5fa78938",
+          "Lumoin.Veritas.Json": "0.0.3-local.5fa78938",
+          "Lumoin.Veritas.LinkedData": "0.0.3-local.5fa78938",
+          "System.IO.Hashing": "11.0.0-rc.1.26425.128"
         }
       },
       "Lumoin.Veritas.JsonSchema": {
         "type": "Direct",
-        "requested": "[0.0.2-local.be47a9ff, )",
-        "resolved": "0.0.2-local.be47a9ff",
-        "contentHash": "vdcmgZdKum23/OzsxW+X5dbFaXZfG/97TTe6hcIwpQOGqvHQDZU59UYx0APr4SWkDElOVuS4FOQdkbsOnZyzGg==",
+        "requested": "[0.0.3-local.5fa78938, )",
+        "resolved": "0.0.3-local.5fa78938",
+        "contentHash": "piq3dph7Lvx36ycynkIm/7gmX2jHyWmiDZztTZqG+nFlqc7N3+5oOos1vvzXSUALnMUdnAoPOBGTtbZEDOeLNw==",
         "dependencies": {
-          "Lumoin.Base": "0.0.12",
-          "Lumoin.Veritas.Core": "0.0.2-local.be47a9ff",
-          "Lumoin.Veritas.Json": "0.0.2-local.be47a9ff",
-          "Lumoin.Veritas.JsonPointer": "0.0.2-local.be47a9ff",
-          "System.IO.Hashing": "10.0.11"
+          "Lumoin.Base": "0.0.14",
+          "Lumoin.Veritas.Core": "0.0.3-local.5fa78938",
+          "Lumoin.Veritas.Json": "0.0.3-local.5fa78938",
+          "Lumoin.Veritas.JsonPointer": "0.0.3-local.5fa78938",
+          "System.IO.Hashing": "11.0.0-rc.1.26425.128"
         }
       },
       "MessagePack": {
@@ -487,7 +487,7 @@
       "verifiable.cbor": {
         "type": "Project",
         "dependencies": {
-          "Lumoin.Veritas.Cbor": "[0.0.2-local.be47a9ff, )",
+          "Lumoin.Veritas.Cbor": "[0.0.3-local.5fa78938, )",
           "Verifiable.Core": "[0.0.0, )",
           "Verifiable.Fido2": "[0.0.0, )",
           "Verifiable.Foundation": "[0.0.0, )",
@@ -506,7 +506,7 @@
         "dependencies": {
           "Lumoin.Veridical.Backends.Managed": "[0.0.7, )",
           "Lumoin.Veridical.Bbs": "[0.0.7, )",
-          "Lumoin.Veritas.JsonPointer": "[0.0.2-local.be47a9ff, )",
+          "Lumoin.Veritas.JsonPointer": "[0.0.3-local.5fa78938, )",
           "Verifiable.Foundation": "[0.0.0, )",
           "Verifiable.JCose": "[0.0.0, )"
         }
@@ -562,7 +562,7 @@
       "verifiable.json": {
         "type": "Project",
         "dependencies": {
-          "Lumoin.Veritas.JsonPointer": "[0.0.2-local.be47a9ff, )",
+          "Lumoin.Veritas.JsonPointer": "[0.0.3-local.5fa78938, )",
           "Verifiable.Core": "[0.0.0, )",
           "Verifiable.DidComm": "[0.0.0, )",
           "Verifiable.Fido2": "[0.0.0, )",
@@ -713,76 +713,76 @@
       },
       "Lumoin.Veritas.Cbor": {
         "type": "CentralTransitive",
-        "requested": "[0.0.2-local.be47a9ff, )",
-        "resolved": "0.0.2-local.be47a9ff",
-        "contentHash": "7LzZLmzQCqyqjC8a27D3qOzmvWMhoS+VMdSexotcQj55cExcxiHXg1SnzVir44K1UTWXrop8Uu5J2XTnHVqqGA==",
+        "requested": "[0.0.3-local.5fa78938, )",
+        "resolved": "0.0.3-local.5fa78938",
+        "contentHash": "Cc8OK6/IDpF4B633MuJYHU34QE9Lmr1VK8V4vgPQzIe8wkxsHywVJN7fvqMg0IUjBE9CyQW3yZFZ0xqMVLA2gg==",
         "dependencies": {
-          "Lumoin.Base": "0.0.12",
-          "Lumoin.Veritas.Cid": "0.0.2-local.be47a9ff",
-          "Lumoin.Veritas.Core": "0.0.2-local.be47a9ff",
-          "System.IO.Hashing": "10.0.11"
+          "Lumoin.Base": "0.0.14",
+          "Lumoin.Veritas.Cid": "0.0.3-local.5fa78938",
+          "Lumoin.Veritas.Core": "0.0.3-local.5fa78938",
+          "System.IO.Hashing": "11.0.0-rc.1.26425.128"
         }
       },
       "Lumoin.Veritas.CborLd": {
         "type": "CentralTransitive",
-        "requested": "[0.0.2-local.be47a9ff, )",
-        "resolved": "0.0.2-local.be47a9ff",
-        "contentHash": "Ndf8aItAHOJ8PXzKhO1C2vu/5MgrSNPy0DfVdESI8aCC4Jf7AOsk2E+y0/xriV6TmgI7FkRi6VuxIDbJf603Kw==",
+        "requested": "[0.0.3-local.5fa78938, )",
+        "resolved": "0.0.3-local.5fa78938",
+        "contentHash": "RKzjtvP/K6YIdT198eeKjcyXD7TzHLS9U3IGodzDY6S8DZD7dhoo1icyzSWuIU5VZrb/SpP8Zr860SOtFryAAQ==",
         "dependencies": {
-          "Lumoin.Base": "0.0.12",
-          "Lumoin.Veritas.Cbor": "0.0.2-local.be47a9ff",
-          "Lumoin.Veritas.Core": "0.0.2-local.be47a9ff",
-          "Lumoin.Veritas.Json": "0.0.2-local.be47a9ff",
-          "Lumoin.Veritas.LinkedData": "0.0.2-local.be47a9ff",
-          "System.IO.Hashing": "10.0.11"
+          "Lumoin.Base": "0.0.14",
+          "Lumoin.Veritas.Cbor": "0.0.3-local.5fa78938",
+          "Lumoin.Veritas.Core": "0.0.3-local.5fa78938",
+          "Lumoin.Veritas.Json": "0.0.3-local.5fa78938",
+          "Lumoin.Veritas.LinkedData": "0.0.3-local.5fa78938",
+          "System.IO.Hashing": "11.0.0-rc.1.26425.128"
         }
       },
       "Lumoin.Veritas.Cid": {
         "type": "CentralTransitive",
-        "requested": "[0.0.2-local.be47a9ff, )",
-        "resolved": "0.0.2-local.be47a9ff",
-        "contentHash": "ja79/bfh7Em2+BwWWjExujgcimDaS4kiv7t74ZRAzRN/S87XHugP76uXbf7tOZ9EsLLzh1teHQCx1D382v0F/Q==",
+        "requested": "[0.0.3-local.5fa78938, )",
+        "resolved": "0.0.3-local.5fa78938",
+        "contentHash": "cLWDUercatwj6qDPGuH8E1yJt2gCgJqaTSYgl2HxHqXM/kGk9ISet9IHyVKWfvQC3Ksn0l2WmuBsOinruZbM7g==",
         "dependencies": {
-          "Lumoin.Base": "0.0.12",
-          "Lumoin.Veritas.Core": "0.0.2-local.be47a9ff",
-          "System.IO.Hashing": "10.0.11"
+          "Lumoin.Base": "0.0.14",
+          "Lumoin.Veritas.Core": "0.0.3-local.5fa78938",
+          "System.IO.Hashing": "11.0.0-rc.1.26425.128"
         }
       },
       "Lumoin.Veritas.Core": {
         "type": "CentralTransitive",
-        "requested": "[0.0.2-local.be47a9ff, )",
-        "resolved": "0.0.2-local.be47a9ff",
-        "contentHash": "fUUDnkQGUky6j37BA1dEZdbspm3PsAIAjmHDRD3ApVjZxbVn0v8GdWEFTQn/2XEO2azuyaLlUrpNHdVLVAvarQ==",
+        "requested": "[0.0.3-local.5fa78938, )",
+        "resolved": "0.0.3-local.5fa78938",
+        "contentHash": "t371PH/z7+0R1obJ4A51y9sY0jSy2pUiUn/xsAQyxAGCd+0yYna8KLaTUwPkdPK5cBjl8DQaGFMRmwC9JZya0g==",
         "dependencies": {
-          "Lumoin.Base": "0.0.12",
-          "System.IO.Hashing": "10.0.11"
+          "Lumoin.Base": "0.0.14",
+          "System.IO.Hashing": "11.0.0-rc.1.26425.128"
         }
       },
       "Lumoin.Veritas.JsonPointer": {
         "type": "CentralTransitive",
-        "requested": "[0.0.2-local.be47a9ff, )",
-        "resolved": "0.0.2-local.be47a9ff",
-        "contentHash": "HECRatfPq8USqLLNTN01AAhrIcvKsScXSDHnZ9fNpP+X4UVzcnx00MYmqw8QMmXjU21oFuSirl/TJXG0wzicFA==",
+        "requested": "[0.0.3-local.5fa78938, )",
+        "resolved": "0.0.3-local.5fa78938",
+        "contentHash": "KU+/tw+khQPoY783zEkP0czjZGWVD/dX0x9iCH4RkMGEPi19bqrZ1e/e3cS7NsKW9wqTm2IfKqZunDGX3t9cTg==",
         "dependencies": {
-          "Lumoin.Base": "0.0.12"
+          "Lumoin.Base": "0.0.14"
         }
       },
       "Lumoin.Veritas.LinkedData": {
         "type": "CentralTransitive",
-        "requested": "[0.0.2-local.be47a9ff, )",
-        "resolved": "0.0.2-local.be47a9ff",
-        "contentHash": "ygxXFXg3qcu+s36dmjSbjTNXsoxmK3xJmAR6Z70fozAeNliiIHFFmIwuli5gjyqcd2aVDINF1tC0Y811rYIvqA==",
+        "requested": "[0.0.3-local.5fa78938, )",
+        "resolved": "0.0.3-local.5fa78938",
+        "contentHash": "3tQpCRpWYOJjcAzg5W3Hs7jZ7UXGwuRBfImSs91GaXDpgcrui5OkC4pUbRSyuP33gTN2lbO58GOFf1ssO1LoIA==",
         "dependencies": {
-          "Lumoin.Base": "0.0.12",
-          "Lumoin.Veritas.Core": "0.0.2-local.be47a9ff",
-          "System.IO.Hashing": "10.0.11"
+          "Lumoin.Base": "0.0.14",
+          "Lumoin.Veritas.Core": "0.0.3-local.5fa78938",
+          "System.IO.Hashing": "11.0.0-rc.1.26425.128"
         }
       },
       "System.IO.Hashing": {
         "type": "CentralTransitive",
-        "requested": "[10.0.11, )",
-        "resolved": "10.0.11",
-        "contentHash": "OzKDcIRkeNJeC8qAsbn8yJXnfTLP1dtkWILe+T56Gf/z+IkAASi7sMqLqJQat08j5z/mRN5xVtoAwbkMNMoBUQ=="
+        "requested": "[11.0.0-rc.1.26425.128, )",
+        "resolved": "11.0.0-rc.1.26425.128",
+        "contentHash": "k2EG0GriOm2mGO+V0/9tq9JBNDI/TREnc7lM1/raddxXBLtxmTy1GrcH0jh8I4PBHV8ajD/J6AVqADeivNUXLA=="
       }
     }
   }

@@ -342,6 +342,76 @@ internal sealed class JarParTests
     }
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749 Section 3.2</see>: "Parameters sent
+    /// without a value MUST be treated as if they were omitted from the request." A pushed authorization request
+    /// carrying a signed request object, sent over the wire with an outer <c>client_id=</c> with no value beside
+    /// the registration's <c>client_id</c>, names the one client identifier and is served: 201 with a
+    /// <c>request_uri</c>.
+    /// </summary>
+    [TestMethod]
+    public async Task AnEmptyOuterClientIdBesideTheClientIdIsTheOneIdentifierAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarParCapabilities).ConfigureAwait(false);
+
+        DateTimeOffset issuedAt = TimeProvider.GetUtcNow();
+        string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
+            material,
+            OAuthJarFixtures.BuildBaseClaims(material, issuedAt, ClientId, RegisteredRedirectUri, DefaultState, DefaultNonce),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        (int statusCode, string body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, material.Registration.TenantId.Value,
+            [
+                new(OAuthRequestParameterNames.ClientId, string.Empty),
+                new(OAuthRequestParameterNames.ClientId, ClientId),
+                new(OAuthRequestParameterNames.Request, compactJar)
+            ], TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(201, statusCode, body);
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.IsTrue(document.RootElement.TryGetProperty("request_uri", out _), "A served pushed request mints a request_uri.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749 Section 3.2</see>: "Request and
+    /// response parameters MUST NOT be included more than once." A pushed authorization request carrying a signed
+    /// request object, sent over the wire with the registration's <c>client_id</c> twice as its outer parameter, is
+    /// refused 400 <c>invalid_request</c> with the description of a repeated client authentication parameter, the
+    /// code <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see> names for a
+    /// request that repeats a parameter, and mints no <c>request_uri</c>.
+    /// </summary>
+    [TestMethod]
+    public async Task ARepeatedOuterClientIdIsAnInvalidRequestAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarParCapabilities).ConfigureAwait(false);
+
+        DateTimeOffset issuedAt = TimeProvider.GetUtcNow();
+        string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
+            material,
+            OAuthJarFixtures.BuildBaseClaims(material, issuedAt, ClientId, RegisteredRedirectUri, DefaultState, DefaultNonce),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        (int statusCode, string body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, material.Registration.TenantId.Value,
+            [
+                new(OAuthRequestParameterNames.ClientId, ClientId),
+                new(OAuthRequestParameterNames.ClientId, ClientId),
+                new(OAuthRequestParameterNames.Request, compactJar)
+            ], TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        Assert.AreEqual(
+            "{\"error\":\"invalid_request\",\"error_description\":\"The request repeats a client authentication parameter.\"}",
+            body);
+    }
+
+
     [TestMethod]
     public async Task RejectsJarSignedWithDifferentClientKey()
     {
@@ -1262,8 +1332,8 @@ internal sealed class JarParTests
         {
             candidateIntegration.ClientAuthenticationMethodsSupported =
                 [ClientAuthenticationMethod.None, ClientAuthenticationMethod.ClientSecretBasic];
-            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
-                ValueTask.FromResult(AuthCodeFlowDriver.DecodeAndMatchBasicHeader(request, registration.ClientId, ConfidentialClientSecret));
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
+                ValueTask.FromResult(AuthCodeFlowDriver.DecodeAndMatchBasicHeader(reading, registration.ClientId, ConfidentialClientSecret));
         }).ConfigureAwait(false);
     }
 

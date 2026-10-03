@@ -205,35 +205,52 @@ internal sealed class AuthorizationServerHttpApplication
 
 
     /// <summary>
-    /// Parses the tenant segment from <c>/connect/{segment}/...</c>. Returns
-    /// <see langword="null"/> when the path does not start with <c>/connect/</c>
-    /// — the dispatcher's prologue then reports a missing tenant and the
-    /// response is the library's standard 400.
+    /// The well-known path prefixes after which the tenant segment rides, because the specifications
+    /// insert the well-known suffix between the host and the identifier's path: <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3">RFC 9728 Section 3</see>
+    /// (<c>oauth-protected-resource</c>), <see href="https://www.rfc-editor.org/rfc/rfc8414#section-3">RFC 8414 Section 3</see> (<c>oauth-authorization-server</c>) and
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-12.2.2">OID4VCI 1.0 Section 12.2.2</see> (<c>openid-credential-issuer</c>).
     /// </summary>
+    private static string[] InsertedWellKnownPrefixes { get; } =
+    [
+        "/.well-known/oauth-protected-resource/",
+        "/.well-known/oauth-authorization-server/",
+        "/.well-known/openid-credential-issuer/"
+    ];
+
+
+    /// <summary>
+    /// Slices the first path segment that follows <paramref name="prefix"/>: everything after the
+    /// prefix up to the next slash, or to the end of the path when no slash follows.
+    /// </summary>
+    /// <param name="path">The request path, which begins with <paramref name="prefix"/>.</param>
+    /// <param name="prefix">The path prefix that ends with the slash before the segment.</param>
+    /// <returns>The segment after <paramref name="prefix"/>, empty when the prefix ends the path.</returns>
+    private static string ReadSegmentAfterPrefix(string path, string prefix)
+    {
+        int start = prefix.Length;
+        int end = path.IndexOf('/', start, StringComparison.Ordinal);
+
+        return end < 0 ? path[start..] : path[start..end];
+    }
+
+
+    /// <summary>
+    /// Parses the tenant segment from <c>/connect/{segment}/...</c>, or from the segment after an
+    /// inserted well-known suffix (<c>oauth-protected-resource</c>, <c>oauth-authorization-server</c>,
+    /// <c>openid-credential-issuer</c>). Returns <see langword="null"/> for any other path; the
+    /// dispatcher's prologue then reports a missing tenant and the response is the library's
+    /// standard 400.
+    /// </summary>
+    /// <param name="path">The request path as received, beginning with <c>/</c>.</param>
+    /// <returns>The tenant segment, or <see langword="null"/> when the path carries none of the recognised forms.</returns>
     private static string? ExtractTenantSegmentFromPath(string path)
     {
-        //RFC 9728 §3 inserts the protected-resource well-known suffix between
-        //the host and the resource identifier's path, so the tenant rides
-        //AFTER the suffix: /.well-known/oauth-protected-resource/{segment}.
-        const string insertedPrefix = "/.well-known/oauth-protected-resource/";
-        if(path.StartsWith(insertedPrefix, StringComparison.Ordinal))
+        foreach(string insertedPrefix in InsertedWellKnownPrefixes)
         {
-            int insertedStart = insertedPrefix.Length;
-            int insertedEnd = path.IndexOf('/', insertedStart, StringComparison.Ordinal);
-
-            return insertedEnd < 0 ? path[insertedStart..] : path[insertedStart..insertedEnd];
-        }
-
-        //RFC 8414 §3 inserts the authorization-server-metadata well-known suffix
-        //between the host and the issuer identifier's path, so the tenant rides
-        //AFTER the suffix: /.well-known/oauth-authorization-server/{segment}.
-        const string oauthMetadataPrefix = "/.well-known/oauth-authorization-server/";
-        if(path.StartsWith(oauthMetadataPrefix, StringComparison.Ordinal))
-        {
-            int oauthMetadataStart = oauthMetadataPrefix.Length;
-            int oauthMetadataEnd = path.IndexOf('/', oauthMetadataStart, StringComparison.Ordinal);
-
-            return oauthMetadataEnd < 0 ? path[oauthMetadataStart..] : path[oauthMetadataStart..oauthMetadataEnd];
+            if(path.StartsWith(insertedPrefix, StringComparison.Ordinal))
+            {
+                return ReadSegmentAfterPrefix(path, insertedPrefix);
+            }
         }
 
         const string prefix = "/connect/";
@@ -241,9 +258,8 @@ internal sealed class AuthorizationServerHttpApplication
         {
             return null;
         }
-        int start = prefix.Length;
-        int end = path.IndexOf('/', start, StringComparison.Ordinal);
-        return end < 0 ? path[start..] : path[start..end];
+
+        return ReadSegmentAfterPrefix(path, prefix);
     }
 
 

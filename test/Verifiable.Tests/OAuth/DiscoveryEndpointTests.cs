@@ -267,7 +267,7 @@ internal sealed class DiscoveryEndpointTests
         //discovery document advertises introspection-response algorithms only for an endpoint on it.
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) => ValueTask.FromResult(true);
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) => ValueTask.FromResult(true);
             candidateIntegration.IntrospectTokenAsync = static (_, _, _, _, _) =>
                 ValueTask.FromResult(new TokenIntrospectionResult { IsActive = false });
         }).ConfigureAwait(false);

@@ -490,7 +490,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             RequestFields fields = BuildFields(assertion);
             ExchangeContext context = BuildContext(app.Server);
 
-            bool authenticated = await validator(null, fields, registration, context, TestContext.CancellationToken)
+            bool authenticated = await validator(ClientCredentialReading.Read(RequestHeaders.Empty, fields), registration, context, TestContext.CancellationToken)
                 .ConfigureAwait(false);
 
             Assert.IsTrue(authenticated);
@@ -603,7 +603,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             RequestFields fields = BuildFields(assertion);
             ExchangeContext context = BuildContext(app.Server);
 
-            bool authenticated = await validator(null, fields, registration, context, TestContext.CancellationToken)
+            bool authenticated = await validator(ClientCredentialReading.Read(RequestHeaders.Empty, fields), registration, context, TestContext.CancellationToken)
                 .ConfigureAwait(false);
 
             Assert.IsFalse(authenticated,
@@ -652,7 +652,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             RequestFields fields = BuildFields(assertion);
             ExchangeContext context = BuildContext(app.Server);
 
-            bool authenticated = await validator(null, fields, registration, context, TestContext.CancellationToken)
+            bool authenticated = await validator(ClientCredentialReading.Read(RequestHeaders.Empty, fields), registration, context, TestContext.CancellationToken)
                 .ConfigureAwait(false);
 
             Assert.IsFalse(authenticated, "A multi-key set with no kid header must refuse, not pick the first key.");
@@ -692,7 +692,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             RequestFields fields = BuildFields(assertion);
             ExchangeContext context = BuildContext(app.Server);
 
-            bool authenticated = await validator(null, fields, registration, context, TestContext.CancellationToken)
+            bool authenticated = await validator(ClientCredentialReading.Read(RequestHeaders.Empty, fields), registration, context, TestContext.CancellationToken)
                 .ConfigureAwait(false);
 
             Assert.IsTrue(authenticated,
@@ -741,7 +741,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             RequestFields fields = BuildFields(assertion);
             ExchangeContext context = BuildContext(app.Server);
 
-            bool authenticated = await validator(null, fields, registration, context, TestContext.CancellationToken)
+            bool authenticated = await validator(ClientCredentialReading.Read(RequestHeaders.Empty, fields), registration, context, TestContext.CancellationToken)
                 .ConfigureAwait(false);
 
             Assert.IsTrue(authenticated,
@@ -783,7 +783,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             RequestFields fields = BuildFields(tampered);
             ExchangeContext context = BuildContext(app.Server);
 
-            bool authenticated = await validator(null, fields, registration, context, TestContext.CancellationToken)
+            bool authenticated = await validator(ClientCredentialReading.Read(RequestHeaders.Empty, fields), registration, context, TestContext.CancellationToken)
                 .ConfigureAwait(false);
 
             Assert.IsFalse(authenticated);
@@ -824,7 +824,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             RequestFields fields = BuildFields(assertion);
             ExchangeContext context = BuildContext(app.Server);
 
-            bool authenticated = await validator(null, fields, registration, context, TestContext.CancellationToken)
+            bool authenticated = await validator(ClientCredentialReading.Read(RequestHeaders.Empty, fields), registration, context, TestContext.CancellationToken)
                 .ConfigureAwait(false);
 
             Assert.IsFalse(authenticated);
@@ -1419,7 +1419,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             RequestFields fields = BuildFields(tamperedAssertion);
             ExchangeContext context = BuildContext(app.Server);
 
-            bool authenticated = await validator(null, fields, registration, context, TestContext.CancellationToken)
+            bool authenticated = await validator(ClientCredentialReading.Read(RequestHeaders.Empty, fields), registration, context, TestContext.CancellationToken)
                 .ConfigureAwait(false);
 
             Assert.IsFalse(authenticated);
@@ -1454,7 +1454,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             //client_assertion_type deliberately omitted.
             ExchangeContext context = BuildContext(app.Server);
 
-            bool authenticated = await validator(null, fields, registration, context, TestContext.CancellationToken)
+            bool authenticated = await validator(ClientCredentialReading.Read(RequestHeaders.Empty, fields), registration, context, TestContext.CancellationToken)
                 .ConfigureAwait(false);
 
             Assert.IsFalse(authenticated);
@@ -1489,7 +1489,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             fields[OAuthRequestParameterNames.ClientAssertion] = assertion;
             ExchangeContext context = BuildContext(app.Server);
 
-            bool authenticated = await validator(null, fields, registration, context, TestContext.CancellationToken)
+            bool authenticated = await validator(ClientCredentialReading.Read(RequestHeaders.Empty, fields), registration, context, TestContext.CancellationToken)
                 .ConfigureAwait(false);
 
             Assert.IsFalse(authenticated);
@@ -1526,7 +1526,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             RequestFields fields = BuildFields(assertion);
             ExchangeContext context = BuildContext(app.Server);
 
-            bool authenticated = await validator(null, fields, registration, context, TestContext.CancellationToken)
+            bool authenticated = await validator(ClientCredentialReading.Read(RequestHeaders.Empty, fields), registration, context, TestContext.CancellationToken)
                 .ConfigureAwait(false);
 
             Assert.IsFalse(authenticated);
@@ -1582,7 +1582,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             RequestFields fields = BuildFields(assertion);
             ExchangeContext context = BuildContext(app.Server);
 
-            bool authenticated = await validator(null, fields, registration, context, TestContext.CancellationToken)
+            bool authenticated = await validator(ClientCredentialReading.Read(RequestHeaders.Empty, fields), registration, context, TestContext.CancellationToken)
                 .ConfigureAwait(false);
 
             Assert.IsTrue(authenticated,
@@ -1626,7 +1626,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             RequestFields fields = BuildFields(assertion);
             ExchangeContext context = BuildContext(app.Server);
 
-            bool authenticated = await validator(null, fields, registration, context, TestContext.CancellationToken)
+            bool authenticated = await validator(ClientCredentialReading.Read(RequestHeaders.Empty, fields), registration, context, TestContext.CancellationToken)
                 .ConfigureAwait(false);
 
             Assert.IsFalse(authenticated,
@@ -1709,7 +1709,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             RequestFields fields = BuildFields(assertion);
 
             bool isAuthenticatedWithAnIssuer = await validator(
-                null, fields, registration, BuildContext(app.Server), TestContext.CancellationToken)
+                ClientCredentialReading.Read(RequestHeaders.Empty, fields), registration, BuildContext(app.Server), TestContext.CancellationToken)
                 .ConfigureAwait(false);
             Assert.IsTrue(isAuthenticatedWithAnIssuer,
                 "The assertion must authenticate while the issuer resolves, so only the failed resolution can refuse it.");
@@ -1721,7 +1721,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             }).ConfigureAwait(false);
 
             bool isAuthenticatedWithoutAnIssuer = await validator(
-                null, fields, registration, BuildContext(app.Server), TestContext.CancellationToken)
+                ClientCredentialReading.Read(RequestHeaders.Empty, fields), registration, BuildContext(app.Server), TestContext.CancellationToken)
                 .ConfigureAwait(false);
 
             Assert.IsFalse(isAuthenticatedWithoutAnIssuer,
@@ -1788,7 +1788,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
                 .ConfigureAwait(false);
 
             bool isAuthenticated = await validator(
-                null, BuildFields(assertion), registration, BuildContext(app.Server), TestContext.CancellationToken)
+                ClientCredentialReading.Read(RequestHeaders.Empty, BuildFields(assertion)), registration, BuildContext(app.Server), TestContext.CancellationToken)
                 .ConfigureAwait(false);
 
             Assert.AreEqual(isAuthenticatedExpected, isAuthenticated,
@@ -1886,7 +1886,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
                 "The permissive deserializer must yield the client's own sub, so only the repeated name can refuse the assertion.");
 
             bool isAuthenticated = await validator(
-                null, BuildFields(repeatedAssertion), registration, BuildContext(app.Server), TestContext.CancellationToken)
+                ClientCredentialReading.Read(RequestHeaders.Empty, BuildFields(repeatedAssertion)), registration, BuildContext(app.Server), TestContext.CancellationToken)
                 .ConfigureAwait(false);
 
             Assert.IsFalse(isAuthenticated,

@@ -771,7 +771,7 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// to require it. The delegate resolves the requester's Federation Entity
     /// Key, verifies the client authentication JWT, and validates its claims via
     /// <see cref="Federation.FederationClientAuthentication.Validate"/>; returning
-    /// a failed result rejects the request with HTTP 401 <c>invalid_client</c>,
+    /// a failed result rejects the request with <c>invalid_client</c> (401 with a challenge, or 400 when none applies),
     /// and <see langword="null"/> means client authentication is not required at
     /// that endpoint so the request proceeds.
     /// </para>
@@ -2062,11 +2062,12 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// <summary>
     /// Issues an OID4VCI 1.0 §8 Credential. The Credential Endpoint activates only when the
     /// <see cref="WellKnownCapabilityIdentifiers.Oid4VciCredentialEndpoint"/> capability is
-    /// allowed and BOTH this seam and <see cref="ParseCredentialRequestAsync"/> are wired — an
-    /// advertised Credential Endpoint that cannot parse the request or cannot mint would be a
-    /// fail-open authorization boundary. The application owns proof verification (its
-    /// <c>c_nonce</c> store), the supported Credential Configurations, and the signing key; the
-    /// library owns bearer-token validation and the wire shape.
+    /// allowed and three seams are wired: this seam, <see cref="ParseCredentialRequestAsync"/> and
+    /// <see cref="ContributeCredentialIssuerMetadataAsync"/>, since an advertised Credential Endpoint that
+    /// cannot parse the request, cannot mint, or cannot judge the request against the Credential
+    /// Issuer catalogue would be a fail-open authorization boundary. The application owns proof
+    /// verification (its <c>c_nonce</c> store), the supported Credential Configurations, and the
+    /// signing key; the library owns bearer-token validation, the catalogue rules and the wire shape.
     /// </summary>
     /// <remarks>
     /// Set during construction or on an alteration candidate. A serving setter throws
@@ -2265,7 +2266,12 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// Credential Issuer Metadata endpoint activates only when the
     /// <see cref="WellKnownCapabilityIdentifiers.Oid4VciCredentialIssuerMetadata"/> capability is
     /// allowed and this seam is wired — the document's REQUIRED
-    /// <c>credential_configurations_supported</c> is application data the library cannot derive.
+    /// <c>credential_configurations_supported</c> is application data the library cannot derive. The
+    /// Credential Endpoint (with <see cref="ParseCredentialRequestAsync"/> and
+    /// <see cref="IssueCredentialAsync"/>) and the Deferred Credential Endpoint require this seam too,
+    /// since every request is judged against the catalogue it answers; a catalogue listing no
+    /// configuration issues no Credential, and a Credential Request that passes the earlier rules is
+    /// refused <c>unknown_credential_configuration</c>.
     /// </summary>
     /// <remarks>
     /// Set during construction or on an alteration candidate. A serving setter throws

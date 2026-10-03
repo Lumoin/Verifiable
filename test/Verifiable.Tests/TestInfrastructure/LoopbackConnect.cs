@@ -16,7 +16,10 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// a new socket receives another local port, so this body retries on that code only: it disposes the
 /// failed socket and tries again at once, up to a fixed count of attempts, and writes one line per
 /// retry through <see cref="LoopbackKestrelDiagnostics"/> so a run's output shows how often it happened.
-/// Any other failure leaves at the attempt it occurs on.
+/// Any other failure leaves at the attempt it occurs on. The body counts the connects it makes
+/// (<see cref="ConnectCount"/>) and the retries it takes (<see cref="RetryCount"/>) in the test
+/// process, and <see cref="WriteRunSummaryAsync(LoopbackKestrelDiagnostics)"/> writes both once through the
+/// same diagnostics line when the run ends.
 /// </summary>
 internal static class LoopbackConnect
 {
@@ -34,6 +37,56 @@ internal static class LoopbackConnect
     /// for to count the retries of that run.
     /// </summary>
     internal static EventId RetriedAfterAddressInUseEventId { get; } = new(1, "ConnectRetriedAfterAddressInUse");
+
+    /// <summary>
+    /// The event id of the one line <see cref="WriteRunSummaryAsync(LoopbackKestrelDiagnostics)"/> writes
+    /// when a test process ends; its name is the text a run's output is searched for to read the
+    /// process's connect and retry counts.
+    /// </summary>
+    internal static EventId RunSummaryEventId { get; } = new(2, "ConnectRunSummary");
+
+    /// <summary>
+    /// The number of calls <see cref="ConnectAsync(EndPoint, int, Action{Socket, int}?, LoopbackKestrelDiagnostics, CancellationToken)"/>
+    /// has received in this process.
+    /// </summary>
+    internal static long ConnectCount => Interlocked.Read(ref connects);
+
+    /// <summary>
+    /// The number of retries <see cref="ConnectAsync(EndPoint, int, Action{Socket, int}?, LoopbackKestrelDiagnostics, CancellationToken)"/>
+    /// has taken in this process: attempts that met <see cref="SocketError.AddressAlreadyInUse"/> and were
+    /// followed by another attempt.
+    /// </summary>
+    internal static long RetryCount => Interlocked.Read(ref retries);
+
+    /// <summary>
+    /// The backing field of <see cref="ConnectCount"/>, a field because <see cref="Interlocked"/> adds to
+    /// a variable by reference and concurrent tests add to it at once.
+    /// </summary>
+    private static long connects;
+
+    /// <summary>
+    /// The backing field of <see cref="RetryCount"/>, a field because <see cref="Interlocked"/> adds to
+    /// a variable by reference and concurrent tests add to it at once.
+    /// </summary>
+    private static long retries;
+
+    /// <summary>
+    /// Writes one line through <paramref name="diagnostics"/> naming how many connects this process made
+    /// through <see cref="ConnectAsync(EndPoint, int, Action{Socket, int}?, LoopbackKestrelDiagnostics, CancellationToken)"/>
+    /// and how many retries it took, so a run's output shows the connection volume beside the retry lines.
+    /// The returned task completes when the line has been written, so a caller that ends the process
+    /// after it awaits the task and the line has reached the output.
+    /// </summary>
+    /// <param name="diagnostics">Receives the line.</param>
+    /// <returns>A task that completes once the line has been written and captured.</returns>
+    internal static Task WriteRunSummaryAsync(LoopbackKestrelDiagnostics diagnostics)
+    {
+        ArgumentNullException.ThrowIfNull(diagnostics);
+
+        string summary = $"this process made {ConnectCount} connects and took {RetryCount} retries after AddressAlreadyInUse";
+
+        return diagnostics.WriteAsync(DiagnosticsCategory, RunSummaryEventId, summary);
+    }
 
 
     /// <summary>
@@ -79,6 +132,7 @@ internal static class LoopbackConnect
         ArgumentOutOfRangeException.ThrowIfLessThan(maxAttempts, 1);
         ArgumentNullException.ThrowIfNull(diagnostics);
 
+        _ = Interlocked.Increment(ref connects);
         ILogger logger = diagnostics.CreateLogger(DiagnosticsCategory);
         for(int attempt = 1; ; attempt++)
         {
@@ -95,6 +149,7 @@ internal static class LoopbackConnect
             }
             catch(SocketException exception) when(exception.SocketErrorCode == SocketError.AddressAlreadyInUse && attempt < maxAttempts)
             {
+                _ = Interlocked.Increment(ref retries);
                 int failedAttempt = attempt;
                 logger.Log(LogLevel.Warning, RetriedAfterAddressInUseEventId, destination, exception,
                     (state, _) => $"connect to {state} met AddressAlreadyInUse on attempt {failedAttempt} of {maxAttempts}; a fresh socket tries again");

@@ -286,7 +286,7 @@ internal sealed class FullLifecycleTests
         //RFC 9701 so the verdict itself is attestable. ===
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(true);
 
             candidateIntegration.IntrospectTokenAsync = (token, _, _, _, _) =>
@@ -444,6 +444,11 @@ internal sealed class FullLifecycleTests
                     cancellationToken: ct).ConfigureAwait(false);
             };
         }).ConfigureAwait(false);
+
+        //Section 8.2: the Credential Issuer indicates support for encrypted responses in its
+        //metadata, so the catalogue advertises the ECDH-ES with A256GCM the wallet asks for.
+        await TestHostShell.AdvertiseCredentialResponseEncryptionAsync(
+            host.Server, [WellKnownJweAlgorithms.EcdhEs], [WellKnownJweEncryptionAlgorithms.A256Gcm]).ConfigureAwait(false);
 
         return issuerState;
     }

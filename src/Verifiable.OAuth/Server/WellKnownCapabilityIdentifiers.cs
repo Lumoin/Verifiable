@@ -187,8 +187,18 @@ public static class WellKnownCapabilityIdentifiers
         CapabilityIdentifier.Create("urn:verifiable:capability:oidc:back_channel_logout");
 
     /// <summary>
-    /// Device Authorization Grant per
-    /// <see href="https://www.rfc-editor.org/rfc/rfc8628">RFC 8628</see>.
+    /// The device authorization endpoint of the Device Authorization Grant per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8628">RFC 8628</see>. Every candidate under this capability is
+    /// judged by the Client ID Metadata Document materialization
+    /// (<see cref="Verifiable.OAuth.Server.Pipeline.ClientIdMetadataMaterialization"/>) as the device authorization
+    /// endpoint of <see href="https://www.rfc-editor.org/rfc/rfc8628#section-3.1">RFC 8628 Section 3.1</see>, whose
+    /// requests authenticate the client as the token endpoint's do: the client's document is fetched with or without a
+    /// <c>client_id</c>, and a <c>client_id</c> naming another client and a failed fetch are answered as a client
+    /// authentication failure. The endpoint of the user interaction, which a user agent reaches
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8628#section-3.3">RFC 8628 Section 3.3</see>: "Authorization
+    /// servers supporting this specification MUST implement a user-interaction sequence that starts with the user
+    /// navigating to "verification_uri" and continues with them supplying the "user_code" at some stage during the
+    /// interaction."), carries a capability of the application's own.
     /// </summary>
     public static CapabilityIdentifier OAuthDeviceAuthorization { get; } =
         CapabilityIdentifier.Create("urn:verifiable:capability:oauth:device_authorization");

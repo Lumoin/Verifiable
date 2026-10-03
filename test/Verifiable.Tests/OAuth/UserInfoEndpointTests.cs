@@ -605,9 +605,9 @@ internal sealed class UserInfoEndpointTests
         const string ClientSecret = "s3cret-of-the-machine";
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
                 ValueTask.FromResult(
-                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    reading.ClientSecret is string secret
                     && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
         }).ConfigureAwait(false);
 
@@ -1025,14 +1025,17 @@ internal sealed class UserInfoEndpointTests
     /// request lacks any authentication information (e.g., the client was unaware that authentication
     /// is necessary or attempted using an unsupported authentication method), the resource server
     /// SHOULD NOT include an error code or other error information." A UserInfo request over the wire
-    /// with no <c>Authorization</c> header, or with one under an unsupported scheme, is refused with 401,
-    /// an empty body and exactly one challenge naming the two schemes UserInfo accepts and no error:
-    /// <c>Bearer scope="openid", DPoP algs="…"</c>.
+    /// with no <c>Authorization</c> header, with one under an unsupported scheme, or with a <c>Bearer</c> line
+    /// whose credentials are an auth-param list and so carry no access token (the token is a <c>b64token</c>,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-2.1">RFC 6750 Section 2.1</see>,
+    /// "credentials = "Bearer" 1*SP b64token"), is refused with 401, an empty body and exactly one challenge
+    /// naming the two schemes UserInfo accepts and no error: <c>Bearer scope="openid", DPoP algs="..."</c>.
     /// </summary>
     /// <param name="authorization">The <c>Authorization</c> header sent, or <see langword="null"/> for none.</param>
     [TestMethod]
     [DataRow(null)]
     [DataRow("Basic dXNlcjpwYXNz")]
+    [DataRow("Bearer a=b")]
     public async Task UserInfoChallengesARequestWithoutUsableCredentialsAsync(string? authorization)
     {
         await using TestHostShell host = new(TimeProvider);
@@ -1056,6 +1059,76 @@ internal sealed class UserInfoEndpointTests
             "RFC 6750 §3: the refusal carries a WWW-Authenticate challenge.");
         Assert.AreEqual($"Bearer scope=\"openid\", DPoP algs=\"{ResourceDpopProofs.AcceptedProofAlgorithms}\"", Assert.ContainsSingle(challenges));
         Assert.AreEqual(string.Empty, body, "RFC 6750 §3.1: no error code or other error information.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>:
+    /// "invalid_request The request is missing a required parameter, includes an unsupported parameter or
+    /// parameter value, repeats the same parameter, uses more than one method for including an access
+    /// token, or is otherwise malformed.  The resource server SHOULD respond with the HTTP 400 (Bad
+    /// Request) status code." A UserInfo POST sent over a raw TLS connection with two
+    /// <c>Authorization: Bearer</c> field lines (<c>Authorization = credentials</c> is no list,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.6.2">RFC 9110 Section 11.6.2</see>) is
+    /// refused with 400 <c>invalid_request</c> and one <c>WWW-Authenticate</c> field holding the <c>Bearer</c> and
+    /// the <c>DPoP</c> challenge, each with <c>error="invalid_request"</c>,
+    /// <c>Bearer realm="https://userinfo-realm.issuer.test/", error="invalid_request", DPoP error="invalid_request", algs="..."</c>:
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 Section 7.2</see>, "Otherwise, both
+    /// Bearer and DPoP challenges MAY be used to deliver error information (Figure 19)." The reading of a repeated
+    /// field keeps no scheme, so the section's "If the mechanism used to attempt authentication could be established
+    /// unambiguously, then the corresponding challenge SHOULD be used to deliver error information (Figure 18)." is
+    /// not applied to two lines of one scheme, a named deviation.
+    /// </summary>
+    [TestMethod]
+    public async Task UserInfoRefusesTwoAuthorizationLinesWithBothChallengesAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        await TestHostShell.NameIssuerAsync(host.Server, new Uri("https://userinfo-realm.issuer.test/")).ConfigureAwait(false);
+
+        Uri userInfoUrl = await UserInfoUrlAsync(host, material).ConfigureAwait(false);
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Post, userInfoUrl,
+            [
+                new(WellKnownHttpHeaderNames.Authorization, "Bearer first-access-token"),
+                new(WellKnownHttpHeaderNames.Authorization, "Bearer second-access-token")
+            ],
+            ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            "Bearer realm=\"https://userinfo-realm.issuer.test/\", error=\"invalid_request\", "
+            + $"DPoP error=\"invalid_request\", algs=\"{ResourceDpopProofs.AcceptedProofAlgorithms}\"",
+            Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
+        using JsonDocument document = JsonDocument.Parse(response.Body);
+        Assert.AreEqual("invalid_request", document.RootElement.GetProperty("error").GetString());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.1">RFC 9110 Section 11.1</see>: "It uses a
+    /// case-insensitive token to identify the authentication scheme:", followed by "auth-scheme    = token". A
+    /// valid access token presented at
+    /// UserInfo over the wire under the scheme written <c>bearer</c> is read as a <c>Bearer</c>
+    /// presentation and served: 200 with the token's subject.
+    /// </summary>
+    [TestMethod]
+    public async Task UserInfoReadsALowerCaseBearerSchemeAsTheBearerSchemeAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId, name: "Alice", email: "alice@example.com");
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        string accessToken = await IssueAccessTokenAsync(host, material, WellKnownScopes.OpenId).ConfigureAwait(false);
+        using HttpResponseMessage response = await SendUserInfoOverWireAsync(
+            host, material, accessToken, scheme: "bearer").ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode, body);
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual(SubjectId, document.RootElement.GetProperty(WellKnownJwtClaimNames.Sub).GetString());
     }
 
 

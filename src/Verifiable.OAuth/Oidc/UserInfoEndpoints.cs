@@ -175,9 +175,19 @@ public static class UserInfoEndpoints
                 //Authorization header under the Bearer scheme, or under the DPoP scheme when
                 //it is bound to the client's DPoP key.
                 //RFC 6750 §3.1: a request without usable credentials is answered with the
-                //challenge alone, no error code and no other error information.
+                //challenge alone, no error code and no other error information. The field is read
+                //once; sent on two lines it is no credential (RFC 9110 Section 11.6.2) and the
+                //request is refused 400 invalid_request with the Bearer and the DPoP challenge,
+                //UserInfo accepting both schemes (RFC 9449 Section 7.2, Figure 19).
+                AuthorizationFieldReading authorization = BearerTokenValidation.ReadAuthorizationField(context);
+                if(authorization.IsRepeated)
+                {
+                    return (null, await CredentialEndpointDpopValidation.RefuseRepeatedAuthorizationAsync(
+                        server, registration, context, isDpopAccepted: true, ct).ConfigureAwait(false));
+                }
+
                 if(!BearerTokenValidation.TryExtractAccessToken(
-                    context, out string? accessToken, out bool isDpopPresentation))
+                    authorization, out string? accessToken, out bool isDpopPresentation))
                 {
                     return (null, ServerHttpResponse.Unauthorized()
                         .WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, MissingCredentialsChallenge));

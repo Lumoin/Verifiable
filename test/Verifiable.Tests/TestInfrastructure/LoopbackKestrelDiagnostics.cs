@@ -28,15 +28,21 @@ internal sealed class LoopbackKestrelDiagnostics: ILoggerProvider
     /// so every host's Kestrel diagnostics land in the same <see cref="Captured"/> ring regardless of
     /// which host's listener emitted them.
     /// </summary>
-    internal static LoopbackKestrelDiagnostics Provider { get; } = new();
+    internal static LoopbackKestrelDiagnostics Provider { get; } = new(isConsoleWriteEnabled: true);
 
     /// <summary>The bounded ring buffer backing <see cref="Captured"/>.</summary>
     private ConcurrentQueue<string> CapturedLines { get; } = new();
 
 
-    /// <summary>Private: every caller reaches an instance through <see cref="Provider"/> or <see cref="CreateIsolated"/>, never a public constructor.</summary>
-    private LoopbackKestrelDiagnostics()
+    /// <summary>Whether a formatted line is also written to <see cref="Console.Out"/>; a line is always appended to <see cref="Captured"/>.</summary>
+    private bool IsConsoleWriteEnabled { get; }
+
+
+    /// <summary>Private: every caller reaches an instance through <see cref="Provider"/>, <see cref="CreateIsolated"/> or <see cref="CreateCapturingOnly"/>, never a public constructor.</summary>
+    /// <param name="isConsoleWriteEnabled">Whether the instance writes each line to <see cref="Console.Out"/> as well as capturing it.</param>
+    private LoopbackKestrelDiagnostics(bool isConsoleWriteEnabled)
     {
+        IsConsoleWriteEnabled = isConsoleWriteEnabled;
     }
 
 
@@ -46,7 +52,16 @@ internal sealed class LoopbackKestrelDiagnostics: ILoggerProvider
     /// probes an instance from here rather than <see cref="Provider"/>, so its assertions never share
     /// the process-wide ring with the concurrently running hosts <see cref="Provider"/> serves.
     /// </summary>
-    internal static LoopbackKestrelDiagnostics CreateIsolated() => new();
+    internal static LoopbackKestrelDiagnostics CreateIsolated() => new(isConsoleWriteEnabled: true);
+
+
+    /// <summary>
+    /// Creates a fresh <see cref="LoopbackKestrelDiagnostics"/> as <see cref="CreateIsolated"/> does,
+    /// whose lines are captured in <see cref="Captured"/> and never written to <see cref="Console.Out"/>,
+    /// for a test that writes a line the run's output carries once, from its own owner, and must not add
+    /// a second copy.
+    /// </summary>
+    internal static LoopbackKestrelDiagnostics CreateCapturingOnly() => new(isConsoleWriteEnabled: false);
 
 
     /// <summary>The last <see cref="CapturedCapacity"/> Warning-or-above lines this provider's loggers formatted, oldest first.</summary>
@@ -65,6 +80,86 @@ internal sealed class LoopbackKestrelDiagnostics: ILoggerProvider
     /// </summary>
     public void Dispose()
     {
+    }
+
+
+    /// <summary>
+    /// Writes one Warning-level line through this provider's own channel, the one every logger it hands
+    /// out uses, and returns a task that completes when the console write has run: a caller that must
+    /// see the line reach <see cref="Console.Out"/> before it returns (an assembly cleanup, after which
+    /// the process ends) awaits it. The task is already complete when the instance writes no console line.
+    /// </summary>
+    /// <param name="categoryName">The logging category named in the line.</param>
+    /// <param name="eventId">The event id named in the line.</param>
+    /// <param name="message">The message the line carries.</param>
+    /// <returns>A task that completes once the line has been written and captured.</returns>
+    internal Task WriteAsync(string categoryName, EventId eventId, string message)
+    {
+        ArgumentNullException.ThrowIfNull(categoryName);
+        ArgumentNullException.ThrowIfNull(message);
+
+        return Deliver(FormatLine(categoryName, eventId, message, exception: null));
+    }
+
+
+    /// <summary>
+    /// Formats the one line shape every log call of this provider produces:
+    /// <c>[loopback-kestrel] {category}[{eventId}] {message}</c>, with a trailing
+    /// <c>(ExceptionType: message)</c> when the call carried an exception.
+    /// </summary>
+    /// <param name="categoryName">The logging category.</param>
+    /// <param name="eventId">The event id.</param>
+    /// <param name="message">The formatted message.</param>
+    /// <param name="exception">The exception the call carried, or <see langword="null"/>.</param>
+    private static string FormatLine(string categoryName, EventId eventId, string message, Exception? exception)
+    {
+        string exceptionSummary = exception is null
+            ? string.Empty
+            : $" ({exception.GetType().Name}: {exception.Message})";
+
+        return $"[loopback-kestrel] {categoryName}[{eventId}] {message}{exceptionSummary}";
+    }
+
+
+    /// <summary>
+    /// Captures <paramref name="line"/> and, when console writes are enabled, writes it to
+    /// <see cref="Console.Out"/> on a thread-pool work item that does not carry the caller's
+    /// <see cref="ExecutionContext"/>, so the runner prints it in the run's output instead of keeping
+    /// it in the captured output of the test that logged it, which the runner shows only when that test
+    /// fails.
+    /// </summary>
+    /// <param name="line">The fully formatted diagnostic line.</param>
+    /// <returns>
+    /// A task that completes after the console write has returned, faults with the write's exception when the
+    /// write throws, or completes at once when none is made.
+    /// </returns>
+    private Task Deliver(string line)
+    {
+        Append(line);
+        if(!IsConsoleWriteEnabled)
+        {
+
+            return Task.CompletedTask;
+        }
+
+        TaskCompletionSource written = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        _ = ThreadPool.UnsafeQueueUserWorkItem(
+            static state =>
+            {
+                try
+                {
+                    Console.Out.WriteLine(state.Line);
+                    _ = state.Written.TrySetResult();
+                }
+                catch(Exception exception)
+                {
+                    _ = state.Written.TrySetException(exception);
+                }
+            },
+            (Line: line, Written: written),
+            preferLocal: false);
+
+        return written.Task;
     }
 
 
@@ -142,16 +237,7 @@ internal sealed class LoopbackKestrelDiagnostics: ILoggerProvider
             }
 
             string message = formatter(state, exception);
-            string exceptionSummary = exception is null
-                ? string.Empty
-                : $" ({exception.GetType().Name}: {exception.Message})";
-            string line = $"[loopback-kestrel] {CategoryName}[{eventId}] {message}{exceptionSummary}";
-
-            //A work item queued without the caller's ExecutionContext writes the line outside any test's
-            //flow, so the runner prints it in the run's output instead of keeping it in the captured
-            //output of the test that logged it, which the runner shows only when that test fails.
-            _ = ThreadPool.UnsafeQueueUserWorkItem(static pendingLine => Console.Out.WriteLine(pendingLine), line, preferLocal: false);
-            Owner.Append(line);
+            _ = Owner.Deliver(FormatLine(CategoryName, eventId, message, exception));
         }
     }
 }

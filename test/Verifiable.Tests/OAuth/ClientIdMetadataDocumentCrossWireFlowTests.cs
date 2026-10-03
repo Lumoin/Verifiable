@@ -12,7 +12,11 @@ using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
+using Verifiable.OAuth.Introspection;
+using Verifiable.OAuth.JwtBearer;
+using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Server;
+using Verifiable.OAuth.TokenExchange;
 using Verifiable.OAuth.Server.Pipeline;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
@@ -44,6 +48,14 @@ internal sealed class ClientIdMetadataDocumentCrossWireFlowTests
 
     private const string SubjectId = "subject-cimd-cross-wire-01";
     private const string ClientSigningKeyId = "cimd-client-signing-key-1";
+
+    /// <summary>
+    /// The context entry under which <see cref="StartConfidentialCimdClientAsync"/>'s materialization wrapper notes
+    /// the reading of the client credentials the library's materialization left carried on the request's context, so
+    /// the client authentication seam's wrapper compares the reading it receives with that instance. An entry of this
+    /// class's own, read by its own wrappers alone.
+    /// </summary>
+    private static string MaterializedReadingEntryName { get; } = "test.materializedClientCredentialReading";
 
 
     /// <summary>
@@ -145,162 +157,356 @@ internal sealed class ClientIdMetadataDocumentCrossWireFlowTests
 
 
     /// <summary>
-    /// Confidential-client authentication (CIMD-047/048/049/050): the document declares
-    /// <c>token_endpoint_auth_method: private_key_jwt</c> plus an inline <c>jwks</c> (CIMD-048). Token
-    /// exchange with NO client authentication fails 401 (CIMD-049 "MUST include client authentication
-    /// of the registered type"); a TAMPERED assertion signature fails 401 (RFC 7523 §2.2 verification,
-    /// CIMD-050); a VALID <c>private_key_jwt</c> assertion authenticates and the exchange completes.
+    /// Confidential-client authentication
+    /// (<see href="https://www.ietf.org/archive/id/draft-ietf-oauth-client-id-metadata-document-02.html#section-8.2">draft-ietf-oauth-client-id-metadata-document-02 Section 8.2</see>):
+    /// the document declares <c>token_endpoint_auth_method: private_key_jwt</c> plus an inline <c>jwks</c>. Token
+    /// exchange with NO client authentication fails 400, since every communication of a confidential client with the
+    /// authorization server includes client authentication of its registered type (that section); a TAMPERED
+    /// assertion signature fails 400, since that section requires client authentication according to
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-2.2">RFC 7523 Section 2.2</see> under the public
+    /// signing material the client's document publishes; a VALID <c>private_key_jwt</c> assertion authenticates and the exchange completes.
     /// Both failing attempts leave the authorization code unconsumed — client-authentication failure is
     /// checked before the code-redemption PDA transition — so all three attempts share one flow.
     /// </summary>
     [TestMethod]
     public async Task ConfidentialClient_TokenExchangeRequiresAndValidatesPrivateKeyJwtAssertion()
     {
-        FakeTimeProvider timeProvider = new(TestClock.CanonicalEpoch);
-        await using StaticContentHost documentHost = await StaticContentHost.StartAsync(TestContext.CancellationToken)
+        await using ConfidentialCimdClient cimd = await StartConfidentialCimdClientAsync().ConfigureAwait(false);
+        HttpClient http = cimd.Hosted.SharedHttpClient!;
+        Dictionary<string, string> baseFields = cimd.CodeRedemptionFields();
+
+        //No client authentication at all (draft-ietf-oauth-client-id-metadata-document-02 Section 8.2).
+        using HttpResponseMessage noAssertion = await OAuthTestTransport.PostFormAsync(
+            http, cimd.TokenEndpoint, baseFields, TestContext.CancellationToken).ConfigureAwait(false);
+        string noAssertionBody = await noAssertion.Content.ReadAsStringAsync(TestContext.CancellationToken)
             .ConfigureAwait(false);
+        Assert.AreEqual(400, (int)noAssertion.StatusCode, noAssertionBody);
+        Assert.Contains(OAuthErrors.InvalidClient, noAssertionBody);
 
-        Uri redirectUri = new("https://client.example.com/callback");
-        const string path = "/app-confidential";
-        Uri documentUri = new(documentHost.BaseAddress, path);
+        string validAssertion = await cimd.SignAssertionAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> clientKeys =
-            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
-        try
+        //A tampered assertion signature fails RFC 7523 Section 2.2 verification.
+        Dictionary<string, string> tamperedFields = new(baseFields, StringComparer.Ordinal)
         {
-            string alg = CryptoFormatConversions.DefaultTagToJwaConverter(clientKeys.PublicKey.Tag);
-            IReadOnlyDictionary<string, string> jwk = DpopJwkUtilities.ToJwk(
-                clientKeys.PublicKey, alg, TestHostShell.Base64UrlEncoder);
-            string jwksJson = BuildJwksJson(jwk, ClientSigningKeyId);
+            [OAuthRequestParameterNames.ClientAssertionType] = WellKnownClientAssertionTypes.JwtBearer,
+            [OAuthRequestParameterNames.ClientAssertion] = TamperSignature(validAssertion)
+        };
+        using HttpResponseMessage tampered = await OAuthTestTransport.PostFormAsync(
+            http, cimd.TokenEndpoint, tamperedFields, TestContext.CancellationToken).ConfigureAwait(false);
+        string tamperedBody = await tampered.Content.ReadAsStringAsync(TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        Assert.AreEqual(400, (int)tampered.StatusCode, tamperedBody);
 
-            string documentJson = BuildCimdDocumentJson(
-                documentUri.OriginalString,
-                redirectUris: [redirectUri],
-                tokenEndpointAuthMethod: WellKnownClientAuthenticationMethods.PrivateKeyJwt,
-                jwksJson: jwksJson);
-            documentHost.Publish(path, Encoding.UTF8.GetBytes(documentJson), "application/json");
+        //A valid private_key_jwt assertion authenticates and the exchange completes.
+        Dictionary<string, string> validFields = new(baseFields, StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.ClientAssertionType] = WellKnownClientAssertionTypes.JwtBearer,
+            [OAuthRequestParameterNames.ClientAssertion] = validAssertion
+        };
+        using HttpResponseMessage ok = await OAuthTestTransport.PostFormAsync(
+            http, cimd.TokenEndpoint, validFields, TestContext.CancellationToken).ConfigureAwait(false);
+        string okBody = await ok.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)ok.StatusCode, okBody);
 
-            await using TestHostShell app = new(timeProvider);
-            ClientRecord stub = await app.RegisterCimdStubClientAsync(
-                documentUri,
-                ImmutableHashSet.Create(
-                    WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
-                    WellKnownCapabilityIdentifiers.OAuthPushedAuthorization),
-                profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
-
-            await app.WireCimdMaterializationAsync("default", documentHost.Certificate).ConfigureAwait(false);
-            await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
-            {
-                candidateIntegration.ValidateClientCredentialsAsync = PrivateKeyJwtClientAuthentication.BuildValidator();
-
-                //The fetched document declares private_key_jwt (CIMD-047/048); the token endpoint now
-                //refuses a declared method it does not advertise before any validator runs (RFC 8414,
-                //Section 2), so the advertisement must agree with the document.
-
-                candidateIntegration.ClientAuthenticationMethodsSupported =
-                    [ClientAuthenticationMethod.None, ClientAuthenticationMethod.PrivateKeyJwt];
+        using JsonDocument tokenDoc = JsonDocument.Parse(okBody);
+        Assert.IsFalse(string.IsNullOrEmpty(tokenDoc.RootElement.GetProperty(OAuthRequestParameterNames.AccessToken).GetString()));
+    }
 
 
-                candidateIntegration.ClientAssertionSigningAlgorithmsSupported = [alg];
-            }).ConfigureAwait(false);
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749 Section 3.2</see>: "Parameters sent
+    /// without a value MUST be treated as if they were omitted from the request." A refresh request of a
+    /// confidential client whose Client ID Metadata Document declares <c>private_key_jwt</c>, sent over the wire with
+    /// <c>client_id=</c> beside <c>client_id=&lt;its URL&gt;</c> and no assertion, names the one client
+    /// identifier, so the document is fetched and the client authentication it declares is required:
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-client-id-metadata-document-02.html#section-8.2">draft-ietf-oauth-client-id-metadata-document-02 Section 8.2</see>,
+    /// "This establishes this client as a confidential client, and any communication with the authorization server
+    /// MUST include client authentication of the registered type." The request is refused 400
+    /// <c>invalid_client</c>, no token issued.
+    /// </summary>
+    [TestMethod]
+    public async Task AnEmptyClientIdBesideTheClientUrlAtRefreshRequiresTheDeclaredAuthenticationAsync()
+    {
+        await using ConfidentialCimdClient cimd = await StartConfidentialCimdClientAsync().ConfigureAwait(false);
+        HttpClient http = cimd.Hosted.SharedHttpClient!;
+        string validAssertion = await cimd.SignAssertionAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Dictionary<string, string> redemptionFields = new(cimd.CodeRedemptionFields(), StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.ClientAssertionType] = WellKnownClientAssertionTypes.JwtBearer,
+            [OAuthRequestParameterNames.ClientAssertion] = validAssertion
+        };
+        using HttpResponseMessage redeemed = await OAuthTestTransport.PostFormAsync(
+            http, cimd.TokenEndpoint, redemptionFields, TestContext.CancellationToken).ConfigureAwait(false);
+        string redeemedBody = await redeemed.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)redeemed.StatusCode, redeemedBody);
+        using JsonDocument redeemedDocument = JsonDocument.Parse(redeemedBody);
+        string refreshToken = redeemedDocument.RootElement.GetProperty(OAuthRequestParameterNames.RefreshToken).GetString()!;
 
-            (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> flowStore) =
-                await app.CreateOAuthClientAndRegistrationAsync(
-                    stub, redirectUri.OriginalString, profile: PolicyProfile.Rfc6749WithPkce, TestContext.CancellationToken)
-                    .ConfigureAwait(false);
-            //RFC 9126 §2: the pushed request now authenticates the client exactly as the token
-            //endpoint does, so the confidential method the fetched document declares must be
-            //presented at PAR too, before any code can be issued.
-            registration = registration with
-            {
-                AuthenticationMethod = ClientAuthenticationMethod.PrivateKeyJwt,
-                AuthenticationKeyMaterial = clientKeys
-            };
-            ClientAssertionOptions parAssertionOptions = new()
-            {
-                SigningKeyId = ClientSigningKeyId,
-                HeaderSerializer = app.Server.OAuth().Codecs.JwtHeaderSerializer!,
-                PayloadSerializer = app.Server.OAuth().Codecs.JwtPayloadSerializer!
-            };
+        using HttpResponseMessage refreshed = await OAuthTestTransport.PostFormAsync(
+            http, cimd.TokenEndpoint,
+            [
+                new(OAuthRequestParameterNames.GrantType, WellKnownGrantTypes.RefreshToken),
+                new(OAuthRequestParameterNames.RefreshToken, refreshToken),
+                new(OAuthRequestParameterNames.ClientId, string.Empty),
+                new(OAuthRequestParameterNames.ClientId, cimd.Registration.ClientId.Value)
+            ],
+            TestContext.CancellationToken).ConfigureAwait(false);
+        string refreshedBody = await refreshed.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-            HostedAuthorizationServer hosted = app.Host("default");
-            string segment = stub.TenantId.Value;
+        Assert.AreEqual(400, (int)refreshed.StatusCode, refreshedBody);
+        Assert.AreEqual("{\"error\":\"invalid_client\",\"error_description\":\"Client authentication failed.\"}", refreshedBody);
+    }
 
-            using HttpClient browserClient = LoopbackTls.CreateSingleHopPinnedHttpClient(app.ServerCertificate);
-            (string flowId, _) = await AuthCodeFlowDriver.DriveParAuthorizeAndCallbackAsync(
-                hosted, client, registration, flowStore, segment, redirectUri, SubjectId, browserClient,
-                clientAssertionOptions: parAssertionOptions, cancellationToken: TestContext.CancellationToken)
-                .ConfigureAwait(false);
 
-            AuthorizationCodeReceivedState codeState = (AuthorizationCodeReceivedState)flowStore[flowId];
-            Uri tokenEndpoint = new(
-                hosted.HttpBaseAddress!, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeToken, segment));
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749 Section 3.2</see>: "Parameters sent
+    /// without a value MUST be treated as if they were omitted from the request." A code redemption of a
+    /// confidential client whose Client ID Metadata Document declares <c>private_key_jwt</c>, sent over the wire with
+    /// <c>client_id=</c> beside <c>client_id=&lt;its URL&gt;</c> and no assertion, names the one client
+    /// identifier, so the document is fetched and the client authentication it declares is required
+    /// (<see href="https://www.ietf.org/archive/id/draft-ietf-oauth-client-id-metadata-document-02.html#section-8.2">draft-ietf-oauth-client-id-metadata-document-02 Section 8.2</see>):
+    /// the request is refused 400 <c>invalid_client</c>, no token issued.
+    /// </summary>
+    [TestMethod]
+    public async Task AnEmptyClientIdBesideTheClientUrlAtCodeRedemptionRequiresTheDeclaredAuthenticationAsync()
+    {
+        await using ConfidentialCimdClient cimd = await StartConfidentialCimdClientAsync().ConfigureAwait(false);
+        List<KeyValuePair<string, string>> fields =
+        [
+            .. cimd.CodeRedemptionFields().Where(static field => field.Key != OAuthRequestParameterNames.ClientId),
+            new(OAuthRequestParameterNames.ClientId, string.Empty),
+            new(OAuthRequestParameterNames.ClientId, cimd.Registration.ClientId.Value)
+        ];
 
-            Dictionary<string, string> baseFields = new(StringComparer.Ordinal)
-            {
-                [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.AuthorizationCode,
-                [OAuthRequestParameterNames.ClientId] = registration.ClientId.Value,
-                [OAuthRequestParameterNames.Code] = codeState.Code,
-                //RFC 6749 §4.1.3's identical-value check binds to Uri.OriginalString (the exact
-                //string the authorization step captured), never Uri.ToString() — which re-canonicalizes
-                //(default-port elision, host casing) and can diverge from the persisted value.
-                [OAuthRequestParameterNames.RedirectUri] = codeState.RedirectUri.OriginalString,
-                [OAuthRequestParameterNames.CodeVerifier] = codeState.Pkce.EncodedVerifier
-            };
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            cimd.Hosted.SharedHttpClient!, cimd.TokenEndpoint, fields, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-            //CIMD-049: no client authentication at all.
-            using HttpResponseMessage noAssertion = await OAuthTestTransport.PostFormAsync(
-                hosted.SharedHttpClient!, tokenEndpoint, baseFields, TestContext.CancellationToken).ConfigureAwait(false);
-            string noAssertionBody = await noAssertion.Content.ReadAsStringAsync(TestContext.CancellationToken)
-                .ConfigureAwait(false);
-            Assert.AreEqual(401, (int)noAssertion.StatusCode, noAssertionBody);
-            Assert.Contains(OAuthErrors.InvalidClient, noAssertionBody);
+        Assert.AreEqual(400, (int)response.StatusCode, body);
+        Assert.AreEqual("{\"error\":\"invalid_client\",\"error_description\":\"Client authentication failed.\"}", body);
+    }
 
-            string validAssertion = await ClientAssertionSigning.SignAsync(
-                registration.ClientId.Value,
-                registration.AuthorizationServerIssuer.OriginalString,
-                Guid.NewGuid().ToString("N"),
-                timeProvider.GetUtcNow(),
-                timeProvider.GetUtcNow().AddMinutes(5),
-                clientKeys.PrivateKey,
-                ClientSigningKeyId,
-                app.Server.OAuth().Codecs.JwtHeaderSerializer!,
-                app.Server.OAuth().Codecs.JwtPayloadSerializer!,
-                app.Server.OAuth().Codecs.Encoder!,
-                TestHostShell.MemoryPool,
-                TestContext.CancellationToken).ConfigureAwait(false);
 
-            //CIMD-050: a tampered assertion signature fails RFC 7523 §2.2 verification.
-            Dictionary<string, string> tamperedFields = new(baseFields, StringComparer.Ordinal)
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749 Section 3.2</see>: "Request and
+    /// response parameters MUST NOT be included more than once." A code redemption of a confidential client whose
+    /// Client ID Metadata Document declares <c>private_key_jwt</c>, sent over the wire with its URL as
+    /// <c>client_id</c> twice, is refused 400 <c>invalid_request</c> with the description of a repeated client
+    /// authentication parameter, the code
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see> names for a
+    /// request that repeats a parameter, and no token is issued. The materialization refuses it before the token
+    /// endpoint runs and before any document is fetched: the document resolver is not called.
+    /// </summary>
+    [TestMethod]
+    public async Task TheClientUrlTwiceAtTheTokenEndpointIsAnInvalidRequestAsync()
+    {
+        await using ConfidentialCimdClient cimd = await StartConfidentialCimdClientAsync().ConfigureAwait(false);
+        List<KeyValuePair<string, string>> fields =
+        [
+            .. cimd.CodeRedemptionFields(),
+            new(OAuthRequestParameterNames.ClientId, cimd.Registration.ClientId.Value)
+        ];
+        int resolutionsBefore = cimd.ResolutionCount;
+        int refusalsBefore = cimd.MaterializationRefusalCount;
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            cimd.Hosted.SharedHttpClient!, cimd.TokenEndpoint, fields, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, (int)response.StatusCode, body);
+        Assert.AreEqual(
+            "{\"error\":\"invalid_request\",\"error_description\":\"The request repeats a client authentication parameter.\"}",
+            body);
+        Assert.AreEqual(resolutionsBefore, cimd.ResolutionCount, "A malformed request fetches no document.");
+        Assert.AreEqual(refusalsBefore + 1, cimd.MaterializationRefusalCount, "The materialization refuses the request before the token endpoint runs.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-client-id-metadata-document-02.html#section-8.2">draft-ietf-oauth-client-id-metadata-document-02 Section 8.2</see>:
+    /// "When a client declares token_endpoint_auth_method as private_key_jwt, the authorization server MUST require
+    /// client authentication according to Section 2.2 of [RFC7523] using the corresponding key discovered from the
+    /// client's metadata document." A code redemption of a confidential client whose Client ID Metadata Document
+    /// declares <c>private_key_jwt</c>, sent over the wire with a valid assertion and no <c>client_id</c>, which a
+    /// client that authenticates may omit (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.3">RFC 6749
+    /// Section 4.1.3</see>, <c>client_id</c>: "REQUIRED, if the client is not authenticating with the authorization
+    /// server as described in Section 3.2.1."), is judged against the document of the registration it is served
+    /// under: the document resolver is called for the request, the assertion verifies under the public signing
+    /// material the document publishes, and the code is redeemed, 200 with an access token.
+    /// </summary>
+    [TestMethod]
+    public async Task AnAssertionWithoutClientIdIsJudgedAgainstTheClientsDocumentAsync()
+    {
+        await using ConfidentialCimdClient cimd = await StartConfidentialCimdClientAsync().ConfigureAwait(false);
+        string validAssertion = await cimd.SignAssertionAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        List<KeyValuePair<string, string>> fields =
+        [
+            .. cimd.CodeRedemptionFields().Where(static field => field.Key != OAuthRequestParameterNames.ClientId),
+            new(OAuthRequestParameterNames.ClientAssertionType, WellKnownClientAssertionTypes.JwtBearer),
+            new(OAuthRequestParameterNames.ClientAssertion, validAssertion)
+        ];
+        int resolutionsBefore = cimd.ResolutionCount;
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            cimd.Hosted.SharedHttpClient!, cimd.TokenEndpoint, fields, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(resolutionsBefore + 1, cimd.ResolutionCount, "The request is judged against the client's document.");
+        Assert.AreEqual(200, (int)response.StatusCode, body);
+        using JsonDocument tokenDocument = JsonDocument.Parse(body);
+        Assert.IsFalse(string.IsNullOrEmpty(tokenDocument.RootElement.GetProperty(OAuthRequestParameterNames.AccessToken).GetString()));
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-client-id-metadata-document-02.html#section-8.2">draft-ietf-oauth-client-id-metadata-document-02 Section 8.2</see>:
+    /// "This establishes this client as a confidential client, and any communication with the authorization server
+    /// MUST include client authentication of the registered type." A jwt-bearer grant
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7523#section-2.1">RFC 7523 Section 2.1</see>), the grant an
+    /// identity assertion authorization grant is redeemed through as well, sent over the wire to the tenant of a client
+    /// whose Client ID Metadata Document declares <c>private_key_jwt</c>, with an assertion the application's
+    /// assertion-grant seam accepts and with neither <c>client_id</c> nor any client authentication, is judged against
+    /// the client's document: the document resolver is called for the request, and the request is refused 400
+    /// <c>invalid_client</c> with the fixed description and no <c>WWW-Authenticate</c> (no <c>Authorization</c>
+    /// field was attempted and <c>client_secret_basic</c> is not advertised), and no token is issued.
+    /// </summary>
+    [TestMethod]
+    public async Task AJwtBearerGrantWithoutClientIdAndWithoutClientAuthenticationIsRefusedAsync()
+    {
+        await using ConfidentialCimdClient cimd = await StartConfidentialCimdClientAsync(isEveryTokenRequestServed: true).ConfigureAwait(false);
+        int resolutionsBefore = cimd.ResolutionCount;
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            cimd.Hosted.SharedHttpClient!, cimd.TokenEndpoint,
+            [
+                new(OAuthRequestParameterNames.GrantType, WellKnownGrantTypes.JwtBearer),
+                new(OAuthRequestParameterNames.Assertion, "eyJhbGciOiJFUzI1NiJ9.accepted-by-the-seam.signature")
+            ],
+            TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(resolutionsBefore + 1, cimd.ResolutionCount, $"The request is judged against the client's document. {(int)response.StatusCode} {body}");
+        Assert.AreEqual(400, (int)response.StatusCode, body);
+        Assert.AreEqual("{\"error\":\"invalid_client\",\"error_description\":\"Client authentication failed.\"}", body);
+        Assert.IsFalse(response.Headers.Contains(WellKnownHttpHeaderNames.WwwAuthenticate), "No Authorization field was attempted.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-client-id-metadata-document-02.html#section-8.2">draft-ietf-oauth-client-id-metadata-document-02 Section 8.2</see>:
+    /// "This establishes this client as a confidential client, and any communication with the authorization server
+    /// MUST include client authentication of the registered type." A token-family request sent over the wire to the
+    /// tenant of a client whose Client ID Metadata Document declares <c>private_key_jwt</c>, with neither
+    /// <c>client_id</c> nor any client authentication, is judged against the client's document: the document resolver
+    /// is called for the request, and the endpoint answers it on the record the document materialized: 400
+    /// <c>invalid_client</c> where the endpoint requires the client authentication the document declares (the code
+    /// redemption and the refresh included, which on the stored record answered that <c>client_id</c> is required),
+    /// and, at the pre-authorized code grant, whose client authentication the application's seam owns, that seam's
+    /// denial.
+    /// </summary>
+    /// <param name="request">The token-family request sent.</param>
+    /// <param name="expectedStatus">The status the endpoint answers.</param>
+    /// <param name="expectedBody">The body the endpoint answers.</param>
+    [TestMethod]
+    [DataRow("client_credentials", 400, "{\"error\":\"invalid_client\",\"error_description\":\"Client authentication failed.\"}", DisplayName = "a client credentials grant")]
+    [DataRow("token_exchange", 400, "{\"error\":\"invalid_client\",\"error_description\":\"Client authentication failed.\"}", DisplayName = "a token exchange")]
+    [DataRow("code_redemption", 400, "{\"error\":\"invalid_client\",\"error_description\":\"Client authentication failed.\"}", DisplayName = "a code redemption")]
+    [DataRow("refresh", 400, "{\"error\":\"invalid_client\",\"error_description\":\"Client authentication failed.\"}", DisplayName = "a refresh")]
+    [DataRow("pre_authorized_code", 400, "{\"error\":\"invalid_grant\",\"error_description\":\"The pre-authorized_code is invalid or has expired.\"}", DisplayName = "a pre-authorized code grant")]
+    [DataRow("revocation", 400, "{\"error\":\"invalid_client\",\"error_description\":\"Client authentication failed.\"}", DisplayName = "a revocation")]
+    [DataRow("introspection", 400, "{\"error\":\"invalid_client\",\"error_description\":\"Client authentication failed.\"}", DisplayName = "an introspection")]
+    public async Task ATokenFamilyRequestWithoutClientIdAndWithoutClientAuthenticationIsJudgedAgainstTheClientsDocumentAsync(
+        string request, int expectedStatus, string expectedBody)
+    {
+        await using ConfidentialCimdClient cimd = await StartConfidentialCimdClientAsync(isEveryTokenRequestServed: true).ConfigureAwait(false);
+        HttpClient http = cimd.Hosted.SharedHttpClient!;
+
+        //A refresh token is issued to the client first, through a code redemption it authenticates.
+        string refreshToken = string.Empty;
+        if(request == "refresh")
+        {
+            Dictionary<string, string> redemptionFields = new(cimd.CodeRedemptionFields(), StringComparer.Ordinal)
             {
                 [OAuthRequestParameterNames.ClientAssertionType] = WellKnownClientAssertionTypes.JwtBearer,
-                [OAuthRequestParameterNames.ClientAssertion] = TamperSignature(validAssertion)
+                [OAuthRequestParameterNames.ClientAssertion] = await cimd.SignAssertionAsync(TestContext.CancellationToken).ConfigureAwait(false)
             };
-            using HttpResponseMessage tampered = await OAuthTestTransport.PostFormAsync(
-                hosted.SharedHttpClient!, tokenEndpoint, tamperedFields, TestContext.CancellationToken).ConfigureAwait(false);
-            string tamperedBody = await tampered.Content.ReadAsStringAsync(TestContext.CancellationToken)
-                .ConfigureAwait(false);
-            Assert.AreEqual(401, (int)tampered.StatusCode, tamperedBody);
-
-            //CIMD-047/048/050: a valid private_key_jwt assertion authenticates and the exchange completes.
-            Dictionary<string, string> validFields = new(baseFields, StringComparer.Ordinal)
-            {
-                [OAuthRequestParameterNames.ClientAssertionType] = WellKnownClientAssertionTypes.JwtBearer,
-                [OAuthRequestParameterNames.ClientAssertion] = validAssertion
-            };
-            using HttpResponseMessage ok = await OAuthTestTransport.PostFormAsync(
-                hosted.SharedHttpClient!, tokenEndpoint, validFields, TestContext.CancellationToken).ConfigureAwait(false);
-            string okBody = await ok.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
-            Assert.AreEqual(200, (int)ok.StatusCode, okBody);
-
-            using JsonDocument tokenDoc = JsonDocument.Parse(okBody);
-            Assert.IsFalse(string.IsNullOrEmpty(tokenDoc.RootElement.GetProperty(OAuthRequestParameterNames.AccessToken).GetString()));
+            using HttpResponseMessage redeemed = await OAuthTestTransport.PostFormAsync(
+                http, cimd.TokenEndpoint, redemptionFields, TestContext.CancellationToken).ConfigureAwait(false);
+            string redeemedBody = await redeemed.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.AreEqual(200, (int)redeemed.StatusCode, redeemedBody);
+            using JsonDocument redeemedDocument = JsonDocument.Parse(redeemedBody);
+            refreshToken = redeemedDocument.RootElement.GetProperty(OAuthRequestParameterNames.RefreshToken).GetString()!;
         }
-        finally
+
+        (string EndpointName, List<KeyValuePair<string, string>> Fields) target = request switch
         {
-            clientKeys.PublicKey.Dispose();
-            clientKeys.PrivateKey.Dispose();
-        }
+            "client_credentials" => (WellKnownEndpointNames.ClientCredentialsToken,
+                [new(OAuthRequestParameterNames.GrantType, WellKnownGrantTypes.ClientCredentials)]),
+            "token_exchange" => (WellKnownEndpointNames.TokenExchangeToken,
+                [
+                    new(OAuthRequestParameterNames.GrantType, WellKnownGrantTypes.TokenExchange),
+                    new(OAuthRequestParameterNames.SubjectToken, "subject-token-0123456789"),
+                    new(OAuthRequestParameterNames.SubjectTokenType, "urn:ietf:params:oauth:token-type:access_token")
+                ]),
+            "code_redemption" => (WellKnownEndpointNames.AuthCodeToken,
+                [.. cimd.CodeRedemptionFields().Where(static field => field.Key != OAuthRequestParameterNames.ClientId)]),
+            "refresh" => (WellKnownEndpointNames.AuthCodeRefreshToken,
+                [
+                    new(OAuthRequestParameterNames.GrantType, WellKnownGrantTypes.RefreshToken),
+                    new(OAuthRequestParameterNames.RefreshToken, refreshToken)
+                ]),
+            "pre_authorized_code" => (WellKnownEndpointNames.Oid4VciPreAuthorizedToken,
+                [
+                    new(OAuthRequestParameterNames.GrantType, WellKnownGrantTypes.PreAuthorizedCode),
+                    new(OAuthRequestParameterNames.PreAuthorizedCode, "pre-authorized-code-0123456789")
+                ]),
+            "revocation" => (WellKnownEndpointNames.AuthCodeRevoke,
+                [new(OAuthRequestParameterNames.Token, "token-0123456789")]),
+            "introspection" => (WellKnownEndpointNames.AuthCodeIntrospect,
+                [new(OAuthRequestParameterNames.Token, "token-0123456789")]),
+
+            _ => throw new ArgumentOutOfRangeException(nameof(request), request, "No such row.")
+        };
+        int resolutionsBefore = cimd.ResolutionCount;
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            http, cimd.EndpointUri(target.EndpointName), target.Fields, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(resolutionsBefore + 1, cimd.ResolutionCount, $"The request is judged against the client's document. {(int)response.StatusCode} {body}");
+        Assert.AreEqual(expectedStatus, (int)response.StatusCode, body);
+        Assert.AreEqual(expectedBody, body);
+    }
+
+
+    /// <summary>
+    /// The request's client credentials are read once, and the client authentication seam judges exactly the reading
+    /// the library took (<see cref="ValidateClientCredentialsDelegate"/>): a code redemption sent over the wire by a
+    /// confidential client whose Client ID Metadata Document declares <c>private_key_jwt</c>, with a valid assertion
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7523#section-2.2">RFC 7523 Section 2.2</see>), is read by the
+    /// Client ID Metadata Document materialization, and the reading the client authentication seam receives is the
+    /// same instance the materialization left carried on the request's context; the code is redeemed, 200 with an
+    /// access token.
+    /// </summary>
+    [TestMethod]
+    public async Task TheClientAuthenticationSeamReceivesTheReadingTheMaterializationTookAsync()
+    {
+        await using ConfidentialCimdClient cimd = await StartConfidentialCimdClientAsync().ConfigureAwait(false);
+        Dictionary<string, string> fields = new(cimd.CodeRedemptionFields(), StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.ClientAssertionType] = WellKnownClientAssertionTypes.JwtBearer,
+            [OAuthRequestParameterNames.ClientAssertion] = await cimd.SignAssertionAsync(TestContext.CancellationToken).ConfigureAwait(false)
+        };
+        int seamReadingsBefore = cimd.SeamReadingCount;
+        int carriedSeamReadingsBefore = cimd.CarriedSeamReadingCount;
+
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            cimd.Hosted.SharedHttpClient!, cimd.TokenEndpoint, fields, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(seamReadingsBefore + 1, cimd.SeamReadingCount, "The client authentication seam judges the request once.");
+        Assert.AreEqual(carriedSeamReadingsBefore + 1, cimd.CarriedSeamReadingCount, "The seam receives the reading the materialization took.");
+        Assert.AreEqual(200, (int)response.StatusCode, body);
     }
 
 
@@ -510,7 +716,7 @@ internal sealed class ClientIdMetadataDocumentCrossWireFlowTests
         await app.WireCimdMaterializationAsync("default", documentHost.Certificate).ConfigureAwait(false);
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) => ValueTask.FromResult(true);
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) => ValueTask.FromResult(true);
         }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -728,7 +934,8 @@ internal sealed class ClientIdMetadataDocumentCrossWireFlowTests
             registration, redirectUri, OAuthFormEncodedFields.Empty, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, secondPar.Outcome,
             "A fresh authorization request against an expired CIMD Service provision must abort, not redirect.");
-        Assert.AreEqual(OAuthErrors.InvalidRequest, secondPar.ErrorCode);
+        Assert.AreEqual(OAuthErrors.InvalidClient, secondPar.ErrorCode,
+            "A pushed request whose client's document cannot be fetched is a failed client authentication (RFC 9126 Section 2).");
     }
 
 
@@ -971,6 +1178,359 @@ internal sealed class ClientIdMetadataDocumentCrossWireFlowTests
         char replacement = first == 'A' ? 'B' : 'A';
 
         return string.Concat(compactJws.AsSpan(0, signatureStart), replacement.ToString(), compactJws.AsSpan(signatureStart + 1));
+    }
+
+
+    /// <summary>
+    /// Starts the confidential client the confidential rows of this class drive
+    /// (<see href="https://www.ietf.org/archive/id/draft-ietf-oauth-client-id-metadata-document-02.html#section-8.2">draft-ietf-oauth-client-id-metadata-document-02 Section 8.2</see>):
+    /// a document host serving a Client ID Metadata Document that declares <c>private_key_jwt</c> with an inline
+    /// <c>jwks</c>, an authorization server that materializes the client from it, judges client assertions through
+    /// <see cref="PrivateKeyJwtClientAuthentication.BuildValidator(IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,ResolveJwksUriDelegate?,ClientAssertionAudiencePolicy?)"/>
+    /// and advertises <c>none</c> and <c>private_key_jwt</c>, and a pushed request, an authorization and a
+    /// callback driven over the wire with a valid assertion at the pushed request, so an authorization code
+    /// waits at the token endpoint. The server's document resolver seam and its materialization are wrapped so the
+    /// client counts each resolution (<see cref="ConfidentialCimdClient.ResolutionCount"/>) and each refusal of the
+    /// materialization (<see cref="ConfidentialCimdClient.MaterializationRefusalCount"/>), and the client
+    /// authentication seam is wrapped so the client counts each reading it receives
+    /// (<see cref="ConfidentialCimdClient.SeamReadingCount"/>) and each that is the instance the materialization left
+    /// carried on the request's context (<see cref="ConfidentialCimdClient.CarriedSeamReadingCount"/>).
+    /// </summary>
+    /// <param name="isEveryTokenRequestServed">
+    /// Whether the client is also allowed the jwt-bearer, client credentials, token exchange, pre-authorized code,
+    /// revocation and introspection capabilities, with an assertion-grant seam that accepts every assertion, token
+    /// exchange seams that accept nothing, a pre-authorized code seam that denies every code, and revocation and
+    /// introspection seams, so every token-family request of its tenant reaches its endpoint.
+    /// </param>
+    /// <returns>The started client; the caller disposes it.</returns>
+    private async Task<ConfidentialCimdClient> StartConfidentialCimdClientAsync(bool isEveryTokenRequestServed = false)
+    {
+        FakeTimeProvider timeProvider = new(TestClock.CanonicalEpoch);
+        StaticContentHost documentHost = await StaticContentHost.StartAsync(TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> clientKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        TestHostShell app = new(timeProvider);
+        ConfidentialCimdClient? cimd = null;
+        try
+        {
+            cimd = new()
+            {
+                DocumentHost = documentHost,
+                ClientKeys = clientKeys,
+                App = app,
+                TimeProvider = timeProvider
+            };
+
+            Uri redirectUri = new("https://client.example.com/callback");
+            const string path = "/app-confidential";
+            Uri documentUri = new(documentHost.BaseAddress, path);
+
+            string alg = CryptoFormatConversions.DefaultTagToJwaConverter(clientKeys.PublicKey.Tag);
+            IReadOnlyDictionary<string, string> jwk = DpopJwkUtilities.ToJwk(
+                clientKeys.PublicKey, alg, TestHostShell.Base64UrlEncoder);
+            string jwksJson = BuildJwksJson(jwk, ClientSigningKeyId);
+
+            string documentJson = BuildCimdDocumentJson(
+                documentUri.OriginalString,
+                redirectUris: [redirectUri],
+                tokenEndpointAuthMethod: WellKnownClientAuthenticationMethods.PrivateKeyJwt,
+                jwksJson: jwksJson);
+            documentHost.Publish(path, Encoding.UTF8.GetBytes(documentJson), "application/json");
+
+            ImmutableHashSet<CapabilityIdentifier> capabilities = ImmutableHashSet.Create(
+                WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
+                WellKnownCapabilityIdentifiers.OAuthPushedAuthorization);
+            if(isEveryTokenRequestServed)
+            {
+                capabilities = capabilities.Union(
+                [
+                    WellKnownCapabilityIdentifiers.OAuthJwtBearer,
+                    WellKnownCapabilityIdentifiers.OAuthClientCredentials,
+                    WellKnownCapabilityIdentifiers.OAuthTokenExchange,
+                    WellKnownCapabilityIdentifiers.Oid4VciPreAuthorizedCodeGrant,
+                    WellKnownCapabilityIdentifiers.OAuthTokenRevocation,
+                    WellKnownCapabilityIdentifiers.OAuthTokenIntrospection
+                ]);
+            }
+
+            ClientRecord stub = await app.RegisterCimdStubClientAsync(
+                documentUri, capabilities, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+            await app.WireCimdMaterializationAsync("default", documentHost.Certificate).ConfigureAwait(false);
+            ConfidentialCimdClient observed = cimd;
+            await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+            {
+                //The client authentication seam is observed: each reading it receives is counted, and so is each
+                //that is the instance the materialization left carried on the request's context.
+                ValidateClientCredentialsDelegate validate = PrivateKeyJwtClientAuthentication.BuildValidator();
+                candidateIntegration.ValidateClientCredentialsAsync = (reading, registration, context, cancellationToken) =>
+                {
+                    bool isCarriedReading = context.TryGetValue(MaterializedReadingEntryName, out object? carried)
+                        && ReferenceEquals(carried, reading);
+                    observed.CountSeamReading(isCarriedReading);
+
+                    return validate(reading, registration, context, cancellationToken);
+                };
+
+                if(isEveryTokenRequestServed)
+                {
+                    candidateIntegration.ValidateJwtBearerAssertionAsync = static (_, _, _, _, _) =>
+                        ValueTask.FromResult<JwtBearerGrant?>(new JwtBearerGrant { Subject = SubjectId, Scope = WellKnownScopes.OpenId });
+                    candidateIntegration.ValidateTokenExchangeTokenAsync = static (_, _, _, _, _) =>
+                        ValueTask.FromResult<ValidatedSecurityToken?>(null);
+                    candidateIntegration.AuthorizeTokenExchangeAsync = static (_, _, _, _, _, _) =>
+                        ValueTask.FromResult<TokenExchangeAuthorization?>(null);
+                    candidateIntegration.ValidatePreAuthorizedCodeAsync = static (_, _, _, _, _, _) =>
+                        ValueTask.FromResult(PreAuthorizedCodeDecision.Deny(PreAuthorizedCodeDenialReason.InvalidCode));
+                    candidateIntegration.RevokeTokenAsync = static (_, _, _, _, _) => ValueTask.CompletedTask;
+                    candidateIntegration.IntrospectTokenAsync = static (_, _, _, _, _) =>
+                        ValueTask.FromResult(new TokenIntrospectionResult { IsActive = false });
+                }
+
+                //The document resolver and the library's materialization are observed: each resolution
+                //and each refusal of the materialization is counted on the client, and the reading the
+                //materialization left carried on the context is noted on the context under an entry of this
+                //class, so the client authentication seam's wrapper compares the reading it receives with it.
+                ResolveClientMetadataDelegate resolve = candidateIntegration.ResolveClientMetadataAsync!;
+                candidateIntegration.ResolveClientMetadataAsync = (clientMetadataUri, context, cancellationToken) =>
+                {
+                    observed.CountResolution();
+
+                    return resolve(clientMetadataUri, context, cancellationToken);
+                };
+                MaterializeRegistrationDelegate materialize = candidateIntegration.MaterializeRegistrationAsync!;
+                candidateIntegration.MaterializeRegistrationAsync = async (registration, context, cancellationToken) =>
+                {
+                    RegistrationMaterialization materialization =
+                        await materialize(registration, context, cancellationToken).ConfigureAwait(false);
+                    if(materialization.Failure is not null)
+                    {
+                        observed.CountMaterializationRefusal();
+                    }
+
+                    if(context.Values.OfType<ClientCredentialReading>().SingleOrDefault() is { } carriedReading)
+                    {
+                        context[MaterializedReadingEntryName] = carriedReading;
+                    }
+
+                    return materialization;
+                };
+
+                //The fetched document declares private_key_jwt (draft-ietf-oauth-client-id-metadata-document-02
+                //Section 8.2); the token endpoint refuses a declared method it does not advertise before any
+                //validator runs (RFC 8414, Section 2), so the advertisement agrees with the document.
+                candidateIntegration.ClientAuthenticationMethodsSupported =
+                    [ClientAuthenticationMethod.None, ClientAuthenticationMethod.PrivateKeyJwt];
+                candidateIntegration.ClientAssertionSigningAlgorithmsSupported = [alg];
+            }).ConfigureAwait(false);
+
+            (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> flowStore) =
+                await app.CreateOAuthClientAndRegistrationAsync(
+                    stub, redirectUri.OriginalString, profile: PolicyProfile.Rfc6749WithPkce, TestContext.CancellationToken)
+                    .ConfigureAwait(false);
+
+            //RFC 9126 Section 2: the pushed request authenticates the client exactly as the token
+            //endpoint does, so the confidential method the fetched document declares is presented at
+            //the pushed request too, before any code is issued.
+            registration = registration with
+            {
+                AuthenticationMethod = ClientAuthenticationMethod.PrivateKeyJwt,
+                AuthenticationKeyMaterial = clientKeys
+            };
+            ClientAssertionOptions parAssertionOptions = new()
+            {
+                SigningKeyId = ClientSigningKeyId,
+                HeaderSerializer = app.Server.OAuth().Codecs.JwtHeaderSerializer!,
+                PayloadSerializer = app.Server.OAuth().Codecs.JwtPayloadSerializer!
+            };
+
+            HostedAuthorizationServer hosted = app.Host("default");
+            string segment = stub.TenantId.Value;
+
+            using HttpClient browserClient = LoopbackTls.CreateSingleHopPinnedHttpClient(app.ServerCertificate);
+            (string flowId, _) = await AuthCodeFlowDriver.DriveParAuthorizeAndCallbackAsync(
+                hosted, client, registration, flowStore, segment, redirectUri, SubjectId, browserClient,
+                clientAssertionOptions: parAssertionOptions, cancellationToken: TestContext.CancellationToken)
+                .ConfigureAwait(false);
+
+            cimd.Hosted = hosted;
+            cimd.Segment = segment;
+            cimd.Registration = registration;
+            cimd.CodeState = (AuthorizationCodeReceivedState)flowStore[flowId];
+            cimd.TokenEndpoint = new(
+                hosted.HttpBaseAddress!, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeToken, segment));
+
+            ConfidentialCimdClient started = cimd;
+            cimd = null;
+
+            return started;
+        }
+        finally
+        {
+            //A start that did not complete releases what it created; a started client is the caller's.
+            if(cimd is not null)
+            {
+                await cimd.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+    }
+
+
+    /// <summary>
+    /// The confidential client <see cref="StartConfidentialCimdClientAsync"/> starts: its document host, its signing
+    /// material, the authorization server serving it, its client-side registration and the authorization code
+    /// waiting at the token endpoint. Disposing it stops both hosts and releases the signing material.
+    /// </summary>
+    private sealed class ConfidentialCimdClient: IAsyncDisposable
+    {
+        /// <summary>The host serving the client's Client ID Metadata Document.</summary>
+        public required StaticContentHost DocumentHost { get; init; }
+
+        /// <summary>The client's signing material, whose public half the document publishes.</summary>
+        public required PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> ClientKeys { get; init; }
+
+        /// <summary>The authorization server fixture.</summary>
+        public required TestHostShell App { get; init; }
+
+        /// <summary>The clock the authorization server and the client's assertions read.</summary>
+        public required FakeTimeProvider TimeProvider { get; init; }
+
+        /// <summary>The authorization server's listener.</summary>
+        public HostedAuthorizationServer Hosted { get; set; } = null!;
+
+        /// <summary>The path segment of the client's tenant on the listener.</summary>
+        public string Segment { get; set; } = null!;
+
+        /// <summary>The client-side registration, carrying the client's URL as its identifier.</summary>
+        public ClientRegistration Registration { get; set; } = null!;
+
+        /// <summary>The client-side state holding the authorization code, its redirect URI and its PKCE verifier.</summary>
+        public AuthorizationCodeReceivedState CodeState { get; set; } = null!;
+
+        /// <summary>The token endpoint of the client's tenant on the listener.</summary>
+        public Uri TokenEndpoint { get; set; } = null!;
+
+        /// <summary>
+        /// The calls the server's document resolver seam received. A field, since <see cref="Interlocked"/> counts
+        /// through a reference to it while requests run concurrently.
+        /// </summary>
+        private int resolutionCount;
+
+        /// <summary>
+        /// The refusals the server's materialization answered with. A field, since <see cref="Interlocked"/> counts
+        /// through a reference to it while requests run concurrently.
+        /// </summary>
+        private int materializationRefusalCount;
+
+        /// <summary>
+        /// The readings the server's client authentication seam received. A field, since <see cref="Interlocked"/>
+        /// counts through a reference to it while requests run concurrently.
+        /// </summary>
+        private int seamReadingCount;
+
+        /// <summary>
+        /// The readings the server's client authentication seam received that were the instance the materialization
+        /// left carried on the request's context. A field, since <see cref="Interlocked"/> counts through a reference
+        /// to it while requests run concurrently.
+        /// </summary>
+        private int carriedSeamReadingCount;
+
+        /// <summary>The calls the server's document resolver seam has received.</summary>
+        public int ResolutionCount => Volatile.Read(ref resolutionCount);
+
+        /// <summary>The refusals the server's materialization has answered with.</summary>
+        public int MaterializationRefusalCount => Volatile.Read(ref materializationRefusalCount);
+
+        /// <summary>The readings the server's client authentication seam has received.</summary>
+        public int SeamReadingCount => Volatile.Read(ref seamReadingCount);
+
+        /// <summary>
+        /// The readings the server's client authentication seam has received that were the instance the
+        /// materialization left carried on the request's context.
+        /// </summary>
+        public int CarriedSeamReadingCount => Volatile.Read(ref carriedSeamReadingCount);
+
+
+        /// <summary>Counts one call of the server's document resolver seam.</summary>
+        public void CountResolution() => _ = Interlocked.Increment(ref resolutionCount);
+
+
+        /// <summary>Counts one refusal of the server's materialization.</summary>
+        public void CountMaterializationRefusal() => _ = Interlocked.Increment(ref materializationRefusalCount);
+
+
+        /// <summary>Counts one reading the server's client authentication seam received.</summary>
+        /// <param name="isCarriedReading">Whether the reading is the instance the materialization left carried on the context.</param>
+        public void CountSeamReading(bool isCarriedReading)
+        {
+            _ = Interlocked.Increment(ref seamReadingCount);
+            if(isCarriedReading)
+            {
+                _ = Interlocked.Increment(ref carriedSeamReadingCount);
+            }
+        }
+
+
+        /// <summary>
+        /// The URL of the named endpoint of the client's tenant on the listener.
+        /// </summary>
+        /// <param name="endpointName">The endpoint's name.</param>
+        /// <returns>The endpoint's URL.</returns>
+        public Uri EndpointUri(string endpointName) =>
+            new(Hosted.HttpBaseAddress!, TestHostShell.ComposeEndpointPath(endpointName, Segment));
+
+
+        /// <summary>
+        /// The fields of a code redemption without client authentication: <c>grant_type</c>, the client's URL as
+        /// <c>client_id</c>, the code, the <c>redirect_uri</c> as the authorization step captured it
+        /// (<see cref="Uri.OriginalString"/>, the value the identical-value check of
+        /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.3">RFC 6749 Section 4.1.3</see> binds to) and
+        /// the PKCE verifier.
+        /// </summary>
+        /// <returns>The fields, keyed by name.</returns>
+        public Dictionary<string, string> CodeRedemptionFields() => new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.AuthorizationCode,
+            [OAuthRequestParameterNames.ClientId] = Registration.ClientId.Value,
+            [OAuthRequestParameterNames.Code] = CodeState.Code,
+            [OAuthRequestParameterNames.RedirectUri] = CodeState.RedirectUri.OriginalString,
+            [OAuthRequestParameterNames.CodeVerifier] = CodeState.Pkce.EncodedVerifier
+        };
+
+
+        /// <summary>
+        /// Signs a valid <c>private_key_jwt</c> client assertion
+        /// (<see href="https://www.rfc-editor.org/rfc/rfc7523#section-2.2">RFC 7523 Section 2.2</see>) of the client
+        /// for the authorization server's issuer, valid for five minutes from the fixture's clock.
+        /// </summary>
+        /// <param name="cancellationToken">Cancels the signing.</param>
+        /// <returns>The compact assertion.</returns>
+        public ValueTask<string> SignAssertionAsync(CancellationToken cancellationToken) =>
+            ClientAssertionSigning.SignAsync(
+                Registration.ClientId.Value,
+                Registration.AuthorizationServerIssuer.OriginalString,
+                Guid.NewGuid().ToString("N"),
+                TimeProvider.GetUtcNow(),
+                TimeProvider.GetUtcNow().AddMinutes(5),
+                ClientKeys.PrivateKey,
+                ClientSigningKeyId,
+                App.Server.OAuth().Codecs.JwtHeaderSerializer!,
+                App.Server.OAuth().Codecs.JwtPayloadSerializer!,
+                App.Server.OAuth().Codecs.Encoder!,
+                TestHostShell.MemoryPool,
+                cancellationToken);
+
+
+        /// <summary>Stops the authorization server and the document host and releases the signing material.</summary>
+        /// <returns>A task that completes when everything is released.</returns>
+        public async ValueTask DisposeAsync()
+        {
+            await App.DisposeAsync().ConfigureAwait(false);
+            ClientKeys.PublicKey.Dispose();
+            ClientKeys.PrivateKey.Dispose();
+            await DocumentHost.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
 

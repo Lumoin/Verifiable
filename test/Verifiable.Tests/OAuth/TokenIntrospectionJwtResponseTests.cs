@@ -100,7 +100,7 @@ internal sealed class TokenIntrospectionJwtResponseTests
 
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(true);
 
             candidateIntegration.IntrospectTokenAsync = static (_, _, _, _, _) =>
@@ -153,7 +153,7 @@ internal sealed class TokenIntrospectionJwtResponseTests
         using VerifierKeyMaterial material = await RegisterSigningCapableResourceServerAsync(host).ConfigureAwait(false);
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(true);
 
             candidateIntegration.IntrospectTokenAsync = static (_, _, _, _, _) =>
@@ -274,7 +274,7 @@ internal sealed class TokenIntrospectionJwtResponseTests
     {
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(true);
 
             candidateIntegration.IntrospectTokenAsync = static (_, _, _, _, _) =>

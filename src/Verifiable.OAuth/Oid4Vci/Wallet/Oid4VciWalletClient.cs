@@ -34,6 +34,18 @@ namespace Verifiable.OAuth.Oid4Vci.Wallet;
 /// takes the offer's pre-authorized grant plus the holder key material and returns the issued
 /// Credential.
 /// </para>
+/// <para>
+/// A Credential Request names what it asks for through one <see cref="CredentialRequestTarget"/>,
+/// so it cannot name both <c>credential_configuration_id</c> and <c>credential_identifier</c>, or
+/// neither. The Pre-Authorized Code entry points read their Token Response's
+/// <c>authorization_details</c> with the span reader and request by the first
+/// <c>credential_identifiers</c> value granted for the requested configuration, by the configuration
+/// when the response returned no <c>openid_credential</c> object, and send no request when the
+/// response granted identifiers for other configurations only.
+/// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.2">OID4VCI 1.0 Section 6.2</see>:
+/// "The Wallet MUST use these identifiers together with an Access Token in subsequent Credential
+/// Requests."
+/// </para>
 /// </remarks>
 public sealed class Oid4VciWalletClient
 {
@@ -311,7 +323,11 @@ public sealed class Oid4VciWalletClient
     /// The offer MUST carry a <see cref="CredentialOffer.PreAuthorizedCodeGrant"/>.
     /// </summary>
     /// <param name="offer">The Credential Offer the Wallet "scanned".</param>
-    /// <param name="credentialConfigurationId">The Credential Configuration to request (one of the offer's ids).</param>
+    /// <param name="credentialConfigurationId">
+    /// The Credential Configuration the Wallet asks for (one of the offer's ids). The Credential Request
+    /// names the first <c>credential_identifiers</c> value the Token Response granted for this
+    /// configuration, or this configuration when the response returned no <c>openid_credential</c> object.
+    /// </param>
     /// <param name="holderPrivate">The holder's signing private key for the §7.2.1 proof.</param>
     /// <param name="holderPublic">The holder's public key projected into the proof header.</param>
     /// <param name="endpoints">The resolved Token / Nonce / Credential endpoint URLs (§12.2 metadata in deployments).</param>
@@ -319,7 +335,15 @@ public sealed class Oid4VciWalletClient
     /// <param name="responseEncryption">The §8.2 <c>credential_response_encryption</c> ask, or <see langword="null"/> for a plaintext response.</param>
     /// <param name="context">The per-operation exchange context carrying the outbound-fetch policy evaluated before each dial.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The issued Credential string (the §8.3 <c>credentials[0].credential</c>), or the endpoint's refusal.</returns>
+    /// <returns>
+    /// The issued Credential string (the section 8.3 <c>credentials[0].credential</c>), or the endpoint's refusal;
+    /// or a <see cref="Oid4VciRequestFailureKind.MalformedResponse"/> failure, with no Credential Request
+    /// sent, when the Token Response granted <c>credential_identifiers</c> for other configurations only
+    /// or carries malformed <c>authorization_details</c>.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.2">OID4VCI 1.0 Section 6.2</see>:
+    /// "The Wallet MUST use these identifiers together with an Access Token in subsequent Credential
+    /// Requests."
+    /// </returns>
     /// <exception cref="InvalidOperationException">
     /// Thrown when <paramref name="offer"/> carries no Pre-Authorized Code grant, or when the
     /// issuance succeeded on the wire but was deferred or carried no Credential — the simple
@@ -366,7 +390,11 @@ public sealed class Oid4VciWalletClient
     /// The offer MUST carry a <see cref="CredentialOffer.PreAuthorizedCodeGrant"/>.
     /// </summary>
     /// <param name="offer">The Credential Offer the Wallet "scanned".</param>
-    /// <param name="credentialConfigurationId">The Credential Configuration to request (one of the offer's ids).</param>
+    /// <param name="credentialConfigurationId">
+    /// The Credential Configuration the Wallet asks for (one of the offer's ids). The Credential Request
+    /// names the first <c>credential_identifiers</c> value the Token Response granted for this
+    /// configuration, or this configuration when the response returned no <c>openid_credential</c> object.
+    /// </param>
     /// <param name="holderPrivate">The holder's signing private key for the §7.2.1 proof.</param>
     /// <param name="holderPublic">The holder's public key projected into the proof header.</param>
     /// <param name="endpoints">The resolved Token / Nonce / Credential endpoint URLs.</param>
@@ -374,7 +402,15 @@ public sealed class Oid4VciWalletClient
     /// <param name="responseEncryption">The §8.2 <c>credential_response_encryption</c> ask, or <see langword="null"/>.</param>
     /// <param name="context">The per-operation exchange context carrying the outbound-fetch policy evaluated before each dial.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The full Credential Response outcome, or the endpoint's refusal.</returns>
+    /// <returns>
+    /// The full Credential Response outcome, or the endpoint's refusal; or a
+    /// <see cref="Oid4VciRequestFailureKind.MalformedResponse"/> failure, with no Credential Request
+    /// sent, when the Token Response granted <c>credential_identifiers</c> for other configurations only
+    /// or carries malformed <c>authorization_details</c>.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.2">OID4VCI 1.0 Section 6.2</see>:
+    /// "The Wallet MUST use these identifiers together with an Access Token in subsequent Credential
+    /// Requests."
+    /// </returns>
     /// <exception cref="InvalidOperationException">Thrown when <paramref name="offer"/> carries no Pre-Authorized Code grant.</exception>
     public async ValueTask<Result<CredentialIssuanceResult, Oid4VciRequestFailure>> IssuePreAuthorizedDetailedAsync(
         CredentialOffer offer,
@@ -417,7 +453,11 @@ public sealed class Oid4VciWalletClient
     /// </summary>
     /// <param name="grant">The offer's Pre-Authorized Code grant carrying the <c>pre-authorized_code</c>.</param>
     /// <param name="credentialIssuer">The Credential Issuer identifier — the holder proof's <c>aud</c>.</param>
-    /// <param name="credentialConfigurationId">The Credential Configuration to request.</param>
+    /// <param name="credentialConfigurationId">
+    /// The Credential Configuration the Wallet asks for. The Credential Request names the first
+    /// <c>credential_identifiers</c> value the Token Response granted for this configuration, or this
+    /// configuration when the response returned no <c>openid_credential</c> object.
+    /// </param>
     /// <param name="holderPrivate">The holder's signing private key for the §7.2.1 proof.</param>
     /// <param name="holderPublic">The holder's public key projected into the proof header.</param>
     /// <param name="endpoints">The resolved Token / Nonce / Credential endpoint URLs.</param>
@@ -425,7 +465,15 @@ public sealed class Oid4VciWalletClient
     /// <param name="responseEncryption">The §8.2 response-encryption ask, or <see langword="null"/>.</param>
     /// <param name="context">The per-operation exchange context carrying the outbound-fetch policy evaluated before each dial.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The issued Credential string (the §8.3 <c>credentials[0].credential</c>), or the endpoint's refusal.</returns>
+    /// <returns>
+    /// The issued Credential string (the section 8.3 <c>credentials[0].credential</c>), or the endpoint's refusal;
+    /// or a <see cref="Oid4VciRequestFailureKind.MalformedResponse"/> failure, with no Credential Request
+    /// sent, when the Token Response granted <c>credential_identifiers</c> for other configurations only
+    /// or carries malformed <c>authorization_details</c>.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.2">OID4VCI 1.0 Section 6.2</see>:
+    /// "The Wallet MUST use these identifiers together with an Access Token in subsequent Credential
+    /// Requests."
+    /// </returns>
     /// <exception cref="InvalidOperationException">
     /// Thrown when the issuance succeeded on the wire but was deferred or produced no
     /// Credential — use
@@ -489,7 +537,11 @@ public sealed class Oid4VciWalletClient
     /// </summary>
     /// <param name="grant">The offer's Pre-Authorized Code grant carrying the <c>pre-authorized_code</c>.</param>
     /// <param name="credentialIssuer">The Credential Issuer identifier — the holder proof's <c>aud</c>.</param>
-    /// <param name="credentialConfigurationId">The Credential Configuration to request.</param>
+    /// <param name="credentialConfigurationId">
+    /// The Credential Configuration the Wallet asks for. The Credential Request names the first
+    /// <c>credential_identifiers</c> value the Token Response granted for this configuration, or this
+    /// configuration when the response returned no <c>openid_credential</c> object.
+    /// </param>
     /// <param name="holderPrivate">The holder's signing private key for the §7.2.1 proof.</param>
     /// <param name="holderPublic">The holder's public key projected into the proof header.</param>
     /// <param name="endpoints">The resolved Token / Nonce / Credential endpoint URLs.</param>
@@ -497,7 +549,15 @@ public sealed class Oid4VciWalletClient
     /// <param name="responseEncryption">The §8.2 response-encryption ask, or <see langword="null"/>.</param>
     /// <param name="context">The per-operation exchange context carrying the outbound-fetch policy evaluated before each dial.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The full Credential Response outcome, or the endpoint's refusal.</returns>
+    /// <returns>
+    /// The full Credential Response outcome, or the endpoint's refusal; or a
+    /// <see cref="Oid4VciRequestFailureKind.MalformedResponse"/> failure, with no Credential Request
+    /// sent, when the Token Response granted <c>credential_identifiers</c> for other configurations only
+    /// or carries malformed <c>authorization_details</c>.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.2">OID4VCI 1.0 Section 6.2</see>:
+    /// "The Wallet MUST use these identifiers together with an Access Token in subsequent Credential
+    /// Requests."
+    /// </returns>
     public async ValueTask<Result<CredentialIssuanceResult, Oid4VciRequestFailure>> IssuePreAuthorizedDetailedAsync(
         PreAuthorizedCodeOfferGrant grant,
         Uri credentialIssuer,
@@ -519,10 +579,11 @@ public sealed class Oid4VciWalletClient
         ArgumentNullException.ThrowIfNull(context);
 
         //§6: the Pre-Authorized Code grant mints the access token over an HTTP
-        //form POST. tx_code rides alongside when the offer required one.
-        Result<(string AccessToken, string TokenType, DateTimeOffset? ExpiresAt), Oid4VciRequestFailure> tokenOutcome =
+        //form POST. tx_code rides alongside when the offer required one. The Token Response's
+        //granted credential_identifiers decide what the Credential Request names (section 6.2).
+        Result<(string AccessToken, string TokenType, DateTimeOffset? ExpiresAt, CredentialRequestTarget Target), Oid4VciRequestFailure> tokenOutcome =
             await RequestAccessTokenAsync(
-                grant.PreAuthorizedCode, transactionCode, endpoints.TokenEndpoint, context, cancellationToken)
+                grant.PreAuthorizedCode, transactionCode, credentialConfigurationId, endpoints.TokenEndpoint, context, cancellationToken)
                 .ConfigureAwait(false);
 
         if(!tokenOutcome.IsSuccess)
@@ -530,14 +591,14 @@ public sealed class Oid4VciWalletClient
             return Result<CredentialIssuanceResult, Oid4VciRequestFailure>.Failure(tokenOutcome.Error);
         }
 
-        (string accessToken, string tokenType, DateTimeOffset? accessTokenExpiresAt) = tokenOutcome.Value;
+        (string accessToken, string tokenType, DateTimeOffset? accessTokenExpiresAt, CredentialRequestTarget target) = tokenOutcome.Value;
 
         return await IssueWithAccessTokenDetailedAsync(
             accessToken,
             tokenType,
             accessTokenExpiresAt,
             credentialIssuer,
-            credentialConfigurationId,
+            target,
             holderPrivate,
             holderPublic,
             endpoints,
@@ -557,6 +618,17 @@ public sealed class Oid4VciWalletClient
     /// by <see cref="CredentialAuthorizationDetailComposition"/> and the offer's
     /// <c>issuer_state</c> on the authorization request - and hands the token here.
     /// </summary>
+    /// <remarks>
+    /// The caller names what the Credential Request asks for through <paramref name="target"/>: when
+    /// the Token Response returned <c>credential_identifiers</c> in its <c>authorization_details</c>,
+    /// <see cref="CredentialRequestTarget.ForIdentifier"/> with one of them; otherwise
+    /// <see cref="CredentialRequestTarget.ForConfiguration"/>. The request body names exactly that
+    /// member. The Pre-Authorized Code entry points read their own Token Response and choose the
+    /// target themselves.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.2">OID4VCI 1.0 Section 6.2</see>:
+    /// "The Wallet MUST use these identifiers together with an Access Token in subsequent Credential
+    /// Requests."
+    /// </remarks>
     /// <param name="accessToken">The access token authorizing the Nonce and Credential Requests.</param>
     /// <param name="tokenType">The token's <c>token_type</c> (<c>Bearer</c>, or <c>DPoP</c> with the DPoP delegate wired).</param>
     /// <param name="accessTokenExpiresAt">
@@ -566,7 +638,7 @@ public sealed class Oid4VciWalletClient
     /// came from a grant this client did not itself redeem).
     /// </param>
     /// <param name="credentialIssuer">The Credential Issuer identifier - the holder proof's <c>aud</c>.</param>
-    /// <param name="credentialConfigurationId">The Credential Configuration to request.</param>
+    /// <param name="target">What the Credential Request names: the configuration, or an identifier the Token Response granted.</param>
     /// <param name="holderPrivate">The holder's signing private key for the section 7.2.1 proof.</param>
     /// <param name="holderPublic">The holder's public key projected into the proof header.</param>
     /// <param name="endpoints">The resolved Nonce / Credential endpoint URLs.</param>
@@ -579,7 +651,7 @@ public sealed class Oid4VciWalletClient
         string tokenType,
         DateTimeOffset? accessTokenExpiresAt,
         Uri credentialIssuer,
-        string credentialConfigurationId,
+        CredentialRequestTarget target,
         PrivateKeyMemory holderPrivate,
         PublicKeyMemory holderPublic,
         Oid4VciIssuanceEndpoints endpoints,
@@ -590,7 +662,7 @@ public sealed class Oid4VciWalletClient
         ArgumentException.ThrowIfNullOrWhiteSpace(accessToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(tokenType);
         ArgumentNullException.ThrowIfNull(credentialIssuer);
-        ArgumentException.ThrowIfNullOrWhiteSpace(credentialConfigurationId);
+        ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(holderPrivate);
         ArgumentNullException.ThrowIfNull(holderPublic);
         ArgumentNullException.ThrowIfNull(endpoints);
@@ -626,7 +698,7 @@ public sealed class Oid4VciWalletClient
             accessToken,
             tokenType,
             accessTokenExpiresAt,
-            credentialConfigurationId,
+            target,
             proofJwt,
             responseEncryption,
             endpoints.CredentialEndpoint,
@@ -649,17 +721,32 @@ public sealed class Oid4VciWalletClient
     /// it "from the time the response was generated," and the request instant is never later than
     /// that, so the computed expiry never overstates the token's remaining lifetime.
     /// </summary>
+    /// <remarks>
+    /// The Token Response's <c>authorization_details</c> are read with the span reader too
+    /// (<see cref="ReadGrantedIdentifier"/>), and the answer keeps what they grant with the token as
+    /// the target of the Credential Request: the first <c>credential_identifiers</c> value of the
+    /// <c>openid_credential</c> object naming <paramref name="credentialConfigurationId"/>, or the
+    /// configuration itself when the response returned no <c>openid_credential</c> object.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.2">OID4VCI 1.0 Section 6.2</see>:
+    /// "The Wallet MUST use these identifiers together with an Access Token in subsequent Credential
+    /// Requests."
+    /// </remarks>
     /// <returns>
-    /// The access token, its type, and its computed expiry; or a failure:
+    /// The access token, its type, its computed expiry and the Credential Request's target; or a failure:
     /// <see cref="Oid4VciRequestFailureKind.OutboundPolicyDenied"/> when the policy refused
     /// <paramref name="tokenEndpoint"/> before any dial, <see cref="Oid4VciRequestFailureKind.ErrorResponse"/>
     /// for the RFC 6749 §5.2 Token Error Response a non-2xx status carries, or
     /// <see cref="Oid4VciRequestFailureKind.MalformedResponse"/> when the success body is not
-    /// well-formed JSON, repeats a member, or carries no <c>access_token</c>.
+    /// well-formed JSON, repeats a member, carries no <c>access_token</c>, carries
+    /// <c>authorization_details</c> that are not a non-empty array of objects, an entry without a
+    /// string <c>type</c>, or an <c>openid_credential</c> object without its configuration or a non-empty <c>credential_identifiers</c> or listing an
+    /// identifier that is empty or white space, or grants <c>credential_identifiers</c> for no object
+    /// naming <paramref name="credentialConfigurationId"/>.
     /// </returns>
-    private async ValueTask<Result<(string AccessToken, string TokenType, DateTimeOffset? ExpiresAt), Oid4VciRequestFailure>> RequestAccessTokenAsync(
+    private async ValueTask<Result<(string AccessToken, string TokenType, DateTimeOffset? ExpiresAt, CredentialRequestTarget Target), Oid4VciRequestFailure>> RequestAccessTokenAsync(
         string preAuthorizedCode,
         string? transactionCode,
+        string credentialConfigurationId,
         Uri tokenEndpoint,
         ExchangeContext context,
         CancellationToken cancellationToken)
@@ -678,7 +765,7 @@ public sealed class Oid4VciWalletClient
         Oid4VciRequestFailure? policyDenial = EvaluateOutboundPolicy(tokenEndpoint, context, Configuration.OutboundFetchPolicy);
         if(policyDenial is not null)
         {
-            return Result<(string, string, DateTimeOffset?), Oid4VciRequestFailure>.Failure(policyDenial);
+            return Result<(string, string, DateTimeOffset?, CredentialRequestTarget), Oid4VciRequestFailure>.Failure(policyDenial);
         }
 
         DateTimeOffset requestedAt = Configuration.TimeProvider.GetUtcNow();
@@ -694,7 +781,7 @@ public sealed class Oid4VciWalletClient
 
         if(response.StatusCode is < 200 or >= 300)
         {
-            return Result<(string, string, DateTimeOffset?), Oid4VciRequestFailure>.Failure(
+            return Result<(string, string, DateTimeOffset?, CredentialRequestTarget), Oid4VciRequestFailure>.Failure(
                 ParseErrorResponse(response.StatusCode, response.Body, tokenEndpoint));
         }
 
@@ -705,7 +792,7 @@ public sealed class Oid4VciWalletClient
         //Server's own semantics — and any other consumer of the same body — resolve the last.
         if(!JwkJsonReader.IsWellFormedJsonDocument(tokenJson))
         {
-            return Result<(string, string, DateTimeOffset?), Oid4VciRequestFailure>.Failure(
+            return Result<(string, string, DateTimeOffset?, CredentialRequestTarget), Oid4VciRequestFailure>.Failure(
                 MalformedResponseFailure(
                     tokenEndpoint,
                     response.StatusCode,
@@ -715,7 +802,7 @@ public sealed class Oid4VciWalletClient
         string? accessToken = JwkJsonReader.ExtractStringValue(tokenJson, WellKnownTokenTypes.AccessTokenUtf8);
         if(accessToken is null)
         {
-            return Result<(string, string, DateTimeOffset?), Oid4VciRequestFailure>.Failure(
+            return Result<(string, string, DateTimeOffset?, CredentialRequestTarget), Oid4VciRequestFailure>.Failure(
                 MalformedResponseFailure(tokenEndpoint, response.StatusCode, "§6 the Token Response carried no access_token."));
         }
 
@@ -728,7 +815,241 @@ public sealed class Oid4VciWalletClient
             ? requestedAt.AddSeconds(expiresInSeconds)
             : null;
 
-        return Result<(string, string, DateTimeOffset?), Oid4VciRequestFailure>.Success((accessToken, tokenType, expiresAt));
+        //Section 6.2: the openid_credential objects the response returned name the identifiers the
+        //Credential Request must use; without them the request names the configuration.
+        GrantedIdentifierReading reading = ReadGrantedIdentifier(
+            tokenJson, credentialConfigurationId, out string? grantedIdentifier);
+
+        return reading switch
+        {
+            GrantedIdentifierReading.NoCredentialDetails =>
+                Result<(string, string, DateTimeOffset?, CredentialRequestTarget), Oid4VciRequestFailure>.Success(
+                    (accessToken, tokenType, expiresAt, CredentialRequestTarget.ForConfiguration(credentialConfigurationId))),
+            GrantedIdentifierReading.Granted =>
+                Result<(string, string, DateTimeOffset?, CredentialRequestTarget), Oid4VciRequestFailure>.Success(
+                    (accessToken, tokenType, expiresAt, CredentialRequestTarget.ForIdentifier(grantedIdentifier!))),
+            GrantedIdentifierReading.NotGrantedForConfiguration =>
+                Result<(string, string, DateTimeOffset?, CredentialRequestTarget), Oid4VciRequestFailure>.Failure(
+                    MalformedResponseFailure(
+                        tokenEndpoint,
+                        response.StatusCode,
+                        "Section 6.2 the Token Response returned credential_identifiers for no openid_credential object "
+                        + "naming the requested credential_configuration_id.")),
+            _ =>
+                Result<(string, string, DateTimeOffset?, CredentialRequestTarget), Oid4VciRequestFailure>.Failure(
+                    MalformedResponseFailure(
+                        tokenEndpoint,
+                        response.StatusCode,
+                        "Section 6.2 the Token Response's authorization_details are not a non-empty array of objects, "
+                        + "an entry lacks a string type, or an "
+                        + "openid_credential object lacks its credential_configuration_id or a non-empty "
+                        + "credential_identifiers, or lists an identifier that is empty or white space."))
+        };
+    }
+
+
+    /// <summary>
+    /// What <see cref="ReadGrantedIdentifier"/> found in a Token Response's
+    /// <c>authorization_details</c>.
+    /// </summary>
+    private enum GrantedIdentifierReading
+    {
+        /// <summary>The response returned no <c>openid_credential</c> object; the request names the configuration.</summary>
+        NoCredentialDetails,
+
+        /// <summary>An <c>openid_credential</c> object names the requested configuration and grants identifiers.</summary>
+        Granted,
+
+        /// <summary><c>openid_credential</c> objects were returned, none naming the requested configuration.</summary>
+        NotGrantedForConfiguration,
+
+        /// <summary>
+        /// The member is not a non-empty array of objects, an entry lacks <c>type</c> or carries a
+        /// <c>type</c> that is not a JSON string, or an <c>openid_credential</c> object misses a REQUIRED
+        /// member or lists an identifier that is empty or white space.
+        /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.2">OID4VCI 1.0 Section 6.2</see>:
+        /// "It is a non-empty array of objects, as defined in Section 7 of [RFC9396]."
+        /// <see href="https://www.rfc-editor.org/rfc/rfc9396#section-2">RFC 9396 Section 2</see>:
+        /// "type: An identifier for the authorization details type as a string. The value of the type
+        /// field determines the allowable contents of the object that contains it. The value is unique
+        /// for the described API in the context of the AS. This field is REQUIRED."
+        /// </summary>
+        Malformed
+    }
+
+
+    /// <summary>
+    /// Reads a Token Response's RFC 9396 <c>authorization_details</c> with the span reader, the
+    /// fixed-shape wire JSON the Authorization Server returns for <c>openid_credential</c> grants
+    /// (<c>type</c>, <c>credential_configuration_id</c>, <c>credential_identifiers</c>), and finds the
+    /// first identifier granted for <paramref name="credentialConfigurationId"/>. Objects whose
+    /// <c>type</c> is a string other than <c>openid_credential</c> are skipped. The whole array is
+    /// validated before a grant is answered: an empty array, an entry that is not an object, an entry
+    /// whose <c>type</c> is absent or not a JSON string, or an <c>openid_credential</c> object without
+    /// its configuration, without a non-empty <c>credential_identifiers</c>, or listing an identifier
+    /// that is empty or white space (which names no Credential Dataset), makes the member malformed
+    /// wherever it stands. <see cref="JwkJsonReader.ExtractStringValue"/> answers
+    /// <see langword="null"/> for a <c>type</c> that is absent or not a string and the value for a
+    /// string, which tells the two cases apart. The document is the one
+    /// <see cref="JwkJsonReader.IsWellFormedJsonDocument"/> accepted.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.2">OID4VCI 1.0 Section 6.2</see>:
+    /// "It is a non-empty array of objects, as defined in Section 7 of [RFC9396]." And:
+    /// "credential_identifiers: REQUIRED. A non-empty array of strings, each uniquely identifying a
+    /// Credential Dataset that can be issued using the Access Token returned in this response."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9396#section-2">RFC 9396 Section 2</see>:
+    /// "type: An identifier for the authorization details type as a string. The value of the type
+    /// field determines the allowable contents of the object that contains it. The value is unique for
+    /// the described API in the context of the AS. This field is REQUIRED."
+    /// </summary>
+    /// <param name="tokenJson">The well-formed Token Response body.</param>
+    /// <param name="credentialConfigurationId">The configuration the Wallet requests.</param>
+    /// <param name="grantedIdentifier">The first identifier granted for the configuration, when <see cref="GrantedIdentifierReading.Granted"/>.</param>
+    /// <returns>What the member holds for the requested configuration.</returns>
+    private static GrantedIdentifierReading ReadGrantedIdentifier(
+        ReadOnlySpan<byte> tokenJson, string credentialConfigurationId, out string? grantedIdentifier)
+    {
+        grantedIdentifier = null;
+        ReadOnlySpan<byte> detailsKey = OAuthRequestParameterNames.AuthorizationDetailsUtf8;
+        int keyStart = JwkJsonReader.IndexOfKey(tokenJson, detailsKey);
+        if(keyStart < 0)
+        {
+            return GrantedIdentifierReading.NoCredentialDetails;
+        }
+
+        int position = JwkJsonReader.SkipWhitespaceAndColon(tokenJson, keyStart + detailsKey.Length + 1);
+        if(position < 0 || position >= tokenJson.Length || tokenJson[position] != (byte)'[')
+        {
+            return GrantedIdentifierReading.Malformed;
+        }
+
+        bool hasEntry = false;
+        bool hasCredentialDetail = false;
+        string? firstGrantedIdentifier = null;
+        position++;
+        while(true)
+        {
+            while(position < tokenJson.Length && IsArraySeparator(tokenJson[position]))
+            {
+                position++;
+            }
+
+            if(position >= tokenJson.Length)
+            {
+                return GrantedIdentifierReading.Malformed;
+            }
+
+            if(tokenJson[position] == (byte)']')
+            {
+                grantedIdentifier = firstGrantedIdentifier;
+
+                //Section 6.2: the member is a non-empty array, so an array that closes without an
+                //entry is malformed rather than an absence of details.
+                return (hasEntry, firstGrantedIdentifier, hasCredentialDetail) switch
+                {
+                    (false, _, _) => GrantedIdentifierReading.Malformed,
+                    (true, not null, _) => GrantedIdentifierReading.Granted,
+                    (true, null, true) => GrantedIdentifierReading.NotGrantedForConfiguration,
+                    (_, _, false) => GrantedIdentifierReading.NoCredentialDetails
+                };
+            }
+
+            int objectEnd = tokenJson[position] == (byte)'{' ? FindObjectEnd(tokenJson, position) : -1;
+            if(objectEnd < 0)
+            {
+                return GrantedIdentifierReading.Malformed;
+            }
+
+            ReadOnlySpan<byte> detail = tokenJson[position..objectEnd];
+            position = objectEnd;
+            hasEntry = true;
+
+            //RFC 9396 Section 2: every entry carries type as a string. The reader answers null for a
+            //type that is absent or not a JSON string (a number, null, an object or an array), which
+            //makes the member malformed wherever the entry stands; a string of another type is an
+            //entry for another API and is skipped.
+            string? type = JwkJsonReader.ExtractStringValue(detail, AuthorizationDetailsParameterNames.TypeUtf8);
+            if(type is null)
+            {
+                return GrantedIdentifierReading.Malformed;
+            }
+
+            if(!string.Equals(type, AuthorizationDetailsTypeValues.OpenIdCredential, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            hasCredentialDetail = true;
+            string? configurationId = JwkJsonReader.ExtractStringValue(
+                detail, Oid4VciCredentialParameterNames.CredentialConfigurationIdUtf8);
+            List<string>? identifiers = JwkJsonReader.ExtractStringArrayProperty(
+                detail, Oid4VciCredentialParameterNames.CredentialIdentifiersUtf8);
+            if(configurationId is null
+                || identifiers is not { Count: > 0 }
+                || identifiers.Exists(string.IsNullOrWhiteSpace))
+            {
+                return GrantedIdentifierReading.Malformed;
+            }
+
+            if(firstGrantedIdentifier is null
+                && string.Equals(configurationId, credentialConfigurationId, StringComparison.Ordinal))
+            {
+                firstGrantedIdentifier = identifiers[0];
+            }
+        }
+    }
+
+
+    /// <summary>Whether <paramref name="value"/> is JSON whitespace or the comma between array elements.</summary>
+    /// <param name="value">The byte read between array elements.</param>
+    /// <returns><see langword="true"/> for a space, tab, carriage return, line feed or comma.</returns>
+    private static bool IsArraySeparator(byte value) =>
+        value is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n' or (byte)',';
+
+
+    /// <summary>
+    /// Finds the end of the JSON object starting at <paramref name="start"/>: the index after its
+    /// closing brace, counting nested objects and arrays and skipping string contents, escapes
+    /// included, so a brace inside a string does not end the object.
+    /// </summary>
+    /// <param name="json">The JSON text.</param>
+    /// <param name="start">The index of the object's opening brace.</param>
+    /// <returns>The index after the closing brace, or -1 when the object does not close.</returns>
+    private static int FindObjectEnd(ReadOnlySpan<byte> json, int start)
+    {
+        int depth = 0;
+        for(int position = start; position < json.Length; position++)
+        {
+            byte current = json[position];
+            if(current == (byte)'"')
+            {
+                position++;
+                while(position < json.Length && json[position] != (byte)'"')
+                {
+                    if(json[position] == (byte)'\\')
+                    {
+                        position++;
+                    }
+
+                    position++;
+                }
+
+                continue;
+            }
+
+            depth += current switch
+            {
+                (byte)'{' or (byte)'[' => 1,
+                (byte)'}' or (byte)']' => -1,
+                _ => 0
+            };
+
+            if(depth == 0)
+            {
+                return position + 1;
+            }
+        }
+
+        return -1;
     }
 
 
@@ -863,8 +1184,9 @@ public sealed class Oid4VciWalletClient
 
     /// <summary>
     /// Sends the <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-8.2">§8.2</see>
-    /// Credential Request — JSON body <c>{ credential_configuration_id, proofs:{jwt:[proof]},
-    /// credential_response_encryption? }</c> — and parses the full
+    /// Credential Request, a JSON body naming the target's <c>credential_identifier</c> or
+    /// <c>credential_configuration_id</c> beside <c>proofs:{jwt:[proof]}</c> and an optional
+    /// <c>credential_response_encryption</c>, and parses the full
     /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-8.3">§8.3</see>
     /// response (every batch credential and the <c>notification_id</c>), or the
     /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-9.2">§9.2</see>
@@ -883,7 +1205,7 @@ public sealed class Oid4VciWalletClient
         string accessToken,
         string tokenType,
         DateTimeOffset? accessTokenExpiresAt,
-        string credentialConfigurationId,
+        CredentialRequestTarget target,
         string proofJwt,
         CredentialResponseEncryption? responseEncryption,
         Uri credentialEndpoint,
@@ -891,7 +1213,7 @@ public sealed class Oid4VciWalletClient
         CancellationToken cancellationToken)
     {
         string requestBody = await EncryptRequestIfAskedAsync(
-            BuildCredentialRequestBody(credentialConfigurationId, proofJwt, responseEncryption),
+            BuildCredentialRequestBody(target, proofJwt, responseEncryption),
             responseEncryption,
             cancellationToken).ConfigureAwait(false);
 
@@ -1522,43 +1844,46 @@ public sealed class Oid4VciWalletClient
 
 
     /// <summary>
-    /// Builds the <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-8.2">§8.2</see>
-    /// Credential Request JSON body without <c>System.Text.Json</c> — the <c>Verifiable.OAuth</c>
-    /// serialization firewall. The proof and config id are JSON-safe wire values (a compact JWS and a
-    /// metadata key); the optional <c>credential_response_encryption</c> object is appended verbatim
-    /// from its members.
+    /// Builds the <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-8.2">OID4VCI 1.0 Section 8.2</see>
+    /// Credential Request JSON body without <c>System.Text.Json</c>, the <c>Verifiable.OAuth</c>
+    /// serialization firewall. The body names exactly the member <paramref name="target"/> holds,
+    /// <c>credential_identifier</c> or <c>credential_configuration_id</c>, its value escaped through
+    /// <see cref="JsonAppender.AppendStringField"/>; the proof is a compact JWS, a JSON-safe wire value;
+    /// the optional <c>credential_response_encryption</c> object's <c>jwk</c> members and <c>enc</c>
+    /// are written through <see cref="JsonAppender.AppendObject"/> and
+    /// <see cref="JsonAppender.AppendStringField"/>, escaped.
+    /// Section 8.2 on <c>credential_identifier</c>: "When this parameter is used, the
+    /// credential_configuration_id MUST NOT be present."
     /// </summary>
+    /// <param name="target">What the request names.</param>
+    /// <param name="proofJwt">The section 7.2.1 holder key proof.</param>
+    /// <param name="responseEncryption">The section 8.2 response-encryption ask, or <see langword="null"/>.</param>
+    /// <returns>The request body.</returns>
     private static string BuildCredentialRequestBody(
-        string credentialConfigurationId,
+        CredentialRequestTarget target,
         string proofJwt,
         CredentialResponseEncryption? responseEncryption)
     {
+        (string targetMember, string targetValue) = target.CredentialIdentifier is { } credentialIdentifier
+            ? (Oid4VciCredentialParameterNames.CredentialIdentifier, credentialIdentifier)
+            : (Oid4VciCredentialParameterNames.CredentialConfigurationId, target.CredentialConfigurationId!);
+
         StringBuilder builder = new();
         _ = builder.Append('{');
-        _ = builder.Append('"').Append(Oid4VciCredentialParameterNames.CredentialConfigurationId).Append("\":\"");
-        _ = builder.Append(credentialConfigurationId).Append("\",");
-        _ = builder.Append('"').Append(Oid4VciCredentialParameterNames.Proofs).Append("\":{\"");
+        bool isFirstMember = true;
+        JsonAppender.AppendStringField(builder, targetMember, targetValue, ref isFirstMember);
+        _ = builder.Append(",\"").Append(Oid4VciCredentialParameterNames.Proofs).Append("\":{\"");
         _ = builder.Append(Oid4VciCredentialParameterNames.JwtProofType).Append("\":[\"");
         _ = builder.Append(proofJwt).Append("\"]}");
 
         if(responseEncryption is { Jwk: { } jwk, Enc: { } enc })
         {
             _ = builder.Append(",\"").Append(Oid4VciCredentialParameterNames.CredentialResponseEncryption);
-            _ = builder.Append("\":{\"").Append(Oid4VciCredentialParameterNames.Jwk).Append("\":{");
-            bool first = true;
-            foreach(KeyValuePair<string, object> member in jwk)
-            {
-                if(!first)
-                {
-                    _ = builder.Append(',');
-                }
-
-                _ = builder.Append('"').Append(member.Key).Append("\":\"").Append(member.Value).Append('"');
-                first = false;
-            }
-
-            _ = builder.Append("},\"").Append(Oid4VciCredentialParameterNames.Enc).Append("\":\"");
-            _ = builder.Append(enc).Append("\"}");
+            _ = builder.Append("\":{\"").Append(Oid4VciCredentialParameterNames.Jwk).Append("\":");
+            JsonAppender.AppendObject(builder, jwk);
+            bool isFirstEncryptionMember = false;
+            JsonAppender.AppendStringField(builder, Oid4VciCredentialParameterNames.Enc, enc, ref isFirstEncryptionMember);
+            _ = builder.Append('}');
         }
 
         _ = builder.Append('}');

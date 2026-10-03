@@ -24,8 +24,10 @@ namespace Verifiable.OAuth.Federation;
 /// endpoint — the request proceeds. A
 /// <see cref="FederationClientAuthenticationResult"/> whose
 /// <see cref="FederationClientAuthenticationResult.IsValid"/> is
-/// <see langword="false"/> rejects the request with HTTP 401
-/// <c>invalid_client</c>; a valid result lets it proceed. The application
+/// <see langword="false"/> rejects the request with <c>invalid_client</c>, 401 with a challenge or 400, as the
+/// library's client authentication failure is answered: 401 with the challenge of the scheme attempted in the
+/// <c>Authorization</c> field, or with the <c>Basic</c> challenge when <c>client_secret_basic</c> is
+/// advertised, and 400 with no challenge otherwise; a valid result lets it proceed. The application
 /// resolves the requester's Federation Entity Key, verifies the client
 /// authentication JWT's signature, and validates its claims via
 /// <see cref="FederationClientAuthentication.Validate"/>.

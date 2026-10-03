@@ -939,7 +939,7 @@ countingMetadataBuilder
         }).ConfigureAwait(false);
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Task<string> oldRequest = ReadDiscoveryAsync(app, keys.Registration);
-        await entered.Task.WaitAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        await HookEntryWait.WaitForEntryAsync(entered.Task, oldRequest, TestContext.CancellationToken).ConfigureAwait(false);
         Task alteration = app.Server.RequestAlterationAsync(candidate =>
         {
             Assert.IsTrue(exited.Task.IsCompletedSuccessfully, "An alteration callback cannot run while an admitted seam is active.");
@@ -1001,13 +1001,13 @@ countingMetadataBuilder
         }).ConfigureAwait(false);
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Task<string> oldRequest = ReadDiscoveryAsync(app, keys.Registration);
-        await entered.Task.WaitAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        await HookEntryWait.WaitForEntryAsync(entered.Task, oldRequest, TestContext.CancellationToken).ConfigureAwait(false);
         Task alteration = app.Server.RequestAlterationAsync(candidate =>
             candidate.Family<AuthorizationServerIntegration>().ContributeDiscoveryFieldsAsync = (_, _, _) => ValueTask.FromResult(Marker("B")), TestContext.CancellationToken);
         Task<string> arrival = ReadDiscoveryAsync(app, keys.Registration);
         try
         {
-            await heldArrival.Task.WaitAsync(TestContext.CancellationToken).ConfigureAwait(false);
+            await HookEntryWait.WaitForEntryAsync(heldArrival.Task, arrival, TestContext.CancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -1050,7 +1050,7 @@ countingMetadataBuilder
         }).ConfigureAwait(false);
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Task<string> oldRequest = ReadDiscoveryAsync(app, keys.Registration);
-        await entered.Task.WaitAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        await HookEntryWait.WaitForEntryAsync(entered.Task, oldRequest, TestContext.CancellationToken).ConfigureAwait(false);
         Task alteration = app.Server.RequestAlterationAsync(candidate =>
             candidate.Family<AuthorizationServerIntegration>().ContributeDiscoveryFieldsAsync = (_, _, _) => ValueTask.FromResult(Marker("B")), TestContext.CancellationToken);
         try
@@ -1139,7 +1139,7 @@ countingMetadataBuilder
         Task<string>[] arrivals = [];
         try
         {
-            await entered.Task.WaitAsync(deadline.Token).ConfigureAwait(false);
+            await HookEntryWait.WaitForEntryAsync(entered.Task, held, deadline.Token).ConfigureAwait(false);
             alteration = app.Server.RequestAlterationAsync(candidate => candidate.Configuration = ProbeConfiguration(candidate.Configuration, "B"), deadline.Token);
             await checkpoint.ReachAsync(alteration, deadline.Token).ConfigureAwait(false);
             arrivals = [.. Enumerable.Range(0, 16).Select(_ => ReadDiscoveryAsync(app, keys.Registration))];
@@ -2112,7 +2112,7 @@ countingMetadataBuilder
         Task<string> stuckRequest = ReadDiscoveryAsync(app, keys.Registration);
         try
         {
-            await entered.Task.WaitAsync(deadline.Token).ConfigureAwait(false);
+            await HookEntryWait.WaitForEntryAsync(entered.Task, stuckRequest, deadline.Token).ConfigureAwait(false);
             Task alteration = app.Server.RequestAlterationAsync(candidate =>
                 candidate.Family<AuthorizationServerIntegration>().ContributeDiscoveryFieldsAsync = (_, _, _) => ValueTask.FromResult(Marker("B")), deadline.Token);
             InvalidOperationException fault = await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => alteration);
@@ -2159,7 +2159,7 @@ countingMetadataBuilder
         Task<string> stuckRequest = ReadDiscoveryAsync(app, keys.Registration);
         try
         {
-            await entered.Task.WaitAsync(deadline.Token).ConfigureAwait(false);
+            await HookEntryWait.WaitForEntryAsync(entered.Task, stuckRequest, deadline.Token).ConfigureAwait(false);
             Task cancelled = app.Server.RequestAlterationAsync(_ => Interlocked.Increment(ref callbacks), opening.Token);
             Task sibling = app.Server.RequestAlterationAsync(_ => Interlocked.Increment(ref callbacks), deadline.Token);
             await opening.CancelAsync().WaitAsync(deadline.Token).ConfigureAwait(false);
@@ -2210,7 +2210,7 @@ countingMetadataBuilder
         Task? next = null;
         try
         {
-            await entered.Task.WaitAsync(deadline.Token).ConfigureAwait(false);
+            await HookEntryWait.WaitForEntryAsync(entered.Task, throwing, deadline.Token).ConfigureAwait(false);
             next = app.Server.RequestAlterationAsync(candidate =>
             {
                 Assert.AreNotEqual(TimeSpan.FromSeconds(41), candidate.Family<AuthorizationServerIntegration>().Timings.ClockSkewTolerance,
@@ -2355,7 +2355,7 @@ countingMetadataBuilder
         Task? signalledAlteration = null;
         try
         {
-            await entered.Task.WaitAsync(deadline.Token).ConfigureAwait(false);
+            await HookEntryWait.WaitForEntryAsync(entered.Task, admittedRequest, deadline.Token).ConfigureAwait(false);
             using CancellationTokenSource signal = new();
             TaskCompletionSource<Task> requested = new(TaskCreationOptions.RunContinuationsAsynchronously);
             using CancellationTokenRegistration subscription = signal.Token.Register(() => requested.SetResult(app.Server.RequestAlterationAsync(candidate =>
@@ -2400,7 +2400,7 @@ countingMetadataBuilder
         }).ConfigureAwait(false);
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Task<string> oldRequest = ReadDiscoveryAsync(app, keys.Registration);
-        await entered.Task.WaitAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        await HookEntryWait.WaitForEntryAsync(entered.Task, oldRequest, TestContext.CancellationToken).ConfigureAwait(false);
         Task first = app.Server.RequestAlterationAsync(candidate => candidate.Family<AuthorizationServerIntegration>().Timings = TimingPolicy.Default with { ClockSkewTolerance = TimeSpan.FromSeconds(19) }, TestContext.CancellationToken);
         Task rejected = app.Server.RequestAlterationAsync(candidate => candidate.Integration.DeleteFlowStateAsync = null, TestContext.CancellationToken);
         Task last = app.Server.RequestAlterationAsync(candidate =>
@@ -2465,7 +2465,7 @@ countingMetadataBuilder
         Task? alteration = null;
         try
         {
-            await entered.Task.WaitAsync(deadline.Token).ConfigureAwait(false);
+            await HookEntryWait.WaitForEntryAsync(entered.Task, rotating, deadline.Token).ConfigureAwait(false);
             alteration = app.Server.RequestAlterationAsync(candidate =>
             {
                 original.MigrateFlowStorageTo(replacement);
@@ -2790,7 +2790,7 @@ countingMetadataBuilder
         Task<Exception?>? setter = null;
         try
         {
-            await arrived.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            await HookEntryWait.WaitForEntryAsync(arrived.Task, request, cancellationToken).ConfigureAwait(false);
             setter = Task.Run(async () =>
             {
                 _ = setterReady.TrySetResult();
@@ -3022,7 +3022,7 @@ countingMetadataBuilder
         Task<string> held = ReadDiscoveryAsync(app, keys.Registration);
         try
         {
-            await entered.Task.WaitAsync(deadline.Token).ConfigureAwait(false);
+            await HookEntryWait.WaitForEntryAsync(entered.Task, held, deadline.Token).ConfigureAwait(false);
             await cancelled.CancelAsync().ConfigureAwait(false);
             app.Server.DrainWaitFinished = () => allowWorker.Wait(deadline.Token);
             bool hasRun = false;
@@ -3098,7 +3098,7 @@ countingMetadataBuilder
         Task? following = null;
         try
         {
-            await entered.Task.WaitAsync(deadline.Token).ConfigureAwait(false);
+            await HookEntryWait.WaitForEntryAsync(entered.Task, held, deadline.Token).ConfigureAwait(false);
             app.Server.DrainWaitFinished = () =>
             {
                 _ = terminal.TrySetResult();
@@ -3108,7 +3108,7 @@ countingMetadataBuilder
 
             // The worker's drain continuation can run inline on the cancelling thread, and the hook blocks it, so the opening token is cancelled from the pool instead.
             _ = Task.Run(opening.Cancel, TestContext.CancellationToken);
-            await terminal.Task.WaitAsync(deadline.Token).ConfigureAwait(false);
+            await HookEntryWait.WaitForEntryAsync(terminal.Task, opener, deadline.Token).ConfigureAwait(false);
             following = app.Server.RequestAlterationAsync(candidate => candidate.Family<AuthorizationServerIntegration>().ContributeDiscoveryFieldsAsync = (_, _, _) => ValueTask.FromResult(Marker("B")), deadline.Token);
             resume.Set();
             _ = await Assert.ThrowsExactlyAsync<TaskCanceledException>(() => opener.WaitAsync(deadline.Token));
@@ -3190,7 +3190,7 @@ countingMetadataBuilder
         Task? second = null;
         try
         {
-            await entered.Task.WaitAsync(deadline.Token).ConfigureAwait(false);
+            await HookEntryWait.WaitForEntryAsync(entered.Task, first, deadline.Token).ConfigureAwait(false);
             second = app.Server.RequestAlterationAsync(_ => Assert.Fail("An escaped worker failure must fault queued callbacks without invoking them."), deadline.Token);
         }
         finally
@@ -3355,7 +3355,7 @@ countingMetadataBuilder
         bool hasCancelledCallbackRun = false;
         try
         {
-            await entered.Task.WaitAsync(deadline.Token).ConfigureAwait(false);
+            await HookEntryWait.WaitForEntryAsync(entered.Task, held, deadline.Token).ConfigureAwait(false);
             app.Server.DrainWaitFinished = () =>
             {
                 _ = terminal.TrySetResult();
@@ -3365,7 +3365,7 @@ countingMetadataBuilder
 
             // The worker's drain continuation can run inline on the cancelling thread, and the hook blocks it, so the opening token is cancelled from the pool instead.
             _ = Task.Run(opening.Cancel, TestContext.CancellationToken);
-            await terminal.Task.WaitAsync(deadline.Token).ConfigureAwait(false);
+            await HookEntryWait.WaitForEntryAsync(terminal.Task, opener, deadline.Token).ConfigureAwait(false);
             Task cancelled = app.Server.RequestAlterationAsync(_ => hasCancelledCallbackRun = true, pending.Token);
             sibling = app.Server.RequestAlterationAsync(candidate => candidate.Family<AuthorizationServerIntegration>().ContributeDiscoveryFieldsAsync = (_, _, _) => ValueTask.FromResult(Marker("B")), deadline.Token);
             await pending.CancelAsync().ConfigureAwait(false);
@@ -3433,7 +3433,7 @@ countingMetadataBuilder
         Task<string> held = ReadDiscoveryAsync(app, keys.Registration);
         try
         {
-            await entered.Task.WaitAsync(deadline.Token).ConfigureAwait(false);
+            await HookEntryWait.WaitForEntryAsync(entered.Task, held, deadline.Token).ConfigureAwait(false);
             Task opener = app.Server.RequestAlterationAsync(_ => { }, deadline.Token);
             Task sibling = app.Server.RequestAlterationAsync(_ => Assert.Fail("A cancelled sibling cannot execute."), cancelled.Token);
             await cancelled.CancelAsync().ConfigureAwait(false);
@@ -3476,7 +3476,7 @@ countingMetadataBuilder
         Task? alteration = null;
         try
         {
-            await entered.Task.WaitAsync(deadline.Token).ConfigureAwait(false);
+            await HookEntryWait.WaitForEntryAsync(entered.Task, held, deadline.Token).ConfigureAwait(false);
             alteration = app.Server.RequestAlterationAsync(_ => { }, deadline.Token);
             InvalidOperationException fault = Assert.ThrowsExactly<InvalidOperationException>(app.Server.Validate);
             Assert.Contains("Validate cannot run during RequestAlterationAsync", fault.Message, StringComparison.Ordinal);
@@ -3773,7 +3773,7 @@ countingMetadataBuilder
         using Barrier start = new(3);
         try
         {
-            await captured.Task.WaitAsync(deadline.Token).ConfigureAwait(false);
+            await HookEntryWait.WaitForEntryAsync(captured.Task, pending, deadline.Token).ConfigureAwait(false);
             await Task.WhenAll(Enumerable.Range(0, 3).Select(index => Task.Run(() =>
             {
                 try
@@ -3881,7 +3881,7 @@ countingMetadataBuilder
         }).ToArray();
         try
         {
-            await allEntered.Task.WaitAsync(deadline.Token).ConfigureAwait(false);
+            await HookEntryWait.WaitForEntryAsync(allEntered.Task, requests, deadline.Token).ConfigureAwait(false);
         }
         finally
         {
@@ -4324,11 +4324,11 @@ countingMetadataBuilder
             HttpMethod.Delete, client.ManagementUri, client.AccessToken, null, exchange.Token);
         try
         {
-            await Task.WhenAll(updateEntered.Task, deleteEntered.Task).WaitAsync(deadline.Token).ConfigureAwait(false);
+            await HookEntryWait.WaitForEntryAsync(Task.WhenAll(updateEntered.Task, deleteEntered.Task), [updateTask, deleteTask], deadline.Token).ConfigureAwait(false);
             if(isUpdateFirst)
             {
                 _ = releaseUpdate.TrySetResult();
-                await updateCommitted.Task.WaitAsync(deadline.Token).ConfigureAwait(false);
+                await HookEntryWait.WaitForEntryAsync(updateCommitted.Task, updateTask, deadline.Token).ConfigureAwait(false);
                 if(!isDeliveryReversed)
                 {
                     _ = await updateTask.ConfigureAwait(false);
@@ -4405,7 +4405,7 @@ countingMetadataBuilder
         };
         Task<HttpResponseMessage> delayed = RawAuthCodeWirePushers.SendPinnedRegistrationAsync(app,
             HttpMethod.Delete, client.ManagementUri, client.AccessToken, null, exchange.Token);
-        await entered.Task.WaitAsync(deadline.Token).ConfigureAwait(false);
+        await HookEntryWait.WaitForEntryAsync(entered.Task, delayed, deadline.Token).ConfigureAwait(false);
         var replacement = client;
         try
         {
@@ -4467,7 +4467,7 @@ countingMetadataBuilder
             WellKnownEndpointNames.MetadataJwks, "GET", new RequestFields(), [], exchange.Token);
         try
         {
-            await entered.Task.WaitAsync(deadline.Token).ConfigureAwait(false);
+            await HookEntryWait.WaitForEntryAsync(entered.Task, pending, deadline.Token).ConfigureAwait(false);
             using HttpResponseMessage deleted = await RawAuthCodeWirePushers.SendPinnedRegistrationAsync(app,
                 HttpMethod.Delete, client.ManagementUri, client.AccessToken, null, exchange.Token).ConfigureAwait(false);
             Assert.AreEqual(204, (int)deleted.StatusCode);

@@ -2,6 +2,7 @@ using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
 using System.Text.Json;
 using Verifiable.OAuth;
+using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Introspection;
 using Verifiable.OAuth.Server;
 using Verifiable.Server.Routing;
@@ -54,7 +55,7 @@ internal sealed class TokenIntrospectionServerTests
         List<(string Token, string? Hint, ClientRecord Client)> introspected = [];
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(true);
 
             candidateIntegration.IntrospectTokenAsync = (token, hint, registration, _, _) =>
@@ -147,7 +148,7 @@ internal sealed class TokenIntrospectionServerTests
 
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(true);
 
             candidateIntegration.IntrospectTokenAsync = static (_, _, _, _, _) =>
@@ -224,7 +225,7 @@ internal sealed class TokenIntrospectionServerTests
 
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(true);
 
             candidateIntegration.IntrospectTokenAsync = static (_, _, _, _, _) =>
@@ -265,7 +266,7 @@ internal sealed class TokenIntrospectionServerTests
 
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(true);
 
             candidateIntegration.IntrospectTokenAsync = static (_, _, _, _, _) =>
@@ -312,7 +313,7 @@ internal sealed class TokenIntrospectionServerTests
 
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(true);
 
 
@@ -355,9 +356,14 @@ internal sealed class TokenIntrospectionServerTests
 
 
     /// <summary>
-    /// When client authentication fails the endpoint returns 401 <c>invalid_client</c> and
-    /// never reaches the introspection seam — token state is not leaked to an unauthenticated
-    /// caller (RFC 7662 §2.3).
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7662#section-2.3">RFC 7662 Section 2.3</see>: "If the
+    /// protected resource uses OAuth 2.0 client credentials to authenticate to the introspection endpoint and its
+    /// credentials are invalid, the authorization server responds with an HTTP 401 (Unauthorized) as described in
+    /// Section 5.2 of OAuth 2.0 [RFC6749]." A caller whose client authentication fails, at a server that advertises
+    /// no <c>client_secret_basic</c> and for a request that used no <c>Authorization</c> field, is answered 400
+    /// <c>invalid_client</c> with no <c>WWW-Authenticate</c> field, and the introspection seam is never reached, so
+    /// token state is not leaked to an unauthenticated caller. The 400 is a named deviation of the library from the
+    /// section's 401: such a server has no challenge applicable to the endpoint, and a 401 is sent only with one.
     /// </summary>
     [TestMethod]
     public async Task IntrospectionEndpointRejectsUnauthenticatedCallerWithoutTouchingTheStore()
@@ -369,7 +375,7 @@ internal sealed class TokenIntrospectionServerTests
         bool seamInvoked = false;
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(false);
 
             candidateIntegration.IntrospectTokenAsync = (_, _, _, _, _) =>
@@ -388,8 +394,63 @@ internal sealed class TokenIntrospectionServerTests
             [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(401, response.StatusCode, response.Body);
+        Assert.AreEqual(400, response.StatusCode, response.Body);
         Assert.Contains(OAuthErrors.InvalidClient, response.Body, StringComparison.Ordinal);
+        Assert.IsFalse(response.Headers.ContainsKey(WellKnownHttpHeaderNames.WwwAuthenticate), "No challenge applies, so none is sent.");
+        Assert.IsFalse(seamInvoked, "A failed authentication must not introspect anything.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7662#section-2.3">RFC 7662 Section 2.3</see>: "If the
+    /// protected resource uses OAuth 2.0 client credentials to authenticate to the introspection endpoint and its
+    /// credentials are invalid, the authorization server responds with an HTTP 401 (Unauthorized) as described in
+    /// Section 5.2 of OAuth 2.0 [RFC6749]." An introspection request posted over the wire with a wrong
+    /// <c>client_secret</c> form credential, at a server that advertises no <c>client_secret_basic</c>, is answered
+    /// 400 <c>invalid_client</c> with no <c>WWW-Authenticate</c> field, and the introspection seam is never
+    /// reached. The 400 is a named deviation of the library from the section's 401: a form credential at such a
+    /// server has no challenge applicable to the endpoint, and a 401 is sent only with one
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.5.2">RFC 9110 Section 15.5.2</see>).
+    /// </summary>
+    [TestMethod]
+    public async Task AWrongFormSecretAtAServerWithoutBasicIsABadRequestWithoutAChallenge()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, IntrospectionCapabilities).ConfigureAwait(false);
+
+        bool seamInvoked = false;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, _, _, _) =>
+                ValueTask.FromResult(string.Equals(reading.ClientSecret, "the-right-secret", StringComparison.Ordinal));
+
+            candidateIntegration.IntrospectTokenAsync = (_, _, _, _, _) =>
+            {
+                seamInvoked = true;
+
+                return ValueTask.FromResult(TokenIntrospectionResult.Inactive);
+            };
+        }).ConfigureAwait(false);
+
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer hosted = host.Host("default");
+        Uri endpoint = new(hosted.HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeIntrospect, material.Registration.TenantId.Value));
+        HttpResponseData response = await HttpClientTransport.SendFormPostAsync(
+            hosted.SharedHttpClient!, endpoint,
+            new Dictionary<string, string>
+            {
+                [OAuthRequestParameterNames.Token] = "some-token",
+                [OAuthRequestParameterNames.ClientId] = ClientId,
+                [OAuthRequestParameterNames.ClientSecret] = "a-wrong-secret"
+            },
+            OutgoingHeaders.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            "{\"error\":\"invalid_client\",\"error_description\":\"Client authentication failed.\"}", response.Body);
+        Assert.IsEmpty(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate));
         Assert.IsFalse(seamInvoked, "A failed authentication must not introspect anything.");
     }
 
@@ -410,7 +471,7 @@ internal sealed class TokenIntrospectionServerTests
         //gate requires both, so the endpoint must not materialize.
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(true);
         }).ConfigureAwait(false);
 
@@ -445,7 +506,7 @@ internal sealed class TokenIntrospectionServerTests
         const string blockedIp = "203.0.113.7";
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(true);
 
             candidateIntegration.IntrospectTokenAsync = static (_, _, _, _, _) =>
@@ -502,7 +563,7 @@ internal sealed class TokenIntrospectionServerTests
 
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(true);
         }).ConfigureAwait(false);
 

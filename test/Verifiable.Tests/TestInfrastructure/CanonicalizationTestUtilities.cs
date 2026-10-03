@@ -1,6 +1,8 @@
 using Lumoin.Veritas.Canonicalization;
+using Lumoin.Veritas.Json;
 using Lumoin.Veritas.Json.Stj;
 using Lumoin.Veritas.JsonLd;
+using Lumoin.Veritas.LinkedData;
 using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.Model.Credentials;
@@ -136,9 +138,15 @@ internal static class CanonicalizationTestUtilities
     /// The canonicalization process:
     /// </para>
     /// <list type="number">
-    /// <item><description>Parses the JSON-LD document and expands it (JSON-LD 1.1), resolving every
-    /// remote <c>@context</c> asynchronously through the caller's resolver so the per-call
-    /// <see cref="ExchangeContext"/> rides each fetch.</description></item>
+    /// <item><description>Parses the JSON-LD document and resolves every remote <c>@context</c> it
+    /// references with <see cref="ResolveContextsThroughCallerAsync"/>, which drives the wave machine of
+    /// <see cref="JsonLdContextResolution.Start"/> itself and awaits the caller's resolver once per
+    /// reference with the per-call <see cref="ExchangeContext"/>. An exception the resolver raises ends
+    /// the canonicalization as raised. A context the resolver does not answer, or any context when the
+    /// resolver is <see langword="null"/>, is recorded as a loading failure.</description></item>
+    /// <item><description>Expands the document (JSON-LD 1.1) with <see cref="JsonLdExpansionTree.Expand"/>,
+    /// a synchronous compute over the resolved set; a recorded loading failure fails the expansion
+    /// where that context is consulted.</description></item>
     /// <item><description>Serializes the expanded document to RDF quads.</description></item>
     /// <item><description>Applies the RDFC-1.0 canonicalization algorithm with SHA-256 and
     /// serializes to sorted canonical N-Quads.</description></item>
@@ -152,24 +160,19 @@ internal static class CanonicalizationTestUtilities
     {
         return async (json, contextResolver, context, cancellationToken) =>
         {
-            //The bridge carries the per-call ExchangeContext into every remote @context fetch;
-            //a null resolver resolves nothing, and expansion fails on the first remote context.
-            async ValueTask<Utf8String?> resolveContext(Uri uri, CancellationToken resolveCancellation)
-            {
-                string? resolved = contextResolver == null
-                    ? null
-                    : await contextResolver(uri, context, resolveCancellation).ConfigureAwait(false);
-
-                return resolved == null ? null : Utf8StringInterner.Shared.Intern(resolved);
-            }
-
             var document = StjJsonAdapter.Parse(Utf8StringInterner.Shared.Intern(json));
-            var expanded = await JsonLdExpansionTree.ExpandAsync(
+            ResolvedContextSet contexts = await ResolveContextsThroughCallerAsync(
+                document,
+                contextResolver,
+                context,
+                cancellationToken).ConfigureAwait(false);
+
+            //The expansion is a synchronous compute over the resolved set.
+            var expanded = JsonLdExpansionTree.Expand(
                 document,
                 baseUrl: null,
-resolveContext,
-                StjJsonAdapter.Parse,
-                cancellationToken).ConfigureAwait(false);
+                contexts,
+                cancellationToken: cancellationToken);
 
             using var pool = new Utf8StringPool();
 
@@ -214,6 +217,88 @@ resolveContext,
                 LabelMap = labelMap
             };
         };
+    }
+
+    /// <summary>
+    /// The application's own drive of the context-resolution wave machine for one canonicalization:
+    /// every pending reference is fetched, one at a time and in wave order, from the caller's
+    /// <see cref="ContextResolverDelegate"/>, and the answer is supplied to or abandoned on the machine.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The failure policy of a fetch is the application's, so this drive does not catch what the
+    /// caller's resolver raises: the exception ends the canonicalization as raised and no further
+    /// reference is fetched. A cancellation carried inside another exception reaches the caller's own
+    /// classification that way, and the canonicalization ends at that fetch.
+    /// </para>
+    /// <para>
+    /// A reference the resolver does not load (the resolver is <see langword="null"/>, or it answers
+    /// <see langword="null"/>) is abandoned with <see cref="WellKnownContextErrors.LoadingRemoteContextFailed"/>,
+    /// so the expansion fails where that context is consulted. A document the machine refuses is
+    /// Veritas' judgment of the document: a refusal over the resolution budget throws
+    /// <see cref="JsonLdProcessingException"/>, and any other refusal is abandoned with the code the
+    /// machine gives, or <see cref="WellKnownContextErrors.InvalidRemoteContext"/> when it gives none.
+    /// </para>
+    /// </remarks>
+    /// <param name="document">The parsed JSON-LD document whose context references are resolved.</param>
+    /// <param name="contextResolver">The caller's context resolver, or <see langword="null"/> when none is given.</param>
+    /// <param name="context">The per-call exchange context passed to every fetch.</param>
+    /// <param name="cancellationToken">The token checked before every fetch and passed to it.</param>
+    /// <returns>The completed set of resolved contexts and recorded failures.</returns>
+    private static async ValueTask<ResolvedContextSet> ResolveContextsThroughCallerAsync(
+        JsonNode document,
+        ContextResolverDelegate? contextResolver,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+    {
+        ContextResolution resolution = JsonLdContextResolution.Start(document, StjJsonAdapter.Parse);
+        while(resolution.TryGetPendingWave(out IReadOnlyList<string>? pendingWave))
+        {
+            foreach(string contextIri in pendingWave)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                //An exception of the caller's resolver leaves this method as raised.
+                string? resolved = contextResolver is null
+                    ? null
+                    : await contextResolver(new Uri(contextIri, UriKind.Absolute), context, cancellationToken).ConfigureAwait(false);
+
+                string abandonedCode;
+                string abandonedDetail;
+                if(resolved is null)
+                {
+                    abandonedCode = WellKnownContextErrors.LoadingRemoteContextFailed;
+                    abandonedDetail = $"The context resolver did not resolve the remote context '{contextIri}'.";
+                }
+                else
+                {
+                    //The interned UTF-8 form holds the resolved text, and its memory is the supplied bytes.
+                    ContextSupplyResult supplied = resolution.Supply(contextIri, Utf8StringInterner.Shared.Intern(resolved).Memory, finalUrl: null);
+                    if(supplied.Accepted)
+                    {
+                        continue;
+                    }
+
+                    if(supplied.Kind == ContextSupplyFailure.BudgetExceeded)
+                    {
+                        throw new JsonLdProcessingException(new LinkedDataProcessingException(
+                            supplied.SpecErrorCode ?? WellKnownContextErrors.ContextOverflow,
+                            supplied.Detail ?? $"Resolution budget exceeded at '{contextIri}'."));
+                    }
+
+                    abandonedCode = supplied.SpecErrorCode ?? WellKnownContextErrors.InvalidRemoteContext;
+                    abandonedDetail = supplied.Detail ?? $"The document supplied for '{contextIri}' was rejected.";
+                }
+
+                ContextSupplyResult abandoned = resolution.Abandon(contextIri, abandonedCode, abandonedDetail);
+                if(!abandoned.Accepted)
+                {
+                    throw new InvalidOperationException($"Failed to record the abandonment of '{contextIri}': {abandoned.Detail}");
+                }
+            }
+        }
+
+        return resolution.Complete();
     }
 
     /// <summary>

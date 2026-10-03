@@ -364,6 +364,42 @@ internal sealed class DynamicRegistrationEndToEndTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>:
+    /// "invalid_request The request is missing a required parameter, includes an unsupported parameter or
+    /// parameter value, repeats the same parameter, uses more than one method for including an access
+    /// token, or is otherwise malformed.  The resource server SHOULD respond with the HTTP 400 (Bad
+    /// Request) status code." A GET of the client configuration URI sent over a raw TLS connection with two
+    /// <c>Authorization: Bearer</c> field lines carrying the client's own registration access token
+    /// (<c>Authorization = credentials</c> is no list,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.6.2">RFC 9110 Section 11.6.2</see>) is refused
+    /// with 400 <c>invalid_request</c> and the one challenge
+    /// <c>Bearer realm="https://registration.issuer.test/", error="invalid_request"</c>: the endpoint reads a
+    /// Bearer token only (<see href="https://www.rfc-editor.org/rfc/rfc7592#section-2">RFC 7592 Section 2</see>), so
+    /// its challenge is the <c>Bearer</c> one.
+    /// </summary>
+    [TestMethod]
+    public async Task AClientConfigurationReadWithTwoAuthorizationLinesIsAnInvalidRequest()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        (_, string accessToken, Uri managementUri) = await RegisterOverTheListenerAsync(host).ConfigureAwait(false);
+
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Get, managementUri,
+            [
+                new(WellKnownHttpHeaderNames.Authorization, $"Bearer {accessToken}"),
+                new(WellKnownHttpHeaderNames.Authorization, $"Bearer {accessToken}")
+            ],
+            ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, response.StatusCode, response.Body);
+        Assert.AreEqual("Bearer realm=\"https://registration.issuer.test/\", error=\"invalid_request\"",
+            Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
+        using JsonDocument error = JsonDocument.Parse(response.Body);
+        Assert.AreEqual("invalid_request", error.RootElement.GetProperty("error").GetString(), response.Body);
+    }
+
+
+    /// <summary>
     /// A GET of the client configuration URI sent over the wire, served under a registration the application's
     /// materialization seam replaces with a record that is not an OAuth client registration, is answered 500 with the
     /// body's error <c>server_error</c> and no challenge, whether or not the request presents the client's own

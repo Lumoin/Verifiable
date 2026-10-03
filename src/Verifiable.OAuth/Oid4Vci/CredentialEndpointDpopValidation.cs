@@ -483,6 +483,54 @@ internal static class CredentialEndpointDpopValidation
 
 
     /// <summary>
+    /// Answers a protected resource request whose <c>Authorization</c> field is sent on two or more field
+    /// lines (<see cref="AuthorizationFieldReading.IsRepeated"/>): 400 <c>invalid_request</c> with
+    /// <see cref="WellKnownOAuthErrorDescriptions.MalformedAuthorizationField"/> and the challenge
+    /// <c>Bearer realm="&lt;issuer&gt;", error="invalid_request"</c> through <see cref="Challenged"/>, followed, at a
+    /// resource that accepts the <c>DPoP</c> scheme, by the <c>DPoP</c> challenge with the same error,
+    /// <c>DPoP error="invalid_request", algs="..."</c>, in the same field, the shape
+    /// <see cref="RefuseMissingCredentialsAsync"/> composes the two in.
+    /// <c>Authorization = credentials</c> is no list
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.6.2">RFC 9110 Section 11.6.2</see>), and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see> names the code:
+    /// "invalid_request The request is missing a required parameter, includes an unsupported parameter or
+    /// parameter value, repeats the same parameter, uses more than one method for including an access
+    /// token, or is otherwise malformed.  The resource server SHOULD respond with the HTTP 400 (Bad
+    /// Request) status code."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 Section 7.2</see> places the error in
+    /// both challenges when the mechanism is ambiguous: "Otherwise, both Bearer and DPoP challenges MAY be used to
+    /// deliver error information (Figure 19)." The reading of a repeated field keeps no scheme, so both are sent
+    /// for every repeated field, also two lines of one scheme, where the section's "If the mechanism used to attempt
+    /// authentication could be established unambiguously, then the corresponding challenge SHOULD be used to deliver
+    /// error information (Figure 18)." is not applied: a named deviation. UserInfo, the OID4VCI resources and the
+    /// client configuration endpoint, which reads a Bearer token only, answer a repeated field through this one body.
+    /// </summary>
+    /// <param name="server">The authorization server whose issuer resolver names the realm.</param>
+    /// <param name="registration">The client (tenant) the request belongs to.</param>
+    /// <param name="context">The per-request context.</param>
+    /// <param name="isDpopAccepted">Whether the resource accepts the <c>DPoP</c> scheme, so its challenge is sent too.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The 400 refusal with its challenge.</returns>
+    internal static async ValueTask<ServerHttpResponse> RefuseRepeatedAuthorizationAsync(
+        EndpointServer server,
+        ClientRecord registration,
+        ExchangeContext context,
+        bool isDpopAccepted,
+        CancellationToken cancellationToken)
+    {
+        Uri issuer = await ResolveIssuerAsync(server, registration, context, cancellationToken).ConfigureAwait(false);
+        string bearerChallenge = BearerTokenChallenge.BuildChallenge(
+            realm: HeaderSafeIssuer(issuer), error: OAuthErrors.InvalidRequest);
+        string challenge = isDpopAccepted
+            ? $"{bearerChallenge}, {BuildDpopChallenge(OAuthErrors.InvalidRequest)}"
+            : bearerChallenge;
+
+        return ServerHttpResponse.BadRequest(OAuthErrors.InvalidRequest, WellKnownOAuthErrorDescriptions.MalformedAuthorizationField)
+            .WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, challenge);
+    }
+
+
+    /// <summary>
     /// Resolves the issuer the request is served under, through the application's
     /// <c>ResolveIssuerAsync</c> seam when wired and the default resolver otherwise; its authority is
     /// the one the proof's <c>htu</c> is compared against, its <see cref="HeaderSafeIssuer"/> form is

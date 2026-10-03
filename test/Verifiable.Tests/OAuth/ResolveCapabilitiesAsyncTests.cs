@@ -208,4 +208,101 @@ internal sealed class ResolveCapabilitiesAsyncTests
             "JWKS must be absent from the chain (filtered) — sanity check that "
             + "the negative chain shape held.");
     }
+
+
+    /// <summary>
+    /// The application's materialization removes a capability, so the request is judged by a chain built for the
+    /// materialized registration; the capabilities resolved for that registration are held to those resolved for
+    /// the loaded registration, so a capability the resolution withheld from the loaded registration and grants the
+    /// materialized one adds no endpoint to the chain. The upper bound of a materialized registration's capabilities
+    /// is this library's rule.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#23-per-endpoint-loop-stage">Server design</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task AMaterializedResolutionBeyondTheLoadedResolutionAddsNoEndpointAsync()
+    {
+        (EndpointChain? chain, _, int statusCode) = await GetJwksUnderABoundedMaterializationAsync().ConfigureAwait(false);
+
+        Assert.AreEqual(200, statusCode);
+        Assert.IsNotNull(chain);
+        HashSet<CapabilityIdentifier> chainCapabilities = [.. chain.Select(static endpoint => endpoint.Capability)];
+        Assert.IsTrue(
+            chainCapabilities.SetEquals([WellKnownCapabilityIdentifiers.OAuthJwksEndpoint]),
+            string.Join(' ', chainCapabilities.Select(static capability => capability.Urn)));
+    }
+
+
+    /// <summary>
+    /// The application's materialization removes a capability, so the capabilities the request carries for the
+    /// endpoint and its token producers are those resolved for the materialized registration, held to those resolved
+    /// for the loaded registration: the set the request carries is the bounded set, not the resolution's own answer.
+    /// The upper bound of a materialized registration's capabilities is this library's rule.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#23-per-endpoint-loop-stage">Server design</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task TheRequestCarriesTheBoundedResolutionOfAMaterializedRegistrationAsync()
+    {
+        (_, IReadOnlySet<CapabilityIdentifier>? resolved, int statusCode) = await GetJwksUnderABoundedMaterializationAsync().ConfigureAwait(false);
+
+        Assert.AreEqual(200, statusCode);
+        Assert.IsNotNull(resolved);
+        Assert.IsTrue(
+            resolved.SetEquals([WellKnownCapabilityIdentifiers.OAuthJwksEndpoint]),
+            string.Join(' ', resolved.Select(static capability => capability.Urn)));
+    }
+
+
+    /// <summary>
+    /// Registers the verifier with the presentation, JWKS and discovery capabilities, wires a capability resolution
+    /// that withholds discovery from a registration allowing presentation and grants every other registration all it
+    /// allows, a materialization that removes the presentation capability and an inspection that reads the request's
+    /// chain and resolved capabilities as the answer leaves, then fetches the JWKS over the listener.
+    /// </summary>
+    /// <returns>The chain and the resolved capabilities the request carried as it was answered, and the status code.</returns>
+    private async Task<(EndpointChain? Chain, IReadOnlySet<CapabilityIdentifier>? Resolved, int StatusCode)> GetJwksUnderABoundedMaterializationAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+
+        EndpointChain? observedChain = null;
+        IReadOnlySet<CapabilityIdentifier>? observedResolved = null;
+        ImmutableHashSet<CapabilityIdentifier> materialized = ImmutableHashSet.Create(
+            WellKnownCapabilityIdentifiers.OAuthJwksEndpoint,
+            WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveCapabilitiesAsync = static (registration, _, _) =>
+                ValueTask.FromResult<IReadOnlySet<CapabilityIdentifier>>(
+                    registration.AllowedCapabilities.Contains(WellKnownCapabilityIdentifiers.VcVerifiablePresentation)
+                        ? registration.AllowedCapabilities.Where(static capability => capability != WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint).ToHashSet()
+                        : registration.AllowedCapabilities);
+            candidateIntegration.MaterializeRegistrationAsync = (registration, _, _) =>
+                ValueTask.FromResult(new RegistrationMaterialization
+                {
+                    Registration = ((ClientRecord)registration) with { AllowedCapabilities = materialized }
+                });
+            candidateIntegration.InspectAsync = (stage, context, _) =>
+            {
+                if(stage is OutgoingResponseStage)
+                {
+                    observedChain = context.EndpointChain;
+                    observedResolved = context.ResolvedCapabilities;
+                }
+
+                return ValueTask.CompletedTask;
+            };
+        }).ConfigureAwait(false);
+
+        using VerifierKeyMaterial keys = await host.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
+
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer hosted = host.Host("default");
+        Uri jwksUri = TestHostShell.ComposeEndpointUri(
+            hosted.HttpBaseAddress!, keys.Registration.TenantId.Value, WellKnownEndpointNames.MetadataJwks);
+
+        using HttpResponseMessage response = await hosted.SharedHttpClient!.GetAsync(
+            jwksUri, TestContext.CancellationToken).ConfigureAwait(false);
+
+        return (observedChain, observedResolved, (int)response.StatusCode);
+    }
 }

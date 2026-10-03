@@ -725,7 +725,7 @@ internal sealed class RedirectUriMatchingTests
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
             candidateIntegration.ClientAuthenticationMethodsSupported = [ClientAuthenticationMethod.ClientSecretBasic];
-            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
                 ValueTask.FromResult(true);
         }).ConfigureAwait(false);
 

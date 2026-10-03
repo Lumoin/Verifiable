@@ -34,6 +34,38 @@ namespace Verifiable.OAuth.Oid4Vci;
 /// "The 500 (Internal Server Error) status code indicates that the server encountered an unexpected
 /// condition that prevented it from fulfilling the request."
 /// </para>
+/// <para>
+/// The Credential Endpoint and the Deferred Credential Endpoint require the Credential Issuer
+/// catalogue: each materializes only when
+/// <see cref="AuthorizationServerIntegration.ContributeCredentialIssuerMetadataAsync"/> is wired, as
+/// the Credential Issuer Metadata endpoint does, so no request is served against an unknown
+/// catalogue. The catalogue is read once per request and every rule that reads it (the encryption
+/// requirements and the advertised response encryption, the scope binding, the key attestation and
+/// the batch ceiling) judges that one answer. The catalogue read for a request is the catalogue the
+/// metadata endpoint would publish, or the request is the server's own fault: right after the read,
+/// the catalogue passes
+/// <see cref="CredentialIssuerMetadataValidation.Validate(CredentialIssuerMetadataContribution)"/>,
+/// the one body that decides what the metadata endpoint publishes, and a catalogue it refuses is
+/// answered exactly as the metadata endpoint answers it, 500 <c>server_error</c> with the same
+/// body, before any rule reads it and with neither the issuance seam nor the deferred seam reached.
+/// A request asking for an encrypted response from a catalogue with no
+/// <c>credential_response_encryption</c> is <c>invalid_encryption_parameters</c>.
+/// </para>
+/// <para>
+/// A Credential Request is held to what its Access Token granted. With the token's
+/// <c>openid_credential</c> authorization details it names one of their
+/// <c>credential_identifiers</c> and is judged for the configuration that identifier was granted for.
+/// Without them it names a <c>credential_configuration_id</c>, and when that configuration declares a
+/// <c>scope</c> the token's <c>scope</c> carries it: the scope binding holds a request by
+/// configuration only. A configuration the catalogue does not list is
+/// <c>unknown_credential_configuration</c>. A Pre-Authorized Code token carries neither scope nor
+/// authorization details, and the Credential Offer that bounds it is seen by the application's seams
+/// alone, so binding such a token to its offer's configurations is the
+/// <see cref="AuthorizationServerIntegration.IssueCredentialAsync"/> seam's.
+/// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-8.2">OID4VCI 1.0 Section 8.2</see>:
+/// "credential_identifier: REQUIRED when an Authorization Details of type openid_credential was
+/// returned from the Token Response. It MUST NOT be used otherwise."
+/// </para>
 /// </remarks>
 public static class Oid4VciEndpoints
 {
@@ -55,23 +87,30 @@ public static class Oid4VciEndpoints
             candidates.Add(BuildNonceEndpoint());
         }
 
-        //OID4VCI 1.0 §8 Credential Endpoint materializes only when the capability is allowed
-        //AND both the request-parse seam and the issuance seam are wired — fail-closed: an
-        //advertised Credential Endpoint that cannot parse the request or cannot mint would be
-        //a fail-open authorization boundary that 200s without issuing.
+        //OID4VCI 1.0 section 8 Credential Endpoint materializes only when the capability is allowed
+        //AND three seams are wired, fail-closed: the request-parse seam and the issuance seam,
+        //without which an advertised endpoint that cannot parse the request or cannot mint would be
+        //a fail-open authorization boundary that 200s without issuing, and the Credential Issuer
+        //metadata seam, as the metadata endpoint below requires, since every request is judged
+        //against the credential_configurations_supported catalogue (section 8.2, section 8.3.1.2)
+        //and an endpoint without it would serve requests no rule could judge.
         if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.Oid4VciCredentialEndpoint)
             && server?.OAuth().ParseCredentialRequestAsync is not null
-            && server?.OAuth().IssueCredentialAsync is not null)
+            && server?.OAuth().IssueCredentialAsync is not null
+            && server?.OAuth().ContributeCredentialIssuerMetadataAsync is not null)
         {
             candidates.Add(BuildCredentialEndpoint());
         }
 
-        //OID4VCI 1.0 §9 Deferred Credential Endpoint materializes only when the capability is
-        //allowed AND the resolution seam is wired — fail-closed: only the application's
-        //deferred-transaction store can tell an unknown transaction_id from an issuance still
-        //in flight.
+        //OID4VCI 1.0 section 9 Deferred Credential Endpoint materializes only when the capability is
+        //allowed AND two seams are wired, fail-closed: the resolution seam, since only the
+        //application's deferred-transaction store can tell an unknown transaction_id from an
+        //issuance in flight, and the Credential Issuer metadata seam, as the Credential Endpoint
+        //requires, since the encryption a request asks for is judged against what the catalogue
+        //advertises (section 9.1) and an endpoint without it would serve requests no rule could judge.
         if(((ClientRecord)registration).IsCapabilityAllowed(WellKnownCapabilityIdentifiers.Oid4VciDeferredCredentialEndpoint)
-            && server?.OAuth().ResolveDeferredCredentialAsync is not null)
+            && server?.OAuth().ResolveDeferredCredentialAsync is not null
+            && server?.OAuth().ContributeCredentialIssuerMetadataAsync is not null)
         {
             candidates.Add(BuildDeferredCredentialEndpoint());
         }
@@ -261,7 +300,9 @@ public static class Oid4VciEndpoints
     /// <summary>
     /// Builds the OID4VCI 1.0 §8 Credential Endpoint candidate. Stateless and <b>protected</b>
     /// (§8.3.1.1: the Wallet presents the access token the grant minted): the library validates
-    /// the bearer token, parses the §8.2 request, enforces the credential-identifier shape, and
+    /// the bearer token, parses the section 8.2 request, enforces the credential-identifier shape, holds
+    /// the request to the token's grant and to the one catalogue it reads (see
+    /// <see cref="AuthorizeCredentialRequest"/> and <see cref="ValidateConfigurationConstraints"/>), and
     /// hands the request plus the validated access-token claims to the
     /// <see cref="AuthorizationServerIntegration.IssueCredentialAsync"/> seam, which verifies
     /// the holder proofs and mints the Credential. The library maps the returned decision to
@@ -316,8 +357,18 @@ public static class Oid4VciEndpoints
                 //§8.3.1.1: the Credential Request must carry an Access Token that enables
                 //issuance. The library validates the AS-issued token (signature, iss, exp) —
                 //the same protected-resource boundary UserInfo applies — before any minting.
+                //The Authorization field is read once; sent on two lines it is no credential
+                //(RFC 9110 Section 11.6.2) and the request is refused 400 invalid_request with
+                //the Bearer and the DPoP challenge (RFC 9449 Section 7.2, Figure 19).
+                AuthorizationFieldReading authorization = BearerTokenValidation.ReadAuthorizationField(context);
+                if(authorization.IsRepeated)
+                {
+                    return Respond(await CredentialEndpointDpopValidation.RefuseRepeatedAuthorizationAsync(
+                        server, registration, context, isDpopAccepted: true, ct).ConfigureAwait(false));
+                }
+
                 if(!BearerTokenValidation.TryExtractAccessToken(
-                    context, out string? bearerToken, out bool isDpopPresentation))
+                    authorization, out string? bearerToken, out bool isDpopPresentation))
                 {
                     return Respond(await CredentialEndpointDpopValidation.RefuseMissingCredentialsAsync(
                         server, registration, context, ct).ConfigureAwait(false));
@@ -379,12 +430,27 @@ public static class Oid4VciEndpoints
                         "The Credential Request could not be parsed."));
                 }
 
+                //Section 12.2.4: the catalogue the gate guarantees is read once for this request and
+                //handed to every rule that reads it (encryption, scope, key attestation, batch), so a
+                //catalogue the application alters while the request is served answers every rule
+                //the same.
+                CredentialIssuerMetadataContribution catalogue = await oauth.ContributeCredentialIssuerMetadataAsync!(
+                    registration, context, ct).ConfigureAwait(false);
+
+                //Section 12.2.4: the request is judged only against a catalogue the metadata endpoint
+                //publishes; under any other it is the server's own fault, answered as that endpoint
+                //answers the catalogue, before any rule reads it.
+                ServerHttpResponse? catalogueFailure = ValidatePublishableCatalogue(catalogue);
+                if(catalogueFailure is not null)
+                {
+                    return Respond(catalogueFailure);
+                }
+
                 //§10 / §12.2.4: the gate enforces what the issuer metadata promises — an
                 //advertised encryption_required:true makes a plain request, or one without
                 //response-encryption keys, a downgrade rather than a choice.
                 (bool isRequestEncryptionRequired, bool isResponseEncryptionRequired) =
-                    await ReadEncryptionRequirementsAsync(server, registration, context, ct)
-                        .ConfigureAwait(false);
+                    ReadEncryptionRequirements(catalogue);
 
                 //§8.2: "Credential Request encryption MUST be used if the
                 //credential_response_encryption parameter is included, to prevent it being
@@ -422,8 +488,8 @@ public static class Oid4VciEndpoints
                 //and the JWE alg MUST equal the chosen JWK's alg member. Enforced as a library
                 //guarantee BEFORE the application's composition seam, so the §10 alg MUST cannot
                 //be skipped by an unguarded seam.
-                ServerHttpResponse? responseEncryptionFailure = await ValidateResponseEncryptionParametersAsync(
-                    server, registration, request.ResponseEncryption, context, ct).ConfigureAwait(false);
+                ServerHttpResponse? responseEncryptionFailure = ValidateResponseEncryptionParameters(
+                    catalogue, request.ResponseEncryption);
                 if(responseEncryptionFailure is not null)
                 {
                     return Respond(responseEncryptionFailure);
@@ -440,11 +506,21 @@ public static class Oid4VciEndpoints
                         "Exactly one of credential_configuration_id or credential_identifier is required."));
                 }
 
-                //§8.2 scope binding + §12.2.4 batch ceiling — both enforced off the same issuer
-                //metadata contribution the document advertises, so the request cannot draw a
-                //configuration the token was not scoped for or exceed the advertised batch_size.
-                ServerHttpResponse? constraintFailure = await ValidateConfigurationConstraintsAsync(
-                    server, registration, request, accessToken!, context, ct).ConfigureAwait(false);
+                //Section 8.2: the token's granted openid_credential details decide which of the two
+                //members the request may name, and name the configuration a granted identifier
+                //stands for.
+                (string? authorizedConfigurationId, ServerHttpResponse? grantFailure) =
+                    AuthorizeCredentialRequest(request, accessToken!);
+                if(grantFailure is not null)
+                {
+                    return Respond(grantFailure);
+                }
+
+                //Section 8.2 scope binding, the Appendix D key attestation and the section 12.2.4
+                //batch ceiling, judged against the one catalogue for the configuration the grant
+                //authorized; a configuration the catalogue does not list is unknown.
+                ServerHttpResponse? constraintFailure = ValidateConfigurationConstraints(
+                    catalogue, request, authorizedConfigurationId!, accessToken!, oauth.Codecs.Decoder, oauth.MemoryPool);
                 if(constraintFailure is not null)
                 {
                     return Respond(constraintFailure);
@@ -627,8 +703,18 @@ public static class Oid4VciEndpoints
 
                 //§9: the Wallet presents an access token valid for the issuance previously
                 //requested at the Credential Endpoint — the same protected-resource boundary.
+                //The Authorization field is read once; sent on two lines it is no credential
+                //(RFC 9110 Section 11.6.2) and the request is refused 400 invalid_request with
+                //the Bearer and the DPoP challenge (RFC 9449 Section 7.2, Figure 19).
+                AuthorizationFieldReading authorization = BearerTokenValidation.ReadAuthorizationField(context);
+                if(authorization.IsRepeated)
+                {
+                    return Respond(await CredentialEndpointDpopValidation.RefuseRepeatedAuthorizationAsync(
+                        server, registration, context, isDpopAccepted: true, ct).ConfigureAwait(false));
+                }
+
                 if(!BearerTokenValidation.TryExtractAccessToken(
-                    context, out string? bearerToken, out bool isDpopPresentation))
+                    authorization, out string? bearerToken, out bool isDpopPresentation))
                 {
                     return Respond(await CredentialEndpointDpopValidation.RefuseMissingCredentialsAsync(
                         server, registration, context, ct).ConfigureAwait(false));
@@ -694,10 +780,21 @@ public static class Oid4VciEndpoints
                 }
 
                 //§10 / §12.2.4: the same metadata-promised gate the Credential Endpoint runs —
-                //the deferred leg is not a downgrade path around it.
+                //the deferred leg is not a downgrade path around it. The catalogue the gate
+                //guarantees is read once for this request and handed to both rules.
+                CredentialIssuerMetadataContribution catalogue = await oauth.ContributeCredentialIssuerMetadataAsync!(
+                    registration, context, ct).ConfigureAwait(false);
+
+                //Section 12.2.4: the same publishable-catalogue check the Credential Endpoint runs,
+                //before any rule reads the catalogue.
+                ServerHttpResponse? catalogueFailure = ValidatePublishableCatalogue(catalogue);
+                if(catalogueFailure is not null)
+                {
+                    return Respond(catalogueFailure);
+                }
+
                 (bool isRequestEncryptionRequired, bool isResponseEncryptionRequired) =
-                    await ReadEncryptionRequirementsAsync(server, registration, context, ct)
-                        .ConfigureAwait(false);
+                    ReadEncryptionRequirements(catalogue);
 
                 //§9.1: "Deferred Credential Request encryption MUST [be] used if the
                 //credential_response_encryption parameter is included, to prevent it being
@@ -731,8 +828,8 @@ public static class Oid4VciEndpoints
                 //§10 / §12.2.4: the requested JWE alg and enc MUST be advertised, and the JWE alg
                 //MUST equal the chosen JWK's alg — the same library guarantee the Credential
                 //Endpoint enforces, applied to the §9.1 newly-provided object.
-                ServerHttpResponse? responseEncryptionFailure = await ValidateResponseEncryptionParametersAsync(
-                    server, registration, responseEncryption, context, ct).ConfigureAwait(false);
+                ServerHttpResponse? responseEncryptionFailure = ValidateResponseEncryptionParameters(
+                    catalogue, responseEncryption);
                 if(responseEncryptionFailure is not null)
                 {
                     return Respond(responseEncryptionFailure);
@@ -827,34 +924,57 @@ public static class Oid4VciEndpoints
 
 
     /// <summary>
-    /// Reads the issuer's §12.2.4 encryption-requirement flags off the metadata contribution —
-    /// the same application data the metadata endpoint advertises, so the gate enforces
-    /// exactly what the document promises. An unwired contribution seam (or absent objects)
-    /// requires nothing.
+    /// Answers whether <paramref name="catalogue"/> is a catalogue the Credential Issuer Metadata
+    /// endpoint publishes, by the one body that decides it,
+    /// <see cref="CredentialIssuerMetadataValidation.Validate(CredentialIssuerMetadataContribution)"/>:
+    /// a catalogue it refuses is answered 500 <c>server_error</c> with the first violation as the
+    /// description, and <see langword="null"/> answers a catalogue it accepts. The metadata endpoint
+    /// answers its document with this, and the Credential Endpoint and the Deferred Credential
+    /// Endpoint run it right after their one catalogue read and before any rule reads the catalogue,
+    /// so a request is judged only against the catalogue the metadata endpoint would publish, and
+    /// under any other the request is the server's own fault, answered as the metadata endpoint
+    /// answers that catalogue, with neither the issuance seam nor the deferred seam reached.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-12.2.4">OID4VCI 1.0 Section 12.2.4</see>,
+    /// on <c>credential_response_encryption</c>: "encryption_required: REQUIRED. Boolean value
+    /// specifying whether the Credential Issuer requires the additional encryption on top of TLS for
+    /// the Credential Response."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.6.1">RFC 9110 Section 15.6.1</see>:
+    /// "The 500 (Internal Server Error) status code indicates that the server encountered an unexpected
+    /// condition that prevented it from fulfilling the request."
     /// </summary>
-    private static async ValueTask<(bool IsRequestEncryptionRequired, bool IsResponseEncryptionRequired)>
-        ReadEncryptionRequirementsAsync(
-            EndpointServer server,
-            ClientRecord registration,
-            ExchangeContext context,
-            CancellationToken cancellationToken)
+    /// <param name="catalogue">The catalogue read for this request.</param>
+    /// <returns>The 500 <c>server_error</c> answer, or <see langword="null"/> when the catalogue is publishable.</returns>
+    private static ServerHttpResponse? ValidatePublishableCatalogue(CredentialIssuerMetadataContribution catalogue)
     {
-        var oauth = server.OAuth();
-        if(oauth.ContributeCredentialIssuerMetadataAsync is null)
-        {
-            return (false, false);
-        }
+        string? metadataFault = CredentialIssuerMetadataValidation.Validate(catalogue);
 
-        CredentialIssuerMetadataContribution contribution =
-            await oauth.ContributeCredentialIssuerMetadataAsync(
-                registration, context, cancellationToken).ConfigureAwait(false);
-
-        return (
-            ReadEncryptionRequiredFlag(contribution.CredentialRequestEncryption),
-            ReadEncryptionRequiredFlag(contribution.CredentialResponseEncryption));
+        return metadataFault is null ? null : ServerHttpResponse.ServerError(OAuthErrors.ServerError, metadataFault);
     }
 
 
+    /// <summary>
+    /// Reads the issuer's section 12.2.4 encryption-requirement flags off the catalogue the request
+    /// read once, the same application data the metadata endpoint advertises, so the endpoint
+    /// enforces exactly what the document promises. The catalogue has passed
+    /// <see cref="ValidatePublishableCatalogue"/>, which holds each present encryption object's
+    /// <c>encryption_required</c> to a boolean, so the flag read here is the one the document
+    /// publishes; an absent encryption object requires nothing.
+    /// </summary>
+    /// <param name="catalogue">The catalogue read for this request.</param>
+    /// <returns>Whether request encryption and response encryption are each required.</returns>
+    private static (bool IsRequestEncryptionRequired, bool IsResponseEncryptionRequired) ReadEncryptionRequirements(
+        CredentialIssuerMetadataContribution catalogue) =>
+        (ReadEncryptionRequiredFlag(catalogue.CredentialRequestEncryption),
+            ReadEncryptionRequiredFlag(catalogue.CredentialResponseEncryption));
+
+
+    /// <summary>
+    /// Whether an advertised encryption object sets <c>encryption_required</c> to
+    /// <see langword="true"/>; the object, when present, carries the flag as a boolean by
+    /// <see cref="ValidatePublishableCatalogue"/>.
+    /// </summary>
+    /// <param name="encryptionObject">The advertised encryption object, or <see langword="null"/> when none is advertised.</param>
+    /// <returns><see langword="true"/> when the object requires encryption.</returns>
     private static bool ReadEncryptionRequiredFlag(IReadOnlyDictionary<string, object>? encryptionObject) =>
         encryptionObject is not null
             && encryptionObject.TryGetValue("encryption_required", out object? value)
@@ -863,33 +983,64 @@ public static class Oid4VciEndpoints
 
 
     /// <summary>
-    /// §10 / §12.2.4 response-encryption parameter validation, run as a library guarantee BEFORE
-    /// the application's <see cref="AuthorizationServerIntegration.EncryptCredentialResponseAsync"/>
-    /// composition seam. The JWE composition is a deployment seam (a post-quantum KEM needs no
-    /// library change), so the §10 algorithm MUSTs are enforced here rather than inside the seam:
+    /// Section 10 and section 12.2.4 response-encryption parameter validation, run as a library
+    /// guarantee BEFORE the application's
+    /// <see cref="AuthorizationServerIntegration.EncryptCredentialResponseAsync"/> composition seam.
+    /// The JWE composition is a deployment seam (a post-quantum KEM needs no library change), so the
+    /// section 10 algorithm MUSTs are enforced here rather than inside the seam:
     /// <list type="bullet">
-    /// <item>§10 "The alg parameter MUST be present." — the JWK MUST carry an <c>alg</c> member.</item>
-    /// <item>§12.2.4 — the requested <c>alg</c> MUST be among the advertised
-    /// <c>alg_values_supported</c>, and the <c>enc</c> among <c>enc_values_supported</c>, when the
-    /// issuer advertises them.</item>
+    /// <item>The catalogue advertises encrypted responses only through a
+    /// <c>credential_response_encryption</c> object; an absent object supports no encrypted response,
+    /// so a request asking for one is refused with the fixed description and neither the issuance nor
+    /// the deferred seam is reached. A present object carries a non-empty <c>alg_values_supported</c>
+    /// and a non-empty <c>enc_values_supported</c>: the endpoint ran the catalogue through
+    /// <see cref="ValidatePublishableCatalogue"/> before this, and a catalogue whose object lacks a
+    /// list, or holds an empty one, was answered 500 <c>server_error</c> there, so this method holds
+    /// no second test of the lists (one body decides what a publishable catalogue is).</item>
+    /// <item>Section 10, "The alg parameter MUST be present.": the JWK carries an <c>alg</c> member.</item>
+    /// <item>Section 12.2.4: the requested <c>alg</c> is among the advertised
+    /// <c>alg_values_supported</c> and the <c>enc</c> among <c>enc_values_supported</c>; both
+    /// membership checks always run.</item>
     /// </list>
     /// Returns the <c>invalid_encryption_parameters</c> refusal on any violation, or
     /// <see langword="null"/> when the request asks for no encryption or the parameters pass. The
-    /// §10 "JWE alg MUST equal the chosen JWK's alg" consistency is structural: the library reads
-    /// the alg only from the JWK (<see cref="CredentialResponseEncryption.Alg"/>), so the value the
-    /// seam composes into the JWE header and the JWK's alg are the same string.
+    /// section 10 consistency of the JWE <c>alg</c> with the chosen JWK's <c>alg</c> is structural:
+    /// the library reads the alg only from the JWK (<see cref="CredentialResponseEncryption.Alg"/>),
+    /// so the value the seam composes into the JWE header and the JWK's alg are the same string. The
+    /// advertised values are read off <paramref name="catalogue"/>, the catalogue the request read
+    /// once. One body serves the Credential Endpoint and the Deferred Credential Endpoint.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-12.2.4">OID4VCI 1.0 Section 12.2.4</see>:
+    /// "alg_values_supported: REQUIRED. A non-empty array containing a list of the JWE [RFC7516]
+    /// encryption algorithms (alg values) [RFC7518] supported by the Credential Endpoint to encode the
+    /// Credential Response in a JWT [RFC7519]." And: "enc_values_supported: REQUIRED. A non-empty array
+    /// containing a list of the JWE [RFC7516] encryption algorithms (enc values) [RFC7518] supported by
+    /// the Credential Endpoint to encode the Credential Response in a JWT [RFC7519]."
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-8.2">OID4VCI 1.0 Section 8.2</see>:
+    /// "The Credential Issuer indicates support for encrypted responses by including the
+    /// credential_response_encryption parameter in the Credential Issuer Metadata."
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-8.3.1.2">OID4VCI 1.0 Section 8.3.1.2</see>:
+    /// "invalid_encryption_parameters: This error occurs when the encryption parameters in the
+    /// Credential Request are either invalid or missing."
     /// </summary>
-    private static async ValueTask<ServerHttpResponse?> ValidateResponseEncryptionParametersAsync(
-        EndpointServer server,
-        ClientRecord registration,
-        CredentialResponseEncryption? encryption,
-        ExchangeContext context,
-        CancellationToken cancellationToken)
+    /// <param name="catalogue">The catalogue read for this request.</param>
+    /// <param name="encryption">The request's response-encryption parameters, or <see langword="null"/>.</param>
+    /// <returns>The refusal, or <see langword="null"/> when the parameters pass.</returns>
+    private static ServerHttpResponse? ValidateResponseEncryptionParameters(
+        CredentialIssuerMetadataContribution catalogue,
+        CredentialResponseEncryption? encryption)
     {
-        var oauth = server.OAuth();
         if(encryption is null)
         {
             return null;
+        }
+
+        //Section 8.2: an absent object advertises no encrypted response. A present one carries both
+        //of its REQUIRED non-empty lists, held by the publishable-catalogue check the endpoint ran.
+        IReadOnlyDictionary<string, object>? responseEncryption = catalogue.CredentialResponseEncryption;
+        if(responseEncryption is null)
+        {
+            return CredentialError(
+                Oid4VciCredentialErrors.InvalidEncryptionParameters, ResponseEncryptionNotAdvertisedDescription);
         }
 
         //§10: "The alg parameter MUST be present." A response-encryption object whose JWK omits
@@ -901,25 +1052,9 @@ public static class Oid4VciEndpoints
                 "credential_response_encryption must carry jwk (with a §10 alg member) and enc.");
         }
 
-        if(oauth.ContributeCredentialIssuerMetadataAsync is null)
-        {
-            return null;
-        }
-
-        CredentialIssuerMetadataContribution contribution =
-            await oauth.ContributeCredentialIssuerMetadataAsync(
-                registration, context, cancellationToken).ConfigureAwait(false);
-
-        IReadOnlyDictionary<string, object>? responseEncryption = contribution.CredentialResponseEncryption;
-        if(responseEncryption is null)
-        {
-            return null;
-        }
-
-        //§12.2.4: a requested alg / enc the issuer did not advertise is unsupported — refused
-        //fail-closed rather than handed to the seam.
-        if(IsAdvertised(responseEncryption, "alg_values_supported") && !ValueIsAdvertised(
-            responseEncryption, "alg_values_supported", encryption.Alg!))
+        //Section 12.2.4: a requested alg or enc the issuer did not advertise is unsupported, refused
+        //fail-closed rather than handed to the seam; both checks always run.
+        if(!ValueIsAdvertised(responseEncryption, "alg_values_supported", encryption.Alg!))
         {
             return CredentialError(
                 Oid4VciCredentialErrors.InvalidEncryptionParameters,
@@ -927,8 +1062,7 @@ public static class Oid4VciEndpoints
                 + "advertised alg_values_supported (§12.2.4).");
         }
 
-        if(IsAdvertised(responseEncryption, "enc_values_supported") && !ValueIsAdvertised(
-            responseEncryption, "enc_values_supported", encryption.Enc!))
+        if(!ValueIsAdvertised(responseEncryption, "enc_values_supported", encryption.Enc!))
         {
             return CredentialError(
                 Oid4VciCredentialErrors.InvalidEncryptionParameters,
@@ -938,14 +1072,6 @@ public static class Oid4VciEndpoints
 
         return null;
     }
-
-
-    /// <summary>Whether the response-encryption object advertises a non-empty list under <paramref name="member"/>.</summary>
-    private static bool IsAdvertised(IReadOnlyDictionary<string, object> responseEncryption, string member) =>
-        responseEncryption.TryGetValue(member, out object? value)
-            && value is System.Collections.IEnumerable enumerable
-            && enumerable is not string
-            && EnumerableHasAny(enumerable);
 
 
     /// <summary>Whether <paramref name="candidate"/> appears as a string entry in the advertised <paramref name="member"/> list.</summary>
@@ -971,12 +1097,196 @@ public static class Oid4VciEndpoints
     }
 
 
-    /// <summary>Whether the (already non-string) enumerable yields at least one element.</summary>
-    private static bool EnumerableHasAny(System.Collections.IEnumerable enumerable)
+    /// <summary>
+    /// The refusal description of a request naming <c>credential_configuration_id</c> under an Access
+    /// Token whose Token Response returned <c>credential_identifiers</c>.
+    /// </summary>
+    private static string ConfigurationUnderGrantedIdentifiersDescription { get; } =
+        "credential_configuration_id is not used when the Token Response returned credential_identifiers; "
+        + "request by credential_identifier (section 8.2).";
+
+    /// <summary>
+    /// The refusal description of a request naming <c>credential_identifier</c> under an Access Token
+    /// whose Token Response returned no <c>credential_identifiers</c>.
+    /// </summary>
+    private static string IdentifierWithoutGrantedIdentifiersDescription { get; } =
+        "credential_identifier is used only when the Token Response returned credential_identifiers (section 8.2).";
+
+    /// <summary>The refusal description of a <c>credential_identifier</c> no granted detail lists.</summary>
+    private static string UnknownCredentialIdentifierDescription { get; } =
+        "The credential_identifier is not one this Access Token was issued for.";
+
+    /// <summary>The refusal description of a configuration the Credential Issuer's catalogue does not list.</summary>
+    private static string UnknownCredentialConfigurationDescription { get; } =
+        "The requested Credential Configuration is not one this Credential Issuer supports.";
+
+    /// <summary>
+    /// The refusal description of a request by a configuration whose declared <c>scope</c> the Access
+    /// Token was not granted.
+    /// </summary>
+    private static string ScopeNotGrantedDescription { get; } =
+        "The requested credential_configuration_id is not authorized by the Access Token's scope (section 8.2).";
+
+    /// <summary>
+    /// The server-error description of a <c>credential_identifier</c> the Access Token's grant lists
+    /// under more than one configuration: the grant is the application's inconsistency, and the
+    /// description names no value from the request.
+    /// </summary>
+    private static string AmbiguousGrantedIdentifierDescription { get; } =
+        "The Access Token's grant lists the credential_identifier under more than one Credential Configuration.";
+
+    /// <summary>
+    /// The refusal description of a request asking for an encrypted response from a Credential Issuer
+    /// whose catalogue carries no <c>credential_response_encryption</c> object (a present object lacking
+    /// a REQUIRED member is a catalogue the metadata endpoint refuses, answered 500 before this).
+    /// </summary>
+    private static string ResponseEncryptionNotAdvertisedDescription { get; } =
+        "The Credential Issuer Metadata advertises no credential_response_encryption, so no encrypted response can be requested.";
+
+
+    /// <summary>
+    /// Holds a Credential Request to what its Access Token granted, by the
+    /// <c>openid_credential</c> objects the token endpoint embedded in the token's RFC 9396
+    /// <c>authorization_details</c> claim (each carrying <c>credential_configuration_id</c> and
+    /// <c>credential_identifiers</c>). With such details, a request by
+    /// <c>credential_configuration_id</c> is an invalid request and a <c>credential_identifier</c> no
+    /// detail lists is unknown; without them, a request by <c>credential_identifier</c> is an invalid
+    /// request.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-8.2">OID4VCI 1.0 Section 8.2</see>:
+    /// "credential_identifier: REQUIRED when an Authorization Details of type openid_credential was
+    /// returned from the Token Response. It MUST NOT be used otherwise." And: "credential_configuration_id:
+    /// REQUIRED if a credential_identifiers parameter was not returned from the Token Response as part
+    /// of the authorization_details parameter. It MUST NOT be used otherwise."
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-8.3.1.2">OID4VCI 1.0 Section 8.3.1.2</see>:
+    /// "unknown_credential_identifier: Requested Credential identifier is unknown."
+    /// </summary>
+    /// <param name="request">The parsed request, naming exactly one of the two members.</param>
+    /// <param name="accessToken">The validated Access Token's claims.</param>
+    /// <returns>
+    /// The configuration the grant authorizes (the request's own <c>credential_configuration_id</c>,
+    /// or the configuration of the detail listing the requested identifier) and no failure; or the
+    /// refusal.
+    /// </returns>
+    private static (string? AuthorizedConfigurationId, ServerHttpResponse? Failure) AuthorizeCredentialRequest(
+        CredentialRequest request,
+        JwtPayload accessToken)
     {
-        foreach(object? _ in enumerable)
+        List<IReadOnlyDictionary<string, object>> grantedDetails = ReadGrantedCredentialDetails(accessToken);
+        bool hasGrantedDetails = grantedDetails.Count > 0;
+        bool isByIdentifier = !string.IsNullOrWhiteSpace(request.CredentialIdentifier);
+
+        return (hasGrantedDetails, isByIdentifier) switch
         {
-            return true;
+            (false, false) => (request.CredentialConfigurationId, null),
+            (false, true) => (null, CredentialError(
+                Oid4VciCredentialErrors.InvalidCredentialRequest, IdentifierWithoutGrantedIdentifiersDescription)),
+            (true, false) => (null, CredentialError(
+                Oid4VciCredentialErrors.InvalidCredentialRequest, ConfigurationUnderGrantedIdentifiersDescription)),
+            (true, true) => FindGrantedConfiguration(grantedDetails, request.CredentialIdentifier!)
+        };
+    }
+
+
+    /// <summary>
+    /// Scans every granted detail for the <c>credential_identifiers</c> that list
+    /// <paramref name="credentialIdentifier"/> and answers the one <c>credential_configuration_id</c>
+    /// they name; the <c>unknown_credential_identifier</c> refusal when no detail with a configuration
+    /// lists it; and a 500 <c>server_error</c> when details naming different configurations list it,
+    /// since such an identifier names no one Credential Dataset and the grant is the application's
+    /// inconsistency, not the caller's.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.2">OID4VCI 1.0 Section 6.2</see>:
+    /// "credential_identifiers: REQUIRED. A non-empty array of strings, each uniquely identifying a
+    /// Credential Dataset that can be issued using the Access Token returned in this response."
+    /// </summary>
+    /// <param name="grantedDetails">The token's granted <c>openid_credential</c> objects.</param>
+    /// <param name="credentialIdentifier">The requested identifier.</param>
+    /// <returns>The authorized configuration and no failure, or the refusal.</returns>
+    private static (string? AuthorizedConfigurationId, ServerHttpResponse? Failure) FindGrantedConfiguration(
+        List<IReadOnlyDictionary<string, object>> grantedDetails,
+        string credentialIdentifier)
+    {
+        string? authorizedConfigurationId = null;
+        foreach(IReadOnlyDictionary<string, object> detail in grantedDetails)
+        {
+            if(!detail.TryGetValue(Oid4VciCredentialParameterNames.CredentialConfigurationId, out object? idValue)
+                || idValue is not string grantedConfigurationId
+                || string.IsNullOrWhiteSpace(grantedConfigurationId)
+                || !IsIdentifierListed(detail, credentialIdentifier))
+            {
+                continue;
+            }
+
+            if(authorizedConfigurationId is not null
+                && !string.Equals(authorizedConfigurationId, grantedConfigurationId, StringComparison.Ordinal))
+            {
+                return (null, ServerHttpResponse.ServerError(
+                    OAuthErrors.ServerError, AmbiguousGrantedIdentifierDescription));
+            }
+
+            authorizedConfigurationId = grantedConfigurationId;
+        }
+
+        return authorizedConfigurationId is not null
+            ? (authorizedConfigurationId, null)
+            : (null, CredentialError(
+                Oid4VciCredentialErrors.UnknownCredentialIdentifier, UnknownCredentialIdentifierDescription));
+    }
+
+
+    /// <summary>
+    /// Reads the <see cref="AuthorizationDetailsTypeValues.OpenIdCredential"/> objects of the Access
+    /// Token's RFC 9396 <c>authorization_details</c> claim, the granted details the token endpoint
+    /// embedded; objects of other types, and entries that are not objects, are not grants of a
+    /// Credential.
+    /// </summary>
+    /// <param name="accessToken">The validated Access Token's claims.</param>
+    /// <returns>The granted <c>openid_credential</c> objects in claim order; empty when the token carries none.</returns>
+    private static List<IReadOnlyDictionary<string, object>> ReadGrantedCredentialDetails(JwtPayload accessToken)
+    {
+        List<IReadOnlyDictionary<string, object>> granted = [];
+        if(!accessToken.TryGetValue(OAuthRequestParameterNames.AuthorizationDetails, out object? rawDetails)
+            || rawDetails is not IReadOnlyList<object> details)
+        {
+            return granted;
+        }
+
+        foreach(object detail in details)
+        {
+            if(detail is IReadOnlyDictionary<string, object> detailMap
+                && detailMap.TryGetValue(AuthorizationDetailsParameterNames.Type, out object? typeValue)
+                && typeValue is string type
+                && string.Equals(type, AuthorizationDetailsTypeValues.OpenIdCredential, StringComparison.Ordinal))
+            {
+                granted.Add(detailMap);
+            }
+        }
+
+        return granted;
+    }
+
+
+    /// <summary>
+    /// Whether a granted detail's <c>credential_identifiers</c> array lists
+    /// <paramref name="credentialIdentifier"/>, compared ordinally.
+    /// </summary>
+    /// <param name="detail">One granted <c>openid_credential</c> object.</param>
+    /// <param name="credentialIdentifier">The requested identifier.</param>
+    /// <returns><see langword="true"/> when the array carries the identifier as a string entry.</returns>
+    private static bool IsIdentifierListed(IReadOnlyDictionary<string, object> detail, string credentialIdentifier)
+    {
+        if(!detail.TryGetValue(Oid4VciCredentialParameterNames.CredentialIdentifiers, out object? identifiersValue)
+            || identifiersValue is string
+            || identifiersValue is not System.Collections.IEnumerable identifiers)
+        {
+            return false;
+        }
+
+        foreach(object? entry in identifiers)
+        {
+            if(entry is string granted && string.Equals(granted, credentialIdentifier, StringComparison.Ordinal))
+            {
+                return true;
+            }
         }
 
         return false;
@@ -984,64 +1294,71 @@ public static class Oid4VciEndpoints
 
 
     /// <summary>
-    /// Enforces the two Credential Issuer Metadata constraints the document promises, read off
-    /// the same <see cref="AuthorizationServerIntegration.ContributeCredentialIssuerMetadataAsync"/>
-    /// contribution that advertises them: §8.2 scope binding (a request naming a
-    /// <c>credential_configuration_id</c> whose configuration declares a <c>scope</c> MUST present
-    /// an Access Token granted that scope) and the §12.2.4 batch ceiling (the proof count MUST NOT
-    /// exceed <c>batch_credential_issuance.batch_size</c>, and may exceed one only when batch
-    /// issuance is advertised). An unwired contribution advertises neither, so neither is enforced.
+    /// Enforces the Credential Issuer Metadata constraints for the configuration the grant authorized,
+    /// read off the one catalogue the request read: the configuration is listed in
+    /// <c>credential_configurations_supported</c>, else <c>unknown_credential_configuration</c>; a
+    /// request by <c>credential_configuration_id</c> presents an Access Token granted the scope the
+    /// configuration declares; the Appendix D key-attestation requirement; and the section 12.2.4 batch
+    /// ceiling.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-8.3.1.2">OID4VCI 1.0 Section 8.3.1.2</see>:
+    /// "unknown_credential_configuration: Requested Credential Configuration is unknown."
     /// </summary>
-    private static async ValueTask<ServerHttpResponse?> ValidateConfigurationConstraintsAsync(
-        EndpointServer server,
-        ClientRecord registration,
+    /// <param name="catalogue">The catalogue read for this request.</param>
+    /// <param name="request">The parsed request.</param>
+    /// <param name="authorizedConfigurationId">The configuration <see cref="AuthorizeCredentialRequest"/> answered.</param>
+    /// <param name="accessToken">The validated Access Token's claims.</param>
+    /// <param name="decoder">The base64url decoder for the key-attestation header check.</param>
+    /// <param name="pool">The pool the header check decodes into.</param>
+    /// <returns>The refusal, or <see langword="null"/> when every constraint holds.</returns>
+    private static ServerHttpResponse? ValidateConfigurationConstraints(
+        CredentialIssuerMetadataContribution catalogue,
         CredentialRequest request,
+        string authorizedConfigurationId,
         JwtPayload accessToken,
-        ExchangeContext context,
-        CancellationToken cancellationToken)
+        DecodeDelegate? decoder,
+        BaseMemoryPool pool)
     {
-        var oauth = server.OAuth();
-        if(oauth.ContributeCredentialIssuerMetadataAsync is null)
+        IReadOnlyDictionary<string, object>? configuration = LookupConfiguration(catalogue, authorizedConfigurationId);
+        if(configuration is null)
         {
-            return null;
+            return CredentialError(
+                Oid4VciCredentialErrors.UnknownCredentialConfiguration, UnknownCredentialConfigurationDescription);
         }
 
-        CredentialIssuerMetadataContribution contribution =
-            await oauth.ContributeCredentialIssuerMetadataAsync(
-                registration, context, cancellationToken).ConfigureAwait(false);
-
-        IReadOnlyDictionary<string, object>? configuration = LookupRequestedConfiguration(contribution, request);
-
-        ServerHttpResponse? scopeFailure = ValidateScopeConfigurationBinding(
-            configuration, accessToken, request.CredentialConfigurationId);
-        if(scopeFailure is not null)
+        //A request by identifier is authorized by the granted detail that lists it; the scope binding
+        //is the authorization of a request by configuration alone.
+        if(!string.IsNullOrWhiteSpace(request.CredentialConfigurationId))
         {
-            return scopeFailure;
+            ServerHttpResponse? scopeFailure = ValidateScopeConfigurationBinding(configuration, accessToken);
+            if(scopeFailure is not null)
+            {
+                return scopeFailure;
+            }
         }
 
         ServerHttpResponse? attestationFailure = ValidateKeyAttestationRequirement(
-            configuration, request, oauth.Codecs.Decoder, oauth.MemoryPool);
+            configuration, request, decoder, pool);
         if(attestationFailure is not null)
         {
             return attestationFailure;
         }
 
-        return ValidateBatchCeiling(contribution, request);
+        return ValidateBatchCeiling(catalogue, request);
     }
 
 
     /// <summary>
-    /// Returns the advertised configuration object for the request's
-    /// <c>credential_configuration_id</c>, or <see langword="null"/> when the request uses a
-    /// <c>credential_identifier</c> or the configuration is not in the advertised catalog.
+    /// Returns the catalogue's configuration object for <paramref name="configurationId"/>, or
+    /// <see langword="null"/> when the catalogue does not list it as an object.
     /// </summary>
-    private static IReadOnlyDictionary<string, object>? LookupRequestedConfiguration(
-        CredentialIssuerMetadataContribution contribution, CredentialRequest request)
+    /// <param name="catalogue">The catalogue read for this request.</param>
+    /// <param name="configurationId">The configuration the grant authorized.</param>
+    /// <returns>The configuration object, or <see langword="null"/>.</returns>
+    private static IReadOnlyDictionary<string, object>? LookupConfiguration(
+        CredentialIssuerMetadataContribution catalogue, string configurationId)
     {
-        if(string.IsNullOrWhiteSpace(request.CredentialConfigurationId)
-            || contribution.CredentialConfigurationsSupported is null
-            || !contribution.CredentialConfigurationsSupported.TryGetValue(
-                request.CredentialConfigurationId, out object? configurationObject)
+        if(catalogue.CredentialConfigurationsSupported is null
+            || !catalogue.CredentialConfigurationsSupported.TryGetValue(configurationId, out object? configurationObject)
             || configurationObject is not IReadOnlyDictionary<string, object> configuration)
         {
             return null;
@@ -1052,101 +1369,40 @@ public static class Oid4VciEndpoints
 
 
     /// <summary>
-    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html">OID4VCI 1.0</see>
-    /// §8.2: "The corresponding object in the <c>credential_configurations_supported</c> map MUST
-    /// contain one of the value(s) used in the <c>scope</c> parameter in the Authorization Request."
-    /// §8.2 further scopes that requirement to the request path where <c>credential_configuration_id</c>
-    /// is used at all — "REQUIRED if a <c>credential_identifiers</c> parameter was not returned from
-    /// the Token Response as part of the <c>authorization_details</c> parameter" — and §5.1.1 names
-    /// <c>credential_configuration_id</c> as the RFC 9396 <c>openid_credential</c> authorization
-    /// detail's own required field. When the Access Token's granted <c>authorization_details</c>
-    /// claim carries an <c>openid_credential</c> detail naming this request's
-    /// <paramref name="credentialConfigurationId"/>, that grant is the authorization for this
-    /// Credential Request and the scope rule does not apply; the scope rule applies only on the
-    /// scope-authorization path, where the token carries no such grant.
+    /// The scope binding of a request by <c>credential_configuration_id</c>: when the configuration
+    /// declares a <c>scope</c>, the Access Token's <c>scope</c> claim carries it; a token with no
+    /// <c>scope</c> claim grants no scope.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-8.2">OID4VCI 1.0 Section 8.2</see>:
+    /// "The corresponding object in the credential_configurations_supported map MUST contain one of
+    /// the value(s) used in the scope parameter in the Authorization Request."
     /// </summary>
+    /// <param name="configuration">The listed configuration object.</param>
+    /// <param name="accessToken">The validated Access Token's claims.</param>
+    /// <returns>The <c>invalid_credential_request</c> refusal, or <see langword="null"/> when the scope is granted or none is declared.</returns>
     private static ServerHttpResponse? ValidateScopeConfigurationBinding(
-        IReadOnlyDictionary<string, object>? configuration,
-        JwtPayload accessToken,
-        string? credentialConfigurationId)
+        IReadOnlyDictionary<string, object> configuration,
+        JwtPayload accessToken)
     {
-        if(configuration is null
-            || !configuration.TryGetValue(CredentialIssuerMetadataParameterNames.Scope, out object? scopeValue)
+        if(!configuration.TryGetValue(CredentialIssuerMetadataParameterNames.Scope, out object? scopeValue)
             || scopeValue is not string configurationScope
             || string.IsNullOrWhiteSpace(configurationScope))
         {
             return null;
         }
 
-        if(IsConfigurationGrantedByAuthorizationDetails(accessToken, credentialConfigurationId))
+        if(accessToken.TryGetValue(WellKnownJwtClaimNames.Scope, out object? grantedValue)
+            && grantedValue is string grantedScopes)
         {
-            return null;
-        }
-
-        if(!accessToken.TryGetValue(WellKnownJwtClaimNames.Scope, out object? grantedValue)
-            || grantedValue is not string grantedScopes
-            || string.IsNullOrWhiteSpace(grantedScopes))
-        {
-            return null;
-        }
-
-        foreach(string grantedScope in grantedScopes.Split(' ', StringSplitOptions.RemoveEmptyEntries))
-        {
-            if(string.Equals(grantedScope, configurationScope, StringComparison.Ordinal))
+            foreach(string grantedScope in grantedScopes.Split(' ', StringSplitOptions.RemoveEmptyEntries))
             {
-                return null;
+                if(string.Equals(grantedScope, configurationScope, StringComparison.Ordinal))
+                {
+                    return null;
+                }
             }
         }
 
-        return CredentialError(
-            Oid4VciCredentialErrors.InvalidCredentialRequest,
-            "The requested credential_configuration_id is not authorized by the Access Token's scope (§8.2).");
-    }
-
-
-    /// <summary>
-    /// Reads the Access Token's RFC 9396 §9.1 <c>authorization_details</c> claim (structured by
-    /// <see cref="AuthorizationServerHandlers.GrantedAuthorizationDetailsClaimKey"/> at the token
-    /// endpoint) and returns <see langword="true"/> when it carries an
-    /// <see cref="AuthorizationDetailsTypeValues.OpenIdCredential"/> detail whose
-    /// <see cref="Oid4VciCredentialParameterNames.CredentialConfigurationId"/> field names
-    /// <paramref name="credentialConfigurationId"/> — the OID4VCI 1.0 §5.1.1 grant this Credential
-    /// Request's scope binding is satisfied by.
-    /// </summary>
-    private static bool IsConfigurationGrantedByAuthorizationDetails(
-        JwtPayload accessToken,
-        string? credentialConfigurationId)
-    {
-        if(string.IsNullOrWhiteSpace(credentialConfigurationId)
-            || !accessToken.TryGetValue(OAuthRequestParameterNames.AuthorizationDetails, out object? rawDetails)
-            || rawDetails is not IReadOnlyList<object> details)
-        {
-            return false;
-        }
-
-        foreach(object detail in details)
-        {
-            if(detail is not IReadOnlyDictionary<string, object> detailMap)
-            {
-                continue;
-            }
-
-            if(!detailMap.TryGetValue(AuthorizationDetailsParameterNames.Type, out object? typeValue)
-                || typeValue is not string type
-                || !string.Equals(type, AuthorizationDetailsTypeValues.OpenIdCredential, StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            if(detailMap.TryGetValue(Oid4VciCredentialParameterNames.CredentialConfigurationId, out object? idValue)
-                && idValue is string grantedConfigurationId
-                && string.Equals(grantedConfigurationId, credentialConfigurationId, StringComparison.Ordinal))
-            {
-                return true;
-            }
-        }
-
-        return false;
+        return CredentialError(Oid4VciCredentialErrors.InvalidCredentialRequest, ScopeNotGrantedDescription);
     }
 
 
@@ -1554,8 +1810,18 @@ public static class Oid4VciEndpoints
 
                 //§11.3: a missing or invalid access token answers an RFC 6750 §3
                 //Authorization Error Response.
+                //The Authorization field is read once; sent on two lines it is no credential
+                //(RFC 9110 Section 11.6.2) and the request is refused 400 invalid_request with
+                //the Bearer and the DPoP challenge (RFC 9449 Section 7.2, Figure 19).
+                AuthorizationFieldReading authorization = BearerTokenValidation.ReadAuthorizationField(context);
+                if(authorization.IsRepeated)
+                {
+                    return Respond(await CredentialEndpointDpopValidation.RefuseRepeatedAuthorizationAsync(
+                        server, registration, context, isDpopAccepted: true, ct).ConfigureAwait(false));
+                }
+
                 if(!BearerTokenValidation.TryExtractAccessToken(
-                    context, out string? bearerToken, out bool isDpopPresentation))
+                    authorization, out string? bearerToken, out bool isDpopPresentation))
                 {
                     return Respond(await CredentialEndpointDpopValidation.RefuseMissingCredentialsAsync(
                         server, registration, context, ct).ConfigureAwait(false));
@@ -1818,10 +2084,10 @@ public static class Oid4VciEndpoints
                 //missing a REQUIRED member, a malformed display entry) fails LOUD here rather than
                 //serving a non-conformant document — the same fail-loud posture as a missing
                 //credential_endpoint. Format-specific REQUIRED members stay with the deployment.
-                string? metadataFault = CredentialIssuerMetadataValidation.Validate(contribution);
+                ServerHttpResponse? metadataFault = ValidatePublishableCatalogue(contribution);
                 if(metadataFault is not null)
                 {
-                    return Respond(ServerHttpResponse.ServerError(OAuthErrors.ServerError, metadataFault));
+                    return Respond(metadataFault);
                 }
 
                 //§12.2.2 Accept-Language: when the Wallet indicates preferred display language(s)

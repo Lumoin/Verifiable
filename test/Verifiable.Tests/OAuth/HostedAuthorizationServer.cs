@@ -1770,6 +1770,12 @@ internal sealed class HostedAuthorizationServer: IClientRegistrationStore
         ]);
         integration.ClaimIssuer = ContributionProfiles.StandardClaimIssuer(timeProvider);
 
+        //OID4VCI 1.0 Section 12.2.4: the Credential Endpoint is served only beside the Credential
+        //Issuer catalogue it judges every request against, so the hosted issuer lists the suite's
+        //configurations; a row stating another catalogue, or none, alters this one.
+        integration.ContributeCredentialIssuerMetadataAsync = static (_, _, _) =>
+            ValueTask.FromResult(TestHostShell.CreateDefaultCredentialCatalogue());
+
         //The shared executor (built above) holds the OID4VP verifier handlers
         //(SignJar, DecryptResponse) AND the SIOPv2 ValidateSelfIssuedIdToken handler.
         //Auth Code flows do not produce actions and ignore the executor.

@@ -96,4 +96,22 @@ public static class ServerEventNames
     /// <see langword="null"/>.
     /// </summary>
     public static string NoMatchEndpointNameUnresolvedTagName { get; } = "server.dispatch.no_match_endpoint_name_unresolved";
+
+    /// <summary>
+    /// A capability the application's materialization added to the matched request's registration, one the
+    /// loaded registration did not allow, was dropped: the request is judged by the materialized registration
+    /// with the loaded registration's resolved capabilities as the upper bound, so the materialization narrows
+    /// the endpoint chain and the resolved capabilities and never widens them. One event per dropped capability, carrying the
+    /// capability's <see cref="Verifiable.Server.CapabilityIdentifier.Urn"/> under the tag
+    /// <c>server.dispatch.materialized_capability</c>. Recorded only on the dispatch
+    /// <see cref="System.Diagnostics.Activity"/>, never in the response.
+    /// </summary>
+    public static string MaterializedCapabilityDropped { get; } = "server.dispatch.materialized_capability_dropped";
+
+    /// <summary>
+    /// The tag name in the <see cref="System.Diagnostics.ActivityTagsCollection"/> of a
+    /// <see cref="MaterializedCapabilityDropped"/> event carrying the dropped capability's
+    /// <see cref="Verifiable.Server.CapabilityIdentifier.Urn"/>.
+    /// </summary>
+    internal static string MaterializedCapabilityTagName { get; } = "server.dispatch.materialized_capability";
 }

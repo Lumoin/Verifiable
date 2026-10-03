@@ -75,7 +75,9 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
     /// request this chain was built for, that the per-request capability filter in
     /// <see cref="BuildForRequestAsync"/> then removed, either because the registration's resolved
     /// capability set or because a present <see cref="ServerConfiguration.DeclaredCapabilities"/> does
-    /// not name its capability. Empty for a chain built by the public
+    /// not name its capability, or, for a chain built for a materialized registration, because the
+    /// chain built for the loaded registration holds no endpoint of its name, HTTP method and flow kind. Empty for a
+    /// chain built by the public
     /// constructor, which takes endpoints already filtered by its caller.
     /// </summary>
     public IReadOnlyList<string> CapabilityFilteredCandidateNames { get; }
@@ -187,8 +189,75 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
     /// Thrown when <c>RequestServer</c> on
     /// <paramref name="context"/> is <see langword="null"/>.
     /// </exception>
-    public static async ValueTask<EndpointChain> BuildForRequestAsync(
+    public static ValueTask<EndpointChain> BuildForRequestAsync(
         IRegistrationRecord registration,
+        ExchangeContext context,
+        CancellationToken cancellationToken) =>
+        BuildBoundedForRequestAsync(registration, upperBound: null, boundingChain: null, context, cancellationToken);
+
+
+    /// <summary>
+    /// Builds the chain of active endpoints for a registration and inbound request as
+    /// <see cref="BuildForRequestAsync"/> does, with the
+    /// capabilities the capability-resolution seam answers held to <paramref name="upperBound"/>: a resolved set never
+    /// exceeds the bound, so a capability outside it neither admits a candidate to the chain nor reaches the set
+    /// stashed on <paramref name="context"/> for the gates that run inside the endpoints, and with the endpoints held to
+    /// those of <paramref name="boundingChain"/>: a candidate that chain holds no endpoint of, by name, HTTP method and
+    /// flow kind together, is dropped and recorded among <see cref="CapabilityFilteredCandidateNames"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The dispatcher passes both bounds when it judges a request by the registration the application's
+    /// <see cref="ServerIntegration.MaterializeRegistrationAsync"/> answered: the capabilities resolved for the
+    /// loaded registration that both registrations allow, and the chain built for the loaded registration, so a
+    /// materialization narrows what the server serves and never widens it. The chain bound holds where the
+    /// capability bound cannot reach: a builder whose gate reads two capabilities of the registration produces a
+    /// candidate that carries one of them, so a capability the materialized registration adds can admit a candidate
+    /// whose own capability is inside the capability bound. The chain bound drops such a candidate unless the bounding
+    /// chain holds an endpoint of the same name, HTTP method and flow kind.
+    /// </para>
+    /// <para>
+    /// The bound does not tell apart a builder that yields, under one name, HTTP method and flow kind, a candidate
+    /// whose handler depends on a capability beyond the one it carries: the bound compares what a chain records of an
+    /// endpoint, and a builder is handed the registration as the materialization answered it, so such a candidate is
+    /// admitted wherever the bounding chain holds an endpoint of its name, HTTP method and flow kind.
+    /// </para>
+    /// <para>
+    /// A name alone does not identify a candidate: an application's builder composed through
+    /// <see cref="ServerConfiguration.EndpointBuilders"/> may yield candidates that share a name across HTTP method or
+    /// flow kind, one of them behind a gate that reads a second capability, so a name bound would admit the gated one
+    /// where the bounding chain holds only the other. The name, the HTTP method and the flow kind identify the
+    /// candidate's role. Its capability is held by the capability bound and is not part of the identity, since a
+    /// builder may choose a candidate's capability from the registration's own capabilities: the library's token
+    /// endpoint builds its grant-type refusal under the first token-serving capability the registration allows, so a
+    /// materialization that removes that capability moves the same refusal to a kept one, and the refusal answers the
+    /// removed grant as for a registration that never held it.
+    /// </para>
+    /// </remarks>
+    /// <param name="registration">
+    /// The client registration whose capabilities determine which endpoints each module produces.
+    /// </param>
+    /// <param name="upperBound">
+    /// The capabilities the resolved set is held to, or <see langword="null"/> to take the resolved set as the
+    /// capability-resolution seam answers it.
+    /// </param>
+    /// <param name="boundingChain">
+    /// The chain whose endpoints this chain's endpoints are held to, by name, HTTP method and flow kind, or
+    /// <see langword="null"/> for no such bound.
+    /// </param>
+    /// <param name="context">The per-request context, carrying the active <see cref="EndpointServer"/>.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The chain of endpoints for this registration and request.</returns>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="registration"/> or <paramref name="context"/> is <see langword="null"/>.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when <c>RequestServer</c> on <paramref name="context"/> is <see langword="null"/>.
+    /// </exception>
+    internal static async ValueTask<EndpointChain> BuildBoundedForRequestAsync(
+        IRegistrationRecord registration,
+        IReadOnlySet<CapabilityIdentifier>? upperBound,
+        EndpointChain? boundingChain,
         ExchangeContext context,
         CancellationToken cancellationToken)
     {
@@ -215,14 +284,25 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
         //Per-call capability set — CAEP/RISC attenuation point. The library
         //default returns registration.AllowedCapabilities unchanged; custom
         //wirings narrow the set in response to per-request signals.
-        IReadOnlySet<CapabilityIdentifier> allowedCapabilities =
+        IReadOnlySet<CapabilityIdentifier> resolvedCapabilities =
             await server.Integration.ResolveCapabilitiesAsync!(
                 registration, context, cancellationToken).ConfigureAwait(false);
 
+        //A bound holds the resolved set to it; a set already within the bound is taken as resolved.
+        IReadOnlySet<CapabilityIdentifier> allowedCapabilities = upperBound is null || resolvedCapabilities.IsSubsetOf(upperBound)
+            ? resolvedCapabilities
+            : resolvedCapabilities.Where(upperBound.Contains).ToHashSet();
+
         //Stash on the context so request-time gating sites running inside
         //handlers (e.g., token-producer attenuation) can read the same
-        //resolver output without re-invoking the delegate.
+        //resolved set, held to the bound when one is given, without
+        //re-invoking the delegate.
         context.SetResolvedCapabilities(allowedCapabilities);
+
+        //A bounding chain admits only the endpoints it holds, each identified by its name, method and flow kind.
+        HashSet<(string Name, string HttpMethod, string KindName)>? boundingIdentities = boundingChain is null
+            ? null
+            : [.. boundingChain.Endpoints.Select(static endpoint => (endpoint.Name, endpoint.HttpMethod, endpoint.Kind.Name))];
 
         List<ServerEndpoint> resolved = [];
         List<string> capabilityFiltered = [];
@@ -235,7 +315,9 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
             foreach(EndpointCandidate candidate in candidates)
             {
                 if(!allowedCapabilities.Contains(candidate.Capability)
-                    || (declaredCapabilities is not null && !declaredCapabilities.Contains(candidate.Capability)))
+                    || (declaredCapabilities is not null && !declaredCapabilities.Contains(candidate.Capability))
+                    || (boundingIdentities is not null
+                        && !boundingIdentities.Contains((candidate.Name, candidate.HttpMethod, candidate.Kind.Name))))
                 {
                     capabilityFiltered.Add(candidate.Name);
 

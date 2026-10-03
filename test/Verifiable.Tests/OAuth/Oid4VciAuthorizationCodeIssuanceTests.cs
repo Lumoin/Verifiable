@@ -3,6 +3,7 @@ using System.Buffers;
 using System.Collections.Immutable;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -90,9 +91,20 @@ internal sealed class Oid4VciAuthorizationCodeIssuanceTests
 
     /// <summary>
     /// The whole journey: PAR carrying <c>authorization_details</c> + <c>issuer_state</c>, the
-    /// authorize GET, the callback, the token exchange, and the token spent on nonce, proof, and
-    /// Credential Request. The authorization seam sees the pushed details, the issuance seam
-    /// verifies the holder proof, and the wallet holds the minted credential.
+    /// authorize GET, the callback, the token exchange, and the token spent on nonce, proof, and a
+    /// Credential Request naming the first <c>credential_identifiers</c> value the Token Response
+    /// returned. The authorization seam sees the pushed details, the issuance seam verifies the
+    /// holder proof and receives the granted identifier with no configuration identifier, and the
+    /// wallet holds the minted credential.
+    /// What the row proves: the wallet writes the identifier the caller names, and only that member,
+    /// and the Credential Endpoint resolves the identifier's configuration from the token's grant and
+    /// issues. What it does not prove: on this path no library code learns the identifier, since the
+    /// authorization-code client's token result surfaces no granted <c>authorization_details</c>; the
+    /// row reads them from the Token Response as the wire carried it and passes
+    /// <see cref="CredentialRequestTarget.ForIdentifier"/> itself.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.2">OID4VCI 1.0 Section 6.2</see>:
+    /// "The Wallet MUST use these identifiers together with an Access Token in subsequent Credential
+    /// Requests."
     /// </summary>
     [TestMethod]
     public async Task ParPkceAuthorizationCodeJourneyEndsInAnIssuedCredential()
@@ -130,11 +142,85 @@ internal sealed class Oid4VciAuthorizationCodeIssuanceTests
 
         IssuerSeamObservations observations = await WireCredentialSeamsAsync(host).ConfigureAwait(false);
 
+        AuthorizationCodeGrant grant = await RedeemAuthorizationCodeAsync(host, material).ConfigureAwait(false);
+
+        Assert.IsNotEmpty(grant.CredentialIdentifiers,
+            "The Token Response must return the credential_identifiers the authorization seam granted.");
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+
+        Oid4VciWalletClient walletClient = BuildWalletClient(host);
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> issuedOutcome = await walletClient.IssueWithAccessTokenDetailedAsync(
+            grant.AccessToken,
+            grant.TokenType,
+            accessTokenExpiresAt: null,
+            material.Registration.IssuerUri!,
+            CredentialRequestTarget.ForIdentifier(grant.CredentialIdentifiers[0]),
+            holderPrivate,
+            holderPublic,
+            ResolveEndpoints(host, material),
+            responseEncryption: null,
+            TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(issuedOutcome.IsSuccess, "The auth-code journey's issuance must succeed over the wire.");
+        CredentialIssuanceResult issued = issuedOutcome.Value;
+
+        Assert.HasCount(1, issued.Credentials, "The auth-code journey must end in exactly the one requested credential.");
+        Assert.AreEqual(IssuedCredential, issued.Credentials[0],
+            "The wallet must hold the credential the issuer minted over the wire.");
+        Assert.IsTrue(observations.IsProofVerified,
+            "The issuance seam must have verified the holder proof signature and its c_nonce.");
+        Assert.AreEqual(material.Registration.IssuerUri!.OriginalString, observations.ProofAudience,
+            "The minted proof must carry the Credential Issuer identifier as aud.");
+        Assert.AreEqual(CredentialIdentifier, observations.RequestedIdentifier,
+            "The Credential Request must name the identifier the Token Response returned.");
+        Assert.IsNull(observations.RequestedConfigurationId,
+            "The Credential Request must not name a credential_configuration_id beside the identifier.");
+        Assert.IsNotNull(grantedDetails);
+        Assert.AreEqual(ConfigurationId, grantedDetails![0].CredentialConfigurationId,
+            "The authorization seam must have received the wallet-composed details.");
+    }
+
+
+    /// <summary>
+    /// What the authorization-code journey hands the wallet: the access token, its type and the
+    /// section 6.2 <c>credential_identifiers</c> the Token Response returned, in their order.
+    /// </summary>
+    /// <param name="AccessToken">The access token the token exchange minted.</param>
+    /// <param name="TokenType">The token's <c>token_type</c>.</param>
+    /// <param name="CredentialIdentifiers">The Token Response's <c>credential_identifiers</c> values.</param>
+    private sealed record AuthorizationCodeGrant(string AccessToken, string TokenType, IReadOnlyList<string> CredentialIdentifiers);
+
+
+    /// <summary>
+    /// Drives the authorization-code leg of the journey over the real wire: the pushed request
+    /// carrying the wallet-composed <c>authorization_details</c> and the offer's <c>issuer_state</c>,
+    /// the authorize GET, the callback and the token exchange. The Token Response is read as the
+    /// wire carried it for its <c>authorization_details</c>.
+    /// </summary>
+    /// <param name="host">The started host serving the Authorization Server.</param>
+    /// <param name="material">The registration the journey runs under.</param>
+    /// <returns>The access token, its type and the granted identifiers.</returns>
+    private async Task<AuthorizationCodeGrant> RedeemAuthorizationCodeAsync(TestHostShell host, VerifierKeyMaterial material)
+    {
+        string? tokenResponseBody = null;
+        string tokenPath = TestHostShell.ComposeEndpointPath(
+            WellKnownEndpointNames.AuthCodeToken, material.Registration.TenantId.Value);
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
-            await host.CreateOAuthClientAndRegistrationAsync(
+            await host.CreateObservedOAuthClientAndRegistrationAsync(
                 material.Registration,
                 RedirectUri.OriginalString,
                 PolicyProfile.Rfc6749WithPkce,
+                (endpoint, response) =>
+                {
+                    if(endpoint == new Uri(host.Host("default").HttpBaseAddress!, tokenPath))
+                    {
+                        tokenResponseBody = response.Body;
+                    }
+                },
                 TestContext.CancellationToken).ConfigureAwait(false);
 
         //Section 5.1.1: the wallet-composed authorization_details and the offer's issuer_state ride
@@ -193,37 +279,39 @@ internal sealed class Oid4VciAuthorizationCodeIssuanceTests
             ? (string)typeValue
             : WellKnownAuthenticationSchemes.Bearer;
 
-        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
-        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
-        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        Assert.IsNotNull(tokenResponseBody, "The token exchange's response must have crossed the wire.");
 
-        Oid4VciWalletClient walletClient = BuildWalletClient(host);
-        Result<CredentialIssuanceResult, Oid4VciRequestFailure> issuedOutcome = await walletClient.IssueWithAccessTokenDetailedAsync(
-            accessToken,
-            tokenType,
-            accessTokenExpiresAt: null,
-            material.Registration.IssuerUri!,
-            ConfigurationId,
-            holderPrivate,
-            holderPublic,
-            ResolveEndpoints(host, material),
-            responseEncryption: null,
-            TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy),
-            TestContext.CancellationToken).ConfigureAwait(false);
+        return new AuthorizationCodeGrant(accessToken, tokenType, ReadGrantedCredentialIdentifiers(tokenResponseBody));
+    }
 
-        Assert.IsTrue(issuedOutcome.IsSuccess, "The auth-code journey's issuance must succeed over the wire.");
-        CredentialIssuanceResult issued = issuedOutcome.Value;
 
-        Assert.HasCount(1, issued.Credentials, "The auth-code journey must end in exactly the one requested credential.");
-        Assert.AreEqual(IssuedCredential, issued.Credentials[0],
-            "The wallet must hold the credential the issuer minted over the wire.");
-        Assert.IsTrue(observations.IsProofVerified,
-            "The issuance seam must have verified the holder proof signature and its c_nonce.");
-        Assert.AreEqual(material.Registration.IssuerUri!.OriginalString, observations.ProofAudience,
-            "The minted proof must carry the Credential Issuer identifier as aud.");
-        Assert.IsNotNull(grantedDetails);
-        Assert.AreEqual(ConfigurationId, grantedDetails![0].CredentialConfigurationId,
-            "The authorization seam must have received the wallet-composed details.");
+    /// <summary>
+    /// Reads every <c>credential_identifiers</c> value of the <c>openid_credential</c> objects of a
+    /// Token Response's <c>authorization_details</c>, in document order; objects of other types are
+    /// skipped.
+    /// </summary>
+    /// <param name="tokenResponseBody">The Token Response body as the wire carried it.</param>
+    /// <returns>The granted identifiers; empty when the response returned none.</returns>
+    private static List<string> ReadGrantedCredentialIdentifiers(string tokenResponseBody)
+    {
+        List<string> identifiers = [];
+        using JsonDocument document = JsonDocument.Parse(tokenResponseBody);
+        if(!document.RootElement.TryGetProperty(OAuthRequestParameterNames.AuthorizationDetails, out JsonElement details))
+        {
+            return identifiers;
+        }
+
+        foreach(JsonElement detail in details.EnumerateArray())
+        {
+            if(detail.TryGetProperty("type", out JsonElement type)
+                && string.Equals(type.GetString(), "openid_credential", StringComparison.Ordinal)
+                && detail.TryGetProperty("credential_identifiers", out JsonElement granted))
+            {
+                identifiers.AddRange(granted.EnumerateArray().Select(static value => value.GetString()!));
+            }
+        }
+
+        return identifiers;
     }
 
 
@@ -235,6 +323,12 @@ internal sealed class Oid4VciAuthorizationCodeIssuanceTests
 
         /// <summary>The <c>aud</c> the verified proof carried.</summary>
         public string? ProofAudience { get; set; }
+
+        /// <summary>The <c>credential_identifier</c> the Credential Request named, if any.</summary>
+        public string? RequestedIdentifier { get; set; }
+
+        /// <summary>The <c>credential_configuration_id</c> the Credential Request named, if any.</summary>
+        public string? RequestedConfigurationId { get; set; }
     }
 
 
@@ -276,7 +370,8 @@ internal sealed class Oid4VciAuthorizationCodeIssuanceTests
 
 
     /// <summary>
-    /// Installs credential parsing, proof and issuance delegates through a requested alteration.
+    /// Installs credential parsing, the Credential Issuer catalogue listing <see cref="ConfigurationId"/>,
+    /// proof and issuance delegates through a requested alteration.
     /// </summary>
     private static async Task<IssuerSeamObservations> WireCredentialSeamsAsync(TestHostShell host)
     {
@@ -286,6 +381,12 @@ internal sealed class Oid4VciAuthorizationCodeIssuanceTests
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
             _ = candidateIntegration.UseDefaultCredentialRequestJsonParsing();
+
+            candidateIntegration.ContributeCredentialIssuerMetadataAsync = static (_, _, _) =>
+                ValueTask.FromResult(new CredentialIssuerMetadataContribution
+                {
+                    CredentialConfigurationsSupported = TestHostShell.ListCredentialConfigurations(ConfigurationId)
+                });
 
 
             candidateIntegration.IssueCredentialNonceAsync = (_, _) =>
@@ -318,6 +419,8 @@ internal sealed class Oid4VciAuthorizationCodeIssuanceTests
 
                     observations.IsProofVerified = true;
                     observations.ProofAudience = proofAudience;
+                    observations.RequestedIdentifier = request.CredentialIdentifier;
+                    observations.RequestedConfigurationId = request.CredentialConfigurationId;
 
                     return CredentialIssuanceDecision.Issue([IssuedCredential]);
                 }

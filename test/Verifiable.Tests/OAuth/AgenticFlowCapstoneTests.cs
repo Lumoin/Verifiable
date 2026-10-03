@@ -568,9 +568,11 @@ internal sealed class AgenticFlowCapstoneTests
     /// <summary>
     /// On the redeem leg: the client's CIMD document declares
     /// <c>token_endpoint_auth_method: private_key_jwt</c>, so a redeem carrying NO client
-    /// credentials at all is refused 401 <c>invalid_client</c> — CIMD-049's "any communication
-    /// with the authorization server MUST include client authentication of the registered type",
-    /// fail-closed against the materialized registration.
+    /// credentials at all is refused 400 <c>invalid_client</c>, the default status of <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see> at a server
+    /// that advertises no <c>client_secret_basic</c>:
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-client-id-metadata-document-02.html#section-8.2">draft-ietf-oauth-client-id-metadata-document-02 Section 8.2</see>,
+    /// "This establishes this client as a confidential client, and any communication with the authorization server
+    /// MUST include client authentication of the registered type.", fail-closed against the materialized registration.
     /// </summary>
     [TestMethod]
     public async Task RedeemWithoutClientAuthenticationIsRefused()
@@ -593,15 +595,16 @@ internal sealed class AgenticFlowCapstoneTests
             .ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(401, (int)response.StatusCode, body);
+        Assert.AreEqual(400, (int)response.StatusCode, body);
         AssertWireErrorCode(OAuthErrors.InvalidClient, body);
     }
 
 
     /// <summary>
     /// A tampered <c>private_key_jwt</c> client assertion on the redeem fails RFC 7523 §2.2
-    /// signature verification against the CIMD-materialized document jwks and is refused 401
-    /// <c>invalid_client</c>.
+    /// signature verification against the CIMD-materialized document jwks and is refused 400
+    /// <c>invalid_client</c>, the default status of <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see> at a server that advertises no
+    /// <c>client_secret_basic</c>.
     /// </summary>
     [TestMethod]
     public async Task RedeemWithTamperedClientAssertionIsRefused()
@@ -629,7 +632,7 @@ internal sealed class AgenticFlowCapstoneTests
             .ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(401, (int)response.StatusCode, body);
+        Assert.AreEqual(400, (int)response.StatusCode, body);
         AssertWireErrorCode(OAuthErrors.InvalidClient, body);
     }
 

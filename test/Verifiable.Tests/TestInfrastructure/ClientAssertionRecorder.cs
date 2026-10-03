@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Verifiable.JCose;
-using Verifiable.OAuth;
 using Verifiable.OAuth.Server;
 
 namespace Verifiable.Tests.TestInfrastructure;
@@ -15,7 +14,8 @@ internal static class ClientAssertionRecorder
 {
     /// <summary>
     /// Builds a <see cref="ValidateClientCredentialsDelegate"/> that appends the presented
-    /// <c>client_assertion</c> form field to <paramref name="recordedAssertions"/>, in the order
+    /// <c>client_assertion</c> of the reading it receives (<see cref="ClientCredentialReading.ClientAssertion"/>)
+    /// to <paramref name="recordedAssertions"/>, in the order
     /// each request reaches the server, then delegates to
     /// <see cref="PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate?,ClientAssertionAudiencePolicy?)"/>
     /// with no explicit policy, so the default accepted set is the one
@@ -34,14 +34,14 @@ internal static class ClientAssertionRecorder
 
         ValidateClientCredentialsDelegate inner = PrivateKeyJwtClientAuthentication.BuildValidator();
 
-        return async (request, fields, registration, context, cancellationToken) =>
+        return async (reading, registration, context, cancellationToken) =>
         {
-            if(fields.TryGetValue(OAuthRequestParameterNames.ClientAssertion, out string? assertion))
+            if(reading.ClientAssertion is string assertion)
             {
                 recordedAssertions.Add(assertion);
             }
 
-            return await inner(request, fields, registration, context, cancellationToken).ConfigureAwait(false);
+            return await inner(reading, registration, context, cancellationToken).ConfigureAwait(false);
         };
     }
 

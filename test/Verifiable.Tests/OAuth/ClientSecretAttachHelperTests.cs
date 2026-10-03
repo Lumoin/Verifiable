@@ -107,8 +107,8 @@ internal sealed class ClientSecretAttachHelperTests
 
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
-                ValueTask.FromResult(AuthCodeFlowDriver.DecodeAndMatchBasicHeader(request, clientId, clientSecret));
+            candidateIntegration.ValidateClientCredentialsAsync = (reading, registration, context, ct) =>
+                ValueTask.FromResult(AuthCodeFlowDriver.DecodeAndMatchBasicHeader(reading, clientId, clientSecret));
         }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -129,18 +129,17 @@ internal sealed class ClientSecretAttachHelperTests
 
 
     /// <summary>
-    /// RFC 6749 §2.3 ("The client MUST NOT use more than one authentication method in each
-    /// request") binds the CLIENT; the RFC has no distinct AS-side "MUST reject a double-credentialed
-    /// request" sentence in §2.3/§2.3.1. <see cref="ValidateClientCredentialsDelegate"/> receives BOTH
-    /// the incoming request (the <c>Authorization</c> header) and the form fields unconditionally, and
-    /// this library performs no structural rejection of a request presenting both — the
-    /// application-supplied seam is the sole arbiter. This test PINS that current, intentional
-    /// behavior: a request carrying a VALID <c>client_secret_basic</c> header AND a
-    /// <c>client_secret_post</c> <c>client_secret</c> field the seam never inspects is accepted,
-    /// proving the library does not reject the double-credentialed shape on the seam's behalf.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-2.3">RFC 6749 Section 2.3</see>: "The client
+    /// MUST NOT use more than one authentication method in each request.", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">Section 5.2</see> names the answer to a
+    /// request that utilizes more than one mechanism for authenticating the client, <c>invalid_request</c>.
+    /// A client credentials request carrying a VALID <c>client_secret_basic</c> credential AND a
+    /// <c>client_secret_post</c> <c>client_secret</c> field is refused over the wire with 400
+    /// <c>invalid_request</c> before the application's seam, which would accept the Basic credential alone,
+    /// runs.
     /// </summary>
     [TestMethod]
-    public async Task RequestCarryingBothBasicHeaderAndPostFieldsIsAcceptedWhenTheSeamOnlyChecksOneChannel()
+    public async Task RequestCarryingBothBasicHeaderAndPostFieldsIsAnInvalidRequest()
     {
         await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
@@ -153,22 +152,18 @@ internal sealed class ClientSecretAttachHelperTests
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
                 WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
 
-        //A client_secret_basic-only policy: the seam checks ONLY the Authorization header and never
-        //looks at the form fields, yet the endpoint hands both to it unconditionally
-        //(AuthCodeEndpoints.cs's ValidateClientCredentialsAsync call sites).
+        //A client_secret_basic-only policy: the seam accepts a valid Basic credential.
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
-                ValueTask.FromResult(AuthCodeFlowDriver.DecodeAndMatchBasicHeader(request, ClientId, ClientSecret));
+            candidateIntegration.ValidateClientCredentialsAsync = (reading, registration, context, ct) =>
+                ValueTask.FromResult(AuthCodeFlowDriver.DecodeAndMatchBasicHeader(reading, ClientId, ClientSecret));
         }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
 
-        //Attach BOTH a VALID Basic header and client_secret_post fields carrying a WRONG secret — RFC
-        //6749 §2.3 tells the CLIENT not to do this, but nothing on the authorization-server side
-        //structurally forbids it.
+        //Attach BOTH a VALID Basic credential and client_secret_post fields carrying a second secret.
         OutgoingHeaders headers = OutgoingHeaders.Empty.WithClientSecretBasic(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
         OutgoingFormFields form = new OutgoingFormFields { [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.ClientCredentials }
             .WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes("wrong-secret-the-seam-never-checks"));
@@ -177,9 +172,10 @@ internal sealed class ClientSecretAttachHelperTests
             host.SharedHttpClient!, tokenUrl, form, headers, TestContext.CancellationToken).ConfigureAwait(false);
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(200, (int)response.StatusCode, body,
-            "The current, intentional behavior: the seam alone decides; the library does not " +
-            "structurally reject a request presenting both an Authorization header and body credentials.");
+        Assert.AreEqual(400, (int)response.StatusCode, body);
+        Assert.AreEqual(
+            "{\"error\":\"invalid_request\",\"error_description\":\"The request authenticates the client by more than one method.\"}",
+            body);
     }
 
 
@@ -211,14 +207,14 @@ internal sealed class ClientSecretAttachHelperTests
         List<string> identifiedClientIds = [];
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+            candidateIntegration.ValidateClientCredentialsAsync = (reading, registration, context, ct) =>
             {
                 //Captured regardless of which value THIS call is about to return: this seam is only ever
                 //handed the already-resolved registration, never the other way around.
                 identifiedClientIds.Add(registration.ClientId);
 
                 return ValueTask.FromResult(
-                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    reading.ClientSecret is string secret
                     && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
             };
         }).ConfigureAwait(false);
@@ -233,7 +229,7 @@ internal sealed class ClientSecretAttachHelperTests
         using HttpResponseMessage rejected = await OAuthTestTransport.PostFormAsync(
             host.SharedHttpClient!, tokenUrl, rejectedForm, TestContext.CancellationToken).ConfigureAwait(false);
         string rejectedBody = await rejected.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(401, (int)rejected.StatusCode, rejectedBody);
+        Assert.AreEqual(400, (int)rejected.StatusCode, rejectedBody);
 
         //(b) CORRECT secret — authentication is about to be ACCEPTED.
         OutgoingFormFields acceptedForm = new OutgoingFormFields { [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.ClientCredentials }
@@ -290,9 +286,9 @@ internal sealed class ClientSecretAttachHelperTests
 
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
                 ValueTask.FromResult(
-                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    reading.ClientSecret is string secret
                     && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
         }).ConfigureAwait(false);
 

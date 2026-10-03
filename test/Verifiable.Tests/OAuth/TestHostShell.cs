@@ -1388,12 +1388,35 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// the client's actual outbound URL. Test isolation is preserved because
     /// each <see cref="TestHostShell"/> binds its own ephemeral port.
     /// </remarks>
-    public async ValueTask<(OAuthClient Client, ClientRegistration Registration, Dictionary<string, FlowState> ClientFlowStore)>
+    public ValueTask<(OAuthClient Client, ClientRegistration Registration, Dictionary<string, FlowState> ClientFlowStore)>
         CreateOAuthClientAndRegistrationAsync(
             ClientRecord record,
             string redirectUri,
             PolicyProfile? profile = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default) =>
+        CreateObservedOAuthClientAndRegistrationAsync(record, redirectUri, profile, observeFormPostResponse: null, cancellationToken);
+
+
+    /// <summary>
+    /// The HTTP-backed client factory of
+    /// <see cref="CreateOAuthClientAndRegistrationAsync(ClientRecord, string, PolicyProfile?, CancellationToken)"/>
+    /// whose form-post transport hands every response it receives, with the endpoint it was sent to, to
+    /// <paramref name="observeFormPostResponse"/> before the client reads it, so a test can read a response
+    /// member the client does not surface.
+    /// </summary>
+    /// <param name="record">The registration the client is created for.</param>
+    /// <param name="redirectUri">The client's redirect URI.</param>
+    /// <param name="profile">The client's policy profile, or <see langword="null"/> for HAIP 1.0.</param>
+    /// <param name="observeFormPostResponse">The observer of each form-post response, or <see langword="null"/>.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The client, its registration and the client's flow store.</returns>
+    public async ValueTask<(OAuthClient Client, ClientRegistration Registration, Dictionary<string, FlowState> ClientFlowStore)>
+        CreateObservedOAuthClientAndRegistrationAsync(
+            ClientRecord record,
+            string redirectUri,
+            PolicyProfile? profile,
+            Action<Uri, HttpResponseData>? observeFormPostResponse,
+            CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(record);
         ArgumentException.ThrowIfNullOrWhiteSpace(redirectUri);
@@ -1424,8 +1447,14 @@ internal sealed class TestHostShell: IAsyncDisposable
         System.Net.Http.HttpClient httpClient = SharedHttpClient!;
 
         OAuthClientInfrastructure infrastructure = OAuthClientInfrastructure.Create(
-            sendFormPostAsync: (endpoint, fields, headers, _, ct) =>
-                HttpClientTransport.SendFormPostAsync(httpClient, endpoint, fields, headers, ct),
+            sendFormPostAsync: async (endpoint, fields, headers, _, ct) =>
+            {
+                HttpResponseData response = await HttpClientTransport.SendFormPostAsync(
+                    httpClient, endpoint, fields, headers, ct).ConfigureAwait(false);
+                observeFormPostResponse?.Invoke(endpoint, response);
+
+                return response;
+            },
             saveStateAsync: (state, _, ct) =>
             {
                 clientFlowStore[state.FlowId] = state;
@@ -4444,12 +4473,19 @@ internal sealed class TestHostShell: IAsyncDisposable
         public bool IsParked { get; private set; }
 
 
-        /// <summary>Waits for the checkpoint or completed publication before the request can continue.</summary>
+        /// <summary>
+        /// Waits for the checkpoint or completed publication before the request can continue. The
+        /// worker invokes <c>DrainWaitStarted</c> before it completes <paramref name="alteration"/>
+        /// (a drain with no request in flight completes at once, so the drain itself can end first),
+        /// so the wait ends with <paramref name="alteration"/>'s own outcome when that request ends
+        /// first (a fault of the worker, a cancelled or refused request) instead of waiting for an
+        /// observation nothing will write.
+        /// </summary>
         /// <param name="alteration">The publication task whose completed wait must finish before continuation.</param>
         /// <param name="cancellationToken">The bounded test lifetime.</param>
         public async Task ReachAsync(Task alteration, CancellationToken cancellationToken)
         {
-            Task wait = await Entered.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            Task wait = await HookEntryWait.WaitForValueAsync(Entered.Task, [alteration], cancellationToken).ConfigureAwait(false);
             IsParked = !wait.IsCompleted;
             if(wait.IsCompleted)
             {
@@ -4531,6 +4567,193 @@ internal sealed class TestHostShell: IAsyncDisposable
         {
             candidateIntegration.ResolveIssuerAsync = (_, _, _) => ValueTask.FromResult<Uri?>(issuer);
         });
+
+
+    /// <summary>
+    /// The <c>credential_configuration_id</c> values the hosted Credential Issuer lists until a row
+    /// alters its catalogue: the configurations the suite's Credential Requests name.
+    /// </summary>
+    public static IReadOnlyList<string> DefaultCredentialConfigurationIds { get; } =
+        ["UniversityDegree_dc_sd_jwt", "eu.europa.ec.eudi.pid.1"];
+
+
+    /// <summary>
+    /// Composes a Credential Issuer catalogue, the <c>credential_configurations_supported</c> object
+    /// of a <see cref="Verifiable.OAuth.Oid4Vci.CredentialIssuerMetadataContribution"/>, listing each of
+    /// <paramref name="configurationIds"/> as an SD-JWT VC configuration. The Credential Endpoint
+    /// judges every request against this object, so a row's catalogue lists the configurations its
+    /// requests name.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-12.2.4">OID4VCI 1.0 Section 12.2.4</see>:
+    /// "credential_configurations_supported: REQUIRED. Object that describes specifics of the
+    /// Credential that the Credential Issuer supports issuance of."
+    /// </summary>
+    /// <param name="configurationIds">The configuration identifiers to list.</param>
+    /// <returns>The catalogue object, one configuration object per identifier.</returns>
+    public static IReadOnlyDictionary<string, object> ListCredentialConfigurations(params IEnumerable<string> configurationIds)
+    {
+        ArgumentNullException.ThrowIfNull(configurationIds);
+
+        Dictionary<string, object> catalogue = new(StringComparer.Ordinal);
+        foreach(string configurationId in configurationIds)
+        {
+            catalogue[configurationId] = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                ["format"] = "dc+sd-jwt"
+            };
+        }
+
+        return catalogue;
+    }
+
+
+    /// <summary>
+    /// The Credential Issuer metadata contribution every hosted server answers until a row alters
+    /// it: a catalogue listing <see cref="DefaultCredentialConfigurationIds"/> and nothing else, so
+    /// the Credential Endpoint, which requires the catalogue, is served and requires no encryption,
+    /// key attestation, scope or batch issuance.
+    /// </summary>
+    /// <returns>A fresh contribution for one read.</returns>
+    public static Verifiable.OAuth.Oid4Vci.CredentialIssuerMetadataContribution CreateDefaultCredentialCatalogue() =>
+        new()
+        {
+            CredentialConfigurationsSupported = ListCredentialConfigurations(DefaultCredentialConfigurationIds)
+        };
+
+
+    /// <summary>
+    /// Makes the catalogue <paramref name="server"/> answers advertise encrypted Credential Responses:
+    /// every read of the catalogue wired at the call carries a <c>credential_response_encryption</c>
+    /// object listing <paramref name="algValues"/> and <paramref name="encValues"/>, encryption not
+    /// required. A row whose requests ask for response encryption calls this beside wiring the
+    /// response-encryption seam, since the Credential Issuer refuses an encryption its metadata does
+    /// not advertise; a catalogue the row wires afterwards replaces this one.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-8.2">OID4VCI 1.0 Section 8.2</see>:
+    /// "The Credential Issuer indicates support for encrypted responses by including the
+    /// credential_response_encryption parameter in the Credential Issuer Metadata."
+    /// </summary>
+    /// <param name="server">The server whose catalogue is altered.</param>
+    /// <param name="algValues">The advertised <c>alg_values_supported</c>.</param>
+    /// <param name="encValues">The advertised <c>enc_values_supported</c>.</param>
+    /// <returns>A task that completes when the alteration is applied.</returns>
+    public static Task AdvertiseCredentialResponseEncryptionAsync(
+        EndpointServer server, IReadOnlyList<string> algValues, IReadOnlyList<string> encValues)
+    {
+        ArgumentNullException.ThrowIfNull(algValues);
+        ArgumentNullException.ThrowIfNull(encValues);
+
+        return AdvertiseCredentialResponseEncryptionAsync(
+            server,
+            new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                ["alg_values_supported"] = algValues.Cast<object>().ToList(),
+                ["enc_values_supported"] = encValues.Cast<object>().ToList(),
+                ["encryption_required"] = false
+            });
+    }
+
+
+    /// <summary>
+    /// Makes the catalogue <paramref name="server"/> answers carry <paramref name="responseEncryption"/> as
+    /// its <c>credential_response_encryption</c> object on every read of the catalogue wired at the call,
+    /// as the application hands it over, so a row states which object the Credential Issuer judges a
+    /// request against, including one that does not hold the shape the metadata requires; a catalogue
+    /// the row wires afterwards replaces this one.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-12.2.4">OID4VCI 1.0 Section 12.2.4</see>:
+    /// "alg_values_supported: REQUIRED. A non-empty array containing a list of the JWE [RFC7516]
+    /// encryption algorithms (alg values) [RFC7518] supported by the Credential Endpoint to encode the
+    /// Credential Response in a JWT [RFC7519]."
+    /// </summary>
+    /// <param name="server">The server whose catalogue is altered.</param>
+    /// <param name="responseEncryption">The <c>credential_response_encryption</c> object every read carries.</param>
+    /// <returns>A task that completes when the alteration is applied.</returns>
+    public static Task AdvertiseCredentialResponseEncryptionAsync(
+        EndpointServer server, IReadOnlyDictionary<string, object> responseEncryption)
+    {
+        ArgumentNullException.ThrowIfNull(responseEncryption);
+
+        return AlterAsync(server, candidateIntegration =>
+        {
+            ContributeCredentialIssuerMetadataDelegate wired = candidateIntegration.ContributeCredentialIssuerMetadataAsync
+                ?? ((_, _, _) => ValueTask.FromResult(CreateDefaultCredentialCatalogue()));
+            candidateIntegration.ContributeCredentialIssuerMetadataAsync = async (registration, context, ct) =>
+            {
+                Verifiable.OAuth.Oid4Vci.CredentialIssuerMetadataContribution catalogue =
+                    await wired(registration, context, ct).ConfigureAwait(false);
+
+                return catalogue with { CredentialResponseEncryption = responseEncryption };
+            };
+        });
+    }
+
+
+    /// <summary>
+    /// Composes a <c>credential_request_encryption</c> object carrying its three REQUIRED members, so a
+    /// row's catalogue is one the Credential Issuer Metadata endpoint publishes: <c>jwks</c>, a JWK Set
+    /// holding <paramref name="issuerPublic"/> (the issuer's request-decryption public key) under the
+    /// <c>kid</c> <c>request-encryption-1</c>; <c>enc_values_supported</c> listing <c>A256GCM</c>; and
+    /// <c>encryption_required</c> as <paramref name="isEncryptionRequired"/>.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-12.2.4">OID4VCI 1.0 Section 12.2.4</see>:
+    /// "jwks: REQUIRED. A JSON Web Key Set, as defined in [RFC7591], that contains one or more public
+    /// keys, to be used by the Wallet as an input to a key agreement for encryption of the Credential
+    /// Request. Each JWK in the set MUST have a kid (Key ID) parameter that uniquely identifies the key."
+    /// </summary>
+    /// <param name="issuerPublic">The issuer's request-decryption public key the set holds.</param>
+    /// <param name="isEncryptionRequired">The <c>encryption_required</c> value.</param>
+    /// <returns>The object the catalogue carries.</returns>
+    public static Dictionary<string, object> ComposeCredentialRequestEncryptionObject(
+        PublicKeyMemory issuerPublic, bool isEncryptionRequired)
+    {
+        ArgumentNullException.ThrowIfNull(issuerPublic);
+
+        JsonWebKey jwk = CryptoFormatConversions.DefaultAlgorithmToJwkConverter(
+            issuerPublic.Tag.Get<CryptoAlgorithm>(),
+            issuerPublic.Tag.Get<Purpose>(),
+            issuerPublic.AsReadOnlySpan(),
+            TestSetup.Base64UrlEncoder);
+        Dictionary<string, object> publishedKey = new(StringComparer.Ordinal)
+        {
+            ["kty"] = jwk.Kty!,
+            ["crv"] = jwk.Crv!,
+            ["x"] = jwk.X!,
+            ["y"] = jwk.Y!,
+            ["kid"] = "request-encryption-1"
+        };
+
+        return new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            ["jwks"] = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                ["keys"] = new List<object> { publishedKey }
+            },
+            ["enc_values_supported"] = new List<object> { WellKnownJweEncryptionAlgorithms.A256Gcm },
+            ["encryption_required"] = isEncryptionRequired
+        };
+    }
+
+
+    /// <summary>
+    /// GETs the Credential Issuer Metadata document of the registration <paramref name="segment"/> names
+    /// over the host's loopback listener, starting the listener when it is not running, and answers the
+    /// status and body as the wire delivered them, so a row compares what the Credential Endpoint or the
+    /// Deferred Credential Endpoint answers under a catalogue with what the metadata endpoint answers for
+    /// that same catalogue.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-12.2.2">OID4VCI 1.0 Section 12.2.2</see>.
+    /// </summary>
+    /// <param name="segment">The registration's tenant segment.</param>
+    /// <param name="cancellationToken">The bounded request lifetime.</param>
+    /// <returns>The status code and body the wire delivered.</returns>
+    public async Task<(int StatusCode, string Body)> FetchCredentialIssuerMetadataOverWireAsync(
+        string segment, CancellationToken cancellationToken)
+    {
+        await StartHttpHostAsync(cancellationToken).ConfigureAwait(false);
+        Uri metadataEndpoint = ComposeEndpointUri(
+            Host("default").HttpBaseAddress!, segment, WellKnownEndpointNames.Oid4VciCredentialIssuerMetadata);
+        using HttpResponseMessage response = await Host("default").SharedHttpClient!
+            .GetAsync(metadataEndpoint, cancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+
+        return ((int)response.StatusCode, body);
+    }
 
 
     /// <summary>Publishes a coherent family alteration and completes when it is applied.</summary>

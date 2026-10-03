@@ -1578,9 +1578,9 @@ internal sealed class VcalmVerifierEndpointTests
             TestContext.CancellationToken).AsTask();
 
         Task<VcalmVerificationOutcome> first = VerifyAsync(0);
-        await firstEntered.Task.WaitAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        await HookEntryWait.WaitForEntryAsync(firstEntered.Task, first, TestContext.CancellationToken).ConfigureAwait(false);
         Task<VcalmVerificationOutcome> second = VerifyAsync(0);
-        await secondEntered.Task.WaitAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        await HookEntryWait.WaitForEntryAsync(secondEntered.Task, second, TestContext.CancellationToken).ConfigureAwait(false);
         releaseFirst.SetResult();
         Assert.IsTrue((await first.ConfigureAwait(false)).Verified, "The first verification of the issuer's credential verifies.");
         releaseSecond.SetResult();

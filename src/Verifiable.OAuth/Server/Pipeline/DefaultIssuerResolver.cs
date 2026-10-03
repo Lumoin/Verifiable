@@ -67,20 +67,35 @@ internal static class DefaultIssuerResolver
     public static ValueTask<Uri> ResolveAsync(
         ClientRecord registration,
         ExchangeContext context,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult(Resolve(registration, context));
+
+
+    /// <summary>
+    /// The resolution of <see cref="ResolveAsync"/>, which completes without waiting, for a caller that composes
+    /// its answer synchronously: the registration's issuer, else the context's, each checked by
+    /// <see cref="IssuerIdentifierValidation.IsValidIssuerShape"/>.
+    /// </summary>
+    /// <param name="registration">The registration for the current request.</param>
+    /// <param name="context">The per-request context bag.</param>
+    /// <returns>The authoritative issuer URI for this request.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when neither source names an issuer, or when the resolved value fails the issuer-identifier shape.
+    /// </exception>
+    public static Uri Resolve(ClientRecord registration, ExchangeContext context)
     {
         ArgumentNullException.ThrowIfNull(registration);
         ArgumentNullException.ThrowIfNull(context);
 
         if(registration.IssuerUri is not null)
         {
-            return ValueTask.FromResult(ValidatedIssuerShape(registration.IssuerUri, registration));
+            return ValidatedIssuerShape(registration.IssuerUri, registration);
         }
 
         Uri? contextIssuer = context.Issuer;
         if(contextIssuer is not null)
         {
-            return ValueTask.FromResult(ValidatedIssuerShape(contextIssuer, registration));
+            return ValidatedIssuerShape(contextIssuer, registration);
         }
 
         throw new InvalidOperationException(

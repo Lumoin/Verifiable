@@ -220,6 +220,37 @@ internal sealed class Oid4VciDeferredAndNotificationTests
 
 
     /// <summary>
+    /// A server whose Credential Issuer metadata seam is not wired does not serve the Deferred
+    /// Credential Endpoint, as it does not serve the Credential Endpoint: without the catalogue the
+    /// encryption a Deferred Credential Request asks for cannot be judged against what the Credential
+    /// Issuer advertises.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-9.1">OID4VCI 1.0 Section 9.1</see>:
+    /// "The Credential Issuer indicates support for encrypted responses by including the
+    /// credential_response_encryption parameter in the Credential Issuer Metadata."
+    /// </summary>
+    [TestMethod]
+    public async Task ADeferredCredentialEndpointWithoutTheCatalogueIsNotServed()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, EndpointCapabilities).ConfigureAwait(false);
+        await WireProtectedEndpointSeamsAsync(host).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeCredentialIssuerMetadataAsync = null;
+        }).ConfigureAwait(false);
+
+        string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
+        using HttpResponseMessage response = await SendProtectedOverWireAsync(
+            host, material, DeferredEndpointRow, "Bearer " + accessToken, ProtectedRequestBody(DeferredEndpointRow))
+            .ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.NotFound, response.StatusCode, body);
+    }
+
+
+    /// <summary>
     /// §11.2: an accepted notification answers 204 No Content with an empty body, and the seam
     /// receives the parsed notification. §11 idempotency is the seam's contract — a repeated
     /// identical call answers success again.
@@ -592,6 +623,57 @@ internal sealed class Oid4VciDeferredAndNotificationTests
         Assert.AreEqual(ResourceDpopProofs.DpopChallenge("invalid_token"), challenges.Single());
         using JsonDocument document = JsonDocument.Parse(body);
         Assert.AreEqual("invalid_token", document.RootElement.GetProperty("error").GetString());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>:
+    /// "invalid_request The request is missing a required parameter, includes an unsupported parameter or
+    /// parameter value, repeats the same parameter, uses more than one method for including an access
+    /// token, or is otherwise malformed.  The resource server SHOULD respond with the HTTP 400 (Bad
+    /// Request) status code." A request to the Deferred Credential or the Notification endpoint sent over a raw
+    /// TLS connection with two <c>Authorization: Bearer</c> field lines (<c>Authorization = credentials</c> is no
+    /// list, <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.6.2">RFC 9110 Section 11.6.2</see>) is
+    /// refused with 400 <c>invalid_request</c> and one <c>WWW-Authenticate</c> field holding the <c>Bearer</c> and
+    /// the <c>DPoP</c> challenge, each with <c>error="invalid_request"</c>,
+    /// <c>Bearer realm="&lt;issuer&gt;", error="invalid_request", DPoP error="invalid_request", algs="..."</c>:
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 Section 7.2</see>, "Otherwise, both
+    /// Bearer and DPoP challenges MAY be used to deliver error information (Figure 19)." Both lines name the
+    /// <c>Bearer</c> scheme, where the section recommends "If the mechanism used to attempt authentication could be
+    /// established unambiguously, then the corresponding challenge SHOULD be used to deliver error information
+    /// (Figure 18)."; the both-challenges answer to two lines of one scheme is the library's named deviation, since
+    /// the reading of a repeated field keeps no scheme.
+    /// </summary>
+    /// <param name="endpointName">The protected endpoint addressed.</param>
+    [TestMethod]
+    [DataRow(DeferredEndpointRow)]
+    [DataRow(NotificationEndpointRow)]
+    public async Task ProtectedEndpointRefusesTwoAuthorizationLinesWithBothChallengesAsync(string endpointName)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, EndpointCapabilities).ConfigureAwait(false);
+        await WireProtectedEndpointSeamsAsync(host).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        string segment = material.Registration.TenantId.Value;
+        Uri url = new(host.Host("default").HttpBaseAddress!, TestHostShell.ComposeEndpointPath(EndpointNameOf(endpointName), segment));
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Post, url,
+            [
+                new(WellKnownHttpHeaderNames.ContentType, WellKnownMediaTypes.Application.Json),
+                new(WellKnownHttpHeaderNames.Authorization, "Bearer first-access-token"),
+                new(WellKnownHttpHeaderNames.Authorization, "Bearer second-access-token")
+            ],
+            Encoding.UTF8.GetBytes(ProtectedRequestBody(endpointName)), TestContext.CancellationToken).ConfigureAwait(false);
+        string issuer = host.Host("default").Registrations[segment].IssuerUri!.OriginalString;
+
+        Assert.AreEqual(400, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            $"Bearer realm=\"{issuer}\", error=\"invalid_request\", DPoP error=\"invalid_request\", algs=\"{ResourceDpopProofs.AcceptedProofAlgorithms}\"",
+            Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
+        using JsonDocument document = JsonDocument.Parse(response.Body);
+        Assert.AreEqual("invalid_request", document.RootElement.GetProperty("error").GetString());
     }
 
 

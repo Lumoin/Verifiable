@@ -33,6 +33,19 @@ public sealed record IncomingRequestStage(IncomingRequest Request): InspectionSt
 /// endpoint accepted the request). Always fires, including on the
 /// unmatched-request case so inspectors observe 404 responses.
 /// </summary>
+/// <remarks>
+/// After a registration the application's
+/// <see cref="ServerIntegration.MaterializeRegistrationAsync"/> answers in
+/// place of the loaded one is judged and the chain is built again for it,
+/// the stage fires again with the decision that is executed: the endpoint
+/// matched in that chain, or none. When an endpoint runs, or the no-match
+/// answer is sent, the request's last announced decision is the one
+/// executed. A materialization that answers a failure, and a materialized
+/// record of another type than the loaded one, which is answered
+/// <c>500</c>, are answered without the announced endpoint running; the
+/// context the <see cref="OutgoingResponseStage"/> is inspected with then
+/// carries the capability of the endpoint the request matched.
+/// </remarks>
 [DebuggerDisplay("MatchedStage Endpoint={Endpoint?.Name}")]
 public sealed record MatchedStage(
     ServerEndpoint? Endpoint,

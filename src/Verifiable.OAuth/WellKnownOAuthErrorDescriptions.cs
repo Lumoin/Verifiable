@@ -59,4 +59,55 @@ public static class WellKnownOAuthErrorDescriptions
     /// </summary>
     public static string ServerNotReady { get; } =
         Utf8Constants.ToInternedString(ServerNotReadyUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="RepeatedClientAuthenticationParameter"/>.</summary>
+    public static ReadOnlySpan<byte> RepeatedClientAuthenticationParameterUtf8 => "The request repeats a client authentication parameter."u8;
+
+    /// <summary>
+    /// The description the library answers with beside <see cref="OAuthErrors.InvalidRequest"/> when a
+    /// request carries <c>client_id</c>, <c>client_secret</c>, <c>client_assertion</c> or
+    /// <c>client_assertion_type</c> twice (<see cref="Server.ClientCredentialReading.IsParameterRepeated"/>):
+    /// "Request and response parameters MUST NOT be included more than once."
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749 Section 3.2</see>), a request
+    /// that repeats a parameter, which the <c>invalid_request</c> code of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">Section 5.2</see> names: "The request is
+    /// missing a required parameter, includes an unsupported parameter value (other than grant type), repeats a
+    /// parameter, includes multiple credentials, utilizes more than one mechanism for authenticating the client,
+    /// or is otherwise malformed." The text names neither the parameter nor its values.
+    /// </summary>
+    public static string RepeatedClientAuthenticationParameter { get; } =
+        Utf8Constants.ToInternedString(RepeatedClientAuthenticationParameterUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="MoreThanOneClientAuthenticationMethod"/>.</summary>
+    public static ReadOnlySpan<byte> MoreThanOneClientAuthenticationMethodUtf8 => "The request authenticates the client by more than one method."u8;
+
+    /// <summary>
+    /// The description the library answers with beside <see cref="OAuthErrors.InvalidRequest"/> when a
+    /// request presents two or more client authentication mechanisms
+    /// (<see cref="Server.ClientCredentialReading.IsMoreThanOneMechanism"/>): "The client MUST NOT use more
+    /// than one authentication method in each request."
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-2.3">RFC 6749 Section 2.3</see>), a request
+    /// that uses more than one mechanism for authenticating the client, which the <c>invalid_request</c> code of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">Section 5.2</see> names. The text names no
+    /// mechanism.
+    /// </summary>
+    public static string MoreThanOneClientAuthenticationMethod { get; } =
+        Utf8Constants.ToInternedString(MoreThanOneClientAuthenticationMethodUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="MalformedAuthorizationField"/>.</summary>
+    public static ReadOnlySpan<byte> MalformedAuthorizationFieldUtf8 => "The Authorization header is not a single well-formed credential."u8;
+
+    /// <summary>
+    /// The description the library answers with beside <see cref="OAuthErrors.InvalidRequest"/> when the
+    /// <c>Authorization</c> field is sent on two field lines or outside its grammar
+    /// (<see cref="Server.ClientCredentialReading.IsAuthorizationRepeated"/>,
+    /// <see cref="Server.ClientCredentialReading.IsAuthorizationMalformed"/>):
+    /// "Authorization = credentials" (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.6.2">RFC
+    /// 9110 Section 11.6.2</see>) is one credential, and a request carrying more includes multiple credentials,
+    /// and one carrying a value outside the grammar is otherwise malformed, both under the <c>invalid_request</c>
+    /// code of <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>. The
+    /// text carries no part of the field's value.
+    /// </summary>
+    public static string MalformedAuthorizationField { get; } =
+        Utf8Constants.ToInternedString(MalformedAuthorizationFieldUtf8);
 }

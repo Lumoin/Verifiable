@@ -7,6 +7,7 @@ using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.JwtBearer;
 using Verifiable.OAuth.Server;
+using Verifiable.Server.Routing;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -103,7 +104,7 @@ internal sealed class VendorParameterRecipeTests
         using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
             host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(401, (int)response.StatusCode, body);
+        Assert.AreEqual(400, (int)response.StatusCode, body);
         Assert.Contains(OAuthErrors.InvalidClient, body);
     }
 
@@ -125,17 +126,18 @@ internal sealed class VendorParameterRecipeTests
     /// <summary>
     /// A deployment-specific <c>client_secret_post</c> (RFC 6749 §2.3.1) authentication seam that ALSO
     /// requires the additional form field the composability recipe adds — exactly where an application
-    /// would implement its own vendor-flavored policy without any library change, since
-    /// <see cref="ValidateClientCredentialsDelegate"/> receives the full posted field set.
+    /// would implement its own vendor-flavored policy without any library change: the seam judges the client's
+    /// credential through the reading it receives (<see cref="ClientCredentialReading.ClientSecret"/>) and reads the
+    /// additional field, which is no credential, from the request on the context.
     /// </summary>
     private static async Task WireClientAuthenticationRequiringAdditionalParameterAsync(TestHostShell app) =>
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
                 ValueTask.FromResult(
-                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    reading.ClientSecret is string secret
                     && string.Equals(secret, ClientSecret, StringComparison.Ordinal)
-                    && fields.TryGetValue("requested_token_use", out string? tokenUse)
+                    && context.IncomingRequest!.Fields.TryGetValue("requested_token_use", out string? tokenUse)
                     && string.Equals(tokenUse, "on_behalf_of", StringComparison.Ordinal));
         }).ConfigureAwait(false);
 
