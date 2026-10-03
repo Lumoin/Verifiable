@@ -1289,6 +1289,114 @@ internal sealed class AuthCodeClientAuthenticationTests
 
 
     /// <summary>
+    /// Over the real token endpoint, a token request whose <c>private_key_jwt</c> client assertion names
+    /// the fully-specified <c>Ed25519</c> in its header, signed under the client's registered Ed25519 key,
+    /// is answered 200 with an access token: the name is an algorithm of the Ed25519 key as <c>EdDSA</c>
+    /// is. <see href="https://www.rfc-editor.org/rfc/rfc9864#section-4.1.1">RFC 9864 section 4.1.1</see>
+    /// registers <c>Ed25519</c> as "EdDSA using the Ed25519 parameter set in Section 5.1 of [RFC8032]".
+    /// The host states both names for client assertions, and neither the registration nor the registered
+    /// key names an algorithm, so the hold the request meets is the binding of its name to the key: were
+    /// <c>Ed25519</c> an algorithm of no key, the same request would be answered 401
+    /// <c>invalid_client</c>. The pushed request authenticates the client under <c>EdDSA</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9126#section-2">RFC 9126 section 2</see>: "The rules
+    /// for client authentication as defined in [RFC6749] for token endpoint requests, including the
+    /// applicable authentication methods, apply for the PAR endpoint as well."), so the code is issued
+    /// whatever is held of <c>Ed25519</c> and the token request's answer is its own.
+    /// </summary>
+    [TestMethod]
+    public async Task PrivateKeyJwtNamingTheFullySpecifiedEd25519IsAnsweredWithATokenOverRealWire()
+    {
+        var signingKeys = TestKeyMaterialProvider.CreateFreshEd25519KeyMaterial();
+        try
+        {
+            IReadOnlyDictionary<string, string> jwk = DpopJwkUtilities.ToJwk(
+                signingKeys.PublicKey, WellKnownJwaValues.EdDsa, TestSetup.Base64UrlEncoder);
+            string jwksJson = BuildJwksJson(jwk, "ed25519-fully-specified-key-1");
+
+            await using TestHostShell host = new(TimeProvider);
+            using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+                ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+            await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+            HostedAuthorizationServer hosted = host.Host("default");
+            string segment = material.Registration.TenantId.Value;
+            Uri tokenEndpoint = new(
+                hosted.HttpBaseAddress!, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeToken, segment));
+
+            Uri parEndpoint = new(
+                hosted.HttpBaseAddress!, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodePar, segment));
+
+            await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+            {
+                candidateIntegration.ValidateClientCredentialsAsync = PrivateKeyJwtClientAuthentication.BuildValidator();
+                candidateIntegration.ClientAssertionSigningAlgorithmsSupported =
+                    [WellKnownJwaValues.EdDsa, WellKnownJwaValues.Ed25519];
+            }).ConfigureAwait(false);
+
+            await DeclareServerSideAuthMethodAsync(
+                host, material, ClientAuthenticationMethod.PrivateKeyJwt, clientJwks: jwksJson).ConfigureAwait(false);
+
+            (_, ClientRegistration registration, _) = await host.CreateOAuthClientAndRegistrationAsync(
+                material.Registration, RedirectUri.OriginalString,
+                profile: PolicyProfile.Rfc6749WithPkce, TestContext.CancellationToken).ConfigureAwait(false);
+
+            AssertionSigningContext signing = new(
+                signingKeys.PrivateKey, WellKnownJwaValues.Ed25519, registration.AuthorizationServerIssuer.OriginalString,
+                tokenEndpoint, parEndpoint, TimeProvider.GetUtcNow(),
+                host.Server.OAuth().Codecs.JwtHeaderSerializer!, host.Server.OAuth().Codecs.JwtPayloadSerializer!);
+
+            PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, Pool);
+            string parAssertion = await SignRawClaimsAsync(
+                signing.SigningKey, WellKnownJwaValues.EdDsa, SerializeClaims(BuildDefaultClaims(signing))).ConfigureAwait(false);
+
+            Dictionary<string, string> parFields = new(StringComparer.Ordinal)
+            {
+                [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+                [OAuthRequestParameterNames.ClientId] = ClientId,
+                [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
+                [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
+                [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+                [OAuthRequestParameterNames.ClientAssertionType] = WellKnownClientAssertionTypes.JwtBearer,
+                [OAuthRequestParameterNames.ClientAssertion] = parAssertion
+            };
+
+            (int parStatusCode, string parBody, Uri? authorizeLocation, int authorizeStatusCode) =
+                await RawAuthCodeWirePushers.PushParAndAuthorizeAsync(
+                    host, segment, ClientId, SubjectId, parFields, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.AreEqual(201, parStatusCode, $"The pushed request naming EdDSA must authenticate the client. Body={parBody}");
+            Assert.AreEqual(302, authorizeStatusCode, "The authorize endpoint must redirect with the authorization code.");
+            Assert.IsNotNull(authorizeLocation, "The authorize redirect must carry a Location.");
+            string code = TestBrowser.ExtractQueryParam(authorizeLocation.ToString(), OAuthRequestParameterNames.Code)
+                ?? throw new InvalidOperationException("Authorize redirect Location missing code.");
+
+            string tokenAssertion = await SignRawClaimsAsync(
+                signing.SigningKey, signing.Algorithm, SerializeClaims(BuildDefaultClaims(signing))).ConfigureAwait(false);
+
+            Dictionary<string, string> tokenFields = RawAuthCodeWirePushers.BuildTokenFields(
+                ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString);
+            tokenFields[OAuthRequestParameterNames.ClientAssertionType] = WellKnownClientAssertionTypes.JwtBearer;
+            tokenFields[OAuthRequestParameterNames.ClientAssertion] = tokenAssertion;
+
+            (int tokenStatusCode, string tokenBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+                host, segment, tokenFields, TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.AreEqual(200, tokenStatusCode,
+                $"A token request naming Ed25519 under the client's Ed25519 key must be answered with a token. Body={tokenBody}");
+
+            using JsonDocument tokenDocument = JsonDocument.Parse(tokenBody);
+            Assert.IsFalse(
+                string.IsNullOrEmpty(tokenDocument.RootElement.GetProperty(OAuthRequestParameterNames.AccessToken).GetString()),
+                $"The token response must carry an access token. Body={tokenBody}");
+        }
+        finally
+        {
+            signingKeys.PublicKey.Dispose();
+            signingKeys.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
     /// The paired positive control for
     /// <see cref="PrivateKeyJwtRefusesEncMarkedEd25519SigningKeyWithKid"/>: the same registered
     /// Ed25519 key, published with no <c>use</c> member — RFC 7517 §4.2 makes <c>use</c> OPTIONAL —
