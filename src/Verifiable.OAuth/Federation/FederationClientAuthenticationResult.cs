@@ -12,7 +12,8 @@ namespace Verifiable.OAuth.Federation;
 /// Same sealed-record-with-nullable-fields shape as the other Federation
 /// result types (<see cref="TrustChainValidationOutcome"/>,
 /// <see cref="EntityStatementParseResult"/>); the federation endpoint maps a
-/// rejection onto an HTTP 401 <c>invalid_client</c> response.
+/// rejection onto an <c>invalid_client</c> response, 401 with a challenge or 400 as the library's client
+/// authentication failure answers.
 /// </remarks>
 [DebuggerDisplay("FederationClientAuthenticationResult Valid={IsValid} Reason={FailureReason,nq}")]
 public sealed record FederationClientAuthenticationResult

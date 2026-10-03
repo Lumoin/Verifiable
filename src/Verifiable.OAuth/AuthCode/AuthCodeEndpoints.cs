@@ -68,6 +68,28 @@ namespace Verifiable.OAuth.AuthCode;
 /// surface replaces these endpoint builders with its own. The library
 /// remains agnostic to wire format.
 /// </para>
+/// <para>
+/// <strong>Client authentication.</strong> Every endpoint here that authenticates or identifies a client
+/// (the pushed request, the pushed request carrying a request object, code redemption, refresh, client
+/// credentials, token exchange, the jwt-bearer grant, the pre-authorized code grant, revocation and
+/// introspection) reads the request's credentials once, through <see cref="ClientCredentialReading.Read"/>,
+/// before any seam, and reads <c>client_id</c> through that reading. A malformed reading is answered 400
+/// <c>invalid_request</c> by <see cref="RefuseMalformedClientCredentials"/> with one of three fixed
+/// descriptions and never reaches
+/// <see cref="AuthorizationServerIntegration.ValidateClientCredentialsAsync"/> or the pre-authorized code
+/// seam; the client authentication seam receives the reading as the credential it judges. A failed
+/// authentication is answered <c>invalid_client</c> by <see cref="ClientAuthenticationRefusal"/>: 401 with
+/// the challenge <c>Basic realm="&lt;issuer&gt;"</c> for a <c>Basic</c> attempt in the
+/// <c>Authorization</c> field, 401 with the challenge of another scheme attempted there followed by the
+/// <c>Basic</c> challenge when <c>client_secret_basic</c> is advertised, 401 with the <c>Basic</c>
+/// challenge for any other request when <c>client_secret_basic</c> is advertised, and 400 otherwise, so no
+/// 401 leaves without a challenge. Where no issuer resolves (no application issuer resolver, a registration
+/// without an issuer and no issuer on the request's context) no realm names a challenge, so even an attempt
+/// in the <c>Authorization</c> field is answered 400 <c>invalid_client</c> with no challenge, a named
+/// deviation from the 401 of <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749
+/// Section 5.2</see>. A request served under a registration of another family than <see cref="ClientRecord"/>
+/// is answered 500 <c>server_error</c> by <see cref="UnresolvedRegistrationResponse"/>.
+/// </para>
 /// </remarks>
 public static class AuthCodeEndpoints
 {
@@ -360,8 +382,18 @@ public static class AuthCodeEndpoints
                         OAuthErrors.InvalidRequest, "request_uri must not be provided to the PAR endpoint."));
                 }
 
-                if(!fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? clientId)
-                    || string.IsNullOrWhiteSpace(clientId))
+                //The client's credentials, client_id among them, are read once and a malformed
+                //reading is refused first, so client_id follows the one reading rule every
+                //client-identifying site of the library applies: an empty occurrence is the
+                //omitted parameter and a second value is a repeated one.
+                ClientCredentialReading parCredentials = CarriedClientCredentials(context, fields);
+                ServerHttpResponse? parMalformedCredentials = RefuseMalformedClientCredentials(parCredentials);
+                if(parMalformedCredentials is not null)
+                {
+                    return (null, parMalformedCredentials);
+                }
+
+                if(parCredentials.ClientId is not { } clientId || string.IsNullOrWhiteSpace(clientId))
                 {
                     return (null, ServerHttpResponse.BadRequest(
                         OAuthErrors.InvalidRequest, "Missing client_id."));
@@ -377,7 +409,7 @@ public static class AuthCodeEndpoints
                 ClientRecord registration = context.ClientRegistration!;
                 if(!IsPresentedClientIdentifierTheRegistration(registration, clientId))
                 {
-                    return (null, UnknownClientResponse(context.IncomingRequest));
+                    return (null, await UnknownClientResponseAsync(parCredentials, registration, context, ct).ConfigureAwait(false));
                 }
 
                 //RFC 9126 §2: "the rules for client authentication ... for token endpoint requests
@@ -385,7 +417,7 @@ public static class AuthCodeEndpoints
                 //exactly as it would at the token endpoint, before any pushed-request effect (no
                 //request_uri generated, no state saved).
                 ServerHttpResponse? parAuthenticationFailure = await RequireClientAuthenticationIfDeclaredAsync(
-                    oauth, context.IncomingRequest, fields, registration, context, ct).ConfigureAwait(false);
+                    oauth, parCredentials, registration, context, ct).ConfigureAwait(false);
                 if(parAuthenticationFailure is not null)
                 {
                     return (null, parAuthenticationFailure);
@@ -2097,12 +2129,33 @@ public static class AuthCodeEndpoints
                 OAuthErrors.InvalidRequest, "Missing request parameter."));
         }
 
+        //The pushed request reads its credentials, client_id among them, once and refuses a
+        //malformed reading before anything else reads it, so the outer client_id follows the one
+        //reading rule of the token endpoint. The by-value authorization request authenticates no
+        //client and reads the single outer client_id of the authorization endpoint.
+        ClientCredentialReading? jarParCredentials = null;
+        string? outerClientId;
+        if(requireDeclaredClientAuthentication)
+        {
+            jarParCredentials = CarriedClientCredentials(context, fields);
+            ServerHttpResponse? malformedCredentials = RefuseMalformedClientCredentials(jarParCredentials);
+            if(malformedCredentials is not null)
+            {
+                return (null, malformedCredentials);
+            }
+
+            outerClientId = jarParCredentials.ClientId;
+        }
+        else
+        {
+            _ = fields.TryGetValue(OAuthRequestParameterNames.ClientId, out outerClientId);
+        }
+
         //RFC 9101 §5 explicitly permits the AS to require an outer client_id for
         //pre-verification client identification. Requiring it sidesteps the
         //"identify the registration before the JAR is verified" problem cleanly
         //and defends against substitution per RFC 9700 §4.6.
-        if(!fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? outerClientId)
-            || string.IsNullOrWhiteSpace(outerClientId))
+        if(string.IsNullOrWhiteSpace(outerClientId))
         {
             return (null, ServerHttpResponse.BadRequest(
                 OAuthErrors.InvalidRequest,
@@ -2112,7 +2165,7 @@ public static class AuthCodeEndpoints
         ClientRecord? registration = context.ClientRegistration;
         if(registration is null)
         {
-            return (null, ClientAuthenticationFailureResponse(context.IncomingRequest, "Unknown client."));
+            return (null, UnresolvedRegistrationResponse());
         }
 
         //RFC 9101 §6.3: the outer client_id and the request object's must agree; the comparison
@@ -2124,10 +2177,10 @@ public static class AuthCodeEndpoints
                 OAuthErrors.InvalidRequest, "Outer client_id does not match the registered client."));
         }
 
-        if(requireDeclaredClientAuthentication)
+        if(jarParCredentials is not null)
         {
             ServerHttpResponse? jarParAuthenticationFailure = await RequireClientAuthenticationIfDeclaredAsync(
-                oauth, context.IncomingRequest, fields, registration, context, cancellationToken)
+                oauth, jarParCredentials, registration, context, cancellationToken)
                 .ConfigureAwait(false);
             if(jarParAuthenticationFailure is not null)
             {
@@ -2834,7 +2887,7 @@ public static class AuthCodeEndpoints
     /// <c>code_verifier</c> answers its own <c>invalid_grant</c> "PKCE verification failed.",
     /// distinct from that constant, since the grammar itself — never the endpoint's identity —
     /// decides it. Declared client authentication runs here, in the step, and answers its own
-    /// <c>401 invalid_client</c> untranslated; <see cref="VerifyCodeGrantPresentation"/> performs
+    /// <c>invalid_client</c> untranslated; <see cref="VerifyCodeGrantPresentation"/> performs
     /// no authentication of its own.
     /// </para>
     /// <para>
@@ -2870,10 +2923,19 @@ public static class AuthCodeEndpoints
         ClientRecord? registration = context.ClientRegistration;
         if(registration is null)
         {
-            return ClientAuthenticationFailureResponse(context.IncomingRequest, "Unknown client.");
+            return UnresolvedRegistrationResponse();
         }
 
-        if(RefuseUnidentifiedClient(registration, fields, context.IncomingRequest) is not null)
+        //The reading is carried to the grant binding, which compares the presented client_id with
+        //the code's client once the code state is loaded.
+        ClientCredentialReading credentials = CarriedClientCredentials(context, fields);
+        ServerHttpResponse? malformedCredentials = RefuseMalformedClientCredentials(credentials);
+        if(malformedCredentials is not null)
+        {
+            return malformedCredentials;
+        }
+
+        if(NamesAnotherClient(registration, credentials))
         {
             return ServerHttpResponse.BadRequest(
                 endpoint.HandleNotFoundError ?? OAuthErrors.InvalidGrant,
@@ -2938,15 +3000,13 @@ public static class AuthCodeEndpoints
         }
 
         ServerHttpResponse? clientAuthFailure = await RequireClientAuthenticationIfDeclaredAsync(
-            oauth, context.IncomingRequest, fields, registration, context, cancellationToken).ConfigureAwait(false);
+            oauth, credentials, registration, context, cancellationToken).ConfigureAwait(false);
         if(clientAuthFailure is not null)
         {
             return clientAuthFailure;
         }
 
-        bool hasFieldClientId = fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? fieldClientId)
-            && !string.IsNullOrEmpty(fieldClientId);
-        if(!hasFieldClientId && !HasClientCredentials(context.IncomingRequest, fields))
+        if(credentials.ClientId is null && !credentials.HasCredentials)
         {
             return ServerHttpResponse.BadRequest(
                 OAuthErrors.InvalidRequest, "client_id is required for a client that is not authenticating.");
@@ -3088,9 +3148,9 @@ public static class AuthCodeEndpoints
         //RFC 6749 §4.1.3 / draft-ietf-oauth-v2-1-16 §4.1.3: "client_id: REQUIRED, if the client
         //is not authenticating with the authorization server" — present or absent; the field's
         //identity and the declared client authentication were already checked by
-        //BeforeCodeRedemptionCorrelationAsync.
-        bool hasFieldClientId = fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? fieldClientId)
-            && !string.IsNullOrEmpty(fieldClientId);
+        //BeforeCodeRedemptionCorrelationAsync, whose one reading of the credentials is read here.
+        string? fieldClientId = CarriedClientCredentials(context, fields).ClientId;
+        bool hasFieldClientId = !string.IsNullOrEmpty(fieldClientId);
 
         //Grant binding: the EFFECTIVE identity — the field when present (already identified,
         //above, as the registration's own) or the authenticated registration's when the field is
@@ -3317,7 +3377,7 @@ public static class AuthCodeEndpoints
     /// declared authentication and the <c>authorization_details</c> decision, both of which read
     /// the carried value instead of resolving a second time for the same request.
     /// <see cref="RequireClientAuthenticationIfDeclaredAsync"/> then authenticates the declared
-    /// method, answering its own <c>401 invalid_client</c> untranslated.
+    /// method, answering its own <c>invalid_client</c> untranslated.
     /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1 draft-16
     /// §4.3.1</see>'s stored-grant binding rule — "if client authentication is included in the
     /// request, ensure that the refresh token was issued to the authenticated client, OR if a
@@ -3346,10 +3406,19 @@ public static class AuthCodeEndpoints
         ClientRecord? registration = context.ClientRegistration;
         if(registration is null)
         {
-            return ClientAuthenticationFailureResponse(context.IncomingRequest, "Unknown client.");
+            return UnresolvedRegistrationResponse();
         }
 
-        if(RefuseUnidentifiedClient(registration, fields, context.IncomingRequest) is not null)
+        //The reading is carried to the refresh client binding, which compares the presented identity
+        //with the token's client once the stored record is loaded.
+        ClientCredentialReading credentials = CarriedClientCredentials(context, fields);
+        ServerHttpResponse? malformedCredentials = RefuseMalformedClientCredentials(credentials);
+        if(malformedCredentials is not null)
+        {
+            return malformedCredentials;
+        }
+
+        if(NamesAnotherClient(registration, credentials))
         {
             return ServerHttpResponse.BadRequest(
                 endpoint.HandleNotFoundError ?? OAuthErrors.InvalidGrant,
@@ -3389,7 +3458,7 @@ public static class AuthCodeEndpoints
         context.SetCorrelationStepIssuer(issuerUri);
 
         ServerHttpResponse? authenticationFailure = await RequireClientAuthenticationIfDeclaredAsync(
-            oauth, context.IncomingRequest, fields, registration, context, cancellationToken).ConfigureAwait(false);
+            oauth, credentials, registration, context, cancellationToken).ConfigureAwait(false);
         if(authenticationFailure is not null)
         {
             return authenticationFailure;
@@ -3401,9 +3470,7 @@ public static class AuthCodeEndpoints
         //BeforeCodeRedemptionCorrelationAsync's identical rule. The record-dependent half — the
         //presented identity against the token's BOUND client — stays in VerifyRefreshClient, once
         //the record is loaded.
-        bool hasFieldClientId = fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? fieldClientId)
-            && !string.IsNullOrEmpty(fieldClientId);
-        if(!hasFieldClientId && !HasClientCredentials(context.IncomingRequest, fields))
+        if(credentials.ClientId is null && !credentials.HasCredentials)
         {
             return ServerHttpResponse.BadRequest(
                 OAuthErrors.InvalidRequest, "client_id is required for a client that is not authenticating.");
@@ -3459,10 +3526,10 @@ public static class AuthCodeEndpoints
         string? boundClientId,
         ExchangeContext context)
     {
-        string? clientId = HasClientCredentials(context.IncomingRequest, fields)
+        ClientCredentialReading credentials = CarriedClientCredentials(context, fields);
+        string? clientId = credentials.HasCredentials
             ? registration.ClientId
-            : fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? formClientId)
-                ? formClientId : null;
+            : credentials.ClientId;
         if(!string.Equals(clientId, boundClientId, StringComparison.Ordinal))
         {
             //A refusal that reads the record answers the endpoint's constant so the answer never
@@ -4408,24 +4475,30 @@ public static class AuthCodeEndpoints
                 ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
-                    return (null, ClientAuthenticationFailureResponse(context.IncomingRequest, "Unknown client."));
+                    return (null, UnresolvedRegistrationResponse());
                 }
 
-                //Identification of an optional client_id form field runs before every other
-                //check: a field that names another registration is refused invalid_client here,
-                //never forwarded into the declared-method check or the authentication seam.
-                ServerHttpResponse? clientCredentialsIdentificationFailure =
-                    RefuseUnidentifiedClient(registration, fields, context.IncomingRequest);
-                if(clientCredentialsIdentificationFailure is not null)
+                //The client's credentials are read once, and a malformed reading is refused before
+                //anything else reads it. Identification of an optional client_id then runs before
+                //every other check: a client_id that names another registration is refused
+                //invalid_client here, never forwarded into the declared-method check or the seam.
+                ClientCredentialReading clientCredentials = CarriedClientCredentials(context, fields);
+                ServerHttpResponse? malformedCredentials = RefuseMalformedClientCredentials(clientCredentials);
+                if(malformedCredentials is not null)
                 {
-                    return (null, clientCredentialsIdentificationFailure);
+                    return (null, malformedCredentials);
+                }
+
+                if(NamesAnotherClient(registration, clientCredentials))
+                {
+                    return (null, await UnknownClientResponseAsync(clientCredentials, registration, context, ct).ConfigureAwait(false));
                 }
 
                 //draft-ietf-oauth-client-id-metadata-document-02 §8.2: a registration declaring a
                 //confidential method this endpoint does not advertise is refused before the validator
                 //runs, so the advertisement and the judgment are one set at every grant.
-                ServerHttpResponse? undeclaredMethodRefusal =
-                    RefuseUndeclaredClientAuthenticationMethod(oauth, registration, context.IncomingRequest);
+                ServerHttpResponse? undeclaredMethodRefusal = await RefuseUndeclaredClientAuthenticationMethodAsync(
+                    oauth, registration, clientCredentials, context, ct).ConfigureAwait(false);
                 if(undeclaredMethodRefusal is not null)
                 {
                     return (null, undeclaredMethodRefusal);
@@ -4435,11 +4508,12 @@ public static class AuthCodeEndpoints
                 //method (client_secret_basic/post, private_key_jwt, mTLS) and the
                 //credential comparison; the builder guarantees it is wired.
                 bool isClientAuthenticated = await oauth.ValidateClientCredentialsAsync!(
-                    context.IncomingRequest, fields, registration, context, ct).ConfigureAwait(false);
+                    clientCredentials, registration, context, ct).ConfigureAwait(false);
                 if(!isClientAuthenticated)
                 {
-                    return (null, ClientAuthenticationFailureResponse(
-                        context.IncomingRequest, WellKnownOAuthErrorDescriptions.ClientAuthenticationFailed));
+                    return (null, await ClientAuthenticationFailureResponseAsync(
+                        clientCredentials, WellKnownOAuthErrorDescriptions.ClientAuthenticationFailed,
+                        registration, context, ct).ConfigureAwait(false));
                 }
 
                 //RFC 6749 §3.3: requested scope tokens must each be allowed for
@@ -4784,24 +4858,30 @@ public static class AuthCodeEndpoints
                 ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
-                    return (null, ClientAuthenticationFailureResponse(context.IncomingRequest, "Unknown client."));
+                    return (null, UnresolvedRegistrationResponse());
                 }
 
-                //Identification of an optional client_id form field runs before every other
-                //check: a field that names another registration is refused invalid_client here,
-                //never forwarded into the declared-method check or the authentication seam.
-                ServerHttpResponse? tokenExchangeIdentificationFailure =
-                    RefuseUnidentifiedClient(registration, fields, context.IncomingRequest);
-                if(tokenExchangeIdentificationFailure is not null)
+                //The client's credentials are read once, and a malformed reading is refused before
+                //anything else reads it. Identification of an optional client_id then runs before
+                //every other check: a client_id that names another registration is refused
+                //invalid_client here, never forwarded into the declared-method check or the seam.
+                ClientCredentialReading clientCredentials = CarriedClientCredentials(context, fields);
+                ServerHttpResponse? malformedCredentials = RefuseMalformedClientCredentials(clientCredentials);
+                if(malformedCredentials is not null)
                 {
-                    return (null, tokenExchangeIdentificationFailure);
+                    return (null, malformedCredentials);
+                }
+
+                if(NamesAnotherClient(registration, clientCredentials))
+                {
+                    return (null, await UnknownClientResponseAsync(clientCredentials, registration, context, ct).ConfigureAwait(false));
                 }
 
                 //draft-ietf-oauth-client-id-metadata-document-02 §8.2: a registration declaring a
                 //confidential method this endpoint does not advertise is refused before the validator
                 //runs, so the advertisement and the judgment are one set at every grant.
-                ServerHttpResponse? undeclaredMethodRefusal =
-                    RefuseUndeclaredClientAuthenticationMethod(oauth, registration, context.IncomingRequest);
+                ServerHttpResponse? undeclaredMethodRefusal = await RefuseUndeclaredClientAuthenticationMethodAsync(
+                    oauth, registration, clientCredentials, context, ct).ConfigureAwait(false);
                 if(undeclaredMethodRefusal is not null)
                 {
                     return (null, undeclaredMethodRefusal);
@@ -4812,11 +4892,12 @@ public static class AuthCodeEndpoints
                 //guarantees it is wired. Authenticating the client is what lets the STS apply
                 //the §2.1 "which entities are permitted to impersonate" checks downstream.
                 bool isClientAuthenticated = await oauth.ValidateClientCredentialsAsync!(
-                    context.IncomingRequest, fields, registration, context, ct).ConfigureAwait(false);
+                    clientCredentials, registration, context, ct).ConfigureAwait(false);
                 if(!isClientAuthenticated)
                 {
-                    return (null, ClientAuthenticationFailureResponse(
-                        context.IncomingRequest, WellKnownOAuthErrorDescriptions.ClientAuthenticationFailed));
+                    return (null, await ClientAuthenticationFailureResponseAsync(
+                        clientCredentials, WellKnownOAuthErrorDescriptions.ClientAuthenticationFailed,
+                        registration, context, ct).ConfigureAwait(false));
                 }
 
                 Uri issuerUri;
@@ -6036,16 +6117,16 @@ public static class AuthCodeEndpoints
     /// However §3.1 requires that "if client credentials are present in the request, the authorization
     /// server MUST validate them," so when the request carries credentials the endpoint runs
     /// <see cref="AuthorizationServerIntegration.ValidateClientCredentialsAsync"/> and rejects a bad
-    /// one with <c>401 invalid_client</c>. Presented credentials are never silently ignored: if the
+    /// one with <c>invalid_client</c>. Presented credentials are never silently ignored: if the
     /// request carries credentials but the client-authentication seam is not configured, the request is
-    /// refused with <c>401 invalid_client</c> rather than proceeding as anonymous (proceeding would be a
+    /// refused with <c>invalid_client</c> rather than proceeding as anonymous (proceeding would be a
     /// §3.1 MUST bypass). An anonymous request — one carrying no credentials at all — proceeds.
     /// </para>
     /// <para>
     /// Client IDENTIFICATION is nonetheless required even though authentication is optional: the
     /// shipped RFC 9068 access-token producer needs a <c>client_id</c> (<see cref="IssuanceContext.ClientId"/>
     /// is required), so a request whose tenant resolves no <see cref="ClientRecord"/> is refused with
-    /// <c>401 invalid_client</c>.
+    /// <c>400 invalid_client</c>.
     /// </para>
     /// <para>
     /// A <see langword="null"/> assertion-validation result is RFC 7523 §3.1's mandated
@@ -6102,12 +6183,21 @@ public static class AuthCodeEndpoints
 
                 //RFC 9068 constraint: a JWT access token requires a client_id, and IssuanceContext.ClientId
                 //is required, so the client MUST be identified even though authentication is optional (§2.1).
-                //A request whose tenant resolves no registration cannot stamp a conformant token.
+                //The dispatcher places the tenant's registration before any candidate runs, so a context
+                //without a client registration is a materializer of another family: a wiring fault.
                 ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
-                    return (null, ClientAuthenticationFailureResponse(
-                        context.IncomingRequest, "Client identification is required for the jwt-bearer grant."));
+                    return (null, UnresolvedRegistrationResponse());
+                }
+
+                //The client's credentials are read once, and a malformed reading is refused before
+                //either branch below reads it.
+                ClientCredentialReading clientCredentials = CarriedClientCredentials(context, fields);
+                ServerHttpResponse? malformedCredentials = RefuseMalformedClientCredentials(clientCredentials);
+                if(malformedCredentials is not null)
+                {
+                    return (null, malformedCredentials);
                 }
 
                 //RFC 7523 §3.1 composed with draft-ietf-oauth-client-id-metadata-document-02 §8.2
@@ -6120,44 +6210,44 @@ public static class AuthCodeEndpoints
                 //the method and the comparison. When credentials ARE present they MUST be validated:
                 //if the client-authentication seam is not configured, the request cannot proceed as
                 //anonymous (that would silently ignore presented credentials, a §3.1 MUST bypass), so it
-                //is refused with 401 invalid_client. A present-but-invalid credential is 401 invalid_client.
+                //is refused with invalid_client. A present-but-invalid credential is invalid_client.
                 //When credentials are ABSENT and the effective (possibly CIMD-materialized) registration
                 //declares a non-None token_endpoint_auth_method, the client is confidential and CIMD-049's
                 //"any communication with the authorization server MUST include client authentication of
                 //the registered type" governs: RequireClientAuthenticationIfDeclaredAsync refuses the
-                //request with 401 invalid_client, fail-closed. The two branches are disjoint, so
+                //request with invalid_client, fail-closed. The two branches are disjoint, so
                 //credentials are never validated twice.
-                if(HasClientCredentials(context.IncomingRequest, fields))
+                if(clientCredentials.HasCredentials)
                 {
-                    //Identification of an optional client_id form field before authentication:
-                    //a field that names another registration is refused invalid_client here, never
+                    //Identification of an optional client_id before authentication: a client_id
+                    //that names another registration is refused invalid_client here, never
                     //forwarded into the authentication seam.
-                    ServerHttpResponse? jwtBearerIdentificationFailure =
-                        RefuseUnidentifiedClient(registration, fields, context.IncomingRequest);
-                    if(jwtBearerIdentificationFailure is not null)
+                    if(NamesAnotherClient(registration, clientCredentials))
                     {
-                        return (null, jwtBearerIdentificationFailure);
+                        return (null, await UnknownClientResponseAsync(clientCredentials, registration, context, ct).ConfigureAwait(false));
                     }
 
                     if(oauth.ValidateClientCredentialsAsync is null)
                     {
-                        return (null, ClientAuthenticationFailureResponse(
-                            context.IncomingRequest,
-                            "Client credentials were presented but client authentication is not configured for this authorization server."));
+                        return (null, await ClientAuthenticationFailureResponseAsync(
+                            clientCredentials,
+                            "Client credentials were presented but client authentication is not configured for this authorization server.",
+                            registration, context, ct).ConfigureAwait(false));
                     }
 
                     bool isClientAuthenticated = await oauth.ValidateClientCredentialsAsync(
-                        context.IncomingRequest, fields, registration, context, ct).ConfigureAwait(false);
+                        clientCredentials, registration, context, ct).ConfigureAwait(false);
                     if(!isClientAuthenticated)
                     {
-                        return (null, ClientAuthenticationFailureResponse(
-                            context.IncomingRequest, WellKnownOAuthErrorDescriptions.ClientAuthenticationFailed));
+                        return (null, await ClientAuthenticationFailureResponseAsync(
+                            clientCredentials, WellKnownOAuthErrorDescriptions.ClientAuthenticationFailed,
+                            registration, context, ct).ConfigureAwait(false));
                     }
                 }
                 else
                 {
                     ServerHttpResponse? declaredAuthFailure = await RequireClientAuthenticationIfDeclaredAsync(
-                        oauth, context.IncomingRequest, fields, registration, context, ct).ConfigureAwait(false);
+                        oauth, clientCredentials, registration, context, ct).ConfigureAwait(false);
                     if(declaredAuthFailure is not null)
                     {
                         return (null, declaredAuthFailure);
@@ -6477,7 +6567,7 @@ public static class AuthCodeEndpoints
 
 
     /// <summary>
-    /// The description text <see cref="UnknownClientResponse"/> answers with, at the endpoints
+    /// The description text <see cref="UnknownClientResponseAsync"/> answers with, at the endpoints
     /// that START a grant or authenticate independently of one — the pushed request, the direct
     /// and <c>request_uri</c> authorization requests, client credentials, token exchange, the
     /// jwt-bearer grant, revocation, and introspection.
@@ -6580,120 +6670,268 @@ public static class AuthCodeEndpoints
 
 
     /// <summary>
-    /// Adds the <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 §5.2</see>
-    /// <c>WWW-Authenticate</c> challenge to <paramref name="response"/> when
-    /// <paramref name="request"/> attempted authentication through the <c>Authorization: Basic</c>
-    /// header — the one place every <c>invalid_client</c> response this file answers with, whether
-    /// a mismatch against a resolved registration (<see cref="UnknownClientResponse"/>) or any
-    /// other identification or authentication failure (<see cref="ClientAuthenticationFailureResponse"/>),
-    /// applies the challenge from; the refusal <see cref="ClientIdMetadataMaterialization.Refuse"/>
-    /// answers a token-endpoint request with calls it too. A continuing grant's
-    /// <c>invalid_grant</c> refusal never calls this.
+    /// The context-bag entry name under which the request's one reading of its client credentials is carried
+    /// from the step that took it (the Client ID Metadata Document materialization, a pre-correlation step, or
+    /// the first client-authenticating site the request reaches) to every later site that reads it, so the
+    /// request's credentials are read once. Transient, never persisted.
     /// </summary>
-    internal static ServerHttpResponse AddBasicChallengeIfAttempted(ServerHttpResponse response, IncomingRequest? request)
+    private static string CarriedClientCredentialsKey { get; } = "server.clientCredentialReading";
+
+
+    /// <summary>
+    /// The request's one reading of its client credentials: the reading carried under
+    /// <see cref="CarriedClientCredentialsKey"/>, or, when none is carried, the reading taken here through
+    /// <see cref="ClientCredentialReading.Read"/> from the request's <c>Authorization</c> field and
+    /// <paramref name="fields"/> and carried for every later site. Every client-authenticating site of the
+    /// library reads through this one body (this file's paths, the Client ID Metadata Document materialization,
+    /// Global Token Revocation and the federation endpoints' client authentication gate), refuses a malformed
+    /// reading through <see cref="RefuseMalformedClientCredentials"/>, and hands the same reading to
+    /// <see cref="AuthorizationServerIntegration.ValidateClientCredentialsAsync"/>.
+    /// </summary>
+    /// <param name="context">The per-request context carrying the request's headers.</param>
+    /// <param name="fields">The request's form fields.</param>
+    /// <returns>The reading.</returns>
+    internal static ClientCredentialReading CarriedClientCredentials(ExchangeContext context, RequestFields fields)
     {
-        if(request is not null
-            && request.Headers.TryGetSingle(WellKnownHttpHeaderNames.Authorization, out string? authHeader)
-            && !string.IsNullOrEmpty(authHeader)
-            && authHeader.StartsWith(WellKnownAuthenticationSchemes.Basic, StringComparison.OrdinalIgnoreCase))
+        if(context.TryGetValue(CarriedClientCredentialsKey, out object? carried) && carried is ClientCredentialReading reading)
         {
-            return response.WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, WellKnownAuthenticationSchemes.Basic);
+            return reading;
         }
 
-        return response;
+        ClientCredentialReading read = ClientCredentialReading.Read(context.IncomingRequest?.Headers ?? RequestHeaders.Empty, fields);
+        context[CarriedClientCredentialsKey] = read;
+
+        return read;
     }
 
 
     /// <summary>
-    /// The wire body <see cref="UnknownClientDescription"/> names — the identification refusal at
-    /// the endpoints listed on that constant's own doc —
-    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 §5.2</see>
-    /// <c>invalid_client</c> — so the body never discloses whether the presented identifier
-    /// belongs to another registration. Carries the <see cref="AddBasicChallengeIfAttempted"/>
-    /// challenge when <paramref name="request"/> attempted <c>Authorization: Basic</c>. The
-    /// continuing-grant endpoints (code redemption, refresh) answer their own identification
-    /// mismatch with <see cref="CodeGrantNotFoundDescription"/> / <see cref="RefreshTokenNotFoundDescription"/>
-    /// instead, never through this response.
+    /// Refuses a malformed client credential reading before any client authentication seam runs: 400
+    /// <c>invalid_request</c> with one of three fixed descriptions, the code
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see> names in its
+    /// definition of <c>invalid_request</c>: "The request is missing a required parameter, includes an
+    /// unsupported parameter value (other than grant type), repeats a parameter, includes multiple credentials,
+    /// utilizes more than one mechanism for authenticating the client, or is otherwise malformed." A form field
+    /// sent twice answers
+    /// <see cref="WellKnownOAuthErrorDescriptions.RepeatedClientAuthenticationParameter"/>, an
+    /// <c>Authorization</c> field sent twice or outside its grammar
+    /// <see cref="WellKnownOAuthErrorDescriptions.MalformedAuthorizationField"/>, and more than one mechanism
+    /// <see cref="WellKnownOAuthErrorDescriptions.MoreThanOneClientAuthenticationMethod"/>. The materialization's
+    /// refusal and the federation endpoints answer through this one body.
     /// </summary>
-    private static ServerHttpResponse UnknownClientResponse(IncomingRequest? request) =>
-        AddBasicChallengeIfAttempted(
-            ServerHttpResponse.Unauthorized(OAuthErrors.InvalidClient, UnknownClientDescription),
-            request);
+    /// <param name="reading">The request's client credentials.</param>
+    /// <returns>The 400 refusal, or <see langword="null"/> when the reading is not malformed.</returns>
+    internal static ServerHttpResponse? RefuseMalformedClientCredentials(ClientCredentialReading reading) => reading switch
+    {
+        { IsParameterRepeated: true } => ServerHttpResponse.BadRequest(
+            OAuthErrors.InvalidRequest, WellKnownOAuthErrorDescriptions.RepeatedClientAuthenticationParameter),
+        { IsAuthorizationRepeated: true } or { IsAuthorizationMalformed: true } => ServerHttpResponse.BadRequest(
+            OAuthErrors.InvalidRequest, WellKnownOAuthErrorDescriptions.MalformedAuthorizationField),
+        { IsMoreThanOneMechanism: true } => ServerHttpResponse.BadRequest(
+            OAuthErrors.InvalidRequest, WellKnownOAuthErrorDescriptions.MoreThanOneClientAuthenticationMethod),
+
+        _ => null
+    };
 
 
     /// <summary>
-    /// The <c>401 invalid_client</c> response every client-authentication failure and every site
-    /// that finds no registration to identify against in this file answers with —
-    /// <paramref name="description"/> names the specific failure. Carries the
-    /// <see cref="AddBasicChallengeIfAttempted"/> challenge when <paramref name="request"/>
-    /// attempted <c>Authorization: Basic</c>, exactly as <see cref="UnknownClientResponse"/> does
-    /// for a mismatch against a resolved registration —
-    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 §5.2</see> draws no
-    /// distinction between the failure kinds for the challenge requirement.
+    /// The <c>invalid_client</c> refusal of a failed client authentication, given the issuer the request is
+    /// served under. <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>:
+    /// "If the client attempted to authenticate via the "Authorization" request header field, the
+    /// authorization server MUST respond with an HTTP 401 (Unauthorized) status code and include the
+    /// "WWW-Authenticate" response header field matching the authentication scheme used by the client." A
+    /// request that attempted the field with <c>Basic</c> is answered 401 with the <c>Basic</c> challenge. A
+    /// request that attempted it with another scheme is answered 401 with the challenge of its scheme and, when
+    /// <c>client_secret_basic</c> is advertised, the <c>Basic</c> challenge after it in the same field
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.6.1">RFC 9110 Section 11.6.1</see>,
+    /// "WWW-Authenticate = #challenge", the two separated by a comma and a space), so the answer matches the
+    /// client's scheme and names one the server applies. Any other request is answered 401 with the
+    /// <c>Basic</c> challenge when <c>client_secret_basic</c> is advertised (the section's "The authorization
+    /// server MAY return an HTTP 401 (Unauthorized) status code to indicate which HTTP authentication schemes
+    /// are supported."), and otherwise 400, the section's default status ("The authorization server responds
+    /// with an HTTP 400 (Bad Request) status code (unless specified otherwise) and includes the following
+    /// parameters with the response:"), so no 401 leaves without a challenge:
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.5.2">RFC 9110 Section 15.5.2</see>, "The
+    /// server generating a 401 response MUST send a WWW-Authenticate header field (Section 11.6.1) containing
+    /// at least one challenge applicable to the target resource." Each challenge carries the
+    /// <c>realm</c> of the issuer (<see href="https://www.rfc-editor.org/rfc/rfc7617#section-2">RFC 7617
+    /// Section 2</see>: "The authentication parameter 'realm' is REQUIRED ([RFC7235], Section 2.2)."), so a
+    /// request whose issuer does not resolve, <paramref name="issuer"/> <see langword="null"/>, is answered 400
+    /// with no challenge, a named deviation from the section's 401 for an attempt in the field. The scheme of
+    /// another attempt is a token of at most 20 characters (<see cref="AuthorizationFieldReading"/>), so the
+    /// value written back is bounded and holds no separator.
     /// </summary>
-    private static ServerHttpResponse ClientAuthenticationFailureResponse(IncomingRequest? request, string description) =>
-        AddBasicChallengeIfAttempted(
-            ServerHttpResponse.Unauthorized(OAuthErrors.InvalidClient, description),
-            request);
+    /// <param name="reading">The request's client credentials, not malformed.</param>
+    /// <param name="description">The <c>error_description</c> of the refusal.</param>
+    /// <param name="isBasicAdvertised">Whether the server advertises <c>client_secret_basic</c>.</param>
+    /// <param name="issuer">The issuer the request is served under, or <see langword="null"/> when none resolves.</param>
+    /// <returns>The refusal.</returns>
+    internal static ServerHttpResponse ClientAuthenticationRefusal(
+        ClientCredentialReading reading, string description, bool isBasicAdvertised, Uri? issuer)
+    {
+        string? challenge = (reading, issuer) switch
+        {
+            (_, null) => null,
+            ({ HasBasicAuthorization: true }, Uri realm) => RealmChallenge(WellKnownAuthenticationSchemes.Basic, realm),
+            ({ HasOtherAuthorization: true }, Uri realm) when isBasicAdvertised =>
+                $"{RealmChallenge(reading.Authorization.Scheme!, realm)}, {RealmChallenge(WellKnownAuthenticationSchemes.Basic, realm)}",
+            ({ HasOtherAuthorization: true }, Uri realm) => RealmChallenge(reading.Authorization.Scheme!, realm),
+            (_, Uri realm) when isBasicAdvertised => RealmChallenge(WellKnownAuthenticationSchemes.Basic, realm),
+
+            _ => null
+        };
+
+        return challenge is not null
+            ? ServerHttpResponse.Unauthorized(OAuthErrors.InvalidClient, description)
+                .WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, challenge)
+            : ServerHttpResponse.BadRequest(OAuthErrors.InvalidClient, description);
+    }
 
 
     /// <summary>
-    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 §4.1.2.1</see>:
-    /// "if the client identifier is missing or invalid, the authorization server ... MUST NOT
-    /// automatically redirect the user agent to the invalid redirection URI" — the authorization
-    /// endpoint's own identification refusal, a direct response with no redirect, distinct from
-    /// the token endpoint family's <see cref="UnknownClientResponse"/>.
+    /// Whether <paramref name="server"/> advertises <c>client_secret_basic</c> in
+    /// <see cref="AuthorizationServerIntegration.ClientAuthenticationMethodsSupported"/>, the method whose
+    /// <c>Basic</c> challenge a failed authentication that did not use the <c>Authorization</c> field is
+    /// answered with.
+    /// </summary>
+    /// <param name="server">The server the request is served by, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when <c>client_secret_basic</c> is advertised.</returns>
+    internal static bool IsBasicAdvertised(EndpointServer? server) =>
+        server is not null
+            && server.OAuth().ClientAuthenticationMethodsSupported.Contains(ClientAuthenticationMethod.ClientSecretBasic);
+
+
+    /// <summary>
+    /// The challenge <c>&lt;scheme&gt; realm="&lt;issuer&gt;"</c>: the scheme the client attempted, or
+    /// <c>Basic</c>, and the realm the header-safe form of the issuer
+    /// (<see cref="CredentialEndpointDpopValidation.HeaderSafeIssuer"/>, the body every challenge of the
+    /// library writes its realm through), its <c>"</c> and <c>\</c> written as quoted-pairs
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.6.4">RFC 9110 Section 5.6.4</see>).
+    /// </summary>
+    /// <param name="scheme">The authentication scheme, a token.</param>
+    /// <param name="issuer">The issuer the request is served under.</param>
+    /// <returns>The <c>WWW-Authenticate</c> value.</returns>
+    private static string RealmChallenge(string scheme, Uri issuer)
+    {
+        string realm = CredentialEndpointDpopValidation.HeaderSafeIssuer(issuer)
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("\"", "\\\"", StringComparison.Ordinal);
+
+        return $"{scheme} realm=\"{realm}\"";
+    }
+
+
+    /// <summary>
+    /// The <c>invalid_client</c> response every client identification or authentication failure of this
+    /// file answers with, <paramref name="description"/> naming the failure, shaped by
+    /// <see cref="ClientAuthenticationRefusal"/>. The issuer that names the challenge's realm is the one a
+    /// continuing grant's step carried (<c>CorrelationStepIssuer</c>), or else resolved once here through
+    /// <see cref="CredentialEndpointDpopValidation.ResolveIssuerAsync"/>, and only when the answer is a 401.
+    /// A registration that is absent or an issuer that does not resolve leaves no realm, and the answer is
+    /// 400.
+    /// </summary>
+    /// <param name="reading">The request's client credentials, not malformed.</param>
+    /// <param name="description">The <c>error_description</c> of the refusal.</param>
+    /// <param name="registration">The registration the request is served for, or <see langword="null"/> when none is resolved.</param>
+    /// <param name="context">The per-request context.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The refusal.</returns>
+    internal static async ValueTask<ServerHttpResponse> ClientAuthenticationFailureResponseAsync(
+        ClientCredentialReading reading,
+        string description,
+        ClientRecord? registration,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+    {
+        EndpointServer? server = context.RequestServer;
+        bool isBasicAdvertised = IsBasicAdvertised(server);
+        if(!reading.HasBasicAuthorization && !reading.HasOtherAuthorization && !isBasicAdvertised)
+        {
+            return ClientAuthenticationRefusal(reading, description, isBasicAdvertised, issuer: null);
+        }
+
+        Uri? issuer = context.CorrelationStepIssuer;
+        if(issuer is null && registration is not null && server is not null)
+        {
+            try
+            {
+                issuer = await CredentialEndpointDpopValidation.ResolveIssuerAsync(
+                    server, registration, context, cancellationToken).ConfigureAwait(false);
+            }
+            catch(InvalidOperationException)
+            {
+                issuer = null;
+            }
+        }
+
+        return ClientAuthenticationRefusal(reading, description, isBasicAdvertised, issuer);
+    }
+
+
+    /// <summary>
+    /// The identification refusal at the endpoints listed on <see cref="UnknownClientDescription"/>'s own doc:
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>
+    /// <c>invalid_client</c> with that description, so the body never discloses whether the presented
+    /// identifier belongs to another registration, shaped by
+    /// <see cref="ClientAuthenticationFailureResponseAsync"/>. The continuing-grant endpoints (code
+    /// redemption, refresh) answer their own identification mismatch with
+    /// <see cref="CodeGrantNotFoundDescription"/> / <see cref="RefreshTokenNotFoundDescription"/> instead.
+    /// </summary>
+    /// <param name="reading">The request's client credentials, not malformed.</param>
+    /// <param name="registration">The registration the request is served for.</param>
+    /// <param name="context">The per-request context.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The refusal.</returns>
+    private static ValueTask<ServerHttpResponse> UnknownClientResponseAsync(
+        ClientCredentialReading reading, ClientRecord? registration, ExchangeContext context, CancellationToken cancellationToken) =>
+        ClientAuthenticationFailureResponseAsync(reading, UnknownClientDescription, registration, context, cancellationToken);
+
+
+    /// <summary>
+    /// The answer of an endpoint of this file that finds no <see cref="ClientRecord"/> on the context: 500
+    /// <c>server_error</c> with <see cref="WellKnownOAuthErrorDescriptions.ServerNotReady"/> and no challenge,
+    /// as the Global Token Revocation endpoint answers the same state. The dispatcher places the tenant's
+    /// registration on the context before any candidate runs and answers a missing one itself, so only an
+    /// application's materializer that returns a registration of another family reaches this answer: the
+    /// endpoint cannot serve the request, and the fault is the server's wiring, not the caller's credential.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.6.1">RFC 9110 Section 15.6.1</see>: "The 500
+    /// (Internal Server Error) status code indicates that the server encountered an unexpected condition that
+    /// prevented it from fulfilling the request." A <c>client_id</c> that names another registration is
+    /// answered <c>invalid_client</c> with <see cref="UnknownClientDescription"/> by
+    /// <see cref="UnknownClientResponseAsync"/>.
+    /// </summary>
+    /// <returns>The 500 answer.</returns>
+    private static ServerHttpResponse UnresolvedRegistrationResponse() =>
+        ServerHttpResponse.ServerError(OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady);
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 Section 4.1.2.1</see>:
+    /// "If the request fails due to a missing, invalid, or mismatching redirection URI, or if the client
+    /// identifier is missing or invalid, the authorization server SHOULD inform the resource owner of the error
+    /// and MUST NOT automatically redirect the user-agent to the invalid redirection URI." This is the
+    /// authorization endpoint's own identification refusal, a direct response with no redirect, distinct from
+    /// the token endpoint family's <see cref="UnknownClientResponseAsync"/>.
     /// </summary>
     private static ServerHttpResponse UnidentifiedClientDirectResponse() =>
         ServerHttpResponse.BadRequest(OAuthErrors.InvalidRequest, UnknownClientDescription);
 
 
     /// <summary>
-    /// Identification at every site that reads an OPTIONAL <c>client_id</c> field: when the
-    /// field is present it MUST be <paramref name="registration"/>'s own identifier
-    /// (<see cref="IsPresentedClientIdentifierTheRegistration"/>); an absent field is not a
-    /// failure here — a caller with its own required-field rule (a public client, or a request
-    /// that never authenticates) enforces that separately. Runs BEFORE the declared
-    /// authentication method and before any grant-binding comparison, per the
-    /// identification-then-authentication-then-binding order client authentication for this
-    /// authorization server follows throughout.
+    /// Identification at every site that reads an OPTIONAL <c>client_id</c>: the reading's
+    /// <see cref="ClientCredentialReading.ClientId"/>, when present, MUST be <paramref name="registration"/>'s
+    /// own identifier (<see cref="IsPresentedClientIdentifierTheRegistration"/>); an absent value is not a
+    /// failure here, since a caller with its own required-field rule enforces that separately. Runs after a
+    /// malformed reading is refused and BEFORE the declared authentication method and any grant-binding
+    /// comparison, the identification-then-authentication-then-binding order this authorization server
+    /// follows throughout.
     /// </summary>
-    private static ServerHttpResponse? RefuseUnidentifiedClient(
-        ClientRecord registration, RequestFields fields, IncomingRequest? request)
-    {
-        if(fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? presentedClientId)
-            && !string.IsNullOrEmpty(presentedClientId)
-            && !IsPresentedClientIdentifierTheRegistration(registration, presentedClientId))
-        {
-            return UnknownClientResponse(request);
-        }
-
-        return null;
-    }
-
-
-    /// <summary>
-    /// Reports whether the request carries client credentials — the §3.1 "if client credentials are
-    /// present" predicate for the jwt-bearer grant. A credential is present when the request bears an
-    /// <c>Authorization</c> header (<c>client_secret_basic</c> / <c>private_key_jwt</c> / mTLS surface)
-    /// OR a <c>client_secret</c> / <c>client_assertion</c> form field (<c>client_secret_post</c> /
-    /// <c>private_key_jwt</c> body form). A bare <c>client_id</c> with no secret is identification, not
-    /// a credential, so it is NOT treated as present — that keeps the §2.1 anonymous path open.
-    /// </summary>
-    private static bool HasClientCredentials(IncomingRequest? request, RequestFields fields)
-    {
-        if(request is not null
-            && request.Headers.TryGetSingle(WellKnownHttpHeaderNames.Authorization, out string? authHeader)
-            && !string.IsNullOrEmpty(authHeader))
-        {
-            return true;
-        }
-
-        return (fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
-                && !string.IsNullOrEmpty(secret))
-            || (fields.TryGetValue(OAuthRequestParameterNames.ClientAssertion, out string? assertion)
-                && !string.IsNullOrEmpty(assertion));
-    }
+    /// <param name="registration">The registration selected for the request.</param>
+    /// <param name="reading">The request's client credentials, not malformed.</param>
+    /// <returns><see langword="true"/> when a presented <c>client_id</c> names another registration.</returns>
+    private static bool NamesAnotherClient(ClientRecord registration, ClientCredentialReading reading) =>
+        reading.ClientId is { } presentedClientId
+            && !IsPresentedClientIdentifierTheRegistration(registration, presentedClientId);
 
 
     /// <summary>
@@ -6701,34 +6939,39 @@ public static class AuthCodeEndpoints
     /// method this token endpoint does not advertise in
     /// <see cref="AuthorizationServerIntegration.ClientAuthenticationMethodsSupported"/>, so the
     /// discovery advertisement and the endpoint's judgment are one set rather than two independently
-    /// maintained facts (draft-ietf-oauth-client-id-metadata-document-02 §8.2). The refusal keys off a
+    /// maintained facts (draft-ietf-oauth-client-id-metadata-document-02 Section 8.2). The refusal keys off a
     /// DECLARED method only: a registration whose <see cref="ClientRecord.TokenEndpointAuthMethod"/> is
-    /// <see langword="null"/> or <see cref="ClientAuthenticationMethod.None"/> keeps its dispatch — the
+    /// <see langword="null"/> or <see cref="ClientAuthenticationMethod.None"/> keeps its dispatch: the
     /// PKCE-only public-client shape the revocation and logout endpoints authenticate. Returns the
-    /// <c>401 invalid_client</c> refusal when the declared method is unadvertised, otherwise
-    /// <see langword="null"/>. Every grant that authenticates a client — the authorization_code,
-    /// refresh_token and jwt-bearer grants through
+    /// <c>invalid_client</c> refusal of <see cref="ClientAuthenticationFailureResponseAsync"/> when the
+    /// declared method is unadvertised, otherwise <see langword="null"/>. Every grant that authenticates a
+    /// client, the authorization_code, refresh_token and jwt-bearer grants through
     /// <see cref="RequireClientAuthenticationIfDeclaredAsync"/>, and the client_credentials and
     /// token-exchange grants that call <see cref="AuthorizationServerIntegration.ValidateClientCredentialsAsync"/>
-    /// directly — consults this before any validator runs.
+    /// directly, consults this before any validator runs.
     /// </summary>
     /// <param name="oauth">The authorization server integration whose advertised methods bound the declaration.</param>
     /// <param name="registration">The effective client registration whose declared method is judged.</param>
-    /// <param name="request">The incoming request, so a Basic-attempted refusal carries the challenge.</param>
-    /// <returns>A <c>401 invalid_client</c> response when the declared method is unadvertised; otherwise <see langword="null"/>.</returns>
-    private static ServerHttpResponse? RefuseUndeclaredClientAuthenticationMethod(
+    /// <param name="reading">The request's client credentials, so the refusal carries the challenge of the scheme attempted.</param>
+    /// <param name="context">The per-request context.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The <c>invalid_client</c> refusal when the declared method is unadvertised; otherwise <see langword="null"/>.</returns>
+    private static async ValueTask<ServerHttpResponse?> RefuseUndeclaredClientAuthenticationMethodAsync(
         AuthorizationServerIntegration oauth,
         ClientRecord registration,
-        IncomingRequest? request)
+        ClientCredentialReading reading,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
     {
         if(registration.TokenEndpointAuthMethod is { } authMethod
             && authMethod != ClientAuthenticationMethod.None
             && !oauth.ClientAuthenticationMethodsSupported.Contains(authMethod))
         {
-            return ClientAuthenticationFailureResponse(
-                request,
+            return await ClientAuthenticationFailureResponseAsync(
+                reading,
                 "The client's declared token_endpoint_auth_method is not supported by this "
-                + "token endpoint.");
+                + "token endpoint.",
+                registration, context, cancellationToken).ConfigureAwait(false);
         }
 
         return null;
@@ -6736,72 +6979,86 @@ public static class AuthCodeEndpoints
 
 
     /// <summary>
-    /// Enforces draft-ietf-oauth-client-id-metadata-document-02 §8.2 (CIMD-049/050) at the
-    /// authorization_code, refresh_token, and jwt-bearer grants: when the effective registration
-    /// declares a non-<see cref="ClientAuthenticationMethod.None"/> <c>token_endpoint_auth_method</c>,
-    /// this is a confidential client and "any communication with the authorization server MUST include
-    /// client authentication of the registered type." The declared method must first be one this token
-    /// endpoint actually advertises (<see cref="AuthorizationServerIntegration.ClientAuthenticationMethodsSupported"/>)
-    /// — a registration declaring a method the server does not support is refused with
-    /// <c>401 invalid_client</c> before any validator runs, so the discovery advertisement and the
+    /// Enforces <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-client-id-metadata-document-02.html#section-8.2">draft-ietf-oauth-client-id-metadata-document-02
+    /// Section 8.2</see> at the pushed request and the authorization_code, refresh_token, and jwt-bearer grants: when
+    /// the effective registration declares a non-<see cref="ClientAuthenticationMethod.None"/>
+    /// <c>token_endpoint_auth_method</c>, "This establishes this client as a confidential client, and any
+    /// communication with the authorization server MUST include client authentication of the registered type."
+    /// A malformed <paramref name="reading"/> is refused first
+    /// (<see cref="RefuseMalformedClientCredentials"/>), then a <c>client_id</c> naming another registration
+    /// (<see cref="NamesAnotherClient"/>). The declared method must be one this token endpoint actually
+    /// advertises (<see cref="AuthorizationServerIntegration.ClientAuthenticationMethodsSupported"/>).
+    /// A registration declaring a method the server does not support is refused with
+    /// <c>invalid_client</c> before any validator runs, so the discovery advertisement and the
     /// endpoint's judgment are never two independently maintained facts. Once coherent,
     /// <see cref="AuthorizationServerIntegration.ValidateClientCredentialsAsync"/>
-    /// must be wired AND must return <see langword="true"/>; an unwired seam is a fail-closed
-    /// <c>401 invalid_client</c>, never silent passthrough.
+    /// must be wired AND must return <see langword="true"/> for the reading; an unwired seam is a fail-closed
+    /// <c>invalid_client</c>, never silent passthrough.
     /// A <see langword="null"/> or <see cref="ClientAuthenticationMethod.None"/> method is the
-    /// PKCE-only public-client shape, but RFC 7523 §3.1's principle — "if client credentials are
-    /// present in the request, the authorization server MUST validate them" — generalizes to every
-    /// caller of this helper, not only the jwt-bearer grant it was written for: a request that
-    /// attaches a <c>client_secret</c> / <c>client_assertion</c> / <c>Authorization</c> header is
-    /// never silently waved through just because the registration never declared a method. That
-    /// branch validates a present credential through the same seam and fail-closed rule as the
-    /// declared-method path below, and returns <see langword="null"/> immediately only when
-    /// <see cref="HasClientCredentials"/> reports none — the true anonymous public client. The
-    /// jwt-bearer grant invokes this only when the request carries no credentials: its own §3.1
-    /// validate-if-present branch authenticates a credential-bearing request before this helper is
-    /// ever reached, so composing the two never validates the same credentials twice.
+    /// PKCE-only public-client shape, but RFC 7523 Section 3.1's principle, "if client credentials are
+    /// present in the request, the authorization server MUST validate them", generalizes to every
+    /// caller of this helper: a request whose reading presents a credential
+    /// (<see cref="ClientCredentialReading.HasCredentials"/>) is never waved through because the
+    /// registration declared no method. That branch validates the presented credential through the same
+    /// seam and fail-closed rule as the declared-method path below, and returns <see langword="null"/>
+    /// immediately only when the reading presents none, the true anonymous public client. Every refusal is
+    /// shaped by <see cref="ClientAuthenticationFailureResponseAsync"/>.
     /// </summary>
+    /// <param name="oauth">The authorization server integration.</param>
+    /// <param name="reading">The request's client credentials, read once by the caller.</param>
+    /// <param name="registration">The effective client registration.</param>
+    /// <param name="context">The per-request context.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The refusal, or <see langword="null"/> when the request may proceed.</returns>
     private static async ValueTask<ServerHttpResponse?> RequireClientAuthenticationIfDeclaredAsync(
         AuthorizationServerIntegration oauth,
-        IncomingRequest? request,
-        RequestFields fields,
+        ClientCredentialReading reading,
         ClientRecord registration,
         ExchangeContext context,
         CancellationToken cancellationToken)
     {
-        ServerHttpResponse? identificationFailure = RefuseUnidentifiedClient(registration, fields, request);
-        if(identificationFailure is not null)
+        ServerHttpResponse? malformedRefusal = RefuseMalformedClientCredentials(reading);
+        if(malformedRefusal is not null)
         {
-            return identificationFailure;
+            return malformedRefusal;
+        }
+
+        if(NamesAnotherClient(registration, reading))
+        {
+            return await UnknownClientResponseAsync(reading, registration, context, cancellationToken).ConfigureAwait(false);
         }
 
         if(registration.TokenEndpointAuthMethod is not { } authMethod
             || authMethod == ClientAuthenticationMethod.None)
         {
-            if(!HasClientCredentials(request, fields))
+            if(!reading.HasCredentials)
             {
                 return null;
             }
 
             if(oauth.ValidateClientCredentialsAsync is null)
             {
-                return ClientAuthenticationFailureResponse(
-                    request,
+                return await ClientAuthenticationFailureResponseAsync(
+                    reading,
                     "Client credentials were presented but this authorization server has no client "
-                    + "authentication configured to validate them.");
+                    + "authentication configured to validate them.",
+                    registration, context, cancellationToken).ConfigureAwait(false);
             }
 
             bool arePresentedCredentialsAuthenticated = await oauth.ValidateClientCredentialsAsync(
-                request, fields, registration, context, cancellationToken).ConfigureAwait(false);
+                reading, registration, context, cancellationToken).ConfigureAwait(false);
             if(!arePresentedCredentialsAuthenticated)
             {
-                return ClientAuthenticationFailureResponse(request, WellKnownOAuthErrorDescriptions.ClientAuthenticationFailed);
+                return await ClientAuthenticationFailureResponseAsync(
+                    reading, WellKnownOAuthErrorDescriptions.ClientAuthenticationFailed, registration, context, cancellationToken)
+                    .ConfigureAwait(false);
             }
 
             return null;
         }
 
-        ServerHttpResponse? undeclaredMethodRefusal = RefuseUndeclaredClientAuthenticationMethod(oauth, registration, request);
+        ServerHttpResponse? undeclaredMethodRefusal = await RefuseUndeclaredClientAuthenticationMethodAsync(
+            oauth, registration, reading, context, cancellationToken).ConfigureAwait(false);
         if(undeclaredMethodRefusal is not null)
         {
             return undeclaredMethodRefusal;
@@ -6809,17 +7066,20 @@ public static class AuthCodeEndpoints
 
         if(oauth.ValidateClientCredentialsAsync is null)
         {
-            return ClientAuthenticationFailureResponse(
-                request,
+            return await ClientAuthenticationFailureResponseAsync(
+                reading,
                 "This client declared a confidential token_endpoint_auth_method but client "
-                + "authentication is not configured for this authorization server.");
+                + "authentication is not configured for this authorization server.",
+                registration, context, cancellationToken).ConfigureAwait(false);
         }
 
         bool isClientAuthenticated = await oauth.ValidateClientCredentialsAsync(
-            request, fields, registration, context, cancellationToken).ConfigureAwait(false);
+            reading, registration, context, cancellationToken).ConfigureAwait(false);
         if(!isClientAuthenticated)
         {
-            return ClientAuthenticationFailureResponse(request, WellKnownOAuthErrorDescriptions.ClientAuthenticationFailed);
+            return await ClientAuthenticationFailureResponseAsync(
+                reading, WellKnownOAuthErrorDescriptions.ClientAuthenticationFailed, registration, context, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         return null;
@@ -6841,7 +7101,10 @@ public static class AuthCodeEndpoints
     /// Client authentication is OPTIONAL for this grant (§6.1), so — unlike
     /// <see cref="BuildClientCredentials"/> — the candidate does not run the
     /// client-authentication seam; the code itself is the authorization grant, and the
-    /// validation seam decides whether an anonymous request is acceptable. The §6.3 error
+    /// validation seam decides whether an anonymous request is acceptable. The request's client
+    /// credentials are read once all the same, through <see cref="CarriedClientCredentials"/>, and a malformed
+    /// reading is refused by <see cref="RefuseMalformedClientCredentials"/> before the validation seam
+    /// runs, so a malformed request never consumes the code. The Section 6.3 error
     /// distinctions (wrong code vs. wrong / missing / unexpected Transaction Code vs.
     /// anonymous-access-not-supported) come from the seam, since only the application's
     /// code store knows them. This grant does not consume the RFC 8707 §2 <c>resource</c>
@@ -6892,7 +7155,7 @@ public static class AuthCodeEndpoints
                 ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
-                    return (null, ClientAuthenticationFailureResponse(context.IncomingRequest, "Unknown client."));
+                    return (null, UnresolvedRegistrationResponse());
                 }
 
                 //§6.1: pre-authorized_code MUST be present when this grant type is used.
@@ -6903,12 +7166,21 @@ public static class AuthCodeEndpoints
                         OAuthErrors.InvalidRequest, "Missing pre-authorized_code."));
                 }
 
+                //The client's credentials, client_id among them, are read once and a malformed
+                //reading is refused here, before the code-validation seam below runs, so a malformed
+                //request never consumes the single-use pre-authorized_code.
+                ClientCredentialReading clientCredentials = CarriedClientCredentials(context, fields);
+                ServerHttpResponse? malformedCredentials = RefuseMalformedClientCredentials(clientCredentials);
+                if(malformedCredentials is not null)
+                {
+                    return (null, malformedCredentials);
+                }
+
                 //§6.1: tx_code and client_id are OPTIONAL. The seam owns whether an absent
                 //tx_code or an anonymous (no client_id) request is acceptable.
                 string? transactionCode = fields.TryGetValue(OAuthRequestParameterNames.TxCode, out string? tx)
                     && !string.IsNullOrWhiteSpace(tx) ? tx : null;
-                string? clientId = fields.TryGetValue(OAuthRequestParameterNames.ClientId, out string? cid)
-                    && !string.IsNullOrWhiteSpace(cid) ? cid : null;
+                string? clientId = clientCredentials.ClientId is { } cid && !string.IsNullOrWhiteSpace(cid) ? cid : null;
 
                 Uri issuerUri;
                 try
@@ -6954,7 +7226,7 @@ public static class AuthCodeEndpoints
 
                 if(!decision.IsGranted)
                 {
-                    return (null, MapPreAuthorizedCodeDenial(decision, context.IncomingRequest));
+                    return (null, MapPreAuthorizedCodeDenial(decision, clientCredentials, context, issuerUri));
                 }
 
                 //A granted decision names the End-User the access token is bound to. A subject that is null, empty or
@@ -7113,13 +7385,19 @@ public static class AuthCodeEndpoints
     /// <summary>
     /// Maps an OID4VCI 1.0 §6.3 Pre-Authorized Code denial to the corresponding OAuth 2.0
     /// Token Error Response. A denial with no reason set defaults to <c>invalid_grant</c>,
-    /// the spec's catch-all for an unaccepted Pre-Authorized Code. <paramref name="request"/>
-    /// carries the <see cref="ClientAuthenticationFailureResponse"/> challenge on the
-    /// <see cref="PreAuthorizedCodeDenialReason.ClientAuthenticationRequired"/> branch, the
-    /// one <c>invalid_client</c> answer this mapping can produce.
+    /// the spec's catch-all for an unaccepted Pre-Authorized Code. The
+    /// <see cref="PreAuthorizedCodeDenialReason.ClientAuthenticationRequired"/> branch, the one
+    /// <c>invalid_client</c> answer this mapping can produce, takes the request's one reading of its client
+    /// credentials, refused before the seam when malformed, and is shaped by
+    /// <see cref="ClientAuthenticationRefusal"/> under <paramref name="issuer"/>.
     /// </summary>
+    /// <param name="decision">The seam's refusal.</param>
+    /// <param name="reading">The request's client credentials, read once before the seam and not malformed.</param>
+    /// <param name="context">The per-request context.</param>
+    /// <param name="issuer">The issuer the request is served under, the realm of a challenge.</param>
+    /// <returns>The token error response.</returns>
     private static ServerHttpResponse MapPreAuthorizedCodeDenial(
-        PreAuthorizedCodeDecision decision, IncomingRequest? request) =>
+        PreAuthorizedCodeDecision decision, ClientCredentialReading reading, ExchangeContext context, Uri issuer) =>
         decision.DenialReason switch
         {
             //A denial with no reason set, and an explicit InvalidCode denial, share the
@@ -7138,8 +7416,10 @@ public static class AuthCodeEndpoints
                 ServerHttpResponse.BadRequest(OAuthErrors.InvalidGrant,
                     decision.DenialDescription ?? "The Transaction Code is invalid."),
             PreAuthorizedCodeDenialReason.ClientAuthenticationRequired =>
-                ClientAuthenticationFailureResponse(request,
-                    decision.DenialDescription ?? "Anonymous access is not supported; a client_id is required."),
+                ClientAuthenticationRefusal(
+                    reading,
+                    decision.DenialDescription ?? "Anonymous access is not supported; a client_id is required.",
+                    IsBasicAdvertised(context.RequestServer), issuer),
 
             _ => ServerHttpResponse.BadRequest(OAuthErrors.InvalidGrant,
                 decision.DenialDescription ?? "The pre-authorized_code is invalid or has expired.")
@@ -8393,7 +8673,7 @@ public static class AuthCodeEndpoints
                 ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
-                    return (null, ClientAuthenticationFailureResponse(context.IncomingRequest, "Unknown client."));
+                    return (null, UnresolvedRegistrationResponse());
                 }
 
                 ServerHttpResponse? clientFailure = VerifyRefreshClient(
@@ -8893,28 +9173,35 @@ public static class AuthCodeEndpoints
                 ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
-                    return (null, ClientAuthenticationFailureResponse(context.IncomingRequest, "Unknown client."));
+                    return (null, UnresolvedRegistrationResponse());
                 }
 
-                //Identification of an optional client_id form field before authentication:
-                //a field that names another registration is refused invalid_client here, never
-                //forwarded into the authentication seam.
-                ServerHttpResponse? revocationIdentificationFailure =
-                    RefuseUnidentifiedClient(registration, fields, context.IncomingRequest);
-                if(revocationIdentificationFailure is not null)
+                //The client's credentials are read once, and a malformed reading is refused before
+                //anything else reads it. Identification of an optional client_id then runs before
+                //authentication: a client_id that names another registration is refused
+                //invalid_client here, never forwarded into the authentication seam.
+                ClientCredentialReading clientCredentials = CarriedClientCredentials(context, fields);
+                ServerHttpResponse? malformedCredentials = RefuseMalformedClientCredentials(clientCredentials);
+                if(malformedCredentials is not null)
                 {
-                    return (null, revocationIdentificationFailure);
+                    return (null, malformedCredentials);
+                }
+
+                if(NamesAnotherClient(registration, clientCredentials))
+                {
+                    return (null, await UnknownClientResponseAsync(clientCredentials, registration, context, ct).ConfigureAwait(false));
                 }
 
                 //RFC 7009 §2.1: the client MUST authenticate using the same method
                 //it uses at the token endpoint. The seam owns the method and the
                 //credential comparison; the candidate gate guarantees it is wired.
                 bool isClientAuthenticated = await oauth.ValidateClientCredentialsAsync!(
-                    context.IncomingRequest, fields, registration, context, ct).ConfigureAwait(false);
+                    clientCredentials, registration, context, ct).ConfigureAwait(false);
                 if(!isClientAuthenticated)
                 {
-                    return (null, ClientAuthenticationFailureResponse(
-                        context.IncomingRequest, WellKnownOAuthErrorDescriptions.ClientAuthenticationFailed));
+                    return (null, await ClientAuthenticationFailureResponseAsync(
+                        clientCredentials, WellKnownOAuthErrorDescriptions.ClientAuthenticationFailed,
+                        registration, context, ct).ConfigureAwait(false));
                 }
 
                 //RFC 7009 §2.1: token is REQUIRED. The matcher claims every POST to this path
@@ -8990,28 +9277,38 @@ public static class AuthCodeEndpoints
                 ClientRecord? registration = context.ClientRegistration;
                 if(registration is null)
                 {
-                    return (null, ClientAuthenticationFailureResponse(context.IncomingRequest, "Unknown client."));
+                    return (null, UnresolvedRegistrationResponse());
                 }
 
-                //Identification of an optional client_id form field before authentication:
-                //a field that names another registration is refused invalid_client here, never
-                //forwarded into the authentication seam.
-                ServerHttpResponse? introspectionIdentificationFailure =
-                    RefuseUnidentifiedClient(registration, fields, context.IncomingRequest);
-                if(introspectionIdentificationFailure is not null)
+                //The client's credentials are read once, and a malformed reading is refused before
+                //anything else reads it. Identification of an optional client_id then runs before
+                //authentication: a client_id that names another registration is refused
+                //invalid_client here, never forwarded into the authentication seam.
+                ClientCredentialReading clientCredentials = CarriedClientCredentials(context, fields);
+                ServerHttpResponse? malformedCredentials = RefuseMalformedClientCredentials(clientCredentials);
+                if(malformedCredentials is not null)
                 {
-                    return (null, introspectionIdentificationFailure);
+                    return (null, malformedCredentials);
                 }
 
-                //RFC 7662 §2.3: a caller authenticating with client credentials that
-                //fail authentication gets HTTP 401. The candidate gate guarantees the
-                //seam is wired.
+                if(NamesAnotherClient(registration, clientCredentials))
+                {
+                    return (null, await UnknownClientResponseAsync(clientCredentials, registration, context, ct).ConfigureAwait(false));
+                }
+
+                //A caller whose client credentials fail authentication is answered invalid_client
+                //through the token endpoint's one refusal: 401 with a challenge where one applies
+                //(an attempt in the Authorization field, or client_secret_basic advertised), and 400
+                //with no challenge otherwise. RFC 7662 Section 2.3 answers such a caller 401; the 400
+                //is the deviation the design document records under client authentication at the
+                //token endpoint. The candidate gate guarantees the seam is wired.
                 bool isClientAuthenticated = await oauth.ValidateClientCredentialsAsync!(
-                    context.IncomingRequest, fields, registration, context, ct).ConfigureAwait(false);
+                    clientCredentials, registration, context, ct).ConfigureAwait(false);
                 if(!isClientAuthenticated)
                 {
-                    return (null, ClientAuthenticationFailureResponse(
-                        context.IncomingRequest, WellKnownOAuthErrorDescriptions.ClientAuthenticationFailed));
+                    return (null, await ClientAuthenticationFailureResponseAsync(
+                        clientCredentials, WellKnownOAuthErrorDescriptions.ClientAuthenticationFailed,
+                        registration, context, ct).ConfigureAwait(false));
                 }
 
                 //RFC 7662 §2.1: token is REQUIRED. The matcher claims every POST to this path

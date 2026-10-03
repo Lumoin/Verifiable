@@ -771,7 +771,7 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// to require it. The delegate resolves the requester's Federation Entity
     /// Key, verifies the client authentication JWT, and validates its claims via
     /// <see cref="Federation.FederationClientAuthentication.Validate"/>; returning
-    /// a failed result rejects the request with HTTP 401 <c>invalid_client</c>,
+    /// a failed result rejects the request with <c>invalid_client</c> (401 with a challenge, or 400 when none applies),
     /// and <see langword="null"/> means client authentication is not required at
     /// that endpoint so the request proceeds.
     /// </para>

@@ -265,6 +265,52 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>:
+    /// "invalid_request The request is missing a required parameter, includes an unsupported parameter or
+    /// parameter value, repeats the same parameter, uses more than one method for including an access
+    /// token, or is otherwise malformed.  The resource server SHOULD respond with the HTTP 400 (Bad
+    /// Request) status code." A Credential Request sent over a raw TLS connection with two
+    /// <c>Authorization: Bearer</c> field lines (<c>Authorization = credentials</c> is no list,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.6.2">RFC 9110 Section 11.6.2</see>) is
+    /// refused with 400 <c>invalid_request</c> and one <c>WWW-Authenticate</c> field holding the <c>Bearer</c> and
+    /// the <c>DPoP</c> challenge, each with <c>error="invalid_request"</c>,
+    /// <c>Bearer realm="&lt;issuer&gt;", error="invalid_request", DPoP error="invalid_request", algs="..."</c>, the
+    /// realm the issuer the host serves the endpoint under:
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 Section 7.2</see>, "Otherwise, both
+    /// Bearer and DPoP challenges MAY be used to deliver error information (Figure 19)." Both lines name the
+    /// <c>Bearer</c> scheme, where the section recommends "If the mechanism used to attempt authentication could be
+    /// established unambiguously, then the corresponding challenge SHOULD be used to deliver error information
+    /// (Figure 18)."; the both-challenges answer to two lines of one scheme is the library's named deviation, since
+    /// the reading of a repeated field keeps no scheme.
+    /// </summary>
+    [TestMethod]
+    public async Task CredentialEndpointRefusesTwoAuthorizationLinesWithBothChallengesAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        BoundTokenContext ctx = await AcquireAsync(host).ConfigureAwait(false);
+        using DpopClientFixture fixture = ctx.Fixture;
+
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Post, ctx.CredentialUrl,
+            [
+                new(WellKnownHttpHeaderNames.ContentType, WellKnownMediaTypes.Application.Json),
+                new(WellKnownHttpHeaderNames.Authorization, "Bearer " + ctx.AccessToken),
+                new(WellKnownHttpHeaderNames.Authorization, "Bearer " + ctx.AccessToken)
+            ],
+            Encoding.UTF8.GetBytes("{\"credential_configuration_id\":\"" + ConfigurationId + "\",\"proofs\":{\"jwt\":[\"p\"]}}"),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            $"Bearer realm=\"{ctx.Fixture.Registration.AuthorizationServerIssuer.OriginalString}\", error=\"invalid_request\", "
+            + $"DPoP error=\"invalid_request\", algs=\"{ResourceDpopProofs.AcceptedProofAlgorithms}\"",
+            Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
+        using JsonDocument document = JsonDocument.Parse(response.Body);
+        Assert.AreEqual("invalid_request", document.RootElement.GetProperty("error").GetString());
+    }
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 §7.2</see>: "If the
     /// mechanism used to attempt authentication could be established unambiguously, then the
     /// corresponding challenge SHOULD be used to deliver error information". A DPoP-bound access token

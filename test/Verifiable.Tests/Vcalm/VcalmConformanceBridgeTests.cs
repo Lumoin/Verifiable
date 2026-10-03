@@ -1635,9 +1635,9 @@ internal sealed class VcalmConformanceBridgeTests
         //client_secret_post (RFC 6749 §2.3.1): the application owns the secret store and comparison.
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
                 ValueTask.FromResult(
-                    fields.TryGetValue("client_secret", out string? secret)
+                    reading.ClientSecret is string secret
                     && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
         }).ConfigureAwait(false);
 

@@ -44,7 +44,7 @@ public delegate ValueTask<JtiReplayOutcome> CheckClientAssertionJtiReplayDelegat
 /// <remarks>
 /// Same sealed-record-with-nullable-fields shape as
 /// <see cref="FederationClientAuthenticationResult"/>; the token endpoint maps a
-/// rejection onto an HTTP 401 <c>invalid_client</c> response (RFC 7523 §3.2).
+/// rejection onto an <c>invalid_client</c> response (RFC 7523 Section 3.2).
 /// </remarks>
 [DebuggerDisplay("PrivateKeyJwtClientAuthenticationResult Valid={IsValid} Reason={FailureReason,nq}")]
 public sealed record PrivateKeyJwtClientAuthenticationResult
@@ -188,7 +188,7 @@ public static class PrivateKeyJwtClientAuthentication
     /// <returns>
     /// A successful result carrying the authenticated <c>client_id</c>, <c>jti</c>, and expiry, or a
     /// failed result whose <see cref="PrivateKeyJwtClientAuthenticationResult.FailureReason"/> the
-    /// caller maps onto an HTTP 401 <c>invalid_client</c> response (RFC 7523 §3.2).
+    /// caller maps onto an <c>invalid_client</c> response (RFC 7523 Section 3.2).
     /// </returns>
     public static PrivateKeyJwtClientAuthenticationResult Validate(
         JwtPayload payload,
@@ -455,7 +455,7 @@ public static class PrivateKeyJwtClientAuthentication
         VerificationDelegate? verificationDelegate,
         ClientAssertionAudiencePolicy? audiencePolicy)
     {
-        return async (request, fields, registration, context, cancellationToken) =>
+        return async (reading, registration, context, cancellationToken) =>
         {
             EndpointServer? server = context.RequestServer;
             if(server is null)
@@ -471,19 +471,20 @@ public static class PrivateKeyJwtClientAuthentication
                 return false;
             }
 
-            //RFC 7523 §2.2 / RFC 7521 §4.2: client_assertion_type MUST select the JWT Bearer client
-            //authentication profile before client_assertion is even attempted as this profile's
-            //assertion — an AS-side check no other seam in this library performs today.
-            if(!fields.TryGetValue(OAuthRequestParameterNames.ClientAssertionType, out string? assertionType)
+            //RFC 7523 Section 2.2 and RFC 7521 Section 4.2: client_assertion_type MUST select the JWT
+            //Bearer client authentication profile before client_assertion is attempted as this
+            //profile's assertion. The library read both fields once, in the reading; a field sent
+            //twice was refused before this seam runs, so each is the one value the client sent.
+            if(reading.ClientAssertionType is not { } assertionType
                 || !WellKnownClientAssertionTypes.IsJwtBearer(assertionType))
             {
                 return false;
             }
 
-            //RFC 7523 §2.2: "the client_assertion parameter contains a single JWT. It MUST NOT
-            //contain more than one JWT" — satisfied structurally: RequestFields holds one string
-            //per key, so a second client_assertion value can never be represented here.
-            if(!fields.TryGetValue(OAuthRequestParameterNames.ClientAssertion, out string? clientAssertion)
+            //RFC 7523 Section 2.2: "The value of the "client_assertion" parameter contains a single JWT."
+            //and "It MUST NOT contain more than one JWT." A second client_assertion value is a repeated
+            //parameter the library refused before this seam, so the reading holds at most one.
+            if(reading.ClientAssertion is not { } clientAssertion
                 || string.IsNullOrWhiteSpace(clientAssertion))
             {
                 return false;

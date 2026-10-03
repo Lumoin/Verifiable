@@ -1682,9 +1682,9 @@ internal sealed class Rfc8707ResourceIndicatorTests
         const string ClientSecret = "s3cret-for-client-credentials";
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, fields, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, _, _, _) =>
                 ValueTask.FromResult(
-                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    reading.ClientSecret is string secret
                     && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
         }).ConfigureAwait(false);
 
@@ -1740,9 +1740,9 @@ internal sealed class Rfc8707ResourceIndicatorTests
         const string ClientSecret = "s3cret-for-client-credentials";
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, fields, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, _, _, _) =>
                 ValueTask.FromResult(
-                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    reading.ClientSecret is string secret
                     && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
         }).ConfigureAwait(false);
 
@@ -1869,9 +1869,9 @@ internal sealed class Rfc8707ResourceIndicatorTests
         const string ClientSecret = "s3cret-for-client-credentials";
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, fields, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, _, _, _) =>
                 ValueTask.FromResult(
-                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    reading.ClientSecret is string secret
                     && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
         }).ConfigureAwait(false);
 
@@ -1911,9 +1911,9 @@ internal sealed class Rfc8707ResourceIndicatorTests
         const string ClientSecret = "s3cret-for-client-credentials";
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, fields, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, _, _, _) =>
                 ValueTask.FromResult(
-                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    reading.ClientSecret is string secret
                     && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
         }).ConfigureAwait(false);
 
@@ -1954,9 +1954,9 @@ internal sealed class Rfc8707ResourceIndicatorTests
         const string ClientSecret = "s3cret-for-client-credentials";
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, fields, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, _, _, _) =>
                 ValueTask.FromResult(
-                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    reading.ClientSecret is string secret
                     && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
         }).ConfigureAwait(false);
 
@@ -2006,7 +2006,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
 
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) => ValueTask.FromResult(true);
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) => ValueTask.FromResult(true);
 
             candidateIntegration.ValidateTokenExchangeTokenAsync =
                 static (token, tokenType, registration, context, ct) =>
@@ -3431,9 +3431,9 @@ internal sealed class Rfc8707ResourceIndicatorTests
         const string clientSecret = "s3cret-for-client-credentials";
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, fields, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, _, _, _) =>
                 ValueTask.FromResult(
-                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    reading.ClientSecret is string secret
                     && string.Equals(secret, clientSecret, StringComparison.Ordinal));
         }).ConfigureAwait(false);
 

@@ -47,7 +47,7 @@ internal sealed class TokenRevocationServerTests
         List<(string Token, string? Hint, ClientRecord Client)> revoked = [];
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(true);
 
             candidateIntegration.RevokeTokenAsync = (token, hint, registration, _, _) =>
@@ -83,9 +83,11 @@ internal sealed class TokenRevocationServerTests
 
 
     /// <summary>
-    /// When client authentication fails the endpoint returns 401
-    /// <c>invalid_client</c> and never reaches the revocation seam — a token is
-    /// not revoked on an unauthenticated request (RFC 7009 §2.1).
+    /// When client authentication fails the endpoint returns <c>invalid_client</c>, 400 at a server that advertises
+    /// no <c>client_secret_basic</c> for a request that used no <c>Authorization</c> field (the default status of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>), and never reaches
+    /// the revocation seam: a token is not revoked on an unauthenticated request
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7009#section-2.1">RFC 7009 Section 2.1</see>).
     /// </summary>
     [TestMethod]
     public async Task RevocationEndpointRejectsUnauthenticatedClientWithoutTouchingTheStore()
@@ -97,7 +99,7 @@ internal sealed class TokenRevocationServerTests
         bool seamInvoked = false;
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(false);
 
             candidateIntegration.RevokeTokenAsync = (_, _, _, _, _) =>
@@ -116,7 +118,7 @@ internal sealed class TokenRevocationServerTests
             [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(401, response.StatusCode, response.Body);
+        Assert.AreEqual(400, response.StatusCode, response.Body);
         Assert.Contains(OAuthErrors.InvalidClient, response.Body, StringComparison.Ordinal);
         Assert.IsFalse(seamInvoked, "A failed authentication must not revoke anything.");
     }
@@ -137,7 +139,7 @@ internal sealed class TokenRevocationServerTests
         int seamCalls = 0;
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(true);
 
             candidateIntegration.RevokeTokenAsync = (_, _, _, _, _) =>
@@ -179,7 +181,7 @@ internal sealed class TokenRevocationServerTests
         //candidate gate requires both, so the endpoint must not materialize.
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(true);
         }).ConfigureAwait(false);
 

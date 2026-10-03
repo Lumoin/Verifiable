@@ -748,7 +748,7 @@ internal sealed class OAuthDiagnosticsTests
             candidateIntegration.ClientAuthenticationMethodsSupported =
                 [ClientAuthenticationMethod.None, ClientAuthenticationMethod.ClientSecretPost];
             candidateIntegration.ValidateClientCredentialsAsync =
-                static (request, fields, registration, context, ct) => ValueTask.FromResult(true);
+                static (reading, registration, context, ct) => ValueTask.FromResult(true);
         }).ConfigureAwait(false);
 
         await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);

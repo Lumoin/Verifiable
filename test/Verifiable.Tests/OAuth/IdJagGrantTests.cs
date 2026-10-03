@@ -19,6 +19,7 @@ using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
 using Verifiable.OAuth.Server.States;
 using Verifiable.OAuth.TokenExchange;
+using Verifiable.Server.Routing;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -475,7 +476,7 @@ internal sealed class IdJagGrantTests
             [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(TokenType.IdToken)
         }, TestContext.CancellationToken).ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(401, (int)response.StatusCode, body);
+        Assert.AreEqual(400, (int)response.StatusCode, body);
         Assert.Contains(OAuthErrors.InvalidClient, body);
     }
 
@@ -2700,7 +2701,7 @@ internal sealed class IdJagGrantTests
                 host.SharedHttpClient!, tokenEndpoint, form, TestContext.CancellationToken).ConfigureAwait(false);
             string secondBody = await second.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-            Assert.AreEqual(401, (int)second.StatusCode, secondBody);
+            Assert.AreEqual(400, (int)second.StatusCode, secondBody);
             Assert.Contains(OAuthErrors.InvalidClient, secondBody);
         }
         finally
@@ -6243,8 +6244,8 @@ internal sealed class IdJagGrantTests
         await TestHostShell.AlterAsync(app.Host("idp").Server, candidateIntegration =>
         {
             candidateIntegration.ValidateClientCredentialsAsync =
-                static (request, fields, registration, context, ct) =>
-                    ValueTask.FromResult(fields.TryGetValue("client_secret", out string? secret)
+                static (reading, registration, context, ct) =>
+                    ValueTask.FromResult(reading.ClientSecret is string secret
                         && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
 
             candidateIntegration.ValidateTokenExchangeTokenAsync =
@@ -6284,8 +6285,8 @@ internal sealed class IdJagGrantTests
         await TestHostShell.AlterAsync(rsHost.Server, candidateIntegration =>
         {
             candidateIntegration.ValidateClientCredentialsAsync =
-                static (request, fields, registration, context, ct) =>
-                    ValueTask.FromResult(fields.TryGetValue("client_secret", out string? secret)
+                static (reading, registration, context, ct) =>
+                    ValueTask.FromResult(reading.ClientSecret is string secret
                         && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
 
             candidateIntegration.ValidateJwtBearerAssertionAsync =
@@ -6365,9 +6366,9 @@ internal sealed class IdJagGrantTests
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
             candidateIntegration.ValidateClientCredentialsAsync =
-                async (request, fields, registration, context, ct) =>
+                async (reading, registration, context, ct) =>
                 {
-                    if(!fields.TryGetValue(OAuthRequestParameterNames.ClientAssertion, out string? assertion)
+                    if(reading.ClientAssertion is not string assertion
                         || string.IsNullOrEmpty(assertion))
                     {
 
@@ -6490,9 +6491,9 @@ internal sealed class IdJagGrantTests
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
             candidateIntegration.ValidateClientCredentialsAsync =
-                async (request, fields, registration, context, ct) =>
+                async (reading, registration, context, ct) =>
                 {
-                    if(!fields.TryGetValue(OAuthRequestParameterNames.ClientAssertion, out string? assertion)
+                    if(reading.ClientAssertion is not string assertion
                         || string.IsNullOrEmpty(assertion))
                     {
 
@@ -7667,11 +7668,12 @@ internal sealed class IdJagGrantTests
         {
             candidateIntegration.ValidateClientCredentialsAsync = receivedFields is null
                 ? privateKeyJwtValidator
-                : (request, fields, registration, context, ct) =>
+                : (reading, registration, context, ct) =>
                 {
-                    receivedFields.Add(fields);
+                    //The form the token endpoint received, read from the request on the context.
+                    receivedFields.Add(context.IncomingRequest!.Fields);
 
-                    return privateKeyJwtValidator(request, fields, registration, context, ct);
+                    return privateKeyJwtValidator(reading, registration, context, ct);
                 };
             candidateIntegration.ClientAuthenticationMethodsSupported =
                 [ClientAuthenticationMethod.None, ClientAuthenticationMethod.PrivateKeyJwt];
@@ -7782,9 +7784,9 @@ internal sealed class IdJagGrantTests
     private static async Task WireClientAuthenticationAsync(TestHostShell app) =>
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
                 ValueTask.FromResult(
-                    fields.TryGetValue("client_secret", out string? secret)
+                    reading.ClientSecret is string secret
                     && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
         }).ConfigureAwait(false);
 

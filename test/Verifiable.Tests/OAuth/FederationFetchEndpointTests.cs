@@ -189,8 +189,16 @@ internal sealed class FederationFetchEndpointTests
 
 
     /// <summary>
-    /// Rejects failed client authentication before resolving a subordinate statement.
-    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.8">Federation §8.8</see>.
+    /// Rejects failed client authentication before resolving a subordinate statement:
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.8">Federation Section 8.8</see>. The
+    /// requester used no <c>Authorization</c> field and the server advertises no <c>client_secret_basic</c>, so the
+    /// answer is 400 <c>invalid_client</c>, since no 401 is sent without a challenge
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.5.2">RFC 9110 Section 15.5.2</see>).
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.9">OpenID Federation 1.0 Section
+    /// 8.9</see> defines <c>invalid_client</c> as "The Client cannot be authorized or is not a valid participant of
+    /// the federation." and continues "The HTTP response status code SHOULD be 401 (Unauthorized)." The 400 is a
+    /// named deviation from that SHOULD: for a request that did not use the <c>Authorization</c> field, a server
+    /// without <c>client_secret_basic</c> has no challenge applicable to the endpoint to send with a 401.
     /// </summary>
     [TestMethod]
     public async Task FetchEndpointRejectsWhenClientAuthenticationFails()
@@ -203,8 +211,9 @@ internal sealed class FederationFetchEndpointTests
         using VerifierKeyMaterial anchor = await RegisterAnchorAsync(app, anchorKeys).ConfigureAwait(false);
 
         //§8.8: the deployment requires client authentication at this endpoint and
-        //the requester fails it. The gate must reject with 401 invalid_client
-        //before the subordinate-statement resolver is consulted.
+        //the requester fails it. The gate must reject with invalid_client before the
+        //subordinate-statement resolver is consulted: 400, since the request used no Authorization
+        //field and the server advertises no client_secret_basic, so no challenge is sent.
         bool resolverInvoked = false;
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
@@ -229,13 +238,62 @@ internal sealed class FederationFetchEndpointTests
         using System.Net.Http.HttpResponseMessage response = await host.SharedHttpClient!
             .GetAsync(url, TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(401, (int)response.StatusCode,
-            "§8.8: a failed client authentication must yield HTTP 401 invalid_client.");
+        Assert.AreEqual(400, (int)response.StatusCode,
+            "Section 8.8: a failed client authentication without an Authorization field and without client_secret_basic advertised yields HTTP 400 invalid_client.");
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.Contains($"\"error\":\"{OAuthErrors.InvalidClient}\"", body, StringComparison.Ordinal,
-            $"The 401 must carry the invalid_client error code. Got: {body}");
+            $"The refusal must carry the invalid_client error code. Got: {body}");
         Assert.IsFalse(resolverInvoked,
             "The client-authentication gate must run before the endpoint's own resolver.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>: "If the
+    /// client attempted to authenticate via the "Authorization" request header field, the authorization
+    /// server MUST respond with an HTTP 401 (Unauthorized) status code and include the "WWW-Authenticate"
+    /// response header field matching the authentication scheme used by the client." A fetch request sent
+    /// over the wire with <c>Authorization: Basic</c> that the deployment's federation client
+    /// authentication refuses is answered 401 <c>invalid_client</c> with the one challenge
+    /// <c>Basic realm="https://federation-realm.issuer.test/"</c>, the issuer the request is served under.
+    /// </summary>
+    [TestMethod]
+    public async Task FetchEndpointChallengesAFailedBasicAttemptWithItsRealm()
+    {
+        await using TestHostShell app = new(TimeProvider);
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> anchorKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+
+        using VerifierKeyMaterial anchor = await RegisterAnchorAsync(app, anchorKeys).ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveSubordinateStatementAsync = (_, _, _, _) =>
+                ValueTask.FromResult<SubordinateStatementContribution?>(null);
+            candidateIntegration.AuthenticateFederationClientAsync = (_, _, _, _, _) =>
+                ValueTask.FromResult<FederationClientAuthenticationResult?>(
+                    FederationClientAuthenticationResult.Rejected("The presented credential is not accepted."));
+        }).ConfigureAwait(false);
+        await TestHostShell.NameIssuerAsync(app.Server, new Uri("https://federation-realm.issuer.test/")).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        string segment = anchor.Registration.TenantId.Value;
+
+        Uri url = new(host.HttpBaseAddress!,
+            $"/connect/{segment}/federation_fetch?sub={Uri.EscapeDataString(SubordinateEntityId)}");
+        using System.Net.Http.HttpRequestMessage request = new(System.Net.Http.HttpMethod.Get, url);
+        _ = request.Headers.TryAddWithoutValidation(WellKnownHttpHeaderNames.Authorization, "Basic Y2xpZW50OnNlY3JldA==");
+        using System.Net.Http.HttpResponseMessage response = await host.SharedHttpClient!
+            .SendAsync(request, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(401, (int)response.StatusCode, body);
+        Assert.Contains($"\"error\":\"{OAuthErrors.InvalidClient}\"", body, StringComparison.Ordinal);
+        Assert.IsTrue(response.Headers.TryGetValues(WellKnownHttpHeaderNames.WwwAuthenticate, out IEnumerable<string>? challenges),
+            "RFC 9110 Section 15.5.2: the 401 carries a challenge.");
+        Assert.AreEqual("Basic realm=\"https://federation-realm.issuer.test/\"", challenges.Single());
     }
 
 

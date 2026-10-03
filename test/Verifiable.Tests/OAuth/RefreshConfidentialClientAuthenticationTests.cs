@@ -73,9 +73,9 @@ internal sealed class RefreshConfidentialClientAuthenticationTests
 
             await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
             {
-                candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+                candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
                     ValueTask.FromResult(
-                        fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                        reading.ClientSecret is string secret
                         && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
             }).ConfigureAwait(false);
 
@@ -122,8 +122,8 @@ internal sealed class RefreshConfidentialClientAuthenticationTests
 
             await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
             {
-                candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
-                    ValueTask.FromResult(AuthCodeFlowDriver.DecodeAndMatchBasicHeader(request, registration.ClientId, ClientSecret));
+                candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
+                    ValueTask.FromResult(AuthCodeFlowDriver.DecodeAndMatchBasicHeader(reading, registration.ClientId, ClientSecret));
             }).ConfigureAwait(false);
 
             await DeclareServerSideAuthMethodAsync(host, material, ClientAuthenticationMethod.ClientSecretBasic).ConfigureAwait(false);
@@ -354,9 +354,9 @@ internal sealed class RefreshConfidentialClientAuthenticationTests
 
             await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
             {
-                candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+                candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
                     ValueTask.FromResult(
-                        fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                        reading.ClientSecret is string secret
                         && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
             }).ConfigureAwait(false);
 
@@ -434,9 +434,9 @@ internal sealed class RefreshConfidentialClientAuthenticationTests
 
             await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
             {
-                candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+                candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
                     ValueTask.FromResult(
-                        fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                        reading.ClientSecret is string secret
                         && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
             }).ConfigureAwait(false);
 
@@ -499,7 +499,8 @@ internal sealed class RefreshConfidentialClientAuthenticationTests
     /// known to be live, retired, or unknown, so this reuse presentation — the correct
     /// <c>client_id</c> but NO <c>client_secret</c>, a raw wire push, since the real client would
     /// never omit a credential it has been configured to attach — is refused
-    /// <c>401 invalid_client</c> there, before reuse detection ever runs, without revoking the
+    /// <c>400 invalid_client</c> there (no <c>client_secret_basic</c> is advertised), before reuse detection ever
+    /// runs, without revoking the
     /// successor, which a subsequent authenticated refresh proves still usable.
     /// </summary>
     [TestMethod]
@@ -515,9 +516,9 @@ internal sealed class RefreshConfidentialClientAuthenticationTests
 
             await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
             {
-                candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+                candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
                     ValueTask.FromResult(
-                        fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                        reading.ClientSecret is string secret
                         && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
             }).ConfigureAwait(false);
 
@@ -571,7 +572,7 @@ internal sealed class RefreshConfidentialClientAuthenticationTests
                 host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, "unknown-refresh-token-value"),
                 TestContext.CancellationToken).ConfigureAwait(false);
 
-            Assert.AreEqual(401, StatusCode, Body);
+            Assert.AreEqual(400, StatusCode, Body);
             Assert.Contains(OAuthErrors.InvalidClient, Body, StringComparison.Ordinal);
             Assert.AreEqual(UnknownStatusCode, StatusCode,
                 "An unknown handle and a retired one must answer byte-identically once client authentication runs first.");
@@ -680,9 +681,9 @@ internal sealed class RefreshConfidentialClientAuthenticationTests
 
             await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
             {
-                candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+                candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
                     ValueTask.FromResult(
-                        fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                        reading.ClientSecret is string secret
                         && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
             }).ConfigureAwait(false);
 
@@ -791,8 +792,8 @@ internal sealed class RefreshConfidentialClientAuthenticationTests
 
             await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
             {
-                candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
-                    ValueTask.FromResult(AuthCodeFlowDriver.DecodeAndMatchBasicHeader(request, registration.ClientId, ClientSecret));
+                candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
+                    ValueTask.FromResult(AuthCodeFlowDriver.DecodeAndMatchBasicHeader(reading, registration.ClientId, ClientSecret));
             }).ConfigureAwait(false);
 
             await DeclareServerSideAuthMethodAsync(host, material, ClientAuthenticationMethod.ClientSecretBasic).ConfigureAwait(false);
@@ -945,7 +946,7 @@ internal sealed class RefreshConfidentialClientAuthenticationTests
     /// A confidential registration's wrong <c>client_secret_basic</c> secret at REFRESH: the
     /// endpoint's pre-correlation step authenticates the declared method before the presented
     /// <c>refresh_token</c> is ever looked up, so an unknown token and a live one answer
-    /// byte-identically — <c>401 invalid_client</c> with the <c>WWW-Authenticate: Basic</c>
+    /// byte-identically: <c>401 invalid_client</c> with the <c>WWW-Authenticate: Basic realm="&lt;issuer&gt;"</c>
     /// challenge. A <c>client_id</c> naming a registration other than this tenant's own is
     /// identification, not authentication, and never reaches this answer — it is refused with
     /// the not-found constant instead. The live grant is unconsumed: it still refreshes with the
@@ -976,7 +977,8 @@ internal sealed class RefreshConfidentialClientAuthenticationTests
         Assert.AreEqual(401, liveResponse.StatusCode, liveResponse.Body);
         Assert.Contains(OAuthErrors.InvalidClient, liveResponse.Body, StringComparison.Ordinal);
         string? liveChallenge = liveResponse.Headers.TryGetSingle(WellKnownHttpHeaderNames.WwwAuthenticate);
-        Assert.AreEqual(WellKnownAuthenticationSchemes.Basic, liveChallenge);
+        //The realm is the issuer of the registration the host serves, aligned to its listener.
+        Assert.AreEqual($"Basic realm=\"{hosted.Registrations[segment].IssuerUri!.OriginalString}\"", liveChallenge);
         Assert.AreEqual(liveResponse.StatusCode, unknownResponse.StatusCode);
         Assert.AreEqual(liveResponse.Body, unknownResponse.Body,
             "An unknown refresh token and a live one must answer byte-identically for a wrong Basic secret.");

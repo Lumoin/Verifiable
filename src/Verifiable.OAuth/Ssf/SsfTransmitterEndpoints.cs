@@ -1182,7 +1182,7 @@ public static class SsfTransmitterEndpoints
     /// Builds the <c>401</c> for a failed or missing authorization, with one <c>Bearer</c> challenge attached by
     /// <see cref="ChallengedRefusalAsync"/>. The transmitter's one challenge is <c>Bearer</c>, so it reads a Bearer
     /// token only: a request whose <c>Authorization</c> field holds a Bearer token, as
-    /// <see cref="BearerTokenValidation.TryExtractBearer"/> reads it, is answered with <c>invalid_token</c> in the
+    /// <see cref="BearerTokenValidation.TryExtractBearer(ExchangeContext, out string?)"/> reads it, is answered with <c>invalid_token</c> in the
     /// body and <c>Bearer realm="&lt;issuer&gt;", error="invalid_token"</c>; every other request (no field, an
     /// empty or white-space value, a credential of another scheme, <c>DPoP</c> included) with an empty body and
     /// <c>Bearer realm="&lt;issuer&gt;"</c>.

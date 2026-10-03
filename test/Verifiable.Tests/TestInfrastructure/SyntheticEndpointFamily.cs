@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Verifiable.JCose;
+using Verifiable.OAuth.Server;
 using Verifiable.Server.Routing;
 
 namespace Verifiable.Tests.TestInfrastructure;
@@ -19,7 +20,9 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// candidate named <see cref="LoadedOnlyName"/> under that capability that matches the second candidate's request.
 /// The last is how a request the second candidate alone matches among the family's candidates of
 /// <see cref="Name"/> matches an endpoint of a registration that does not allow <see cref="Gate"/>: the dispatcher
-/// asks the application's materialization only for a request the loaded registration's chain matches.
+/// asks the application's materialization only for a request the loaded registration's chain matches. A second
+/// builder of the family (<see cref="CreateClientAuthenticatingBuilder"/>) serves an application's
+/// client-authenticating endpoint under a capability the row names, composed with the library's public parts.
 /// </remarks>
 internal static class SyntheticEndpointFamily
 {
@@ -141,7 +144,10 @@ internal static class SyntheticEndpointFamily
     /// <summary>
     /// The configuration <paramref name="configuration"/> with <paramref name="builder"/> composed after its own
     /// builders. A configuration that declares its capabilities declares the family's three as well, so the
-    /// declaration admits the family's candidates; one that declares none is left declaring none.
+    /// declaration admits the family's candidates; one that declares none is left declaring none. The
+    /// client-authenticating candidate's capability, the one its builder is created with, is not among the three: a
+    /// configuration that declares capabilities admits that candidate only when it declares that capability already, and
+    /// a configuration that declares none admits it as it admits every candidate.
     /// </summary>
     /// <param name="configuration">The configuration the family is composed into.</param>
     /// <param name="builder">The family's builder.</param>
@@ -155,7 +161,7 @@ internal static class SyntheticEndpointFamily
 
 
     /// <summary>
-    /// Wraps the endpoint-address resolution <paramref name="integration"/> carries so the family's two names resolve
+    /// Wraps the endpoint-address resolution <paramref name="integration"/> carries so the family's names resolve
     /// to <see cref="ComposePath"/> at the registration's tenant and every other name reaches the wrapped resolution.
     /// </summary>
     /// <param name="integration">The integration whose endpoint-address resolution is wrapped.</param>
@@ -165,6 +171,7 @@ internal static class SyntheticEndpointFamily
         integration.ResolveEndpointUriAsync = (endpointKey, registration, context, cancellationToken) =>
             string.Equals(endpointKey, Name, StringComparison.Ordinal)
                 || string.Equals(endpointKey, LoadedOnlyName, StringComparison.Ordinal)
+                || string.Equals(endpointKey, ClientAuthenticatingName, StringComparison.Ordinal)
                 ? ValueTask.FromResult<Uri?>(new Uri(AddressBase, ComposePath(registration.TenantId.Value)))
                 : resolve is null
                     ? ValueTask.FromResult<Uri?>(null)
@@ -201,13 +208,7 @@ internal static class SyntheticEndpointFamily
             HttpMethod = httpMethod,
             Kind = kind,
             StartsNewFlow = true,
-            MatchesRequest = (_, context, endpoint, _) =>
-                ValueTask.FromResult<MatchPayload?>(
-                    context.IncomingRequest is IncomingRequest request
-                    && string.Equals(request.Method, httpMethod, StringComparison.OrdinalIgnoreCase)
-                    && string.Equals(request.Path, endpoint.ResolvedUri.AbsolutePath + pathExtension, StringComparison.Ordinal)
-                        ? MatchPayload.Empty
-                        : null),
+            MatchesRequest = MatchesAt(httpMethod, pathExtension),
             BuildInputAsync = (_, _, _, _) =>
             {
                 handlersRun.Enqueue(label);
@@ -217,5 +218,111 @@ internal static class SyntheticEndpointFamily
             },
             BuildResponse = static (_, _, _) =>
                 ServerHttpResponse.ServerError(ServerErrors.ServerError, "The family's candidates answer from their input step.")
+        };
+
+
+    /// <summary>
+    /// The match every candidate of the family makes: a request by <paramref name="httpMethod"/> to the candidate's
+    /// resolved path followed by <paramref name="pathExtension"/>.
+    /// </summary>
+    /// <param name="httpMethod">The HTTP method the candidate serves.</param>
+    /// <param name="pathExtension">The path extension after the resolved path, the empty text for none.</param>
+    /// <returns>The candidate's match.</returns>
+    private static MatchRequestDelegate MatchesAt(string httpMethod, string pathExtension) =>
+        (_, context, endpoint, _) =>
+            ValueTask.FromResult<MatchPayload?>(
+                context.IncomingRequest is IncomingRequest request
+                && string.Equals(request.Method, httpMethod, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(request.Path, endpoint.ResolvedUri.AbsolutePath + pathExtension, StringComparison.Ordinal)
+                    ? MatchPayload.Empty
+                    : null);
+
+
+    /// <summary>
+    /// The name of the family's client-authenticating candidate, which no other candidate shares.
+    /// </summary>
+    public static string ClientAuthenticatingName { get; } = "Synthetic.ClientAuthenticating";
+
+
+    /// <summary>
+    /// The path extension after <see cref="ComposePath"/> at which the client-authenticating candidate serves.
+    /// </summary>
+    public static string ClientAuthenticatingPathExtension { get; } = "/client-authenticating";
+
+
+    /// <summary>
+    /// The path the client-authenticating candidate serves at the tenant <paramref name="tenantSegment"/>:
+    /// <see cref="ComposePath"/> followed by <see cref="ClientAuthenticatingPathExtension"/>.
+    /// </summary>
+    /// <param name="tenantSegment">The tenant segment of the registration.</param>
+    /// <returns>The absolute path.</returns>
+    public static string ComposeClientAuthenticatingPath(string tenantSegment) =>
+        ComposePath(tenantSegment) + ClientAuthenticatingPathExtension;
+
+
+    /// <summary>
+    /// The body the client-authenticating candidate answers: whether the registration its handler saw is the one
+    /// a Client ID Metadata Document materialized, and whether the client authentication seam accepted the request's
+    /// credential.
+    /// </summary>
+    /// <param name="isClientMetadataMaterialized">Whether the registration the handler saw was materialized.</param>
+    /// <param name="isAuthenticated">Whether the client authentication seam accepted the credential.</param>
+    /// <returns>The literal body.</returns>
+    public static string ClientAuthenticatingBodyOf(bool isClientMetadataMaterialized, bool isAuthenticated) =>
+        $$"""{"client_metadata_materialized":{{(isClientMetadataMaterialized ? "true" : "false")}},"authenticated":{{(isAuthenticated ? "true" : "false")}}}""";
+
+
+    /// <summary>
+    /// The builder of an application's client-authenticating endpoint under <paramref name="capability"/>, composed
+    /// with the library's public parts: for a registration that allows <paramref name="capability"/>, one candidate
+    /// named <see cref="ClientAuthenticatingName"/>, by POST, of the stateless flow kind, at
+    /// <see cref="ComposeClientAuthenticatingPath"/>. Its handler records the registration the request's context
+    /// holds (<see cref="Verifiable.OAuth.Server.ExchangeContextServerExtensions"/>) in
+    /// <paramref name="registrationsSeen"/>, reads the request's client credentials through
+    /// <see cref="ClientCredentialReading.Read"/>, hands a reading that presents a credential and that registration
+    /// to the server's <see cref="AuthorizationServerIntegration.ValidateClientCredentialsAsync"/>, and answers
+    /// <c>200</c> with <see cref="ClientAuthenticatingBodyOf"/> of what it saw and judged, from its input step.
+    /// </summary>
+    /// <param name="capability">The capability the candidate carries.</param>
+    /// <param name="registrationsSeen">The registrations the handler saw, in order.</param>
+    /// <returns>The builder an application composes into its configuration.</returns>
+    public static EndpointBuilderDelegate CreateClientAuthenticatingBuilder(
+        CapabilityIdentifier capability,
+        ConcurrentQueue<ClientRecord?> registrationsSeen) =>
+        (registration, _, _) =>
+        {
+            List<EndpointCandidate> candidates = [];
+            if(registration.AllowedCapabilities.Contains(capability))
+            {
+                candidates.Add(new EndpointCandidate
+                {
+                    Name = ClientAuthenticatingName,
+                    Capability = capability,
+                    HttpMethod = WellKnownHttpMethods.Post,
+                    Kind = StatelessFlowKind.Instance,
+                    StartsNewFlow = true,
+                    MatchesRequest = MatchesAt(WellKnownHttpMethods.Post, ClientAuthenticatingPathExtension),
+                    BuildInputAsync = async (fields, context, _, cancellationToken) =>
+                    {
+                        ClientRecord? seen = context.ClientRegistration;
+                        registrationsSeen.Enqueue(seen);
+                        ClientCredentialReading reading = ClientCredentialReading.Read(
+                            context.IncomingRequest?.Headers ?? RequestHeaders.Empty, fields);
+                        ValidateClientCredentialsDelegate? validate = context.RequestServer?.OAuth().ValidateClientCredentialsAsync;
+                        bool isAuthenticated = reading is { IsMalformed: false, HasCredentials: true }
+                            && seen is not null
+                            && validate is not null
+                            && await validate(reading, seen, context, cancellationToken).ConfigureAwait(false);
+
+                        return (null, ServerHttpResponse.Ok(
+                            ClientAuthenticatingBodyOf(seen is { IsClientMetadataMaterialized: true }, isAuthenticated),
+                            WellKnownMediaTypes.Application.Json));
+                    },
+                    BuildResponse = static (_, _, _) =>
+                        ServerHttpResponse.ServerError(ServerErrors.ServerError, "The family's candidates answer from their input step.")
+                });
+            }
+
+            return ValueTask.FromResult<IReadOnlyList<EndpointCandidate>>(candidates);
         };
 }

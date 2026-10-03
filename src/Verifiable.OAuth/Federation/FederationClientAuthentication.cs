@@ -63,7 +63,7 @@ public static class FederationClientAuthentication
     /// A successful result carrying the authenticated <c>client_id</c>, <c>jti</c>,
     /// and expiry, or a failed result whose
     /// <see cref="FederationClientAuthenticationResult.FailureReason"/> the
-    /// endpoint maps onto an HTTP 401 <c>invalid_client</c> response.
+    /// endpoint maps onto an <c>invalid_client</c> response.
     /// </returns>
     public static FederationClientAuthenticationResult Validate(
         JwtPayload payload,

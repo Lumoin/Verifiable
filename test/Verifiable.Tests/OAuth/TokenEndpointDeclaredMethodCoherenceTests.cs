@@ -29,7 +29,7 @@ namespace Verifiable.Tests.OAuth;
 /// private_key_jwt, the authorization server MUST require client authentication according to Section
 /// 2.2 of [RFC7523] using the corresponding key discovered from the client's metadata document." A
 /// registration declaring a confidential method the token endpoint does not advertise is refused with
-/// <c>401 invalid_client</c> before any validator runs; a registration declaring an advertised method
+/// <c>invalid_client</c> before any validator runs; a registration declaring an advertised method
 /// is handed to <see cref="AuthorizationServerIntegration.ValidateClientCredentialsAsync"/> for
 /// judgment; a registration declaring nothing keeps the public-client path. The rule holds on the
 /// authorization-code grant, the refresh-token grant, and the RFC 7523 JWT Bearer grant.
@@ -101,7 +101,7 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
     /// of the registered type." A registration declaring <c>private_key_jwt</c> on a token endpoint
     /// that advertises only <see cref="ClientAuthenticationMethod.None"/> is incoherent — the endpoint
     /// cannot honour the method — so the pushed authorization request is refused with
-    /// <c>401 invalid_client</c> before <see cref="AuthorizationServerIntegration.ValidateClientCredentialsAsync"/>
+    /// <c>invalid_client</c> before <see cref="AuthorizationServerIntegration.ValidateClientCredentialsAsync"/>
     /// is ever consulted, per
     /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2">RFC 9126 §2</see>'s rule that a
     /// pushed request authenticates the client exactly as the token endpoint would. The counting
@@ -118,7 +118,7 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
         int validatorInvocations = 0;
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+            candidateIntegration.ValidateClientCredentialsAsync = (reading, registration, context, ct) =>
             {
                 validatorInvocations++;
 
@@ -157,7 +157,7 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
     /// authorization server MUST include client authentication of the registered type." Initial
     /// issuance runs as a public client (nothing declared) to obtain a refresh token; the server
     /// registration is then upgraded to declare <c>private_key_jwt</c> without the endpoint advertising
-    /// it, and the refresh is refused with <c>401 invalid_client</c> before the counting validator runs.
+    /// it, and the refresh is refused with <c>invalid_client</c> before the counting validator runs.
     /// </summary>
     [TestMethod]
     public async Task RefreshGrantRefusesDeclaredMethodTheEndpointDoesNotAdvertise()
@@ -169,7 +169,7 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
         int validatorInvocations = 0;
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+            candidateIntegration.ValidateClientCredentialsAsync = (reading, registration, context, ct) =>
             {
                 validatorInvocations++;
 
@@ -222,7 +222,7 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
     /// credential-less redemption (a bare <c>client_id</c> plus an <c>assertion</c>, no
     /// <c>client_secret</c> or <c>client_assertion</c>) from a registration declaring
     /// <c>private_key_jwt</c> on an endpoint that advertises only
-    /// <see cref="ClientAuthenticationMethod.None"/> is refused with <c>401 invalid_client</c> before
+    /// <see cref="ClientAuthenticationMethod.None"/> is refused with <c>400 invalid_client</c> before
     /// either the client-authentication validator or the assertion validator runs.
     /// </summary>
     [TestMethod]
@@ -235,7 +235,7 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
         int clientAuthInvocations = 0;
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+            candidateIntegration.ValidateClientCredentialsAsync = (reading, registration, context, ct) =>
             {
                 clientAuthInvocations++;
 
@@ -271,7 +271,7 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
         }, TestContext.CancellationToken).ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(401, (int)response.StatusCode, body);
+        Assert.AreEqual(400, (int)response.StatusCode, body);
         Assert.Contains(OAuthErrors.InvalidClient, body,
             "Section 8.2's coherence rule refuses the jwt-bearer redemption with invalid_client.");
         Assert.AreEqual(0, clientAuthInvocations,
@@ -316,11 +316,11 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
                 additionalAcceptedAudiences: [tokenEndpoint.OriginalString]);
             await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
             {
-                candidateIntegration.ValidateClientCredentialsAsync = async (request, fields, registration, context, ct) =>
+                candidateIntegration.ValidateClientCredentialsAsync = async (reading, registration, context, ct) =>
                 {
                     validatorInvocations++;
 
-                    return await realValidator(request, fields, registration, context, ct).ConfigureAwait(false);
+                    return await realValidator(reading, registration, context, ct).ConfigureAwait(false);
                 };
             }).ConfigureAwait(false);
 
@@ -374,7 +374,7 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
     /// the PUSHED request too, per
     /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2">RFC 9126 §2</see>; a client that
     /// signs with a key absent from the server's published <c>ClientJwks</c> — a foreign key — fails
-    /// the signature check and is refused with <c>401 invalid_client</c> before a <c>request_uri</c>
+    /// the signature check and is refused with <c>400 invalid_client</c> before a <c>request_uri</c>
     /// is ever issued. The validator was reached and rendered the verdict.
     /// </summary>
     [TestMethod]
@@ -405,11 +405,11 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
                 additionalAcceptedAudiences: [tokenEndpoint.OriginalString]);
             await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
             {
-                candidateIntegration.ValidateClientCredentialsAsync = async (request, fields, registration, context, ct) =>
+                candidateIntegration.ValidateClientCredentialsAsync = async (reading, registration, context, ct) =>
                 {
                     validatorInvocations++;
 
-                    return await realValidator(request, fields, registration, context, ct).ConfigureAwait(false);
+                    return await realValidator(reading, registration, context, ct).ConfigureAwait(false);
                 };
             }).ConfigureAwait(false);
 
@@ -439,7 +439,7 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
             (int statusCode, string body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
                 host, segment, parFields, TestContext.CancellationToken).ConfigureAwait(false);
 
-            Assert.AreEqual(401, statusCode, body);
+            Assert.AreEqual(400, statusCode, body);
             Assert.Contains($"\"error\":\"{OAuthErrors.InvalidClient}\"", body, StringComparison.Ordinal);
             Assert.IsGreaterThanOrEqualTo(1, validatorInvocations,
                 "The advertised-method path must reach the client-authentication validator to render the verdict.");
@@ -459,7 +459,7 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
     /// Client ID Metadata Document, Section 8.2</see>: "any communication with the authorization server
     /// MUST include client authentication of the registered type." A confidential registration declaring
     /// an advertised <c>private_key_jwt</c> that attaches NO client assertion is refused with
-    /// <c>401 invalid_client</c> at the PUSHED request — the coherence gate passes, the validator is
+    /// <c>400 invalid_client</c> at the PUSHED request: the coherence gate passes, the validator is
     /// reached (<see href="https://www.rfc-editor.org/rfc/rfc7523">RFC 7523, Section 2.2</see>), and a
     /// request carrying no assertion of the registered type fails closed before a <c>request_uri</c>
     /// is ever issued (<see href="https://www.rfc-editor.org/rfc/rfc9126#section-2">RFC 9126 §2</see>).
@@ -490,11 +490,11 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
                 additionalAcceptedAudiences: [tokenEndpoint.OriginalString]);
             await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
             {
-                candidateIntegration.ValidateClientCredentialsAsync = async (request, fields, registration, context, ct) =>
+                candidateIntegration.ValidateClientCredentialsAsync = async (reading, registration, context, ct) =>
                 {
                     validatorInvocations++;
 
-                    return await realValidator(request, fields, registration, context, ct).ConfigureAwait(false);
+                    return await realValidator(reading, registration, context, ct).ConfigureAwait(false);
                 };
             }).ConfigureAwait(false);
 
@@ -516,7 +516,7 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
             (int statusCode, string body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
                 host, segment, parFields, TestContext.CancellationToken).ConfigureAwait(false);
 
-            Assert.AreEqual(401, statusCode, body);
+            Assert.AreEqual(400, statusCode, body);
             Assert.Contains($"\"error\":\"{OAuthErrors.InvalidClient}\"", body, StringComparison.Ordinal);
             Assert.IsGreaterThanOrEqualTo(1, validatorInvocations,
                 "The advertised-method path reaches the validator, which fails closed on the absent assertion.");
@@ -549,7 +549,7 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
         {
             candidateIntegration.ClientAuthenticationMethodsSupported = [ClientAuthenticationMethod.PrivateKeyJwt];
             candidateIntegration.ClientAssertionSigningAlgorithmsSupported = [WellKnownJwaValues.Es256];
-            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) => ValueTask.FromResult(false);
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) => ValueTask.FromResult(false);
         }).ConfigureAwait(false);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
@@ -600,12 +600,12 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
             {
                 candidateIntegration.ClientAuthenticationMethodsSupported = [ClientAuthenticationMethod.PrivateKeyJwt];
                 candidateIntegration.ClientAssertionSigningAlgorithmsSupported = [WellKnownJwaValues.Es256];
-                candidateIntegration.ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+                candidateIntegration.ValidateClientCredentialsAsync = (reading, registration, context, ct) =>
                 {
                     validatorInvocations++;
 
                     return ValueTask.FromResult(
-                        fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                        reading.ClientSecret is string secret
                         && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
                 };
             }).ConfigureAwait(false);
@@ -692,7 +692,7 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
     /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-client-id-metadata-document-02">OAuth
     /// Client ID Metadata Document, Section 8.2</see> coherence: a registration declaring
     /// <c>client_secret_post</c> on an endpoint advertising only
-    /// <see cref="ClientAuthenticationMethod.None"/> is refused with <c>401 invalid_client</c> before the
+    /// <see cref="ClientAuthenticationMethod.None"/> is refused with <c>400 invalid_client</c> before the
     /// counting validator runs, so a count of zero proves the coherence gate precedes authentication.
     /// </summary>
     [TestMethod]
@@ -705,7 +705,7 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
         int validatorInvocations = 0;
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+            candidateIntegration.ValidateClientCredentialsAsync = (reading, registration, context, ct) =>
             {
                 validatorInvocations++;
 
@@ -729,7 +729,7 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
         }, TestContext.CancellationToken).ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(401, (int)response.StatusCode, body);
+        Assert.AreEqual(400, (int)response.StatusCode, body);
         Assert.Contains(OAuthErrors.InvalidClient, body,
             "Section 8.2's coherence rule refuses the client_credentials grant with invalid_client.");
         Assert.AreEqual(0, validatorInvocations,
@@ -755,12 +755,12 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
         int validatorInvocations = 0;
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+            candidateIntegration.ValidateClientCredentialsAsync = (reading, registration, context, ct) =>
             {
                 validatorInvocations++;
 
                 return ValueTask.FromResult(
-                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    reading.ClientSecret is string secret
                     && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
             };
         }).ConfigureAwait(false);
@@ -794,7 +794,7 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
     /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-client-id-metadata-document-02">OAuth
     /// Client ID Metadata Document, Section 8.2</see> coherence: a registration declaring
     /// <c>client_secret_post</c> on an endpoint advertising only
-    /// <see cref="ClientAuthenticationMethod.None"/> is refused with <c>401 invalid_client</c> before the
+    /// <see cref="ClientAuthenticationMethod.None"/> is refused with <c>400 invalid_client</c> before the
     /// counting validator runs, so a count of zero proves the coherence gate precedes authentication.
     /// </summary>
     [TestMethod]
@@ -807,7 +807,7 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
         int validatorInvocations = 0;
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+            candidateIntegration.ValidateClientCredentialsAsync = (reading, registration, context, ct) =>
             {
                 validatorInvocations++;
 
@@ -844,7 +844,7 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
         }, TestContext.CancellationToken).ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(401, (int)response.StatusCode, body);
+        Assert.AreEqual(400, (int)response.StatusCode, body);
         Assert.Contains(OAuthErrors.InvalidClient, body,
             "Section 8.2's coherence rule refuses the token-exchange grant with invalid_client.");
         Assert.AreEqual(0, validatorInvocations,
@@ -870,12 +870,12 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
         int validatorInvocations = 0;
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+            candidateIntegration.ValidateClientCredentialsAsync = (reading, registration, context, ct) =>
             {
                 validatorInvocations++;
 
                 return ValueTask.FromResult(
-                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    reading.ClientSecret is string secret
                     && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
             };
 

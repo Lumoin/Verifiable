@@ -1784,7 +1784,7 @@ internal sealed class TokenExchangeGrantTests
         using HttpResponseMessage badSecret = await OAuthTestTransport.PostFormAsync(
             http, tokenUrl, badSecretForm, TestContext.CancellationToken).ConfigureAwait(false);
         string badSecretBody = await badSecret.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(401, (int)badSecret.StatusCode, badSecretBody);
+        Assert.AreEqual(400, (int)badSecret.StatusCode, badSecretBody);
         Assert.Contains(OAuthErrors.InvalidClient, badSecretBody);
 
         //(i) Fail-closed: a host whose token-exchange seams are NOT wired does not
@@ -4165,7 +4165,8 @@ internal sealed class TokenExchangeGrantTests
     /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 Section 2.1</see>: "Client
     /// authentication to the authorization server is done using the normal mechanisms provided by OAuth 2.0."
-    /// A client that fails authentication is answered 401 <c>invalid_client</c>
+    /// A client that fails form authentication at a server that advertises no <c>client_secret_basic</c> is answered
+    /// 400 <c>invalid_client</c>
     /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>), and the
     /// application's request seam, which this library calls after client authentication, is never called.
     /// </summary>
@@ -4190,7 +4191,7 @@ internal sealed class TokenExchangeGrantTests
             host.SharedHttpClient!, tokenUrl, TokenType.AccessToken, clientSecret: "not-the-secret-of-the-machine")
             .ConfigureAwait(false);
 
-        Assert.AreEqual(401, status, body);
+        Assert.AreEqual(400, status, body);
         Assert.AreEqual("""{"error":"invalid_client","error_description":"Client authentication failed."}""", body);
         Assert.AreEqual(0, countRequestSeamCalls(), "The request seam must not be called for a client that failed authentication.");
     }
@@ -4946,9 +4947,9 @@ internal sealed class TokenExchangeGrantTests
     private static async Task WireClientAuthenticationAsync(TestHostShell app) =>
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
                 ValueTask.FromResult(
-                    fields.TryGetValue("client_secret", out string? secret)
+                    reading.ClientSecret is string secret
                     && string.Equals(
                         secret,
                         string.Equals(registration.ClientId, ActorClientId, StringComparison.Ordinal)

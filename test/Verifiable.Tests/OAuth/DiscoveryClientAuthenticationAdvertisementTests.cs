@@ -108,7 +108,7 @@ internal sealed class DiscoveryClientAuthenticationAdvertisementTests
                 [WellKnownJwaValues.Es256, WellKnownJwaValues.Rs256];
 
 
-            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
                 ValueTask.FromResult(true);
         }).ConfigureAwait(false);
 
@@ -159,7 +159,7 @@ internal sealed class DiscoveryClientAuthenticationAdvertisementTests
             candidateIntegration.ClientAssertionSigningAlgorithmsSupported = [WellKnownJwaValues.Rs256];
 
 
-            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
                 ValueTask.FromResult(true);
         }).ConfigureAwait(false);
 
@@ -239,7 +239,7 @@ internal sealed class DiscoveryClientAuthenticationAdvertisementTests
             candidateIntegration.ClientAssertionSigningAlgorithmsSupported = [];
 
 
-            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
                 ValueTask.FromResult(true);
         }).ConfigureAwait(false)).ConfigureAwait(false);
 
@@ -276,7 +276,7 @@ internal sealed class DiscoveryClientAuthenticationAdvertisementTests
             candidateIntegration.ClientAssertionSigningAlgorithmsSupported = [];
 
 
-            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
                 ValueTask.FromResult(true);
         }).ConfigureAwait(false)).ConfigureAwait(false);
 
@@ -312,7 +312,7 @@ internal sealed class DiscoveryClientAuthenticationAdvertisementTests
             candidateIntegration.ClientAssertionSigningAlgorithmsSupported = [WellKnownJwaValues.None];
 
 
-            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
                 ValueTask.FromResult(true);
         }).ConfigureAwait(false)).ConfigureAwait(false);
 
@@ -380,7 +380,7 @@ internal sealed class DiscoveryClientAuthenticationAdvertisementTests
 
 
             candidateIntegration.ClientAssertionSigningAlgorithmsSupported = [WellKnownJwaValues.Es256];
-            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) => ValueTask.FromResult(false);
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) => ValueTask.FromResult(false);
         }).ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)

@@ -682,34 +682,54 @@ public delegate ValueTask<Ssf.SsfTransmitterMetadataContribution> ContributeSsfT
 
 
 /// <summary>
-/// Authenticates a confidential client at the token endpoint for the
-/// <c>client_credentials</c> grant (RFC 6749 §4.4) — <c>client_secret_basic</c>
-/// from the Authorization header, <c>client_secret_post</c> from the form
-/// fields, <c>private_key_jwt</c>, or mTLS, per the deployment's policy. The
-/// application owns credential storage and comparison; the endpoint rejects a
-/// <see langword="false"/> with <c>401 invalid_client</c>. The grant activates
-/// only when this seam is wired — an unauthenticated client-credentials grant
-/// would mint tokens for anyone.
+/// Authenticates a client at every endpoint of the library that authenticates one: the token endpoint's
+/// grants (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.4">RFC 6749 Section 4.4</see> and
+/// the others), the pushed authorization request, revocation, introspection and Global Token Revocation.
+/// The application judges the one credential the <paramref name="reading"/> presents, a
+/// <c>client_secret_basic</c> field (<see cref="ClientCredentialReading.HasBasicAuthorization"/>), a
+/// <c>client_secret_post</c> secret (<see cref="ClientCredentialReading.ClientSecret"/>), a
+/// <c>private_key_jwt</c> assertion (<see cref="ClientCredentialReading.ClientAssertion"/>), or a field of
+/// another scheme, per the deployment's policy, and owns credential storage and comparison. The endpoint
+/// answers a <see langword="false"/> with <c>invalid_client</c>. The client-credentials grant activates
+/// only when this seam is wired: an unauthenticated client-credentials grant would mint tokens for anyone.
 /// </summary>
 /// <remarks>
-/// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-2.3">RFC 6749 §2.3</see> binds the
-/// CLIENT to "MUST NOT use more than one authentication method in each request," but has no
-/// corresponding AS-side "MUST reject a request presenting more than one" sentence in this range.
-/// This delegate is therefore handed BOTH <paramref name="request"/> (which may carry an
-/// <c>Authorization</c> header) and <paramref name="fields"/> (which may carry
-/// <c>client_secret</c>/<c>client_assertion</c>) unconditionally, whether or not the request presents
-/// credentials through more than one channel at once; the library performs no structural rejection of
-/// that shape. Whether to accept, prefer one channel, or reject a double-credentialed request outright
-/// is entirely this delegate's decision.
+/// <para>
+/// The library reads the request's credentials once, through <see cref="ClientCredentialReading.Read"/>,
+/// before this seam runs, and refuses a malformed reading itself with 400 <c>invalid_request</c>: a client
+/// authentication form field sent twice ("Request and response parameters MUST NOT be included more than
+/// once.", <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749 Section 3.2</see>), the
+/// <c>Authorization</c> field sent on two field lines or outside its grammar
+/// (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.3">RFC 9110 Section 5.3</see>,
+/// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.4">Section 11.4</see>), or more than one
+/// mechanism ("The client MUST NOT use more than one authentication method in each request.",
+/// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-2.3">RFC 6749 Section 2.3</see>). Such a request
+/// never reaches this seam, with one exception: the Global Token Revocation endpoint, a resource read with a
+/// Bearer token, reads a present <c>Authorization</c> line that is empty or white space only as a request without
+/// a credential and hands this seam its reading, which is marked
+/// <see cref="ClientCredentialReading.IsAuthorizationMalformed"/>, names no mechanism
+/// (<see cref="ClientCredentialReading.HasCredentials"/> is <see langword="false"/>) and carries no value.
+/// </para>
+/// <para>
+/// The seam judges only the reading it receives. Its parameters carry the reading in place of the request's
+/// header and form fields, so a seam that judges the reading judges the credential the library read, never
+/// a credential the library refused or one value of a field sent twice.
+/// </para>
+/// <para>
+/// The <paramref name="context"/> carries the request as well
+/// (<see cref="Verifiable.Server.Routing.ExchangeContextIncomingRequestExtensions"/>), for a deployment whose policy
+/// reads a field that is not a credential, such as a parameter its own authentication rule requires. A seam
+/// that judges credentials reads them from the <paramref name="reading"/> only, never from the request: the
+/// raw fields hold every value of a field sent twice and an empty occurrence beside a valued one, which the
+/// reading has already resolved or refused.
+/// </para>
 /// </remarks>
-/// <param name="request">The incoming request (carries the Authorization header), when available.</param>
-/// <param name="fields">The form fields (carry <c>client_id</c>/<c>client_secret</c> for the POST method).</param>
+/// <param name="reading">The request's client credentials, read once by the library and never malformed here except for the empty <c>Authorization</c> line Global Token Revocation hands on.</param>
 /// <param name="registration">The <see cref="ClientRecord"/> the request claims to be.</param>
 /// <param name="context">The per-request context bag.</param>
 /// <param name="cancellationToken">Cancellation token.</param>
 public delegate ValueTask<bool> ValidateClientCredentialsDelegate(
-    IncomingRequest? request,
-    RequestFields fields,
+    ClientCredentialReading reading,
     ClientRecord registration,
     ExchangeContext context,
     CancellationToken cancellationToken);

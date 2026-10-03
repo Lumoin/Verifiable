@@ -34,7 +34,7 @@ namespace Verifiable.Tests.OAuth;
 /// seam is wired; client AUTHENTICATION is OPTIONAL (§2.1/§3.1), so the client-authentication seam is
 /// NOT required for the grant to exist — but when the request carries client credentials they MUST be
 /// validated (§3.1), and when the effective registration declares a non-<c>none</c>
-/// <c>token_endpoint_auth_method</c> a credential-less request is refused with <c>401 invalid_client</c>
+/// <c>token_endpoint_auth_method</c> a credential-less request is refused with <c>400 invalid_client</c>
 /// (draft-ietf-oauth-client-id-metadata-document-02 §8.2, CIMD-049). A host with the capability but no
 /// validation seam fails closed: the grant endpoint does not exist and a well-formed request never
 /// reaches 200.
@@ -268,7 +268,7 @@ internal sealed class JwtBearerGrantTests
     /// optional — a JWT access token needs a <c>client_id</c>. A request whose tenant resolves no
     /// client registration cannot be tied to a <c>client_id</c>, so the grant cannot issue a token: a
     /// well-formed request to an unregistered tenant never reaches 200. (The handler's defensive
-    /// <c>registration is null</c> guard maps to <c>401 invalid_client</c>, mirroring the sibling
+    /// <c>registration is null</c> guard maps to <c>400 invalid_client</c>, mirroring the sibling
     /// grants; over HTTP an unregistered tenant resolves no endpoints, so the request is refused before
     /// the handler — either way no token is minted for an unidentified client.)
     /// </summary>
@@ -302,7 +302,9 @@ internal sealed class JwtBearerGrantTests
     /// <summary>
     /// RFC 7523 §3.1: "if client credentials are present in the request, the authorization server MUST
     /// validate them." A request that carries a <c>client_secret</c> the seam rejects is refused with
-    /// <c>401 invalid_client</c> — the credentials were present, so they were validated and failed —
+    /// <c>400 invalid_client</c> (the credentials were present, so they were validated and failed; the server advertises
+    /// no <c>client_secret_basic</c>, so the default status of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see> holds)
     /// even though authentication is otherwise optional for this grant.
     /// </summary>
     [TestMethod]
@@ -326,7 +328,7 @@ internal sealed class JwtBearerGrantTests
             host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(401, (int)response.StatusCode, body);
+        Assert.AreEqual(400, (int)response.StatusCode, body);
         Assert.Contains(OAuthErrors.InvalidClient, body);
     }
 
@@ -561,7 +563,7 @@ internal sealed class JwtBearerGrantTests
     /// MUST validate them." When a request presents a <c>client_secret</c> but the authorization server
     /// has NOT configured the client-authentication seam, the credentials cannot be validated — and
     /// proceeding as anonymous would silently ignore them, a §3.1 MUST bypass. The endpoint therefore
-    /// refuses the request with <c>401 invalid_client</c> rather than minting a token.
+    /// refuses the request with <c>400 invalid_client</c> rather than minting a token.
     /// </summary>
     [TestMethod]
     public async Task PresentCredentialsWithNoClientAuthSeamAreRejectedAsInvalidClient()
@@ -587,7 +589,7 @@ internal sealed class JwtBearerGrantTests
             host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(401, (int)response.StatusCode, body);
+        Assert.AreEqual(400, (int)response.StatusCode, body);
         Assert.Contains(OAuthErrors.InvalidClient, body,
             StringComparison.Ordinal);
         Assert.AreNotEqual(200, (int)response.StatusCode,
@@ -600,7 +602,7 @@ internal sealed class JwtBearerGrantTests
     /// registration that declares a non-<c>none</c> <c>token_endpoint_auth_method</c> is a confidential
     /// client, and "any communication with the authorization server MUST include client authentication
     /// of the registered type." A jwt-bearer request carrying a valid assertion but NO client
-    /// credentials at all is refused with <c>401 invalid_client</c> — the §3.1 anonymous path is open
+    /// credentials at all is refused with <c>400 invalid_client</c>; the Section 3.1 anonymous path is open
     /// only to clients that declared no authentication method.
     /// </summary>
     [TestMethod]
@@ -627,7 +629,7 @@ internal sealed class JwtBearerGrantTests
             host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(401, (int)response.StatusCode, body);
+        Assert.AreEqual(400, (int)response.StatusCode, body);
         Assert.Contains(OAuthErrors.InvalidClient, body, StringComparison.Ordinal);
     }
 
@@ -637,7 +639,7 @@ internal sealed class JwtBearerGrantTests
     /// <c>token_endpoint_auth_method</c> on an authorization server whose
     /// <see cref="AuthorizationServerIntegration.ValidateClientCredentialsAsync"/> seam is NOT wired
     /// cannot authenticate anything, so a credential-less jwt-bearer request is refused with
-    /// <c>401 invalid_client</c> — never silently passed through as anonymous.
+    /// <c>400 invalid_client</c>, never silently passed through as anonymous.
     /// </summary>
     [TestMethod]
     public async Task DeclaredConfidentialClientWithUnwiredAuthSeamFailsClosed()
@@ -662,7 +664,7 @@ internal sealed class JwtBearerGrantTests
             host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
 
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(401, (int)response.StatusCode, body);
+        Assert.AreEqual(400, (int)response.StatusCode, body);
         Assert.Contains(OAuthErrors.InvalidClient, body, StringComparison.Ordinal);
     }
 
@@ -685,12 +687,12 @@ internal sealed class JwtBearerGrantTests
         int validationCallCount = 0;
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+            candidateIntegration.ValidateClientCredentialsAsync = (reading, registration, context, ct) =>
             {
                 validationCallCount++;
 
                 return ValueTask.FromResult(
-                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    reading.ClientSecret is string secret
                     && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
             };
         }).ConfigureAwait(false);
@@ -1622,9 +1624,9 @@ internal sealed class JwtBearerGrantTests
     private static async Task WireClientAuthenticationAsync(TestHostShell app) =>
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
                 ValueTask.FromResult(
-                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    reading.ClientSecret is string secret
                     && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
         }).ConfigureAwait(false);
 

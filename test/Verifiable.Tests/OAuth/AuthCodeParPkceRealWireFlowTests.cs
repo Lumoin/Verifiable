@@ -123,7 +123,7 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(true);
 
             candidateIntegration.RevokeTokenAsync = static (_, _, _, _, _) =>
@@ -405,6 +405,46 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
         Assert.AreEqual(400, TokenStatusCode, TokenBody);
         Assert.Contains(OAuthErrors.InvalidGrant, TokenBody, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749 Section 3.2</see>: "Parameters sent
+    /// without a value MUST be treated as if they were omitted from the request." A code redemption of a public
+    /// client, sent over the wire with <c>client_id=</c> with no value beside the client's <c>client_id</c>, names
+    /// the one client identifier the code is bound to and is served: 200 with an access token whose
+    /// <c>client_id</c> claim is that client's
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9068#section-2.2">RFC 9068 Section 2.2</see>).
+    /// </summary>
+    [TestMethod]
+    public async Task AnEmptyClientIdBesideThePublicClientsIdentifierRedeemsTheCodeBoundToThatClient()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string code = await DriveRawParAndAuthorizeAsync(
+            host, segment, pkce.EncodedChallenge, WellKnownCodeChallengeMethods.S256,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        (int tokenStatusCode, string tokenBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment,
+            [
+                new(OAuthRequestParameterNames.GrantType, WellKnownGrantTypes.AuthorizationCode),
+                new(OAuthRequestParameterNames.ClientId, string.Empty),
+                new(OAuthRequestParameterNames.ClientId, ClientId),
+                new(OAuthRequestParameterNames.Code, code),
+                new(OAuthRequestParameterNames.CodeVerifier, pkce.EncodedVerifier),
+                new(OAuthRequestParameterNames.RedirectUri, RedirectUri.OriginalString)
+            ],
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(200, tokenStatusCode, tokenBody);
+        using JsonDocument tokenDocument = JsonDocument.Parse(tokenBody);
+        using JsonDocument accessTokenPayload = JwtPayloadReader.ParsePayloadJson(
+            tokenDocument.RootElement.GetProperty(OAuthRequestParameterNames.AccessToken).GetString()!);
+        Assert.AreEqual(ClientId, accessTokenPayload.RootElement.GetProperty(WellKnownJwtClaimNames.ClientId).GetString());
     }
 
 
@@ -2112,7 +2152,7 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(true);
         }).ConfigureAwait(false);
 
@@ -2791,7 +2831,7 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         HashSet<string> revokedJtis = new(StringComparer.Ordinal);
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(true);
 
             candidateIntegration.RevokeIssuedTokenAsync = (tokenIdentifier, tokenType, _, _, _) =>
@@ -3067,7 +3107,7 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         int revokeCallCount = 0;
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(true);
 
             candidateIntegration.RevokeIssuedTokenAsync = (_, _, _, _, _) =>
@@ -3149,7 +3189,7 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         //RevokeIssuedTokenAsync deliberately left unwired.
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(true);
 
             candidateIntegration.IntrospectTokenAsync = static (_, _, _, _, _) =>
@@ -4809,7 +4849,7 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         bool revokeInvoked = false;
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(true);
 
             candidateIntegration.RevokeIssuedTokenAsync = (_, _, _, _, _) =>
@@ -5024,7 +5064,7 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(true);
         }).ConfigureAwait(false);
 
@@ -5352,7 +5392,7 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(true);
         }).ConfigureAwait(false);
         ConcurrentQueue<RequestFields> accepted = await RecordAcceptedRequestFieldsAsync(host).ConfigureAwait(false);
@@ -5814,7 +5854,7 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     {
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(true);
         }).ConfigureAwait(false);
 
@@ -7016,7 +7056,7 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
             host, segment, parFields, TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(401, StatusCode, Body);
+        Assert.AreEqual(400, StatusCode, Body);
         Assert.Contains(OAuthErrors.InvalidClient, Body, StringComparison.Ordinal);
         Assert.DoesNotContain("request_uri", Body, StringComparison.Ordinal);
         Assert.HasCount(flowCountBefore, hosted.FlowStates,
@@ -7065,7 +7105,7 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
             host, segmentA, parFields, TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(401, StatusCode, Body);
+        Assert.AreEqual(400, StatusCode, Body);
         Assert.Contains(OAuthErrors.InvalidClient, Body, StringComparison.Ordinal);
         Assert.HasCount(flowCountBefore, hosted.FlowStates,
             "An identification failure must create no flow record.");
@@ -8024,7 +8064,7 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         HostedAuthorizationServer hosted = host.Host("default");
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(true);
             candidateIntegration.RevokeTokenAsync = static (_, _, _, _, _) =>
                 ValueTask.CompletedTask;
@@ -8475,8 +8515,8 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
-                ValueTask.FromResult(AuthCodeFlowDriver.DecodeAndMatchBasicHeader(request, registration.ClientId, ClientSecret));
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
+                ValueTask.FromResult(AuthCodeFlowDriver.DecodeAndMatchBasicHeader(reading, registration.ClientId, ClientSecret));
         }).ConfigureAwait(false);
 
         _ = await host.SetTokenEndpointAuthMethodAsync(

@@ -7,8 +7,10 @@ using Verifiable.Core.SecurityEvents;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
+using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Logout;
 using Verifiable.OAuth.Server;
+using Verifiable.OAuth.Server.Pipeline;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tests.WebFinger;
 
@@ -46,6 +48,9 @@ internal sealed class GlobalTokenRevocationServerTests
     /// <summary>The issuer the wire rows that read a challenge serve the registration under.</summary>
     private static Uri RevocationIssuer { get; } = new("https://gtr.issuer.test/");
 
+    /// <summary>The Client ID Metadata Document a row's registration names when it is served as such a client.</summary>
+    private static Uri ClientIdMetadataDocumentUri { get; } = new("https://gtr.client.test/client-metadata");
+
     /// <summary>
     /// An issuer whose host holds U+00FC, built from its code point: <c>https://b</c>, U+00FC,
     /// <c>cher.example/</c>.
@@ -71,7 +76,7 @@ internal sealed class GlobalTokenRevocationServerTests
         SubjectIdentifier? revokedSubject = null;
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(true);
 
 
@@ -130,7 +135,7 @@ internal sealed class GlobalTokenRevocationServerTests
         bool revokeInvoked = false;
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(false);
 
             candidateIntegration.ParseGlobalTokenRevocationRequestAsync = (_, _, _) =>
@@ -182,7 +187,7 @@ internal sealed class GlobalTokenRevocationServerTests
         GlobalTokenRevocationOutcome outcome = GlobalTokenRevocationOutcome.SubjectNotFound;
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(true);
 
             candidateIntegration.ParseGlobalTokenRevocationRequestAsync = static (_, _, _) =>
@@ -232,7 +237,7 @@ internal sealed class GlobalTokenRevocationServerTests
         bool revokeInvoked = false;
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(true);
 
             candidateIntegration.ParseGlobalTokenRevocationRequestAsync = static (_, _, _) =>
@@ -275,7 +280,7 @@ internal sealed class GlobalTokenRevocationServerTests
         bool revokeInvoked = false;
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(true);
 
 
@@ -529,11 +534,10 @@ internal sealed class GlobalTokenRevocationServerTests
 
 
     /// <summary>
-    /// A revocation posted over the wire whose <c>Authorization</c> field carries no access token, an empty value, a
-    /// value of white space or a credential of the <c>Basic</c> scheme, which the client authentication seam refuses,
-    /// is answered 401 with the one challenge <c>Bearer realm="https://gtr.issuer.test/"</c>, which carries no error
-    /// code, and an empty body, and the revoke seam is not called: such a request lacks the authentication
-    /// information this endpoint reads.
+    /// A revocation posted over the wire whose <c>Authorization</c> field carries no access token, an empty value or a
+    /// value of white space, which the client authentication seam refuses, is answered 401 with the one challenge
+    /// <c>Bearer realm="https://gtr.issuer.test/"</c>, which carries no error code, and an empty body, and the revoke
+    /// seam is not called: such a request lacks the authentication information this endpoint reads.
     /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>: "If the request
     /// lacks any authentication information (e.g., the client was unaware that authentication is necessary or
     /// attempted using an unsupported authentication method), the resource server SHOULD NOT include an error code
@@ -543,7 +547,6 @@ internal sealed class GlobalTokenRevocationServerTests
     [TestMethod]
     [DataRow("", DisplayName = "an empty Authorization value")]
     [DataRow(" ", DisplayName = "an Authorization value of white space")]
-    [DataRow("Basic dXNlcjpwYXNz", DisplayName = "an Authorization value of the Basic scheme")]
     public async Task ARevocationWhoseAuthorizationFieldCarriesNoAccessTokenIsChallengedWithoutAnErrorCode(string authorization)
     {
         (int statusCode, string body, int revokeCallCount, _, IReadOnlyList<string> challenges) =
@@ -554,6 +557,152 @@ internal sealed class GlobalTokenRevocationServerTests
         Assert.AreEqual(string.Empty, body, "No error code or other error information.");
         Assert.AreEqual("Bearer realm=\"https://gtr.issuer.test/\"", Assert.ContainsSingle(challenges));
         Assert.AreEqual(0, revokeCallCount, "A request without an access token must not reach the revoke seam.");
+    }
+
+
+    /// <summary>
+    /// A revocation posted over the wire whose <c>Authorization</c> field line is empty or holds white space only,
+    /// to a client authentication seam that accepts what it receives, hands the seam the reading of a request that
+    /// presents no credential: <see cref="ClientCredentialReading.HasCredentials"/> is false,
+    /// <see cref="ClientCredentialReading.IsAuthorizationMalformed"/> is true (the line has no <c>auth-scheme</c>,
+    /// the token "credentials = auth-scheme [ 1*SP ( token68 / #auth-param ) ]" begins with,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.4">RFC 9110 Section 11.4</see>) and
+    /// <see cref="ClientCredentialReading.ClientId"/> is <see langword="null"/>, so no value of the line reaches the
+    /// seam. The endpoint reads such a line as a request without the authentication information it reads
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>: "If the request
+    /// lacks any authentication information (e.g., the client was unaware that authentication is necessary or
+    /// attempted using an unsupported authentication method), the resource server SHOULD NOT include an error code
+    /// or other error information."), and the seam's acceptance is answered 204.
+    /// </summary>
+    /// <param name="authorization">The value of the request's <c>Authorization</c> field.</param>
+    [TestMethod]
+    [DataRow("", DisplayName = "an empty Authorization value")]
+    [DataRow(" ", DisplayName = "an Authorization value of white space")]
+    public async Task AnAuthorizationLineWithoutACredentialReachesTheSeamAsAReadingWithoutCredentials(string authorization)
+    {
+        List<ClientCredentialReading> receivedReadings = [];
+        (int statusCode, string body, int revokeCallCount, _, _) =
+            await PostOverTheLoopbackListenerAsync(
+                SubIdJson, authorization: authorization, isCredentialAccepted: true, issuer: RevocationIssuer,
+                receivedReadings: receivedReadings).ConfigureAwait(false);
+
+        Assert.AreEqual(204, statusCode, body);
+        ClientCredentialReading received = Assert.ContainsSingle(receivedReadings);
+        Assert.IsFalse(received.HasCredentials);
+        Assert.IsTrue(received.IsAuthorizationMalformed);
+        Assert.IsNull(received.ClientId);
+        Assert.AreEqual(1, revokeCallCount);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 Section 3</see>: "If the protected
+    /// resource request does not include authentication credentials or does not contain an access token that enables
+    /// access to the protected resource, the resource server MUST include the HTTP "WWW-Authenticate" response header
+    /// field; it MAY include it in response to other conditions as well." A revocation posted over the wire with an
+    /// empty <c>Authorization</c> field line, served for a client whose registration names a Client ID Metadata
+    /// Document under the library's materialization
+    /// (<see cref="ClientIdMetadataMaterialization.Build"/>), which the client
+    /// authentication seam refuses, is answered as the endpoint answers it for any client: 401 with the one challenge
+    /// <c>Bearer realm="https://gtr.issuer.test/"</c>, which carries no error code, and an empty body, and the revoke
+    /// seam is not called.
+    /// </summary>
+    [TestMethod]
+    public async Task AnEmptyAuthorizationLineOfAMetadataDocumentClientIsChallengedWithoutAnErrorCode()
+    {
+        (int statusCode, string body, int revokeCallCount, _, IReadOnlyList<string> challenges) =
+            await PostOverTheLoopbackListenerAsync(
+                SubIdJson, authorization: string.Empty, isCredentialAccepted: false, issuer: RevocationIssuer,
+                isClientIdMetadataTenant: true).ConfigureAwait(false);
+
+        Assert.AreEqual(401, statusCode, body);
+        Assert.AreEqual("Bearer realm=\"https://gtr.issuer.test/\"", Assert.ContainsSingle(challenges));
+        Assert.AreEqual(string.Empty, body, "No error code or other error information.");
+        Assert.AreEqual(0, revokeCallCount, "A request without an access token must not reach the revoke seam.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>: "If the client
+    /// attempted to authenticate via the "Authorization" request header field, the authorization server MUST respond
+    /// with an HTTP 401 (Unauthorized) status code and include the "WWW-Authenticate" response header field matching
+    /// the authentication scheme used by the client." A revocation posted over the wire with a credential of the
+    /// <c>Basic</c> scheme, which the client authentication seam refuses, is answered 401 <c>invalid_client</c> with
+    /// the one challenge <c>Basic realm="https://gtr.issuer.test/"</c>, and the revoke seam is not called.
+    /// </summary>
+    [TestMethod]
+    public async Task ARevocationWithARefusedBasicCredentialIsChallengedInTheBasicScheme()
+    {
+        (int statusCode, string body, int revokeCallCount, _, IReadOnlyList<string> challenges) =
+            await PostOverTheLoopbackListenerAsync(
+                SubIdJson, authorization: "Basic dXNlcjpwYXNz", isCredentialAccepted: false, issuer: RevocationIssuer).ConfigureAwait(false);
+
+        Assert.AreEqual(401, statusCode, body);
+        Assert.AreEqual("{\"error\":\"invalid_client\",\"error_description\":\"Client authentication failed.\"}", body);
+        Assert.AreEqual("Basic realm=\"https://gtr.issuer.test/\"", Assert.ContainsSingle(challenges));
+        Assert.AreEqual(0, revokeCallCount, "A refused credential must not reach the revoke seam.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>:
+    /// "invalid_request The request is missing a required parameter, includes an unsupported parameter or
+    /// parameter value, repeats the same parameter, uses more than one method for including an access
+    /// token, or is otherwise malformed.  The resource server SHOULD respond with the HTTP 400 (Bad
+    /// Request) status code." A revocation posted over a raw TLS connection with two <c>Authorization</c> field
+    /// lines (<c>Authorization = credentials</c> is no list,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.6.2">RFC 9110 Section 11.6.2</see>) is answered
+    /// 400 <c>invalid_request</c> with the one challenge
+    /// <c>Bearer realm="https://gtr.issuer.test/", error="invalid_request"</c>; the client authentication seam is
+    /// not called and nothing is revoked.
+    /// </summary>
+    [TestMethod]
+    public async Task ARevocationWithTwoAuthorizationLinesIsAnInvalidRequest()
+    {
+        List<ClientCredentialReading> receivedReadings = [];
+        (int statusCode, string body, int revokeCallCount, _, IReadOnlyList<string> challenges) =
+            await PostOverTheLoopbackListenerAsync(
+                SubIdJson, isCredentialAccepted: true, issuer: RevocationIssuer,
+                authorizationLines: ["Bearer good", "Bearer good"], receivedReadings: receivedReadings).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        Assert.AreEqual(
+            "{\"error\":\"invalid_request\",\"error_description\":\"The Authorization header is not a single well-formed credential.\"}",
+            body);
+        Assert.AreEqual("Bearer realm=\"https://gtr.issuer.test/\", error=\"invalid_request\"", Assert.ContainsSingle(challenges));
+        Assert.IsEmpty(receivedReadings, "A malformed credential never reaches the client authentication seam.");
+        Assert.AreEqual(0, revokeCallCount, "A malformed request must not reach the revoke seam.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>:
+    /// "invalid_request The request is missing a required parameter, includes an unsupported parameter or
+    /// parameter value, repeats the same parameter, uses more than one method for including an access
+    /// token, or is otherwise malformed.  The resource server SHOULD respond with the HTTP 400 (Bad
+    /// Request) status code." A revocation posted over the wire whose <c>Authorization</c> value is outside
+    /// "credentials = auth-scheme [ 1*SP ( token68 / #auth-param ) ]"
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.4">RFC 9110 Section 11.4</see>), here
+    /// <c>Bearer one two</c>, is answered 400 <c>invalid_request</c> with the one challenge
+    /// <c>Bearer realm="https://gtr.issuer.test/", error="invalid_request"</c>; the client authentication seam is
+    /// not called and nothing is revoked.
+    /// </summary>
+    [TestMethod]
+    public async Task ARevocationWhoseAuthorizationValueIsOutsideTheGrammarIsAnInvalidRequest()
+    {
+        List<ClientCredentialReading> receivedReadings = [];
+        (int statusCode, string body, int revokeCallCount, _, IReadOnlyList<string> challenges) =
+            await PostOverTheLoopbackListenerAsync(
+                SubIdJson, authorization: "Bearer one two", isCredentialAccepted: true, issuer: RevocationIssuer,
+                receivedReadings: receivedReadings).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        Assert.AreEqual(
+            "{\"error\":\"invalid_request\",\"error_description\":\"The Authorization header is not a single well-formed credential.\"}",
+            body);
+        Assert.AreEqual("Bearer realm=\"https://gtr.issuer.test/\", error=\"invalid_request\"", Assert.ContainsSingle(challenges));
+        Assert.IsEmpty(receivedReadings, "A malformed credential never reaches the client authentication seam.");
+        Assert.AreEqual(0, revokeCallCount, "A malformed request must not reach the revoke seam.");
     }
 
 
@@ -636,9 +785,11 @@ internal sealed class GlobalTokenRevocationServerTests
 
     /// <summary>
     /// A revocation posted over the wire whose registration the application's materialization seam replaces with a
-    /// record that is not an OAuth client registration is answered 500 with the body's error <c>server_error</c> and
-    /// no challenge, and the revoke seam is not called: the endpoint cannot serve the request, and the cause is the
-    /// server's wiring, not the caller.
+    /// record that is not an OAuth client registration is answered by the dispatcher before the endpoint runs: a
+    /// materialized record of another type than the loaded registration is a fault of the server's wiring, so no
+    /// endpoint runs over it and the dispatcher (<see cref="EndpointServer"/>) answers 500 with the error
+    /// <c>server_error</c>, the description the library answers a fault of its own wiring with, and no challenge; the
+    /// revoke seam is not called.
     /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.6.1">RFC 9110 Section 15.6.1</see>: "The 500
     /// (Internal Server Error) status code indicates that the server encountered an unexpected condition that
     /// prevented it from fulfilling the request."
@@ -663,8 +814,8 @@ internal sealed class GlobalTokenRevocationServerTests
                 })).ConfigureAwait(false);
 
         Assert.AreEqual(500, statusCode, body);
-        using JsonDocument error = JsonDocument.Parse(body);
-        Assert.AreEqual("server_error", error.RootElement.GetProperty("error").GetString(), body);
+        Assert.AreEqual(
+            /*lang=json,strict*/ "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}", body);
         Assert.IsEmpty(challenges, "A fault of the server carries no challenge.");
         Assert.AreEqual(0, revokeCallCount, "A request the endpoint cannot serve must not reach the revoke seam.");
     }
@@ -700,6 +851,218 @@ internal sealed class GlobalTokenRevocationServerTests
         Assert.AreEqual(0, revokeCallCount, "A request the endpoint cannot serve must not reach the revoke seam.");
         _ = Assert.IsInstanceOfType<InvalidOperationException>(Assert.ContainsSingle(faults));
     }
+
+
+    /// <summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-parecki-oauth-global-token-revocation-06#section-3.2">draft-parecki-oauth-global-token-revocation-06 Section 3.2</see>:
+    /// "The request MUST also be authenticated."
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-client-id-metadata-document-02.html#section-8.2">draft-ietf-oauth-client-id-metadata-document-02 Section 8.2</see>:
+    /// "This establishes this client as a confidential client, and any communication with the authorization server
+    /// MUST include client authentication of the registered type."
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-parecki-oauth-global-token-revocation-06#section-3.5">draft-parecki-oauth-global-token-revocation-06 Section 3.5</see>:
+    /// "When the caller is an Identity Provider, the RECOMMENDED authentication method is to send a signed JWT as a
+    /// Bearer token in the HTTP Authorization header, following the structure of the private_key_jwt client
+    /// authentication method defined in [RFC7523]." A revocation posted over the wire for a client whose registration
+    /// names a Client ID Metadata Document, presenting a credential, with no <c>client_id</c> or with the client's own,
+    /// is judged against the client's document: the document resolver is called once, for the registration's document,
+    /// and the client authentication seam receives the record the document materialized; the seam's acceptance is
+    /// answered 204. The credentials are a <c>Basic</c> field, the draft's signed JWT as a <c>Bearer</c> token, and a
+    /// <c>private_key_jwt</c> client assertion in form parameters, a shape the library reads and the draft does not
+    /// define for this endpoint.
+    /// </summary>
+    /// <param name="credential">The credential the request presents.</param>
+    [TestMethod]
+    [DataRow("basic", DisplayName = "Authorization: Basic")]
+    [DataRow("assertion", DisplayName = "a client assertion")]
+    [DataRow("basic_client_id", DisplayName = "Authorization: Basic and the client's own client_id")]
+    [DataRow("bearer_jwt", DisplayName = "a signed JWT as a Bearer token")]
+    public async Task ARevocationPresentingACredentialOfAMetadataDocumentClientIsJudgedAgainstItsDocument(string credential)
+    {
+        List<Uri> resolvedDocumentUris = [];
+        List<ClientRecord> receivedRegistrations = [];
+        (string? authorization, string? query) = CredentialOf(credential);
+
+        (int statusCode, string body, int revokeCallCount, _, _) =
+            await PostOverTheLoopbackListenerAsync(
+                SubIdJson, authorization: authorization, isCredentialAccepted: true, issuer: RevocationIssuer,
+                isClientIdMetadataTenant: true, resolvedDocument: ClientIdMetadataDocument,
+                resolvedDocumentUris: resolvedDocumentUris, receivedRegistrations: receivedRegistrations, query: query).ConfigureAwait(false);
+
+        Assert.AreEqual(ClientIdMetadataDocumentUri, Assert.ContainsSingle(resolvedDocumentUris), $"{statusCode} {body}");
+        ClientRecord judged = Assert.ContainsSingle(receivedRegistrations);
+        Assert.IsTrue(judged.IsClientMetadataMaterialized, "The seam judges the record the document materialized.");
+        Assert.AreEqual(ClientAuthenticationMethod.PrivateKeyJwt, judged.TokenEndpointAuthMethod);
+        Assert.AreEqual(204, statusCode, body);
+        Assert.AreEqual(1, revokeCallCount);
+    }
+
+
+    /// <summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-parecki-oauth-global-token-revocation-06#section-3.2">draft-parecki-oauth-global-token-revocation-06 Section 3.2</see>:
+    /// "The request MUST also be authenticated."
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-parecki-oauth-global-token-revocation-06#section-3.5">draft-parecki-oauth-global-token-revocation-06 Section 3.5</see>:
+    /// "When the caller is an Identity Provider, the RECOMMENDED authentication method is to send a signed JWT as a
+    /// Bearer token in the HTTP Authorization header, following the structure of the private_key_jwt client
+    /// authentication method defined in [RFC7523]." A revocation posted over the wire for a client whose registration
+    /// names a Client ID Metadata Document that cannot be fetched, presenting a credential the client authentication
+    /// seam would accept, is not authenticated: it is answered by the endpoint's own refusal of an unauthenticated
+    /// request, 401 <c>invalid_client</c> with <c>Basic realm="https://gtr.issuer.test/"</c> for a <c>Basic</c>
+    /// credential, 401 <c>invalid_token</c> with <c>Bearer realm="https://gtr.issuer.test/", error="invalid_token"</c>
+    /// for the signed JWT the draft's Section 3.5 sends as a <c>Bearer</c> token, and 401 with an empty body and
+    /// <c>Bearer realm="https://gtr.issuer.test/"</c> for a client assertion in form parameters, and neither the
+    /// client authentication seam nor the revoke seam is called.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 Section 3</see>: "If the protected
+    /// resource request included an access token and failed authentication, the resource server SHOULD include the
+    /// "error" attribute to provide the client with the reason why the access request was declined."
+    /// </summary>
+    /// <param name="credential">The credential the request presents.</param>
+    /// <param name="expectedBody">The body of the endpoint's refusal.</param>
+    /// <param name="expectedChallenge">The challenge of the endpoint's refusal.</param>
+    [TestMethod]
+    [DataRow("basic", "{\"error\":\"invalid_client\",\"error_description\":\"Client authentication failed.\"}", "Basic realm=\"https://gtr.issuer.test/\"", DisplayName = "Authorization: Basic")]
+    [DataRow("assertion", "", "Bearer realm=\"https://gtr.issuer.test/\"", DisplayName = "a client assertion")]
+    [DataRow("bearer_jwt", "{\"error\":\"invalid_token\",\"error_description\":\"Client authentication failed.\"}", "Bearer realm=\"https://gtr.issuer.test/\", error=\"invalid_token\"", DisplayName = "a signed JWT as a Bearer token")]
+    public async Task ARevocationOfAMetadataDocumentClientWhoseDocumentFailsIsRefusedAsUnauthenticated(
+        string credential, string expectedBody, string expectedChallenge)
+    {
+        List<ClientCredentialReading> receivedReadings = [];
+        List<Uri> resolvedDocumentUris = [];
+        (string? authorization, string? query) = CredentialOf(credential);
+
+        (int statusCode, string body, int revokeCallCount, _, IReadOnlyList<string> challenges) =
+            await PostOverTheLoopbackListenerAsync(
+                SubIdJson, authorization: authorization, isCredentialAccepted: true, issuer: RevocationIssuer,
+                receivedReadings: receivedReadings, isClientIdMetadataTenant: true,
+                resolvedDocumentUris: resolvedDocumentUris, query: query).ConfigureAwait(false);
+
+        Assert.AreEqual(401, statusCode, body);
+        Assert.AreEqual(expectedBody, body);
+        Assert.AreEqual(expectedChallenge, Assert.ContainsSingle(challenges));
+        Assert.HasCount(1, resolvedDocumentUris, "The client's document is fetched for the request.");
+        Assert.IsEmpty(receivedReadings, "A client whose document fails is not judged on the stored record.");
+        Assert.AreEqual(0, revokeCallCount, "An unauthenticated request must not reach the revoke seam.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-parecki-oauth-global-token-revocation-06#section-3.2">draft-parecki-oauth-global-token-revocation-06 Section 3.2</see>:
+    /// "The request MUST also be authenticated." A revocation posted over the wire for a client whose registration
+    /// names a Client ID Metadata Document, presenting a <c>Basic</c> credential the client authentication seam would
+    /// accept beside a <c>client_id</c> naming another client, is answered by the endpoint's own refusal of an
+    /// unauthenticated request, 401 <c>invalid_client</c> with <c>Basic realm="https://gtr.issuer.test/"</c>, the
+    /// answer a failed fetch is given, and no document is fetched and neither seam is called.
+    /// </summary>
+    [TestMethod]
+    public async Task ARevocationOfAMetadataDocumentClientNamingAnotherClientIsRefusedAsUnauthenticated()
+    {
+        List<ClientCredentialReading> receivedReadings = [];
+        List<Uri> resolvedDocumentUris = [];
+
+        (int statusCode, string body, int revokeCallCount, _, IReadOnlyList<string> challenges) =
+            await PostOverTheLoopbackListenerAsync(
+                SubIdJson, authorization: "Basic dXNlcjpwYXNz", isCredentialAccepted: true, issuer: RevocationIssuer,
+                receivedReadings: receivedReadings, isClientIdMetadataTenant: true, resolvedDocument: ClientIdMetadataDocument,
+                resolvedDocumentUris: resolvedDocumentUris,
+                query: $"client_id={Uri.EscapeDataString("https://other.client.test/client-metadata")}").ConfigureAwait(false);
+
+        Assert.AreEqual(401, statusCode, body);
+        Assert.AreEqual("{\"error\":\"invalid_client\",\"error_description\":\"Client authentication failed.\"}", body);
+        Assert.AreEqual("Basic realm=\"https://gtr.issuer.test/\"", Assert.ContainsSingle(challenges));
+        Assert.IsEmpty(resolvedDocumentUris, "A client_id naming another client fetches no document.");
+        Assert.IsEmpty(receivedReadings, "A request naming another client is not judged on the stored record.");
+        Assert.AreEqual(0, revokeCallCount, "An unauthenticated request must not reach the revoke seam.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 Section 3</see>: "If the protected
+    /// resource request does not include authentication credentials or does not contain an access token that enables
+    /// access to the protected resource, the resource server MUST include the HTTP "WWW-Authenticate" response header
+    /// field; it MAY include it in response to other conditions as well." A revocation posted over the wire for a client
+    /// whose registration names a Client ID Metadata Document, with an empty <c>Authorization</c> field line and a
+    /// <c>grant_type</c> query parameter, is no token request: it is answered as the endpoint answers an empty line,
+    /// 401 with the one challenge <c>Bearer realm="https://gtr.issuer.test/"</c> and an empty body, and no document is
+    /// fetched.
+    /// </summary>
+    [TestMethod]
+    public async Task AnEmptyAuthorizationLineBesideAGrantTypeOfAMetadataDocumentClientIsChallengedWithoutAnErrorCode()
+    {
+        List<Uri> resolvedDocumentUris = [];
+
+        (int statusCode, string body, int revokeCallCount, _, IReadOnlyList<string> challenges) =
+            await PostOverTheLoopbackListenerAsync(
+                SubIdJson, authorization: string.Empty, isCredentialAccepted: false, issuer: RevocationIssuer,
+                isClientIdMetadataTenant: true, resolvedDocumentUris: resolvedDocumentUris,
+                query: "grant_type=authorization_code").ConfigureAwait(false);
+
+        Assert.AreEqual(401, statusCode, body);
+        Assert.AreEqual("Bearer realm=\"https://gtr.issuer.test/\"", Assert.ContainsSingle(challenges));
+        Assert.AreEqual(string.Empty, body, "No error code or other error information.");
+        Assert.IsEmpty(resolvedDocumentUris, "A request without a credential fetches no document.");
+        Assert.AreEqual(0, revokeCallCount);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 Section 3</see>: "If the protected
+    /// resource request does not include authentication credentials or does not contain an access token that enables
+    /// access to the protected resource, the resource server MUST include the HTTP "WWW-Authenticate" response header
+    /// field; it MAY include it in response to other conditions as well." A revocation posted over the wire for a client
+    /// whose registration names a Client ID Metadata Document, without any credential, is answered as the endpoint
+    /// answers it for any client, 401 with the one challenge <c>Bearer realm="https://gtr.issuer.test/"</c> and an
+    /// empty body, and no document is fetched.
+    /// </summary>
+    [TestMethod]
+    public async Task ARevocationWithoutACredentialOfAMetadataDocumentClientFetchesNoDocument()
+    {
+        List<Uri> resolvedDocumentUris = [];
+
+        (int statusCode, string body, int revokeCallCount, _, IReadOnlyList<string> challenges) =
+            await PostOverTheLoopbackListenerAsync(
+                SubIdJson, isCredentialAccepted: false, issuer: RevocationIssuer,
+                isClientIdMetadataTenant: true, resolvedDocument: ClientIdMetadataDocument,
+                resolvedDocumentUris: resolvedDocumentUris).ConfigureAwait(false);
+
+        Assert.AreEqual(401, statusCode, body);
+        Assert.AreEqual("Bearer realm=\"https://gtr.issuer.test/\"", Assert.ContainsSingle(challenges));
+        Assert.AreEqual(string.Empty, body);
+        Assert.IsEmpty(resolvedDocumentUris, "A request without a credential fetches no document.");
+        Assert.AreEqual(0, revokeCallCount);
+    }
+
+
+    /// <summary>
+    /// The Client ID Metadata Document the resolver answers with in the rows that name one: the client's
+    /// identifier and <c>private_key_jwt</c> as its declared method.
+    /// </summary>
+    private static ClientMetadata ClientIdMetadataDocument { get; } = new()
+    {
+        ClientId = ClientId,
+        TokenEndpointAuthMethod = ClientAuthenticationMethod.PrivateKeyJwt
+    };
+
+
+    /// <summary>
+    /// The <c>Authorization</c> field value or the query that carries the named credential: <c>basic</c> a
+    /// <c>Basic</c> field, <c>basic_client_id</c> a <c>Basic</c> field and the client's own <c>client_id</c> in the
+    /// query, <c>assertion</c> a <c>private_key_jwt</c> client assertion in the query (a shape of the library's
+    /// reading, which the draft does not define for this endpoint), and <c>bearer_jwt</c> a signed JWT as a
+    /// <c>Bearer</c> token in the <c>Authorization</c> field, the shape the draft recommends
+    /// (<see href="https://datatracker.ietf.org/doc/html/draft-parecki-oauth-global-token-revocation-06#section-3.5">draft-parecki-oauth-global-token-revocation-06 Section 3.5</see>).
+    /// </summary>
+    /// <param name="credential">The credential's name.</param>
+    /// <returns>The field value and the query, each <see langword="null"/> when not used.</returns>
+    private static (string? Authorization, string? Query) CredentialOf(string credential) => credential switch
+    {
+        "basic" => ("Basic dXNlcjpwYXNz", null),
+        "basic_client_id" => ("Basic dXNlcjpwYXNz", $"client_id={Uri.EscapeDataString(ClientId)}"),
+        "assertion" => (null,
+            $"client_assertion_type={Uri.EscapeDataString(WellKnownClientAssertionTypes.JwtBearer)}"
+            + "&client_assertion=eyJhbGciOiJFUzI1NiJ9.eyJpc3MiOiJjbGllbnQifQ.c2lnbmF0dXJl"),
+        "bearer_jwt" => ("Bearer eyJhbGciOiJFUzI1NiJ9.eyJpc3MiOiJjbGllbnQifQ.c2lnbmF0dXJl", null),
+
+        _ => throw new ArgumentOutOfRangeException(nameof(credential), credential, "No such credential.")
+    };
 
 
     /// <summary>
@@ -747,6 +1110,22 @@ internal sealed class GlobalTokenRevocationServerTests
     /// <param name="materializeRegistration">The application's materialization seam, or <see langword="null"/> for none.</param>
     /// <param name="isIssuerWithdrawn">Whether the registration is served without an issuer.</param>
     /// <param name="faults">The list that receives the captured faults, or <see langword="null"/> to leave them to teardown.</param>
+    /// <param name="authorizationLines">
+    /// The values of the request's <c>Authorization</c> field lines, each sent on its own line over a raw TLS
+    /// connection through <see cref="RawHttpsRequest.SendAsync"/>, or <see langword="null"/> to send
+    /// <paramref name="authorization"/> through the host's client.
+    /// </param>
+    /// <param name="receivedReadings">The list that receives every reading the client authentication seam is called with, or <see langword="null"/>.</param>
+    /// <param name="isClientIdMetadataTenant">
+    /// Whether the registration names a Client ID Metadata Document (<see cref="ClientIdMetadataDocumentUri"/>) and
+    /// is served under the library's materialization
+    /// (<see cref="ClientIdMetadataMaterialization.Build"/>), with a document
+    /// resolver that answers every fetch with <paramref name="resolvedDocument"/>, or as failed when none is given.
+    /// </param>
+    /// <param name="resolvedDocument">The document the resolver answers every fetch with, or <see langword="null"/> to answer it as failed.</param>
+    /// <param name="resolvedDocumentUris">The list that receives the document URL of every call of the resolver, or <see langword="null"/>.</param>
+    /// <param name="receivedRegistrations">The list that receives every registration the client authentication seam is called with, or <see langword="null"/>.</param>
+    /// <param name="query">The query of the request's target without its <c>?</c>, or <see langword="null"/> for none.</param>
     /// <returns>
     /// The status code and body of the answer, the number of calls the revoke seam received, the identifier it
     /// last received (<see langword="null"/> when it was not called) and every <c>WWW-Authenticate</c> field
@@ -760,7 +1139,14 @@ internal sealed class GlobalTokenRevocationServerTests
         Uri? issuer = null,
         MaterializeRegistrationDelegate? materializeRegistration = null,
         bool isIssuerWithdrawn = false,
-        List<Exception>? faults = null)
+        List<Exception>? faults = null,
+        IReadOnlyList<string>? authorizationLines = null,
+        List<ClientCredentialReading>? receivedReadings = null,
+        bool isClientIdMetadataTenant = false,
+        ClientMetadata? resolvedDocument = null,
+        List<Uri>? resolvedDocumentUris = null,
+        List<ClientRecord>? receivedRegistrations = null,
+        string? query = null)
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = await host.RegisterClientAsync(ClientId, ClientBaseUri, GtrCapabilities).ConfigureAwait(false);
@@ -769,8 +1155,13 @@ internal sealed class GlobalTokenRevocationServerTests
         SubjectIdentifier? revokedSubject = null;
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = (_, _, _, _, _) =>
-                ValueTask.FromResult(isCredentialAccepted);
+            candidateIntegration.ValidateClientCredentialsAsync = (reading, registration, _, _) =>
+            {
+                receivedReadings?.Add(reading);
+                receivedRegistrations?.Add(registration);
+
+                return ValueTask.FromResult(isCredentialAccepted);
+            };
 
             _ = candidateIntegration.UseDefaultGlobalTokenRevocationJsonParsing();
 
@@ -786,6 +1177,19 @@ internal sealed class GlobalTokenRevocationServerTests
             {
                 candidateIntegration.MaterializeRegistrationAsync = materializeRegistration;
             }
+
+            if(isClientIdMetadataTenant)
+            {
+                candidateIntegration.MaterializeRegistrationAsync = ClientIdMetadataMaterialization.Build();
+                candidateIntegration.ResolveClientMetadataAsync = (clientMetadataUri, _, _) =>
+                {
+                    resolvedDocumentUris?.Add(clientMetadataUri);
+
+                    return ValueTask.FromResult(resolvedDocument is null
+                        ? new ClientIdMetadataResolution { Outcome = ClientIdMetadataResolutionOutcome.FetchFailed }
+                        : new ClientIdMetadataResolution { Outcome = ClientIdMetadataResolutionOutcome.Resolved, Document = resolvedDocument });
+                };
+            }
         }).ConfigureAwait(false);
 
         await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -800,8 +1204,39 @@ internal sealed class GlobalTokenRevocationServerTests
             listener.Registrations[issuedRegistration.ClientId] = issuedRegistration;
         }
 
+        if(isClientIdMetadataTenant)
+        {
+            ClientRecord served = listener.Registrations[material.Registration.TenantId.Value];
+            ClientRecord metadataDocumentTenant = served with
+            {
+                ClientMetadataUri = ClientIdMetadataDocumentUri,
+                AllowedCapabilities = served.AllowedCapabilities.Add(WellKnownCapabilityIdentifiers.OAuthClientIdMetadataDocument)
+            };
+            listener.Registrations[metadataDocumentTenant.TenantId.Value] = metadataDocumentTenant;
+            listener.Registrations[metadataDocumentTenant.ClientId] = metadataDocumentTenant;
+        }
+
         Uri endpoint = TestHostShell.ComposeEndpointUri(
             listener.HttpBaseAddress!, material.Registration.TenantId.Value, WellKnownEndpointNames.GlobalTokenRevocation);
+        if(query is not null)
+        {
+            endpoint = new UriBuilder(endpoint) { Query = query }.Uri;
+        }
+
+        if(authorizationLines is not null)
+        {
+            HttpResponseData raw = await RawHttpsRequest.SendAsync(
+                host, WellKnownHttpMethods.Post, endpoint,
+                [
+                    new(WellKnownHttpHeaderNames.ContentType, WellKnownMediaTypes.Application.Json),
+                    .. authorizationLines.Select(static line => new KeyValuePair<string, string>(WellKnownHttpHeaderNames.Authorization, line))
+                ],
+                Encoding.UTF8.GetBytes(subIdJson), TestContext.CancellationToken).ConfigureAwait(false);
+            faults?.AddRange(listener.ConsumeHttpFaults());
+
+            return (raw.StatusCode, raw.Body, revokeCallCount, revokedSubject,
+                [.. raw.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)]);
+        }
 
         using HttpRequestMessage request = new(HttpMethod.Post, endpoint)
         {
@@ -839,7 +1274,7 @@ internal sealed class GlobalTokenRevocationServerTests
         //seam is not — the gate requires all three, so the endpoint must not exist.
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(true);
 
             candidateIntegration.ParseGlobalTokenRevocationRequestAsync = static (_, _, _) =>

@@ -727,13 +727,27 @@ public static class FederationEndpoints
 
 
     /// <summary>
-    /// Applies the OpenID Federation 1.0 §8.8 client-authentication gate when the
-    /// deployment wired
-    /// <see cref="Server.AuthorizationServerIntegration.AuthenticateFederationClientAsync"/>:
-    /// returns an HTTP 401 <c>invalid_client</c> response when the requester
-    /// fails authentication at this endpoint, or <see langword="null"/> to let the
-    /// request proceed (no delegate, or client authentication not required here).
+    /// Applies the OpenID Federation 1.0 Section 8.8 client-authentication gate when the deployment wired
+    /// <see cref="Server.AuthorizationServerIntegration.AuthenticateFederationClientAsync"/>. The request's
+    /// client credentials are read once through <see cref="ClientCredentialReading.Read"/> before the gate
+    /// runs, and a malformed reading is answered 400 <c>invalid_request</c> by
+    /// <see cref="AuthCode.AuthCodeEndpoints.RefuseMalformedClientCredentials"/> without the gate. A requester
+    /// the gate refuses is answered <c>invalid_client</c> in the shape of the library's client authentication
+    /// failure (<see cref="AuthCode.AuthCodeEndpoints.ClientAuthenticationFailureResponseAsync"/>): 401 with
+    /// the challenge <c>&lt;scheme&gt; realm="&lt;issuer&gt;"</c> of the scheme the request attempted in its
+    /// <c>Authorization</c> field, or of <c>Basic</c> when <c>client_secret_basic</c> is advertised, and
+    /// otherwise 400, so no 401 leaves without a challenge
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.5.2">RFC 9110 Section 15.5.2</see>).
+    /// Returns <see langword="null"/> to let the request proceed (no gate wired, or client authentication
+    /// not required here).
     /// </summary>
+    /// <param name="endpointName">The federation endpoint the gate judges.</param>
+    /// <param name="fields">The request's fields.</param>
+    /// <param name="registration">The registration the request is served for.</param>
+    /// <param name="context">The per-request context.</param>
+    /// <param name="server">The server holding the gate.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The refusal, or <see langword="null"/>.</returns>
     private static async ValueTask<ServerHttpResponse?> EnforceFederationClientAuthenticationAsync(
         string endpointName,
         RequestFields fields,
@@ -748,14 +762,22 @@ public static class FederationEndpoints
             return null;
         }
 
+        ClientCredentialReading reading = AuthCode.AuthCodeEndpoints.CarriedClientCredentials(context, fields);
+        ServerHttpResponse? malformedRefusal = AuthCode.AuthCodeEndpoints.RefuseMalformedClientCredentials(reading);
+        if(malformedRefusal is not null)
+        {
+            return malformedRefusal;
+        }
+
         FederationClientAuthenticationResult? result = await authenticate(
             endpointName, fields, registration, context, cancellationToken).ConfigureAwait(false);
 
         if(result is not null && !result.IsValid)
         {
-            return ServerHttpResponse.Unauthorized(
-                OAuthErrors.InvalidClient,
-                result.FailureReason ?? "Federation endpoint client authentication failed.");
+            return await AuthCode.AuthCodeEndpoints.ClientAuthenticationFailureResponseAsync(
+                reading,
+                result.FailureReason ?? "Federation endpoint client authentication failed.",
+                registration, context, cancellationToken).ConfigureAwait(false);
         }
 
         return null;

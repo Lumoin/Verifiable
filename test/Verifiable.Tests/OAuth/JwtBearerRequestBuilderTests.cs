@@ -7,6 +7,7 @@ using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.JwtBearer;
 using Verifiable.OAuth.Server;
+using Verifiable.Server.Routing;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -242,25 +243,26 @@ internal sealed class JwtBearerRequestBuilderTests
 
 
     /// <summary>
-    /// Wires the <c>client_secret_post</c> (RFC 6749 section 2.3.1) authentication seam that checks the request's <c>client_secret</c> form field against the fixture secret.
-    /// When <paramref name="receivedFields"/> is supplied, the installed seam appends the form fields of every request it receives to that list and then delegates to the check.
+    /// Wires the <c>client_secret_post</c> (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-2.3.1">RFC 6749 Section 2.3.1</see>) authentication seam that checks the <c>client_secret</c> of the reading it receives (<see cref="ClientCredentialReading.ClientSecret"/>) against the fixture secret.
+    /// When <paramref name="receivedFields"/> is supplied, the installed seam appends the form fields of every request it judges, read from the request on the context, to that list and then delegates to the check.
     /// </summary>
     /// <param name="app">The host shell whose server receives the seam.</param>
     /// <param name="receivedFields">The list that collects the form fields the token endpoint received, or <see langword="null"/> to collect nothing.</param>
     private static async Task WireClientAuthenticationAsync(TestHostShell app, List<RequestFields>? receivedFields = null)
     {
-        static ValueTask<bool> checkSecret(RequestFields fields) =>
+        static ValueTask<bool> checkSecret(ClientCredentialReading reading) =>
             ValueTask.FromResult(
-                fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                reading.ClientSecret is string secret
                 && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
 
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+            candidateIntegration.ValidateClientCredentialsAsync = (reading, registration, context, ct) =>
             {
-                receivedFields?.Add(fields);
+                //The form the token endpoint received, read from the request on the context.
+                receivedFields?.Add(context.IncomingRequest!.Fields);
 
-                return checkSecret(fields);
+                return checkSecret(reading);
             };
         }).ConfigureAwait(false);
     }

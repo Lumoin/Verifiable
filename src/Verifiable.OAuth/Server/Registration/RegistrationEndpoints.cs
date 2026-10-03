@@ -375,7 +375,7 @@ public static class RegistrationEndpoints
         EndpointServer server,
         CancellationToken cancellationToken)
     {
-        ServerHttpResponse? authFailure = await ValidateBearerAsync(
+        (ServerHttpResponse? authFailure, string? validatedBearer) = await ValidateBearerAsync(
             context, server, cancellationToken).ConfigureAwait(false);
         if(authFailure is not null)
         {
@@ -385,7 +385,7 @@ public static class RegistrationEndpoints
 
 
         ClientRecord registration = context.ClientRegistration!;
-        string body = BuildReadResponseJson(registration, context);
+        string body = BuildReadResponseJson(registration, validatedBearer!);
         //The client-information response carries the authenticated management bearer.
 
         return ServerHttpResponse
@@ -401,7 +401,7 @@ public static class RegistrationEndpoints
         CancellationToken cancellationToken)
     {
         var oauth = server.OAuth();
-        ServerHttpResponse? authFailure = await ValidateBearerAsync(
+        (ServerHttpResponse? authFailure, string? validatedBearer) = await ValidateBearerAsync(
             context, server, cancellationToken).ConfigureAwait(false);
         if(authFailure is not null)
         {
@@ -473,7 +473,7 @@ public static class RegistrationEndpoints
 
         await server.UpdateClientAsync(previous, updated, context).ConfigureAwait(false);
 
-        string responseBody = BuildReadResponseJson(updated, context);
+        string responseBody = BuildReadResponseJson(updated, validatedBearer!);
         //OAuth 2.1 §3.2.3 — the update echoes the (possibly new)
         //credentials back to the caller; treat as a token-bearing response.
 
@@ -513,7 +513,7 @@ public static class RegistrationEndpoints
         EndpointServer server,
         CancellationToken cancellationToken)
     {
-        ServerHttpResponse? authFailure = await ValidateBearerAsync(
+        (ServerHttpResponse? authFailure, _) = await ValidateBearerAsync(
             context, server, cancellationToken).ConfigureAwait(false);
         if(authFailure is not null)
         {
@@ -559,7 +559,7 @@ public static class RegistrationEndpoints
     /// the one the dispatcher sets) is answered 500 <c>server_error</c> with
     /// <see cref="WellKnownOAuthErrorDescriptions.ServerNotReady"/> and no challenge, before the token is read. A
     /// request whose <c>Authorization</c> field holds no Bearer token, as
-    /// <see cref="BearerTokenValidation.TryExtractBearer"/> reads it, is answered 401 with an empty body and the
+    /// <see cref="BearerTokenValidation.TryExtractBearer(ExchangeContext, out string?)"/> reads it, is answered 401 with an empty body and the
     /// challenge <c>Bearer realm="&lt;issuer&gt;"</c>; a token the application's seam refuses is answered by
     /// <see cref="RefuseRegistrationAccessTokenAsync"/>.
     /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.6.1">RFC 9110 Section 15.6.1</see>: "The 500
@@ -569,8 +569,11 @@ public static class RegistrationEndpoints
     /// <param name="context">The per-request context.</param>
     /// <param name="server">The authorization server holding the validation seam.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The refusal, or <see langword="null"/> when the presented token authenticates the client.</returns>
-    private static async ValueTask<ServerHttpResponse?> ValidateBearerAsync(
+    /// <returns>
+    /// The refusal and no token, or no refusal and the Bearer token that authenticated the client, which the
+    /// read and the update echo in their response without reading the field again.
+    /// </returns>
+    private static async ValueTask<(ServerHttpResponse? Failure, string? ValidatedBearer)> ValidateBearerAsync(
         ExchangeContext context,
         EndpointServer server,
         CancellationToken cancellationToken)
@@ -579,9 +582,9 @@ public static class RegistrationEndpoints
         if(oauth.ValidateRegistrationAccessTokenAsync is null)
         {
 
-            return ServerHttpResponse.ServerError(
+            return (ServerHttpResponse.ServerError(
                 OAuthErrors.ServerError,
-                "ValidateRegistrationAccessTokenAsync is not configured.");
+                "ValidateRegistrationAccessTokenAsync is not configured."), null);
         }
 
         //The dispatcher sets the registration before a candidate runs, but an application's materializer
@@ -591,8 +594,8 @@ public static class RegistrationEndpoints
         if(registration is null)
         {
 
-            return ServerHttpResponse.ServerError(
-                OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady);
+            return (ServerHttpResponse.ServerError(
+                OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady), null);
         }
 
         //RFC 7592 Section 2: "The client MUST use its registration access token in all calls to this
@@ -602,12 +605,22 @@ public static class RegistrationEndpoints
         //RFC 6750 Section 3.1: "If the request lacks any authentication information (e.g., the client was
         //unaware that authentication is necessary or attempted using an unsupported authentication
         //method), the resource server SHOULD NOT include an error code or other error information."
-        if(!BearerTokenValidation.TryExtractBearer(context, out string? presented))
+        //The field is read once; sent on two lines it is no credential (RFC 9110 Section 11.6.2) and the
+        //request is refused 400 invalid_request with the Bearer challenge, the one scheme this endpoint reads.
+        AuthorizationFieldReading authorization = BearerTokenValidation.ReadAuthorizationField(context);
+        if(authorization.IsRepeated)
         {
 
-            return await CredentialEndpointDpopValidation.ChallengedAsync(
+            return (await CredentialEndpointDpopValidation.RefuseRepeatedAuthorizationAsync(
+                server, registration, context, isDpopAccepted: false, cancellationToken).ConfigureAwait(false), null);
+        }
+
+        if(!BearerTokenValidation.TryExtractBearer(authorization, out string? presented))
+        {
+
+            return (await CredentialEndpointDpopValidation.ChallengedAsync(
                 ServerHttpResponse.Unauthorized(), error: null, server, registration, context, cancellationToken)
-                .ConfigureAwait(false);
+                .ConfigureAwait(false), null);
         }
 
         bool isValid = await oauth.ValidateRegistrationAccessTokenAsync(
@@ -620,11 +633,11 @@ public static class RegistrationEndpoints
         if(!isValid)
         {
 
-            return await RefuseRegistrationAccessTokenAsync(
-                server, registration, context, cancellationToken).ConfigureAwait(false);
+            return (await RefuseRegistrationAccessTokenAsync(
+                server, registration, context, cancellationToken).ConfigureAwait(false), null);
         }
 
-        return null;
+        return (null, presented);
     }
 
 
@@ -655,11 +668,15 @@ public static class RegistrationEndpoints
             OAuthErrors.InvalidToken, server, registration, context, cancellationToken);
 
 
-    /// <summary>Builds the complete RFC 7592 section 3 response, echoing the validated bearer and all accepted metadata.</summary>
-    private static string BuildReadResponseJson(ClientRecord registration, ExchangeContext context)
+    /// <summary>
+    /// Builds the complete RFC 7592 section 3 response, echoing the bearer <see cref="ValidateBearerAsync"/>
+    /// validated for this request, handed over by the handler so the field is read once, and all accepted metadata.
+    /// </summary>
+    /// <param name="registration">The registration whose metadata the response carries.</param>
+    /// <param name="bearer">The registration access token that authenticated the request.</param>
+    /// <returns>The JSON response body.</returns>
+    private static string BuildReadResponseJson(ClientRecord registration, string bearer)
     {
-        _ = context.IncomingRequest!.Headers.TryGetSingle(WellKnownHttpHeaderNames.Authorization, out string? authorization);
-        string bearer = authorization![(WellKnownAuthenticationSchemes.Bearer.Length + 1)..];
         Uri managementUri = registration.RegistrationClientUri
             ?? throw new InvalidOperationException("The registration has no client configuration URI.");
         ClientMetadata metadata = (registration.RegisteredMetadata ?? new ClientMetadata()) with

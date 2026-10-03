@@ -357,8 +357,18 @@ public static class Oid4VciEndpoints
                 //§8.3.1.1: the Credential Request must carry an Access Token that enables
                 //issuance. The library validates the AS-issued token (signature, iss, exp) —
                 //the same protected-resource boundary UserInfo applies — before any minting.
+                //The Authorization field is read once; sent on two lines it is no credential
+                //(RFC 9110 Section 11.6.2) and the request is refused 400 invalid_request with
+                //the Bearer and the DPoP challenge (RFC 9449 Section 7.2, Figure 19).
+                AuthorizationFieldReading authorization = BearerTokenValidation.ReadAuthorizationField(context);
+                if(authorization.IsRepeated)
+                {
+                    return Respond(await CredentialEndpointDpopValidation.RefuseRepeatedAuthorizationAsync(
+                        server, registration, context, isDpopAccepted: true, ct).ConfigureAwait(false));
+                }
+
                 if(!BearerTokenValidation.TryExtractAccessToken(
-                    context, out string? bearerToken, out bool isDpopPresentation))
+                    authorization, out string? bearerToken, out bool isDpopPresentation))
                 {
                     return Respond(await CredentialEndpointDpopValidation.RefuseMissingCredentialsAsync(
                         server, registration, context, ct).ConfigureAwait(false));
@@ -693,8 +703,18 @@ public static class Oid4VciEndpoints
 
                 //§9: the Wallet presents an access token valid for the issuance previously
                 //requested at the Credential Endpoint — the same protected-resource boundary.
+                //The Authorization field is read once; sent on two lines it is no credential
+                //(RFC 9110 Section 11.6.2) and the request is refused 400 invalid_request with
+                //the Bearer and the DPoP challenge (RFC 9449 Section 7.2, Figure 19).
+                AuthorizationFieldReading authorization = BearerTokenValidation.ReadAuthorizationField(context);
+                if(authorization.IsRepeated)
+                {
+                    return Respond(await CredentialEndpointDpopValidation.RefuseRepeatedAuthorizationAsync(
+                        server, registration, context, isDpopAccepted: true, ct).ConfigureAwait(false));
+                }
+
                 if(!BearerTokenValidation.TryExtractAccessToken(
-                    context, out string? bearerToken, out bool isDpopPresentation))
+                    authorization, out string? bearerToken, out bool isDpopPresentation))
                 {
                     return Respond(await CredentialEndpointDpopValidation.RefuseMissingCredentialsAsync(
                         server, registration, context, ct).ConfigureAwait(false));
@@ -1790,8 +1810,18 @@ public static class Oid4VciEndpoints
 
                 //§11.3: a missing or invalid access token answers an RFC 6750 §3
                 //Authorization Error Response.
+                //The Authorization field is read once; sent on two lines it is no credential
+                //(RFC 9110 Section 11.6.2) and the request is refused 400 invalid_request with
+                //the Bearer and the DPoP challenge (RFC 9449 Section 7.2, Figure 19).
+                AuthorizationFieldReading authorization = BearerTokenValidation.ReadAuthorizationField(context);
+                if(authorization.IsRepeated)
+                {
+                    return Respond(await CredentialEndpointDpopValidation.RefuseRepeatedAuthorizationAsync(
+                        server, registration, context, isDpopAccepted: true, ct).ConfigureAwait(false));
+                }
+
                 if(!BearerTokenValidation.TryExtractAccessToken(
-                    context, out string? bearerToken, out bool isDpopPresentation))
+                    authorization, out string? bearerToken, out bool isDpopPresentation))
                 {
                     return Respond(await CredentialEndpointDpopValidation.RefuseMissingCredentialsAsync(
                         server, registration, context, ct).ConfigureAwait(false));

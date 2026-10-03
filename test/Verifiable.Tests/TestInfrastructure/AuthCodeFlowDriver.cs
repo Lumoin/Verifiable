@@ -560,24 +560,28 @@ internal static class AuthCodeFlowDriver
 
     /// <summary>
     /// The test-side reverse of <see cref="OutgoingHeadersClientAuthExtensions.WithClientSecretBasic"/>
-    /// (RFC 6749 §2.3.1): base64-decode the <c>Authorization: Basic</c> header, split the pair on the
-    /// first <c>:</c> (the join character the encoder never percent-encodes into either half), and
-    /// reverse <c>application/x-www-form-urlencoded</c> on each half — a <c>client_id</c> or
-    /// <c>client_secret</c> containing <c>:</c>, <c>/</c>, or a space, all of which the encoder
-    /// percent-escapes or <c>+</c>-encodes, would otherwise never match a naive raw comparison.
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-2.3.1">RFC 6749 Section 2.3.1</see>), over the
+    /// credential the library read: the <c>Basic</c> credentials of
+    /// <paramref name="reading"/> (<see cref="ClientCredentialReading.HasBasicAuthorization"/>) are
+    /// base64-decoded, the pair split on the first <c>:</c> (the join character the encoder never
+    /// percent-encodes into either half), and <c>application/x-www-form-urlencoded</c> reversed on each
+    /// half, since a <c>client_id</c> or <c>client_secret</c> containing <c>:</c>, <c>/</c>, or a space,
+    /// all of which the encoder percent-escapes or <c>+</c>-encodes, would otherwise never match a naive
+    /// raw comparison.
     /// </summary>
+    /// <param name="reading">The client credentials the seam received.</param>
+    /// <param name="expectedClientId">The registered client identifier.</param>
+    /// <param name="expectedClientSecret">The registered secret.</param>
+    /// <returns><see langword="true"/> when the <c>Basic</c> credential names the client and its secret.</returns>
     internal static bool DecodeAndMatchBasicHeader(
-        IncomingRequest? request, string expectedClientId, string expectedClientSecret)
+        ClientCredentialReading reading, string expectedClientId, string expectedClientSecret)
     {
-        if(request is null
-            || !request.Headers.TryGetSingle(WellKnownHttpHeaderNames.Authorization, out string? authorizationHeader)
-            || authorizationHeader is null
-            || !authorizationHeader.StartsWith("Basic ", StringComparison.Ordinal))
+        if(!reading.HasBasicAuthorization || reading.Authorization.Credentials is not { Length: > 0 } credentials)
         {
             return false;
         }
 
-        byte[] decoded = Convert.FromBase64String(authorizationHeader["Basic ".Length..]);
+        byte[] decoded = Convert.FromBase64String(credentials);
         string pair = Encoding.UTF8.GetString(decoded);
         int separatorIndex = pair.IndexOf(':', StringComparison.Ordinal);
         if(separatorIndex < 0)

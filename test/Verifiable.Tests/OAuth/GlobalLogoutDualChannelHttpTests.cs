@@ -144,7 +144,7 @@ internal sealed class GlobalLogoutDualChannelHttpTests
         using HttpClient transmitterClient = LoopbackTls.CreatePinnedHttpClient(ssfReceiver.Certificate);
         await TestHostShell.AlterAsync(op.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) => ValueTask.FromResult(true);
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) => ValueTask.FromResult(true);
 
 
             _ = candidateIntegration.UseDefaultGlobalTokenRevocationJsonParsing();

@@ -464,7 +464,7 @@ internal sealed class RefreshGrantTests
         //unregistered for it.
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
                 ValueTask.FromResult(true);
             candidateIntegration.ValidateTokenExchangeTokenAsync = static (token, tokenType, registration, context, ct) =>
                 ValueTask.FromResult<ValidatedSecurityToken?>(new ValidatedSecurityToken { Subject = "https://subject.example.com" });

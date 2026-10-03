@@ -1474,9 +1474,9 @@ internal sealed class Oid4VciAuthorizationDetailsTests
             int resolveIssuerCount = 0;
             await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
             {
-                candidateIntegration.ValidateClientCredentialsAsync = static (_, fields, _, _, _) =>
+                candidateIntegration.ValidateClientCredentialsAsync = static (reading, _, _, _) =>
                     ValueTask.FromResult(
-                        fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                        reading.ClientSecret is string secret
                         && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
                 _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
                 candidateIntegration.AuthorizationDetailTypes.Register(new AuthorizationDetailHandler

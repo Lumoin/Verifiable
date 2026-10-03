@@ -286,7 +286,7 @@ internal sealed class FullLifecycleTests
         //RFC 9701 so the verdict itself is attestable. ===
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _, _) =>
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(true);
 
             candidateIntegration.IntrospectTokenAsync = (token, _, _, _, _) =>

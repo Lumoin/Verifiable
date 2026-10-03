@@ -159,7 +159,8 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
     /// Each §6.3 denial the seam returns maps to its OAuth Token Error Response: a wrong or
     /// expired code and a wrong Transaction Code are <c>invalid_grant</c>; a missing or
     /// unexpected Transaction Code is <c>invalid_request</c>; an unsupported anonymous request
-    /// is <c>invalid_client</c>.
+    /// is <c>invalid_client</c>, 400 at a server that advertises no <c>client_secret_basic</c>, <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>'s
+    /// default status, since no 401 is sent without a challenge.
     /// </summary>
     [TestMethod]
     public async Task DenialsMapToTheSpecTokenErrorResponses()
@@ -186,7 +187,7 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
 
         await AssertDenialAsync(host, material,
             PreAuthorizedCodeDecision.Deny(PreAuthorizedCodeDenialReason.ClientAuthenticationRequired),
-            401, OAuthErrors.InvalidClient).ConfigureAwait(false);
+            400, OAuthErrors.InvalidClient).ConfigureAwait(false);
     }
 
 
@@ -1073,6 +1074,141 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
             .ConfigureAwait(false);
         string provenBody = await provenResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(HttpStatusCode.OK, provenResponse.StatusCode, provenBody);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749 Section 3.2</see>: "Request and
+    /// response parameters MUST NOT be included more than once." A Token Request of the Pre-Authorized Code grant
+    /// (<see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.1">OpenID for
+    /// Verifiable Credential Issuance 1.0 Section 6.1</see>) sent over the wire with <c>client_assertion</c> twice is
+    /// refused 400 <c>invalid_request</c> with the description of a repeated client authentication parameter, the
+    /// code <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see> names for a
+    /// request that repeats a parameter, before the application's code-validation seam runs, so the
+    /// <c>pre-authorized_code</c> is never consumed by a malformed request.
+    /// </summary>
+    [TestMethod]
+    public async Task ARepeatedClientAssertionIsRefusedBeforeTheCodeIsConsulted()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities).ConfigureAwait(false);
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
+
+        int seamInvocations = 0;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidatePreAuthorizedCodeAsync =
+                (code, txCode, clientId, registration, context, ct) =>
+                {
+                    _ = Interlocked.Increment(ref seamInvocations);
+
+                    return ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject, "UniversityDegree_dc_sd_jwt"));
+                };
+        }).ConfigureAwait(false);
+
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        (int status, string body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, material.Registration.TenantId.Value,
+            [
+                .. BuildPreAuthorizedFields(),
+                new(OAuthRequestParameterNames.ClientAssertionType, WellKnownClientAssertionTypes.JwtBearer),
+                new(OAuthRequestParameterNames.ClientAssertion, "first.client.assertion"),
+                new(OAuthRequestParameterNames.ClientAssertion, "second.client.assertion")
+            ],
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, status, body);
+        Assert.AreEqual(
+            "{\"error\":\"invalid_request\",\"error_description\":\"The request repeats a client authentication parameter.\"}",
+            body);
+        Assert.AreEqual(0, Volatile.Read(ref seamInvocations), "A malformed request never reaches the code-validation seam.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>: "If the client
+    /// attempted to authenticate via the "Authorization" request header field, the authorization server MUST respond
+    /// with an HTTP 401 (Unauthorized) status code and include the "WWW-Authenticate" response header field matching
+    /// the authentication scheme used by the client." A Token Request of the Pre-Authorized Code grant sent over the
+    /// wire with <c>Authorization: Basic</c> carrying a wrong secret, which the application's code-validation seam
+    /// denies as requiring client authentication, is answered 401 <c>invalid_client</c> with the one challenge
+    /// <c>Basic realm="&lt;issuer&gt;"</c>, the issuer the request is served under.
+    /// </summary>
+    [TestMethod]
+    public async Task AClientAuthenticationDenialOfABasicAttemptIsChallengedInTheBasicScheme()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidatePreAuthorizedCodeAsync =
+                static (code, txCode, clientId, registration, context, ct) =>
+                    ValueTask.FromResult(PreAuthorizedCodeDecision.Deny(PreAuthorizedCodeDenialReason.ClientAuthenticationRequired));
+        }).ConfigureAwait(false);
+
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer hosted = host.Host("default");
+        string segment = material.Registration.TenantId.Value;
+        HttpResponseData response = await HttpClientTransport.SendFormPostAsync(
+            hosted.SharedHttpClient!, RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment), BuildPreAuthorizedFields(),
+            OutgoingHeaders.Empty.WithClientSecretBasic(ClientId, Encoding.UTF8.GetBytes("wrong-secret")),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(401, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            "{\"error\":\"invalid_client\",\"error_description\":\"Anonymous access is not supported; a client_id is required.\"}",
+            response.Body);
+        Assert.AreEqual($"Basic realm=\"{hosted.Registrations[segment].IssuerUri!.OriginalString}\"",
+            Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">RFC 6749 Section 3.2</see>: "Parameters sent
+    /// without a value MUST be treated as if they were omitted from the request." A Token Request of the
+    /// Pre-Authorized Code grant
+    /// (<see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.1">OpenID for
+    /// Verifiable Credential Issuance 1.0 Section 6.1</see>) sent over the wire with <c>client_id=</c> with no value
+    /// beside <c>client_id=https://wallet.client.test</c> names the one client identifier: the application's
+    /// code-validation seam receives <c>https://wallet.client.test</c>, and the granted code is answered 200 with an
+    /// access token.
+    /// </summary>
+    [TestMethod]
+    public async Task AnEmptyClientIdBesideAClientIdIsTheOneIdentifierTheCodeValidationSeamReceives()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities).ConfigureAwait(false);
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
+
+        ConcurrentQueue<string?> receivedClientIds = new();
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidatePreAuthorizedCodeAsync =
+                (code, txCode, clientId, registration, context, ct) =>
+                {
+                    receivedClientIds.Enqueue(clientId);
+
+                    return ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject, "UniversityDegree_dc_sd_jwt"));
+                };
+        }).ConfigureAwait(false);
+
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        (int status, string body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, material.Registration.TenantId.Value,
+            [
+                .. BuildPreAuthorizedFields(),
+                new(OAuthRequestParameterNames.ClientId, string.Empty),
+                new(OAuthRequestParameterNames.ClientId, ClientId)
+            ],
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(200, status, body);
+        Assert.AreEqual(ClientId, Assert.ContainsSingle(receivedClientIds));
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.IsFalse(string.IsNullOrEmpty(document.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()));
     }
 
 

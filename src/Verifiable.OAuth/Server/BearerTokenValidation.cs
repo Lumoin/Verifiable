@@ -57,12 +57,34 @@ namespace Verifiable.OAuth.Server;
 /// resource's identifier per
 /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-4">RFC 9068 §4</see>.
 /// </para>
+/// <para>
+/// The extractors read the <c>Authorization</c> field through <see cref="AuthorizationFieldReading.Read"/>: the
+/// token is the credentials of one well-formed field line of the <c>Bearer</c> or <c>DPoP</c> scheme, the scheme
+/// compared case-insensitively, whose credentials are a token68
+/// (<see cref="AuthorizationFieldReading.HasToken68Credentials"/>), the form both schemes define:
+/// "credentials = "Bearer" 1*SP b64token"
+/// (<see href="https://www.rfc-editor.org/rfc/rfc6750#section-2.1">RFC 6750 Section 2.1</see>) and
+/// "credentials = "DPoP" 1*SP token68"
+/// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>). A field sent on
+/// two lines carries no token, and the library's own resources answer it 400 <c>invalid_request</c>: UserInfo and
+/// the OID4VCI resources, which accept both schemes, with the <c>Bearer</c> and the <c>DPoP</c> challenge, and the
+/// client configuration endpoint with the <c>Bearer</c> challenge. A value of another scheme, outside the grammar,
+/// or whose credentials are a list of auth-param, carries no token.
+/// </para>
 /// </remarks>
 public static class BearerTokenValidation
 {
     /// <summary>
-    /// Parses the <c>Authorization</c> header and extracts the bearer token,
-    /// rejecting missing / non-Bearer / empty-payload presentations.
+    /// Reads the request's <c>Authorization</c> field through <see cref="AuthorizationFieldReading.Read"/> and
+    /// extracts the bearer token: the credentials of one well-formed field line whose scheme is
+    /// <c>Bearer</c>, compared case-insensitively ("It uses a case-insensitive token to identify the
+    /// authentication scheme:", <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.1">RFC 9110
+    /// Section 11.1</see>), and whose credentials are a token68, the token's form:
+    /// "b64token    = 1*( ALPHA / DIGIT / "-" / "." / "_" / "~" / "+" / "/" ) *"="" and
+    /// "credentials = "Bearer" 1*SP b64token"
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6750#section-2.1">RFC 6750 Section 2.1</see>). A field that is
+    /// absent, repeated, of another scheme, outside the <c>credentials</c> grammar, without credentials or whose
+    /// credentials are a list of auth-param carries no token.
     /// </summary>
     /// <param name="context">The per-request context carrying the inbound request.</param>
     /// <param name="bearerToken">The extracted token, or <see langword="null"/> when absent or malformed.</param>
@@ -71,32 +93,43 @@ public static class BearerTokenValidation
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        bearerToken = null;
-        IncomingRequest? req = context.IncomingRequest;
-        string bearerPrefix = WellKnownAuthenticationSchemes.Bearer + " ";
-
-        if(req is null
-            || !req.Headers.TryGetSingle(WellKnownHttpHeaderNames.Authorization, out string? authHeader)
-            || authHeader is null
-            || !authHeader.StartsWith(bearerPrefix, StringComparison.Ordinal)
-            || authHeader.Length <= bearerPrefix.Length)
-        {
-            return false;
-        }
-
-        bearerToken = authHeader[bearerPrefix.Length..];
-
-        return true;
+        return TryExtractBearer(ReadAuthorizationField(context), out bearerToken);
     }
 
 
     /// <summary>
-    /// Parses the <c>Authorization</c> header for an access token under EITHER the <c>Bearer</c>
-    /// (RFC 6750) or the <c>DPoP</c> (RFC 9449 §7.1) scheme, reporting which scheme carried it.
-    /// A sender-constrained token is presented under the <c>DPoP</c> scheme alongside a
-    /// <c>DPoP</c> proof header, so a protected resource that honors the binding must accept that
-    /// scheme; the <paramref name="isDpopPresentation"/> flag lets the caller reject a
-    /// DPoP-bound token presented (downgraded) under <c>Bearer</c>.
+    /// Extracts the bearer token from an <c>Authorization</c> field already read once by the caller, by the
+    /// rule of <see cref="TryExtractBearer(ExchangeContext, out string?)"/>.
+    /// </summary>
+    /// <param name="authorization">The request's <c>Authorization</c> field reading.</param>
+    /// <param name="bearerToken">The extracted token, or <see langword="null"/> when absent or malformed.</param>
+    /// <returns><see langword="true"/> when a well-formed Bearer token was present.</returns>
+    internal static bool TryExtractBearer(AuthorizationFieldReading authorization, out string? bearerToken)
+    {
+        bearerToken = authorization.HasToken68Credentials
+            && authorization.IsScheme(WellKnownAuthenticationSchemes.Bearer)
+                ? authorization.Credentials
+                : null;
+
+        return bearerToken is not null;
+    }
+
+
+    /// <summary>
+    /// Reads the request's <c>Authorization</c> field through <see cref="AuthorizationFieldReading.Read"/>
+    /// for an access token under EITHER the <c>Bearer</c> (RFC 6750) or the <c>DPoP</c> (RFC 9449 Section 7.1)
+    /// scheme, each compared case-insensitively
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.1">RFC 9110 Section 11.1</see>), reporting
+    /// which scheme carried it. A sender-constrained token is presented under the <c>DPoP</c> scheme alongside
+    /// a <c>DPoP</c> proof header, so a protected resource that honors the binding must accept that scheme;
+    /// the <paramref name="isDpopPresentation"/> flag lets the caller reject a DPoP-bound token presented
+    /// (downgraded) under <c>Bearer</c>. The token is the credentials of the one well-formed line when they are a
+    /// token68, the form of both schemes: "credentials = "Bearer" 1*SP b64token"
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6750#section-2.1">RFC 6750 Section 2.1</see>) and
+    /// "credentials = "DPoP" 1*SP token68"
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>). A field that is
+    /// absent, repeated, of another scheme, outside the <c>credentials</c> grammar, without credentials or whose
+    /// credentials are a list of auth-param carries no token.
     /// </summary>
     /// <param name="context">The per-request context carrying the inbound request.</param>
     /// <param name="accessToken">The extracted token, or <see langword="null"/> when absent or malformed.</param>
@@ -107,38 +140,43 @@ public static class BearerTokenValidation
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        accessToken = null;
-        isDpopPresentation = false;
-
-        IncomingRequest? req = context.IncomingRequest;
-        if(req is null
-            || !req.Headers.TryGetSingle(WellKnownHttpHeaderNames.Authorization, out string? authHeader)
-            || authHeader is null)
-        {
-            return false;
-        }
-
-        string dpopPrefix = WellKnownAuthenticationSchemes.DPoP + " ";
-        if(authHeader.StartsWith(dpopPrefix, StringComparison.Ordinal)
-            && authHeader.Length > dpopPrefix.Length)
-        {
-            accessToken = authHeader[dpopPrefix.Length..];
-            isDpopPresentation = true;
-
-            return true;
-        }
-
-        string bearerPrefix = WellKnownAuthenticationSchemes.Bearer + " ";
-        if(authHeader.StartsWith(bearerPrefix, StringComparison.Ordinal)
-            && authHeader.Length > bearerPrefix.Length)
-        {
-            accessToken = authHeader[bearerPrefix.Length..];
-
-            return true;
-        }
-
-        return false;
+        return TryExtractAccessToken(ReadAuthorizationField(context), out accessToken, out isDpopPresentation);
     }
+
+
+    /// <summary>
+    /// Extracts the access token from an <c>Authorization</c> field already read once by the caller, by the
+    /// rule of <see cref="TryExtractAccessToken(ExchangeContext, out string?, out bool)"/>.
+    /// </summary>
+    /// <param name="authorization">The request's <c>Authorization</c> field reading.</param>
+    /// <param name="accessToken">The extracted token, or <see langword="null"/> when absent or malformed.</param>
+    /// <param name="isDpopPresentation"><see langword="true"/> when the token was presented under the <c>DPoP</c> scheme.</param>
+    /// <returns><see langword="true"/> when a well-formed token under either scheme was present.</returns>
+    internal static bool TryExtractAccessToken(
+        AuthorizationFieldReading authorization, out string? accessToken, out bool isDpopPresentation)
+    {
+        isDpopPresentation = authorization.IsScheme(WellKnownAuthenticationSchemes.DPoP);
+        bool isAccessTokenScheme = isDpopPresentation || authorization.IsScheme(WellKnownAuthenticationSchemes.Bearer);
+        accessToken = isAccessTokenScheme && authorization.HasToken68Credentials
+            ? authorization.Credentials
+            : null;
+        isDpopPresentation = isDpopPresentation && accessToken is not null;
+
+        return accessToken is not null;
+    }
+
+
+    /// <summary>
+    /// The request's <c>Authorization</c> field, read once through <see cref="AuthorizationFieldReading.Read"/>;
+    /// the absent field for a context that carries no request. A protected resource reads the field here,
+    /// answers a repeated field (<see cref="AuthorizationFieldReading.IsRepeated"/>) through
+    /// <see cref="Oid4Vci.CredentialEndpointDpopValidation.RefuseRepeatedAuthorizationAsync"/>, and extracts the
+    /// token from the same reading.
+    /// </summary>
+    /// <param name="context">The per-request context carrying the inbound request.</param>
+    /// <returns>The reading.</returns>
+    internal static AuthorizationFieldReading ReadAuthorizationField(ExchangeContext context) =>
+        context.IncomingRequest is { } request ? AuthorizationFieldReading.Read(request.Headers) : default;
 
 
     /// <summary>
