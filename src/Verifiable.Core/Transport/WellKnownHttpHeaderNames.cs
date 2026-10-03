@@ -22,8 +22,9 @@ namespace Verifiable.Core.Transport;
 /// <see cref="ContentType"/>, <see cref="DPoP"/>, <see cref="DPoPNonce"/>,
 /// <see cref="CacheControl"/>, <see cref="WwwAuthenticate"/>, <see cref="Allow"/>,
 /// <see cref="Location"/>, <see cref="Date"/>, <see cref="Age"/>, <see cref="Expires"/>,
-/// and <see cref="RetryAfter"/>. Hosts that read or write content length, cookies, trace context
-/// and rate limits beside the library can use <see cref="ContentLength"/>, <see cref="SetCookie"/>,
+/// and <see cref="RetryAfter"/>. Hosts that read or write content length, cookies, proxy
+/// credentials, trace context and rate limits beside the library can use <see cref="ContentLength"/>,
+/// <see cref="Cookie"/>, <see cref="SetCookie"/>, <see cref="ProxyAuthorization"/>,
 /// <see cref="TraceParent"/>, <see cref="TraceState"/>,
 /// <see cref="Baggage"/>, <see cref="RateLimitPolicy"/>, and <see cref="RateLimit"/>.
 /// The trace-context names use the lowercase spelling their specifications ask senders to use:
@@ -50,6 +51,30 @@ public static class WellKnownHttpHeaderNames
     /// Carries the credentials the client uses to authenticate to the server.
     /// </summary>
     public static string Authorization { get; } = Utf8Constants.ToInternedString(AuthorizationUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="ProxyAuthorization"/>.</summary>
+    public static ReadOnlySpan<byte> ProxyAuthorizationUtf8 => "Proxy-Authorization"u8;
+
+    /// <summary>
+    /// The <c>Proxy-Authorization</c> request header per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.7.2">RFC 9110 Section 11.7.2</see>:
+    /// "The &quot;Proxy-Authorization&quot; header field allows the client to identify itself (or its
+    /// user) to a proxy that requires authentication. Its value consists of credentials containing the
+    /// authentication information of the client for the proxy and/or realm of the resource being
+    /// requested." A credential field, as <see cref="Authorization"/> and <see cref="Cookie"/> are.
+    /// </summary>
+    public static string ProxyAuthorization { get; } = Utf8Constants.ToInternedString(ProxyAuthorizationUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Cookie"/>.</summary>
+    public static ReadOnlySpan<byte> CookieUtf8 => "Cookie"u8;
+
+    /// <summary>
+    /// The <c>Cookie</c> request header per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6265#section-4.2.1">RFC 6265 Section 4.2.1</see>:
+    /// "The user agent sends stored cookies to the origin server in the Cookie header." A credential
+    /// field, as <see cref="Authorization"/> and <see cref="ProxyAuthorization"/> are.
+    /// </summary>
+    public static string Cookie { get; } = Utf8Constants.ToInternedString(CookieUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Accept"/>.</summary>
     public static ReadOnlySpan<byte> AcceptUtf8 => "Accept"u8;
@@ -344,6 +369,22 @@ public static class WellKnownHttpHeaderNames
 
     /// <summary>
     /// Returns <see langword="true"/> when <paramref name="name"/> is the
+    /// <c>Proxy-Authorization</c> header.
+    /// </summary>
+    /// <param name="name">The header name to test.</param>
+    /// <returns><see langword="true"/> for <see cref="ProxyAuthorization"/> in any case.</returns>
+    public static bool IsProxyAuthorization(string name) => Equals(name, ProxyAuthorization);
+
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="name"/> is the
+    /// <c>Cookie</c> header.
+    /// </summary>
+    /// <param name="name">The header name to test.</param>
+    /// <returns><see langword="true"/> for <see cref="Cookie"/> in any case.</returns>
+    public static bool IsCookie(string name) => Equals(name, Cookie);
+
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="name"/> is the
     /// <c>Accept</c> header.
     /// </summary>
     public static bool IsAccept(string name) => Equals(name, Accept);
@@ -492,6 +533,8 @@ public static class WellKnownHttpHeaderNames
     public static string GetCanonicalizedValue(string name) => name switch
     {
         var n when IsAuthorization(n) => Authorization,
+        var n when IsProxyAuthorization(n) => ProxyAuthorization,
+        var n when IsCookie(n) => Cookie,
         var n when IsAccept(n) => Accept,
         var n when IsAcceptLanguage(n) => AcceptLanguage,
         var n when IsContentLanguage(n) => ContentLanguage,

@@ -56,7 +56,10 @@ internal sealed class WellKnownHttpHeaderNamesTests
 
     /// <summary>
     /// Every field name the table registers, each row's wire value transcribed from the defining
-    /// specification: <c>Authorization</c> (RFC 9110 Section 11.6.2), <c>Accept</c> (Section 12.5.1),
+    /// specification: <c>Authorization</c> (RFC 9110 Section 11.6.2), <c>Proxy-Authorization</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.7.2">Section 11.7.2</see>),
+    /// <c>Cookie</c> (<see href="https://www.rfc-editor.org/rfc/rfc6265#section-4.2.1">RFC 6265, Section 4.2.1</see>),
+    /// <c>Accept</c> (Section 12.5.1),
     /// <c>Accept-Language</c> (Section 12.5.4), <c>Content-Language</c> (Section 8.5),
     /// <c>Content-Type</c> (Section 8.3),
     /// <c>Content-Length</c> (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-8.6">Section 8.6</see>),
@@ -77,6 +80,8 @@ internal sealed class WellKnownHttpHeaderNamesTests
     private static TabledHeader[] AllRegisteredHeaders() =>
     [
         new(nameof(WellKnownHttpHeaderNames.Authorization), WellKnownHttpHeaderNames.Authorization, "Authorization", "authorization", "AUTHORIZATION", WellKnownHttpHeaderNames.IsAuthorization),
+        new(nameof(WellKnownHttpHeaderNames.ProxyAuthorization), WellKnownHttpHeaderNames.ProxyAuthorization, "Proxy-Authorization", "proxy-authorization", "PROXY-AUTHORIZATION", WellKnownHttpHeaderNames.IsProxyAuthorization),
+        new(nameof(WellKnownHttpHeaderNames.Cookie), WellKnownHttpHeaderNames.Cookie, "Cookie", "cookie", "COOKIE", WellKnownHttpHeaderNames.IsCookie),
         new(nameof(WellKnownHttpHeaderNames.Accept), WellKnownHttpHeaderNames.Accept, "Accept", "accept", "ACCEPT", WellKnownHttpHeaderNames.IsAccept),
         new(nameof(WellKnownHttpHeaderNames.AcceptLanguage), WellKnownHttpHeaderNames.AcceptLanguage, "Accept-Language", "accept-language", "ACCEPT-LANGUAGE", WellKnownHttpHeaderNames.IsAcceptLanguage),
         new(nameof(WellKnownHttpHeaderNames.ContentLanguage), WellKnownHttpHeaderNames.ContentLanguage, "Content-Language", "content-language", "CONTENT-LANGUAGE", WellKnownHttpHeaderNames.IsContentLanguage),
