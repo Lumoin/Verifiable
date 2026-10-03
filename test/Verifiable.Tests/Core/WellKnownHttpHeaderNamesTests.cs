@@ -89,7 +89,6 @@ internal sealed class WellKnownHttpHeaderNamesTests
         new(nameof(WellKnownHttpHeaderNames.Accept), WellKnownHttpHeaderNames.Accept, "Accept", "accept", "ACCEPT", WellKnownHttpHeaderNames.IsAccept),
         new(nameof(WellKnownHttpHeaderNames.AcceptLanguage), WellKnownHttpHeaderNames.AcceptLanguage, "Accept-Language", "accept-language", "ACCEPT-LANGUAGE", WellKnownHttpHeaderNames.IsAcceptLanguage),
         new(nameof(WellKnownHttpHeaderNames.ContentLanguage), WellKnownHttpHeaderNames.ContentLanguage, "Content-Language", "content-language", "CONTENT-LANGUAGE", WellKnownHttpHeaderNames.IsContentLanguage),
-        new(nameof(WellKnownHttpHeaderNames.ContentLength), WellKnownHttpHeaderNames.ContentLength, "Content-Length", "content-length", "CONTENT-LENGTH", WellKnownHttpHeaderNames.IsContentLength),
         new(nameof(WellKnownHttpHeaderNames.ContentType), WellKnownHttpHeaderNames.ContentType, "Content-Type", "content-type", "CONTENT-TYPE", WellKnownHttpHeaderNames.IsContentType),
         new(nameof(WellKnownHttpHeaderNames.ContentLength), WellKnownHttpHeaderNames.ContentLength, "Content-Length", "content-length", "CONTENT-LENGTH", WellKnownHttpHeaderNames.IsContentLength),
         new(nameof(WellKnownHttpHeaderNames.DPoP), WellKnownHttpHeaderNames.DPoP, "DPoP", "dpop", "DPOP", WellKnownHttpHeaderNames.IsDPoP),
@@ -174,7 +173,6 @@ internal sealed class WellKnownHttpHeaderNamesTests
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.Accept), WellKnownHttpHeaderNames.Accept, WellKnownHttpHeaderNames.AcceptUtf8);
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.AcceptLanguage), WellKnownHttpHeaderNames.AcceptLanguage, WellKnownHttpHeaderNames.AcceptLanguageUtf8);
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.ContentLanguage), WellKnownHttpHeaderNames.ContentLanguage, WellKnownHttpHeaderNames.ContentLanguageUtf8);
-        AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.ContentLength), WellKnownHttpHeaderNames.ContentLength, WellKnownHttpHeaderNames.ContentLengthUtf8);
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.ContentType), WellKnownHttpHeaderNames.ContentType, WellKnownHttpHeaderNames.ContentTypeUtf8);
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.ContentLength), WellKnownHttpHeaderNames.ContentLength, WellKnownHttpHeaderNames.ContentLengthUtf8);
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.DPoP), WellKnownHttpHeaderNames.DPoP, WellKnownHttpHeaderNames.DPoPUtf8);
