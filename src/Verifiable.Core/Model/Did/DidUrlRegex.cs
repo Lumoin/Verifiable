@@ -47,10 +47,19 @@ namespace Verifiable.Core.Did
         /// <item><description>Fragment component (optional, e.g., "key-1").</description></item>
         /// </list>
         /// <para>
+        /// The path, the query and the fragment hold to the
+        /// <see href="https://www.rfc-editor.org/rfc/rfc3986#appendix-A">RFC 3986 Appendix A</see> rules the DID URL
+        /// syntax takes: "path-abempty  = *( "/" segment )", "segment       = *pchar",
+        /// "query         = *( pchar / "/" / "?" )" and "fragment      = *( pchar / "/" / "?" )", where
+        /// "pchar         = unreserved / pct-encoded / sub-delims / ":" / "@"" and
+        /// "pct-encoded   = "%" HEXDIG HEXDIG". A brace, white space, a character beyond ASCII or a "%" not
+        /// followed by two hexadecimal digits in any of the three is refused.
+        /// </para>
+        /// <para>
         /// Reference: <see href="https://www.w3.org/TR/did-1.1/#did-url-syntax">W3C DID 1.1 Section 3.2</see>
         /// </para>
         /// </remarks>
-        [GeneratedRegex(@"^did:([a-z0-9]+):((?:[a-zA-Z0-9._-]|%[0-9a-fA-F]{2})+(?::(?:[a-zA-Z0-9._-]|%[0-9a-fA-F]{2})+)*)(/[^?#]*)?(\?[^#]*)?(#.*)?$")]
+        [GeneratedRegex(@"^did:([a-z0-9]+):((?:[a-zA-Z0-9._-]|%[0-9a-fA-F]{2})+(?::(?:[a-zA-Z0-9._-]|%[0-9a-fA-F]{2})+)*)((?:/(?:[A-Za-z0-9\-._~!$&'()*+,;=:@]|%[0-9A-Fa-f]{2})*)+)?(\?(?:[A-Za-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9A-Fa-f]{2})*)?(#(?:[A-Za-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9A-Fa-f]{2})*)?$")]
         public static partial Regex AbsoluteDidUrl();
 
 
@@ -77,10 +86,14 @@ namespace Verifiable.Core.Did
         /// <item><description>Service references: "#agent" → resolves to "did:example:123#agent".</description></item>
         /// </list>
         /// <para>
+        /// The fragment holds to <see href="https://www.rfc-editor.org/rfc/rfc3986#section-3.5">RFC 3986 Section 3.5</see>,
+        /// "fragment    = *( pchar / "/" / "?" )", as the fragment of <see cref="AbsoluteDidUrl"/> does.
+        /// </para>
+        /// <para>
         /// Reference: <see href="https://www.w3.org/TR/did-1.1/#relative-did-urls">W3C DID 1.1 Section 3.2.2</see>.
         /// </para>
         /// </remarks>
-        [GeneratedRegex("^#(.+)$")]
+        [GeneratedRegex(@"^#((?:[A-Za-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9A-Fa-f]{2})+)$")]
         public static partial Regex FragmentReference();
 
 
@@ -115,7 +128,7 @@ namespace Verifiable.Core.Did
         /// <see href="https://www.w3.org/TR/did-1.1/#relative-did-urls">Section 3.2.2</see>.
         /// </para>
         /// </remarks>
-        [GeneratedRegex("^(?:did:([a-z0-9]+):((?:[a-zA-Z0-9]|\\.|-|_|%[0-9a-fA-F]{2})+)(\\/[^?#]*)?(\\?[^#]*)?(?:#(.*))?|(#(.+)))$")]
+        [GeneratedRegex(@"^(?:did:([a-z0-9]+):((?:[a-zA-Z0-9]|\.|-|_|%[0-9a-fA-F]{2})+)((?:/(?:[A-Za-z0-9\-._~!$&'()*+,;=:@]|%[0-9A-Fa-f]{2})*)+)?(\?(?:[A-Za-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9A-Fa-f]{2})*)?(?:#((?:[A-Za-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9A-Fa-f]{2})*))?|(#((?:[A-Za-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9A-Fa-f]{2})+)))$")]
         public static partial Regex AnyDidUrl();
     }
 }

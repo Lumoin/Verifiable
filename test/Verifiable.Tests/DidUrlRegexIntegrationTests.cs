@@ -71,6 +71,68 @@ namespace Verifiable.Tests
         ];
 
 
+        /// <summary>
+        /// A DID URL's path, query and fragment hold to RFC 3986, whose path-abempty, query and fragment rules
+        /// the DID URL syntax takes: a brace, white space, a character beyond ASCII and a "%" not followed by
+        /// two hexadecimal digits are refused in each of the three, by the absolute parser and the unified
+        /// pattern alike.
+        /// </summary>
+        /// <param name="input">The DID URL.</param>
+        [TestMethod]
+        [DataRow("did:example:123/{path}", DisplayName = "a brace in the path")]
+        [DataRow("did:example:123/pa th", DisplayName = "white space in the path")]
+        [DataRow("did:example:123/p%zzath", DisplayName = "a percent sign before no hexadecimal digit in the path")]
+        [DataRow("did:example:123/p%2", DisplayName = "a percent sign before one hexadecimal digit in the path")]
+        [DataRow("did:example:123/päth", DisplayName = "a character beyond ASCII in the path")]
+        [DataRow("did:example:123?service={files}", DisplayName = "a brace in the query")]
+        [DataRow("did:example:123?service=fi les", DisplayName = "white space in the query")]
+        [DataRow("did:example:123?q=%", DisplayName = "a lone percent sign in the query")]
+        [DataRow("did:example:123#key 1", DisplayName = "white space in the fragment")]
+        [DataRow("did:example:123#{key}", DisplayName = "a brace in the fragment")]
+        [DataRow("did:example:123#key-%", DisplayName = "a lone percent sign in the fragment")]
+        [DataRow("did:example:123#avain-ä", DisplayName = "a character beyond ASCII in the fragment")]
+        public void AComponentOutsideTheRfc3986CharactersIsRefused(string input)
+        {
+            Assert.IsFalse(DidUrl.TryParseAbsolute(input, out _), $"'{input}' must be refused by the absolute parser.");
+            Assert.IsFalse(DidUrlRegex.AnyDidUrl().IsMatch(input), $"'{input}' must be refused by the unified pattern.");
+        }
+
+
+        /// <summary>
+        /// A fragment-only reference holds to the same RFC 3986 fragment rule as the fragment of an absolute
+        /// DID URL.
+        /// </summary>
+        /// <param name="input">The fragment reference.</param>
+        [TestMethod]
+        [DataRow("#key 1", DisplayName = "white space")]
+        [DataRow("#{key}", DisplayName = "a brace")]
+        [DataRow("#key-%4", DisplayName = "a percent sign before one hexadecimal digit")]
+        [DataRow("#avain-ä", DisplayName = "a character beyond ASCII")]
+        public void AFragmentReferenceOutsideTheRfc3986CharactersIsRefused(string input)
+        {
+            Assert.IsFalse(DidUrl.TryParseFragment(input, out _), $"'{input}' must be refused by the fragment parser.");
+            Assert.IsFalse(DidUrlRegex.AnyDidUrl().IsMatch(input), $"'{input}' must be refused by the unified pattern.");
+        }
+
+
+        /// <summary>
+        /// Every character RFC 3986 admits in a path, a query or a fragment is admitted, unreserved, sub-delims,
+        /// ":" and "@" in each and "/" and "?" in the query and the fragment, as are percent-encoded octets and
+        /// empty components.
+        /// </summary>
+        /// <param name="input">The DID URL.</param>
+        [TestMethod]
+        [DataRow("did:example:123/a/b:c@d!$&'()*+,;=~_.-?x=/y?z#f/g?h:i@j", DisplayName = "every admitted character")]
+        [DataRow("did:example:123/caf%C3%A9?q=%20#%7Bkey%7D", DisplayName = "percent-encoded octets")]
+        [DataRow("did:example:123/", DisplayName = "an empty segment")]
+        [DataRow("did:example:123?", DisplayName = "an empty query")]
+        [DataRow("did:example:123#", DisplayName = "an empty fragment")]
+        public void EveryRfc3986ComponentCharacterIsAdmitted(string input)
+        {
+            Assert.IsTrue(DidUrl.TryParseAbsolute(input, out _), $"'{input}' must be admitted by the absolute parser.");
+        }
+
+
         [TestMethod]
         public void FragmentReferenceRegexAndParserShouldAgree()
         {

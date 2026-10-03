@@ -61,12 +61,25 @@ namespace Verifiable.Tests.Did
                 .Select(segments => string.Join(":", segments));
 
         /// <summary>
-        /// Generates valid path components that start with "/" and contain valid path characters.
+        /// The characters RFC 3986 Appendix A admits unencoded in a path segment, its "pchar" without the
+        /// percent-encoding: unreserved, sub-delims, ":" and "@".
+        /// </summary>
+        private const string SegmentCharacters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~!$&'()*+,;=:@";
+
+        /// <summary>Generates one character of <paramref name="characters"/>.</summary>
+        /// <param name="characters">The characters to choose from.</param>
+        /// <returns>The generator.</returns>
+        private static Gen<string> GenCharacterOf(string characters) =>
+            Gen.Int[0, characters.Length - 1].Select(index => characters[index].ToString());
+
+        /// <summary>
+        /// Generates valid path components that start with "/" and hold the RFC 3986 path characters,
+        /// "pchar" and "/", percent-encoded octets among them.
         /// </summary>
         private static Gen<string> GenPath { get; } =
-            Gen.Char.Where(c => c is not ('?' or '#') and > (char)32 and < (char)127)
+            Gen.OneOf(GenCharacterOf(SegmentCharacters + "/"), GenPercentEncoded)
                .Array[0, 30]
-               .Select(chars => "/" + new string(chars));
+               .Select(parts => "/" + string.Concat(parts));
 
         /// <summary>
         /// Generates valid query parameter names using alphanumeric characters.
@@ -77,12 +90,13 @@ namespace Verifiable.Tests.Did
             .Select(chars => new string(chars));
 
         /// <summary>
-        /// Generates valid query parameter values using URL-safe characters.
+        /// Generates valid query parameter values from the RFC 3986 query characters, "pchar", "/" and "?",
+        /// less the "&amp;" that separates the parameters.
         /// </summary>
         private static Gen<string> GenParamValue { get; } =
-            Gen.Char.Where(c => c is not ('&' or '#') and > (char)32 and < (char)127)
+            Gen.OneOf(GenCharacterOf((SegmentCharacters + "/?").Replace("&", string.Empty, StringComparison.Ordinal)), GenPercentEncoded)
             .Array[0, 20]
-            .Select(chars => new string(chars));
+            .Select(parts => string.Concat(parts));
 
         /// <summary>
         /// Generates a single query parameter in the format "name=value".
@@ -98,12 +112,13 @@ namespace Verifiable.Tests.Did
         private static Gen<string> GenQuery { get; } = GenQueryParam.Array[1, 5].Select(params_ => string.Join("&", params_));
 
         /// <summary>
-        /// Generates valid fragment identifiers using URL-safe characters.
+        /// Generates valid fragment identifiers from the RFC 3986 fragment characters, "pchar", "/" and "?",
+        /// percent-encoded octets among them.
         /// </summary>
         private static Gen<string> GenFragment { get; } =
-            Gen.Char.Where(c => c is > (char)32 and < (char)127)
+            Gen.OneOf(GenCharacterOf(SegmentCharacters + "/?"), GenPercentEncoded)
             .Array[1, 20]
-            .Select(chars => new string(chars));
+            .Select(parts => string.Concat(parts));
 
         /// <summary>
         /// Generates optional components (either null or a generated value).
