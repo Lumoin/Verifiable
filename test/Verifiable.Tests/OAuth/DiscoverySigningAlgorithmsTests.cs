@@ -342,7 +342,7 @@ internal sealed class DiscoverySigningAlgorithmsTests
         _ = await host.EnableDpopAsync().ConfigureAwait(false);
         await TestHostShell.AlterAsync(host.Server, integration =>
         {
-            integration.ValidateClientCredentialsAsync = static (_, _, _, _, _) => ValueTask.FromResult(true);
+            integration.ValidateClientCredentialsAsync = static (_, _, _, _) => ValueTask.FromResult(true);
             integration.IntrospectTokenAsync = static (_, _, _, _, _) =>
                 ValueTask.FromResult(new TokenIntrospectionResult { IsActive = false });
             integration.ClientAssertionSigningAlgorithmsSupported =

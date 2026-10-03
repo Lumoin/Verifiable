@@ -552,7 +552,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             ExchangeContext context = BuildContext(app.Server);
             context.SetClockSkewTolerance(Skew);
 
-            bool authenticated = await validator(null, BuildFields(assertion), registration, context, TestContext.CancellationToken)
+            bool authenticated = await validator(ClientCredentialReading.Read(RequestHeaders.Empty, BuildFields(assertion)), registration, context, TestContext.CancellationToken)
                 .ConfigureAwait(false);
 
             Assert.IsTrue(authenticated);
@@ -863,7 +863,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
                 .ConfigureAwait(false);
 
             bool originalAuthenticated = await validator(
-                null, BuildFields(assertion), registration, BuildContext(app.Server), TestContext.CancellationToken)
+                ClientCredentialReading.Read(RequestHeaders.Empty, BuildFields(assertion)), registration, BuildContext(app.Server), TestContext.CancellationToken)
                 .ConfigureAwait(false);
             Assert.IsTrue(originalAuthenticated, "The correctly declared ES256 assertion must authenticate.");
 
@@ -883,7 +883,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             string mismatchedAssertion = $"{headerSegment}.{segments[1]}.{signatureSegment}";
 
             bool authenticated = await validator(
-                null, BuildFields(mismatchedAssertion), registration, BuildContext(app.Server), TestContext.CancellationToken)
+                ClientCredentialReading.Read(RequestHeaders.Empty, BuildFields(mismatchedAssertion)), registration, BuildContext(app.Server), TestContext.CancellationToken)
                 .ConfigureAwait(false);
 
             Assert.IsFalse(authenticated,
@@ -1344,7 +1344,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
                 .ConfigureAwait(false);
 
             bool originalAuthenticated = await validator(
-                null, BuildFields(assertion), registration, BuildContext(app.Server), TestContext.CancellationToken)
+                ClientCredentialReading.Read(RequestHeaders.Empty, BuildFields(assertion)), registration, BuildContext(app.Server), TestContext.CancellationToken)
                 .ConfigureAwait(false);
             Assert.IsTrue(originalAuthenticated, "The assertion must authenticate under the original RSA key.");
 
@@ -1359,7 +1359,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             };
 
             bool authenticated = await validator(
-                null, BuildFields(assertion), changedRegistration, BuildContext(app.Server), TestContext.CancellationToken)
+                ClientCredentialReading.Read(RequestHeaders.Empty, BuildFields(assertion)), changedRegistration, BuildContext(app.Server), TestContext.CancellationToken)
                 .ConfigureAwait(false);
 
             Assert.IsFalse(authenticated,
@@ -2138,7 +2138,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
         using Activity call = new(nameof(ValidateRecordingAlgorithmFaultsAsync));
         _ = call.Start();
         bool isAuthenticated = await validator(
-            null, BuildFields(assertion), registration, BuildContext(server), TestContext.CancellationToken)
+            ClientCredentialReading.Read(RequestHeaders.Empty, BuildFields(assertion)), registration, BuildContext(server), TestContext.CancellationToken)
             .ConfigureAwait(false);
         call.Stop();
 
