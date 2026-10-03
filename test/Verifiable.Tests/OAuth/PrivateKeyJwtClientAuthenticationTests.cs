@@ -501,6 +501,70 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
 
 
     /// <summary>
+    /// An assertion whose <c>exp</c> is the last whole second a <see cref="DateTimeOffset"/> holds,
+    /// 253402300799, authenticates through the published-key validator with a replay check wired, and its
+    /// <c>jti</c> is recorded until <see cref="DateTimeOffset.MaxValue"/>: the record runs for the assertion's
+    /// lifetime plus the clock-skew tolerance its timing was accepted under, and a sum past the last instant a
+    /// <see cref="DateTimeOffset"/> holds ends at that instant instead of leaving the representable range.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see> item 7: "The
+    /// authorization server MAY ensure that JWTs are not replayed by maintaining the set of used "jti" values
+    /// for the length of time for which the JWT would be considered valid based on the applicable "exp"
+    /// instant."
+    /// </summary>
+    [TestMethod]
+    public async Task AnExpiryAtTheLastInstantIsRecordedUntilTheLastInstant()
+    {
+        await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        var clientKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            ClientRecord registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
+            List<DateTimeOffset> recordedUntil = [];
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+                checkJtiReplayAsync: (_, _, _, _, _, expiresAt, _) =>
+                {
+                    recordedUntil.Add(expiresAt);
+
+                    return ValueTask.FromResult(JtiReplayOutcome.FirstUse);
+                });
+
+            var oauth = app.Server.OAuth();
+            string assertion = await ClientAssertionSigning.SignAsync(
+                registration.ClientId,
+                registration.IssuerUri!.OriginalString,
+                "assertion-expiring-at-the-last-instant",
+                app.Server.TimeProvider.GetUtcNow().AddMinutes(-1),
+                DateTimeOffset.MaxValue,
+                clientKeys.PrivateKey,
+                SigningKeyId,
+                oauth.Codecs.JwtHeaderSerializer!,
+                oauth.Codecs.JwtPayloadSerializer!,
+                oauth.Codecs.Encoder!,
+                BaseMemoryPool.Shared,
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+            ExchangeContext context = BuildContext(app.Server);
+            context.SetClockSkewTolerance(Skew);
+
+            bool authenticated = await validator(null, BuildFields(assertion), registration, context, TestContext.CancellationToken)
+                .ConfigureAwait(false);
+
+            Assert.IsTrue(authenticated);
+            Assert.HasCount(1, recordedUntil);
+            Assert.AreEqual(DateTimeOffset.MaxValue, recordedUntil[0]);
+        }
+        finally
+        {
+            clientKeys.PublicKey.Dispose();
+            clientKeys.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc7517#section-4.5">RFC 7517 §4.5</see> makes
     /// distinct <c>kid</c> values within a set a SHOULD, so a duplicate can arrive. A registered key
     /// set carrying two keys under the
