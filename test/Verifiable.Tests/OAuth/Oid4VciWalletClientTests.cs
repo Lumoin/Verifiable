@@ -365,6 +365,71 @@ internal sealed class Oid4VciWalletClientTests
 
 
     /// <summary>
+    /// A Token Response whose <c>authorization_details</c> member name is spelled with an escape is read as
+    /// that member: the wallet spends the token on one Credential Request naming the identifier the member
+    /// grants, alone. The library's Authorization Server writes the name without an escape, so the response
+    /// is delivered through the wallet's transport delegate.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.3">RFC 8259 Section 8.3</see>:
+    /// "Implementations that transform the textual representation into sequences of Unicode code units and
+    /// then perform the comparison numerically, code unit by code unit, are interoperable in the sense that
+    /// implementations will agree in all cases on equality or inequality of two strings."
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.2">OID4VCI 1.0 Section 6.2</see>:
+    /// "The Wallet MUST use these identifiers together with an Access Token in subsequent Credential
+    /// Requests."
+    /// </summary>
+    /// <param name="memberName">The member's name as the Token Response spells it, between its quotation marks.</param>
+    [TestMethod]
+    [DataRow("authorization\\u005fdetails")]
+    [DataRow("\\u0061uthorization_details")]
+    public async Task AnAuthorizationDetailsNameSpelledWithAnEscapeIsReadAsTheMember(string memberName)
+    {
+        GrantedDetailsIssuance issuance = await IssueOverTokenResponseAsync(
+            "{\"access_token\":\"tok\",\"token_type\":\"Bearer\",\"" + memberName + "\":"
+            + "[{\"type\":\"openid_credential\",\"credential_configuration_id\":\"" + ConfigurationId + "\","
+            + "\"credential_identifiers\":[\"pid-dataset-1\"]}]}").ConfigureAwait(false);
+
+        Assert.IsTrue(issuance.Outcome.IsSuccess, "The grant under an escaped member name must be spent.");
+        Assert.HasCount(1, issuance.CredentialRequestBodies, "Exactly one Credential Request must be sent.");
+        byte[] credentialRequest = Encoding.UTF8.GetBytes(issuance.CredentialRequestBodies[0]);
+        Assert.AreEqual("pid-dataset-1", JwkJsonReader.ExtractStringValue(credentialRequest, "credential_identifier"u8));
+        Assert.IsFalse(JwkJsonReader.ContainsKey(credentialRequest, "credential_configuration_id"u8),
+            "The Credential Request must not name a credential_configuration_id beside the identifier.");
+    }
+
+
+    /// <summary>
+    /// An <c>openid_credential</c> entry whose <c>type</c> member is spelled with an escape, in its name or in
+    /// its value, is read as an entry of that type: the wallet spends the token on one Credential Request
+    /// naming the identifier the entry grants, alone. A pin: the entries are read by the reader that compares
+    /// every name and every string as the text it spells. The library's Authorization Server writes the
+    /// entry without an escape, so the response is delivered through the wallet's transport delegate.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-7">RFC 8259 Section 7</see>: "Any character
+    /// may be escaped."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9396#section-2">RFC 9396 Section 2</see>:
+    /// "type: An identifier for the authorization details type as a string. The value of the type field
+    /// determines the allowable contents of the object that contains it. The value is unique for the
+    /// described API in the context of the AS. This field is REQUIRED."
+    /// </summary>
+    /// <param name="typeMember">The entry's <c>type</c> member, its name and its value, as the Token Response spells it.</param>
+    [TestMethod]
+    [DataRow("\"t\\u0079pe\":\"openid_credential\"")]
+    [DataRow("\"type\":\"openid\\u005fcredential\"")]
+    public async Task AnEntryTypeSpelledWithAnEscapeIsReadAsItsType(string typeMember)
+    {
+        GrantedDetailsIssuance issuance = await IssueOverGrantedDetailsAsync(
+            "[{" + typeMember + ",\"credential_configuration_id\":\"" + ConfigurationId + "\","
+            + "\"credential_identifiers\":[\"pid-dataset-1\"]}]").ConfigureAwait(false);
+
+        Assert.IsTrue(issuance.Outcome.IsSuccess, "The grant of an entry whose type is escaped must be spent.");
+        Assert.HasCount(1, issuance.CredentialRequestBodies, "Exactly one Credential Request must be sent.");
+        byte[] credentialRequest = Encoding.UTF8.GetBytes(issuance.CredentialRequestBodies[0]);
+        Assert.AreEqual("pid-dataset-1", JwkJsonReader.ExtractStringValue(credentialRequest, "credential_identifier"u8));
+        Assert.IsFalse(JwkJsonReader.ContainsKey(credentialRequest, "credential_configuration_id"u8),
+            "The Credential Request must not name a credential_configuration_id beside the identifier.");
+    }
+
+
+    /// <summary>
     /// A configuration identifier carrying a quotation mark and a reverse solidus reaches the Issuer as the
     /// wallet was given it, alone: the Credential Request body escapes the value and names no
     /// <c>credential_identifier</c>.
@@ -1996,7 +2061,19 @@ internal sealed class Oid4VciWalletClientTests
     /// </summary>
     /// <param name="authorizationDetails">The whole <c>authorization_details</c> member, as JSON text.</param>
     /// <returns>The issuance outcome and the requests that followed the Token Request.</returns>
-    private async ValueTask<GrantedDetailsIssuance> IssueOverGrantedDetailsAsync(string authorizationDetails)
+    private ValueTask<GrantedDetailsIssuance> IssueOverGrantedDetailsAsync(string authorizationDetails) =>
+        IssueOverTokenResponseAsync(
+            "{\"access_token\":\"tok\",\"token_type\":\"Bearer\",\"authorization_details\":" + authorizationDetails + "}");
+
+
+    /// <summary>
+    /// Drives a Pre-Authorized Code issuance over the in-process transport whose Token Response is
+    /// <paramref name="tokenResponse"/> as written, and records every Nonce and Credential Request that
+    /// follows it, answered by <see cref="CredentialFlowStub"/>.
+    /// </summary>
+    /// <param name="tokenResponse">The whole Token Response body, as JSON text.</param>
+    /// <returns>The issuance outcome and the requests that followed the Token Request.</returns>
+    private async ValueTask<GrantedDetailsIssuance> IssueOverTokenResponseAsync(string tokenResponse)
     {
         Uri tokenEndpoint = new("https://issuer.example.com/token");
         Uri nonceEndpoint = new("https://issuer.example.com/nonce");
@@ -2006,11 +2083,7 @@ internal sealed class Oid4VciWalletClientTests
         Oid4VciJsonPostDelegate flow = CredentialFlowStub(nonceEndpoint, credentialEndpoint);
 
         Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
-            sendFormPost: (_, _, _, _, _) =>
-                ValueTask.FromResult(JsonResponse(
-                    200,
-                    "{\"access_token\":\"tok\",\"token_type\":\"Bearer\",\"authorization_details\":"
-                    + authorizationDetails + "}")),
+            sendFormPost: (_, _, _, _, _) => ValueTask.FromResult(JsonResponse(200, tokenResponse)),
             sendJsonPost: (endpoint, jsonBody, headers, context, ct) =>
             {
                 laterRequests.Add(endpoint);
@@ -2029,7 +2102,7 @@ internal sealed class Oid4VciWalletClientTests
     }
 
 
-    /// <summary>What <see cref="IssueOverGrantedDetailsAsync"/> observed of one issuance.</summary>
+    /// <summary>What <see cref="IssueOverTokenResponseAsync"/> observed of one issuance.</summary>
     /// <param name="Outcome">The issuance outcome the wallet answered.</param>
     /// <param name="LaterRequests">The endpoints of the Nonce and Credential Requests sent after the Token Request, in order.</param>
     /// <param name="CredentialRequestBodies">The bodies of the Credential Requests sent, in order.</param>
