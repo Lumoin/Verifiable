@@ -4,13 +4,15 @@ namespace Verifiable.Server;
 
 /// <summary>
 /// Resolves the per-request capability set active for a given registration.
-/// Consulted once per request for the registration
-/// <see cref="ServerIntegration.LoadRegistrationAsync"/> answers, by
-/// the dispatcher's chain build, and once more for
-/// the registration <see cref="ServerIntegration.MaterializeRegistrationAsync"/>
-/// answers when that is another reference of the loaded registration's type,
-/// its answer then held to the capabilities resolved for the loaded
-/// registration, to attenuate
+/// Consulted by the dispatcher's chain build for the registration the
+/// dispatcher loaded, when the configuration holds an endpoint builder, and
+/// once more, for a request an endpoint of that chain matches, for the
+/// registration <see cref="ServerIntegration.MaterializeRegistrationAsync"/>
+/// answers in its place when that is another reference of a type the loaded
+/// registration's type admits and the request's context holds the set that
+/// chain build wrote (a context without it is answered <c>500</c>
+/// <c>server_error</c> before a second resolution), its answer then held to
+/// the capabilities resolved for the loaded registration, to attenuate
 /// <see cref="IRegistrationRecord.AllowedCapabilities"/> down to whatever subset
 /// the deployment considers active for this request. The request is served
 /// under the library's own immutable copy of an answer, so a set changed after
@@ -32,6 +34,14 @@ namespace Verifiable.Server;
 /// <para>
 /// The library default returns
 /// <see cref="IRegistrationRecord.AllowedCapabilities"/> unchanged.
+/// </para>
+/// <para>
+/// The context this delegate receives for a materialized registration carries
+/// the set the request is served under, which the dispatcher's chain build
+/// wrote for the loaded registration and the answer is held to. This delegate
+/// is the application's code: code that removes that entry from the context
+/// and builds a chain on it has rewritten the request's context, which is the
+/// application's own act.
 /// </para>
 /// </remarks>
 /// <param name="registration">The registration whose active capabilities are being resolved.</param>

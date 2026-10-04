@@ -28,8 +28,9 @@ namespace Verifiable.Server;
 /// </para>
 /// <para>
 /// For a record of the loaded registration's type that is another reference, its capabilities are
-/// resolved through <see cref="ServerIntegration.ResolveCapabilitiesAsync"/> and held to the bound in
-/// every case. The
+/// resolved through <see cref="ServerIntegration.ResolveCapabilitiesAsync"/> and held to the bound,
+/// whether the chain is kept or built again, whenever the request's context holds the set the request
+/// is served under as that registration is judged. The
 /// endpoint chain is built again for this seam's registration and the request matched again when the
 /// registration does not allow every capability the loaded registration allows, when its policy
 /// resolution leaves a policy entry at another value than the loaded registration's resolution left it,
@@ -58,7 +59,10 @@ namespace Verifiable.Server;
 /// which allows no capability, and the public <see cref="Pipeline.EndpointChain.BuildForRequestAsync"/>
 /// refuses the request's context as this seam receives it, since it carries the set the dispatcher's
 /// chain build wrote. This seam is the application's code: what it stores in the context, removes from
-/// it or builds on it afterwards is the application's to answer for. The library's
+/// it or builds on it afterwards is the application's to answer for. When this seam answers another
+/// reference and the context holds no such entry of the library's as that registration is judged, the
+/// request is answered <c>500</c> <c>server_error</c> as a fault of the server's wiring, since that
+/// registration's capabilities are held to the stashed set. The library's
 /// builders and handlers that act on a capability beyond the one a candidate carries read it, so a
 /// capability this seam adds is answered as one the registration never held: the token endpoint's
 /// registered grants and the capability its

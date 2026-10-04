@@ -73,7 +73,9 @@ internal static class ServerContextKeys
     /// that holds the context can write under; <c>ResolvedCapabilities</c> of
     /// <see cref="ExchangeContextServerExtensions"/> reads a value under it that is not the library's own entry for
     /// the context read, including an entry carried from another request's context, as no set, which allows no
-    /// capability.
+    /// capability. A request whose registration is materialized is answered <c>500</c> <c>server_error</c>, as a fault
+    /// of the server's wiring, when the context holds under this name no entry the library wrote for it as the
+    /// materialized registration is judged, since that registration's capabilities are held to this set.
     /// </summary>
     public const string ResolvedCapabilitiesKey = "server.resolvedCapabilities";
 

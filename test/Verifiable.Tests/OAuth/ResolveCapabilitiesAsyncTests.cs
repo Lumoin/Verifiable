@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using Verifiable.Core;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Server;
@@ -532,6 +533,250 @@ internal sealed class ResolveCapabilitiesAsyncTests
 
 
     /// <summary>
+    /// The application's capability resolution withholds back-channel logout from the loaded registration, which
+    /// allows the JWKS, discovery and back-channel logout capabilities, and grants every other registration all it
+    /// allows; the application's policy resolution calls <see cref="EndpointChain.BuildForRequestAsync"/> on the
+    /// request's own context in each of its calls; the application's materialization answers another reference of
+    /// the registration with every capability. The policy resolution's first call runs before the dispatcher's chain
+    /// build, which writes the set the request is served under over what that call built. The set is the dispatcher's
+    /// entry and no policy entry, so the policy resolution for the materialized registration, which starts from the
+    /// request's arriving policy, leaves it on the context, and the public chain build of the second call refuses a
+    /// context that carries it: the discovery request fetched over the wire is answered <c>500</c> with the body's
+    /// error <c>server_error</c>, the listener records that one fault, and no part of the answer carries back-channel
+    /// logout. A request's context carries the set from the dispatcher's chain build onwards, which is this library's
+    /// rule.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#23-per-endpoint-loop-stage">Server design</see>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task APolicyResolutionBuildingAChainInEachCallIsRefusedInItsSecondCallAsync()
+    {
+        int policyCalls = 0;
+        (_, _, int statusCode, string underTheBuilds, _, Exception[] faults) = await SendUnderABoundedMaterializationAsync(
+            WithBackChannelLogout, WithBackChannelLogout, WellKnownEndpointNames.MetadataDiscovery,
+            WithholdBackChannelLogoutFromTheLoadedRegistration,
+            resolvingPolicy: async (registration, context, call, cancellationToken) =>
+            {
+                policyCalls = call;
+                _ = await EndpointChain.BuildForRequestAsync(registration, context, cancellationToken).ConfigureAwait(false);
+            }).ConfigureAwait(false);
+
+        Assert.AreEqual(500, statusCode, underTheBuilds);
+        Assert.AreEqual(
+            "500\nContent-Type: application/json\nServer: Kestrel\nTransfer-Encoding: chunked\n\n"
+            + "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}",
+            underTheBuilds);
+        Assert.DoesNotContain("backchannel", underTheBuilds);
+        Assert.AreEqual(
+            "The context already carries the capabilities of a chain build, and a context carries the "
+            + "capabilities of one build. Build the chain on a context of the caller's own.",
+            Assert.IsInstanceOfType<InvalidOperationException>(Assert.ContainsSingle(faults)).Message);
+        Assert.AreEqual(2, policyCalls, "The policy is resolved for the loaded and for the materialized registration.");
+    }
+
+
+    /// <summary>
+    /// The application's capability resolution withholds back-channel logout from the loaded registration, which
+    /// allows the JWKS, discovery and back-channel logout capabilities, and grants every other registration all it
+    /// allows; the application's policy resolution stores a capability set of its own under the context entry named
+    /// <c>server.resolvedCapabilities</c> in its first call and does nothing in its second; the application's
+    /// materialization answers another reference of the registration with every capability. The discovery document
+    /// fetched over the wire is answered byte for byte as the same request whose policy resolution writes nothing,
+    /// <c>200</c> without <c>backchannel_logout_supported</c>, and the request carries the JWKS and discovery
+    /// capabilities as it is answered: the dispatcher's chain build writes the set the request is served under over
+    /// the value of the first call, and that set is the dispatcher's entry and no policy entry, so the policy
+    /// resolution for the materialized registration leaves it in place and the materialized registration is resolved
+    /// under it. The served set is no policy entry, which is this library's rule.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#23-per-endpoint-loop-stage">Server design</see>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task AValueThePolicyResolutionStoresUnderTheServedSetsNameLeavesTheServedSetAsync()
+    {
+        (_, IReadOnlySet<CapabilityIdentifier>? resolved, int statusCode, string underTheWrite, _, _) = await SendUnderABoundedMaterializationAsync(
+            WithBackChannelLogout, WithBackChannelLogout, WellKnownEndpointNames.MetadataDiscovery,
+            WithholdBackChannelLogoutFromTheLoadedRegistration,
+            resolvingPolicy: static (_, context, call, _) =>
+            {
+                if(call == 1)
+                {
+                    context[ServerContextKeys.ResolvedCapabilitiesKey] = WithBackChannelLogout;
+                }
+
+                return ValueTask.CompletedTask;
+            }).ConfigureAwait(false);
+        (_, _, _, string withoutTheWrite, _, _) = await SendUnderABoundedMaterializationAsync(
+            WithBackChannelLogout, WithBackChannelLogout, WellKnownEndpointNames.MetadataDiscovery,
+            WithholdBackChannelLogoutFromTheLoadedRegistration).ConfigureAwait(false);
+
+        Assert.AreEqual(withoutTheWrite, underTheWrite);
+        Assert.AreEqual(200, statusCode, underTheWrite);
+        Assert.DoesNotContain("backchannel_logout_supported", underTheWrite);
+        Assert.IsNotNull(resolved, "The request carries the set the dispatcher's chain build wrote.");
+        Assert.IsTrue(
+            resolved.SetEquals(JwksAndDiscovery),
+            string.Join(' ', resolved.Select(static capability => capability.Urn)));
+    }
+
+
+    /// <summary>
+    /// The application's policy resolution writes an entry of its own name in its first call, for the loaded
+    /// registration, and does nothing in its second, for another reference of the registration the application's
+    /// materialization answers with every capability. The discovery document fetched over the wire is answered
+    /// <c>200</c>, byte for byte as the same request whose policy resolution writes nothing, and the request's
+    /// context carries no entry of that name as the policy resolution's second call runs nor as the answer leaves:
+    /// every policy entry the loaded registration's resolution wrote is removed, or returned to the value the request
+    /// arrived with, before the materialized registration's policy is resolved, so the materialized registration's
+    /// resolution starts from the request's arriving state, which is this library's rule.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#23-per-endpoint-loop-stage">Server design</see>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task AnEntryThePolicyResolutionWritesForTheLoadedRegistrationIsRemovedForTheMaterializedOneAsync()
+    {
+        string entryName = "application.riskTier";
+        bool isEntrySeenAtTheSecondResolution = true;
+        bool isEntrySeenAsTheAnswerLeaves = true;
+        int policyCalls = 0;
+        (_, _, int statusCode, string underTheWrite, _, _) = await SendUnderABoundedMaterializationAsync(
+            WithBackChannelLogout, WithBackChannelLogout, WellKnownEndpointNames.MetadataDiscovery,
+            WithholdBackChannelLogoutFromTheLoadedRegistration,
+            resolvingPolicy: (_, context, call, _) =>
+            {
+                policyCalls = call;
+                if(call == 1)
+                {
+                    context[entryName] = "elevated";
+                }
+                else
+                {
+                    isEntrySeenAtTheSecondResolution = context.ContainsKey(entryName);
+                }
+
+                return ValueTask.CompletedTask;
+            },
+            outgoing: context => isEntrySeenAsTheAnswerLeaves = context.ContainsKey(entryName)).ConfigureAwait(false);
+        (_, _, _, string withoutTheWrite, _, _) = await SendUnderABoundedMaterializationAsync(
+            WithBackChannelLogout, WithBackChannelLogout, WellKnownEndpointNames.MetadataDiscovery,
+            WithholdBackChannelLogoutFromTheLoadedRegistration).ConfigureAwait(false);
+
+        Assert.AreEqual(200, statusCode, underTheWrite);
+        Assert.AreEqual(withoutTheWrite, underTheWrite);
+        Assert.AreEqual(2, policyCalls, "The policy is resolved for the loaded and for the materialized registration.");
+        Assert.IsFalse(
+            isEntrySeenAtTheSecondResolution,
+            "The entry the loaded registration's policy resolution wrote is removed before the materialized registration's policy is resolved.");
+        Assert.IsFalse(isEntrySeenAsTheAnswerLeaves, "The entry the loaded registration's policy resolution wrote is absent as the answer leaves.");
+    }
+
+
+    /// <summary>
+    /// The application's materialization answers another reference of the registration with the capabilities the
+    /// loaded registration allows, the JWKS and discovery capabilities; the application's capability resolution
+    /// withholds discovery, the capability of the endpoint the request matches, from the materialized registration;
+    /// the application's policy resolution removes the context entry named <c>server.resolvedCapabilities</c> in its
+    /// second call, for the materialized registration. The judgement of the materialized registration needs the set
+    /// the request is served under, and the context holds none at that point, so the discovery request fetched over
+    /// the wire is answered <c>500</c> with the body's error <c>server_error</c> and the description the library
+    /// answers a fault of the server's wiring with, the request's trace records that one fault, an
+    /// <see cref="InvalidOperationException"/>, and nothing escapes the dispatch: a context without the set is a fault
+    /// of the server's wiring, never an empty bound, which is this library's rule.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#23-per-endpoint-loop-stage">Server design</see>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DoNotParallelize]
+    public async Task APolicyResolutionRemovingTheServedSetInItsSecondCallIsAServerFaultAsync()
+    {
+        (int statusCode, string withoutTheSet, Exception[] faults, int policyCalls, ActivityEvent[] exceptionEvents) =
+            await SendWithTheServedSetRewrittenInTheSecondPolicyCallAsync(
+                static context => _ = context.Remove(ServerContextKeys.ResolvedCapabilitiesKey)).ConfigureAwait(false);
+
+        Assert.AreEqual(500, statusCode, withoutTheSet);
+        Assert.AreEqual(
+            "500\nContent-Type: application/json\nServer: Kestrel\nTransfer-Encoding: chunked\n\n"
+            + "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}",
+            withoutTheSet);
+        Assert.IsEmpty(faults, "The dispatch answers the fault itself; nothing escapes it.");
+        Assert.AreEqual(2, policyCalls, "The policy is resolved for the loaded and for the materialized registration.");
+        AssertTheOneFaultIsTheMissingServedSet(exceptionEvents);
+    }
+
+
+    /// <summary>
+    /// The application's materialization answers another reference of the registration with the capabilities the
+    /// loaded registration allows, the JWKS and discovery capabilities; the application's capability resolution
+    /// withholds discovery, the capability of the endpoint the request matches, from the materialized registration;
+    /// the application's policy resolution stores a capability set of its own, the JWKS and discovery capabilities,
+    /// under the context entry named <c>server.resolvedCapabilities</c> in its second call, for the materialized
+    /// registration. A value under that name that is not the library's own entry for the request's context reads as
+    /// no set, and the judgement of the materialized registration needs the set the request is served under, so the
+    /// discovery request fetched over the wire is answered <c>500</c> with the body's error <c>server_error</c> and
+    /// the description the library answers a fault of the server's wiring with, the request's trace records that one
+    /// fault, an <see cref="InvalidOperationException"/>, and nothing escapes the dispatch: a context without the set
+    /// is a fault of the server's wiring, never an empty bound, which is this library's rule.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#23-per-endpoint-loop-stage">Server design</see>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DoNotParallelize]
+    public async Task APolicyResolutionReplacingTheServedSetInItsSecondCallIsAServerFaultAsync()
+    {
+        (int statusCode, string underItsOwnSet, Exception[] faults, int policyCalls, ActivityEvent[] exceptionEvents) =
+            await SendWithTheServedSetRewrittenInTheSecondPolicyCallAsync(
+                static context => context[ServerContextKeys.ResolvedCapabilitiesKey] = JwksAndDiscovery).ConfigureAwait(false);
+
+        Assert.AreEqual(500, statusCode, underItsOwnSet);
+        Assert.AreEqual(
+            "500\nContent-Type: application/json\nServer: Kestrel\nTransfer-Encoding: chunked\n\n"
+            + "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}",
+            underItsOwnSet);
+        Assert.IsEmpty(faults, "The dispatch answers the fault itself; nothing escapes it.");
+        Assert.AreEqual(2, policyCalls, "The policy is resolved for the loaded and for the materialized registration.");
+        AssertTheOneFaultIsTheMissingServedSet(exceptionEvents);
+    }
+
+
+    /// <summary>
+    /// The application's materialization answers another reference of the registration with the capabilities the
+    /// loaded registration allows, the JWKS and discovery capabilities; the application's capability resolution
+    /// withholds discovery, the capability of the endpoint the request matches, from the materialized registration;
+    /// the application's policy resolution runs in both of its calls and touches nothing under the context entry
+    /// named <c>server.resolvedCapabilities</c>. The materialized registration is judged under the set the request is
+    /// served under, its resolution held to that bound is narrower, and the chain is built again under it: the
+    /// discovery request fetched over the wire is answered as a request no endpoint serves, <c>404</c> with an empty
+    /// body, and the request carries the JWKS capability alone as it is answered. A materialized registration's
+    /// capabilities are held to the set the request is served under, which is this library's rule.
+    /// <see href="../../../documents/AuthorizationServerDesign.md#23-per-endpoint-loop-stage">Server design</see>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task APolicyResolutionLeavingTheServedSetHoldsTheMaterializedRegistrationToItAsync()
+    {
+        int policyCalls = 0;
+        (_, IReadOnlySet<CapabilityIdentifier>? resolved, int statusCode, string underTheServedSet, _, Exception[] faults) =
+            await SendUnderABoundedMaterializationAsync(
+                JwksAndDiscovery, JwksAndDiscovery, WellKnownEndpointNames.MetadataDiscovery,
+                WithholdDiscoveryFromTheMaterializedRegistration,
+                resolvingPolicy: (_, _, call, _) =>
+                {
+                    policyCalls = call;
+
+                    return ValueTask.CompletedTask;
+                }).ConfigureAwait(false);
+
+        Assert.AreEqual(404, statusCode, underTheServedSet);
+        Assert.AreEqual("404\nContent-Length: 0\nServer: Kestrel\n\n", underTheServedSet);
+        Assert.IsEmpty(faults, "A request no endpoint serves is no fault.");
+        Assert.AreEqual(2, policyCalls, "The policy is resolved for the loaded and for the materialized registration.");
+        Assert.IsNotNull(resolved, "The request carries the set the chain built again wrote.");
+        Assert.IsTrue(
+            resolved.SetEquals([WellKnownCapabilityIdentifiers.OAuthJwksEndpoint]),
+            string.Join(' ', resolved.Select(static capability => capability.Urn)));
+    }
+
+
+    /// <summary>
     /// A caller builds the chain for a registration through <see cref="EndpointChain.BuildForRequestAsync"/> on a
     /// context of its own, then calls it again on that same context: the second call throws
     /// <see cref="InvalidOperationException"/>, since the context already carries the capabilities of one build, and a
@@ -636,15 +881,105 @@ internal sealed class ResolveCapabilitiesAsyncTests
 
 
     /// <summary>
+    /// A capability resolution that withholds back-channel logout from the registration the load seam answered and
+    /// grants every other registration all it allows: it narrows the loaded registration alone.
+    /// </summary>
+    /// <param name="registration">The registration the resolution is asked for.</param>
+    /// <param name="isLoaded">Whether <paramref name="registration"/> is the reference the load seam answered.</param>
+    /// <returns>The capabilities the resolution answers.</returns>
+    private static IReadOnlySet<CapabilityIdentifier> WithholdBackChannelLogoutFromTheLoadedRegistration(IRegistrationRecord registration, bool isLoaded) =>
+        isLoaded
+            ? registration.AllowedCapabilities.Where(static capability => capability != WellKnownCapabilityIdentifiers.OidcBackChannelLogout).ToHashSet()
+            : registration.AllowedCapabilities;
+
+
+    /// <summary>
+    /// A capability resolution that withholds discovery from every registration other than the reference the load seam
+    /// answered and grants that one all it allows: it narrows a materialized registration alone.
+    /// </summary>
+    /// <param name="registration">The registration the resolution is asked for.</param>
+    /// <param name="isLoaded">Whether <paramref name="registration"/> is the reference the load seam answered.</param>
+    /// <returns>The capabilities the resolution answers.</returns>
+    private static IReadOnlySet<CapabilityIdentifier> WithholdDiscoveryFromTheMaterializedRegistration(IRegistrationRecord registration, bool isLoaded) =>
+        isLoaded
+            ? registration.AllowedCapabilities
+            : registration.AllowedCapabilities.Where(static capability => capability != WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint).ToHashSet();
+
+
+    /// <summary>
+    /// Sends a GET of the discovery document through <see cref="SendUnderABoundedMaterializationAsync"/> under a
+    /// registration that allows the JWKS and discovery capabilities, which the materialization answers as another
+    /// reference allowing the same, with <see cref="WithholdDiscoveryFromTheMaterializedRegistration"/> as the
+    /// capability resolution and a policy resolution that applies <paramref name="rewrite"/> to the request's context
+    /// in its second call, inside a root activity of a trace of its own, and collects the exception events recorded
+    /// in that trace. The capture is a process-wide activity listener, so a caller runs apart from other tests
+    /// (<see cref="DoNotParallelizeAttribute"/>) and asserts only over the events of the request's own trace.
+    /// </summary>
+    /// <param name="rewrite">What the policy resolution's second call does to the request's context.</param>
+    /// <returns>
+    /// The status code, the answer as <see cref="OAuthTestTransport.ProjectWireAnswer"/> projects it, the faults the
+    /// listener recorded for the request, how many times the policy was resolved, and the events named
+    /// <c>exception</c> of the request's trace.
+    /// </returns>
+    private async Task<(int StatusCode, string WireAnswer, Exception[] Faults, int PolicyCalls, ActivityEvent[] ExceptionEvents)> SendWithTheServedSetRewrittenInTheSecondPolicyCallAsync(
+        Action<ExchangeContext> rewrite)
+    {
+        int policyCalls = 0;
+        using TraceTreeCapture capture = new();
+        using Activity root = new(nameof(SendWithTheServedSetRewrittenInTheSecondPolicyCallAsync));
+        _ = root.Start();
+        (_, _, int statusCode, string answer, _, Exception[] faults) = await SendUnderABoundedMaterializationAsync(
+            JwksAndDiscovery, JwksAndDiscovery, WellKnownEndpointNames.MetadataDiscovery,
+            WithholdDiscoveryFromTheMaterializedRegistration,
+            resolvingPolicy: (_, context, call, _) =>
+            {
+                policyCalls = call;
+                if(call == 2)
+                {
+                    rewrite(context);
+                }
+
+                return ValueTask.CompletedTask;
+            }).ConfigureAwait(false);
+        root.Stop();
+
+        ActivityEvent[] exceptionEvents = [.. TraceTreeAssertions.FilterByTrace(capture.StoppedActivities, root.TraceId)
+            .SelectMany(static activity => activity.Events)
+            .Where(static activityEvent => string.Equals(activityEvent.Name, "exception", StringComparison.Ordinal))];
+
+        return (statusCode, answer, faults, policyCalls, exceptionEvents);
+    }
+
+
+    /// <summary>
+    /// Asserts that <paramref name="exceptionEvents"/> holds one event, an <see cref="InvalidOperationException"/>
+    /// whose message says that the request's context holds no capabilities the request is served under.
+    /// </summary>
+    /// <param name="exceptionEvents">The events named <c>exception</c> of the request's trace.</param>
+    private static void AssertTheOneFaultIsTheMissingServedSet(ActivityEvent[] exceptionEvents)
+    {
+        ActivityEvent fault = Assert.ContainsSingle(exceptionEvents);
+        Assert.AreEqual(
+            "System.InvalidOperationException",
+            fault.Tags.SingleOrDefault(static tag => string.Equals(tag.Key, "exception.type", StringComparison.Ordinal)).Value as string);
+        Assert.AreEqual(
+            "The request's context holds no capabilities the request is served under, so the materialized registration "
+            + "has nothing to be held to.",
+            fault.Tags.SingleOrDefault(static tag => string.Equals(tag.Key, "exception.message", StringComparison.Ordinal)).Value as string);
+    }
+
+
+    /// <summary>
     /// Registers the verifier with <paramref name="loaded"/>, wires <paramref name="resolve"/> as the capability
     /// resolution, counting each call, the back-channel logout delivery so that the discovery document's back-channel
     /// members follow the capability alone, a materialization when <paramref name="materialized"/> or
     /// <paramref name="materializing"/> is given, which takes the step <paramref name="materializing"/> on the request's
     /// context when given and answers the registration with <paramref name="materialized"/>, or the registration it was
     /// given when that is <see langword="null"/>, and an inspection that reads the request's chain and resolved
-    /// capabilities as the answer leaves and hands the request's context to <paramref name="outgoing"/> when given, then
-    /// sends a GET to <paramref name="endpointName"/> over the listener, or a POST of <paramref name="form"/> when one is
-    /// given.
+    /// capabilities as the answer leaves and hands the request's context to <paramref name="outgoing"/> when given, and,
+    /// when <paramref name="resolvingPolicy"/> is given, a policy resolution that runs the configured one and then that
+    /// step, then sends a GET to <paramref name="endpointName"/> over the listener, or a POST of <paramref name="form"/>
+    /// when one is given.
     /// </summary>
     /// <param name="loaded">The capabilities the loaded registration allows.</param>
     /// <param name="materialized">
@@ -664,6 +999,12 @@ internal sealed class ResolveCapabilitiesAsyncTests
     /// What the application's outgoing inspection does with the request's context, or <see langword="null"/> for
     /// nothing beyond the reads the fixture answers.
     /// </param>
+    /// <param name="resolvingPolicy">
+    /// The step the policy resolution takes on the request's context after the configured policy resolution, handed
+    /// the registration the policy is resolved for, the request's context, the number of the call within the request
+    /// (1 for the loaded registration, 2 for a materialized one) and the cancellation token, or
+    /// <see langword="null"/> to keep the configured policy resolution alone.
+    /// </param>
     /// <returns>
     /// The chain and the resolved capabilities the request carried as it was answered, the status code, the answer as
     /// <see cref="OAuthTestTransport.ProjectWireAnswer"/> projects it, with the registration's tenant segment replaced
@@ -677,7 +1018,8 @@ internal sealed class ResolveCapabilitiesAsyncTests
         Func<IRegistrationRecord, bool, IReadOnlySet<CapabilityIdentifier>>? resolve = null,
         Dictionary<string, string>? form = null,
         Func<IRegistrationRecord, ExchangeContext, CancellationToken, ValueTask>? materializing = null,
-        Action<ExchangeContext>? outgoing = null)
+        Action<ExchangeContext>? outgoing = null,
+        Func<IRegistrationRecord, ExchangeContext, int, CancellationToken, ValueTask>? resolvingPolicy = null)
     {
         await using TestHostShell host = new(TimeProvider);
         HostedAuthorizationServer hosted = host.Host("default");
@@ -699,6 +1041,18 @@ internal sealed class ResolveCapabilitiesAsyncTests
             };
 
             candidateIntegration.DeliverBackChannelLogoutAsync = static (_, _, _, _, _) => ValueTask.CompletedTask;
+            if(resolvingPolicy is not null)
+            {
+                ResolveServerPolicyDelegate configuredPolicy = candidateIntegration.ResolvePolicyAsync!;
+                int policyCalls = 0;
+                candidateIntegration.ResolvePolicyAsync = async (registration, context, cancellationToken) =>
+                {
+                    await configuredPolicy(registration, context, cancellationToken).ConfigureAwait(false);
+                    await resolvingPolicy(
+                        registration, context, Interlocked.Increment(ref policyCalls), cancellationToken).ConfigureAwait(false);
+                };
+            }
+
             if(materialized is not null || materializing is not null)
             {
                 candidateIntegration.MaterializeRegistrationAsync = async (registration, context, cancellationToken) =>

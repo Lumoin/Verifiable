@@ -1167,7 +1167,9 @@ public sealed class EndpointServer: IDisposable
     /// written under such a name between the two resolutions included, so the
     /// materialized registration's resolution starts from the request's arriving state, as its issuer does: an axis
     /// its profile does not set reads the value the request arrived with or its strict default, never the loaded
-    /// registration's value.
+    /// registration's value. The entry named <c>server.resolvedCapabilities</c> is not recorded among the entries a
+    /// resolution wrote (<see cref="WrittenEntries"/>): it holds the set the request is served under, the dispatcher's
+    /// entry, so the materialized registration's policy is resolved with that set in place.
     /// </remarks>
     /// <param name="registration">The registration the policy and the issuer are resolved for.</param>
     /// <param name="requestIssuer">
@@ -1258,7 +1260,11 @@ public sealed class EndpointServer: IDisposable
     /// The entries a policy resolution wrote on <paramref name="context"/>: every entry it added or set to a value
     /// other than the one it held before, with the value it holds after, and every entry it removed, with
     /// <see langword="null"/>. An entry set to the value it already held is not among them, since the context reads
-    /// the same either way.
+    /// the same either way. The entry named <c>server.resolvedCapabilities</c> is never among them, whatever the
+    /// resolution did under that name: it holds the set the request is served under, which the dispatcher's chain
+    /// build writes after the loaded registration's policy resolution, so it is the dispatcher's entry and no policy
+    /// entry, and the restore of a materialized registration's policy neither removes nor replaces it and the
+    /// comparison of two policies does not count it.
     /// </summary>
     /// <param name="entriesBefore">The entries <paramref name="context"/> held before the resolution.</param>
     /// <param name="context">The context after the resolution.</param>
@@ -1282,6 +1288,9 @@ public sealed class EndpointServer: IDisposable
                 written[entryName] = null;
             }
         }
+
+        //The set the request is served under is the dispatcher's entry, never a policy entry.
+        _ = written.Remove(ServerContextKeys.ResolvedCapabilitiesKey);
 
         return written;
     }
@@ -1339,7 +1348,8 @@ public sealed class EndpointServer: IDisposable
 
         /// <summary>
         /// The entries the resolution wrote, by name, with the value each holds after it, or <see langword="null"/>
-        /// for an entry it removed.
+        /// for an entry it removed; the entry named <c>server.resolvedCapabilities</c>, the dispatcher's, is never
+        /// among them.
         /// </summary>
         internal required Dictionary<string, object?> Written { get; init; }
     }
@@ -1415,6 +1425,14 @@ public sealed class EndpointServer: IDisposable
     /// runs over it, the request is answered <c>500</c> <c>server_error</c> with the description the library answers a
     /// fault of the server's own wiring with, and the fault is recorded on the dispatch activity.
     /// </para>
+    /// <para>
+    /// The set the request is served under is read once, after the materialized registration's policy and issuer are
+    /// resolved, as <c>ResolvedCapabilities</c> of <see cref="ExchangeContextServerExtensions"/>. A context that holds
+    /// no set at that point is answered as a record of another type is, since the bound is computed from that set and
+    /// no set leaves nothing to hold the materialized registration's capabilities to: no endpoint runs, the request
+    /// is answered <c>500</c> <c>server_error</c> with the same description, and the fault is recorded on the dispatch
+    /// activity.
+    /// </para>
     /// </remarks>
     /// <param name="loaded">The registration the application's load seam answered.</param>
     /// <param name="materialized">The registration the materialization answered in its place.</param>
@@ -1465,8 +1483,16 @@ public sealed class EndpointServer: IDisposable
         PolicyEntries materializedPolicy = await ResolvePolicyAndIssuerAsync(
             materialized, requestIssuer, loadedPolicy, context, cancellationToken).ConfigureAwait(false);
 
-        IReadOnlySet<CapabilityIdentifier> loadedResolved =
-            context.ResolvedCapabilities ?? ImmutableHashSet<CapabilityIdentifier>.Empty;
+        //The bound is computed from the set the request is served under; without one there is nothing to hold to.
+        if(context.ResolvedCapabilities is not { } loadedResolved)
+        {
+            _ = activity?.AddException(new InvalidOperationException(
+                "The request's context holds no capabilities the request is served under, so the materialized "
+                + "registration has nothing to be held to."));
+
+            return ServerHttpResponse.ServerError(ServerErrors.ServerError, ServerNotReadyDescription);
+        }
+
         HashSet<CapabilityIdentifier> upperBound = [.. loadedResolved.Where(capability =>
             loaded.AllowedCapabilities.Contains(capability) && materialized.AllowedCapabilities.Contains(capability))];
 
@@ -1598,9 +1624,10 @@ public sealed class EndpointServer: IDisposable
 
     /// <summary>
     /// The <c>error_description</c> the dispatcher answers beside <see cref="ServerErrors.ServerError"/> when the
-    /// application's materialization answers a record of another type than the loaded registration: the fault is the
-    /// server's wiring, not the request. The same text as the description the library answers a fault of the server's
-    /// own wiring with; it names no seam, configuration or internal cause.
+    /// application's materialization answers a record of another type than the loaded registration, or when the
+    /// request's context holds no capabilities the request is served under as a materialized registration is judged:
+    /// the fault is the server's wiring, not the request. The same text as the description the library answers a
+    /// fault of the server's own wiring with; it names no seam, configuration or internal cause.
     /// </summary>
     private static string ServerNotReadyDescription { get; } = "The server is not ready to serve this request.";
 

@@ -329,10 +329,13 @@ public class ServerIntegration: WiringComponent
 
 
     /// <summary>
-    /// Resolves the per-request capability set active for a registration. Consulted by the dispatcher
-    /// once for the registration it loaded, in its chain build, and once more for a registration
-    /// <see cref="MaterializeRegistrationAsync"/> answers; the
-    /// returned set filters which builder-produced candidates land in the chain. Required.
+    /// Resolves the per-request capability set active for a registration. Consulted by the dispatcher's
+    /// chain build for the registration the dispatcher loaded, when the configuration holds an endpoint
+    /// builder, and once more, for a request an endpoint of that chain matches, for the registration
+    /// <see cref="MaterializeRegistrationAsync"/> answers in its place when that is another reference of a
+    /// type the loaded registration's type admits and the request's context holds the set that chain build
+    /// wrote (a context without it is answered <c>500</c> <c>server_error</c> before a second resolution);
+    /// the returned set filters which builder-produced candidates land in the chain. Required.
     /// </summary>
     /// <remarks>
     /// <para>

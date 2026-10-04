@@ -200,9 +200,16 @@ registration's type, policy and issuer are resolved again for it, with every ent
 registration's policy resolution wrote first returned to the value the request arrived with, or removed
 when the request arrived without it, so the materialized record's resolution starts from the request's
 arriving state and a policy axis its profile does not set reads the arriving value or its strict
-default. For a record of the loaded registration's type that is another reference, its capabilities are
-resolved through `ResolveCapabilitiesAsync` in every case and held to the bound: the set resolved for the
-loaded registration that both records allow. The set the chain build stores on the context is the
+default. The set the request is served under (`server.resolvedCapabilities`) is the dispatcher's entry,
+written by its chain build after the loaded registration's policy resolution, and no policy entry: the
+policy restore of a materialized judgement leaves it in place, whatever the policy resolution did under
+that name. The judgement of a materialized record needs that set: a context that holds under that name
+no entry the library wrote for that context, once the materialized record's policy and issuer are
+resolved, is answered as a record of another type is, `500` `server_error` with the fault on the
+dispatch activity, and is never held to an empty bound. For a record of the loaded registration's type
+that is another reference, its capabilities are resolved through `ResolveCapabilitiesAsync` whenever the
+context holds that set, whether the chain is kept or built again, and held to the bound: the set resolved
+for the loaded registration that both records allow. The set the chain build stores on the context is the
 library's immutable copy of the resolution: it is made by walking the bound, or without one the
 registration's own allowed capabilities, and asking the answer for each capability, never from the
 answer's own subset test or enumeration. A capability resolution can only narrow what the registration
@@ -337,11 +344,28 @@ matched.
   application's own, and no set read),
   `APublicChainBuildOnTheRequestsContextWidensNothingAsync` (a materialization that calls the public chain
   build on the request's context with its registration widened by back-channel logout: `500`, the one
-  fault an `InvalidOperationException`, and no part of the answer carrying the capability) and
+  fault an `InvalidOperationException`, and no part of the answer carrying the capability),
   `ASecondPublicChainBuildOnOneContextIsRefusedAsync` (the public chain build again on one context
-  refused, on a fresh context built), and, each in the two forms (a materialization that adds the
-  capability; a capability resolution that withholds it) compared with a registration that never held
-  it, by
+  refused, on a fresh context built),
+  `APolicyResolutionBuildingAChainInEachCallIsRefusedInItsSecondCallAsync` (a capability resolution that
+  narrows the loaded registration, a policy resolution that calls the public chain build on the
+  request's context in each of its calls and a materialization of every capability: the second build
+  refused, `500`, the one fault the refusal, and no part of the answer carrying the narrowed capability),
+  `AValueThePolicyResolutionStoresUnderTheServedSetsNameLeavesTheServedSetAsync` (a policy resolution that
+  stores a set of its own under `server.resolvedCapabilities` in its first call: answered byte for byte as
+  without that write, the served set in place),
+  `AnEntryThePolicyResolutionWritesForTheLoadedRegistrationIsRemovedForTheMaterializedOneAsync` (an entry
+  of the policy resolution's own name written in its first call is absent as its second call runs and as
+  the answer leaves, and the document is answered byte for byte as without the write),
+  `APolicyResolutionRemovingTheServedSetInItsSecondCallIsAServerFaultAsync` and
+  `APolicyResolutionReplacingTheServedSetInItsSecondCallIsAServerFaultAsync` (a materialization of the
+  loaded capabilities, a capability resolution that withholds discovery from it and a policy resolution
+  whose second call removes the entry or stores a set of its own under its name: `500`, the one fault an
+  `InvalidOperationException` on the request's trace) and
+  `APolicyResolutionLeavingTheServedSetHoldsTheMaterializedRegistrationToItAsync` (the same with the entry
+  left alone: the chain built again, `404`, the JWKS capability alone served), and, each in the two forms
+  (a materialization that adds the capability; a capability resolution that withholds it) compared with a
+  registration that never held it, by
   `EndSessionLogoutTests.ABackChannelLogoutOutsideTheServedCapabilitiesIsNotDeliveredAsync`,
   `DiscoveryEndpointTests.ADiscoveryMemberOutsideTheServedCapabilitiesIsNotAdvertisedAsync`,
   `FederationEntityConfigurationEndpointTests.ARegistrationTypeOutsideTheServedCapabilitiesIsNotListedAsync`
