@@ -10,9 +10,13 @@ namespace Verifiable.Tests.Jose
     internal sealed class WellKnownJwaValuesTests
     {
         /// <summary>
-        /// All of the well-known JWE algorithms should be recognized.
+        /// The rows of <see cref="JwaAlgorithmComparesCorrectly"/>: every well-known JWA algorithm of
+        /// <see cref="WellKnownJwaValues"/> the rows cover, each with its predicate.
         /// </summary>
-        /// <returns></returns>
+        /// <returns>
+        /// The catalogue's instance of the algorithm name and the predicate of <see cref="WellKnownJwaValues"/>
+        /// that recognizes that name.
+        /// </returns>
         public static IEnumerable<object[]> GetJwaAlgorithms()
         {
             yield return new object[] { WellKnownJwaValues.None, new Func<string, bool>(WellKnownJwaValues.IsNone) };
@@ -30,11 +34,16 @@ namespace Verifiable.Tests.Jose
             yield return new object[] { WellKnownJwaValues.Rs384, new Func<string, bool>(WellKnownJwaValues.IsRs384) };
             yield return new object[] { WellKnownJwaValues.Rs512, new Func<string, bool>(WellKnownJwaValues.IsRs512) };
             yield return new object[] { WellKnownJwaValues.EdDsa, new Func<string, bool>(WellKnownJwaValues.IsEdDsa) };
+            yield return new object[] { WellKnownJwaValues.Ed25519, new Func<string, bool>(WellKnownJwaValues.IsEd25519) };
         }
 
 
         /// <summary>
-        /// Tests that all well-known JWA algorithms are recognized.
+        /// Tests that all well-known JWA algorithms are recognized: a copy of the name that is not the
+        /// catalogue's instance satisfies its predicate and canonicalizes to the catalogue's instance, and the
+        /// name with the case of one letter toggled does not satisfy it, since
+        /// <see href="https://www.rfc-editor.org/rfc/rfc7515#section-4.1.1">RFC 7515 Section 4.1.1</see> says:
+        /// "The "alg" value is a case-sensitive ASCII string containing a StringOrURI value."
         /// </summary>
         /// <param name="correctAlgorithm">The algorithm to test.</param>
         /// <param name="isCorrectAlgorithm">The function that checks if the algorithm is recognized.</param>
