@@ -60,9 +60,11 @@ internal static class DefaultIssuerResolver
     /// <exception cref="InvalidOperationException">
     /// Thrown when neither <see cref="ClientRecord.IssuerUri"/> nor
     /// <c>ExchangeContextServerExtensions.Issuer</c> is set, or when the
-    /// resolved value fails the RFC 9207 §2 / RFC 8414 §2 issuer-identifier shape
-    /// (<see cref="IssuerIdentifier.Parse"/>) — an https URL
-    /// with no query or fragment component.
+    /// resolved value's original spelling fails the RFC 9207 §2 / RFC 8414 §2 issuer-identifier shape
+    /// as <see cref="IssuerIdentifier.Parse"/> reads it, which refuses an empty spelling, one that is
+    /// not an absolute URI, one holding a white-space or control character or one
+    /// <see cref="Uri.IsWellFormedOriginalString"/> refuses, a scheme other than https, and a query
+    /// or fragment component, an empty one included (<see cref="IssuerIdentifierFault"/>).
     /// </exception>
     public static ValueTask<Uri> ResolveAsync(
         ClientRecord registration,
@@ -121,8 +123,9 @@ internal static class DefaultIssuerResolver
         {
             throw new InvalidOperationException(
                 $"Issuer identifier '{issuer}' configured for registration '{registration.ClientId}' does " +
-                "not satisfy RFC 9207 §2 / RFC 8414 §2: it MUST be a URL using the https scheme with no " +
-                "query or fragment component.");
+                "not satisfy RFC 9207 §2 / RFC 8414 §2 as IssuerIdentifier.Parse reads it: its original spelling " +
+                "must be a non-empty absolute URI holding no white-space or control character, well formed as " +
+                "written, using the https scheme, and with no query or fragment component, not even an empty one.");
         }
 
         return issuer;
