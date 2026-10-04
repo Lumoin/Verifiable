@@ -156,8 +156,9 @@ namespace Verifiable.JCose
         /// <summary>
         /// EdDSA over Ed25519, fully specified: the algorithm
         /// <see href="https://www.rfc-editor.org/rfc/rfc9864#section-2.2">RFC 9864 Section 2.2</see>
-        /// defines and the JSON Web Signature and Encryption Algorithms registry describes as "EdDSA using
-        /// the Ed25519 parameter set in Section 5.1 of [RFC8032]".
+        /// defines and the JSON Web Signature and Encryption Algorithms registry describes, by the registration
+        /// of <see href="https://www.rfc-editor.org/rfc/rfc9864#section-4.1.1">RFC 9864 Section 4.1.1</see>, as
+        /// "EdDSA using the Ed25519 parameter set in Section 5.1 of [RFC8032]".
         /// </summary>
         public static string Ed25519 { get; } = Utf8Constants.ToInternedString(Ed25519Utf8);
 
@@ -540,6 +541,7 @@ namespace Verifiable.JCose
             string when IsRs384(alg) => Rs384,
             string when IsRs512(alg) => Rs512,
             string when IsEdDsa(alg) => EdDsa,
+            string when IsEd25519(alg) => Ed25519,
             string when IsMlDsa44(alg) => MlDsa44,
             string when IsMlDsa65(alg) => MlDsa65,
             string when IsMlDsa87(alg) => MlDsa87,

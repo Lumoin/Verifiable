@@ -1072,9 +1072,11 @@ public sealed class EndpointServer: IDisposable
                 PolicyEntries loadedPolicy = await ResolvePolicyAndIssuerAsync(
                     registration, requestIssuer, earlierPolicy: null, context, cancellationToken).ConfigureAwait(false);
 
-                //3. Build the registration's active endpoint chain and walk it.
-                EndpointChain chain = await EndpointChain.BuildForRequestAsync(
-                    registration, context, cancellationToken).ConfigureAwait(false);
+                //3. Build the registration's active endpoint chain and walk it. The dispatcher builds through the
+                //internal path, which writes the request's capabilities whatever the arriving context carries.
+                EndpointChain chain = await EndpointChain.BuildBoundedForRequestAsync(
+                    registration, upperBound: null, boundingChain: null, resolvedCapabilities: null, context, cancellationToken)
+                    .ConfigureAwait(false);
                 context.SetEndpointChain(chain);
 
                 MatchedEndpoint? matched = await chain.MatchAsync(
@@ -1165,7 +1167,9 @@ public sealed class EndpointServer: IDisposable
     /// written under such a name between the two resolutions included, so the
     /// materialized registration's resolution starts from the request's arriving state, as its issuer does: an axis
     /// its profile does not set reads the value the request arrived with or its strict default, never the loaded
-    /// registration's value.
+    /// registration's value. The entry named <c>server.resolvedCapabilities</c> is not recorded among the entries a
+    /// resolution wrote (<see cref="WrittenEntries"/>): it holds the set the request is served under, the dispatcher's
+    /// entry, so the materialized registration's policy is resolved with that set in place.
     /// </remarks>
     /// <param name="registration">The registration the policy and the issuer are resolved for.</param>
     /// <param name="requestIssuer">
@@ -1256,7 +1260,11 @@ public sealed class EndpointServer: IDisposable
     /// The entries a policy resolution wrote on <paramref name="context"/>: every entry it added or set to a value
     /// other than the one it held before, with the value it holds after, and every entry it removed, with
     /// <see langword="null"/>. An entry set to the value it already held is not among them, since the context reads
-    /// the same either way.
+    /// the same either way. The entry named <c>server.resolvedCapabilities</c> is never among them, whatever the
+    /// resolution did under that name: it holds the set the request is served under, which the dispatcher's chain
+    /// build writes after the loaded registration's policy resolution, so it is the dispatcher's entry and no policy
+    /// entry, and the restore of a materialized registration's policy neither removes nor replaces it and the
+    /// comparison of two policies does not count it.
     /// </summary>
     /// <param name="entriesBefore">The entries <paramref name="context"/> held before the resolution.</param>
     /// <param name="context">The context after the resolution.</param>
@@ -1280,6 +1288,9 @@ public sealed class EndpointServer: IDisposable
                 written[entryName] = null;
             }
         }
+
+        //The set the request is served under is the dispatcher's entry, never a policy entry.
+        _ = written.Remove(ServerContextKeys.ResolvedCapabilitiesKey);
 
         return written;
     }
@@ -1337,7 +1348,8 @@ public sealed class EndpointServer: IDisposable
 
         /// <summary>
         /// The entries the resolution wrote, by name, with the value each holds after it, or <see langword="null"/>
-        /// for an entry it removed.
+        /// for an entry it removed; the entry named <c>server.resolvedCapabilities</c>, the dispatcher's, is never
+        /// among them.
         /// </summary>
         internal required Dictionary<string, object?> Written { get; init; }
     }
@@ -1346,31 +1358,43 @@ public sealed class EndpointServer: IDisposable
     /// <summary>
     /// Judges a matched request by the registration the application's
     /// <see cref="ServerIntegration.MaterializeRegistrationAsync"/> answered in place of the loaded one, so one
-    /// registration is judged per request: policy and issuer are resolved for the materialized registration, and when
-    /// it does not allow every capability the loaded registration allows or its policy differs from the loaded
-    /// registration's, the endpoint chain is built again for it and the request matched again.
+    /// registration is judged per request: policy, issuer and capabilities are resolved for the materialized
+    /// registration, and when it does not allow every capability the loaded registration allows, its policy differs
+    /// from the loaded registration's or its capabilities held to the bound are fewer than those resolved for the
+    /// loaded registration, the endpoint chain is built again for it and the request matched again.
     /// </summary>
     /// <remarks>
     /// <para>
     /// A materialization narrows the endpoint chain and the resolved capabilities and never widens them. Each
     /// capability the materialized registration adds is recorded as
-    /// <see cref="ServerEventNames.MaterializedCapabilityDropped"/>. When the materialization removes no capability and
-    /// its policy resolution leaves every policy entry at the value the loaded registration's resolution left it, the
-    /// chain built for the loaded registration and its resolved capabilities are kept. A kept chain is the loaded
-    /// registration's in every input: its capability resolution, its endpoint addresses and whatever else its builders
-    /// read of the registration. It is kept only when the materialized registration allows every loaded capability
-    /// under an unchanged policy. Otherwise the chain is built again with
-    /// <see cref="EndpointChain.BuildBoundedForRequestAsync"/>: its resolved capabilities are held to the capabilities
-    /// resolved for the loaded registration that both registrations allow, and its endpoints to the endpoints of the
-    /// chain built for the loaded registration, each identified by its name, HTTP method and flow kind together, so an
-    /// endpoint that chain lacks is dropped and recorded among
+    /// <see cref="ServerEventNames.MaterializedCapabilityDropped"/>. The bound is the capabilities resolved for the
+    /// loaded registration that both registrations allow, read from the library's immutable copy the chain build stored
+    /// on the context, and the materialized registration's answer is read by asking it for each capability, so an
+    /// answer the application changes after handing it back, or whose own subset test reaches beyond the bound, adds
+    /// nothing. When the materialization removes no capability and its policy
+    /// resolution leaves every policy entry at the value the loaded registration's resolution left it, the capability
+    /// resolution is asked once for the materialized registration and its answer held to the bound; when the bounded
+    /// answer holds every capability resolved for the loaded registration, the chain built for the loaded registration
+    /// and its resolved capabilities are kept. A kept chain is the loaded registration's in every input: its capability
+    /// resolution, its endpoint addresses and whatever else its builders read of the registration. Otherwise the chain
+    /// is built again with <see cref="EndpointChain.BuildBoundedForRequestAsync"/>, handed the answer already given
+    /// for the materialized registration when there is one: its resolved capabilities are held to the bound, and its
+    /// endpoints to the endpoints of the chain built for the loaded registration, each identified by its name, HTTP
+    /// method and flow kind together, so an endpoint that chain lacks is dropped and recorded among
     /// <see cref="EndpointChain.CapabilityFilteredCandidateNames"/>. A candidate that a builder's gate admits for a
     /// capability the materialized registration adds, a gate that reads two capabilities of the registration while its
     /// candidate carries one of them, is therefore dropped unless the loaded chain holds an endpoint of that same name,
-    /// HTTP method and flow kind. The bound does not tell apart a builder that yields, under one name, HTTP method and
-    /// flow kind, a candidate whose handler depends on a capability beyond the one it carries: the bound compares what
-    /// a chain records of an endpoint, and a builder is handed the registration as the materialization answered it. An
-    /// endpoint that reads the registration's own capabilities as it runs reads the materialized ones.
+    /// HTTP method and flow kind. A resolution that answers more than the bound is held by it; a resolution that throws
+    /// leaves this method and the dispatch as the resolution for the loaded registration does.
+    /// </para>
+    /// <para>
+    /// The bound compares what a chain records of an endpoint, not what a builder or a handler reads: the library's
+    /// builders and handlers read a capability beyond the one a candidate carries from the resolved capabilities the
+    /// chain build writes on the context, which are held to the bound, so the token endpoint's registered grants and
+    /// its grant-type refusal's capability, the request-object endpoints, the end-session back-channel fan-out, the
+    /// discovery document's members, the federation Entity Configuration's client registration types and the Shared
+    /// Signals challenge answer a capability the materialization adds as one never held. An application's endpoint
+    /// that reads the registration's own capabilities as it runs reads the materialized ones.
     /// </para>
     /// <para>
     /// A policy change alone builds the chain again, since the endpoint builders read the per-request policy as they
@@ -1379,21 +1403,13 @@ public sealed class EndpointServer: IDisposable
     /// chain kept from the loaded registration would answer under the loaded registration's policy.
     /// </para>
     /// <para>
-    /// A capability the materialization removes is answered as one the registration never held: the chain built again
-    /// has no candidate for it, so the request is answered as a request no candidate matches or by the candidate that
-    /// refuses what the registration is not allowed. Two cases do not hold, both whenever the chain is built again,
-    /// for a capability removed or for a policy change alone. First, a token-serving grant the materialization adds
-    /// and the server serves answers the dispatcher's <c>404</c> where a registration that never held it answers
-    /// <c>unauthorized_client</c>: the token endpoint's module registers the grant from the record's own capabilities,
-    /// so its grant-type refusal declines the grant, while the bound drops the grant's own candidate. Second, when the
-    /// added capability precedes every kept one in the order the token endpoint takes its grant-type refusal's
-    /// capability from, the refusal itself carries the added capability and is dropped, so every token request no kept
-    /// grant candidate owns answers the <c>404</c>: a missing or blank <c>grant_type</c>, a grant the server serves
-    /// that the materialized registration does not hold, the removed one included, and a grant the server does not
-    /// serve, where a registration that never held the added capability answers <c>invalid_request</c>,
-    /// <c>unauthorized_client</c> and <c>unsupported_grant_type</c>. The cause of both is the token endpoint's module,
-    /// which reads the record's own capabilities for its registered grants and for the capability its refusal
-    /// carries.
+    /// A capability the materialization removes, or adds, is answered as one the registration never held: the chain
+    /// that serves the request, kept or built again, has no candidate for it, so the request is answered as a request
+    /// no candidate matches or by the candidate that refuses what the registration is not allowed; the token
+    /// endpoint's grant-type refusal takes its
+    /// registered grants and its own capability from the bounded capabilities, so a grant the materialization adds and
+    /// the server serves answers <c>unauthorized_client</c>, and a capability added ahead of every kept one in the
+    /// order the refusal takes its capability from leaves the refusal under a kept one.
     /// </para>
     /// <para>
     /// Whenever the chain is built again, the match-decision inspection (<see cref="MatchedStage"/>) runs again for
@@ -1408,6 +1424,14 @@ public sealed class EndpointServer: IDisposable
     /// another type than the loaded one is a fault of the application's wiring whatever its capabilities: no endpoint
     /// runs over it, the request is answered <c>500</c> <c>server_error</c> with the description the library answers a
     /// fault of the server's own wiring with, and the fault is recorded on the dispatch activity.
+    /// </para>
+    /// <para>
+    /// The set the request is served under is read once, after the materialized registration's policy and issuer are
+    /// resolved, as <c>ResolvedCapabilities</c> of <see cref="ExchangeContextServerExtensions"/>. A context that holds
+    /// no set at that point is answered as a record of another type is, since the bound is computed from that set and
+    /// no set leaves nothing to hold the materialized registration's capabilities to: no endpoint runs, the request
+    /// is answered <c>500</c> <c>server_error</c> with the same description, and the fault is recorded on the dispatch
+    /// activity.
     /// </para>
     /// </remarks>
     /// <param name="loaded">The registration the application's load seam answered.</param>
@@ -1459,21 +1483,39 @@ public sealed class EndpointServer: IDisposable
         PolicyEntries materializedPolicy = await ResolvePolicyAndIssuerAsync(
             materialized, requestIssuer, loadedPolicy, context, cancellationToken).ConfigureAwait(false);
 
-        if(!IsPolicyChanged(loadedPolicy, materializedPolicy)
-            && materialized.AllowedCapabilities.IsSupersetOf(loaded.AllowedCapabilities))
+        //The bound is computed from the set the request is served under; without one there is nothing to hold to.
+        if(context.ResolvedCapabilities is not { } loadedResolved)
         {
+            _ = activity?.AddException(new InvalidOperationException(
+                "The request's context holds no capabilities the request is served under, so the materialized "
+                + "registration has nothing to be held to."));
 
-            return await HandleCoreAsync(
-                matched.Endpoint, fields, context, activity, cancellationToken).ConfigureAwait(false);
+            return ServerHttpResponse.ServerError(ServerErrors.ServerError, ServerNotReadyDescription);
         }
 
-        IReadOnlySet<CapabilityIdentifier> loadedResolved =
-            context.ResolvedCapabilities ?? ImmutableHashSet<CapabilityIdentifier>.Empty;
         HashSet<CapabilityIdentifier> upperBound = [.. loadedResolved.Where(capability =>
             loaded.AllowedCapabilities.Contains(capability) && materialized.AllowedCapabilities.Contains(capability))];
 
+        //A materialized registration that keeps every loaded capability under an unchanged policy is resolved once and
+        //its answer held to the bound: equal to the loaded resolution, the loaded chain and its resolution stay; narrower,
+        //the chain is built again under it, handed the answer so the resolution seam is not asked a third time.
+        IReadOnlySet<CapabilityIdentifier>? materializedResolved = null;
+        if(!IsPolicyChanged(loadedPolicy, materializedPolicy)
+            && materialized.AllowedCapabilities.IsSupersetOf(loaded.AllowedCapabilities))
+        {
+            IReadOnlySet<CapabilityIdentifier> answered = await Integration.ResolveCapabilitiesAsync!(
+                materialized, context, cancellationToken).ConfigureAwait(false);
+            materializedResolved = answered;
+            if(loadedResolved.All(capability => upperBound.Contains(capability) && answered.Contains(capability)))
+            {
+
+                return await HandleCoreAsync(
+                    matched.Endpoint, fields, context, activity, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
         EndpointChain chain = await EndpointChain.BuildBoundedForRequestAsync(
-            materialized, upperBound, loadedChain, context, cancellationToken).ConfigureAwait(false);
+            materialized, upperBound, loadedChain, materializedResolved, context, cancellationToken).ConfigureAwait(false);
         context.SetEndpointChain(chain);
 
         MatchedEndpoint? rematched = await chain.MatchAsync(
@@ -1582,9 +1624,10 @@ public sealed class EndpointServer: IDisposable
 
     /// <summary>
     /// The <c>error_description</c> the dispatcher answers beside <see cref="ServerErrors.ServerError"/> when the
-    /// application's materialization answers a record of another type than the loaded registration: the fault is the
-    /// server's wiring, not the request. The same text as the description the library answers a fault of the server's
-    /// own wiring with; it names no seam, configuration or internal cause.
+    /// application's materialization answers a record of another type than the loaded registration, or when the
+    /// request's context holds no capabilities the request is served under as a materialized registration is judged:
+    /// the fault is the server's wiring, not the request. The same text as the description the library answers a
+    /// fault of the server's own wiring with; it names no seam, configuration or internal cause.
     /// </summary>
     private static string ServerNotReadyDescription { get; } = "The server is not ready to serve this request.";
 

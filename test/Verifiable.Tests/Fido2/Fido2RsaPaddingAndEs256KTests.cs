@@ -1,9 +1,12 @@
 using Microsoft.Extensions.Time.Testing;
+using Org.BouncyCastle.Crypto.Parameters;
+using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Fido2;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
+using BcBigInteger = Org.BouncyCastle.Math.BigInteger;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -138,6 +141,46 @@ internal sealed class Fido2RsaPaddingAndEs256KTests
     }
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8017#section-3.1">RFC 8017 Section 3.1</see>: "In a valid RSA
+    /// public key, the RSA modulus n is a product of u distinct odd primes r_i, i = 1, 2, ..., u, where u &gt;= 2,
+    /// and the RSA public exponent e is an integer between 3 and n - 1 satisfying GCD(e,\lambda(n)) = 1, where
+    /// \lambda(n) = LCM(r_1 - 1, ..., r_u - 1)." Under the exponent 1 the RSA function is the identity, so the
+    /// RSASSA-PKCS1-v1_5 SHA-256 encoded message of an assertion's signed data (the authenticator data followed by
+    /// the hash of the client data), computed with the exponent 1 over the same modulus, which needs no secret, is
+    /// its own signature. A stored RS256 credential
+    /// key whose COSE_Key carries the modulus of a 2048-bit key pair and <c>e</c> = 1 is no valid RSA public key: an
+    /// assertion that presents that encoded message as its signature is not verified by
+    /// <see cref="Fido2AssertionVerifier"/>, which turns the COSE_Key into the DER RSAPublicKey the test registry's
+    /// RSA verification function reads.
+    /// </summary>
+    /// <returns>A task that completes when the answer was asserted.</returns>
+    [TestMethod]
+    public async Task Rs256AssertionUnderACredentialKeyWithThePublicExponentOneIsNotVerified()
+    {
+        using Fido2AssertionOracle oracle = Fido2AssertionOracle.CreateRs256();
+        using MintedAssertion minted = await oracle.MintAsync(ValidChallenge, ValidOrigin, cancellationToken: TestContext.CancellationToken);
+
+        ReadOnlyMemory<byte> modulusOctets = oracle.CredentialPublicKey.N.GetValueOrDefault();
+        Assert.HasCount(256, modulusOctets.ToArray(), "The stored credential key carries the 256-octet modulus of a 2048-bit key pair.");
+        BcBigInteger modulus = new(1, modulusOctets.ToArray());
+        CoseKey exponentOneCredentialKey = new(
+            kty: oracle.CredentialPublicKey.Kty,
+            alg: WellKnownCoseAlgorithms.Rs256,
+            n: modulusOctets,
+            e: new byte[] { 0x01 });
+
+        using DigestValue clientDataHash = Fido2ClientDataHash.Compute(minted.ClientDataJson, BaseMemoryPool.Shared);
+        byte[] signedData = [.. minted.AuthenticatorData, .. clientDataHash.AsReadOnlySpan()];
+        byte[] encodedMessage = RsaSignatureFixtures.Sign("Pkcs1", "Sha256", new RsaKeyParameters(isPrivate: true, modulus, BcBigInteger.One), signedData);
+        Assert.HasCount(256, encodedMessage);
+
+        Fido2AssertionOutcome outcome = await VerifyAsync(exponentOneCredentialKey, encodedMessage, minted.AuthenticatorData, minted.ClientDataJson);
+
+        Assert.IsFalse(outcome.SignatureValid, "The encoded message under a credential key with the public exponent 1 is not a verified assertion signature.");
+    }
+
+
     /// <summary>An ES256K (secp256k1) assertion round-trips through the shipped verifier end to end.</summary>
     [TestMethod]
     public async Task Es256KAssertionRoundTripsThroughShippedVerifier()
@@ -213,16 +256,34 @@ internal sealed class Fido2RsaPaddingAndEs256KTests
     /// <see cref="Fido2AssertionVerifier"/> against <paramref name="credentialPublicKey"/>, which may differ
     /// from the key <paramref name="minted"/> was signed with (the algorithm-confusion tests above).
     /// </summary>
-    private async Task<Fido2AssertionOutcome> VerifyAsync(CoseKey credentialPublicKey, MintedAssertion minted)
+    /// <param name="credentialPublicKey">The stored credential public key.</param>
+    /// <param name="minted">The minted assertion's wire bytes and signature.</param>
+    /// <returns>The verifier's outcome.</returns>
+    private Task<Fido2AssertionOutcome> VerifyAsync(CoseKey credentialPublicKey, MintedAssertion minted) =>
+        VerifyAsync(credentialPublicKey, minted.Signature.AsReadOnlyMemory(), minted.AuthenticatorData, minted.ClientDataJson);
+
+
+    /// <summary>
+    /// Reconstructs an <see cref="AssertionCeremonyInput"/> from the wire bytes <paramref name="authenticatorData"/>
+    /// and <paramref name="clientDataJson"/> only and runs <see cref="Fido2AssertionVerifier"/> over
+    /// <paramref name="signature"/> against <paramref name="credentialPublicKey"/>: the ceremony an assertion whose
+    /// signature octets are presented as they are (not minted by a signer) goes through.
+    /// </summary>
+    /// <param name="credentialPublicKey">The stored credential public key.</param>
+    /// <param name="signature">The presented assertion signature octets.</param>
+    /// <param name="authenticatorData">The presented <c>authData</c>.</param>
+    /// <param name="clientDataJson">The presented <c>clientDataJSON</c>.</param>
+    /// <returns>The verifier's outcome.</returns>
+    private async Task<Fido2AssertionOutcome> VerifyAsync(CoseKey credentialPublicKey, ReadOnlyMemory<byte> signature, byte[] authenticatorData, byte[] clientDataJson)
     {
-        ClientData clientData = ClientDataJsonReader.Read(minted.ClientDataJson);
-        AuthenticatorData authenticatorData = AuthenticatorDataReader.Read(
-            minted.AuthenticatorData, Fido2TestVectors.TestCredentialPublicKeyReader, BaseMemoryPool.Shared);
+        ClientData clientData = ClientDataJsonReader.Read(clientDataJson);
+        AuthenticatorData readAuthenticatorData = AuthenticatorDataReader.Read(
+            authenticatorData, Fido2TestVectors.TestCredentialPublicKeyReader, BaseMemoryPool.Shared);
 
         using var ceremonyInput = new AssertionCeremonyInput
         {
             ClientData = clientData,
-            AuthenticatorData = authenticatorData,
+            AuthenticatorData = readAuthenticatorData,
             ExpectedChallenge = ValidChallenge,
             ExpectedOrigins = new HashSet<string> { ValidOrigin },
             ExpectedRpIdHash = Fido2TestVectors.WrapRpIdHash(Fido2TestVectors.CreateRpIdHash(), BaseMemoryPool.Shared),
@@ -235,9 +296,9 @@ internal sealed class Fido2RsaPaddingAndEs256KTests
 
         return await Fido2AssertionVerifier.VerifyAsync(
             credentialPublicKey,
-            minted.Signature.AsReadOnlyMemory(),
-            minted.AuthenticatorData,
-            minted.ClientDataJson,
+            signature,
+            authenticatorData,
+            clientDataJson,
             ceremonyInput,
             correlationId: "fido2-rsa-padding-es256k-test-correlation",
             pool: BaseMemoryPool.Shared,

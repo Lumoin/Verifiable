@@ -1964,7 +1964,7 @@ internal sealed class VcalmVerifierEndpointTests
                 isUninitialized ? null! : (algorithm, purpose, _) => (algorithm, purpose) switch
                 {
                     _ when algorithm.Equals(CryptoAlgorithm.P256) && purpose.Equals(Purpose.Verification) => MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
-                    _ => null!
+                    _ => null
                 });
             Assert.AreEqual(!isUninitialized, CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.IsInitialized);
             using JsonDocument response = await PostCredentialWireAsync(app, segment, body, 200).ConfigureAwait(false);

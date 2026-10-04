@@ -2357,6 +2357,82 @@ internal sealed class SourceHygieneTests
         Assert.IsTrue(failures[0].Contains("Second", StringComparison.Ordinal));
     }
 
+    /// <summary>The source file that declares every predefined key algorithm, relative to the repository root.</summary>
+    private static string CryptoAlgorithmSourceFile { get; } = "src/Verifiable.Cryptography/Context/CryptoAlgorithm.cs";
+
+    /// <summary>
+    /// Matches the declaration of a member of the type <c>CryptoAlgorithm</c> in
+    /// <see cref="CryptoAlgorithmSourceFile"/>: the member's modifiers directly before the type name, captured as
+    /// <c>modifiers</c>, then the member's name, captured as <c>name</c>, then what opens a property, an expression
+    /// body or an initializer, or ends a field. It reads a static member of the type, in any accessibility, that is
+    /// written as the file writes its declarations: the modifiers, the type's simple name and one plain identifier,
+    /// as a property with any accessor list, an expression-bodied property or a field. A method has a parameter
+    /// list after its name and so does not match, and an instance member is left out by the caller, which keeps the
+    /// matches whose modifiers hold the word <c>static</c>. A line that is a comment is not read, so a declaration
+    /// shown in a doc comment or a line comment is not taken. The pattern reads source text and has two limits. A
+    /// declaration written in another form is not read and leaves the row passing: one with a comment between its
+    /// modifiers and the type name, with the type name qualified by its namespace, with a verbatim identifier, or
+    /// with several names in one field declaration; the file holds none. A declaration-shaped text inside a block
+    /// comment, or inside a string literal that spans lines, is read as a declaration and fails the row; the file
+    /// holds none.
+    /// </summary>
+    private static Regex CryptoAlgorithmDeclarationPattern { get; } = new(
+        @"(?<modifiers>(?:\b(?:public|internal|private|protected|static|readonly|new)\s+)+)CryptoAlgorithm\s+(?<name>\w+)\s*(?:\{|=>|=|;)",
+        RegexOptions.Compiled);
+
+    /// <summary>Matches the modifier <c>static</c> as a whole word among the modifiers of a declaration.</summary>
+    private static Regex StaticModifierPattern { get; } = new(@"\bstatic\b", RegexOptions.Compiled);
+
+    /// <summary>
+    /// The rows of <see cref="Jose.JwsAlgorithmKeyBindingTests"/> place every predefined key algorithm: the set of
+    /// names of the key algorithms <see cref="CryptoAlgorithmSourceFile"/> declares equals the set of names, by
+    /// <see cref="Verifiable.Cryptography.Context.CryptoAlgorithmNames.GetName(Verifiable.Cryptography.Context.CryptoAlgorithm)"/>,
+    /// of the values its two listed arrays hold, the key algorithms the table binds and those it binds to none, and no
+    /// value stands in both arrays or twice in one. A key algorithm declared later without a place in either array
+    /// fails naming that key algorithm, and a listed value no declaration names fails naming that value.
+    /// A key algorithm declared in any accessibility, or as a field, in a form
+    /// <see cref="CryptoAlgorithmDeclarationPattern"/> reads, is read as declared, so the row fails until the rows
+    /// place it.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.1">RFC 8725 Section 3.1</see>: "Moreover, each
+    /// key MUST be used with exactly one algorithm, and this MUST be checked when the cryptographic operation is
+    /// performed."
+    /// </summary>
+    [TestMethod]
+    public void JwsAlgorithmKeyBindingRowsPlaceEveryDeclaredKeyAlgorithm()
+    {
+        string repositoryRoot = SourceHygieneScanner.FindRepositoryRoot();
+        string sourceText = string.Join('\n', File.ReadAllLines(Path.Join(repositoryRoot, CryptoAlgorithmSourceFile))
+            .Where(static line => !line.TrimStart().StartsWith("//", StringComparison.Ordinal)));
+        HashSet<string> declaredNames = [.. CryptoAlgorithmDeclarationPattern.Matches(sourceText)
+            .Where(static match => StaticModifierPattern.IsMatch(match.Groups["modifiers"].Value))
+            .Select(static match => match.Groups["name"].Value)];
+        int listedCount = Jose.JwsAlgorithmKeyBindingTests.TableKeyAlgorithms.Length + Jose.JwsAlgorithmKeyBindingTests.UnboundKeyAlgorithms.Length;
+        int distinctCount = Jose.JwsAlgorithmKeyBindingTests.TableKeyAlgorithms.Concat(Jose.JwsAlgorithmKeyBindingTests.UnboundKeyAlgorithms).Distinct().Count();
+        HashSet<string> listedNames = [.. Jose.JwsAlgorithmKeyBindingTests.TableKeyAlgorithms
+            .Concat(Jose.JwsAlgorithmKeyBindingTests.UnboundKeyAlgorithms)
+            .Select(static keyAlgorithm => Verifiable.Cryptography.Context.CryptoAlgorithmNames.GetName(keyAlgorithm))];
+        List<string> failures = [];
+
+        foreach(string name in declaredNames.Order(StringComparer.Ordinal))
+        {
+            if(!listedNames.Contains(name))
+            {
+                failures.Add($"{CryptoAlgorithmSourceFile}: {name} is declared but neither array of the table's rows places it.");
+            }
+        }
+
+        foreach(string name in listedNames.Order(StringComparer.Ordinal))
+        {
+            if(!declaredNames.Contains(name))
+            {
+                failures.Add($"{CryptoAlgorithmSourceFile}: the table's rows place {name}, which no declaration names.");
+            }
+        }
+
+        Assert.AreEqual(listedCount, distinctCount, "A key algorithm stands in both arrays or twice in one.");
+        Assert.IsEmpty(failures, string.Join(Environment.NewLine, failures));
+    }
+
     /// <summary>
     /// The catalogue's stand-in for a verification method type the library does not recognise: a member the catalogue
     /// exposes that by its meaning describes no type, so the catalogue list leaves it out.

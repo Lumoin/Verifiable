@@ -18,7 +18,7 @@ public static class NoMatchCategories
 {
     /// <summary>
     /// No <see cref="Verifiable.Server.IRegistrationRecord"/> exists for the resolved tenant, so
-    /// <see cref="EndpointChain.BuildForRequestAsync"/> never ran.
+    /// the dispatcher's chain build never ran.
     /// </summary>
     public static string NoRegistrationForTenant { get; } = "no_registration_for_tenant";
 

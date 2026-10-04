@@ -641,8 +641,10 @@ public static class MetadataEndpoints
                     //the sender — there is no OP endpoint to chain — so the boolean flags are
                     //emitted here rather than via a candidate's DiscoveryMetadataKey. The OP
                     //includes a sid in its Logout Tokens (the per-session sid), so session-based
-                    //back-channel logout is supported too.
-                    if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OidcBackChannelLogout)
+                    //back-channel logout is supported too. The capability is read from the set the
+                    //request is served under, held to the bound, so the document advertises only what
+                    //the end-session fan-out sends.
+                    if(context.IsBoundedCapabilityAllowed(WellKnownCapabilityIdentifiers.OidcBackChannelLogout)
                         && oauth.DeliverBackChannelLogoutAsync is not null)
                     {
                         AppendBooleanField(
@@ -662,8 +664,9 @@ public static class MetadataEndpoints
                     //allowed AND the CIMD resolver seam is wired (fail-closed) — mirroring
                     //the back-channel-logout dual gate above. CIMD applies AS-wide (any
                     //grant a URL-shaped client_id can drive), so this is not gated on
-                    //authorizationCodeOnChain.
-                    if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthClientIdMetadataDocument)
+                    //authorizationCodeOnChain. The capability is read from the set the request is
+                    //served under, held to the bound.
+                    if(context.IsBoundedCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthClientIdMetadataDocument)
                         && oauth.ResolveClientMetadataAsync is not null)
                     {
                         AppendBooleanField(

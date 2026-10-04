@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Frozen;
 using System.Collections.Immutable;
 using System.Diagnostics;
 
@@ -162,6 +163,18 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
     /// driving the chain outside admission use a supplied Server fallback and must call
     /// <see cref="Verifiable.Server.ExchangeContextServerExtensions.SetServer"/> themselves.
     /// </para>
+    /// <para>
+    /// This member is for a context its caller owns. A build under a configuration that holds an endpoint
+    /// builder writes the capabilities it resolves to <paramref name="context"/>, in the entry named
+    /// <c>server.resolvedCapabilities</c> that <c>ResolvedCapabilities</c> reads; a build under a
+    /// configuration that holds none answers the empty chain and writes nothing. A context carries the
+    /// capabilities of one build: a context that carries the set a chain build wrote for it is refused.
+    /// The context of a request carries that set from the dispatcher's chain build onwards when that build
+    /// wrote one, so a build on it from a seam that runs after that build is then refused, and a build on
+    /// it from a seam that runs before that build is written over by it. A caller builds again on a fresh
+    /// context of its own. Code that removes or replaces the entry and then builds has rewritten the
+    /// context, which is the application's own act.
+    /// </para>
     /// </remarks>
     /// <param name="registration">
     /// The client registration whose capabilities determine which endpoints
@@ -186,14 +199,28 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
     /// <paramref name="context"/> is <see langword="null"/>.
     /// </exception>
     /// <exception cref="InvalidOperationException">
-    /// Thrown when <c>RequestServer</c> on
-    /// <paramref name="context"/> is <see langword="null"/>.
+    /// Thrown when <paramref name="context"/> already carries the capabilities a chain build resolved for it
+    /// (<c>ResolvedCapabilities</c> is not <see langword="null"/>), before anything else is read or called, or
+    /// when <c>RequestServer</c> on <paramref name="context"/> is <see langword="null"/>.
     /// </exception>
-    public static ValueTask<EndpointChain> BuildForRequestAsync(
+    public static async ValueTask<EndpointChain> BuildForRequestAsync(
         IRegistrationRecord registration,
         ExchangeContext context,
-        CancellationToken cancellationToken) =>
-        BuildBoundedForRequestAsync(registration, upperBound: null, boundingChain: null, context, cancellationToken);
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(registration);
+        ArgumentNullException.ThrowIfNull(context);
+        if(context.ResolvedCapabilities is not null)
+        {
+            throw new InvalidOperationException(
+                "The context already carries the capabilities of a chain build, and a context carries the "
+                + "capabilities of one build. Build the chain on a context of the caller's own.");
+        }
+
+        return await BuildBoundedForRequestAsync(
+            registration, upperBound: null, boundingChain: null, resolvedCapabilities: null, context, cancellationToken)
+            .ConfigureAwait(false);
+    }
 
 
     /// <summary>
@@ -201,11 +228,21 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
     /// <see cref="BuildForRequestAsync"/> does, with the
     /// capabilities the capability-resolution seam answers held to <paramref name="upperBound"/>: a resolved set never
     /// exceeds the bound, so a capability outside it neither admits a candidate to the chain nor reaches the set
-    /// stashed on <paramref name="context"/> for the gates that run inside the endpoints, and with the endpoints held to
+    /// stashed on <paramref name="context"/>, before any builder is called, for the builders and for the gates that
+    /// run inside the endpoints. The stashed set is the library's immutable copy, made by walking the bound, or the
+    /// registration's own <see cref="IRegistrationRecord.AllowedCapabilities"/> when no bound is given, and asking
+    /// the answer for each capability, never from the answer's own subset test or enumeration, so the seam's answer
+    /// can only narrow what the registration allows. The endpoints are held to
     /// those of <paramref name="boundingChain"/>: a candidate that chain holds no endpoint of, by name, HTTP method and
     /// flow kind together, is dropped and recorded among <see cref="CapabilityFilteredCandidateNames"/>.
     /// </summary>
     /// <remarks>
+    /// <para>
+    /// The dispatcher's first build of a request calls this member with no bound, as
+    /// <see cref="BuildForRequestAsync"/> does, and its judgement of a materialized registration calls it again on
+    /// the same context; it writes the capabilities it resolves whether or not the context already carries a set, so
+    /// a request's context is written again by the dispatcher's own builds alone.
+    /// </para>
     /// <para>
     /// The dispatcher passes both bounds when it judges a request by the registration the application's
     /// <see cref="ServerIntegration.MaterializeRegistrationAsync"/> answered: the capabilities resolved for the
@@ -217,9 +254,12 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
     /// chain holds an endpoint of the same name, HTTP method and flow kind.
     /// </para>
     /// <para>
-    /// The bound does not tell apart a builder that yields, under one name, HTTP method and flow kind, a candidate
-    /// whose handler depends on a capability beyond the one it carries: the bound compares what a chain records of an
-    /// endpoint, and a builder is handed the registration as the materialization answered it, so such a candidate is
+    /// The chain bound compares what a chain records of an endpoint, not what a builder or a handler reads. The
+    /// library's builders and handlers read a capability beyond the one a candidate carries from the stashed set, so
+    /// the bounded capabilities decide those reads as well: the token endpoint's registered grants and its grant-type
+    /// refusal's capability, the request-object endpoints' second capability, and the handlers' reads. An
+    /// application's builder that hands a candidate a handler depending on a capability beyond the one it carries, read
+    /// from the registration as the materialization answered it, is held by the chain bound only: such a candidate is
     /// admitted wherever the bounding chain holds an endpoint of its name, HTTP method and flow kind.
     /// </para>
     /// <para>
@@ -228,22 +268,27 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
     /// flow kind, one of them behind a gate that reads a second capability, so a name bound would admit the gated one
     /// where the bounding chain holds only the other. The name, the HTTP method and the flow kind identify the
     /// candidate's role. Its capability is held by the capability bound and is not part of the identity, since a
-    /// builder may choose a candidate's capability from the registration's own capabilities: the library's token
-    /// endpoint builds its grant-type refusal under the first token-serving capability the registration allows, so a
-    /// materialization that removes that capability moves the same refusal to a kept one, and the refusal answers the
-    /// removed grant as for a registration that never held it.
+    /// builder may choose a candidate's capability from the capabilities the request is served under: the library's
+    /// token endpoint builds its grant-type refusal under the first token-serving capability of the stashed set, so a
+    /// materialization that removes that capability, or adds one ahead of it, leaves the same refusal under a kept
+    /// one, and the refusal answers the grant as for a registration that never held it.
     /// </para>
     /// </remarks>
     /// <param name="registration">
     /// The client registration whose capabilities determine which endpoints each module produces.
     /// </param>
     /// <param name="upperBound">
-    /// The capabilities the resolved set is held to, or <see langword="null"/> to take the resolved set as the
-    /// capability-resolution seam answers it.
+    /// The capabilities the resolved set is held to, or <see langword="null"/> to hold the resolved set to the
+    /// registration's own <see cref="IRegistrationRecord.AllowedCapabilities"/>.
     /// </param>
     /// <param name="boundingChain">
     /// The chain whose endpoints this chain's endpoints are held to, by name, HTTP method and flow kind, or
     /// <see langword="null"/> for no such bound.
+    /// </param>
+    /// <param name="resolvedCapabilities">
+    /// The capabilities the capability-resolution seam already answered for <paramref name="registration"/> in this
+    /// request, taken in place of a second call of the seam and copied as a fresh answer is, or
+    /// <see langword="null"/> to call the seam.
     /// </param>
     /// <param name="context">The per-request context, carrying the active <see cref="EndpointServer"/>.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -258,6 +303,7 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
         IRegistrationRecord registration,
         IReadOnlySet<CapabilityIdentifier>? upperBound,
         EndpointChain? boundingChain,
+        IReadOnlySet<CapabilityIdentifier>? resolvedCapabilities,
         ExchangeContext context,
         CancellationToken cancellationToken)
     {
@@ -283,15 +329,20 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
 
         //Per-call capability set — CAEP/RISC attenuation point. The library
         //default returns registration.AllowedCapabilities unchanged; custom
-        //wirings narrow the set in response to per-request signals.
-        IReadOnlySet<CapabilityIdentifier> resolvedCapabilities =
-            await server.Integration.ResolveCapabilitiesAsync!(
+        //wirings narrow the set in response to per-request signals. A set the
+        //dispatcher already resolved for this registration in this request is
+        //taken as the seam's answer, so the seam is not asked twice.
+        IReadOnlySet<CapabilityIdentifier> answered = resolvedCapabilities
+            ?? await server.Integration.ResolveCapabilitiesAsync!(
                 registration, context, cancellationToken).ConfigureAwait(false);
 
-        //A bound holds the resolved set to it; a set already within the bound is taken as resolved.
-        IReadOnlySet<CapabilityIdentifier> allowedCapabilities = upperBound is null || resolvedCapabilities.IsSubsetOf(upperBound)
-            ? resolvedCapabilities
-            : resolvedCapabilities.Where(upperBound.Contains).ToHashSet();
+        //The set the request is served under is the library's own immutable copy, so an answer the application
+        //changes after handing it back changes nothing the chain, the dispatcher or a reader decides on. The copy
+        //walks the bound when one is given and the registration's own capabilities otherwise, and asks the answer
+        //for each capability, so an answer that holds a capability beyond them, or whose own subset test or
+        //enumeration reaches beyond them, adds nothing: a capability resolution can only narrow.
+        IEnumerable<CapabilityIdentifier> walked = upperBound ?? registration.AllowedCapabilities;
+        FrozenSet<CapabilityIdentifier> allowedCapabilities = walked.Where(answered.Contains).ToFrozenSet();
 
         //Stash on the context so request-time gating sites running inside
         //handlers (e.g., token-producer attenuation) can read the same

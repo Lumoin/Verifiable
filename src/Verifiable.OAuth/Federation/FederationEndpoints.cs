@@ -277,16 +277,16 @@ public static class FederationEndpoints
                 string alg = CryptoFormatConversions.DefaultTagToJwaConverter(privateKey.Tag);
 
                 //Advertise the registration types this OP accepts (Federation §12)
-                //from the registration's enabled federation capabilities, so the
-                //published Entity Configuration matches what the endpoints actually
-                //serve. Automatic (§12.1) first, then explicit (§12.2).
+                //from the federation capabilities the request is served under, held
+                //to the bound, so the published Entity Configuration matches what the
+                //endpoints actually serve. Automatic (section 12.1) first, then explicit (section 12.2).
                 List<string> clientRegistrationTypesSupported = [];
-                if(registration.IsCapabilityAllowed(WellKnownFederationCapabilityIdentifiers.RegisterClientsAutomatically))
+                if(context.IsBoundedCapabilityAllowed(WellKnownFederationCapabilityIdentifiers.RegisterClientsAutomatically))
                 {
                     clientRegistrationTypesSupported.Add(WellKnownFederationRegistrationTypeValues.Automatic);
                 }
 
-                if(registration.IsCapabilityAllowed(WellKnownFederationCapabilityIdentifiers.RegisterClientsExplicitly))
+                if(context.IsBoundedCapabilityAllowed(WellKnownFederationCapabilityIdentifiers.RegisterClientsExplicitly))
                 {
                     clientRegistrationTypesSupported.Add(WellKnownFederationRegistrationTypeValues.Explicit);
                 }

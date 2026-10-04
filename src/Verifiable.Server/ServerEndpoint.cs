@@ -183,9 +183,9 @@ public sealed record ServerEndpoint
 
     /// <summary>
     /// The per-request absolute URL this endpoint is reachable at, computed
-    /// by <see cref="Pipeline.EndpointChain.BuildForRequestAsync"/> via
+    /// by the dispatcher's chain build via
     /// <see cref="ServerIntegration.ResolveEndpointUriAsync"/>
-    /// once per request. Matchers compare the inbound path against
+    /// once per build. Matchers compare the inbound path against
     /// <see cref="Uri.AbsolutePath"/> rather than carrying path templates
     /// themselves; discovery emission reads it for the
     /// <see cref="DiscoveryMetadataKey"/> field publication.

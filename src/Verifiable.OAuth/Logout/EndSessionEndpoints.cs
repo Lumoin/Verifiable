@@ -187,10 +187,12 @@ public static class EndSessionEndpoints
                     //OIDC Back-Channel Logout 1.0: once the local session has ended, fan the
                     //logout out to the registered RPs. Gated identically to the discovery
                     //advertisement (capability allowed + deliver seam wired) so the OP behaves
-                    //exactly as it advertises. The verified id_token_hint path is the one that
-                    //carries the sub/sid the Logout Tokens are built from; the sessionless
-                    //logout_hint path leaves any cascade to the app's by-hint terminate.
-                    if(registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OidcBackChannelLogout)
+                    //exactly as it advertises. The capability is read from the set the request
+                    //is served under, held to the bound, so a capability the resolution withholds
+                    //or a materialization adds sends nothing. The verified id_token_hint path is
+                    //the one that carries the sub/sid the Logout Tokens are built from; the
+                    //sessionless logout_hint path leaves any cascade to the app's by-hint terminate.
+                    if(context.IsBoundedCapabilityAllowed(WellKnownCapabilityIdentifiers.OidcBackChannelLogout)
                         && oauth.DeliverBackChannelLogoutAsync is not null)
                     {
                         await oauth.DeliverBackChannelLogoutAsync(

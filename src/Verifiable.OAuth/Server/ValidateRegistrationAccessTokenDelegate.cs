@@ -14,8 +14,14 @@ namespace Verifiable.OAuth.Server;
 /// </para>
 /// <para>
 /// Constant-time comparison is the application's responsibility. The
-/// library calls this delegate exactly once per RFC 7592 request after
-/// extracting the <c>Authorization: Bearer</c> header.
+/// library calls this delegate at most once per RFC 7592 request, after
+/// extracting the <c>Authorization: Bearer</c> header: once for a request whose stored
+/// record exists and names the client of the request's registration, and not at all for a
+/// request that is refused before the token is checked, which is a request whose
+/// <c>Authorization</c> field holds no Bearer token or is sent on two lines, a request whose
+/// stored record is gone, is not a client record or names another client than the request's
+/// registration, and a request whose registration is not a client record when the endpoint
+/// runs or whose application has not wired this delegate.
 /// </para>
 /// </remarks>
 /// <param name="tenantId">The tenant the registration belongs to.</param>

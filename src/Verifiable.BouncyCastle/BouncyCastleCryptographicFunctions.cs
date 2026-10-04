@@ -13,6 +13,7 @@ using System.Buffers;
 using System.Collections.Frozen;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Formats.Asn1;
 using System.Security.Cryptography;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -26,6 +27,41 @@ namespace Verifiable.BouncyCastle
     /// library. This includes Ed25519, ECDSA (P-256, P-384, P-521, secp256k1), RSA PKCS#1 v1.5, RSA-PSS,
     /// and X25519 key agreement. All signing operations produce pool-allocated signatures tagged
     /// with their algorithm. All ECDSA signatures use the fixed-size IEEE P1363 (r || s) encoding.
+    /// Every verification member answers <c>false</c>, raising nothing, for presented public key and
+    /// signature octets it or BouncyCastle refuses, and reads only the encodings its algorithm
+    /// defines (for RSA also the bare modulus under the exponent 65537, this library's own
+    /// convention, not RFC 8017's). Every RSA member reads the public key octets by one rule. The
+    /// octets do not state their own encoding, so they are read by form, in this order. (1) Octets
+    /// that are exactly the DER <c>RSAPublicKey</c> of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8017#appendix-A.1.1">RFC 8017 Appendix A.1.1</see>
+    /// (a SEQUENCE of two INTEGERs with nothing after them inside the SEQUENCE and nothing after the
+    /// SEQUENCE), whatever their length, are that modulus and that exponent. (2) Any other octets
+    /// are the bare modulus they spell, under the exponent 65537, and octets whose first octet is
+    /// zero are no modulus. So a bare modulus whose octets happen to be exactly such a structure is
+    /// read as that structure. The JWK reader hands a bare modulus of 256 or 512 octets, and the
+    /// library's managed certificate verifiers one of the certificate's own size after holding its
+    /// exponent to 65537 themselves; <c>did:key</c>, a COSE_Key and a certificate's subject public
+    /// key hand the DER <c>RSAPublicKey</c>, which the first arm reads. A bare modulus is held to the minimum number
+    /// of octets, the rule <see href="https://www.rfc-editor.org/rfc/rfc7518#section-2">RFC 7518
+    /// Section 2</see> states for the Base64urlUInt a JWK's <c>n</c> is: "The octet sequence MUST
+    /// utilize the minimum number of octets needed to represent the value." Every reading is held to
+    /// <see cref="RsaUtilities.IsValidPublicKey"/> before anything is constructed from it. What each
+    /// member answers <c>false</c> for, by algorithm. ECDSA: a public key other than 0x02
+    /// or 0x03 at the compressed length or 0x04 at the uncompressed length (the hybrid 0x06 and 0x07 and
+    /// the infinity encoding included), a point the curve's decoder refuses, and a signature that is not
+    /// exactly the two components. RSA (PKCS#1 v1.5 and PSS): an exact DER modulus or exponent that is
+    /// not positive, a bare modulus whose first octet is zero, a reading <see cref="RsaUtilities.IsValidPublicKey"/> refuses (an exponent below 3, not
+    /// below the modulus or even, a modulus that is even or below 1024 bits), parameters BouncyCastle refuses
+    /// to construct (a modulus with a small prime factor), a modulus the signer's initialization refuses, a
+    /// signature that is not the modulus length or whose value is 0, 1, n - 1 or more, and for PSS under a
+    /// modulus whose bit length is 1 modulo 8 a signature whose recovered representative does not fit the
+    /// encoded message. Ed25519: a public key that is not 32 octets, 32 octets BouncyCastle refuses to
+    /// decode, and a signature that is not 64 octets. ML-DSA: a public key BouncyCastle refuses for the
+    /// parameter set and a signature of the wrong length. Where BouncyCastle itself refuses a public key, it
+    /// raises <see cref="ArgumentException"/> or <see cref="FormatException"/>, which each member catches only
+    /// around the decoding, the parameter construction and the verifier's initialization; what its RSA engine
+    /// and PSS signer would raise for a signature is checked before they run. The verification arithmetic and
+    /// the provider's own faults are not caught.
     /// The registered <see cref="ComputeDigestDelegate"/> entry point for this provider
     /// (<see cref="ComputeDigest"/>, <see cref="ComputeBlake3DigestAsync"/>) lives here too — see
     /// <see cref="DigestValue"/> for how a consumer discovers and wires it.
@@ -257,7 +293,22 @@ namespace Verifiable.BouncyCastle
         /// <param name="timeProvider">The time source for the <see cref="VerificationCompletedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
         /// <param name="cancellationToken">A token to observe for cancellation.</param>
-        /// <returns><c>true</c> if the signature is valid; otherwise, <c>false</c>.</returns>
+        /// <returns>
+        /// <c>true</c> if the signature is valid; otherwise, <c>false</c>, which is also the answer, with no
+        /// exception, for a public key that is not 32 octets, for 32 octets BouncyCastle refuses as a public key,
+        /// and for a signature that is not 64 octets.
+        /// </returns>
+        /// <remarks>
+        /// <see href="https://www.rfc-editor.org/rfc/rfc8032#section-5.1.7">RFC 8032 Section 5.1.7</see>, step 1:
+        /// "Decode the public key A as point A'.  If any of the decodings fail (including S being out of range), the
+        /// signature is invalid." <see href="https://www.rfc-editor.org/rfc/rfc8032#section-5.1.3">Section 5.1.3</see>
+        /// decodes a point from a 32-octet string, so a public key of any other length is refused before
+        /// BouncyCastle reads it (it reads the first 32 octets of a longer buffer and refuses a shorter one with an
+        /// exception). 32 octets BouncyCastle refuses to decode as a public key (a y coordinate not below p, the
+        /// neutral point), which it reports with <see cref="ArgumentException"/>, answer <c>false</c>; the catch
+        /// covers the public key's construction and the verifier's initialization only. BouncyCastle's verifier
+        /// answers <c>false</c> for a signature that is not 64 octets.
+        /// </remarks>
         public static ValueTask<(bool IsVerified, CryptoEvent? Event)> VerifyEd25519Async(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> publicKeyMaterial, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ProviderOperation operation = new(nameof(VerifyEd25519Async));
@@ -268,9 +319,26 @@ namespace Verifiable.BouncyCastle
                 _ = activity.SetTag(CryptoTelemetry.Signature.Algorithm, "Ed25519");
             }
 
-            var publicKey = new Ed25519PublicKeyParameters(publicKeyMaterial.ToArray(), 0);
+            //RFC 8032 Section 5.1.3: a point is decoded from a 32-octet string; the presented public key of any
+            //other length is no Ed25519 public key.
+            if(publicKeyMaterial.Length != Ed25519PublicKeyParameters.KeySize)
+            {
+                return NotVerified(CryptoAlgorithm.Ed25519, VerificationOutcome.Error, dataToVerify.Length, timeProvider);
+            }
+
+            //RFC 8032 Section 5.1.7 step 1: 32 octets BouncyCastle refuses to decode as a public key are no point
+            //a signature is valid under.
             var validator = new Ed25519Signer();
-            validator.Init(forSigning: false, publicKey);
+            try
+            {
+                var publicKey = new Ed25519PublicKeyParameters(publicKeyMaterial.ToArray(), 0);
+                validator.Init(forSigning: false, publicKey);
+            }
+            catch(Exception ex) when(IsMaterialRefusal(ex))
+            {
+                return NotVerified(CryptoAlgorithm.Ed25519, VerificationOutcome.Error, dataToVerify.Length, timeProvider);
+            }
+
             validator.BlockUpdate(dataToVerify.ToArray(), off: 0, len: dataToVerify.Length);
 
             bool isVerified = validator.VerifySignature(signature.ToArray());
@@ -582,7 +650,7 @@ namespace Verifiable.BouncyCastle
         /// </summary>
         /// <param name="dataToVerify">The original data that was signed.</param>
         /// <param name="signature">The RSA signature to verify.</param>
-        /// <param name="publicKeyMaterial">The DER-encoded RSA 2048 public key.</param>
+        /// <param name="publicKeyMaterial">The RSA public key octets, read by the rule the class summary states.</param>
         /// <param name="timeProvider">The time source for the <see cref="VerificationCompletedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
         /// <param name="cancellationToken">A token to observe for cancellation.</param>
@@ -615,7 +683,7 @@ namespace Verifiable.BouncyCastle
         /// </summary>
         /// <param name="dataToVerify">The original data that was signed.</param>
         /// <param name="signature">The RSA signature to verify.</param>
-        /// <param name="publicKeyMaterial">The DER-encoded RSA 4096 public key.</param>
+        /// <param name="publicKeyMaterial">The RSA public key octets, read by the rule the class summary states.</param>
         /// <param name="timeProvider">The time source for the <see cref="VerificationCompletedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
         /// <param name="cancellationToken">A token to observe for cancellation.</param>
@@ -648,7 +716,7 @@ namespace Verifiable.BouncyCastle
         /// </summary>
         /// <param name="dataToVerify">The original data that was signed.</param>
         /// <param name="signature">The RSA signature to verify.</param>
-        /// <param name="publicKeyMaterial">The DER-encoded RSA public key.</param>
+        /// <param name="publicKeyMaterial">The RSA public key octets, read by the rule the class summary states.</param>
         /// <param name="timeProvider">The time source for the <see cref="VerificationCompletedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
         /// <param name="cancellationToken">A token to observe for cancellation.</param>
@@ -681,7 +749,7 @@ namespace Verifiable.BouncyCastle
         /// </summary>
         /// <param name="dataToVerify">The original data that was signed.</param>
         /// <param name="signature">The RSA signature to verify.</param>
-        /// <param name="publicKeyMaterial">The DER-encoded RSA public key.</param>
+        /// <param name="publicKeyMaterial">The RSA public key octets, read by the rule the class summary states.</param>
         /// <param name="timeProvider">The time source for the <see cref="VerificationCompletedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
         /// <param name="cancellationToken">A token to observe for cancellation.</param>
@@ -714,7 +782,7 @@ namespace Verifiable.BouncyCastle
         /// </summary>
         /// <param name="dataToVerify">The original data that was signed.</param>
         /// <param name="signature">The RSA signature to verify.</param>
-        /// <param name="publicKeyMaterial">The DER-encoded RSA public key.</param>
+        /// <param name="publicKeyMaterial">The RSA public key octets, read by the rule the class summary states.</param>
         /// <param name="timeProvider">The time source for the <see cref="VerificationCompletedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
         /// <param name="cancellationToken">A token to observe for cancellation.</param>
@@ -747,7 +815,7 @@ namespace Verifiable.BouncyCastle
         /// </summary>
         /// <param name="dataToVerify">The original data that was signed.</param>
         /// <param name="signature">The RSA signature to verify.</param>
-        /// <param name="publicKeyMaterial">The DER-encoded RSA public key.</param>
+        /// <param name="publicKeyMaterial">The RSA public key octets, read by the rule the class summary states.</param>
         /// <param name="timeProvider">The time source for the <see cref="VerificationCompletedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
         /// <param name="cancellationToken">A token to observe for cancellation.</param>
@@ -780,7 +848,7 @@ namespace Verifiable.BouncyCastle
         /// </summary>
         /// <param name="dataToVerify">The original data that was signed.</param>
         /// <param name="signature">The RSA signature to verify.</param>
-        /// <param name="publicKeyMaterial">The DER-encoded RSA public key.</param>
+        /// <param name="publicKeyMaterial">The RSA public key octets, read by the rule the class summary states.</param>
         /// <param name="timeProvider">The time source for the <see cref="VerificationCompletedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
         /// <param name="cancellationToken">A token to observe for cancellation.</param>
@@ -813,7 +881,7 @@ namespace Verifiable.BouncyCastle
         /// </summary>
         /// <param name="dataToVerify">The original data that was signed.</param>
         /// <param name="signature">The RSA signature to verify.</param>
-        /// <param name="publicKeyMaterial">The DER-encoded RSA public key.</param>
+        /// <param name="publicKeyMaterial">The RSA public key octets, read by the rule the class summary states.</param>
         /// <param name="timeProvider">The time source for the <see cref="VerificationCompletedEvent"/> timestamp.</param>
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
         /// <param name="cancellationToken">A token to observe for cancellation.</param>
@@ -1010,9 +1078,39 @@ namespace Verifiable.BouncyCastle
 
         /// <summary>
         /// Verifies an ECDSA signature in IEEE P1363 encoding against the specified curve.
-        /// The public key may be in compressed or uncompressed SEC1 encoding; BouncyCastle
-        /// handles both transparently via <c>DecodePoint</c>.
+        /// The public key is in compressed or uncompressed SEC1 encoding, both of which BouncyCastle's
+        /// <c>DecodePoint</c> reads.
         /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The public key is read only in the two SEC1 encodings: 0x02 or 0x03 followed by the field's octet length
+        /// (compressed), or 0x04 followed by twice it (uncompressed). Presented octets of any other length or first
+        /// octet (the empty ones, the hybrid encodings 0x06 and 0x07, the infinity encoding 0x00, the uncompressed
+        /// prefix at the compressed length) answer <c>false</c> before any point is decoded. A point the curve's
+        /// decoder or BouncyCastle's parameter construction refuses (a point not on the curve, a compressed
+        /// coordinate with no point), which BouncyCastle reports with <see cref="ArgumentException"/> or
+        /// <see cref="FormatException"/>, answers <c>false</c> too; the catch covers the decoding, the parameter
+        /// construction and the verifier's initialization, never the verification arithmetic.
+        /// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.4">RFC 8725 Section 3.4</see>: "The JWS/JWE
+        /// library itself must validate these inputs before using them, or it must use underlying cryptographic
+        /// libraries that do so (or both!)."
+        /// </para>
+        /// <para>
+        /// The signature is exactly the two components and nothing else: one of any other length answers
+        /// <c>false</c>. <see href="https://www.rfc-editor.org/rfc/rfc7518#section-3.4">RFC 7518 Section 3.4</see>
+        /// for P-256: "The JWS Signature value MUST be a 64-octet sequence.  If it is not a 64-octet sequence, the
+        /// validation has failed." The same section fixes P-384 and P-521: "For ECDSA P-384 SHA-384, R and S will be
+        /// 384 bits each, resulting in a 96-octet sequence." and "For ECDSA P-521 SHA-512, R and S will be 521 bits
+        /// each, resulting in a 132-octet sequence."
+        /// <see href="https://www.rfc-editor.org/rfc/rfc8812#section-3.2">RFC 8812 Section 3.2</see> fixes
+        /// secp256k1: "The resulting 64-octet sequence is the JWS Signature or COSE signature value." The Brainpool
+        /// curves P256r1, P320r1, P384r1 and P512r1 are registered for COSE by
+        /// <see href="https://www.rfc-editor.org/rfc/rfc9864#section-2.1">RFC 9864 Section 2.1</see>, whose ECDSA
+        /// signature form is that of <see href="https://www.rfc-editor.org/rfc/rfc9053#section-2.1">RFC 9053 Section
+        /// 2.1</see>, a document not quoted here; brainpoolP224r1 has no
+        /// signature registration, and its length is this provider's own two components of 28 octets.
+        /// </para>
+        /// </remarks>
         /// <param name="dataToVerify">The original data that was signed.</param>
         /// <param name="signature">The IEEE P1363-encoded signature (r || s).</param>
         /// <param name="publicKeyMaterial">The SEC1-encoded public key (compressed or uncompressed).</param>
@@ -1020,7 +1118,11 @@ namespace Verifiable.BouncyCastle
         /// <param name="curveName">The SEC curve name (e.g., "secp256r1", "secp256k1").</param>
         /// <param name="componentSize">The byte length of each signature component (r and s).</param>
         /// <param name="timeProvider">The time source for the <see cref="VerificationCompletedEvent"/> timestamp.</param>
-        /// <returns><c>true</c> if the signature is valid; otherwise, <c>false</c>.</returns>
+        /// <returns>
+        /// <c>true</c> if the signature is valid; otherwise, <c>false</c>, which is also the answer, with no
+        /// exception, for public key octets that are no SEC1 point of the curve and for a signature that is not
+        /// exactly the two components.
+        /// </returns>
         private static ValueTask<(bool IsVerified, CryptoEvent? Event)> VerifyEcdsaAsync(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> publicKeyMaterial, CryptoAlgorithm algorithm, string curveName, int componentSize, TimeProvider timeProvider)
         {
             ProviderOperation operation = new(nameof(VerifyEcdsaAsync));
@@ -1035,8 +1137,38 @@ namespace Verifiable.BouncyCastle
             X9ECParameters curveParams = ECNamedCurveTable.GetByName(curveName);
             ECDomainParameters domainParams = new(curveParams.Curve, curveParams.G, curveParams.N, curveParams.H);
 
-            Org.BouncyCastle.Math.EC.ECPoint point = curveParams.Curve.DecodePoint(publicKeyMaterial.ToArray());
-            ECPublicKeyParameters publicKey = new(point, domainParams);
+            //A SEC1 point is 0x02 or 0x03 and f octets compressed, or 0x04 and 2f octets uncompressed, f the field's
+            //octet length; presented octets of any other length or first octet (the empty ones, the hybrid 0x06 and
+            //0x07, the infinity 0x00 included) are no public key of this curve.
+            int fieldLength = (curveParams.Curve.FieldSize + 7) / 8;
+            ReadOnlySpan<byte> publicKeySpan = publicKeyMaterial.Span;
+            bool isSec1Point = (publicKeySpan.Length == 1 + fieldLength && publicKeySpan[0] is 0x02 or 0x03)
+                || (publicKeySpan.Length == 1 + (2 * fieldLength) && publicKeySpan[0] == 0x04);
+            if(!isSec1Point)
+            {
+                return NotVerified(algorithm, VerificationOutcome.Error, dataToVerify.Length, timeProvider);
+            }
+
+            //RFC 7518 Section 3.4: a signature that is not exactly the two components fails validation; trailing
+            //octets after them are never ignored.
+            if(signature.Length != 2 * componentSize)
+            {
+                return NotVerified(algorithm, VerificationOutcome.Invalid, dataToVerify.Length, timeProvider);
+            }
+
+            //A point the curve's decoder refuses (not on the curve, a compressed coordinate with no point) is no
+            //public key; the catch covers the decoding, the parameter construction and the verifier's initialization.
+            ECDsaSigner verifier = new();
+            try
+            {
+                Org.BouncyCastle.Math.EC.ECPoint point = curveParams.Curve.DecodePoint(publicKeyMaterial.ToArray());
+                ECPublicKeyParameters publicKey = new(point, domainParams);
+                verifier.Init(forSigning: false, publicKey);
+            }
+            catch(Exception ex) when(IsMaterialRefusal(ex))
+            {
+                return NotVerified(algorithm, VerificationOutcome.Error, dataToVerify.Length, timeProvider);
+            }
 
             byte[] hash = ComputeHash(dataToVerify.Span, curveName);
 
@@ -1047,9 +1179,6 @@ namespace Verifiable.BouncyCastle
 
             BigInteger r = new(1, rBytes);
             BigInteger s = new(1, sBytes);
-
-            ECDsaSigner verifier = new();
-            verifier.Init(forSigning: false, publicKey);
 
             bool isVerified = verifier.VerifySignature(hash, r, s);
             CryptoEvent evt = VerificationCompletedEvent.Create(
@@ -1100,16 +1229,25 @@ namespace Verifiable.BouncyCastle
 
 
         /// <summary>
-        /// Verifies an RSA PKCS#1 v1.5 signature. The public key is expected in the
-        /// DER PKCS#1 format produced by <see cref="RsaPublicKeyEncoding.Encode"/>.
+        /// Verifies an RSA PKCS#1 v1.5 signature. <see cref="ParseRsaPublicKey"/> reads the public key octets by
+        /// the rule the class summary states.
         /// </summary>
         /// <param name="dataToVerify">The original data that was signed.</param>
         /// <param name="signature">The RSA PKCS#1 v1.5 signature to verify.</param>
-        /// <param name="publicKeyMaterial">The encoded RSA public key.</param>
+        /// <param name="publicKeyMaterial">The RSA public key octets, read by the rule the class summary states.</param>
         /// <param name="algorithm">The <see cref="CryptoAlgorithm"/> stamped on the resulting <see cref="VerificationCompletedEvent"/>.</param>
         /// <param name="digest">The hash digest to use (e.g., SHA-256, SHA-384, SHA-512).</param>
         /// <param name="timeProvider">The time source for the <see cref="VerificationCompletedEvent"/> timestamp.</param>
-        /// <returns><c>true</c> if the signature is valid; otherwise, <c>false</c>.</returns>
+        /// <returns>
+        /// <c>true</c> if the signature is valid; otherwise, <c>false</c>, which is also the answer, with no
+        /// exception, for public key octets <see cref="ParseRsaPublicKey"/> answers no valid RSA public key for (a
+        /// bare modulus whose first octet is zero, and an exponent below 3, not below the modulus or even, a modulus
+        /// that is even, below 1024 bits or with a small prime factor, whichever arm of the rule reads the octets),
+        /// for a public key the signer's initialization refuses (which
+        /// BouncyCastle reports with <see cref="ArgumentException"/>; the catch covers the initialization only) and
+        /// for a signature <see cref="IsRsaSignatureRepresentative"/> refuses (not k octets, or a value of 0, 1, n - 1
+        /// or more).
+        /// </returns>
         private static ValueTask<(bool IsVerified, CryptoEvent? Event)> VerifyRsaPkcs1Async(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> publicKeyMaterial, CryptoAlgorithm algorithm, IDigest digest, TimeProvider timeProvider)
         {
             ProviderOperation operation = new(nameof(VerifyRsaPkcs1Async));
@@ -1120,9 +1258,26 @@ namespace Verifiable.BouncyCastle
                 _ = activity.SetTag(CryptoTelemetry.Signature.Algorithm, "RSA");
             }
 
-            RsaKeyParameters publicKey = ParseRsaPublicKey(publicKeyMaterial.Span);
+            if(ParseRsaPublicKey(publicKeyMaterial.Span) is not RsaKeyParameters publicKey)
+            {
+                return NotVerified(algorithm, VerificationOutcome.Error, dataToVerify.Length, timeProvider);
+            }
+
+            if(!IsRsaSignatureRepresentative(signature.Span, publicKey.Modulus))
+            {
+                return NotVerified(algorithm, VerificationOutcome.Invalid, dataToVerify.Length, timeProvider);
+            }
+
             RsaDigestSigner verifier = new(digest);
-            verifier.Init(forSigning: false, publicKey);
+            try
+            {
+                verifier.Init(forSigning: false, publicKey);
+            }
+            catch(Exception ex) when(IsMaterialRefusal(ex))
+            {
+                return NotVerified(algorithm, VerificationOutcome.Error, dataToVerify.Length, timeProvider);
+            }
+
             verifier.BlockUpdate(dataToVerify.ToArray(), 0, dataToVerify.Length);
 
             bool isVerified = verifier.VerifySignature(signature.ToArray());
@@ -1173,17 +1328,30 @@ namespace Verifiable.BouncyCastle
 
 
         /// <summary>
-        /// Verifies an RSA PSS signature. The public key is expected in the
-        /// DER PKCS#1 format produced by <see cref="RsaPublicKeyEncoding.Encode"/>.
-        /// The salt length is set to the digest size.
+        /// Verifies an RSA PSS signature. <see cref="ParseRsaPublicKey"/> reads the public key octets by the rule
+        /// the class summary states. The salt length is set to the digest size.
         /// </summary>
         /// <param name="dataToVerify">The original data that was signed.</param>
         /// <param name="signature">The RSA-PSS signature to verify.</param>
-        /// <param name="publicKeyMaterial">The encoded RSA public key.</param>
+        /// <param name="publicKeyMaterial">The RSA public key octets, read by the rule the class summary states.</param>
         /// <param name="algorithm">The <see cref="CryptoAlgorithm"/> stamped on the resulting <see cref="VerificationCompletedEvent"/>.</param>
         /// <param name="digest">The hash digest to use (e.g., SHA-256, SHA-384, SHA-512).</param>
         /// <param name="timeProvider">The time source for the <see cref="VerificationCompletedEvent"/> timestamp.</param>
-        /// <returns><c>true</c> if the signature is valid; otherwise, <c>false</c>.</returns>
+        /// <returns>
+        /// <c>true</c> if the signature is valid; otherwise, <c>false</c>, which is also the answer, with no
+        /// exception, for public key octets <see cref="ParseRsaPublicKey"/> answers no valid RSA public key for (a
+        /// bare modulus whose first octet is zero, and an exponent below 3, not below the modulus or even, a modulus
+        /// that is even, below 1024 bits or with a small prime factor, whichever arm of the rule reads the octets),
+        /// for a modulus the PSS signer's initialization refuses as too small for the digest and the salt
+        /// (<see href="https://www.rfc-editor.org/rfc/rfc8017#section-9.1.2">RFC 8017 Section 9.1.2</see>, step 3:
+        /// "If emLen &lt; hLen + sLen + 2, output "inconsistent" and stop."; BouncyCastle reports it with
+        /// <see cref="ArgumentException"/>, and the catch covers the initialization only), for a signature
+        /// <see cref="IsRsaSignatureRepresentative"/> refuses (not k octets, or a value of 0, 1, n - 1 or more, which
+        /// BouncyCastle's RSA engine would otherwise refuse with <see cref="DataLengthException"/>) and for a signature
+        /// whose recovered representative does not fit the encoded message under a modulus whose bit length is 1
+        /// modulo 8 (<see cref="IsWithinPssEncodedMessageLength"/>), which BouncyCastle's PSS signer would otherwise
+        /// raise for.
+        /// </returns>
         private static ValueTask<(bool IsVerified, CryptoEvent? Event)> VerifyRsaPssAsync(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> publicKeyMaterial, CryptoAlgorithm algorithm, IDigest digest, TimeProvider timeProvider)
         {
             ProviderOperation operation = new(nameof(VerifyRsaPssAsync));
@@ -1194,9 +1362,35 @@ namespace Verifiable.BouncyCastle
                 _ = activity.SetTag(CryptoTelemetry.Signature.Algorithm, "RSA");
             }
 
-            RsaKeyParameters publicKey = ParseRsaPublicKey(publicKeyMaterial.Span);
+            if(ParseRsaPublicKey(publicKeyMaterial.Span) is not RsaKeyParameters publicKey)
+            {
+                return NotVerified(algorithm, VerificationOutcome.Error, dataToVerify.Length, timeProvider);
+            }
+
+            if(!IsRsaSignatureRepresentative(signature.Span, publicKey.Modulus))
+            {
+                return NotVerified(algorithm, VerificationOutcome.Invalid, dataToVerify.Length, timeProvider);
+            }
+
+            //RFC 8017 Section 8.1.2 step 2.c: under a modulus whose bit length is 1 modulo 8 a recovered representative
+            //that needs k octets does not fit emLen = k - 1 and is "invalid signature", before the signer runs.
+            if(!IsWithinPssEncodedMessageLength(signature.Span, publicKey))
+            {
+                return NotVerified(algorithm, VerificationOutcome.Invalid, dataToVerify.Length, timeProvider);
+            }
+
+            //RFC 8017 Section 9.1.2 step 3: a modulus too small for the digest and the salt (emLen < hLen + sLen + 2)
+            //holds no RSASSA-PSS signature; BouncyCastle's signer refuses it at initialization.
             PssSigner verifier = new(new RsaEngine(), digest, digest.GetDigestSize());
-            verifier.Init(forSigning: false, publicKey);
+            try
+            {
+                verifier.Init(forSigning: false, publicKey);
+            }
+            catch(Exception ex) when(IsMaterialRefusal(ex))
+            {
+                return NotVerified(algorithm, VerificationOutcome.Error, dataToVerify.Length, timeProvider);
+            }
+
             verifier.BlockUpdate(dataToVerify.ToArray(), 0, dataToVerify.Length);
 
             bool isVerified = verifier.VerifySignature(signature.ToArray());
@@ -1262,6 +1456,22 @@ namespace Verifiable.BouncyCastle
         /// Verifies a signature using the specified ML-DSA parameter set.
         /// Reconstructs key parameters from raw encoded bytes.
         /// </summary>
+        /// <remarks>
+        /// Presented public key octets BouncyCastle refuses to decode for the parameter set (a length other than the
+        /// set's encoded public key), which it reports with <see cref="ArgumentException"/>, answer <c>false</c>
+        /// raising nothing; the catch covers the decoding and the verifier's initialization only. A signature of the
+        /// wrong length answers <c>false</c> from BouncyCastle's verifier.
+        /// </remarks>
+        /// <param name="parameters">The ML-DSA parameter set.</param>
+        /// <param name="dataToVerify">The original data that was signed.</param>
+        /// <param name="signature">The ML-DSA signature to verify.</param>
+        /// <param name="publicKeyMaterial">The encoded ML-DSA public key.</param>
+        /// <param name="algorithm">The <see cref="CryptoAlgorithm"/> stamped on the resulting <see cref="VerificationCompletedEvent"/>.</param>
+        /// <param name="timeProvider">The time source for the <see cref="VerificationCompletedEvent"/> timestamp.</param>
+        /// <returns>
+        /// <c>true</c> if the signature is valid; otherwise, <c>false</c>, which is also the answer, with no
+        /// exception, for public key octets that are no public key of the parameter set.
+        /// </returns>
         private static ValueTask<(bool IsVerified, CryptoEvent? Event)> VerifyMlDsaAsync(
             MLDsaParameters parameters,
             ReadOnlyMemory<byte> dataToVerify,
@@ -1278,9 +1488,17 @@ namespace Verifiable.BouncyCastle
                 _ = activity.SetTag(CryptoTelemetry.Signature.Algorithm, "ML-DSA");
             }
 
-            var publicKey = MLDsaPublicKeyParameters.FromEncoding(parameters, publicKeyMaterial.ToArray());
             var verifier = new MLDsaSigner(parameters, deterministic: true);
-            verifier.Init(forSigning: false, publicKey);
+            try
+            {
+                var publicKey = MLDsaPublicKeyParameters.FromEncoding(parameters, publicKeyMaterial.ToArray());
+                verifier.Init(forSigning: false, publicKey);
+            }
+            catch(Exception ex) when(IsMaterialRefusal(ex))
+            {
+                return NotVerified(algorithm, VerificationOutcome.Error, dataToVerify.Length, timeProvider);
+            }
+
             verifier.BlockUpdate(dataToVerify.ToArray(), 0, dataToVerify.Length);
 
             bool isVerified = verifier.VerifySignature(signature.ToArray());
@@ -1396,25 +1614,192 @@ namespace Verifiable.BouncyCastle
 
 
         /// <summary>
-        /// Parses an RSA public key from a DER PKCS#1 <c>RSAPublicKey ::= SEQUENCE { modulus INTEGER,
-        /// publicExponent INTEGER }</c> (RFC 8017 Appendix A.1.1, the same shape RFC 8230 §4's
-        /// COSE RSA <c>n</c>/<c>e</c> labels round-trip through). The DER form carries whatever
-        /// public exponent the key actually uses, so it is parsed rather than assumed.
+        /// Parses presented RSA public key octets by the rule the class summary states. The first arm is
+        /// read with <see cref="AsnReader"/>: the octets are exactly a DER PKCS#1
+        /// <c>RSAPublicKey ::= SEQUENCE { modulus INTEGER, publicExponent INTEGER }</c> (the same shape the
+        /// COSE RSA <c>n</c>/<c>e</c> labels of RFC 8230 Section 4 carry) when the SEQUENCE holds exactly the
+        /// two INTEGERs and nothing follows it, and that modulus and that exponent are read, which the DER form
+        /// carries rather than assumes; a DER modulus or exponent that is not positive answers
+        /// <see langword="null"/>. Content the reader refuses (<see cref="AsnContentException"/>, the type
+        /// <c>System.Formats.Asn1</c> documents for content that is not valid under the encoding rules), DER
+        /// with a trailing octet and a SEQUENCE with a third INTEGER among them, goes to the second arm, where
+        /// octets whose first octet is zero answer <see langword="null"/>. Every reading answers
+        /// <see langword="null"/> when it is no valid RSA public key (<see cref="ConstructRsaPublicKey"/>: an
+        /// exponent below 3, not below the modulus or even, a modulus that is even or below 1024 bits, held to
+        /// <see cref="RsaUtilities.IsValidPublicKey"/> before anything is constructed, and a modulus with a
+        /// small prime factor, which BouncyCastle refuses to construct with <see cref="ArgumentException"/>; the
+        /// catch covers the construction only).
         /// </summary>
-        /// <param name="publicKeyMaterial">The DER-encoded RSA public key.</param>
-        /// <returns>The parsed public key parameters.</returns>
-        private static RsaKeyParameters ParseRsaPublicKey(ReadOnlySpan<byte> publicKeyMaterial)
+        /// <param name="publicKeyMaterial">The RSA public key octets, read by the rule the class summary states.</param>
+        /// <returns>The parsed public key parameters, or <see langword="null"/> when the octets are no valid RSA public key.</returns>
+        private static RsaKeyParameters? ParseRsaPublicKey(ReadOnlySpan<byte> publicKeyMaterial)
         {
-            (byte[] modulus, byte[] exponent) = RsaPublicKeyEncoding.Decode(publicKeyMaterial);
+            System.Numerics.BigInteger modulus;
+            System.Numerics.BigInteger exponent;
+            try
+            {
+                AsnReader outerReader = new(publicKeyMaterial.ToArray(), AsnEncodingRules.DER);
+                AsnReader sequenceReader = outerReader.ReadSequence();
+                modulus = sequenceReader.ReadInteger();
+                exponent = sequenceReader.ReadInteger();
+                sequenceReader.ThrowIfNotEmpty();
+                outerReader.ThrowIfNotEmpty();
+            }
+            catch(AsnContentException)
+            {
+                //The second arm: octets that are not exactly a DER RSAPublicKey are the bare modulus they spell, under
+                //65537, held to the minimum number of octets, so a first octet of zero is no modulus.
+                return publicKeyMaterial is [0x00, ..]
+                    ? null
+                    : ConstructRsaPublicKey(new BigInteger(1, publicKeyMaterial.ToArray()), BigInteger.ValueOf(65537));
+            }
+
+            if(modulus.Sign <= 0 || exponent.Sign <= 0)
+            {
+                return null;
+            }
 
             //The sign-magnitude constructor (sign = 1) is used rather than the two's-complement one,
             //since System.Numerics.BigInteger's unsigned big-endian byte form always encodes a
             //positive RSA modulus/exponent, and a two's-complement read would misinterpret an
             //MSB-set modulus as negative.
-            return new RsaKeyParameters(
-                isPrivate: false,
-                new BigInteger(1, modulus),
-                new BigInteger(1, exponent));
+            return ConstructRsaPublicKey(
+                new BigInteger(1, modulus.ToByteArray(isUnsigned: true, isBigEndian: true)),
+                new BigInteger(1, exponent.ToByteArray(isUnsigned: true, isBigEndian: true)));
+        }
+
+
+        /// <summary>
+        /// Constructs BouncyCastle's RSA public key parameters from a presented modulus and exponent, the one place
+        /// both encodings <see cref="ParseRsaPublicKey"/> reads construct their parameters. The pair is first held to
+        /// <see cref="RsaUtilities.IsValidPublicKey"/> with its defaults (an odd exponent with 3 &lt;= e &lt; n, an odd
+        /// modulus of at least <see cref="RsaUtilities.MinimumModulusBitLength"/> bits):
+        /// <see href="https://www.rfc-editor.org/rfc/rfc8017#section-3.1">RFC 8017 Section 3.1</see>: "In a valid RSA
+        /// public key, the RSA modulus n is a product of u distinct odd primes r_i, i = 1, 2, ..., u, where u &gt;= 2,
+        /// and the RSA public exponent e is an integer between 3 and n - 1 satisfying GCD(e,\lambda(n)) = 1, where
+        /// \lambda(n) = LCM(r_1 - 1, ..., r_u - 1)." A pair that fails it answers <see langword="null"/> before
+        /// anything is constructed, and so does a pair BouncyCastle refuses to construct (a modulus with a small prime
+        /// factor), which it reports with <see cref="ArgumentException"/>.
+        /// </summary>
+        /// <param name="modulus">The presented modulus n.</param>
+        /// <param name="exponent">The presented public exponent e.</param>
+        /// <returns>The parameters, or <see langword="null"/> when the pair is no valid RSA public key.</returns>
+        private static RsaKeyParameters? ConstructRsaPublicKey(BigInteger modulus, BigInteger exponent)
+        {
+            if(!RsaUtilities.IsValidPublicKey(modulus.ToByteArrayUnsigned(), exponent.ToByteArrayUnsigned()))
+            {
+                return null;
+            }
+
+            try
+            {
+                return new RsaKeyParameters(isPrivate: false, modulus, exponent);
+            }
+            catch(Exception ex) when(IsMaterialRefusal(ex))
+            {
+                return null;
+            }
+        }
+
+
+        /// <summary>
+        /// Whether <paramref name="exception"/>, raised by BouncyCastle while it decoded presented public key
+        /// octets, constructed parameters from them or initialized a verifier with them, is its refusal of that
+        /// material: <see cref="ArgumentException"/> (an off-curve or badly encoded point, an Ed25519 encoding it
+        /// does not decode, an RSA modulus with a small prime factor, a modulus the PSS signer refuses, an ML-DSA
+        /// public key of the wrong length) or <see cref="FormatException"/> (a point encoding
+        /// it does not know). Each verification member catches with it only around those calls, never around the
+        /// verification arithmetic, so a fault of the provider propagates.
+        /// </summary>
+        /// <param name="exception">The exception BouncyCastle raised.</param>
+        /// <returns><see langword="true"/> when the exception is BouncyCastle's refusal of the presented material.</returns>
+        private static bool IsMaterialRefusal(Exception exception) => exception is ArgumentException or FormatException;
+
+
+        /// <summary>
+        /// Whether <paramref name="signature"/> can be an RSA signature under <paramref name="modulus"/> that
+        /// BouncyCastle's RSA engine is asked about: it is exactly k octets, k the modulus's octet length, and its
+        /// value s satisfies 1 &lt; s &lt; n - 1.
+        /// <see href="https://www.rfc-editor.org/rfc/rfc8017#section-8.1.2">RFC 8017 Section 8.1.2</see>
+        /// (RSASSA-PSS-VERIFY) and <see href="https://www.rfc-editor.org/rfc/rfc8017#section-8.2.2">Section 8.2.2</see>
+        /// (RSASSA-PKCS1-V1_5-VERIFY), step 1: "Length checking: If the length of the signature S is not k octets,
+        /// output "invalid signature" and stop."
+        /// <see href="https://www.rfc-editor.org/rfc/rfc8017#section-5.2.2">Section 5.2.2</see> (RSAVP1), step 1:
+        /// "If the signature representative s is not between 0 and n - 1, output "signature representative out of
+        /// range" and stop.", which both verification operations answer as "invalid signature". RSAVP1 admits 0 to
+        /// n - 1; BouncyCastle's RSA engine refuses 0, 1 and n - 1 too, with <see cref="DataLengthException"/>.
+        /// RSAVP1 maps each of those three to itself (the public exponent is odd), and none is the encoded message of
+        /// either scheme: an EMSA-PKCS1-v1_5 encoded message starts 0x00 0x01, so its value is above 1 and below
+        /// n - 1; an EMSA-PSS encoded message ends 0xBC, which neither 0 nor 1 does, and n - 1 either does not fit
+        /// emLen octets or sets a leftmost bit that step 6 of
+        /// <see href="https://www.rfc-editor.org/rfc/rfc8017#section-9.1.2">Section 9.1.2</see> requires to be zero.
+        /// Refusing the three changes no answer, and checking all of this before the engine runs answers such a
+        /// signature as not verified rather than as the exception.
+        /// </summary>
+        /// <param name="signature">The presented signature octets.</param>
+        /// <param name="modulus">The public key's modulus n.</param>
+        /// <returns><see langword="true"/> when the signature is k octets and 1 &lt; s &lt; n - 1.</returns>
+        private static bool IsRsaSignatureRepresentative(ReadOnlySpan<byte> signature, BigInteger modulus)
+        {
+            if(signature.Length != (modulus.BitLength + 7) / 8)
+            {
+                return false;
+            }
+
+            BigInteger representative = new(1, signature);
+
+            return representative.CompareTo(BigInteger.One) > 0 && representative.CompareTo(modulus.Subtract(BigInteger.One)) < 0;
+        }
+
+
+        /// <summary>
+        /// Whether the message representative <paramref name="signature"/> recovers under
+        /// <paramref name="publicKey"/> fits the encoded message of RSASSA-PSS.
+        /// <see href="https://www.rfc-editor.org/rfc/rfc8017#section-8.1.2">RFC 8017 Section 8.1.2</see>, step 2.c:
+        /// "Convert the message representative m to an encoded message EM of length emLen = \ceil ((modBits - 1)/8)
+        /// octets, where modBits is the length in bits of the RSA modulus n (see Section 4.1): EM = I2OSP (m, emLen).
+        /// Note that emLen will be one less than k if modBits - 1 is divisible by 8 and equal to k otherwise. If I2OSP
+        /// outputs "integer too large", output "invalid signature" and stop." Only under a modulus whose bit length is
+        /// 1 modulo 8 is emLen one less than k, so only there can a recovered representative below n need more than
+        /// emLen octets; BouncyCastle's PSS signer copies it into a block of emLen octets and raises for one that does
+        /// not fit. For such a modulus this member makes the one exponentiation with the public exponent and answers
+        /// whether m is below 2^(modBits - 1); for every other modulus it answers <see langword="true"/> without it.
+        /// </summary>
+        /// <param name="signature">The presented signature octets, already held to <see cref="IsRsaSignatureRepresentative"/>.</param>
+        /// <param name="publicKey">The public key.</param>
+        /// <returns><see langword="true"/> when the recovered representative fits emLen octets.</returns>
+        private static bool IsWithinPssEncodedMessageLength(ReadOnlySpan<byte> signature, RsaKeyParameters publicKey)
+        {
+            int modulusBitLength = publicKey.Modulus.BitLength;
+            if(modulusBitLength % 8 != 1)
+            {
+                return true;
+            }
+
+            BigInteger messageRepresentative = new BigInteger(1, signature).ModPow(publicKey.Exponent, publicKey.Modulus);
+
+            return messageRepresentative.BitLength <= modulusBitLength - 1;
+        }
+
+
+        /// <summary>
+        /// The answer of a verifier for presented material it cannot verify: <c>false</c> with a
+        /// <see cref="VerificationCompletedEvent"/> of <paramref name="outcome"/>, raising nothing. A verify body
+        /// reads it as a signature that does not verify.
+        /// </summary>
+        /// <param name="algorithm">The <see cref="CryptoAlgorithm"/> stamped on the event.</param>
+        /// <param name="outcome">
+        /// <see cref="VerificationOutcome.Error"/> for a public key the verifier cannot read,
+        /// <see cref="VerificationOutcome.Invalid"/> for a signature that cannot be one under the public key.
+        /// </param>
+        /// <param name="dataLength">The length of the data that was to be verified.</param>
+        /// <param name="timeProvider">The time source for the event's timestamp.</param>
+        /// <returns>The not-verified answer with its event.</returns>
+        private static ValueTask<(bool IsVerified, CryptoEvent? Event)> NotVerified(CryptoAlgorithm algorithm, VerificationOutcome outcome, int dataLength, TimeProvider timeProvider)
+        {
+            CryptoEvent evt = VerificationCompletedEvent.Create(algorithm, outcome, dataLength, CryptoLib.Name, timeProvider: timeProvider);
+
+            return ValueTask.FromResult<(bool, CryptoEvent?)>((false, evt));
         }
 
 

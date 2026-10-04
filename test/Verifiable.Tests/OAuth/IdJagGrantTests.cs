@@ -8713,26 +8713,37 @@ internal sealed class IdJagGrantTests
     /// <summary>
     /// A capability the application's materialization removes or adds is answered exactly as the same request is
     /// answered for a registration that never held it: the status, every header field and the body are the same
-    /// bytes, whether no token-serving capability is left, another token-serving capability is kept, or the grant is
-    /// one the server does not serve. One registration is judged per request, which is this library's rule; the
+    /// bytes, whether no token-serving capability is left, another token-serving capability is kept, the grant is
+    /// one the server does not serve, the grant is one the materialization adds and the server serves, or the added
+    /// capability precedes every kept one in the order the token endpoint takes its grant-type refusal's capability
+    /// from. One registration is judged per request, which is this library's rule; the
     /// refusals are
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>'s, on
     /// <c>unauthorized_client</c>: "The authenticated client is not authorized to use this authorization grant type."
     /// and on <c>unsupported_grant_type</c>: "The authorization grant type is not supported by the authorization
-    /// server."
+    /// server." and on <c>invalid_request</c>: "The request is missing a required parameter, includes an unsupported
+    /// parameter value (other than grant type), repeats a parameter, includes multiple credentials, utilizes more than
+    /// one mechanism for authenticating the client, or is otherwise malformed."
     /// </summary>
     /// <param name="caseName">
     /// The direction and the case: <c>narrowedNoTokenServingLeft</c>, <c>narrowedAnotherTokenServingKept</c>,
-    /// <c>narrowedUnservedGrant</c>, <c>widenedNoTokenServingLeft</c>, <c>widenedAnotherTokenServingKept</c> or
-    /// <c>widenedUnservedGrant</c>. In <c>widenedNoTokenServingLeft</c> the loaded registration allows no
-    /// token-serving capability, so the request matches no candidate of the token endpoint before any materialization
-    /// runs and the materialization seam is not invoked. In <c>narrowedNoTokenServingLeft</c> the request matches in
-    /// the chain built for the loaded registration and no candidate in the chain built for the materialized one, so
-    /// the outgoing context carries no capability and no match payload and the dispatch activity no flow kind.
+    /// <c>narrowedUnservedGrant</c>, <c>widenedNoTokenServingLeft</c>, <c>widenedAnotherTokenServingKept</c>,
+    /// <c>widenedUnservedGrant</c>, <c>narrowedAndWidenedAddedGrant</c>, <c>widenedAheadOfKeptMissingGrantType</c>,
+    /// <c>widenedAheadOfKeptUnservedGrant</c> or <c>widenedAheadOfKeptAddedGrant</c>. In
+    /// <c>widenedNoTokenServingLeft</c> the loaded registration allows no token-serving capability, so the request
+    /// matches no candidate of the token endpoint before any materialization runs and the materialization seam is not
+    /// invoked. In <c>narrowedNoTokenServingLeft</c> the request matches in the chain built for the loaded registration
+    /// and no candidate in the chain built for the materialized one, so the outgoing context carries no capability and
+    /// no match payload and the dispatch activity no flow kind. In <c>narrowedAndWidenedAddedGrant</c> the
+    /// materialization removes the JWK Set capability and adds token exchange, a grant the server serves, which is
+    /// posted. In the three <c>widenedAheadOfKept</c> cases the materialization removes the client credentials
+    /// capability and adds the authorization code capability, which precedes every kept token-serving capability in
+    /// the order the token endpoint takes its grant-type refusal's capability from; the request carries no
+    /// <c>grant_type</c>, the jwt-bearer grant the server does not serve, or the added authorization code grant.
     /// </param>
     /// <param name="expectedStatus">The status code both answers carry.</param>
     /// <param name="expectedFields">
-    /// The header fields both answers carry, as <see cref="ProjectWireAnswer"/> lists them: one <c>name: value</c> line
+    /// The header fields both answers carry, as <see cref="OAuthTestTransport.ProjectWireAnswer"/> lists them: one <c>name: value</c> line
     /// per field in ordinal name order, the <c>Date</c> field left out.
     /// </param>
     /// <param name="expectedBody">The body both answers carry, the empty text for a request no candidate matches.</param>
@@ -8753,6 +8764,10 @@ internal sealed class IdJagGrantTests
     [DataRow("widenedNoTokenServingLeft", 404, "Content-Length: 0\nServer: Kestrel", "", 0, 1, null, DisplayName = "added: no token-serving capability held, no candidate matches before the materialization")]
     [DataRow("widenedAnotherTokenServingKept", 400, "Content-Type: application/json\nServer: Kestrel\nTransfer-Encoding: chunked", """{"error":"unauthorized_client","error_description":"This client is not authorized to use the 'urn:ietf:params:oauth:grant-type:token-exchange' grant type."}""", 1, 1, "AuthCode.Token POST urn:verifiable:capability:oauth:authorization_code stateless", DisplayName = "added: another token-serving capability held")]
     [DataRow("widenedUnservedGrant", 400, "Content-Type: application/json\nServer: Kestrel\nTransfer-Encoding: chunked", """{"error":"unsupported_grant_type","error_description":"grant_type 'urn:ietf:params:oauth:grant-type:jwt-bearer' is not supported by this authorization server."}""", 1, 1, "AuthCode.Token POST urn:verifiable:capability:oauth:authorization_code stateless", DisplayName = "added: a grant the server does not serve")]
+    [DataRow("narrowedAndWidenedAddedGrant", 400, "Content-Type: application/json\nServer: Kestrel\nTransfer-Encoding: chunked", """{"error":"unauthorized_client","error_description":"This client is not authorized to use the 'urn:ietf:params:oauth:grant-type:token-exchange' grant type."}""", 1, 2, "AuthCode.Token POST urn:verifiable:capability:oauth:authorization_code stateless", DisplayName = "one removed and one added: the added grant the server serves")]
+    [DataRow("widenedAheadOfKeptMissingGrantType", 400, "Content-Type: application/json\nServer: Kestrel\nTransfer-Encoding: chunked", """{"error":"invalid_request","error_description":"Missing grant_type."}""", 1, 2, "AuthCode.Token POST urn:verifiable:capability:oauth:token_exchange stateless", DisplayName = "added ahead of every kept token-serving capability: no grant_type")]
+    [DataRow("widenedAheadOfKeptUnservedGrant", 400, "Content-Type: application/json\nServer: Kestrel\nTransfer-Encoding: chunked", """{"error":"unsupported_grant_type","error_description":"grant_type 'urn:ietf:params:oauth:grant-type:jwt-bearer' is not supported by this authorization server."}""", 1, 2, "AuthCode.Token POST urn:verifiable:capability:oauth:token_exchange stateless", DisplayName = "added ahead of every kept token-serving capability: a grant the server does not serve")]
+    [DataRow("widenedAheadOfKeptAddedGrant", 400, "Content-Type: application/json\nServer: Kestrel\nTransfer-Encoding: chunked", """{"error":"unauthorized_client","error_description":"This client is not authorized to use the 'authorization_code' grant type."}""", 1, 2, "AuthCode.Token POST urn:verifiable:capability:oauth:token_exchange stateless", DisplayName = "added ahead of every kept token-serving capability: the added grant")]
     public async Task ACapabilityTheMaterializationChangesIsAnsweredAsOneNeverHeldAsync(
         string caseName,
         int expectedStatus,
@@ -8776,6 +8791,20 @@ internal sealed class IdJagGrantTests
             IdJagClientCapabilities.Remove(WellKnownCapabilityIdentifiers.OAuthTokenExchange);
         ImmutableHashSet<CapabilityIdentifier> withoutJwtBearer =
             IdJagClientCapabilities.Remove(WellKnownCapabilityIdentifiers.OAuthJwtBearer);
+        ImmutableHashSet<CapabilityIdentifier> withoutJwks =
+            IdJagClientCapabilities.Remove(WellKnownCapabilityIdentifiers.OAuthJwksEndpoint);
+        ImmutableHashSet<CapabilityIdentifier> withClientCredentialsFirst =
+            withTokenExchangeOnly.Add(WellKnownCapabilityIdentifiers.OAuthClientCredentials);
+        ImmutableHashSet<CapabilityIdentifier> withAuthorizationCodeFirst =
+            withTokenExchangeOnly.Add(WellKnownCapabilityIdentifiers.OAuthAuthorizationCode);
+        Dictionary<string, string> withoutGrantType = new(BuildMintForm(ResourceAsIssuer).Where(
+            static field => !string.Equals(field.Key, OAuthRequestParameterNames.GrantType, StringComparison.Ordinal)));
+        Dictionary<string, string> authorizationCodeGrant = new()
+        {
+            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.AuthorizationCode,
+            [OAuthRequestParameterNames.Code] = "a-code-no-flow-issued",
+            [OAuthRequestParameterNames.ClientId] = ClientId
+        };
 
         //The jwt-bearer grant is posted with no assertion-validation seam wired, so the server serves no such grant.
         (ImmutableHashSet<CapabilityIdentifier> loaded, ImmutableHashSet<CapabilityIdentifier> materialized, Dictionary<string, string> form) = caseName switch
@@ -8786,6 +8815,10 @@ internal sealed class IdJagGrantTests
             "widenedNoTokenServingLeft" => (withoutTokenServing, withTokenExchangeOnly, BuildMintForm(ResourceAsIssuer)),
             "widenedAnotherTokenServingKept" => (withoutTokenExchange, IdJagClientCapabilities, BuildMintForm(ResourceAsIssuer)),
             "widenedUnservedGrant" => (withoutJwtBearer, IdJagClientCapabilities, BuildRedeemForm("an-assertion-no-seam-reads")),
+            "narrowedAndWidenedAddedGrant" => (withoutTokenExchange, withoutJwks, BuildMintForm(ResourceAsIssuer)),
+            "widenedAheadOfKeptMissingGrantType" => (withClientCredentialsFirst, withAuthorizationCodeFirst, withoutGrantType),
+            "widenedAheadOfKeptUnservedGrant" => (withClientCredentialsFirst, withAuthorizationCodeFirst, BuildRedeemForm("an-assertion-no-seam-reads")),
+            "widenedAheadOfKeptAddedGrant" => (withClientCredentialsFirst, withAuthorizationCodeFirst, authorizationCodeGrant),
             _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, "Unknown case.")
         };
 
@@ -8830,6 +8863,79 @@ internal sealed class IdJagGrantTests
             isNoMatch,
             dispatch.GetTagItem(Verifiable.Server.Diagnostics.ServerTagNames.FlowKind) is null,
             $"Flow kind on the dispatch activity: {dispatch.GetTagItem(Verifiable.Server.Diagnostics.ServerTagNames.FlowKind)}.");
+    }
+
+
+    /// <summary>
+    /// The application's capability resolution withholds the token exchange capability from a registration that
+    /// allows it, and the server serves token exchange; no materialization is wired. The mint posted to the token
+    /// endpoint over the wire is answered exactly as for a registration that never held the capability, the same
+    /// bytes: 400 with the body's error <c>unauthorized_client</c>. A capability the resolution withholds is not
+    /// served, which is this library's rule:
+    /// <see href="../../../documents/AuthorizationServerDesign.md#23-per-endpoint-loop-stage">Server design</see>; the
+    /// refusal is
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>'s, on
+    /// <c>unauthorized_client</c>: "The authenticated client is not authorized to use this authorization grant type."
+    /// </summary>
+    [TestMethod]
+    public async Task AGrantTheCapabilityResolutionWithholdsIsAnsweredAsOneNeverHeldAsync()
+    {
+        (int statusCode, string body, string underTheResolution, _) = await PostToTheTokenEndpointUnderMaterializationAsync(
+            IdJagClientCapabilities,
+            materialize: null,
+            BuildMintForm(ResourceAsIssuer),
+            candidateIntegration => candidateIntegration.ResolveCapabilitiesAsync =
+                CapabilityBounds.ResolutionWithholding(WellKnownCapabilityIdentifiers.OAuthTokenExchange)).ConfigureAwait(false);
+        (_, _, string neverHeld, _) = await PostToTheTokenEndpointUnderMaterializationAsync(
+            IdJagClientCapabilities.Remove(WellKnownCapabilityIdentifiers.OAuthTokenExchange),
+            materialize: null,
+            BuildMintForm(ResourceAsIssuer)).ConfigureAwait(false);
+
+        Assert.AreEqual(neverHeld, underTheResolution);
+        Assert.AreEqual(400, statusCode, body);
+        Assert.AreEqual(
+            "400\nContent-Type: application/json\nServer: Kestrel\nTransfer-Encoding: chunked\n\n"
+            + """{"error":"unauthorized_client","error_description":"This client is not authorized to use the 'urn:ietf:params:oauth:grant-type:token-exchange' grant type."}""",
+            underTheResolution);
+    }
+
+
+    /// <summary>
+    /// The application's capability resolution withholds the authorization code capability, the first token-serving
+    /// capability of the registration in the order the token endpoint takes its grant-type refusal's capability from,
+    /// from a registration that allows it; no materialization is wired. A token request posted over the wire without
+    /// <c>grant_type</c> is answered exactly as for a registration that never held the capability, the same bytes: 400
+    /// with the body's error <c>invalid_request</c>, the refusal carrying a capability the request is served under. A
+    /// capability the resolution withholds is not served, which is this library's rule:
+    /// <see href="../../../documents/AuthorizationServerDesign.md#23-per-endpoint-loop-stage">Server design</see>; the
+    /// refusal is
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>'s, on
+    /// <c>invalid_request</c>: "The request is missing a required parameter, includes an unsupported parameter value
+    /// (other than grant type), repeats a parameter, includes multiple credentials, utilizes more than one mechanism for
+    /// authenticating the client, or is otherwise malformed."
+    /// </summary>
+    [TestMethod]
+    public async Task TheRefusalsCapabilityTheResolutionWithholdsIsAnsweredAsOneNeverHeldAsync()
+    {
+        Dictionary<string, string> withoutGrantType = new(BuildMintForm(ResourceAsIssuer).Where(
+            static field => !string.Equals(field.Key, OAuthRequestParameterNames.GrantType, StringComparison.Ordinal)));
+        (int statusCode, string body, string underTheResolution, _) = await PostToTheTokenEndpointUnderMaterializationAsync(
+            IdJagClientCapabilities,
+            materialize: null,
+            withoutGrantType,
+            candidateIntegration => candidateIntegration.ResolveCapabilitiesAsync =
+                CapabilityBounds.ResolutionWithholding(WellKnownCapabilityIdentifiers.OAuthAuthorizationCode)).ConfigureAwait(false);
+        (_, _, string neverHeld, _) = await PostToTheTokenEndpointUnderMaterializationAsync(
+            IdJagClientCapabilities.Remove(WellKnownCapabilityIdentifiers.OAuthAuthorizationCode),
+            materialize: null,
+            withoutGrantType).ConfigureAwait(false);
+
+        Assert.AreEqual(neverHeld, underTheResolution);
+        Assert.AreEqual(400, statusCode, body);
+        Assert.AreEqual(
+            "400\nContent-Type: application/json\nServer: Kestrel\nTransfer-Encoding: chunked\n\n"
+            + """{"error":"invalid_request","error_description":"Missing grant_type."}""",
+            underTheResolution);
     }
 
 
@@ -9059,16 +9165,19 @@ internal sealed class IdJagGrantTests
 
     /// <summary>
     /// The application's materialization replaces the registration with a record allowing the same capabilities under
-    /// the same policy. The endpoint chain built for the loaded registration is the one the materialized registration
-    /// would build, so the capability resolution that builds a chain runs once for the request and the mint is served.
-    /// Building the chain again only when the materialized registration does not allow every capability the loaded
-    /// registration allows or its policy differs from the loaded registration's is this library's rule; the mint is
+    /// the same policy. The capability resolution is consulted twice for the request, once for the loaded registration
+    /// and once for the materialized one, and the materialized answer held to the bound equals the loaded resolution,
+    /// so the endpoint chain built for the loaded registration is kept: the chain is built once for the request, as a
+    /// builder wrapped to count its calls observes, and the mint is served. Resolving a materialized registration under
+    /// the bound in every case and building the chain again only when the bounded answer is narrower, the policy
+    /// differs or a loaded capability is removed is this library's rule; the mint is
     /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.3">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.3</see>.
     /// </summary>
     [TestMethod]
     public async Task AMaterializationThatChangesNoCapabilityBuildsOneChainAsync()
     {
         int chainBuilds = 0;
+        int resolutions = 0;
 
         (int statusCode, string body, _, _) = await PostToTheTokenEndpointUnderMaterializationAsync(
             IdJagClientCapabilities,
@@ -9082,14 +9191,31 @@ internal sealed class IdJagGrantTests
                 ResolveCapabilitiesDelegate resolve = candidateIntegration.ResolveCapabilitiesAsync!;
                 candidateIntegration.ResolveCapabilitiesAsync = (registration, context, ct) =>
                 {
-                    _ = Interlocked.Increment(ref chainBuilds);
+                    _ = Interlocked.Increment(ref resolutions);
 
                     return resolve(registration, context, ct);
+                };
+            },
+            configuration =>
+            {
+                EndpointBuilderDelegate first = configuration.EndpointBuilders[0];
+
+                return configuration with
+                {
+                    EndpointBuilders = new EndpointBuilderSet([
+                        (registration, context, ct) =>
+                        {
+                            _ = Interlocked.Increment(ref chainBuilds);
+
+                            return first(registration, context, ct);
+                        },
+                        .. configuration.EndpointBuilders.Skip(1)])
                 };
             }).ConfigureAwait(false);
 
         Assert.AreEqual(200, statusCode, body);
-        Assert.AreEqual(1, chainBuilds);
+        Assert.AreEqual(1, chainBuilds, "The chain built for the loaded registration is kept.");
+        Assert.AreEqual(2, resolutions, "The loaded and the materialized registration are each resolved once.");
     }
 
 
@@ -9143,6 +9269,63 @@ internal sealed class IdJagGrantTests
         Assert.IsNull(matchDecisions[1], $"Match decisions: {string.Join(", ", matchDecisions)}.");
         Assert.HasCount(1, outgoing);
         Assert.IsNull(outgoing[0].Capability);
+    }
+
+
+    /// <summary>
+    /// The application's capability resolution withholds the JWT-secured authorization request capability from a
+    /// registration that allows it under the <see cref="PolicyProfile.Rfc6749WithPkce"/> profile, with no
+    /// materialization wired; the endpoint that serves a request object reads that capability beside the one its
+    /// candidate carries. A request object passed by value to the authorization endpoint, the <c>request</c> parameter
+    /// of <see href="https://www.rfc-editor.org/rfc/rfc9101#section-5">RFC 9101 Section 5</see>, or pushed to the
+    /// pushed authorization request endpoint of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2">RFC 9126 Section 2</see>, is answered over the
+    /// wire as for a registration that never held the capability, the same bytes. A capability the resolution
+    /// withholds is not served, which is this library's rule:
+    /// <see href="../../../documents/AuthorizationServerDesign.md#23-per-endpoint-loop-stage">Server design</see>.
+    /// </summary>
+    /// <param name="requestName"><c>byValue</c> for the authorization endpoint, <c>pushed</c> for the pushed one.</param>
+    /// <param name="expectedAnswer">
+    /// The answer of the registration that never held the capability, as
+    /// <see cref="OAuthTestTransport.ProjectWireAnswer"/> projects it.
+    /// </param>
+    [TestMethod]
+    [DataRow("byValue", "404\nContent-Length: 0\nServer: Kestrel\n\n", DisplayName = "a request object by value at the authorization endpoint")]
+    [DataRow("pushed", "404\nContent-Length: 0\nServer: Kestrel\n\n", DisplayName = "a request object pushed to the pushed authorization request endpoint")]
+    public async Task ARequestObjectTheCapabilityResolutionWithholdsIsAnsweredAsOneNeverHeldAsync(string requestName, string expectedAnswer)
+    {
+        ImmutableHashSet<CapabilityIdentifier> neverHeld = requestName switch
+        {
+            "byValue" => ImmutableHashSet.Create(
+                WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
+                WellKnownCapabilityIdentifiers.OAuthDirectAuthorization),
+            "pushed" => ImmutableHashSet.Create(
+                WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
+                WellKnownCapabilityIdentifiers.OAuthPushedAuthorization),
+            _ => throw new ArgumentOutOfRangeException(nameof(requestName), requestName, "Unknown request.")
+        };
+        ImmutableHashSet<CapabilityIdentifier> registered =
+            neverHeld.Add(WellKnownCapabilityIdentifiers.OAuthJwtSecuredAuthorizationRequest);
+        Action<AuthorizationServerIntegration> withhold = CapabilityBounds.Wire(
+            CapabilityBounds.ResolutionWithholds, WellKnownCapabilityIdentifiers.OAuthJwtSecuredAuthorizationRequest);
+
+        (string underTheResolution, string neverHeldAnswer) = requestName switch
+        {
+            "byValue" => (
+                (await GetTheAuthorizationEndpointUnderMaterializationAsync(
+                    registered, PolicyProfile.Rfc6749WithPkce, materialize: null, BuildRequestObjectQueryAsync, withhold).ConfigureAwait(false)).WireAnswer,
+                (await GetTheAuthorizationEndpointUnderMaterializationAsync(
+                    neverHeld, PolicyProfile.Rfc6749WithPkce, materialize: null, BuildRequestObjectQueryAsync).ConfigureAwait(false)).WireAnswer),
+            "pushed" => (
+                (await PostThePushedAuthorizationRequestUnderMaterializationAsync(
+                    registered, materialize: null, withhold, BuildRequestObjectQueryAsync).ConfigureAwait(false)).WireAnswer,
+                (await PostThePushedAuthorizationRequestUnderMaterializationAsync(
+                    neverHeld, materialize: null, parameters: BuildRequestObjectQueryAsync).ConfigureAwait(false)).WireAnswer),
+            _ => throw new ArgumentOutOfRangeException(nameof(requestName), requestName, "Unknown request.")
+        };
+
+        Assert.AreEqual(neverHeldAnswer, underTheResolution);
+        Assert.AreEqual(expectedAnswer, neverHeldAnswer);
     }
 
 
@@ -9363,18 +9546,30 @@ internal sealed class IdJagGrantTests
     /// <param name="materialize">The application's materialization seam, or <see langword="null"/> for none.</param>
     /// <param name="form">The form posted to the token endpoint.</param>
     /// <param name="alter">Further wiring of the candidate, or <see langword="null"/> for none.</param>
+    /// <param name="compose">
+    /// A composition of the server's configuration applied before the registration, for example a builder wrapped to
+    /// count chain builds, or <see langword="null"/> for none.
+    /// </param>
     /// <returns>
-    /// The status code, the body, the answer as <see cref="ProjectWireAnswer"/> projects it and the registration's
+    /// The status code, the body, the answer as <see cref="OAuthTestTransport.ProjectWireAnswer"/> projects it and the registration's
     /// tenant handle, which the dispatch activity of the request carries.
     /// </returns>
     private Task<(int StatusCode, string Body, string WireAnswer, string TenantHandle)> PostToTheTokenEndpointUnderMaterializationAsync(
         ImmutableHashSet<CapabilityIdentifier> capabilities,
         MaterializeRegistrationDelegate? materialize,
         Dictionary<string, string> form,
-        Action<AuthorizationServerIntegration>? alter = null) =>
+        Action<AuthorizationServerIntegration>? alter = null,
+        Func<ServerConfiguration, ServerConfiguration>? compose = null) =>
         SendUnderMaterializationAsync(
             async app =>
             {
+                if(compose is not null)
+                {
+                    await app.Server.RequestAlterationAsync(
+                        candidate => candidate.Configuration = compose(candidate.Configuration),
+                        TestContext.CancellationToken).ConfigureAwait(false);
+                }
+
                 VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
                     ClientId,
                     new Uri(ClientId),
@@ -9410,7 +9605,7 @@ internal sealed class IdJagGrantTests
     /// </param>
     /// <param name="alter">Further wiring of the candidate, or <see langword="null"/> for none.</param>
     /// <returns>
-    /// The status code, the body, the answer as <see cref="ProjectWireAnswer"/> projects it and the registration's
+    /// The status code, the body, the answer as <see cref="OAuthTestTransport.ProjectWireAnswer"/> projects it and the registration's
     /// tenant handle, which the dispatch activity of the request carries.
     /// </returns>
     private Task<(int StatusCode, string Body, string WireAnswer, string TenantHandle)> GetTheAuthorizationEndpointUnderMaterializationAsync(
@@ -9439,38 +9634,51 @@ internal sealed class IdJagGrantTests
     /// <summary>
     /// Registers a client with <paramref name="capabilities"/> under <see cref="PolicyProfile.Rfc6749WithPkce"/>
     /// through the fixture's request-object registration, installs <paramref name="materialize"/> as the application's
-    /// materialization seam and applies <paramref name="alter"/> to the same candidate when given, then posts a pushed
-    /// authorization request for the authorization code flow with an S256 code challenge to the pushed authorization
-    /// request endpoint over the listener.
+    /// materialization seam when given and applies <paramref name="alter"/> to the same candidate when given, then
+    /// posts a pushed authorization request to the pushed authorization request endpoint over the listener: for the
+    /// authorization code flow with an S256 code challenge, or, when <paramref name="parameters"/> is given,
+    /// <c>client_id</c> and the parameters it builds, for example a request object.
     /// </summary>
     /// <param name="capabilities">The capabilities the loaded registration allows.</param>
-    /// <param name="materialize">The application's materialization seam.</param>
+    /// <param name="materialize">The application's materialization seam, or <see langword="null"/> for none.</param>
     /// <param name="alter">Further wiring of the candidate, or <see langword="null"/> for none.</param>
+    /// <param name="parameters">
+    /// The parameters beside <c>client_id</c>, built from the registered key material, or <see langword="null"/> for
+    /// the authorization code flow's parameters with an S256 code challenge.
+    /// </param>
     /// <returns>
-    /// The status code, the body, the answer as <see cref="ProjectWireAnswer"/> projects it and the registration's
+    /// The status code, the body, the answer as <see cref="OAuthTestTransport.ProjectWireAnswer"/> projects it and the registration's
     /// tenant handle, which the dispatch activity of the request carries.
     /// </returns>
     private Task<(int StatusCode, string Body, string WireAnswer, string TenantHandle)> PostThePushedAuthorizationRequestUnderMaterializationAsync(
         ImmutableHashSet<CapabilityIdentifier> capabilities,
-        MaterializeRegistrationDelegate materialize,
-        Action<AuthorizationServerIntegration>? alter = null) =>
+        MaterializeRegistrationDelegate? materialize,
+        Action<AuthorizationServerIntegration>? alter = null,
+        Func<VerifierKeyMaterial, Task<Dictionary<string, string>>>? parameters = null) =>
         SendUnderMaterializationAsync(
             app => app.RegisterClientAsync(ClientId, new Uri(ClientId), capabilities, PolicyProfile.Rfc6749WithPkce),
             materialize,
-            (_, host, material) => OAuthTestTransport.PostFormAsync(
-                host.SharedHttpClient!,
-                new Uri(host.HttpBaseAddress!,
-                    TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodePar, material.Registration.TenantId.Value)),
-                new Dictionary<string, string>
-                {
-                    [OAuthRequestParameterNames.ClientId] = ClientId,
-                    [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
-                    [OAuthRequestParameterNames.RedirectUri] = MaterializationRedirectUri,
-                    [OAuthRequestParameterNames.CodeChallenge] = MaterializationCodeChallenge,
-                    [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
-                    [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
-                },
-                TestContext.CancellationToken),
+            async (_, host, material) =>
+            {
+                Dictionary<string, string> form = parameters is null
+                    ? new Dictionary<string, string>
+                    {
+                        [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+                        [OAuthRequestParameterNames.RedirectUri] = MaterializationRedirectUri,
+                        [OAuthRequestParameterNames.CodeChallenge] = MaterializationCodeChallenge,
+                        [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
+                        [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
+                    }
+                    : await parameters(material).ConfigureAwait(false);
+                form[OAuthRequestParameterNames.ClientId] = ClientId;
+
+                return await OAuthTestTransport.PostFormAsync(
+                    host.SharedHttpClient!,
+                    new Uri(host.HttpBaseAddress!,
+                        TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodePar, material.Registration.TenantId.Value)),
+                    form,
+                    TestContext.CancellationToken).ConfigureAwait(false);
+            },
             alter);
 
 
@@ -9490,7 +9698,7 @@ internal sealed class IdJagGrantTests
     /// <param name="pathExtension">The path extension after the family's path, the empty text for none.</param>
     /// <param name="alter">Further wiring of the candidate, or <see langword="null"/> for none.</param>
     /// <returns>
-    /// The status code, the body, the answer as <see cref="ProjectWireAnswer"/> projects it and the registration's
+    /// The status code, the body, the answer as <see cref="OAuthTestTransport.ProjectWireAnswer"/> projects it and the registration's
     /// tenant handle, which the dispatch activity of the request carries.
     /// </returns>
     private Task<(int StatusCode, string Body, string WireAnswer, string TenantHandle)> SendToTheSyntheticFamilyUnderMaterializationAsync(
@@ -9553,7 +9761,7 @@ internal sealed class IdJagGrantTests
     /// <param name="send">Sends the request over the started listener and answers the response.</param>
     /// <param name="alter">Further wiring of the candidate, or <see langword="null"/> for none.</param>
     /// <returns>
-    /// The status code, the body, the answer as <see cref="ProjectWireAnswer"/> projects it and the registration's
+    /// The status code, the body, the answer as <see cref="OAuthTestTransport.ProjectWireAnswer"/> projects it and the registration's
     /// tenant handle, which the dispatch activity of the request carries.
     /// </returns>
     private async Task<(int StatusCode, string Body, string WireAnswer, string TenantHandle)> SendUnderMaterializationAsync(
@@ -9580,7 +9788,7 @@ internal sealed class IdJagGrantTests
         using HttpResponseMessage response = await send(app, host, material).ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        return ((int)response.StatusCode, body, ProjectWireAnswer(response, body), material.Registration.TenantHandle!.Value.Value);
+        return ((int)response.StatusCode, body, OAuthTestTransport.ProjectWireAnswer(response, body), material.Registration.TenantHandle!.Value.Value);
     }
 
 
@@ -9644,26 +9852,6 @@ internal sealed class IdJagGrantTests
                 AllowedCapabilities = capabilities
             }
         });
-
-
-    /// <summary>
-    /// The text an answer carries on the wire, for a byte-for-byte comparison of two answers: the status code, every
-    /// response and content header field in ordinal name order, and the body. The <c>Date</c> field is left out: the
-    /// listener stamps it from the machine's clock as it writes the answer, so it differs between two answers that
-    /// are otherwise the same bytes.
-    /// </summary>
-    /// <param name="response">The answer as the client received it.</param>
-    /// <param name="body">The body of <paramref name="response"/>, read once.</param>
-    private static string ProjectWireAnswer(HttpResponseMessage response, string body)
-    {
-        IEnumerable<string> fields = response.Headers
-            .Concat(response.Content.Headers)
-            .Where(static field => !string.Equals(field.Key, "Date", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(static field => field.Key, StringComparer.Ordinal)
-            .Select(static field => $"{field.Key}: {string.Join(", ", field.Value)}");
-
-        return $"{(int)response.StatusCode}\n{string.Join("\n", fields)}\n\n{body}";
-    }
 
 
     /// <summary>

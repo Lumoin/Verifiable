@@ -4275,9 +4275,18 @@ countingMetadataBuilder
 
     /// <summary>
     /// Proves conditional deletion under <see href="https://www.rfc-editor.org/rfc/rfc7592#section-2.3">RFC 7592 section 2.3</see>.
+    /// A deletion and an update share one loaded revision. When the deletion commits first, the update loses its race.
+    /// When the update commits first, the deletion loses its race and is answered 400 with the body
+    /// <c>{"error":"invalid_client_metadata","error_description":"The registration changed during this deletion."}</c>,
+    /// commits nothing and emits no event; the client then sends the deletion again and it is answered 204. In each
+    /// order, and with the update's delivery before or after the deletion's, the cache retains the tombstone one
+    /// revision beyond the removed record.
     /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Section 4.1</see>:
-    /// "Deletion retries a lost conditional race and emits a tombstone one revision beyond the atomically removed record, so delayed updates cannot repopulate a deleted cache entry."
+    /// "Deletion makes one conditional pass at the revision it loaded and emits a tombstone one revision beyond the atomically removed record, so delayed updates cannot repopulate a deleted cache entry."
     /// </summary>
+    /// <param name="isUpdateFirst">Whether the update commits before the deletion.</param>
+    /// <param name="isDeliveryReversed">Whether the update's delivery is held until the deletion is answered.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
     [DataRow(false, false)]
     [DataRow(true, false)]
@@ -4335,6 +4344,18 @@ countingMetadataBuilder
                 }
 
                 _ = releaseDelete.TrySetResult();
+                using HttpResponseMessage lost = await deleteTask.ConfigureAwait(false);
+                string lostBody = await lost.Content.ReadAsStringAsync(exchange.Token).ConfigureAwait(false);
+                Assert.AreEqual(400, (int)lost.StatusCode, lostBody);
+                Assert.AreEqual(
+                    /*lang=json,strict*/ "{\"error\":\"invalid_client_metadata\",\"error_description\":\"The registration changed during this deletion.\"}",
+                    lostBody);
+                Assert.AreEqual(2L, app.RegistrationStore[client.ClientId].Revision, "The lost deletion commits nothing.");
+                Assert.IsEmpty(delivered.OfType<ClientDeregistered>(), "The lost deletion emits no event.");
+
+                //The client sends the deletion again.
+                deleteTask = RawAuthCodeWirePushers.SendPinnedRegistrationAsync(app,
+                    HttpMethod.Delete, client.ManagementUri, client.AccessToken, null, exchange.Token);
                 _ = await deleteTask.ConfigureAwait(false);
             }
             else
@@ -4378,11 +4399,14 @@ countingMetadataBuilder
 
     /// <summary>
     /// Proves identity isolation under <see href="https://www.rfc-editor.org/rfc/rfc7592#section-2.3">RFC 7592 section 2.3</see>.
-    /// The stale deletion, whose client another party deletes and replaces while it runs, is refused 401 with the one
-    /// challenge <c>Bearer realm="https://registration.issuer.test/", error="invalid_token"</c>.
+    /// The stale deletion, whose client another party deletes and replaces while it runs, loses its race: it is answered
+    /// 400 with the body
+    /// <c>{"error":"invalid_client_metadata","error_description":"The registration changed during this deletion."}</c>
+    /// and no challenge, and emits no event; the reused tenant's index and grant state stay the replacement client's.
     /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Section 4.1</see>:
     /// "A delayed deletion cannot remove a different client's reused tenant index or grant state."
     /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
     public async Task DelayedDeletionPreservesReusedTenantOverWire()
     {
@@ -4392,6 +4416,8 @@ countingMetadataBuilder
         await TestHostShell.NameIssuerAsync(app.Server, RawAuthCodeWirePushers.ManagedClientIssuer).ConfigureAwait(false);
         using CancellationTokenSource exchange = CreateTestCancellation();
         var client = await RegisterManagedClientOverWireAsync(app).ConfigureAwait(false);
+        System.Collections.Concurrent.ConcurrentQueue<ClientRegistrationEvent> delivered = new();
+        using IDisposable observed = app.Server.Events.Subscribe(new ActionRegistrationObserver(delivered.Enqueue));
         TaskCompletionSource entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
         TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
         int attempts = 0;
@@ -4420,10 +4446,14 @@ countingMetadataBuilder
         }
 
         using HttpResponseMessage stale = await delayed.ConfigureAwait(false);
-        Assert.AreEqual(401, (int)stale.StatusCode);
+        string staleBody = await stale.Content.ReadAsStringAsync(exchange.Token).ConfigureAwait(false);
+        Assert.AreEqual(400, (int)stale.StatusCode, staleBody);
         Assert.AreEqual(
-            "Bearer realm=\"https://registration.issuer.test/\", error=\"invalid_token\"",
-            Assert.ContainsSingle(RawAuthCodeWirePushers.ChallengesOf(stale)));
+            /*lang=json,strict*/ "{\"error\":\"invalid_client_metadata\",\"error_description\":\"The registration changed during this deletion.\"}",
+            staleBody);
+        Assert.IsEmpty(RawAuthCodeWirePushers.ChallengesOf(stale), "A lost race carries no challenge.");
+        Assert.AreEqual(client.ClientId, Assert.ContainsSingle(delivered.OfType<ClientDeregistered>()).ClientId,
+            "The stale deletion emits no event.");
         Assert.AreNotEqual(client.ClientId, replacement.ClientId);
         Assert.AreSame(app.RegistrationStore[replacement.ClientId], app.RegistrationStore["dynamic-clients"]);
         using HttpResponseMessage read = await RawAuthCodeWirePushers.SendPinnedRegistrationAsync(app,
@@ -4896,44 +4926,6 @@ countingMetadataBuilder
                     return await MetadataEndpoints.Builder(registration, ctx, ct).ConfigureAwait(false);
                 }])
         };
-    }
-
-
-    /// <summary>
-    /// An event observer that retains notifications for in-process registration assertions.
-    /// The supplied list receives each synchronous notification in delivery order.
-    /// </summary>
-    /// <typeparam name="T">The notification type.</typeparam>
-    /// <param name="collected">The list used by the test to inspect notifications.</param>
-    /// <param name="observe">An optional synchronous request observer.</param>
-    private sealed class CollectingObserver<T>(List<T> collected, Action<T>? observe = null): IObserver<T>
-    {
-        /// <summary>
-        /// Records the delivered notification so the test can inspect its payload.
-        /// </summary>
-        /// <param name="value">The delivered notification.</param>
-        public void OnNext(T value)
-        {
-            collected.Add(value);
-            observe?.Invoke(value);
-        }
-
-
-        /// <summary>
-        /// Accepts an error notification without adding a lifecycle event to the test list.
-        /// </summary>
-        /// <param name="error">The reported error.</param>
-        public void OnError(Exception error)
-        {
-        }
-
-
-        /// <summary>
-        /// Accepts completion without adding a lifecycle event to the test list.
-        /// </summary>
-        public void OnCompleted()
-        {
-        }
     }
 
 

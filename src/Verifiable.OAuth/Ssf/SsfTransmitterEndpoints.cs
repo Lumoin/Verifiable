@@ -1261,7 +1261,9 @@ public static class SsfTransmitterEndpoints
             return refusal;
         }
 
-        Uri? metadataUrl = registration.IsCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata)
+        //The metadata capability is read from the set the request is served under, held to the bound, so the
+        //challenge names the metadata URL only where the metadata endpoint is served.
+        Uri? metadataUrl = context.IsBoundedCapabilityAllowed(WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata)
             ? WellKnownPaths.OAuthProtectedResource.ComputeUri(issuer.OriginalString)
             : null;
 

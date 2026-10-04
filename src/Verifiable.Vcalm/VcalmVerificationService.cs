@@ -1308,13 +1308,14 @@ public static class VcalmVerificationService
 
 
     /// <summary>
-    /// Checks dispatch availability in <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>:
-    /// an uninitialized registry or a null lookup result means unavailable. Matcher exceptions
-    /// reach <see cref="ProofVerificationAttempt.UnexpectedFailure"/> as unclassified dependency failures.
+    /// Checks dispatch availability in <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>
+    /// through <see cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}.TryResolveVerification"/>:
+    /// an uninitialized registry or a pair the matcher answers <see langword="null"/> for means unavailable.
+    /// Matcher exceptions reach <see cref="ProofVerificationAttempt.UnexpectedFailure"/> as unclassified
+    /// dependency failures.
     /// </summary>
     private static ProofVerificationOutcome ValidateCryptoRegistry(CryptoAlgorithm algorithm) =>
-        CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.IsInitialized
-            && CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(algorithm, Purpose.Verification) is not null
+        CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.TryResolveVerification(algorithm, Purpose.Verification, out _)
             ? ProofVerificationOutcome.Success
             : ProofVerificationOutcome.Failure(VcalmProblemTypes.UnsupportedSecuringMechanism, VcalmProblemTypes.UnsupportedSecuringMechanismTitle,
                 VcalmProblemTypes.UnsupportedSecuringMechanismDetail);

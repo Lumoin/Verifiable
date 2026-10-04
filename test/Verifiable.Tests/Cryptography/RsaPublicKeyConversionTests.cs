@@ -23,7 +23,8 @@ namespace Verifiable.Tests.Cryptography;
 
 /// <summary>
 /// RSA conversions retain the supplied public exponent through JWK, COSE and multibase, and both
-/// verification providers use that exponent. Invalid exponents are refused at the conversion boundary.
+/// verification providers use that exponent. Invalid exponents are refused at the conversion boundary. A
+/// bare modulus, which carries no exponent, means 65537 to both providers.
 /// </summary>
 [TestClass]
 internal sealed class RsaPublicKeyConversionTests
@@ -116,6 +117,30 @@ internal sealed class RsaPublicKeyConversionTests
             algorithm, purpose, owner.Memory.Span, TestSetup.Base64UrlEncoder);
         Assert.AreEqual((string)jwk[WellKnownJwkMemberNames.N], roundTripped.N);
         Assert.AreEqual((string)jwk[WellKnownJwkMemberNames.E], roundTripped.E);
+    }
+
+
+    /// <summary>
+    /// A public key the library holds as a bare modulus converts to a JWK by the rule both providers read it by: the
+    /// modulus with the exponent 65537, since a bare modulus carries none. A DER key keeps its own exponent
+    /// (<see cref="JwkRoundTripPreservesPublicExponent"/>). A bare modulus after a leading zero octet is not written in
+    /// its minimum number of octets and is refused, as the providers refuse it.
+    /// </summary>
+    [TestMethod]
+    public void ABareModulusConvertsToAJwkUnder65537()
+    {
+        byte[] modulus = CreateModulus(256);
+        JsonWebKey converted = CryptoFormatConversions.DefaultAlgorithmToJwkConverter(
+            CryptoAlgorithm.Rsa2048, Purpose.Verification, modulus, TestSetup.Base64UrlEncoder);
+
+        Assert.AreEqual(TestSetup.Base64UrlEncoder(modulus), converted.N, "The JWK carries the modulus as held.");
+        Assert.AreEqual(RsaUtilities.DefaultExponent, converted.E, "A bare modulus means 65537.");
+
+        RsaPublicKeyException exception = Assert.ThrowsExactly<RsaPublicKeyException>(() =>
+            CryptoFormatConversions.DefaultAlgorithmToJwkConverter(
+                CryptoAlgorithm.Rsa2048, Purpose.Verification, [0x00, .. modulus], TestSetup.Base64UrlEncoder));
+
+        Assert.AreEqual(RsaPublicKeyFailureKind.MalformedEncoding, exception.FailureKind);
     }
 
 
@@ -293,7 +318,11 @@ internal sealed class RsaPublicKeyConversionTests
     }
 
 
-    /// <summary>Both providers refuse an invalid DER exponent before importing the public key.</summary>
+    /// <summary>
+    /// Both providers answer a DER public key whose exponent is no valid RSA public exponent as not verified, raising
+    /// nothing: a verify body answers presented key octets as a value, and RFC 8017 Section 3.1 holds the exponent to
+    /// an odd value with 3 &lt;= e &lt; n before anything is imported.
+    /// </summary>
     /// <param name="useMicrosoft">The provider to exercise.</param>
     [TestMethod]
     [DataRow(true)]
@@ -302,39 +331,80 @@ internal sealed class RsaPublicKeyConversionTests
     {
         byte[] modulus = CreateModulus(256);
         byte[] der = EncodeDer(modulus, [0x01]);
-        FakeTimeProvider clock = new(TestClock.CanonicalEpoch);
-        RsaPublicKeyException exception = await Assert.ThrowsExactlyAsync<RsaPublicKeyException>(async () =>
-        {
-            _ = useMicrosoft
-                ? await MicrosoftCryptographicFunctions.VerifyRsa2048Async(
-                    ReadOnlyMemory<byte>.Empty, modulus, der, clock, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)
-                : await BouncyCastleCryptographicFunctions.VerifyRsa2048Async(
-                    ReadOnlyMemory<byte>.Empty, modulus, der, clock, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
-        }).ConfigureAwait(false);
 
-        Assert.AreEqual(RsaPublicKeyFailureKind.InvalidPublicExponent, exception.FailureKind);
+        Assert.IsFalse(await VerifyOctetsAsync(useMicrosoft, [], modulus, der).ConfigureAwait(false),
+            "A DER public key carrying the exponent one is no RSA public key, so nothing verifies under it.");
     }
 
 
-    /// <summary>The providers refuse a bare modulus rather than inventing its missing public exponent.</summary>
+    /// <summary>
+    /// One rule reads an RSA public key on both providers: a DER <c>RSAPublicKey</c> keeps the exponent it carries,
+    /// which is never replaced by 65537, and a bare modulus, which carries none, means 65537. Over one modulus whose
+    /// primes admit both exponents, the DER key of exponent three verifies the exponent-three signature and not the
+    /// 65537 one, and the bare modulus verifies the 65537 signature and not the exponent-three one, so each half fails
+    /// under the other reading.
+    /// </summary>
     /// <param name="useMicrosoft">The provider to exercise.</param>
     [TestMethod]
-    [DataRow(true)]
-    [DataRow(false)]
-    public async Task BareModulusIsRefusedWithoutDefaultExponent(bool useMicrosoft)
+    [DataRow(true, DisplayName = "Microsoft keeps a carried exponent and reads a bare modulus under 65537")]
+    [DataRow(false, DisplayName = "BouncyCastle keeps a carried exponent and reads a bare modulus under 65537")]
+    public async Task ACarriedExponentIsKeptAndABareModulusMeans65537(bool useMicrosoft)
     {
-        byte[] modulus = CreateModulus(256);
+        RsaKeyPairGenerator generator = new();
+        generator.Init(new RsaKeyGenerationParameters(BigInteger.ValueOf(3 * 65537), new SecureRandom(), 2048, 80));
+        AsymmetricCipherKeyPair pair = generator.GenerateKeyPair();
+        RsaPrivateCrtKeyParameters generated = Assert.IsInstanceOfType<RsaPrivateCrtKeyParameters>(pair.Private);
+        byte[] modulus = generated.Modulus.ToByteArrayUnsigned();
+        byte[] carriedThree = EncodeDer(modulus, [0x03]);
+        byte[] privateThree = EncodePrivateKey(generated, 3);
+        byte[] private65537 = EncodePrivateKey(generated, 65537);
+        byte[] message = "A bare modulus carries no exponent of its own."u8.ToArray();
         FakeTimeProvider clock = new(TestClock.CanonicalEpoch);
-        RsaPublicKeyException exception = await Assert.ThrowsExactlyAsync<RsaPublicKeyException>(async () =>
-        {
-            _ = useMicrosoft
-                ? await MicrosoftCryptographicFunctions.VerifyRsa2048Async(
-                    ReadOnlyMemory<byte>.Empty, modulus, modulus, clock, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)
-                : await BouncyCastleCryptographicFunctions.VerifyRsa2048Async(
-                    ReadOnlyMemory<byte>.Empty, modulus, modulus, clock, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
-        }).ConfigureAwait(false);
 
-        Assert.AreEqual(RsaPublicKeyFailureKind.MalformedEncoding, exception.FailureKind);
+        try
+        {
+            (Signature signatureThree, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.SignRsa2048Async(
+                privateThree, message, BaseMemoryPool.Shared, clock, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            using Signature ownedThree = signatureThree;
+            (Signature signature65537, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.SignRsa2048Async(
+                private65537, message, BaseMemoryPool.Shared, clock, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            using Signature owned65537 = signature65537;
+            byte[] three = signatureThree.AsReadOnlyMemory().ToArray();
+            byte[] sixtyFiveThousand = signature65537.AsReadOnlyMemory().ToArray();
+
+            Assert.IsTrue(await VerifyOctetsAsync(useMicrosoft, message, three, carriedThree).ConfigureAwait(false),
+                "The DER key keeps the exponent three it carries.");
+            Assert.IsFalse(await VerifyOctetsAsync(useMicrosoft, message, sixtyFiveThousand, carriedThree).ConfigureAwait(false),
+                "The exponent the DER key carries is never replaced by 65537.");
+            Assert.IsTrue(await VerifyOctetsAsync(useMicrosoft, message, sixtyFiveThousand, modulus).ConfigureAwait(false),
+                "A bare modulus means 65537.");
+            Assert.IsFalse(await VerifyOctetsAsync(useMicrosoft, message, three, modulus).ConfigureAwait(false),
+                "A bare modulus is no key of the exponent three.");
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(privateThree);
+            CryptographicOperations.ZeroMemory(private65537);
+        }
+    }
+
+
+    /// <summary>Verifies a signature over presented public key octets through the selected provider.</summary>
+    /// <param name="useMicrosoft">Whether to verify through the Microsoft provider rather than BouncyCastle.</param>
+    /// <param name="message">The signed message.</param>
+    /// <param name="signature">The signature octets.</param>
+    /// <param name="publicKey">The public key octets as presented.</param>
+    /// <returns>Whether the provider verified the signature.</returns>
+    private async Task<bool> VerifyOctetsAsync(bool useMicrosoft, byte[] message, byte[] signature, byte[] publicKey)
+    {
+        FakeTimeProvider clock = new(TestClock.CanonicalEpoch);
+        (bool verified, CryptoEvent? _) = useMicrosoft
+            ? await MicrosoftCryptographicFunctions.VerifyRsa2048Async(
+                message, signature, publicKey, clock, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)
+            : await BouncyCastleCryptographicFunctions.VerifyRsa2048Async(
+                message, signature, publicKey, clock, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        return verified;
     }
 
 

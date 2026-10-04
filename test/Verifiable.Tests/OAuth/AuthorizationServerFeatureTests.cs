@@ -2307,20 +2307,6 @@ internal sealed class AuthorizationServerFeatureTests
     }
 
 
-    //Helper observer that collects all events into a list for assertion.
-    private sealed class CollectingObserver<T>(List<T> collected): IObserver<T>
-    {
-        public void OnNext(T value)
-        {
-            collected.Add(value);
-        }
-
-        public void OnError(Exception error) { }
-
-        public void OnCompleted() { }
-    }
-
-
     //Constructs the minimum-fields ClientRecord the policy resolver
     //needs. Tests in this class consume only the Profile axis.
     private static ClientRecord MakeMinimalRegistration(PolicyProfile profile) =>

@@ -370,6 +370,31 @@ internal sealed class DidCommFromPriorTests
     }
 
 
+    /// <summary>
+    /// A from_prior whose <c>kid</c> names an authentication method of the prior DID that carries an X25519
+    /// key agreement public key is rejected with <see cref="DidCommDecryptionError.RotationSignerNotAuthorized"/>,
+    /// and nothing is raised: no signature verification is served for a key agreement public key, so that
+    /// method cannot be the signer of the rotation. The prior DID's document is presented input.
+    /// DIDComm Messaging v2.1 <see href="https://identity.foundation/didcomm-messaging/spec/v2.1/#did-rotation">DID Rotation</see>:
+    /// "The validity of the DID Rotation is verified by checking the JWT signature against the key indicated in
+    /// the <c>kid</c> header parameter."
+    /// </summary>
+    [TestMethod]
+    public async Task PriorAuthenticationMethodCarryingKeyAgreementPublicKeyRejected()
+    {
+        await using var rotation = await RotationFixture.CreateAsync(Pool, TestContext.CancellationToken).ConfigureAwait(false);
+
+        DidCommMessage message = NewMessage(rotation.NewDid);
+        await rotation.MintFromPriorAsync(message, TestContext.CancellationToken).ConfigureAwait(false);
+
+        DidResolver keyAgreementResolver = await rotation.BuildKeyAgreementAuthenticationPriorResolverAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        DidCommEncryptedUnpackResult result = await rotation.PackAndUnpackAnoncryptAsync(
+            message, TestContext.CancellationToken, resolverOverride: keyAgreementResolver).ConfigureAwait(false);
+
+        AssertRotationRejected(result, DidCommDecryptionError.RotationSignerNotAuthorized);
+    }
+
+
     private static void AssertRotationRejected(DidCommEncryptedUnpackResult result, DidCommDecryptionError expected)
     {
         Assert.IsFalse(result.IsUnpacked, $"The rotation MUST be rejected. Unexpected success, error: {result.Error}.");

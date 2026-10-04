@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
+using System.Net;
+using System.Text;
 using System.Text.Json;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -248,6 +250,116 @@ internal sealed class CredentialProofEnforcementFlowTests
 
 
     /// <summary>
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-8.3.1.2">OID4VCI
+    /// 1.0 Section 8.3.1.2</see> names <c>invalid_proof</c> for a Credential Request one of whose key proofs is
+    /// invalid, and <see href="https://www.rfc-editor.org/rfc/rfc7515#section-5.2">RFC 7515 Section 5.2</see>
+    /// says: "If any of the listed steps fails, then the signature or MAC cannot be validated." The JWK converter
+    /// reads every verification key it yields to an algorithm the test registry serves, so the pair this row
+    /// presents is the key-agreement reading of a P-256 public key: a proof signed under <c>ES256</c> whose header
+    /// <c>jwk</c> carries <c>"use":"enc"</c> names (P-256, key agreement), a pair the registry serves no
+    /// verification function for. Sent over the wire, the Credential Request is answered 400 with the error
+    /// <c>invalid_proof</c>, never a server fault. The status and the error code are what this row holds; the
+    /// description names the reason the Credential Endpoint's key proof validation gives for a proof that does not verify.
+    /// </summary>
+    [TestMethod]
+    public async Task ProofUnderAKeyAgreementPublicKeyIsAnInvalidProofAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities).ConfigureAwait(false);
+
+        await WireProofExpectationSeamAsync(host).ConfigureAwait(false);
+        _ = await WireIssuanceAsync(host).ConfigureAwait(false);
+
+        string issuerAudience = material.Registration.IssuerUri!.OriginalString;
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = keys.PublicKey;
+        using PrivateKeyMemory holderPrivate = keys.PrivateKey;
+        string proof = await MintProofWithTypAsync(
+            holderPrivate, holderPublic, issuerAudience, CredentialNonce, Oid4VciProofIssuance.ProofJwtType,
+            jwkUse: WellKnownJwkValues.UseEnc).ConfigureAwait(false);
+
+        (HttpStatusCode statusCode, string body) = await PostOverWireAsync(host, material, proof).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.BadRequest, statusCode, body);
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual("invalid_proof", document.RootElement.GetProperty("error").GetString());
+        Assert.AreEqual("A jwt key proof failed validation: SignatureFailed (Appendix F.4).",
+            document.RootElement.GetProperty("error_description").GetString());
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-8.3.1.2">OID4VCI
+    /// 1.0 Section 8.3.1.2</see> names <c>invalid_proof</c> for a Credential Request one of whose key proofs is
+    /// invalid. A key proof of <see cref="Jws.DefaultMaxJwsLength"/> + 1 characters, longer than the longest
+    /// compact JWS this library verifies (its own guard against a large allocation, stated by no
+    /// specification), is such a proof: sent over the wire, the Credential Request is answered 400 with the error
+    /// <c>invalid_proof</c>, never a server fault. The status and the error code are what this row holds; the
+    /// description names the reason the Credential Endpoint's key proof validation gives for a proof that does not verify.
+    /// </summary>
+    [TestMethod]
+    public async Task OversizedProofIsMalformedAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities).ConfigureAwait(false);
+
+        await WireProofExpectationSeamAsync(host).ConfigureAwait(false);
+        _ = await WireIssuanceAsync(host).ConfigureAwait(false);
+
+        string issuerAudience = material.Registration.IssuerUri!.OriginalString;
+        string proof = await MintProofAsync(issuerAudience, CredentialNonce).ConfigureAwait(false);
+        string oversizedProof = proof + new string('A', Jws.DefaultMaxJwsLength + 1 - proof.Length);
+        Assert.AreEqual(Jws.DefaultMaxJwsLength + 1, oversizedProof.Length);
+
+        (HttpStatusCode statusCode, string body) = await PostOverWireAsync(host, material, oversizedProof).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.BadRequest, statusCode, body);
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual("invalid_proof", document.RootElement.GetProperty("error").GetString());
+        Assert.AreEqual("A jwt key proof failed validation: SignatureFailed (Appendix F.4).",
+            document.RootElement.GetProperty("error_description").GetString());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7515#section-5.2">RFC 7515 Section 5.2</see>, step 7:
+    /// "Base64url-decode the encoded representation of the JWS Signature, following the restriction that no line
+    /// breaks, whitespace, or other additional characters have been used."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7515#section-2">Section 2</see> defines the encoding: "Base64
+    /// encoding using the URL- and filename-safe character set defined in Section 5 of RFC 4648 [RFC4648], with all
+    /// trailing '=' characters omitted (as permitted by Section 3.2) and without the inclusion of any line breaks,
+    /// whitespace, or other additional characters." A correctly signed key proof whose signature segment carries
+    /// <c>==</c> after it is no such encoding, so its signature cannot be validated, and
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-8.3.1.2">OID4VCI
+    /// 1.0 Section 8.3.1.2</see> names <c>invalid_proof</c> for a Credential Request one of whose key proofs is
+    /// invalid: sent over the wire, the Credential Request is answered 400 with the error <c>invalid_proof</c>.
+    /// </summary>
+    /// <returns>A task that completes when the answer was asserted.</returns>
+    [TestMethod]
+    public async Task PaddedProofSignatureIsAnInvalidProofAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities).ConfigureAwait(false);
+
+        await WireProofExpectationSeamAsync(host).ConfigureAwait(false);
+        _ = await WireIssuanceAsync(host).ConfigureAwait(false);
+
+        string issuerAudience = material.Registration.IssuerUri!.OriginalString;
+        string proof = await MintProofAsync(issuerAudience, CredentialNonce).ConfigureAwait(false);
+        Assert.AreEqual(2, (proof.Length - proof.LastIndexOf('.', StringComparison.Ordinal) - 1) % 4, "The 64-octet signature segment is 86 characters, which padding would end with '=='.");
+
+        (HttpStatusCode statusCode, string body) = await PostOverWireAsync(host, material, proof + "==").ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.BadRequest, statusCode, body);
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual("invalid_proof", document.RootElement.GetProperty("error").GetString());
+    }
+
+
+    /// <summary>
     /// Installs proof-binding expectations through a requested alteration so issuance can enforce them.
     /// </summary>
     /// <param name="host">The test host to alter.</param>
@@ -328,19 +440,34 @@ internal sealed class CredentialProofEnforcementFlowTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
 
-    //Mints a §F.1 jwt proof carrying a caller-chosen typ, otherwise built exactly as
-    //Oid4VciProofIssuance.BuildJwtProofAsync builds it, to exercise a typ spelling the production
-    //minter itself never emits.
+    /// <summary>
+    /// Mints an Appendix F.1 <c>jwt</c> proof carrying a caller-chosen <c>typ</c>, otherwise built exactly as
+    /// <see cref="Oid4VciProofIssuance.BuildJwtProofAsync"/> builds it, to exercise a header the production
+    /// minter itself never emits.
+    /// </summary>
+    /// <param name="holderPrivate">The holder's private key the proof is signed with.</param>
+    /// <param name="holderPublic">The holder's public key the header <c>jwk</c> carries.</param>
+    /// <param name="audience">The <c>aud</c> claim.</param>
+    /// <param name="nonce">The <c>nonce</c> claim.</param>
+    /// <param name="typ">The <c>typ</c> header parameter.</param>
+    /// <param name="jwkUse">A <c>use</c> member added to the header <c>jwk</c>, or <see langword="null"/> for none.</param>
+    /// <returns>The compact proof.</returns>
     private async Task<string> MintProofWithTypAsync(
-        PrivateKeyMemory holderPrivate, PublicKeyMemory holderPublic, string audience, string nonce, string typ)
+        PrivateKeyMemory holderPrivate, PublicKeyMemory holderPublic, string audience, string nonce, string typ,
+        string? jwkUse = null)
     {
         string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(holderPrivate.Tag);
         IReadOnlyDictionary<string, string> jwk = DpopJwkUtilities.ToJwk(holderPublic, algorithm, TestSetup.Base64UrlEncoder);
 
-        Dictionary<string, object> jwkHeaderMember = new(jwk.Count, StringComparer.Ordinal);
+        Dictionary<string, object> jwkHeaderMember = new(jwk.Count + 1, StringComparer.Ordinal);
         foreach(KeyValuePair<string, string> member in jwk)
         {
             jwkHeaderMember[member.Key] = member.Value;
+        }
+
+        if(jwkUse is not null)
+        {
+            jwkHeaderMember[WellKnownJwkMemberNames.Use] = jwkUse;
         }
 
         JwtHeader header = new(capacity: 3)
@@ -372,6 +499,72 @@ internal sealed class CredentialProofEnforcementFlowTests
     private async Task<ServerHttpResponse> DispatchAsync(
         TestHostShell host, VerifierKeyMaterial material, string proof)
     {
+        string accessToken = await ObtainAccessTokenAsync(host, material).ConfigureAwait(false);
+
+        RequestHeaders headers = new(new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            [WellKnownHttpHeaderNames.Authorization] = ["Bearer " + accessToken]
+        });
+
+        return await host.DispatchAtEndpointAsync(
+            material.Registration.TenantId.Value,
+            WellKnownEndpointNames.Oid4VciCredential,
+            "POST",
+            new RequestFields(),
+            headers,
+            CredentialRequestBody(proof),
+            [],
+            TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Submits a credential request with the supplied proof over the host's HTTPS listener through its pinned
+    /// client, the transport a wallet uses, and returns the status and the body the wire carried.
+    /// </summary>
+    /// <param name="host">The test host whose listener is started and whose Credential Endpoint is posted to.</param>
+    /// <param name="material">The registered client the access token is minted for.</param>
+    /// <param name="proof">The compact <c>jwt</c> key proof the request carries.</param>
+    /// <returns>The HTTP status code and the response body.</returns>
+    private async Task<(HttpStatusCode StatusCode, string Body)> PostOverWireAsync(
+        TestHostShell host, VerifierKeyMaterial material, string proof)
+    {
+        string accessToken = await ObtainAccessTokenAsync(host, material).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Uri credentialUrl = new(host.Host("default").HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.Oid4VciCredential, material.Registration.TenantId.Value));
+        using StringContent content = new(CredentialRequestBody(proof), Encoding.UTF8, WellKnownMediaTypes.Application.Json);
+        using HttpRequestMessage request = new(HttpMethod.Post, credentialUrl) { Content = content };
+        _ = request.Headers.TryAddWithoutValidation(WellKnownHttpHeaderNames.Authorization, "Bearer " + accessToken);
+
+        using HttpResponseMessage response = await host.Host("default").SharedHttpClient!
+            .SendAsync(request, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        return (response.StatusCode, body);
+    }
+
+
+    /// <summary>
+    /// The JSON Credential Request for <see cref="ConfigurationId"/> carrying <paramref name="proof"/> as its one
+    /// <c>proofs.jwt</c> entry.
+    /// </summary>
+    /// <param name="proof">The compact <c>jwt</c> key proof.</param>
+    /// <returns>The request body.</returns>
+    private static string CredentialRequestBody(string proof) =>
+        "{\"credential_configuration_id\":\"" + ConfigurationId + "\",\"proofs\":{\"jwt\":[\"" + proof + "\"]}}";
+
+
+    /// <summary>
+    /// Mints a plain bearer access token for <paramref name="material"/>'s client through the pre-authorized
+    /// code grant, dispatched in process, so a credential request can present it.
+    /// </summary>
+    /// <param name="host">The test host whose token endpoint issues the token.</param>
+    /// <param name="material">The registered client the token is minted for.</param>
+    /// <returns>The access token.</returns>
+    private async Task<string> ObtainAccessTokenAsync(TestHostShell host, VerifierKeyMaterial material)
+    {
         //OID4VCI 1.0 §13.10: "Long-lived Access Tokens giving access to Credentials MUST not be
         //issued unless sender-constrained." Keep this plain-bearer credential token within the
         //long-lived threshold (lifetimes longer than 5 minutes are considered long lived).
@@ -398,24 +591,7 @@ internal sealed class CredentialProofEnforcementFlowTests
 
         Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
         using JsonDocument tokenDoc = JsonDocument.Parse(tokenResponse.Body);
-        string accessToken = tokenDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
 
-        string body = "{\"credential_configuration_id\":\"" + ConfigurationId
-            + "\",\"proofs\":{\"jwt\":[\"" + proof + "\"]}}";
-
-        RequestHeaders headers = new(new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
-        {
-            [WellKnownHttpHeaderNames.Authorization] = ["Bearer " + accessToken]
-        });
-
-        return await host.DispatchAtEndpointAsync(
-            material.Registration.TenantId.Value,
-            WellKnownEndpointNames.Oid4VciCredential,
-            "POST",
-            new RequestFields(),
-            headers,
-            body,
-            [],
-            TestContext.CancellationToken).ConfigureAwait(false);
+        return tokenDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
     }
 }

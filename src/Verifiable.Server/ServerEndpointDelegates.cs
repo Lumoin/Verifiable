@@ -87,7 +87,7 @@ public delegate ServerHttpResponse BuildResponseDelegate(
 /// Hosted on <see cref="ServerEndpoint"/> rather than as a registration-scoped
 /// hook because a registration-scoped hook belongs to the application, while a
 /// step set on the endpoint travels with the endpoint chain that
-/// <see cref="Pipeline.EndpointChain.BuildForRequestAsync"/> rebuilds from
+/// the dispatcher's chain build rebuilds from
 /// configuration on every request, so a live alteration cannot lose it.
 /// </para>
 /// </remarks>
