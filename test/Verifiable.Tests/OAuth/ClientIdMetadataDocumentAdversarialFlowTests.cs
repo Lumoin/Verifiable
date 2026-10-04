@@ -2,6 +2,7 @@ using Microsoft.Extensions.Time.Testing;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 using Verifiable.Core;
@@ -1085,6 +1086,116 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
             a => a.Events.Any(e => string.Equals(e.Name, ClientIdMismatchEventName, StringComparison.Ordinal)),
             handleActivities,
             "A client-id-mismatch span event must be recorded on the request's Handle activity.");
+    }
+
+
+    /// <summary>
+    /// CIMD-059: a document response longer than the configured maximum aborts the request and records the
+    /// too-large span event on the request's <c>Handle</c> activity, not the invalid-document event, and the wire
+    /// response never names the reason.
+    /// </summary>
+    [TestMethod]
+    public async Task OversizedDocumentEmitsTooLargeSpanEventAndWireBodyOmitsInternalDetail()
+    {
+        ConcurrentBag<Activity> captured = [];
+        using ActivityListener listener = CreateListener(captured);
+        ActivitySource.AddActivityListener(listener);
+
+        await using MinimalHttpHost documentHost = await MinimalHttpHost.StartAsync(
+            (request, ct) => Task.FromResult(new MinimalHttpResponse
+            {
+                StatusCode = 200,
+                ContentType = "application/json",
+                Body = new string('x', 4096)
+            }),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
+        ClientIdMetadataDocumentResolverOptions options = new() { MaximumDocumentBytes = 64 };
+        await app.WireCimdMaterializationAsync("default", documentHost.Certificate, options).ConfigureAwait(false);
+        Uri documentUri = new(documentHost.BaseAddress, "/app");
+        ClientRecord stub = await app.RegisterCimdStubClientAsync(documentUri, AuthCodeCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        AuthCodeFlowEndpointResult result = await DriveParForStubAsync(
+            app, stub, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, result.Outcome,
+            "CIMD-059: a document exceeding the configured maximum size must abort the authorization request.");
+        AssertNoInternalDetailLeaked(result);
+
+        Activity[] handleActivities = captured
+            .Where(a => string.Equals(a.OperationName, ServerActivityNames.Handle, StringComparison.Ordinal))
+            .Where(a => a.Tags.Any(t =>
+                string.Equals(t.Key, ServerTagNames.TenantHandle, StringComparison.Ordinal)
+                && string.Equals(t.Value, stub.TenantHandle!.Value.Value, StringComparison.Ordinal)))
+            .ToArray();
+        Assert.IsGreaterThan(0, handleActivities.Length, "At least one Handle activity for this tenant must be captured.");
+        Assert.Contains(
+            a => a.Events.Any(e => string.Equals(e.Name, TooLargeEventName, StringComparison.Ordinal)),
+            handleActivities,
+            "A too-large span event must be recorded on the request's Handle activity.");
+
+        Assert.DoesNotContain(
+            a => a.Events.Any(e => string.Equals(e.Name, InvalidDocumentEventName, StringComparison.Ordinal)),
+            handleActivities,
+            "A size refusal must not be recorded as an invalid document.");
+    }
+
+
+    /// <summary>
+    /// A document host the guarded fetch cannot complete an exchange with, here one whose TLS certificate is not the
+    /// one the resolver's client pins, so the handshake fails before the host serves any request, aborts the request
+    /// and records the unreachable span event on the request's <c>Handle</c> activity, not the invalid-document event,
+    /// and the wire response never names the reason.
+    /// </summary>
+    [TestMethod]
+    public async Task UnreachableDocumentHostEmitsUnreachableSpanEventAndWireBodyOmitsInternalDetail()
+    {
+        ConcurrentBag<Activity> captured = [];
+        using ActivityListener listener = CreateListener(captured);
+        ActivitySource.AddActivityListener(listener);
+
+        RequestCounter counter = new();
+        await using MinimalHttpHost documentHost = await MinimalHttpHost.StartAsync(
+            (request, ct) =>
+            {
+                counter.Increment();
+
+                return Task.FromResult(new MinimalHttpResponse { StatusCode = 200 });
+            },
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        //The resolver's client pins a certificate the document host does not present.
+        using X509Certificate2 pinnedCertificate = LoopbackTls.CreateDistinctServerCertificate("cimd-unreachable-pin");
+        await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
+        await app.WireCimdMaterializationAsync("default", pinnedCertificate).ConfigureAwait(false);
+        Uri documentUri = new(documentHost.BaseAddress, "/app");
+        ClientRecord stub = await app.RegisterCimdStubClientAsync(documentUri, AuthCodeCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        AuthCodeFlowEndpointResult result = await DriveParForStubAsync(
+            app, stub, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, result.Outcome,
+            "CIMD-035: a document that cannot be fetched must abort the authorization request directly, never redirect.");
+        Assert.AreEqual(0, counter.Count, "The handshake must fail before the document host serves any request.");
+        AssertNoInternalDetailLeaked(result);
+
+        Activity[] handleActivities = captured
+            .Where(a => string.Equals(a.OperationName, ServerActivityNames.Handle, StringComparison.Ordinal))
+            .Where(a => a.Tags.Any(t =>
+                string.Equals(t.Key, ServerTagNames.TenantHandle, StringComparison.Ordinal)
+                && string.Equals(t.Value, stub.TenantHandle!.Value.Value, StringComparison.Ordinal)))
+            .ToArray();
+        Assert.IsGreaterThan(0, handleActivities.Length, "At least one Handle activity for this tenant must be captured.");
+        Assert.Contains(
+            a => a.Events.Any(e => string.Equals(e.Name, UnreachableEventName, StringComparison.Ordinal)),
+            handleActivities,
+            "An unreachable span event must be recorded on the request's Handle activity.");
+
+        Assert.DoesNotContain(
+            a => a.Events.Any(e => string.Equals(e.Name, InvalidDocumentEventName, StringComparison.Ordinal)),
+            handleActivities,
+            "A transport failure must not be recorded as an invalid document.");
     }
 
 
@@ -2278,6 +2389,15 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
 
     /// <summary>The span event name for a resolver-side policy denial (see <see cref="ClientIdMismatchEventName"/>).</summary>
     private static string PolicyDeniedEventName { get; } = ClientIdMetadataMaterialization.PolicyDeniedEventName;
+
+    /// <summary>The span event name for a resolver-side size refusal (see <see cref="ClientIdMismatchEventName"/>).</summary>
+    private static string TooLargeEventName { get; } = ClientIdMetadataMaterialization.TooLargeEventName;
+
+    /// <summary>The span event name for a resolver-side transport failure (see <see cref="ClientIdMismatchEventName"/>).</summary>
+    private static string UnreachableEventName { get; } = ClientIdMetadataMaterialization.UnreachableEventName;
+
+    /// <summary>The span event name for a resolver-side invalid-document rejection (see <see cref="ClientIdMismatchEventName"/>).</summary>
+    private static string InvalidDocumentEventName { get; } = ClientIdMetadataMaterialization.InvalidDocumentEventName;
 
     private static ClientIdMetadataDocumentResolverOptions RequirePrivateKeyJwtOptions { get; } = new()
     {

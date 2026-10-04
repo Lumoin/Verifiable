@@ -98,6 +98,18 @@ public static class ClientIdMetadataMaterialization
     /// <summary>The span event name for a resolver-side fetch failure.</summary>
     public static string FetchFailedEventName { get; } = Utf8Constants.ToInternedString(FetchFailedEventNameUtf8);
 
+    /// <summary>The UTF-8 source literal of <see cref="TooLargeEventName"/>.</summary>
+    public static ReadOnlySpan<byte> TooLargeEventNameUtf8 => "oauth.cimd.materialize.too_large"u8;
+
+    /// <summary>The span event name for a resolver-side size refusal of a declared or observed response length.</summary>
+    public static string TooLargeEventName { get; } = Utf8Constants.ToInternedString(TooLargeEventNameUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="UnreachableEventName"/>.</summary>
+    public static ReadOnlySpan<byte> UnreachableEventNameUtf8 => "oauth.cimd.materialize.unreachable"u8;
+
+    /// <summary>The span event name for a resolver-side transport failure unrelated to size.</summary>
+    public static string UnreachableEventName { get; } = Utf8Constants.ToInternedString(UnreachableEventNameUtf8);
+
     /// <summary>The UTF-8 source literal of <see cref="InvalidDocumentEventName"/>.</summary>
     public static ReadOnlySpan<byte> InvalidDocumentEventNameUtf8 => "oauth.cimd.materialize.invalid_document"u8;
 
@@ -275,7 +287,10 @@ public static class ClientIdMetadataMaterialization
 
             if(!resolution.IsResolved || resolution.Document is null)
             {
-                _ = (Activity.Current?.AddEvent(new ActivityEvent(ResolutionFailureEventName(resolution.Outcome))));
+                //The event name is read before the trace is consulted, so an outcome without an arm fails whether
+                //or not the request is traced.
+                string failureEventName = ResolutionFailureEventName(resolution.Outcome);
+                _ = (Activity.Current?.AddEvent(new ActivityEvent(failureEventName)));
 
                 return await RefuseAsync(context, record, reading, requestClass, cancellationToken).ConfigureAwait(false);
             }
@@ -542,17 +557,27 @@ public static class ClientIdMetadataMaterialization
     /// <summary>
     /// The span event name that records why a document resolution did not yield a usable
     /// document, so a refusal whose wire body names no cause leaves its cause on the request's
-    /// trace.
+    /// trace. Every member of <see cref="ClientIdMetadataResolutionOutcome"/> has its own arm, and each
+    /// outcome is recorded as itself; a <see cref="ClientIdMetadataResolutionOutcome.Resolved"/> outcome
+    /// reaches this method only without a document, which is recorded as an invalid document.
     /// </summary>
     /// <param name="outcome">The outcome the resolver reported.</param>
     /// <returns>The event name for <paramref name="outcome"/>.</returns>
+    /// <exception cref="UnreachableException">
+    /// Thrown when <paramref name="outcome"/> is none of the members the arms name, so an outcome added
+    /// later without an arm here fails loudly instead of being recorded under another outcome's event.
+    /// </exception>
     private static string ResolutionFailureEventName(ClientIdMetadataResolutionOutcome outcome) => outcome switch
     {
         ClientIdMetadataResolutionOutcome.PolicyDenied => PolicyDeniedEventName,
         ClientIdMetadataResolutionOutcome.FetchFailed => FetchFailedEventName,
+        ClientIdMetadataResolutionOutcome.TooLarge => TooLargeEventName,
+        ClientIdMetadataResolutionOutcome.Unreachable => UnreachableEventName,
         ClientIdMetadataResolutionOutcome.InvalidDocument => InvalidDocumentEventName,
         ClientIdMetadataResolutionOutcome.Resolved => InvalidDocumentEventName,
 
-        _ => InvalidDocumentEventName
+        _ => throw new UnreachableException(
+            $"Unhandled {nameof(ClientIdMetadataResolutionOutcome)} value '{outcome}'; the enum admits only Resolved, " +
+            "PolicyDenied, FetchFailed, InvalidDocument, TooLarge and Unreachable.")
     };
 }
