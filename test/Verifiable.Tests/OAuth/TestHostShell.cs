@@ -1410,12 +1410,45 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// <param name="observeFormPostResponse">The observer of each form-post response, or <see langword="null"/>.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The client, its registration and the client's flow store.</returns>
-    public async ValueTask<(OAuthClient Client, ClientRegistration Registration, Dictionary<string, FlowState> ClientFlowStore)>
+    public ValueTask<(OAuthClient Client, ClientRegistration Registration, Dictionary<string, FlowState> ClientFlowStore)>
         CreateObservedOAuthClientAndRegistrationAsync(
             ClientRecord record,
             string redirectUri,
             PolicyProfile? profile,
             Action<Uri, HttpResponseData>? observeFormPostResponse,
+            CancellationToken cancellationToken) =>
+        CreateRewritingOAuthClientAndRegistrationAsync(
+            record,
+            redirectUri,
+            profile,
+            (endpoint, response) =>
+            {
+                observeFormPostResponse?.Invoke(endpoint, response);
+
+                return response;
+            },
+            cancellationToken);
+
+
+    /// <summary>
+    /// The HTTP-backed client factory of
+    /// <see cref="CreateOAuthClientAndRegistrationAsync(ClientRecord, string, PolicyProfile?, CancellationToken)"/>
+    /// whose form-post transport hands every response it receives, with the endpoint it was sent to, to
+    /// <paramref name="rewriteFormPostResponse"/> and gives the client the response that answers, so a
+    /// test can deliver over the real wire a response the library's Authorization Server does not emit.
+    /// </summary>
+    /// <param name="record">The registration the client is created for.</param>
+    /// <param name="redirectUri">The client's redirect URI.</param>
+    /// <param name="profile">The client's policy profile, or <see langword="null"/> for HAIP 1.0.</param>
+    /// <param name="rewriteFormPostResponse">The rewrite of each form-post response, or <see langword="null"/> to deliver each as received.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The client, its registration and the client's flow store.</returns>
+    public async ValueTask<(OAuthClient Client, ClientRegistration Registration, Dictionary<string, FlowState> ClientFlowStore)>
+        CreateRewritingOAuthClientAndRegistrationAsync(
+            ClientRecord record,
+            string redirectUri,
+            PolicyProfile? profile,
+            Func<Uri, HttpResponseData, HttpResponseData>? rewriteFormPostResponse,
             CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(record);
@@ -1451,9 +1484,8 @@ internal sealed class TestHostShell: IAsyncDisposable
             {
                 HttpResponseData response = await HttpClientTransport.SendFormPostAsync(
                     httpClient, endpoint, fields, headers, ct).ConfigureAwait(false);
-                observeFormPostResponse?.Invoke(endpoint, response);
 
-                return response;
+                return rewriteFormPostResponse is null ? response : rewriteFormPostResponse(endpoint, response);
             },
             saveStateAsync: (state, _, ct) =>
             {

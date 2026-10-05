@@ -31,6 +31,25 @@ public enum CredentialAuthorizationDenialReason
 /// Configuration the grant covers and the Credential Dataset identifiers issuable with the
 /// returned access token (OID4VCI 1.0 §6.2 <c>credential_identifiers</c>).
 /// </summary>
+/// <remarks>
+/// <para>
+/// One type serves both ends of the wire member. The Authorization Server writes its Token
+/// Response's <c>authorization_details</c> from the values the
+/// <see cref="Server.ResolveCredentialAuthorizationDelegate"/> seam returns, and the client reads a
+/// Token Response's <c>openid_credential</c> entries back into it: the default Token Response parser
+/// fills <see cref="AuthCode.TokenResponse.GrantedCredentialAuthorizations"/>, the authorization-code
+/// client surfaces the list in
+/// <see cref="AuthCode.AuthCodeFlowEndpointResult.GrantedCredentialAuthorizations"/>, and
+/// <see cref="CredentialRequestTarget.FromGrantedAuthorizations"/> chooses a Credential Request's
+/// target from it. A value the client read carries a non-empty list of identifiers, none of them
+/// empty or white space; the entry's <c>claims</c> and any other data field are not carried.
+/// </para>
+/// <para>
+/// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.2">OID4VCI 1.0 Section 6.2</see>:
+/// "The Wallet MUST ignore any unrecognized data fields in the authorization_details present in the
+/// Token Response."
+/// </para>
+/// </remarks>
 [DebuggerDisplay("GrantedCredentialAuthorization ConfigurationId={CredentialConfigurationId} Identifiers={CredentialIdentifiers.Count}")]
 public sealed record GrantedCredentialAuthorization
 {

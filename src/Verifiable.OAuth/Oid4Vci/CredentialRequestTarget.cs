@@ -17,7 +17,9 @@ namespace Verifiable.OAuth.Oid4Vci;
 /// <para>
 /// A Wallet whose Token Response returned <c>credential_identifiers</c> requests by one of them
 /// (<see cref="ForIdentifier"/>); otherwise it requests by the configuration
-/// (<see cref="ForConfiguration"/>).
+/// (<see cref="ForConfiguration"/>). <see cref="FromGrantedAuthorizations"/> chooses between the
+/// two from the <see cref="GrantedCredentialAuthorization"/> values the library read off the Token
+/// Response, so a Wallet does not read its own JSON to decide.
 /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.2">OID4VCI 1.0 Section 6.2</see>:
 /// "The Wallet MUST use these identifiers together with an Access Token in subsequent Credential
 /// Requests."
@@ -77,5 +79,81 @@ public sealed record CredentialRequestTarget
         ArgumentException.ThrowIfNullOrWhiteSpace(credentialIdentifier);
 
         return new CredentialRequestTarget(credentialConfigurationId: null, credentialIdentifier);
+    }
+
+
+    /// <summary>
+    /// The target a Wallet requests under the <c>openid_credential</c> authorizations its Token
+    /// Response granted: <see cref="ForIdentifier"/> with the first identifier of the first
+    /// authorization naming <paramref name="credentialConfigurationId"/>;
+    /// <see cref="ForConfiguration"/> when the response granted none; <see langword="null"/> when it
+    /// granted authorizations for other configurations only, since then neither member may be
+    /// named.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The list is <see cref="AuthCode.TokenResponse.GrantedCredentialAuthorizations"/>, or the
+    /// token result's <see cref="AuthCode.AuthCodeFlowEndpointResult.GrantedCredentialAuthorizations"/>
+    /// on the authorization-code path; the Pre-Authorized Code entry points of
+    /// <see cref="Wallet.Oid4VciWalletClient"/> choose through this factory too. Several entries may
+    /// name one configuration, and the first of them decides.
+    /// </para>
+    /// <para>
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-8.2">OID4VCI 1.0 Section 8.2</see>:
+    /// "credential_identifier: REQUIRED when an Authorization Details of type openid_credential was
+    /// returned from the Token Response. It MUST NOT be used otherwise. A string that identifies a
+    /// Credential Dataset that is requested for issuance. When this parameter is used, the
+    /// credential_configuration_id MUST NOT be present." And: "credential_configuration_id: REQUIRED
+    /// if a credential_identifiers parameter was not returned from the Token Response as part of the
+    /// authorization_details parameter. It MUST NOT be used otherwise."
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.2">OID4VCI 1.0 Section 6.2</see>:
+    /// "The Wallet MUST use these identifiers together with an Access Token in subsequent Credential
+    /// Requests."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9396#section-2">RFC 9396 Section 2</see>:
+    /// "An authorization_details array MAY contain multiple entries of the same type."
+    /// </para>
+    /// </remarks>
+    /// <param name="credentialConfigurationId">The configuration the Wallet requests.</param>
+    /// <param name="grantedAuthorizations">The granted authorizations, in the order the Token Response lists them.</param>
+    /// <returns>The target, or <see langword="null"/> when the grant names other configurations only.</returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="credentialConfigurationId"/> is null, empty or white space, when an
+    /// entry of <paramref name="grantedAuthorizations"/> is null, or when the entry naming the
+    /// configuration lists no identifier or a first identifier that is null, empty or white space.
+    /// </exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="grantedAuthorizations"/> is null.</exception>
+    public static CredentialRequestTarget? FromGrantedAuthorizations(
+        string credentialConfigurationId,
+        IReadOnlyList<GrantedCredentialAuthorization> grantedAuthorizations)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(credentialConfigurationId);
+        ArgumentNullException.ThrowIfNull(grantedAuthorizations);
+
+        if(grantedAuthorizations.Count == 0)
+        {
+            return ForConfiguration(credentialConfigurationId);
+        }
+
+        foreach(GrantedCredentialAuthorization? granted in grantedAuthorizations)
+        {
+            if(granted is null)
+            {
+                throw new ArgumentException("A granted authorization is null.", nameof(grantedAuthorizations));
+            }
+
+            if(!string.Equals(granted.CredentialConfigurationId, credentialConfigurationId, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            return granted.CredentialIdentifiers switch
+            {
+                [string firstIdentifier, ..] when !string.IsNullOrWhiteSpace(firstIdentifier) => ForIdentifier(firstIdentifier),
+                _ => throw new ArgumentException(
+                    "The granted authorization naming the configuration lists no usable identifier.", nameof(grantedAuthorizations))
+            };
+        }
+
+        return null;
     }
 }

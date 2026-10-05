@@ -7140,6 +7140,302 @@ internal sealed class IdJagGrantTests
 
 
     /// <summary>
+    /// The parse error an ID-JAG mint hands the application over a refused JSON-shaped Token Response
+    /// carries an empty body: the mint answer, rewritten after it crossed the wire so the minted grant
+    /// stands under <c>refresh_token</c> and no <c>access_token</c> remains, is refused as malformed, and
+    /// the grant it holds is not preserved in the error.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-10.4">RFC 6749 Section 10.4</see>:
+    /// "Refresh tokens MUST be kept confidential in transit and storage, and shared only among the
+    /// authorization server and the client to whom the refresh tokens were issued."
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ARefusedMintAnswerReachesTheApplicationWithoutItsBody()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
+        await WireMintSeamsAsync(app, ChatScope, resourceClientId: null).ConfigureAwait(false);
+
+        (HostedAuthorizationServer host, Uri tokenEndpoint, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> clientKeys) =
+            await StartHostAndWirePrivateKeyJwtClientAuthenticationAsync(app, material).ConfigureAwait(false);
+        using PublicKeyMemory clientPublic = clientKeys.PublicKey;
+        using PrivateKeyMemory clientPrivate = clientKeys.PrivateKey;
+
+        AuthorizationServerMetadata metadata = new()
+        {
+            Issuer = material.Registration.IssuerUri!,
+            TokenEndpoint = tokenEndpoint
+        };
+
+        //The library's Authorization Server answers a well-formed mint, so the answer is rewritten after
+        //it crossed the wire and before the client reads it: the access_token member is renamed.
+        string? sentBody = null;
+        OAuthClientInfrastructure infrastructure = CreateClientInfrastructure(
+            host,
+            metadata,
+            rewriteResponse: response =>
+            {
+                sentBody = response.Body;
+
+                return response with { Body = response.Body.Replace("\"access_token\":", "\"refresh_token\":", StringComparison.Ordinal) };
+            });
+        ClientRegistration registration = new()
+        {
+            ClientId = new ClientId(ClientId),
+            AuthorizationServerIssuer = material.Registration.IssuerUri!,
+            AuthenticationMethod = ClientAuthenticationMethod.PrivateKeyJwt,
+            Profile = PolicyProfile.Rfc6749WithPkce
+        };
+        OAuthClient client = new(infrastructure);
+
+        Result<TokenResponse, OAuthParseError> result = await client.IdJag.MintAsync(
+            registration,
+            new IdJagMintOptions
+            {
+                Audience = ResourceAsIssuer,
+                SubjectToken = SubjectTokenValue,
+                SubjectTokenType = TokenType.IdToken,
+                SigningKey = clientPrivate,
+                SigningKeyId = MintRedeemSigningKeyId,
+                HeaderSerializer = ClientAssertionHeaderSerializer,
+                PayloadSerializer = ClientAssertionPayloadSerializer
+            },
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsNotNull(sentBody, "The mint must have reached the token endpoint.");
+        string? mintedGrant = JwkJsonReader.ExtractStringValue(
+            System.Text.Encoding.UTF8.GetBytes(sentBody), OAuthRequestParameterNames.AccessTokenUtf8);
+        Assert.IsFalse(string.IsNullOrEmpty(mintedGrant), "The mint answer must have carried the minted grant.");
+        Assert.IsFalse(result.IsSuccess, "A mint answer without an access_token must not parse.");
+        OAuthMalformedResponse malformed = Assert.IsInstanceOfType<OAuthMalformedResponse>(result.Error);
+        Assert.DoesNotContain(mintedGrant, malformed.Body, StringComparison.Ordinal);
+        Assert.IsEmpty(malformed.Body, "A refused JSON-shaped body must not reach the application in the error.");
+    }
+
+
+    /// <summary>
+    /// The parse error an ID-JAG mint hands the application over a form-encoded Token Response carries an
+    /// empty body: the mint answer, rewritten after it crossed the wire into the form-encoded parameters
+    /// <c>access_token</c> and <c>token_type</c>, is refused as malformed, and the minted grant it holds
+    /// is not preserved in the error, since a refused body is kept only when it is an HTML or XML document.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-10.3">RFC 6749 Section 10.3</see>:
+    /// "Access token credentials (as well as any confidential access token attributes) MUST be kept
+    /// confidential in transit and storage, and only shared among the authorization server, the resource
+    /// servers the access token is valid for, and the client to whom the access token is issued."
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task AFormEncodedMintAnswerReachesTheApplicationWithoutItsBody()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
+        await WireMintSeamsAsync(app, ChatScope, resourceClientId: null).ConfigureAwait(false);
+
+        (HostedAuthorizationServer host, Uri tokenEndpoint, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> clientKeys) =
+            await StartHostAndWirePrivateKeyJwtClientAuthenticationAsync(app, material).ConfigureAwait(false);
+        using PublicKeyMemory clientPublic = clientKeys.PublicKey;
+        using PrivateKeyMemory clientPrivate = clientKeys.PrivateKey;
+
+        AuthorizationServerMetadata metadata = new()
+        {
+            Issuer = material.Registration.IssuerUri!,
+            TokenEndpoint = tokenEndpoint
+        };
+
+        //The library's Authorization Server answers a JSON mint, so the answer is rewritten after it
+        //crossed the wire and before the client reads it: the minted grant is sent form-encoded.
+        string? mintedGrant = null;
+        OAuthClientInfrastructure infrastructure = CreateClientInfrastructure(
+            host,
+            metadata,
+            rewriteResponse: response =>
+            {
+                mintedGrant = JwkJsonReader.ExtractStringValue(
+                    System.Text.Encoding.UTF8.GetBytes(response.Body), OAuthRequestParameterNames.AccessTokenUtf8);
+
+                return response with { Body = "access_token=" + mintedGrant + "&token_type=N_A" };
+            });
+        ClientRegistration registration = new()
+        {
+            ClientId = new ClientId(ClientId),
+            AuthorizationServerIssuer = material.Registration.IssuerUri!,
+            AuthenticationMethod = ClientAuthenticationMethod.PrivateKeyJwt,
+            Profile = PolicyProfile.Rfc6749WithPkce
+        };
+        OAuthClient client = new(infrastructure);
+
+        Result<TokenResponse, OAuthParseError> result = await client.IdJag.MintAsync(
+            registration,
+            new IdJagMintOptions
+            {
+                Audience = ResourceAsIssuer,
+                SubjectToken = SubjectTokenValue,
+                SubjectTokenType = TokenType.IdToken,
+                SigningKey = clientPrivate,
+                SigningKeyId = MintRedeemSigningKeyId,
+                HeaderSerializer = ClientAssertionHeaderSerializer,
+                PayloadSerializer = ClientAssertionPayloadSerializer
+            },
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(string.IsNullOrEmpty(mintedGrant), "The mint answer must have carried the minted grant.");
+        Assert.IsFalse(result.IsSuccess, "A form-encoded mint answer must not parse.");
+        OAuthMalformedResponse malformed = Assert.IsInstanceOfType<OAuthMalformedResponse>(result.Error);
+        Assert.IsEmpty(malformed.Body, "A refused form-encoded body must not reach the application in the error.");
+        Assert.DoesNotContain(mintedGrant, malformed.ToString(), StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// A refused ID-JAG mint whose Token Error Response carries an <c>error_uri</c> of the
+    /// <c>javascript</c> scheme reaches the application as the protocol error with its code and no
+    /// <c>error_uri</c>: the value identifies no web page.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>:
+    /// "error_uri OPTIONAL. A URI identifying a human-readable web page with information about the
+    /// error, used to provide the client developer with additional information about the error."
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task AMintErrorUriNamingNoWebPageReachesTheApplicationAsAbsent()
+    {
+        Result<TokenResponse, OAuthParseError> result = await MintOverRewrittenAnswerAsync(
+            "{\"error\":\"invalid_grant\",\"error_uri\":\"javascript:alert(1)\"}").ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccess, "A Token Error Response must not parse as a token.");
+        OAuthProtocolError protocolError = Assert.IsInstanceOfType<OAuthProtocolError>(result.Error);
+        Assert.AreEqual("invalid_grant", protocolError.ErrorCode);
+        Assert.IsNull(protocolError.ErrorUri, "An error_uri that names no web page must reach the application as absent.");
+    }
+
+
+    /// <summary>
+    /// A refused ID-JAG mint whose Token Error Response carries an <c>https</c> <c>error_uri</c> whose
+    /// authority carries userinfo reaches the application as the protocol error with its code and no
+    /// <c>error_uri</c>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-4.2.4">RFC 9110 Section 4.2.4</see>:
+    /// "Before making use of an "http" or "https" URI reference received from an untrusted source, a
+    /// recipient SHOULD parse for userinfo and treat its presence as an error; it is likely being used to
+    /// obscure the authority for the sake of phishing attacks."
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task AMintErrorUriWithUserinfoReachesTheApplicationAsAbsent()
+    {
+        Result<TokenResponse, OAuthParseError> result = await MintOverRewrittenAnswerAsync(
+            "{\"error\":\"invalid_grant\",\"error_uri\":\"https://as.example@evil.example/\"}").ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccess, "A Token Error Response must not parse as a token.");
+        OAuthProtocolError protocolError = Assert.IsInstanceOfType<OAuthProtocolError>(result.Error);
+        Assert.AreEqual("invalid_grant", protocolError.ErrorCode);
+        Assert.IsNull(protocolError.ErrorUri, "An error_uri carrying userinfo must reach the application as absent.");
+    }
+
+
+    /// <summary>
+    /// A refused ID-JAG mint whose Token Error Response carries an <c>https</c> <c>error_uri</c> holding
+    /// chars no URI-reference holds reaches the application as the protocol error with its code and no
+    /// <c>error_uri</c>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>:
+    /// "Values for the "error_uri" parameter MUST conform to the URI-reference syntax and thus MUST NOT
+    /// include characters outside the set %x21 / %x23-5B / %x5D-7E."
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task AMintErrorUriOutsideTheUriReferenceSyntaxReachesTheApplicationAsAbsent()
+    {
+        Result<TokenResponse, OAuthParseError> result = await MintOverRewrittenAnswerAsync(
+            "{\"error\":\"invalid_grant\",\"error_uri\":\"https://as.example/<script>\"}").ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccess, "A Token Error Response must not parse as a token.");
+        OAuthProtocolError protocolError = Assert.IsInstanceOfType<OAuthProtocolError>(result.Error);
+        Assert.AreEqual("invalid_grant", protocolError.ErrorCode);
+        Assert.IsNull(protocolError.ErrorUri, "An error_uri outside the URI-reference syntax must reach the application as absent.");
+    }
+
+
+    /// <summary>
+    /// A refused ID-JAG mint whose Token Error Response carries an empty <c>error</c> carries no error code
+    /// the application can act on: it reaches the application as a malformed response with an empty body.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#appendix-A.7">RFC 6749 Appendix A.7</see>:
+    /// "error             = 1*NQSCHAR".
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task AMintErrorWithAnEmptyCodeReachesTheApplicationAsMalformed()
+    {
+        Result<TokenResponse, OAuthParseError> result = await MintOverRewrittenAnswerAsync("{\"error\":\"\"}").ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccess, "A Token Error Response must not parse as a token.");
+        OAuthMalformedResponse malformed = Assert.IsInstanceOfType<OAuthMalformedResponse>(result.Error);
+        Assert.IsEmpty(malformed.Body, "A refused JSON body must not reach the application in the error.");
+    }
+
+
+    /// <summary>
+    /// Mints an ID-JAG over the real wire against the library's Authorization Server and hands the client,
+    /// in place of the mint answer that crossed the wire, a 400 answer carrying <paramref name="errorBody"/>.
+    /// </summary>
+    /// <param name="errorBody">The JSON body of the 400 answer the client reads.</param>
+    /// <returns>The mint's result as the application receives it.</returns>
+    private async Task<Result<TokenResponse, OAuthParseError>> MintOverRewrittenAnswerAsync(string errorBody)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
+        await WireMintSeamsAsync(app, ChatScope, resourceClientId: null).ConfigureAwait(false);
+
+        (HostedAuthorizationServer host, Uri tokenEndpoint, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> clientKeys) =
+            await StartHostAndWirePrivateKeyJwtClientAuthenticationAsync(app, material).ConfigureAwait(false);
+        using PublicKeyMemory clientPublic = clientKeys.PublicKey;
+        using PrivateKeyMemory clientPrivate = clientKeys.PrivateKey;
+
+        AuthorizationServerMetadata metadata = new()
+        {
+            Issuer = material.Registration.IssuerUri!,
+            TokenEndpoint = tokenEndpoint
+        };
+
+        //The library's Authorization Server answers a well-formed mint, so the answer is rewritten after
+        //it crossed the wire and before the client reads it: a 400 answer with the given body.
+        bool isAnswered = false;
+        OAuthClientInfrastructure infrastructure = CreateClientInfrastructure(
+            host,
+            metadata,
+            rewriteResponse: response =>
+            {
+                isAnswered = response.StatusCode == 200;
+
+                return response with { StatusCode = 400, Body = errorBody };
+            });
+        ClientRegistration registration = new()
+        {
+            ClientId = new ClientId(ClientId),
+            AuthorizationServerIssuer = material.Registration.IssuerUri!,
+            AuthenticationMethod = ClientAuthenticationMethod.PrivateKeyJwt,
+            Profile = PolicyProfile.Rfc6749WithPkce
+        };
+        OAuthClient client = new(infrastructure);
+
+        Result<TokenResponse, OAuthParseError> result = await client.IdJag.MintAsync(
+            registration,
+            new IdJagMintOptions
+            {
+                Audience = ResourceAsIssuer,
+                SubjectToken = SubjectTokenValue,
+                SubjectTokenType = TokenType.IdToken,
+                SigningKey = clientPrivate,
+                SigningKeyId = MintRedeemSigningKeyId,
+                HeaderSerializer = ClientAssertionHeaderSerializer,
+                PayloadSerializer = ClientAssertionPayloadSerializer
+            },
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(isAnswered, "The mint must have been answered over the wire before the rewrite.");
+
+        return result;
+    }
+
+
+    /// <summary>
     /// §4.5: a SAML 2.0 Assertion is exchanged for a Refresh Token (<c>requested_token_type</c> =
     /// the refresh_token URN) — the protocol-transition step. The Token Exchange response carries the
     /// Refresh Token in <c>access_token</c> with <c>issued_token_type</c> the refresh_token URN and
@@ -8210,22 +8506,29 @@ internal sealed class IdJagGrantTests
     /// <param name="onFormPost">Invoked with the form fields of each post before it is sent, or <see langword="null"/> to observe nothing.</param>
     /// <param name="dpopKey">The DPoP key the proofs are signed with, or <see langword="null"/> to wire no DPoP.</param>
     /// <param name="nonceCache">The DPoP nonce cache used together with <paramref name="dpopKey"/>, or <see langword="null"/> to wire no DPoP.</param>
+    /// <param name="rewriteResponse">
+    /// The rewrite of each form-post answer after it crossed the wire and before the client reads it, or
+    /// <see langword="null"/> to hand every answer to the client as received.
+    /// </param>
     /// <returns>The composed client infrastructure.</returns>
     private OAuthClientInfrastructure CreateClientInfrastructure(
         HostedAuthorizationServer host,
         AuthorizationServerMetadata metadata,
         Action<IReadOnlyCollection<KeyValuePair<string, string>>>? onFormPost = null,
         DpopKey? dpopKey = null,
-        InMemoryDpopNonceCache? nonceCache = null)
+        InMemoryDpopNonceCache? nonceCache = null,
+        Func<HttpResponseData, HttpResponseData>? rewriteResponse = null)
     {
         bool isDpopWired = dpopKey is not null && nonceCache is not null;
 
         return OAuthClientInfrastructure.Create(
-            sendFormPostAsync: (endpoint, fields, headers, _, ct) =>
+            sendFormPostAsync: async (endpoint, fields, headers, _, ct) =>
             {
                 onFormPost?.Invoke(fields);
+                HttpResponseData response = await HttpClientTransport.SendFormPostAsync(
+                    host.SharedHttpClient!, endpoint, fields, headers, ct).ConfigureAwait(false);
 
-                return HttpClientTransport.SendFormPostAsync(host.SharedHttpClient!, endpoint, fields, headers, ct);
+                return rewriteResponse is null ? response : rewriteResponse(response);
             },
             saveStateAsync: (_, _, _) => ValueTask.CompletedTask,
             loadStateAsync: (_, _, _) => ValueTask.FromResult<FlowState?>(null),

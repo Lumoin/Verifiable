@@ -177,6 +177,18 @@ public delegate Result<ParResponse, OAuthParseError> ParseParResponseDelegate(
 /// which handles RFC 6749 §5.1 success responses, RFC 6749 §5.2 error responses,
 /// and RFC 9457 problem+json responses.
 /// </para>
+/// <para>
+/// The default implementation also reads the response's <c>authorization_details</c> into
+/// <see cref="TokenResponse.GrantedCredentialAuthorizations"/> and fails the parse for a malformed
+/// member. An application parser that leaves the member empty makes a wallet that chooses through
+/// <see cref="Oid4Vci.CredentialRequestTarget.FromGrantedAuthorizations"/> request by the
+/// configuration when the Token Response granted <c>credential_identifiers</c>, which the library's
+/// Credential Endpoint refuses as <c>invalid_credential_request</c>.
+/// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-8.2">OID4VCI 1.0 Section 8.2</see>:
+/// "credential_configuration_id: REQUIRED if a credential_identifiers parameter was not returned
+/// from the Token Response as part of the authorization_details parameter. It MUST NOT be used
+/// otherwise."
+/// </para>
 /// </remarks>
 /// <param name="response">The full HTTP response from the token endpoint.</param>
 /// <param name="receivedAt">

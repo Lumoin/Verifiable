@@ -870,10 +870,13 @@ public static class AuthCodeFlowHandlers
             body[OAuthRequestParameterNames.IdToken] = tokenResponse.IdToken;
         }
 
+        //OID4VCI 1.0 Section 6.2: the granted openid_credential authorizations reach the caller
+        //typed, so a wallet chooses its Credential Request's target from them.
         return new AuthCodeFlowEndpointResult
         {
             Outcome = AuthCodeFlowEndpointOutcome.Ok,
-            Body = body
+            Body = body,
+            GrantedCredentialAuthorizations = tokenResponse.GrantedCredentialAuthorizations
         };
     }
 
@@ -1057,10 +1060,13 @@ public static class AuthCodeFlowHandlers
             body[OAuthRequestParameterNames.IdToken] = tokenResponse.IdToken;
         }
 
+        //RFC 9396 Section 7: a refreshed access token carries the authorization_details granted
+        //to it, surfaced the same way as on the code exchange.
         return new AuthCodeFlowEndpointResult
         {
             Outcome = AuthCodeFlowEndpointOutcome.Ok,
-            Body = body
+            Body = body,
+            GrantedCredentialAuthorizations = tokenResponse.GrantedCredentialAuthorizations
         };
     }
 

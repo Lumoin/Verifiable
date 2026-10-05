@@ -218,6 +218,346 @@ internal sealed class Oid4VciWalletClientTests
 
 
     /// <summary>
+    /// A Pre-Authorized Code journey whose Token Response, after it crossed the wire, carries an
+    /// <c>access_token</c> decoding to a value holding a carriage return and a line feed is not spent: the
+    /// wallet answers a malformed-response failure, and neither a Nonce Request nor a Credential Request
+    /// reaches the Issuer, so the token is never composed into an Authorization header.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#appendix-A.12">RFC 6749 Appendix A.12</see>:
+    /// "access-token = 1*VSCHAR", where
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#appendix-A">RFC 6749 Appendix A</see> defines
+    /// "VSCHAR     = %x20-7E".
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task APreAuthorizedTokenAnswerHoldingALineBreakIsNotSpent()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuerCapabilities).ConfigureAwait(false);
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
+        IssuerSeamObservations observations = await WireIssuerSeamsAsync(host).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+
+        //The library's Authorization Server mints no token outside its grammar, so the Token Response is
+        //rewritten after it crossed the wire and before the wallet reads it: the access_token's value
+        //gains a leading header line written with the JSON escapes for a carriage return and a line feed.
+        bool isRewritten = false;
+        Oid4VciWalletClient walletClient = BuildWalletClient(
+            host,
+            rewriteTokenAnswer: answer =>
+            {
+                string rewritten = answer.Body.Replace(
+                    "\"access_token\":\"", "\"access_token\":\"X-Injected: yes\\r\\n", StringComparison.Ordinal);
+                isRewritten = !string.Equals(rewritten, answer.Body, StringComparison.Ordinal);
+
+                return answer with { Body = rewritten };
+            });
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await walletClient.IssuePreAuthorizedDetailedAsync(
+            ComposeOffer(material),
+            ConfigurationId,
+            holderPrivate,
+            holderPublic,
+            ResolveEndpoints(host, material),
+            transactionCode: null,
+            responseEncryption: null,
+            TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(isRewritten, "The Token Response must have carried an access_token to rewrite.");
+        Assert.IsFalse(outcome.IsSuccess, "An access_token outside its grammar must not be spent.");
+        Assert.AreEqual(Oid4VciRequestFailureKind.MalformedResponse, outcome.Error.Kind);
+        Assert.AreEqual(0, observations.NonceRequests, "No Nonce Request may follow a malformed Token Response.");
+        Assert.AreEqual(0, observations.IssuanceRequests, "No Credential Request may reach the Issuer.");
+    }
+
+
+    /// <summary>
+    /// A Pre-Authorized Code journey whose Token Response, after it crossed the wire, is a Token Error
+    /// Response whose <c>error</c> decodes to a value holding a carriage return and a line feed carries no
+    /// error code the wallet can act on: the wallet answers a malformed-response failure that echoes none
+    /// of it, and neither a Nonce Request nor a Credential Request reaches the Issuer.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>:
+    /// "Values for the "error" parameter MUST NOT include characters outside the set %x20-21 / %x23-5B /
+    /// %x5D-7E."
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task APreAuthorizedTokenErrorOutsideItsCharacterSetIsMalformed()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuerCapabilities).ConfigureAwait(false);
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
+        IssuerSeamObservations observations = await WireIssuerSeamsAsync(host).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+
+        //The library's Authorization Server writes no error code outside its set, so the Token Response is
+        //rewritten after it crossed the wire and before the wallet reads it: a 400 Token Error Response
+        //whose error carries a header line written with the JSON escapes for a carriage return and a line
+        //feed.
+        bool isRewritten = false;
+        Oid4VciWalletClient walletClient = BuildWalletClient(
+            host,
+            rewriteTokenAnswer: answer =>
+            {
+                isRewritten = answer.StatusCode == 200;
+
+                return answer with
+                {
+                    StatusCode = 400,
+                    Body = "{\"error\":\"invalid_grant\\r\\nX-Injected: yes\"}"
+                };
+            });
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await walletClient.IssuePreAuthorizedDetailedAsync(
+            ComposeOffer(material),
+            ConfigurationId,
+            holderPrivate,
+            holderPublic,
+            ResolveEndpoints(host, material),
+            transactionCode: null,
+            responseEncryption: null,
+            TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(isRewritten, "The Token Request must have been answered over the wire before the rewrite.");
+        Assert.IsFalse(outcome.IsSuccess, "A refused Token Request must be a refusal.");
+        Assert.AreEqual(Oid4VciRequestFailureKind.MalformedResponse, outcome.Error.Kind);
+        Assert.IsNull(outcome.Error.ErrorCode, "An error code outside its set must not be surfaced.");
+        Assert.DoesNotContain("X-Injected", outcome.Error.ToString(), StringComparison.Ordinal);
+        Assert.AreEqual(0, observations.NonceRequests, "No Nonce Request may follow a refused Token Request.");
+        Assert.AreEqual(0, observations.IssuanceRequests, "No Credential Request may reach the Issuer.");
+    }
+
+
+    /// <summary>
+    /// A Pre-Authorized Code journey whose Token Response, after it crossed the wire, carries a
+    /// <c>token_type</c> written as a URI-reference is spent: the wallet makes the Credential Request and
+    /// surfaces the type as written.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#appendix-A.13">RFC 6749 Appendix A.13</see>:
+    /// "token-type = type-name / URI-reference", where
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-4.1">RFC 3986 Section 4.1</see> defines
+    /// "URI-reference = URI / relative-ref".
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task APreAuthorizedUriReferenceTokenTypeIsSpent()
+    {
+        const string UriReferenceTokenType = "urn:ietf:params:oauth:token-type:jwt";
+
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuerCapabilities).ConfigureAwait(false);
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
+        IssuerSeamObservations observations = await WireIssuerSeamsAsync(host).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+
+        //The library's Authorization Server sends a type name, so the Token Response is rewritten after it
+        //crossed the wire and before the wallet reads it: the token_type's value becomes the URI-reference.
+        bool isRewritten = false;
+        Oid4VciWalletClient walletClient = BuildWalletClient(
+            host,
+            rewriteTokenAnswer: answer =>
+            {
+                const string TokenTypeMember = "\"token_type\":\"";
+                int valueStart = answer.Body.IndexOf(TokenTypeMember, StringComparison.Ordinal);
+                if(valueStart < 0)
+                {
+                    return answer;
+                }
+
+                valueStart += TokenTypeMember.Length;
+                int valueEnd = valueStart + answer.Body.AsSpan(valueStart).IndexOf('"');
+                isRewritten = true;
+
+                return answer with
+                {
+                    Body = string.Concat(answer.Body.AsSpan(0, valueStart), UriReferenceTokenType, answer.Body.AsSpan(valueEnd))
+                };
+            });
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await walletClient.IssuePreAuthorizedDetailedAsync(
+            ComposeOffer(material),
+            ConfigurationId,
+            holderPrivate,
+            holderPublic,
+            ResolveEndpoints(host, material),
+            transactionCode: null,
+            responseEncryption: null,
+            TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(isRewritten, "The Token Response must have carried a token_type to rewrite.");
+        Assert.IsTrue(outcome.IsSuccess, "A URI-reference token_type must be accepted.");
+        Assert.AreEqual(UriReferenceTokenType, outcome.Value.TokenType, "The token_type must be surfaced as written.");
+        Assert.AreEqual(1, observations.IssuanceRequests, "Exactly one Credential Request must reach the Issuer.");
+    }
+
+
+    /// <summary>
+    /// A Pre-Authorized Code journey whose Token Response, after it crossed the wire, carries an
+    /// <c>access_token</c> that is not a <c>token68</c> credential (white space, a space inside) cannot
+    /// present it in an Authorization header: the wallet answers a malformed-response failure, and neither
+    /// a Nonce Request nor a Credential Request reaches the Issuer.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.2">RFC 9110 Section 11.2</see>:
+    /// "token68        = 1*( ALPHA / DIGIT / "-" / "." / "_" / "~" / "+" / "/" ) *"="".
+    /// </summary>
+    /// <param name="accessToken">The <c>access_token</c> the rewritten Token Response carries, as JSON string content.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(" ")]
+    [DataRow("a b")]
+    public async Task APreAuthorizedAccessTokenOutsideToken68IsMalformed(string accessToken)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuerCapabilities).ConfigureAwait(false);
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
+        IssuerSeamObservations observations = await WireIssuerSeamsAsync(host).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+
+        //The library's Authorization Server mints only token68 tokens, so the Token Response is rewritten
+        //after it crossed the wire and before the wallet reads it: the access_token's value is replaced.
+        bool isRewritten = false;
+        Oid4VciWalletClient walletClient = BuildWalletClient(
+            host,
+            rewriteTokenAnswer: answer =>
+            {
+                string rewritten = WithStringMemberValue(answer.Body, OAuthRequestParameterNames.AccessToken, accessToken);
+                isRewritten = !string.Equals(rewritten, answer.Body, StringComparison.Ordinal);
+
+                return answer with { Body = rewritten };
+            });
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = default;
+        Exception? escaped = null;
+        try
+        {
+            outcome = await walletClient.IssuePreAuthorizedDetailedAsync(
+                ComposeOffer(material),
+                ConfigurationId,
+                holderPrivate,
+                holderPublic,
+                ResolveEndpoints(host, material),
+                transactionCode: null,
+                responseEncryption: null,
+                TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy),
+                TestContext.CancellationToken).ConfigureAwait(false);
+        }
+        catch(Exception thrown)
+        {
+            //The issuance answers its refusal as a failure value; an exception escaping it is recorded so
+            //that the assertion below, not the exception, fails the row.
+            escaped = thrown;
+        }
+
+        Assert.IsNull(escaped, "Issuance must complete with a failure value, not an exception.");
+        Assert.IsTrue(isRewritten, "The Token Response must have carried an access_token to rewrite.");
+        Assert.IsFalse(outcome.IsSuccess, "An access_token outside token68 must not be spent.");
+        Assert.AreEqual(Oid4VciRequestFailureKind.MalformedResponse, outcome.Error.Kind);
+        Assert.AreEqual(0, observations.NonceRequests, "No Nonce Request may follow a malformed Token Response.");
+        Assert.AreEqual(0, observations.IssuanceRequests, "No Credential Request may reach the Issuer.");
+    }
+
+
+    /// <summary>
+    /// A Pre-Authorized Code journey whose Token Response, after it crossed the wire, carries a
+    /// <c>token_type</c> holding a quotation mark, neither a type name nor an RFC 3986 URI-reference: the
+    /// wallet answers a malformed-response failure, and no Credential Request reaches the Issuer.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#appendix-A.13">RFC 6749 Appendix A.13</see>:
+    /// "token-type = type-name / URI-reference", "type-name  = 1*name-char" and
+    /// "name-char  = "-" / "." / "_" / DIGIT / ALPHA".
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task APreAuthorizedTokenTypeOutsideItsGrammarIsMalformed()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuerCapabilities).ConfigureAwait(false);
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
+        IssuerSeamObservations observations = await WireIssuerSeamsAsync(host).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+
+        //The library's Authorization Server sends a type name, so the Token Response is rewritten after it
+        //crossed the wire and before the wallet reads it: the token_type's value holds the JSON escape for
+        //a quotation mark.
+        bool isRewritten = false;
+        Oid4VciWalletClient walletClient = BuildWalletClient(
+            host,
+            rewriteTokenAnswer: answer =>
+            {
+                string rewritten = WithStringMemberValue(answer.Body, OAuthRequestParameterNames.TokenType, "a\\\"b");
+                isRewritten = !string.Equals(rewritten, answer.Body, StringComparison.Ordinal);
+
+                return answer with { Body = rewritten };
+            });
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await walletClient.IssuePreAuthorizedDetailedAsync(
+            ComposeOffer(material),
+            ConfigurationId,
+            holderPrivate,
+            holderPublic,
+            ResolveEndpoints(host, material),
+            transactionCode: null,
+            responseEncryption: null,
+            TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(isRewritten, "The Token Response must have carried a token_type to rewrite.");
+        Assert.IsFalse(outcome.IsSuccess, "A token_type outside its grammar must not be spent.");
+        Assert.AreEqual(Oid4VciRequestFailureKind.MalformedResponse, outcome.Error.Kind);
+        Assert.AreEqual(0, observations.IssuanceRequests, "No Credential Request may reach the Issuer.");
+    }
+
+
+    /// <summary>
+    /// A Token Response body whose top-level string member <paramref name="memberName"/> holds
+    /// <paramref name="jsonValue"/> where the body carries the member; a body without it is returned as it
+    /// came.
+    /// </summary>
+    /// <param name="body">The Token Response body the Authorization Server sent.</param>
+    /// <param name="memberName">The member whose value is replaced.</param>
+    /// <param name="jsonValue">The member's value as JSON string content.</param>
+    /// <returns>The rewritten body, or <paramref name="body"/> when it carries no such member.</returns>
+    private static string WithStringMemberValue(string body, string memberName, string jsonValue)
+    {
+        string memberStart = "\"" + memberName + "\":\"";
+        int valueStart = body.IndexOf(memberStart, StringComparison.Ordinal);
+        if(valueStart < 0)
+        {
+            return body;
+        }
+
+        valueStart += memberStart.Length;
+        int valueEnd = valueStart + body.AsSpan(valueStart).IndexOf('"');
+
+        return string.Concat(body.AsSpan(0, valueStart), jsonValue, body.AsSpan(valueEnd));
+    }
+
+
+    /// <summary>
     /// A Token Response granting the requested configuration a <c>credential_identifiers</c> value that is
     /// empty or white space names no Credential Dataset: the wallet answers a malformed-response failure,
     /// raises nothing and sends no Credential Request.
@@ -333,6 +673,351 @@ internal sealed class Oid4VciWalletClientTests
         Assert.IsFalse(issuance.Outcome.IsSuccess, "An entry without a string type must not be skipped as another type.");
         Assert.AreEqual(Oid4VciRequestFailureKind.MalformedResponse, issuance.Outcome.Error.Kind);
         Assert.IsEmpty(issuance.LaterRequests, "No Nonce or Credential Request may follow a malformed Token Response.");
+    }
+
+
+    /// <summary>
+    /// A Token Response whose <c>authorization_details</c> hold, beside a valid grant for the requested
+    /// configuration, an <c>openid_credential</c> entry whose <c>credential_configuration_id</c> is empty
+    /// or white space is malformed as a whole: the wallet answers a malformed-response failure and sends
+    /// no Nonce or Credential Request. The library's Authorization Server emits no such entry, so the
+    /// response is delivered through the wallet's transport delegate.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-5.1.1">OID4VCI 1.0 Section 5.1.1</see>:
+    /// "credential_configuration_id: REQUIRED. String specifying a unique identifier of the Credential
+    /// being described in the credential_configurations_supported map in the Credential Issuer Metadata
+    /// as defined in Section 12.2.4."
+    /// </summary>
+    /// <param name="configurationId">The blank configuration identifier the second entry carries, as JSON string content.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("")]
+    [DataRow(" \\t")]
+    public async Task AnEntryWithABlankConfigurationIdentifierIsAMalformedTokenResponse(string configurationId)
+    {
+        GrantedDetailsIssuance issuance = await IssueOverGrantedDetailsAsync(
+            "[{\"type\":\"openid_credential\",\"credential_configuration_id\":\"" + ConfigurationId + "\","
+            + "\"credential_identifiers\":[\"pid-dataset-1\"]},"
+            + "{\"type\":\"openid_credential\",\"credential_configuration_id\":\"" + configurationId + "\","
+            + "\"credential_identifiers\":[\"pid-dataset-2\"]}]").ConfigureAwait(false);
+
+        Assert.IsFalse(issuance.Outcome.IsSuccess, "An entry naming no configuration must make the member malformed.");
+        Assert.AreEqual(Oid4VciRequestFailureKind.MalformedResponse, issuance.Outcome.Error.Kind);
+        Assert.IsEmpty(issuance.LaterRequests, "No Nonce or Credential Request may follow a malformed Token Response.");
+    }
+
+
+    /// <summary>
+    /// A Token Response whose <c>access_token</c> decodes to a value holding a carriage return and a line
+    /// feed is malformed: the wallet answers a malformed-response failure and sends no Nonce or Credential
+    /// Request, so the token is never composed into an Authorization header. The library's Authorization
+    /// Server mints no such token, so the response is delivered through the wallet's transport delegate.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#appendix-A.12">RFC 6749 Appendix A.12</see>:
+    /// "access-token = 1*VSCHAR", where
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#appendix-A">RFC 6749 Appendix A</see> defines
+    /// "VSCHAR     = %x20-7E".
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task AnAccessTokenOutsideItsGrammarIsAMalformedTokenResponse()
+    {
+        GrantedDetailsIssuance issuance = await IssueOverTokenResponseAsync(
+            "{\"access_token\":\"X-Injected: yes\\r\\ntok\",\"token_type\":\"Bearer\"}").ConfigureAwait(false);
+
+        Assert.IsFalse(issuance.Outcome.IsSuccess, "An access_token outside its grammar must not be spent.");
+        Assert.AreEqual(Oid4VciRequestFailureKind.MalformedResponse, issuance.Outcome.Error.Kind);
+        Assert.IsEmpty(issuance.LaterRequests, "No Nonce or Credential Request may follow a malformed Token Response.");
+    }
+
+
+    /// <summary>
+    /// A Token Response whose <c>token_type</c> decodes to a value holding a carriage return and a line
+    /// feed, which neither a type name nor a URI-reference holds, is malformed: the wallet answers a
+    /// malformed-response failure and sends no Nonce or Credential Request. The library's Authorization
+    /// Server sends no such type, so the response is delivered through the wallet's transport delegate.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#appendix-A.13">RFC 6749 Appendix A.13</see>:
+    /// "token-type = type-name / URI-reference", "type-name  = 1*name-char" and
+    /// "name-char  = "-" / "." / "_" / DIGIT / ALPHA".
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ATokenTypeOutsideItsGrammarIsAMalformedTokenResponse()
+    {
+        GrantedDetailsIssuance issuance = await IssueOverTokenResponseAsync(
+            "{\"access_token\":\"tok\",\"token_type\":\"Bearer\\r\\nX-Injected: yes\"}").ConfigureAwait(false);
+
+        Assert.IsFalse(issuance.Outcome.IsSuccess, "A token_type outside its grammar must not be spent.");
+        Assert.AreEqual(Oid4VciRequestFailureKind.MalformedResponse, issuance.Outcome.Error.Kind);
+        Assert.IsEmpty(issuance.LaterRequests, "No Nonce or Credential Request may follow a malformed Token Response.");
+    }
+
+
+    /// <summary>
+    /// A Token Response whose <c>token_type</c> is an RFC 3986 URI-reference (a URI behind its scheme,
+    /// whatever its authority's port, or a relative reference whose first segment holds no colon) is
+    /// accepted: the wallet spends the token on one Credential Request and surfaces the type as written.
+    /// The library's Authorization Server sends no such type, so the response is delivered through the
+    /// wallet's transport delegate.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#appendix-A.13">RFC 6749 Appendix A.13</see>:
+    /// "token-type = type-name / URI-reference", where
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-4.1">RFC 3986 Section 4.1</see> defines
+    /// "URI-reference = URI / relative-ref".
+    /// </summary>
+    /// <param name="tokenType">The <c>token_type</c> the Token Response carries.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("urn:ietf:params:oauth:token-type:jwt")]
+    [DataRow("https://as.example/types/bearer")]
+    [DataRow("a:b")]
+    [DataRow("a:b:c")]
+    [DataRow("https://as.example:99999/t")]
+    [DataRow("http://")]
+    [DataRow("types/bearer")]
+    public async Task AUriReferenceTokenTypeIsSpent(string tokenType)
+    {
+        GrantedDetailsIssuance issuance = await IssueOverTokenResponseAsync(
+            "{\"access_token\":\"tok\",\"token_type\":\"" + tokenType + "\"}").ConfigureAwait(false);
+
+        Assert.IsTrue(issuance.Outcome.IsSuccess, "A URI-reference token_type must be accepted.");
+        Assert.HasCount(1, issuance.CredentialRequestBodies, "Exactly one Credential Request must be sent.");
+        Assert.AreEqual(tokenType, issuance.Outcome.Value.TokenType, "The token_type must be surfaced as written.");
+    }
+
+
+    /// <summary>
+    /// A Token Response whose <c>token_type</c> is neither a type name nor an RFC 3986 URI-reference (a
+    /// quotation mark, a reverse solidus, a brace or a bracket outside an authority, a percent sign without
+    /// two hex digits, a second number sign, or a first segment holding a colon behind no scheme) is
+    /// malformed: the wallet answers a malformed-response failure and sends no Nonce or Credential Request.
+    /// The library's Authorization Server sends no such type, so the response is delivered through the
+    /// wallet's transport delegate.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#appendix-A.13">RFC 6749 Appendix A.13</see>:
+    /// "token-type = type-name / URI-reference", where
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-4.2">RFC 3986 Section 4.2</see> holds:
+    /// "A path segment that contains a colon character (e.g., "this:that") cannot be used as the first
+    /// segment of a relative-path reference, as it would be mistaken for a scheme name."
+    /// </summary>
+    /// <param name="tokenType">The <c>token_type</c> the Token Response carries, as JSON string content.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("a\\\"b")]
+    [DataRow("a\\\\b")]
+    [DataRow("a%zz")]
+    [DataRow("%")]
+    [DataRow("a#b#c")]
+    [DataRow("::")]
+    [DataRow("1:x")]
+    [DataRow(":a")]
+    [DataRow("C:\\\\x")]
+    [DataRow("\\\\\\\\server\\\\share")]
+    [DataRow("a{b}")]
+    [DataRow("[a]")]
+    public async Task ATokenTypeOutsideTheUriReferenceGrammarIsAMalformedTokenResponse(string tokenType)
+    {
+        GrantedDetailsIssuance issuance = await IssueOverTokenResponseAsync(
+            "{\"access_token\":\"tok\",\"token_type\":\"" + tokenType + "\"}").ConfigureAwait(false);
+
+        Assert.IsFalse(issuance.Outcome.IsSuccess, "A token_type outside its grammar must not be spent.");
+        Assert.AreEqual(Oid4VciRequestFailureKind.MalformedResponse, issuance.Outcome.Error.Kind);
+        Assert.IsEmpty(issuance.LaterRequests, "No Nonce or Credential Request may follow a malformed Token Response.");
+    }
+
+
+    /// <summary>
+    /// A Token Response whose <c>access_token</c> is not a <c>token68</c> credential (white space only, a
+    /// space inside, a quotation mark) cannot be carried in an Authorization header: the wallet answers a
+    /// malformed-response failure and sends no Nonce or Credential Request. The library's Authorization
+    /// Server mints no such token, so the response is delivered through the wallet's transport delegate.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.2">RFC 9110 Section 11.2</see>:
+    /// "token68        = 1*( ALPHA / DIGIT / "-" / "." / "_" / "~" / "+" / "/" ) *"="".
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-2.1">RFC 6750 Section 2.1</see>:
+    /// "b64token    = 1*( ALPHA / DIGIT / "-" / "." / "_" / "~" / "+" / "/" ) *"="".
+    /// </summary>
+    /// <param name="accessToken">The <c>access_token</c> the Token Response carries, as JSON string content.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(" ")]
+    [DataRow("   ")]
+    [DataRow("a b")]
+    [DataRow("a\\\"b")]
+    public async Task AnAccessTokenOutsideToken68IsAMalformedTokenResponse(string accessToken)
+    {
+        GrantedDetailsIssuance? issuance = null;
+        Exception? escaped = null;
+        try
+        {
+            issuance = await IssueOverTokenResponseAsync(
+                "{\"access_token\":\"" + accessToken + "\",\"token_type\":\"Bearer\"}").ConfigureAwait(false);
+        }
+        catch(Exception thrown)
+        {
+            //The issuance answers its refusal as a failure value; an exception escaping it is recorded so
+            //that the assertion below, not the exception, fails the row.
+            escaped = thrown;
+        }
+
+        Assert.IsNull(escaped, "Issuance must complete with a failure value, not an exception.");
+        Assert.IsNotNull(issuance);
+        Assert.IsFalse(issuance.Outcome.IsSuccess, "An access_token outside token68 must not be spent.");
+        Assert.AreEqual(Oid4VciRequestFailureKind.MalformedResponse, issuance.Outcome.Error.Kind);
+        Assert.IsEmpty(issuance.LaterRequests, "No Nonce or Credential Request may follow a malformed Token Response.");
+    }
+
+
+    /// <summary>
+    /// A Token Response whose <c>access_token</c> is a <c>token68</c> credential holding every char of its
+    /// alphabet beside the letters and digits, with trailing padding, is spent on one Credential Request.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.2">RFC 9110 Section 11.2</see>:
+    /// "token68        = 1*( ALPHA / DIGIT / "-" / "." / "_" / "~" / "+" / "/" ) *"="".
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task AToken68AccessTokenIsSpent()
+    {
+        GrantedDetailsIssuance issuance = await IssueOverTokenResponseAsync(
+            "{\"access_token\":\"abc-._~+/==\",\"token_type\":\"Bearer\"}").ConfigureAwait(false);
+
+        Assert.IsTrue(issuance.Outcome.IsSuccess, "A token68 access_token must be accepted.");
+        Assert.HasCount(1, issuance.CredentialRequestBodies, "Exactly one Credential Request must be sent.");
+        Assert.AreEqual("abc-._~+/==", issuance.Outcome.Value.AccessToken);
+    }
+
+
+    /// <summary>
+    /// A Token Error Response whose <c>error</c> is empty or holds a char outside Section 5.2's set (a
+    /// carriage return and a line feed, a quotation mark) carries no error code the wallet can act on: the
+    /// wallet answers a malformed-response failure whose description echoes none of it, and sends no Nonce
+    /// or Credential Request.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>:
+    /// "Values for the "error" parameter MUST NOT include characters outside the set %x20-21 / %x23-5B /
+    /// %x5D-7E."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#appendix-A.7">RFC 6749 Appendix A.7</see>:
+    /// "error             = 1*NQSCHAR".
+    /// </summary>
+    /// <param name="errorCode">The <c>error</c> the Token Error Response carries, as JSON string content.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("invalid_grant\\r\\nX-Injected: yes")]
+    [DataRow("bad\\\"code")]
+    [DataRow("")]
+    public async Task ATokenErrorCodeOutsideItsCharacterSetIsAMalformedResponse(string errorCode)
+    {
+        GrantedDetailsIssuance issuance = await IssueOverTokenResponseAsync(
+            "{\"error\":\"" + errorCode + "\"}", tokenStatusCode: 400).ConfigureAwait(false);
+
+        Assert.IsFalse(issuance.Outcome.IsSuccess, "A refused Token Request must be a refusal.");
+        Assert.AreEqual(Oid4VciRequestFailureKind.MalformedResponse, issuance.Outcome.Error.Kind);
+        Assert.IsNull(issuance.Outcome.Error.ErrorCode, "An error code outside its set must not be surfaced.");
+        Assert.DoesNotContain("X-Injected", issuance.Outcome.Error.ToString(), StringComparison.Ordinal);
+        Assert.IsEmpty(issuance.LaterRequests, "No Nonce or Credential Request may follow a refused Token Request.");
+    }
+
+
+    /// <summary>
+    /// A Token Error Response whose <c>error_description</c> holds a char outside Section 5.2's set (a
+    /// quotation mark, a carriage return and a line feed) is read without its description: the error
+    /// stands with its code.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>:
+    /// "Values for the "error_description" parameter MUST NOT include characters outside the set %x20-21 /
+    /// %x23-5B / %x5D-7E."
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ATokenErrorDescriptionOutsideItsCharacterSetIsAbsent()
+    {
+        GrantedDetailsIssuance issuance = await IssueOverTokenResponseAsync(
+            "{\"error\":\"invalid_grant\",\"error_description\":\"a\\\"b\\r\\nc\"}", tokenStatusCode: 400).ConfigureAwait(false);
+
+        Assert.IsFalse(issuance.Outcome.IsSuccess, "A refused Token Request must be a refusal.");
+        Assert.AreEqual(Oid4VciRequestFailureKind.ErrorResponse, issuance.Outcome.Error.Kind);
+        Assert.AreEqual(OAuthErrors.InvalidGrant, issuance.Outcome.Error.ErrorCode);
+        Assert.IsNull(issuance.Outcome.Error.ErrorDescription, "A description outside its set must be read as absent.");
+    }
+
+
+    /// <summary>
+    /// A Token Response whose <c>token_type</c> holds a space, which neither a type name nor a
+    /// URI-reference holds, is malformed: the wallet answers a malformed-response failure and sends no
+    /// Nonce or Credential Request. The library's Authorization Server sends no such type, so the response
+    /// is delivered through the wallet's transport delegate.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#appendix-A.13">RFC 6749 Appendix A.13</see>:
+    /// "token-type = type-name / URI-reference", "type-name  = 1*name-char" and
+    /// "name-char  = "-" / "." / "_" / DIGIT / ALPHA".
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ATokenTypeHoldingASpaceIsAMalformedTokenResponse()
+    {
+        GrantedDetailsIssuance issuance = await IssueOverTokenResponseAsync(
+            "{\"access_token\":\"tok\",\"token_type\":\"Bearer Token\"}").ConfigureAwait(false);
+
+        Assert.IsFalse(issuance.Outcome.IsSuccess, "A token_type holding a space must not be spent.");
+        Assert.AreEqual(Oid4VciRequestFailureKind.MalformedResponse, issuance.Outcome.Error.Kind);
+        Assert.IsEmpty(issuance.LaterRequests, "No Nonce or Credential Request may follow a malformed Token Response.");
+    }
+
+
+    /// <summary>
+    /// A Token Response whose <c>token_type</c> is present and empty is malformed: the wallet answers a
+    /// malformed-response failure and sends no Nonce or Credential Request. The library's Authorization
+    /// Server sends no such type, so the response is delivered through the wallet's transport delegate.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#appendix-A.13">RFC 6749 Appendix A.13</see>:
+    /// "token-type = type-name / URI-reference", "type-name  = 1*name-char" and
+    /// "name-char  = "-" / "." / "_" / DIGIT / ALPHA".
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task AnEmptyTokenTypeIsAMalformedTokenResponse()
+    {
+        GrantedDetailsIssuance issuance = await IssueOverTokenResponseAsync(
+            "{\"access_token\":\"tok\",\"token_type\":\"\"}").ConfigureAwait(false);
+
+        Assert.IsFalse(issuance.Outcome.IsSuccess, "An empty token_type must not be spent.");
+        Assert.AreEqual(Oid4VciRequestFailureKind.MalformedResponse, issuance.Outcome.Error.Kind);
+        Assert.IsEmpty(issuance.LaterRequests, "No Nonce or Credential Request may follow a malformed Token Response.");
+    }
+
+
+    /// <summary>
+    /// A Token Response whose <c>access_token</c> is present and empty is malformed: the wallet answers a
+    /// malformed-response failure and sends no Nonce or Credential Request. The library's Authorization
+    /// Server mints no such token, so the response is delivered through the wallet's transport delegate.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#appendix-A.12">RFC 6749 Appendix A.12</see>:
+    /// "access-token = 1*VSCHAR".
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task AnEmptyAccessTokenIsAMalformedTokenResponse()
+    {
+        GrantedDetailsIssuance issuance = await IssueOverTokenResponseAsync(
+            "{\"access_token\":\"\",\"token_type\":\"Bearer\"}").ConfigureAwait(false);
+
+        Assert.IsFalse(issuance.Outcome.IsSuccess, "An empty access_token must not be spent.");
+        Assert.AreEqual(Oid4VciRequestFailureKind.MalformedResponse, issuance.Outcome.Error.Kind);
+        Assert.IsEmpty(issuance.LaterRequests, "No Nonce or Credential Request may follow a malformed Token Response.");
+    }
+
+
+    /// <summary>
+    /// The failure the wallet answers for an <c>access_token</c> outside its grammar names the rule and
+    /// echoes none of the token in its description.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-10.3">RFC 6749 Section 10.3</see>:
+    /// "Access token credentials (as well as any confidential access token attributes) MUST be kept
+    /// confidential in transit and storage, and only shared among the authorization server, the resource
+    /// servers the access token is valid for, and the client to whom the access token is issued."
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ARefusedAccessTokenIsNotEchoedInTheFailure()
+    {
+        GrantedDetailsIssuance issuance = await IssueOverTokenResponseAsync(
+            "{\"access_token\":\"SlAV32hkKG\\r\\nX-Injected: yes\",\"token_type\":\"Bearer\"}").ConfigureAwait(false);
+
+        Assert.IsFalse(issuance.Outcome.IsSuccess, "An access_token outside its grammar must not be spent.");
+        Assert.AreEqual(Oid4VciRequestFailureKind.MalformedResponse, issuance.Outcome.Error.Kind);
+        Assert.IsNotNull(issuance.Outcome.Error.ErrorDescription);
+        Assert.Contains("Appendix A.12", issuance.Outcome.Error.ErrorDescription, StringComparison.Ordinal);
+        Assert.DoesNotContain("SlAV32hkKG", issuance.Outcome.Error.ErrorDescription, StringComparison.Ordinal);
+        Assert.DoesNotContain("SlAV32hkKG", issuance.Outcome.Error.ToString(), StringComparison.Ordinal);
     }
 
 
@@ -1985,7 +2670,20 @@ internal sealed class Oid4VciWalletClientTests
     /// </summary>
     /// <param name="authorizationDetails">The whole <c>authorization_details</c> member, as JSON text.</param>
     /// <returns>The issuance outcome and the requests that followed the Token Request.</returns>
-    private async ValueTask<GrantedDetailsIssuance> IssueOverGrantedDetailsAsync(string authorizationDetails)
+    private ValueTask<GrantedDetailsIssuance> IssueOverGrantedDetailsAsync(string authorizationDetails) =>
+        IssueOverTokenResponseAsync(
+            "{\"access_token\":\"tok\",\"token_type\":\"Bearer\",\"authorization_details\":" + authorizationDetails + "}");
+
+
+    /// <summary>
+    /// Drives a Pre-Authorized Code issuance over the in-process transport whose Token Request is answered
+    /// with <paramref name="tokenResponse"/>, and records every Nonce and Credential Request that follows
+    /// it, answered by <see cref="CredentialFlowStub"/>.
+    /// </summary>
+    /// <param name="tokenResponse">The whole Token Response body, as JSON text.</param>
+    /// <param name="tokenStatusCode">The HTTP status the Token Request is answered with.</param>
+    /// <returns>The issuance outcome and the requests that followed the Token Request.</returns>
+    private async ValueTask<GrantedDetailsIssuance> IssueOverTokenResponseAsync(string tokenResponse, int tokenStatusCode = 200)
     {
         Uri tokenEndpoint = new("https://issuer.example.com/token");
         Uri nonceEndpoint = new("https://issuer.example.com/nonce");
@@ -1995,11 +2693,7 @@ internal sealed class Oid4VciWalletClientTests
         Oid4VciJsonPostDelegate flow = CredentialFlowStub(nonceEndpoint, credentialEndpoint);
 
         Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
-            sendFormPost: (_, _, _, _, _) =>
-                ValueTask.FromResult(JsonResponse(
-                    200,
-                    "{\"access_token\":\"tok\",\"token_type\":\"Bearer\",\"authorization_details\":"
-                    + authorizationDetails + "}")),
+            sendFormPost: (_, _, _, _, _) => ValueTask.FromResult(JsonResponse(tokenStatusCode, tokenResponse)),
             sendJsonPost: (endpoint, jsonBody, headers, context, ct) =>
             {
                 laterRequests.Add(endpoint);
@@ -2018,7 +2712,10 @@ internal sealed class Oid4VciWalletClientTests
     }
 
 
-    /// <summary>What <see cref="IssueOverGrantedDetailsAsync"/> observed of one issuance.</summary>
+    /// <summary>
+    /// What <see cref="IssueOverTokenResponseAsync"/> observed of one issuance, which
+    /// <see cref="IssueOverGrantedDetailsAsync"/> answers through it.
+    /// </summary>
     /// <param name="Outcome">The issuance outcome the wallet answered.</param>
     /// <param name="LaterRequests">The endpoints of the Nonce and Credential Requests sent after the Token Request, in order.</param>
     /// <param name="CredentialRequestBodies">The bodies of the Credential Requests sent, in order.</param>
@@ -2483,6 +3180,9 @@ internal sealed class Oid4VciWalletClientTests
         /// <summary>How many Credential Requests reached the issuance seam.</summary>
         public int IssuanceRequests { get; set; }
 
+        /// <summary>How many Nonce Requests reached the nonce seam.</summary>
+        public int NonceRequests { get; set; }
+
         /// <summary>The <c>kid</c> of the last Credential Request's response-encryption JWK, if any.</summary>
         public string? ResponseEncryptionKeyId { get; set; }
     }
@@ -2552,6 +3252,10 @@ internal sealed class Oid4VciWalletClientTests
     /// <param name="constructDpopProofAsync">The DPoP proof constructor, or <see langword="null"/>.</param>
     /// <param name="dpopKey">The DPoP signing pair, or <see langword="null"/>.</param>
     /// <param name="tokenRequestAuthorizationDetails">The <c>authorization_details</c> every form post carries, or <see langword="null"/>.</param>
+    /// <param name="rewriteTokenAnswer">
+    /// The rewrite of every form-post answer (the section 6 Token Response) after it crossed the wire and
+    /// before the wallet reads it, or <see langword="null"/> to hand each answer over as it arrived.
+    /// </param>
     /// <returns>The wallet client.</returns>
     private Oid4VciWalletClient BuildWalletClient(
         TestHostShell host,
@@ -2560,14 +3264,16 @@ internal sealed class Oid4VciWalletClientTests
         OutboundTransportDelegate? fetchCredentialOffer = null,
         ConstructDpopProofDelegate? constructDpopProofAsync = null,
         DpopKey? dpopKey = null,
-        string? tokenRequestAuthorizationDetails = null)
+        string? tokenRequestAuthorizationDetails = null,
+        Func<HttpResponseData, HttpResponseData>? rewriteTokenAnswer = null)
     {
         HttpClient httpClient = host.Host("default").SharedHttpClient!;
 
         Oid4VciWalletConfiguration configuration = new()
         {
-            SendFormPost = (endpoint, formFields, headers, _, ct) =>
-                HttpClientTransport.SendFormPostAsync(
+            SendFormPost = async (endpoint, formFields, headers, _, ct) =>
+            {
+                HttpResponseData answer = await HttpClientTransport.SendFormPostAsync(
                     httpClient,
                     endpoint,
                     tokenRequestAuthorizationDetails is null
@@ -2577,7 +3283,10 @@ internal sealed class Oid4VciWalletClientTests
                             [OAuthRequestParameterNames.AuthorizationDetails] = tokenRequestAuthorizationDetails
                         },
                     headers,
-                    ct),
+                    ct).ConfigureAwait(false);
+
+                return rewriteTokenAnswer is null ? answer : rewriteTokenAnswer(answer);
+            },
             SendJsonPost = (endpoint, body, headers, _, ct) =>
                 HttpClientTransport.SendJsonPostAsync(httpClient, endpoint, body, headers, ct),
             FetchCredentialOffer = fetchCredentialOffer,
@@ -2687,6 +3396,7 @@ internal sealed class Oid4VciWalletClientTests
 
             candidateIntegration.IssueCredentialNonceAsync = (_, _) =>
             {
+                observations.NonceRequests++;
                 mintedNonce = $"c-nonce-{Guid.NewGuid():N}";
 
                 return ValueTask.FromResult(mintedNonce);

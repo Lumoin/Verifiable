@@ -130,8 +130,12 @@ public sealed record OAuthProtocolError(
 /// <remarks>
 /// Common causes: the wrong endpoint was called, a reverse proxy or firewall
 /// returned an HTML error page, the connection was truncated, or the server
-/// has a bug. The raw <see cref="Body"/> is preserved for logging and diagnostic
-/// purposes.
+/// has a bug. A refused token endpoint response keeps its raw <see cref="Body"/> for logging and
+/// diagnostics only when it is an HTML or XML document: with a leading byte order mark and white space
+/// stripped, its first char is <c>&lt;</c>. Past an empty or white-space body, which is carried as it
+/// came, every other refused token endpoint response, a JSON text, a form-encoded body, plain text or
+/// anything else, carries <see cref="string.Empty"/> as its <see cref="Body"/>, and its
+/// <see cref="OAuthParseError.Support"/> summary names the refusal.
 /// </remarks>
 public sealed record OAuthMalformedResponse(
     string Body,

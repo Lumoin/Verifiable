@@ -66,8 +66,10 @@ public enum Oid4VciRequestFailureKind
     ErrorResponse,
 
     /// <summary>
-    /// The endpoint answered a success status, but the body, content type, or size breaks a rule
-    /// the section names; <see cref="Oid4VciRequestFailure.ErrorDescription"/> names which one.
+    /// The endpoint answered a success status whose body, content type, or size breaks a rule the
+    /// section names, or an error response whose <c>error</c> is empty or holds a char outside RFC 6749
+    /// Section 5.2's set <c>%x20-21 / %x23-5B / %x5D-7E</c>;
+    /// <see cref="Oid4VciRequestFailure.ErrorDescription"/> names which one.
     /// </summary>
     MalformedResponse,
 

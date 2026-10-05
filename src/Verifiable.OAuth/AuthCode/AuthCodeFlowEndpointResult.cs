@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Verifiable.Core.Assessment;
+using Verifiable.OAuth.Oid4Vci;
 
 namespace Verifiable.OAuth.AuthCode;
 
@@ -85,4 +86,21 @@ public sealed class AuthCodeFlowEndpointResult
     /// failed without parsing the <see cref="ErrorDescription"/> string.
     /// </remarks>
     public IReadOnlyList<Claim> ValidationClaims { get; init; } = [];
+
+    /// <summary>
+    /// The <c>openid_credential</c> authorizations the Token Response granted, as
+    /// <see cref="TokenResponse.GrantedCredentialAuthorizations"/> carries them, for the
+    /// <see cref="AuthCodeFlowEndpointOutcome.Ok"/> outcome of a token or refresh exchange; empty for
+    /// every other outcome and handler.
+    /// </summary>
+    /// <remarks>
+    /// A wallet on the authorization-code path chooses its Credential Request's target from this list
+    /// through <see cref="Oid4Vci.CredentialRequestTarget.FromGrantedAuthorizations"/>. The flow state
+    /// the exchange saves does not carry it; an application that needs the grant later keeps it from
+    /// this result.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.2">OID4VCI 1.0 Section 6.2</see>:
+    /// "The Wallet MUST use these identifiers together with an Access Token in subsequent Credential
+    /// Requests."
+    /// </remarks>
+    public IReadOnlyList<GrantedCredentialAuthorization> GrantedCredentialAuthorizations { get; init; } = [];
 }
