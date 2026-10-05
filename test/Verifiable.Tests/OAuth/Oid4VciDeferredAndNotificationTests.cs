@@ -745,6 +745,85 @@ internal sealed class Oid4VciDeferredAndNotificationTests
     }
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-4">RFC 9068 Section 4</see>: "The resource server
+    /// MUST validate that the "aud" claim contains a resource indicator value corresponding to an identifier the
+    /// resource server expects for itself.  The JWT access token MUST be rejected if "aud" does not contain a
+    /// resource indicator of the current resource server as a valid audience." The Credential, the Deferred
+    /// Credential and the Notification endpoint are resources of this Authorization Server, whose identifier is
+    /// the issuer. An access token from the Pre-Authorized Code grant, issued while the application's audience
+    /// resolver names another resource, carries that resource alone as its <c>aud</c>; presented over the wire
+    /// under the <c>Bearer</c> scheme with a well-formed request body at the endpoint a row addresses, it is
+    /// refused with 401, <c>invalid_token</c> and the one challenge <c>Bearer error="invalid_token"</c>.
+    /// </summary>
+    /// <param name="endpointName">The protected endpoint addressed.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(CredentialEndpointRow)]
+    [DataRow(DeferredEndpointRow)]
+    [DataRow(NotificationEndpointRow)]
+    public async Task AProtectedEndpointRefusesATokenAudiencedAtAnotherResourceAsync(string endpointName)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce,
+            EndpointCapabilities.Add(WellKnownCapabilityIdentifiers.Oid4VciCredentialEndpoint)).ConfigureAwait(false);
+        await WireProtectedEndpointSeamsAsync(host).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, static candidateIntegration =>
+        {
+            candidateIntegration.ResolveAccessTokenAudienceAsync = static (_, _, _) =>
+                ValueTask.FromResult<IReadOnlyList<string>?>([OtherResourceAudience]);
+        }).ConfigureAwait(false);
+
+        string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
+
+        using HttpResponseMessage response = await SendProtectedOverWireAsync(
+            host, material, endpointName, "Bearer " + accessToken, ProtectedRequestBody(endpointName)).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        AssertInvalidTokenRefusal(response, body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-2.2">RFC 9068 Section 2.2</see>: "aud  REQUIRED -
+    /// as defined in Section 4.1.3 of [RFC7519]." and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-4">Section 4</see>: "The JWT access token MUST be
+    /// rejected if "aud" does not contain a resource indicator of the current resource server as a valid
+    /// audience." An access token from the Pre-Authorized Code grant, signed again under the registration's
+    /// access-token key with its <c>aud</c> claim removed, presented over the wire under the <c>Bearer</c> scheme
+    /// with a well-formed request body at the Credential, the Deferred Credential or the Notification endpoint, is
+    /// refused with 401, <c>invalid_token</c> and the one challenge <c>Bearer error="invalid_token"</c>.
+    /// </summary>
+    /// <param name="endpointName">The protected endpoint addressed.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(CredentialEndpointRow)]
+    [DataRow(DeferredEndpointRow)]
+    [DataRow(NotificationEndpointRow)]
+    public async Task AProtectedEndpointRefusesATokenWithoutAnAudienceAsync(string endpointName)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce,
+            EndpointCapabilities.Add(WellKnownCapabilityIdentifiers.Oid4VciCredentialEndpoint)).ConfigureAwait(false);
+        await WireProtectedEndpointSeamsAsync(host).ConfigureAwait(false);
+
+        string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
+        string withoutAudience = await CompactJwsResigning.ResignWithAlteredPayloadAsync(
+            host, accessToken, material.SigningKeyId, static payload => payload.Remove("aud")).ConfigureAwait(false);
+
+        using HttpResponseMessage response = await SendProtectedOverWireAsync(
+            host, material, endpointName, "Bearer " + withoutAudience, ProtectedRequestBody(endpointName)).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        AssertInvalidTokenRefusal(response, body);
+    }
+
+
+    /// <summary>The identifier of a resource other than this Authorization Server.</summary>
+    private static string OtherResourceAudience { get; } = "https://rs.example.com";
+
     /// <summary>The row addressing the Credential Endpoint.</summary>
     private const string CredentialEndpointRow = "oid4vci-credential";
 
@@ -780,7 +859,7 @@ internal sealed class Oid4VciDeferredAndNotificationTests
     /// <returns>The JSON body.</returns>
     private static string ProtectedRequestBody(string row) => row switch
     {
-        CredentialEndpointRow => "{\"credential_configuration_id\":\"UniversityDegree_dc_sd_jwt\"}",
+        CredentialEndpointRow => "{\"credential_configuration_id\":\"UniversityDegree_dc_sd_jwt\",\"proofs\":{\"jwt\":[\"p\"]}}",
         DeferredEndpointRow => $"{{\"transaction_id\":\"{TransactionId}\"}}",
         NotificationEndpointRow => $"{{\"notification_id\":\"{NotificationId}\",\"event\":\"credential_accepted\"}}",
         _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown endpoint row.")
@@ -801,17 +880,40 @@ internal sealed class Oid4VciDeferredAndNotificationTests
 
 
     /// <summary>
-    /// Wires the deferred-issuance and notification seams so both endpoints are on the chain.
+    /// Wires the credential-issuance, deferred-issuance and notification seams, and the default Credential
+    /// Request parsing, so each endpoint a registration's capabilities allow is on the chain and serves a
+    /// well-formed request.
     /// </summary>
     /// <param name="host">The host whose integration is altered.</param>
     private static async Task WireProtectedEndpointSeamsAsync(TestHostShell host) =>
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
+            _ = candidateIntegration.UseDefaultCredentialRequestJsonParsing();
+            candidateIntegration.IssueCredentialAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
             candidateIntegration.ResolveDeferredCredentialAsync = static (_, _, _, _, _) =>
                 ValueTask.FromResult(DeferredCredentialDecision.Defer(60));
             candidateIntegration.ProcessCredentialNotificationAsync = static (_, _, _, _, _) =>
                 ValueTask.FromResult(CredentialNotificationDecision.Accept);
         }).ConfigureAwait(false);
+
+
+    /// <summary>
+    /// Asserts the refusal of a presented access token over the wire: 401, exactly one
+    /// <c>WWW-Authenticate</c> value <c>Bearer error="invalid_token"</c>, and <c>invalid_token</c> as the body's
+    /// <c>error</c>.
+    /// </summary>
+    /// <param name="response">The wire response.</param>
+    /// <param name="body">The response body text.</param>
+    private static void AssertInvalidTokenRefusal(HttpResponseMessage response, string body)
+    {
+        Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
+        Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges),
+            "RFC 6750 Section 3: the refusal carries a WWW-Authenticate challenge.");
+        Assert.AreEqual("Bearer error=\"invalid_token\"", challenges.Single());
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual("invalid_token", document.RootElement.GetProperty("error").GetString());
+    }
 
 
     /// <summary>

@@ -14,6 +14,8 @@ using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.OAuth;
+using Verifiable.OAuth.AuthCode;
+using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Oidc;
 using Verifiable.OAuth.Server;
@@ -1745,6 +1747,7 @@ internal sealed class UserInfoEndpointTests
     /// as a bearer token: it is refused with 401 and <c>Bearer error="invalid_token"</c>, and no claim of
     /// the End-User is returned.
     /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
     public async Task UserInfoRefusesATokenBoundByAConfirmationMethodItCannotCheckAsync()
     {
@@ -1755,7 +1758,7 @@ internal sealed class UserInfoEndpointTests
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         string accessToken = await IssueAccessTokenAsync(host, material, WellKnownScopes.OpenId).ConfigureAwait(false);
-        string certificateBoundToken = await ResignAccessTokenPayloadAsync(
+        string certificateBoundToken = await CompactJwsResigning.ResignWithAlteredPayloadAsync(
             host, accessToken, material.SigningKeyId,
             payload => payload["cnf"] = new JsonObject { ["x5t#S256"] = "bwcK0esc3ACC3DB2Y5_lESsXE8o9ltc05O89jdN-dg2" })
             .ConfigureAwait(false);
@@ -1780,6 +1783,7 @@ internal sealed class UserInfoEndpointTests
     /// <c>sub</c> is this library's own rule, UserInfo having no subject to answer for).
     /// </summary>
     /// <param name="row">Which refusal the DPoP-scheme request meets.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
     [DataRow(TamperedSignatureRow)]
     [DataRow(WithoutOpenIdScopeRow)]
@@ -1801,11 +1805,11 @@ internal sealed class UserInfoEndpointTests
         {
             TamperedSignatureRow => (TamperSignature(boundAccessToken), HttpStatusCode.Unauthorized,
                 ResourceDpopProofs.DpopChallenge("invalid_token"), "invalid_token"),
-            WithoutOpenIdScopeRow => (await ResignAccessTokenPayloadAsync(host, boundAccessToken, material.SigningKeyId,
+            WithoutOpenIdScopeRow => (await CompactJwsResigning.ResignWithAlteredPayloadAsync(host, boundAccessToken, material.SigningKeyId,
                     payload => payload["scope"] = WellKnownScopes.Profile).ConfigureAwait(false),
                 HttpStatusCode.Forbidden,
                 $"DPoP error=\"insufficient_scope\", scope=\"openid\", algs=\"{ResourceDpopProofs.AcceptedProofAlgorithms}\"", "insufficient_scope"),
-            WithoutSubjectRow => (await ResignAccessTokenPayloadAsync(host, boundAccessToken, material.SigningKeyId,
+            WithoutSubjectRow => (await CompactJwsResigning.ResignWithAlteredPayloadAsync(host, boundAccessToken, material.SigningKeyId,
                     payload => _ = payload.Remove("sub")).ConfigureAwait(false),
                 HttpStatusCode.Unauthorized, ResourceDpopProofs.DpopChallenge("invalid_token"), "invalid_token"),
             _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown refusal row.")
@@ -1860,6 +1864,7 @@ internal sealed class UserInfoEndpointTests
     /// UserInfo over the wire with 401 <c>invalid_token</c> and <c>Bearer error="invalid_token"</c>,
     /// never a server error.
     /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
     public async Task UserInfoRefusesAnAccessTokenWhoseExpIsNotARepresentableInstantAsync()
     {
@@ -1870,7 +1875,7 @@ internal sealed class UserInfoEndpointTests
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
         string accessToken = await IssueAccessTokenAsync(host, material, WellKnownScopes.OpenId).ConfigureAwait(false);
-        string farExpiryToken = await ResignAccessTokenPayloadAsync(
+        string farExpiryToken = await CompactJwsResigning.ResignWithAlteredPayloadAsync(
             host, accessToken, material.SigningKeyId, payload => payload["exp"] = long.MaxValue).ConfigureAwait(false);
 
         using HttpResponseMessage response = await SendUserInfoOverWireAsync(host, material, farExpiryToken)
@@ -2030,6 +2035,519 @@ internal sealed class UserInfoEndpointTests
     }
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-4">RFC 9068 Section 4</see>: "The resource
+    /// server MUST validate that the "aud" claim contains a resource indicator value corresponding to an
+    /// identifier the resource server expects for itself.  The JWT access token MUST be rejected if "aud" does
+    /// not contain a resource indicator of the current resource server as a valid audience." UserInfo is a
+    /// resource of this Authorization Server, whose identifier is the issuer. A registration whose scope map
+    /// names another resource for <c>openid</c> is issued an access token whose <c>aud</c> is that resource
+    /// alone; presented at UserInfo over the wire under the <c>Bearer</c> scheme, it is refused with 401,
+    /// <c>invalid_token</c> and the one challenge <c>Bearer error="invalid_token"</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task UserInfoRefusesATokenAudiencedAtAnotherResourceAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        _ = await host.AddScopeWithAudienceAsync(
+            material, WellKnownScopes.OpenId, OtherResourceAudience, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        string accessToken = await IssueAccessTokenAsync(host, material, WellKnownScopes.OpenId).ConfigureAwait(false);
+        Assert.AreEqual($"[\"{OtherResourceAudience}\"]", ReadAudienceClaim(accessToken),
+            "The scope map audiences the token at the other resource alone.");
+
+        using HttpResponseMessage response = await SendUserInfoOverWireAsync(host, material, accessToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        AssertRefused(response, body, HttpStatusCode.Unauthorized, "Bearer error=\"invalid_token\"", "invalid_token");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-4">RFC 9068 Section 4</see>: "The JWT access
+    /// token MUST be rejected if "aud" does not contain a resource indicator of the current resource server as a
+    /// valid audience." and "Please note that this requirement does not prevent JWT access tokens from using
+    /// authentication schemes other than "Bearer"." A DPoP-bound access token whose <c>aud</c> names another
+    /// resource alone, signed under the registration's access-token key and presented at UserInfo over the wire
+    /// under the <c>DPoP</c> scheme with a proof from the bound key carrying the nonce UserInfo provided, is
+    /// refused with 401, <c>invalid_token</c> and the one challenge <c>DPoP error="invalid_token", algs="..."</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task UserInfoRefusesADpopBoundTokenAudiencedAtAnotherResourceAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        using DpopClientFixture fixture = await CreateDpopFixtureAsync(host, material).ConfigureAwait(false);
+        DpopPresentationContext presentation = await PrepareDpopPresentationAsync(host, material, fixture).ConfigureAwait(false);
+
+        string otherAudienceToken = await CompactJwsResigning.ResignWithAlteredPayloadAsync(
+            host, presentation.AccessToken, material.SigningKeyId,
+            payload => payload["aud"] = new JsonArray(OtherResourceAudience)).ConfigureAwait(false);
+        string proof = await ResourceDpopProofs.BuildAsync(
+            presentation.DpopKey, "POST", presentation.UserInfoUrl, otherAudienceToken, presentation.Nonce,
+            TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        using HttpResponseMessage response = await SendUserInfoOverWireAsync(
+            host, material, otherAudienceToken, scheme: "DPoP", dpopProof: proof).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        AssertRefused(response, body, HttpStatusCode.Unauthorized, ResourceDpopProofs.DpopChallenge("invalid_token"), "invalid_token");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-2.2">RFC 9068 Section 2.2</see>: "aud  REQUIRED -
+    /// as defined in Section 4.1.3 of [RFC7519]." and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-4">Section 4</see>: "The JWT access token MUST be
+    /// rejected if "aud" does not contain a resource indicator of the current resource server as a valid
+    /// audience." An access token signed under the registration's access-token key whose claims carry no
+    /// <c>aud</c> contains no audience at all; presented at UserInfo over the wire under the <c>Bearer</c>
+    /// scheme, it is refused with 401, <c>invalid_token</c> and the one challenge <c>Bearer error="invalid_token"</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task UserInfoRefusesATokenWithoutAnAudienceAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        string accessToken = await IssueAccessTokenAsync(host, material, WellKnownScopes.OpenId).ConfigureAwait(false);
+        string withoutAudience = await CompactJwsResigning.ResignWithAlteredPayloadAsync(
+            host, accessToken, material.SigningKeyId, payload => payload.Remove("aud")).ConfigureAwait(false);
+        Assert.IsNull(ReadAudienceClaim(withoutAudience), "The presented token carries no aud claim.");
+
+        using HttpResponseMessage response = await SendUserInfoOverWireAsync(host, material, withoutAudience).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        AssertRefused(response, body, HttpStatusCode.Unauthorized, "Bearer error=\"invalid_token\"", "invalid_token");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-4">RFC 9068 Section 4</see>: "The resource
+    /// server MUST validate that the "aud" claim contains a resource indicator value corresponding to an
+    /// identifier the resource server expects for itself." The rule is containment, not equality: an access
+    /// token signed under the registration's access-token key whose <c>aud</c> is the array of another resource
+    /// and the issuer, presented at UserInfo over the wire under the <c>Bearer</c> scheme, is served 200 with
+    /// the End-User's <c>sub</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task UserInfoServesATokenWhoseAudienceHoldsTheIssuerAmongOtherResourcesAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        string issuer = IssuerOf(host, material);
+
+        string accessToken = await IssueAccessTokenAsync(host, material, WellKnownScopes.OpenId).ConfigureAwait(false);
+        string sharedAudienceToken = await CompactJwsResigning.ResignWithAlteredPayloadAsync(
+            host, accessToken, material.SigningKeyId,
+            payload => payload["aud"] = new JsonArray(OtherResourceAudience, issuer)).ConfigureAwait(false);
+
+        using HttpResponseMessage response = await SendUserInfoOverWireAsync(host, material, sharedAudienceToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode, body);
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual(SubjectId, document.RootElement.GetProperty("sub").GetString());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-3">RFC 9068 Section 3</see>: "If the request does
+    /// not include a "resource" parameter, the authorization server MUST use a default resource indicator in the
+    /// "aud" claim." The default resource indicator of this Authorization Server is its issuer. Under the FAPI 2.0
+    /// and the HAIP 1.0 profile, a registration whose scopes map to no audience runs the pushed authorization-code
+    /// flow of a DPoP-wired client over the wire for <c>openid</c> with no <c>resource</c>; the issued access
+    /// token's <c>aud</c> is the one-element array <c>["&lt;issuer&gt;"]</c>, and the token, presented at UserInfo
+    /// over the wire under the <c>DPoP</c> scheme with a proof from the bound key carrying the nonce UserInfo
+    /// provided, is served 200 with the End-User's <c>sub</c>.
+    /// </summary>
+    /// <param name="profileRow">The registration's policy profile: <see cref="Fapi20ProfileRow"/> or <see cref="Haip10ProfileRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(Fapi20ProfileRow)]
+    [DataRow(Haip10ProfileRow)]
+    public async Task ATokenRequestedWithoutAResourceIsAudiencedAtTheIssuerAndServedAtUserInfoAsync(string profileRow)
+    {
+        PolicyProfile profile = profileRow switch
+        {
+            Fapi20ProfileRow => PolicyProfile.Fapi20,
+            Haip10ProfileRow => PolicyProfile.Haip10,
+            _ => throw new ArgumentOutOfRangeException(nameof(profileRow), profileRow, "Unknown profile row.")
+        };
+
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri, profile).ConfigureAwait(false);
+        using DpopClientFixture fixture = await CreateDpopFixtureAsync(host, material).ConfigureAwait(false);
+
+        //The token endpoint's answer is asserted first, with every fault the host captured for the request taken
+        //into the assertion's message, so a token request the server fails is the row's own failure.
+        using HttpClient browserClient = LoopbackTls.CreateSingleHopPinnedHttpClient(host.ServerCertificate);
+        (string flowId, _) = await AuthCodeFlowDriver.DriveParAuthorizeAndCallbackAsync(
+            host.Host("default"), fixture.Client, fixture.Registration, fixture.ClientFlowStore,
+            material.Registration.TenantId.Value, RedirectUri, SubjectId, browserClient,
+            scope: WellKnownScopes.OpenId, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        AuthCodeFlowEndpointResult tokenResult = await fixture.Client.AuthCode.ExchangeTokenAsync(
+            fixture.Registration, flowId, [], null, TestContext.CancellationToken).ConfigureAwait(false);
+        Exception[] tokenFaults = host.Host("default").ConsumeHttpFaults();
+        string tokenAnswer = $"Outcome={tokenResult.Outcome} ErrorCode={tokenResult.ErrorCode} "
+            + $"ErrorDescription={tokenResult.ErrorDescription} Faults=[{string.Join(" | ", tokenFaults.Select(static fault => fault.Message))}]";
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, tokenResult.Outcome, tokenAnswer);
+        Assert.IsEmpty(tokenFaults, tokenAnswer);
+        Assert.AreEqual("DPoP", (string)tokenResult.Body![OAuthRequestParameterNames.TokenType], tokenAnswer);
+
+        string accessToken = (string)tokenResult.Body![OAuthRequestParameterNames.AccessToken];
+        string? audience = ReadAudienceClaim(accessToken);
+        Assert.IsNotNull(audience, "The issued access token carries aud.");
+        Assert.AreEqual($"[\"{IssuerOf(host, material)}\"]", audience,
+            "The default audience is the issuer, written as the one-element array.");
+
+        string userInfoUrl = (await UserInfoUrlAsync(host, material).ConfigureAwait(false)).ToString();
+        string nonce = await ObtainResourceNonceAsync(host, material, accessToken).ConfigureAwait(false);
+        string proof = await ResourceDpopProofs.BuildAsync(
+            fixture.DpopKey, "POST", userInfoUrl, accessToken, nonce, TimeProvider.GetUtcNow(), TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        using HttpResponseMessage response = await SendUserInfoOverWireAsync(
+            host, material, accessToken, scheme: "DPoP", dpopProof: proof).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode, body);
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual(SubjectId, document.RootElement.GetProperty("sub").GetString());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-3">RFC 9068 Section 3</see>: "If the request does
+    /// not include a "resource" parameter, the authorization server MUST use a default resource indicator in the
+    /// "aud" claim." The default resource indicator of this Authorization Server is its issuer. Under the RFC 6749
+    /// with PKCE profile, a registration whose scopes map to no audience runs the authorization-code flow for
+    /// <c>openid</c> with no <c>resource</c>, its pushed request and its token request over the wire; the issued
+    /// access token's <c>aud</c> is the one-element array <c>["&lt;issuer&gt;"]</c>, and the token, presented at
+    /// UserInfo over the wire under the <c>Bearer</c> scheme, is served 200 with the End-User's <c>sub</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ATokenRequestedWithoutAResourceUnderRfc6749WithPkceIsAudiencedAtTheIssuerAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        //The pushed request and the token request cross the loopback listener; the token endpoint's answer is asserted
+        //first.
+        InProcessAuthCodeDriveResult drive = await InProcessAuthCodeDriver.DriveAsync(
+            host, material, SubjectId, RedirectUri,
+            new InProcessAuthCodeDriveOptions { Scope = WellKnownScopes.OpenId, UsesRealWireTransport = true },
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, drive.TokenResponse.StatusCode, drive.TokenResponse.Body);
+
+        using JsonDocument tokenBody = JsonDocument.Parse(drive.TokenResponse.Body);
+        string accessToken = tokenBody.RootElement.GetProperty("access_token").GetString()!;
+        string? audience = ReadAudienceClaim(accessToken);
+        Assert.IsNotNull(audience, "The issued access token carries aud.");
+        Assert.AreEqual($"[\"{IssuerOf(host, material)}\"]", audience,
+            "The default audience is the issuer, written as the one-element array.");
+
+        using HttpResponseMessage response = await SendUserInfoOverWireAsync(host, material, accessToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode, body);
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual(SubjectId, document.RootElement.GetProperty("sub").GetString());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-4">RFC 9068 Section 4</see>: "The current time
+    /// MUST be before the time represented by the "exp" claim." An access token issued to the registration is
+    /// presented at UserInfo over the wire under the <c>Bearer</c> scheme with the injected clock set relative to
+    /// the token's <c>exp</c>: one second before it the token is served 200 with the End-User's <c>sub</c>; at the
+    /// instant of <c>exp</c> it is refused with 401, <c>invalid_token</c>, the one challenge
+    /// <c>Bearer error="invalid_token"</c> and the description "Access token has expired.".
+    /// </summary>
+    /// <param name="secondsFromExp">The clock's offset from the token's <c>exp</c>, in seconds: -1 or 0.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(-1)]
+    [DataRow(0)]
+    public async Task UserInfoServesATokenOnlyBeforeTheInstantOfItsExpAsync(int secondsFromExp)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        string accessToken = await IssueAccessTokenAsync(host, material, WellKnownScopes.OpenId).ConfigureAwait(false);
+        long exp = ReadExpirationSeconds(accessToken);
+        TimeProvider.SetUtcNow(DateTimeOffset.FromUnixTimeSeconds(exp).AddSeconds(secondsFromExp));
+
+        using HttpResponseMessage response = await SendUserInfoOverWireAsync(host, material, accessToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        if(secondsFromExp < 0)
+        {
+            Assert.AreEqual(HttpStatusCode.OK, response.StatusCode, body);
+            using JsonDocument served = JsonDocument.Parse(body);
+            Assert.AreEqual(SubjectId, served.RootElement.GetProperty("sub").GetString());
+
+            return;
+        }
+
+        AssertRefused(response, body, HttpStatusCode.Unauthorized, "Bearer error=\"invalid_token\"", "invalid_token");
+        using JsonDocument refused = JsonDocument.Parse(body);
+        Assert.AreEqual("Access token has expired.", refused.RootElement.GetProperty("error_description").GetString());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>: "invalid_token The
+    /// access token provided is expired, revoked, malformed, or invalid for other reasons." A malformed access token
+    /// presented at UserInfo over the wire under the <c>Bearer</c> scheme is refused with 401, <c>invalid_token</c>
+    /// and the one challenge <c>Bearer error="invalid_token"</c>, and its description is a fixed text that carries
+    /// nothing a parser said about the token. The rows: a protected header that is a JSON array
+    /// (<c>W10.e30.AA</c>), answered "Access token is malformed."; a payload, signed under the registration's
+    /// access-token key, that is the JSON array <c>[]</c>, answered "Access token payload could not be parsed.".
+    /// </summary>
+    /// <param name="row">Which part of the token is malformed: <see cref="HeaderNotAnObjectRow"/> or <see cref="PayloadNotAnObjectRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(HeaderNotAnObjectRow)]
+    [DataRow(PayloadNotAnObjectRow)]
+    public async Task UserInfoDescribesAMalformedTokenWithAFixedTextAsync(string row)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        (string malformedToken, string expectedDescription) = row switch
+        {
+            HeaderNotAnObjectRow => ("W10.e30.AA", "Access token is malformed."),
+            PayloadNotAnObjectRow => (await CompactJwsResigning.ResignWithPayloadAsync(
+                host,
+                await IssueAccessTokenAsync(host, material, WellKnownScopes.OpenId).ConfigureAwait(false),
+                material.SigningKeyId,
+                "[]").ConfigureAwait(false), "Access token payload could not be parsed."),
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown malformed-token row.")
+        };
+
+        using HttpResponseMessage response = await SendUserInfoOverWireAsync(host, material, malformedToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        AssertRefused(response, body, HttpStatusCode.Unauthorized, "Bearer error=\"invalid_token\"", "invalid_token");
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual(expectedDescription, document.RootElement.GetProperty("error_description").GetString());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.6.1">RFC 9110 Section 15.6.1</see>: "The 500
+    /// (Internal Server Error) status code indicates that the server encountered an unexpected condition that
+    /// prevented it from fulfilling the request." An access token issued to the registration is presented at
+    /// UserInfo over the wire under the <c>Bearer</c> scheme after the server's own wiring is altered so that it cannot
+    /// validate it; the answer is 500 with exactly the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c> and no
+    /// challenge, whatever the fault names. The rows: the registration's issuer replaced by one the default issuer
+    /// resolver refuses (<c>http</c> scheme); an application issuer resolver that answers nothing.
+    /// </summary>
+    /// <param name="row">Which part of the wiring fails: <see cref="IssuerUnresolvableRow"/> or <see cref="IssuerResolverAnswersNothingRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(IssuerUnresolvableRow)]
+    [DataRow(IssuerResolverAnswersNothingRow)]
+    public async Task UserInfoAnswersAFaultOfTheServersWiringWithTheFixedDescriptionAsync(string row)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        string accessToken = await IssueAccessTokenAsync(host, material, WellKnownScopes.OpenId).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        //The unresolvable row replaces the registration the host holds; the other row alters the integration.
+        Action<AuthorizationServerIntegration>? alteration = row switch
+        {
+            IssuerResolverAnswersNothingRow => static candidateIntegration =>
+                candidateIntegration.ResolveIssuerAsync = static (_, _, _) => ValueTask.FromResult<Uri?>(null),
+            IssuerUnresolvableRow => null,
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown wiring row.")
+        };
+        if(alteration is not null)
+        {
+            await TestHostShell.AlterAsync(host.Server, alteration).ConfigureAwait(false);
+        }
+        else
+        {
+            ReplaceRegistrationIssuer(host, material, new Uri("http://issuer.test/" + material.Registration.TenantId.Value));
+        }
+
+        using HttpResponseMessage response = await SendUserInfoOverWireAsync(host, material, accessToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.InternalServerError, response.StatusCode, body);
+        Assert.AreEqual(
+            /*lang=json,strict*/ "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}", body);
+        Assert.IsFalse(response.Headers.Contains("WWW-Authenticate"), "A fault of the server carries no challenge.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>: "invalid_token The
+    /// access token provided is expired, revoked, malformed, or invalid for other reasons." An access token issued to
+    /// the registration is presented at UserInfo over the wire under the <c>Bearer</c> scheme while the verification
+    /// registry raises an <see cref="InvalidOperationException"/> whose message is
+    /// <see cref="VerificationRaisedMessage"/> as the function for the token's verification key is resolved; a
+    /// signature whose verification cannot run is a signature that does
+    /// not verify, so the token is refused with 401, <c>invalid_token</c>, the one challenge
+    /// <c>Bearer error="invalid_token"</c> and exactly the description "Access token signature verification
+    /// failed.", and the body carries nothing of the exception's message.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DoNotParallelize]
+    public async Task UserInfoDescribesASignatureVerificationThatRaisesWithAFixedTextAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        string accessToken = await IssueAccessTokenAsync(host, material, WellKnownScopes.OpenId).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        string body;
+        HttpResponseMessage response;
+        try
+        {
+            //The registry the library resolves a verification function from is process-wide: the row runs
+            //alone and restores the test setup's registry whatever happens.
+            CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.Initialize(
+                (_, _, _) => MicrosoftCryptographicFunctionsAdapter.SignP256Async,
+                (_, _, _) => throw new InvalidOperationException(VerificationRaisedMessage));
+            response = await SendUserInfoOverWireAsync(host, material, accessToken).ConfigureAwait(false);
+            body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            TestSetup.Setup();
+        }
+
+        using(response)
+        {
+            AssertRefused(response, body, HttpStatusCode.Unauthorized, "Bearer error=\"invalid_token\"", "invalid_token");
+            using JsonDocument document = JsonDocument.Parse(body);
+            Assert.AreEqual(
+                "Access token signature verification failed.",
+                document.RootElement.GetProperty("error_description").GetString(),
+                body);
+            Assert.DoesNotContain(VerificationRaisedMessage, body, StringComparison.Ordinal);
+        }
+    }
+
+
+    /// <summary>The message of the exception the replaced verification function raises.</summary>
+    private static string VerificationRaisedMessage { get; } = "verification-function-raised-marker";
+
+
+    /// <summary>The identifier of a resource other than this Authorization Server.</summary>
+    private static string OtherResourceAudience { get; } = "https://rs.example.com";
+
+    /// <summary>The profile row of the FAPI 2.0 registration.</summary>
+    private const string Fapi20ProfileRow = "fapi20";
+
+    /// <summary>The profile row of the HAIP 1.0 registration.</summary>
+    private const string Haip10ProfileRow = "haip10";
+
+    /// <summary>The malformed-token row whose protected header is a JSON array.</summary>
+    private const string HeaderNotAnObjectRow = "header-not-an-object";
+
+    /// <summary>The malformed-token row whose payload is a JSON array.</summary>
+    private const string PayloadNotAnObjectRow = "payload-not-an-object";
+
+    /// <summary>The wiring row whose registration names an issuer the default resolver refuses.</summary>
+    private const string IssuerUnresolvableRow = "issuer-unresolvable";
+
+    /// <summary>The wiring row whose application issuer resolver answers nothing.</summary>
+    private const string IssuerResolverAnswersNothingRow = "issuer-resolver-answers-nothing";
+
+
+    /// <summary>
+    /// The issuer the host holds for <paramref name="material"/>'s registration, the value the issued tokens'
+    /// <c>iss</c> carries.
+    /// </summary>
+    /// <param name="host">The host holding the registration.</param>
+    /// <param name="material">The registration.</param>
+    /// <returns>The issuer, as written.</returns>
+    private static string IssuerOf(TestHostShell host, VerifierKeyMaterial material) =>
+        host.Host("default").Registrations[material.Registration.TenantId.Value].IssuerUri!.OriginalString;
+
+
+    /// <summary>
+    /// Replaces the issuer the host holds for <paramref name="material"/>'s registration with
+    /// <paramref name="issuer"/>, under both of the keys the host serves the registration by, without the
+    /// checks a registration update runs.
+    /// </summary>
+    /// <param name="host">The host holding the registration.</param>
+    /// <param name="material">The registration.</param>
+    /// <param name="issuer">The issuer the registration names from then on.</param>
+    private static void ReplaceRegistrationIssuer(TestHostShell host, VerifierKeyMaterial material, Uri issuer)
+    {
+        HostedAuthorizationServer served = host.Host("default");
+        ClientRecord replaced = served.Registrations[material.Registration.TenantId.Value] with { IssuerUri = issuer };
+        served.Registrations[replaced.TenantId.Value] = replaced;
+        served.Registrations[replaced.ClientId] = replaced;
+    }
+
+
+    /// <summary>
+    /// The <c>aud</c> claim of a compact JWS's payload exactly as written, or <see langword="null"/> when the
+    /// payload carries none.
+    /// </summary>
+    /// <param name="compactJws">The access token.</param>
+    /// <returns>The claim's raw JSON text, or <see langword="null"/>.</returns>
+    private static string? ReadAudienceClaim(string compactJws)
+    {
+        string[] parts = compactJws.Split('.');
+        using IMemoryOwner<byte> payloadOwner = TestSetup.Base64UrlDecoder(parts[1], BaseMemoryPool.Shared);
+        using JsonDocument payload = JsonDocument.Parse(payloadOwner.Memory);
+
+        return payload.RootElement.TryGetProperty("aud", out JsonElement audience) ? audience.GetRawText() : null;
+    }
+
+
+    /// <summary>The <c>exp</c> claim of a compact JWS's payload, in seconds since the epoch.</summary>
+    /// <param name="compactJws">The access token.</param>
+    /// <returns>The <c>exp</c> value.</returns>
+    private static long ReadExpirationSeconds(string compactJws)
+    {
+        string[] parts = compactJws.Split('.');
+        using IMemoryOwner<byte> payloadOwner = TestSetup.Base64UrlDecoder(parts[1], BaseMemoryPool.Shared);
+        using JsonDocument payload = JsonDocument.Parse(payloadOwner.Memory);
+
+        return payload.RootElement.GetProperty("exp").GetInt64();
+    }
+
+
     /// <summary>The resolver row that holds the registration's key for access tokens only.</summary>
     private const string HeldForAccessTokensRow = "held-for-access-tokens";
 
@@ -2100,28 +2618,6 @@ internal sealed class UserInfoEndpointTests
         char flipped = compactJws[tamperIndex] == 'A' ? 'B' : 'A';
 
         return string.Concat(compactJws.AsSpan(0, tamperIndex), flipped.ToString(), compactJws.AsSpan(tamperIndex + 1));
-    }
-
-
-    /// <summary>
-    /// Re-signs an issued access token under <paramref name="keyId"/> with its payload rewritten by
-    /// <paramref name="alterPayload"/>, through <see cref="CompactJwsResigning.ResignWithPayloadAsync"/>.
-    /// </summary>
-    /// <param name="host">The host holding the key's private half.</param>
-    /// <param name="accessToken">The issued access token.</param>
-    /// <param name="keyId">The key the token's header names and the rebuilt token is signed under.</param>
-    /// <param name="alterPayload">Rewrites the parsed payload.</param>
-    /// <returns>The re-signed access token.</returns>
-    private static async Task<string> ResignAccessTokenPayloadAsync(
-        TestHostShell host, string accessToken, KeyId keyId, Action<JsonObject> alterPayload)
-    {
-        string[] parts = accessToken.Split('.');
-        using IMemoryOwner<byte> payloadOwner = TestSetup.Base64UrlDecoder(parts[1], BaseMemoryPool.Shared);
-        JsonObject payload = JsonNode.Parse(payloadOwner.Memory.Span)!.AsObject();
-        alterPayload(payload);
-
-        return await CompactJwsResigning.ResignWithPayloadAsync(host, accessToken, keyId, payload.ToJsonString())
-            .ConfigureAwait(false);
     }
 
 

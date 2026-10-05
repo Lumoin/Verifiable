@@ -300,7 +300,8 @@ public static class Oid4VciEndpoints
     /// <summary>
     /// Builds the OID4VCI 1.0 §8 Credential Endpoint candidate. Stateless and <b>protected</b>
     /// (§8.3.1.1: the Wallet presents the access token the grant minted): the library validates
-    /// the bearer token, parses the section 8.2 request, enforces the credential-identifier shape, holds
+    /// the bearer token, its <c>aud</c> holding the issuer that identifies this endpoint (RFC 9068 Section 4),
+    /// parses the section 8.2 request, enforces the credential-identifier shape, holds
     /// the request to the token's grant and to the one catalogue it reads (see
     /// <see cref="AuthorizeCredentialRequest"/> and <see cref="ValidateConfigurationConstraints"/>), and
     /// hands the request plus the validated access-token claims to the
@@ -355,8 +356,10 @@ public static class Oid4VciEndpoints
                 }
 
                 //§8.3.1.1: the Credential Request must carry an Access Token that enables
-                //issuance. The library validates the AS-issued token (signature, iss, exp) —
-                //the same protected-resource boundary UserInfo applies — before any minting.
+                //issuance. The library validates the AS-issued token (signature, iss, aud, exp; the
+                //endpoint is a resource of this Authorization Server, identified by its issuer, which the
+                //token's aud must contain per RFC 9068 Section 4), the protected-resource boundary UserInfo
+                //applies, before any minting.
                 //The Authorization field is read once; sent on two lines it is no credential
                 //(RFC 9110 Section 11.6.2) and the request is refused 400 invalid_request with
                 //the Bearer and the DPoP challenge (RFC 9449 Section 7.2, Figure 19).
@@ -375,7 +378,7 @@ public static class Oid4VciEndpoints
                 }
 
                 (JwtPayload? accessToken, ServerHttpResponse? validationFailure) =
-                    await BearerTokenValidation.ValidateAsync(bearerToken!, server, registration, context, ct)
+                    await BearerTokenValidation.ValidateAtLibraryResourceAsync(bearerToken!, server, registration, context, ct)
                         .ConfigureAwait(false);
                 //RFC 9449 §7.2: the refusal of a token presented under the DPoP scheme is delivered
                 //in that scheme's challenge.
@@ -649,7 +652,8 @@ public static class Oid4VciEndpoints
 
     /// <summary>
     /// Builds the OID4VCI 1.0 §9 Deferred Credential Endpoint candidate. Stateless and
-    /// <b>protected</b>: the library validates the bearer token and the §9.1 request shape
+    /// <b>protected</b>: the library validates the bearer token, its <c>aud</c> holding the issuer that
+    /// identifies this endpoint (RFC 9068 Section 4), and the section 9.1 request shape
     /// (a JSON body whose <c>transaction_id</c> is REQUIRED), hands the transaction to the
     /// <see cref="AuthorizationServerIntegration.ResolveDeferredCredentialAsync"/> seam, and
     /// maps the verdict to the §9.2 200-with-<c>credentials</c> / 202-with-<c>interval</c>
@@ -721,7 +725,7 @@ public static class Oid4VciEndpoints
                 }
 
                 (JwtPayload? accessToken, ServerHttpResponse? validationFailure) =
-                    await BearerTokenValidation.ValidateAsync(bearerToken!, server, registration, context, ct)
+                    await BearerTokenValidation.ValidateAtLibraryResourceAsync(bearerToken!, server, registration, context, ct)
                         .ConfigureAwait(false);
                 //RFC 9449 §7.2: the refusal of a token presented under the DPoP scheme is delivered
                 //in that scheme's challenge.
@@ -1756,7 +1760,8 @@ public static class Oid4VciEndpoints
 
     /// <summary>
     /// Builds the OID4VCI 1.0 §11 Notification Endpoint candidate. Stateless and
-    /// <b>protected</b>: the library validates the bearer token and the §11.1 request shape
+    /// <b>protected</b>: the library validates the bearer token, its <c>aud</c> holding the issuer that
+    /// identifies this endpoint (RFC 9068 Section 4), and the section 11.1 request shape
     /// (REQUIRED <c>notification_id</c>, REQUIRED case-sensitive <c>event</c>, optional
     /// <c>event_description</c>), hands the notification to the
     /// <see cref="AuthorizationServerIntegration.ProcessCredentialNotificationAsync"/> seam,
@@ -1828,7 +1833,7 @@ public static class Oid4VciEndpoints
                 }
 
                 (JwtPayload? accessToken, ServerHttpResponse? validationFailure) =
-                    await BearerTokenValidation.ValidateAsync(bearerToken!, server, registration, context, ct)
+                    await BearerTokenValidation.ValidateAtLibraryResourceAsync(bearerToken!, server, registration, context, ct)
                         .ConfigureAwait(false);
                 //RFC 9449 §7.2: the refusal of a token presented under the DPoP scheme is delivered
                 //in that scheme's challenge.

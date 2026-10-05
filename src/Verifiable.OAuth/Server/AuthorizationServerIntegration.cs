@@ -2483,10 +2483,9 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The producer consults the active
-    /// <see cref="AccessTokenAudPolicy"/> from the resolved policy and uses
-    /// the audience(s) this delegate returns to populate the <c>aud</c> claim
-    /// per <see href="https://www.rfc-editor.org/rfc/rfc9068#section-2.2">RFC 9068 §2.2</see>.
+    /// The producer writes the audience(s) this delegate returns as the <c>aud</c> claim
+    /// per <see href="https://www.rfc-editor.org/rfc/rfc9068#section-2.2">RFC 9068 Section 2.2</see>, and
+    /// the issuer, the default resource indicator, when it returns none.
     /// </para>
     /// <para>
     /// Set during construction or on an alteration candidate. A serving setter throws

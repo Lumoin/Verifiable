@@ -48,9 +48,12 @@ internal sealed class IdJagGrantTests
     //differ from the requesting client). Used by the mint test that proves the differing client_id.
     private const string ResourceClientId = "resource-client-at-rs";
 
-    //The openid scope maps to this resource-server identifier on every RegisterDpopClient
-    //registration (ScopeToAudience[openid]); the redeemed access token carries it as aud.
-    private const string ResourceServerAudience = "https://rs.example.com";
+    /// <summary>
+    /// The resource-server identifier a row maps the <c>openid</c> scope to through
+    /// <see cref="TestHostShell.AddScopeWithAudienceAsync"/> (<see cref="ClientRecord.ScopeToAudience"/>) when the
+    /// redeemed access token is validated against it as <c>aud</c>.
+    /// </summary>
+    private static string ResourceServerAudience { get; } = "https://rs.example.com";
 
     private const string ChatScope = "chat.read chat.history";
     private const string SubjectTokenValue = "id-token-opaque-blob";
@@ -524,6 +527,8 @@ internal sealed class IdJagGrantTests
     {
         await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
+        _ = await app.AddScopeWithAudienceAsync(
+            material, WellKnownScopes.OpenId, ResourceServerAudience, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         await WireMintSeamsAsync(app, WellKnownScopes.OpenId, resourceClientId: null).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -724,12 +729,6 @@ internal sealed class IdJagGrantTests
             candidateIntegration.ValidateJwtBearerAssertionAsync =
                 async (assertion, requestedScope, registration, context, ct) =>
                     await ValidateIdJagAsync(assertion, registration, resolver, ResourceAsIssuer).ConfigureAwait(false);
-
-            //HAIP 1.0's AccessTokenAudPolicy.Required needs a resolved audience; ChatScope carries
-            //no ScopeToAudience mapping, so a fixed resource-server audience stands in, matching the
-            //pattern JwtBearerGrantTests and ClientCredentialsGrantTests use under the same profile.
-            candidateIntegration.ResolveAccessTokenAudienceAsync = static (registration, issuance, ct) =>
-                ValueTask.FromResult<IReadOnlyList<string>?>(["https://rs.example.com"]);
         }).ConfigureAwait(false);
 
         (HostedAuthorizationServer host, Uri tokenEndpoint, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> clientKeys) =
@@ -800,6 +799,7 @@ internal sealed class IdJagGrantTests
     /// a <c>use_dpop_nonce</c> challenge, so it must never reach the assertion seam or the <c>jti</c>
     /// replay guard: the same real, signed ID-JAG presented again with a VALID proof is then served.
     /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
     public async Task RedeemWithInvalidDpopProofDoesNotConsumeTheAssertion()
     {
@@ -830,8 +830,6 @@ internal sealed class IdJagGrantTests
             candidateIntegration.ValidateJwtBearerAssertionAsync =
                 async (assertion, requestedScope, registration, context, ct) =>
                     await ValidateIdJagAsync(assertion, registration, resolver, ResourceAsIssuer).ConfigureAwait(false);
-            candidateIntegration.ResolveAccessTokenAudienceAsync = static (registration, issuance, ct) =>
-                ValueTask.FromResult<IReadOnlyList<string>?>(["https://rs.example.com"]);
         }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -921,6 +919,7 @@ internal sealed class IdJagGrantTests
     /// WITH the client-assertion replay delegate: a second presentation of the SAME assertion is
     /// refused, so the retry can only complete by presenting a different one.
     /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
     public async Task RedeemCompletesAfterOneNonceRetryWithFreshClientAssertionUnderReplayCheckedRegistration()
     {
@@ -934,8 +933,6 @@ internal sealed class IdJagGrantTests
             candidateIntegration.ValidateJwtBearerAssertionAsync =
                 static (assertion, requestedScope, registration, context, ct) =>
                     ValueTask.FromResult<JwtBearerGrant?>(new JwtBearerGrant { Subject = SubjectIdentity, Scope = ChatScope });
-            candidateIntegration.ResolveAccessTokenAudienceAsync = static (registration, issuance, ct) =>
-                ValueTask.FromResult<IReadOnlyList<string>?>(["https://rs.example.com"]);
         }).ConfigureAwait(false);
 
         (HostedAuthorizationServer host, Uri tokenEndpoint, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> clientKeys) =
@@ -2064,6 +2061,399 @@ internal sealed class IdJagGrantTests
 
 
     /// <summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.1</see>:
+    /// "resource: OPTIONAL - The Resource Identifier (Section 2 of [RFC8707]) of the Resource Server (either a
+    /// single URI or an array of URIs)." A mint whose authorization seam grants a resource list that reads
+    /// differently when it is read again (its first enumeration yields the absolute URI
+    /// <c>https://api.chat.example/files</c>, every later reading the logical name <c>billing api</c>) is answered 200
+    /// with an ID-JAG whose <c>resource</c> claim is <c>https://api.chat.example/files</c>, the value the resource
+    /// grammar check read, and the list is read once: one enumeration and no read through its indexer. The granted
+    /// resource list is read once and the claim holds what was checked; that rule is this library's.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task AMintUnderAGrantedResourceThatReadsDifferentlyAgainCarriesTheResourceReadOnceAsync()
+    {
+        const string CheckedResource = "https://api.chat.example/files";
+        ShiftingReadOnlyList grantedResource = new([CheckedResource], ["billing api"]);
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
+        await WireMintSeamsGrantingAsync(app, ChatScope, grantedResource).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        using HttpResponseMessage response = await PostMintAsync(host.SharedHttpClient!, tokenUrl, ResourceAsIssuer)
+            .ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        int enumerationsAtTheMint = grantedResource.Enumerations;
+        int indexerReadsAtTheMint = grantedResource.IndexerReads;
+        string resourceClaim = "none";
+        if(response.IsSuccessStatusCode)
+        {
+            using JsonDocument doc = JsonDocument.Parse(body);
+            string jag = doc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+            using JsonDocument payload = DecodePayload(jag);
+            resourceClaim = payload.RootElement.TryGetProperty(OAuthRequestParameterNames.Resource, out JsonElement claim)
+                ? claim.GetRawText()
+                : "absent";
+        }
+
+        string record = $"{(int)response.StatusCode} resource {resourceClaim} resource list at the mint {grantedResource} '{body}'";
+
+        Assert.AreEqual(200, (int)response.StatusCode, record);
+        Assert.AreEqual("\"https://api.chat.example/files\"", resourceClaim, record);
+        Assert.AreEqual(1, enumerationsAtTheMint, record);
+        Assert.AreEqual(0, indexerReadsAtTheMint, record);
+    }
+
+
+    /// <summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.1</see>:
+    /// "resource: OPTIONAL - The Resource Identifier (Section 2 of [RFC8707]) of the Resource Server (either a
+    /// single URI or an array of URIs)." A mint whose authorization seam grants a resource list of two entries that
+    /// reads differently when it is read again (its first enumeration yields the absolute URIs
+    /// <c>https://api.chat.example/files</c> and <c>https://api.chat.example/messages</c>, every later reading the
+    /// logical name <c>billing api</c> twice) is answered 200 with an ID-JAG whose <c>resource</c> claim is the JSON
+    /// array of those two URIs in the granted order, the values the resource grammar check read, and the list is
+    /// enumerated once. The granted resource list is read once and the claim holds what was checked; that rule is
+    /// this library's.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task AMintUnderSeveralGrantedResourcesThatReadDifferentlyAgainCarriesTheArrayReadOnceAsync()
+    {
+        ShiftingReadOnlyList grantedResource = new(
+            ["https://api.chat.example/files", "https://api.chat.example/messages"],
+            ["billing api", "billing api"]);
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
+        await WireMintSeamsGrantingAsync(app, ChatScope, grantedResource).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        using HttpResponseMessage response = await PostMintAsync(host.SharedHttpClient!, tokenUrl, ResourceAsIssuer)
+            .ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        int enumerationsAtTheMint = grantedResource.Enumerations;
+        string resourceClaim = "none";
+        if(response.IsSuccessStatusCode)
+        {
+            using JsonDocument doc = JsonDocument.Parse(body);
+            string jag = doc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+            using JsonDocument payload = DecodePayload(jag);
+            resourceClaim = payload.RootElement.TryGetProperty(OAuthRequestParameterNames.Resource, out JsonElement claim)
+                ? claim.GetRawText()
+                : "absent";
+        }
+
+        string record = $"{(int)response.StatusCode} resource {resourceClaim} resource list at the mint {grantedResource} '{body}'";
+
+        Assert.AreEqual(200, (int)response.StatusCode, record);
+        Assert.AreEqual("[\"https://api.chat.example/files\",\"https://api.chat.example/messages\"]", resourceClaim, record);
+        Assert.AreEqual(1, enumerationsAtTheMint, record);
+    }
+
+
+    /// <summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.1</see>:
+    /// "resource: OPTIONAL - The Resource Identifier (Section 2 of [RFC8707]) of the Resource Server (either a
+    /// single URI or an array of URIs)." A mint whose authorization seam grants a resource list that is a collection
+    /// whose enumerator yields the absolute URI <c>https://api.chat.example/files</c> and whose bulk copy writes the
+    /// logical name <c>billing api</c> is answered 200 with an ID-JAG whose <c>resource</c> claim is
+    /// <c>https://api.chat.example/files</c>, the enumerator's entry, and the list's bulk copy is never called. The
+    /// granted resource list is copied by its enumerator into the library's own buffer, never by a bulk copy that
+    /// hands that buffer to the application; that rule is this library's.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task AMintUnderAGrantedResourceCollectionCarriesTheEnumeratedResourceWithoutABulkCopyAsync()
+    {
+        const string CheckedResource = "https://api.chat.example/files";
+        DivergentBulkCopyList grantedResource = new([CheckedResource], ["billing api"]);
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
+        await WireMintSeamsGrantingAsync(app, ChatScope, grantedResource).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        using HttpResponseMessage response = await PostMintAsync(host.SharedHttpClient!, tokenUrl, ResourceAsIssuer)
+            .ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        int copyToCallsAtTheMint = grantedResource.CopyToCalls;
+        string resourceClaim = "none";
+        if(response.IsSuccessStatusCode)
+        {
+            using JsonDocument doc = JsonDocument.Parse(body);
+            string jag = doc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+            using JsonDocument payload = DecodePayload(jag);
+            resourceClaim = payload.RootElement.TryGetProperty(OAuthRequestParameterNames.Resource, out JsonElement claim)
+                ? claim.GetRawText()
+                : "absent";
+        }
+
+        string record = $"{(int)response.StatusCode} resource {resourceClaim} resource list at the mint {grantedResource} '{body}'";
+
+        Assert.AreEqual(200, (int)response.StatusCode, record);
+        Assert.AreEqual("\"https://api.chat.example/files\"", resourceClaim, record);
+        Assert.AreEqual(0, copyToCallsAtTheMint, record);
+    }
+
+
+    /// <summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.3">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.3</see>:
+    /// "When such a value is used, the IdP Authorization Server resolves it to the corresponding Resource
+    /// Authorization Server identifier and issues the ID-JAG with that identifier in the aud claim." A mint whose
+    /// authorization seam shapes an audience list that reads differently when it is read again (its first
+    /// enumeration yields the one Resource Authorization Server identifier <c>https://seam-resolved-as.example/</c>,
+    /// every later reading the logical name <c>billing api</c>) is answered 200 with an ID-JAG whose <c>aud</c> claim
+    /// is <c>https://seam-resolved-as.example/</c>, and the list is read once: one enumeration, no <c>Count</c> read
+    /// and no read through its indexer. The shaped audience is read once and the claim holds what was checked; that
+    /// rule is this library's.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task AMintUnderAShapedAudienceThatReadsDifferentlyAgainCarriesTheAudienceReadOnceAsync()
+    {
+        const string SeamShapedAudience = "https://seam-resolved-as.example/";
+        ShiftingReadOnlyList shapedAudience = new([SeamShapedAudience], ["billing api"]);
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
+        await WireMintSeamsGrantingAsync(app, ChatScope, []).ConfigureAwait(false);
+        await ShapeMintAudienceAsync(app, shapedAudience).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        //The request names a different audience; the seam-shaped audience is what the claim carries.
+        using HttpResponseMessage response = await PostMintAsync(host.SharedHttpClient!, tokenUrl, ResourceAsIssuer)
+            .ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        int enumerationsAtTheMint = shapedAudience.Enumerations;
+        int countReadsAtTheMint = shapedAudience.CountReads;
+        int indexerReadsAtTheMint = shapedAudience.IndexerReads;
+        string audienceClaim = "none";
+        if(response.IsSuccessStatusCode)
+        {
+            using JsonDocument doc = JsonDocument.Parse(body);
+            string jag = doc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+            using JsonDocument payload = DecodePayload(jag);
+            audienceClaim = payload.RootElement.TryGetProperty(WellKnownJwtClaimNames.Aud, out JsonElement claim)
+                ? claim.GetRawText()
+                : "absent";
+        }
+
+        string record = $"{(int)response.StatusCode} aud {audienceClaim} audience list at the mint {shapedAudience} '{body}'";
+
+        Assert.AreEqual(200, (int)response.StatusCode, record);
+        Assert.AreEqual("\"https://seam-resolved-as.example/\"", audienceClaim, record);
+        Assert.AreEqual(1, enumerationsAtTheMint, record);
+        Assert.AreEqual(0, countReadsAtTheMint, record);
+        Assert.AreEqual(0, indexerReadsAtTheMint, record);
+    }
+
+
+    /// <summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.3">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.3</see>:
+    /// "When such a value is used, the IdP Authorization Server resolves it to the corresponding Resource
+    /// Authorization Server identifier and issues the ID-JAG with that identifier in the aud claim." A mint whose
+    /// authorization seam shapes an audience list that is a collection whose enumerator yields the one Resource
+    /// Authorization Server identifier <c>https://seam-resolved-as.example/</c> and whose bulk copy writes the
+    /// logical name <c>billing api</c> is answered 200 with an ID-JAG whose <c>aud</c> claim is
+    /// <c>https://seam-resolved-as.example/</c>, the enumerator's entry, and the list's bulk copy is never called. The
+    /// shaped audience is copied by its enumerator into the library's own buffer, never by a bulk copy that hands
+    /// that buffer to the application; that rule is this library's.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task AMintUnderAShapedAudienceCollectionCarriesTheEnumeratedAudienceWithoutABulkCopyAsync()
+    {
+        const string SeamShapedAudience = "https://seam-resolved-as.example/";
+        DivergentBulkCopyList shapedAudience = new([SeamShapedAudience], ["billing api"]);
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
+        await WireMintSeamsGrantingAsync(app, ChatScope, []).ConfigureAwait(false);
+        await ShapeMintAudienceAsync(app, shapedAudience).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        //The request names a different audience; the seam-shaped audience is what the claim carries.
+        using HttpResponseMessage response = await PostMintAsync(host.SharedHttpClient!, tokenUrl, ResourceAsIssuer)
+            .ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        int copyToCallsAtTheMint = shapedAudience.CopyToCalls;
+        string audienceClaim = "none";
+        if(response.IsSuccessStatusCode)
+        {
+            using JsonDocument doc = JsonDocument.Parse(body);
+            string jag = doc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+            using JsonDocument payload = DecodePayload(jag);
+            audienceClaim = payload.RootElement.TryGetProperty(WellKnownJwtClaimNames.Aud, out JsonElement claim)
+                ? claim.GetRawText()
+                : "absent";
+        }
+
+        string record = $"{(int)response.StatusCode} aud {audienceClaim} audience list at the mint {shapedAudience} '{body}'";
+
+        Assert.AreEqual(200, (int)response.StatusCode, record);
+        Assert.AreEqual("\"https://seam-resolved-as.example/\"", audienceClaim, record);
+        Assert.AreEqual(0, copyToCallsAtTheMint, record);
+    }
+
+
+    /// <summary>
+    /// The ID-JAG mint is gated per client by the <see cref="WellKnownCapabilityIdentifiers.OAuthIdJag"/>
+    /// capability, and the issued type is
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.3">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.3</see>'s.
+    /// An authorization seam that selects the id-jag issued type for a registration without that capability, and
+    /// shapes an audience list and grants a resource list that each count their reads, is answered 500 with
+    /// <c>{"error":"server_error","error_description":"The authorization seam selected the id-jag issued type but the client lacks the id-jag capability."}</c>,
+    /// and neither list is read: no enumeration, no <c>Count</c> read and no read through the indexer of either.
+    /// Each list is read only after the refusals ahead of its first use that do not read it, the capability
+    /// refusal among them; the gate and that order are this library's rules.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task AMintRefusedForTheMissingIdJagCapabilityReadsNeitherSeamListAsync()
+    {
+        ShiftingReadOnlyList shapedAudience = new(["https://seam-resolved-as.example/"], ["billing api"]);
+        ShiftingReadOnlyList grantedResource = new(["https://api.chat.example/files"], ["billing api"]);
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId,
+            new Uri(ClientId),
+            profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: IdJagClientCapabilities.Remove(WellKnownCapabilityIdentifiers.OAuthIdJag)).ConfigureAwait(false);
+        await WireMintSeamsAsync(
+            app, ChatScope, resourceClientId: null, resource: grantedResource, shapedAudience: shapedAudience).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        using HttpResponseMessage response = await PostMintAsync(host.SharedHttpClient!, tokenUrl, ResourceAsIssuer)
+            .ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string record = $"{(int)response.StatusCode} '{body}' audience list at the mint {shapedAudience} resource list at the mint {grantedResource}";
+
+        Assert.AreEqual(500, (int)response.StatusCode, record);
+        Assert.AreEqual(
+            """{"error":"server_error","error_description":"The authorization seam selected the id-jag issued type but the client lacks the id-jag capability."}""",
+            body,
+            record);
+        Assert.AreEqual(0, grantedResource.Enumerations, record);
+        Assert.AreEqual(0, grantedResource.CountReads, record);
+        Assert.AreEqual(0, grantedResource.IndexerReads, record);
+        Assert.AreEqual(0, shapedAudience.Enumerations, record);
+        Assert.AreEqual(0, shapedAudience.CountReads, record);
+        Assert.AreEqual(0, shapedAudience.IndexerReads, record);
+    }
+
+
+    /// <summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.3">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.3</see>
+    /// reads "audience: REQUIRED - The identifier of the Resource Authorization Server in another trust domain as
+    /// the intended audience for the ID-JAG.", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see> answers a
+    /// request that is not valid with "The value of the "error" parameter MUST be the "invalid_request" error code."
+    /// An exchange naming no <c>audience</c> whose authorization seam chooses the id-jag issued type, shapes no
+    /// audience and grants a resource list that counts its reads is answered 400 with
+    /// <c>{"error":"invalid_request","error_description":"An ID-JAG is issued for exactly one audience; the request named none."}</c>,
+    /// and the resource list is not read: no enumeration, no <c>Count</c> read and no read through its indexer. The
+    /// resource list is read only after the refusals ahead of its first use that do not read it, the audience count
+    /// among them; that order is this library's rule.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task AMintRefusedForARequestNamingNoAudienceReadsNoGrantedResourceAsync()
+    {
+        ShiftingReadOnlyList grantedResource = new(["https://api.chat.example/files"], ["billing api"]);
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
+        await WireMintSeamsAsync(app, ChatScope, resourceClientId: null, resource: grantedResource).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        //The mint form without its requested_token_type and audience: the seam chooses the id-jag issued type.
+        OutgoingFormFields form = new(BuildMintForm(ResourceAsIssuer).Where(static field =>
+            !string.Equals(field.Key, OAuthRequestParameterNames.RequestedTokenType, StringComparison.Ordinal)
+            && !string.Equals(field.Key, OAuthRequestParameterNames.Audience, StringComparison.Ordinal)));
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string record = $"{(int)response.StatusCode} '{body}' resource list at the mint {grantedResource}";
+
+        Assert.AreEqual(400, (int)response.StatusCode, record);
+        Assert.AreEqual(
+            """{"error":"invalid_request","error_description":"An ID-JAG is issued for exactly one audience; the request named none."}""",
+            body,
+            record);
+        Assert.AreEqual(0, grantedResource.Enumerations, record);
+        Assert.AreEqual(0, grantedResource.CountReads, record);
+        Assert.AreEqual(0, grantedResource.IndexerReads, record);
+    }
+
+
+    /// <summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.3">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.3</see>
+    /// reads "When such a value is used, the IdP Authorization Server resolves it to the corresponding Resource
+    /// Authorization Server identifier and issues the ID-JAG with that identifier in the aud claim." An
+    /// authorization seam that shapes an audience whose one value is white space only names no Resource
+    /// Authorization Server; with a granted resource list that counts its reads, the mint answers 500 with
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c>, and the
+    /// resource list is not read: no enumeration, no <c>Count</c> read and no read through its indexer. The resource
+    /// list is read only after the refusals ahead of its first use that do not read it, the shaped audience's
+    /// refusal among them; answering the seam's defect <c>server_error</c> and that order are this library's rules.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task AMintRefusedForABlankShapedAudienceReadsNoGrantedResourceAsync()
+    {
+        ShiftingReadOnlyList grantedResource = new(["https://api.chat.example/files"], ["billing api"]);
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
+        await WireMintSeamsAsync(
+            app, ChatScope, resourceClientId: null, resource: grantedResource, shapedAudience: [" "]).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        using HttpResponseMessage response = await PostMintAsync(host.SharedHttpClient!, tokenUrl, ResourceAsIssuer)
+            .ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string record = $"{(int)response.StatusCode} '{body}' resource list at the mint {grantedResource}";
+
+        Assert.AreEqual(500, (int)response.StatusCode, record);
+        Assert.AreEqual(
+            """{"error":"server_error","error_description":"The server is not ready to serve this request."}""",
+            body,
+            record);
+        Assert.AreEqual(0, grantedResource.Enumerations, record);
+        Assert.AreEqual(0, grantedResource.CountReads, record);
+        Assert.AreEqual(0, grantedResource.IndexerReads, record);
+    }
+
+
+    /// <summary>
     /// §4.3.4: when the granted scope differs from the requested scope (here narrowed to a subset), the
     /// response carries the granted scope, not the requested one.
     /// </summary>
@@ -2891,7 +3281,11 @@ internal sealed class IdJagGrantTests
                 [WellKnownJwtClaimNames.Scope] = WellKnownScopes.OpenId + " chat.read"
             },
             servedCulture: "tr-TR",
-            scopeAudiences: new Dictionary<string, string>(StringComparer.Ordinal) { ["chat.read"] = chatAudience })
+            scopeAudiences: new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [WellKnownScopes.OpenId] = ResourceServerAudience,
+                ["chat.read"] = chatAudience
+            })
             .ConfigureAwait(false);
 
         Assert.AreEqual(200, statusCode, body);
@@ -3170,6 +3564,28 @@ internal sealed class IdJagGrantTests
                             IssuedTokenType = TokenType.IdJag,
                             Resource = grantedResource
                         });
+        }).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Wraps the authorization seam the host holds so every verdict it answers carries
+    /// <paramref name="shapedAudience"/> as its shaped audience, the rest of the verdict unchanged. A row installs the
+    /// mint's seams first (<see cref="WireMintSeamsGrantingAsync"/>) and shapes the audience with this.
+    /// </summary>
+    /// <param name="app">The host whose authorization seam is wrapped.</param>
+    /// <param name="shapedAudience">The audience list every verdict carries.</param>
+    /// <returns>A task that completes when the wrapped seam is installed.</returns>
+    private static async Task ShapeMintAudienceAsync(TestHostShell app, IReadOnlyList<string> shapedAudience)
+    {
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            AuthorizeTokenExchangeDelegate granting = candidateIntegration.AuthorizeTokenExchangeAsync!;
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                async (subject, actor, request, registration, context, ct) =>
+                    await granting(subject, actor, request, registration, context, ct).ConfigureAwait(false) is { } verdict
+                        ? verdict with { Audience = shapedAudience }
+                        : null;
         }).ConfigureAwait(false);
     }
 
@@ -3810,6 +4226,8 @@ internal sealed class IdJagGrantTests
     {
         await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
+        _ = await app.AddScopeWithAudienceAsync(
+            material, WellKnownScopes.OpenId, ResourceServerAudience, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         await WireRefreshTokenSubjectMintSeamsAsync(app).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -6330,6 +6748,8 @@ internal sealed class IdJagGrantTests
             "idp", ClientId, new Uri(ClientId), PolicyProfile.Rfc6749WithPkce, IdJagClientCapabilities).ConfigureAwait(false);
         using VerifierKeyMaterial rsClient = await app.RegisterDpopClientOnHostAsync(
             "default", ClientId, new Uri(ClientId), PolicyProfile.Rfc6749WithPkce, IdJagClientCapabilities).ConfigureAwait(false);
+        _ = await app.AddScopeWithAudienceAsync(
+            rsClient, WellKnownScopes.OpenId, ResourceServerAudience, "default", TestContext.CancellationToken).ConfigureAwait(false);
 
         //IdP host mint seams: authenticate the client, accept its Identity Assertion, mint an id-jag.
         await TestHostShell.AlterAsync(app.Host("idp").Server, candidateIntegration =>
@@ -7308,6 +7728,8 @@ internal sealed class IdJagGrantTests
         await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
             clientId, new Uri(clientId), profile: PolicyProfile.Rfc6749WithPkce, capabilities: IdJagClientCapabilities).ConfigureAwait(false);
+        _ = await app.AddScopeWithAudienceAsync(
+            material, WellKnownScopes.OpenId, ResourceServerAudience, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //The issuer identifier is the namespace a may_act iss member names, and it is only settled
         //once the host is listening — so the claim is shaped lazily, when the mint request runs.

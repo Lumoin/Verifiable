@@ -1148,15 +1148,6 @@ internal sealed class ClientCredentialsGrantTests
         using VerifierKeyMaterial material = await RegisterMachineClientAsync(app, PolicyProfile.Haip10).ConfigureAwait(false);
         _ = await app.EnableDpopAsync().ConfigureAwait(false);
 
-        //HAIP 1.0's AccessTokenAudPolicy.Required needs a resolved audience; MachineScope carries no
-        //ScopeToAudience mapping, so a fixed resource-server audience stands in, matching the pattern
-        //Oid4VciPreAuthorizedCodeGrantTests uses under the same profile.
-        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
-        {
-            candidateIntegration.ResolveAccessTokenAudienceAsync = static (registration, issuance, ct) =>
-                ValueTask.FromResult<IReadOnlyList<string>?>(["https://rs.example.com"]);
-        }).ConfigureAwait(false);
-
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
         string segment = material.Registration.TenantId.Value;
@@ -1259,12 +1250,6 @@ internal sealed class ClientCredentialsGrantTests
 
                 return ValueTask.FromResult(true);
             };
-
-            //HAIP 1.0's AccessTokenAudPolicy.Required needs a resolved audience; MachineScope carries
-            //no ScopeToAudience mapping, so a fixed resource-server audience stands in, matching the
-            //pattern Oid4VciPreAuthorizedCodeGrantTests uses under the same profile.
-            candidateIntegration.ResolveAccessTokenAudienceAsync = static (registration, issuance, ct) =>
-                ValueTask.FromResult<IReadOnlyList<string>?>(["https://rs.example.com"]);
         }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -1382,11 +1367,6 @@ internal sealed class ClientCredentialsGrantTests
                     PrivateKeyJwtClientAuthentication.BuildValidator(
                         additionalAcceptedAudiences: [tokenEndpoint.OriginalString],
                         checkJtiReplayAsync: JtiReplayGuard.ConsultClientAssertionAsync);
-
-                //HAIP 1.0's AccessTokenAudPolicy.Required needs a resolved audience; MachineScope
-                //carries no ScopeToAudience mapping, so a fixed resource-server audience stands in.
-                candidateIntegration.ResolveAccessTokenAudienceAsync = static (registration, issuance, ct) =>
-                    ValueTask.FromResult<IReadOnlyList<string>?>(["https://rs.example.com"]);
             }).ConfigureAwait(false);
 
             await DeclareServerSideAuthMethodAsync(

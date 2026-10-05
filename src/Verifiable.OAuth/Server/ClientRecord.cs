@@ -340,9 +340,11 @@ public sealed record ClientRecord: IRegistrationRecord
     /// <see cref="ResolveAccessTokenAudienceDelegate"/> in
     /// <see cref="Rfc9068AccessTokenProducer.DefaultResolveAccessTokenAudienceAsync"/>
     /// to populate the RFC 9068 §2.2 <c>aud</c> claim. <see langword="null"/>
-    /// means the registration relies on a custom
-    /// <see cref="AuthorizationServerIntegration.ResolveAccessTokenAudienceAsync"/>
-    /// or has no audience requirement.
+    /// maps no scope: with no application
+    /// <see cref="AuthorizationServerIntegration.ResolveAccessTokenAudienceAsync"/> wired, an access token
+    /// whose request names no <c>resource</c> carries the issuer as its <c>aud</c>, the default resource
+    /// indicator <see href="https://www.rfc-editor.org/rfc/rfc9068#section-3">RFC 9068 Section 3</see>
+    /// requires; with one wired, the application's resolver answers the audience.
     /// </summary>
     /// <remarks>
     /// RFC 7519 §4.1.3 permits multiple audiences per token; the value type

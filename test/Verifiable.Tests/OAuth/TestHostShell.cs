@@ -3673,13 +3673,6 @@ internal sealed class TestHostShell: IAsyncDisposable
                 .Add(KeyUsageContext.IdTokenIssuance,
                     new SigningKeySet { Current = [signingKeyId] }),
             TokenLifetimes = ImmutableDictionary<string, TimeSpan>.Empty,
-            //FAPI 2.0 / HAIP require a resolved aud on access tokens. Map the
-            //openid scope to a deterministic resource-server identifier so the
-            //RFC 9068 producer has an audience to embed.
-            ScopeToAudience = new Dictionary<string, IReadOnlyList<string>>
-            {
-                [WellKnownScopes.OpenId] = new[] { "https://rs.example.com" }
-            },
             Profile = profile ?? PolicyProfile.Haip10
         };
 

@@ -48,6 +48,9 @@ internal sealed class Rfc8707ResourceIndicatorTests
     private const string ResourceB = "https://contacts.example.com/";
     private const string UngrantedResource = "https://unrelated.example.com/";
 
+    /// <summary>The resource a row's registration maps the <c>openid</c> scope to, the audience its scope map answers.</summary>
+    private static string OpenIdScopeAudience { get; } = "https://rs.example.com";
+
     /// <summary>
     /// The <c>invalid_target</c> JSON body every parse-time refusal of a malformed <c>resource</c>
     /// value answers with, regardless of which grammar part failed
@@ -688,14 +691,17 @@ internal sealed class Rfc8707ResourceIndicatorTests
 
 
     /// <summary>
-    /// Regression guard: with no <c>resource</c> requested anywhere, the pre-existing
-    /// <see cref="ClientRecord.ScopeToAudience"/> fallback still applies unchanged — only now
-    /// always as a JSON array (the producer-wide unification per
-    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.3">RFC 7519 §4.1.3</see>'s
-    /// general representation), never a bare string;
-    /// <see cref="DecodeAudienceFromTokenResponse"/> itself pins the array shape and fails on a
-    /// bare string, so this test's assertions cannot pass on the old dual-shape wire form.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-3">RFC 9068 Section 3</see>: "If the request does
+    /// not include a "resource" parameter, the authorization server MUST use a default resource indicator in the
+    /// "aud" claim.  If a "scope" parameter is present in the request, the authorization server SHOULD use it to
+    /// infer the value of the default resource indicator to be used in the "aud" claim." A code flow that names no
+    /// <c>resource</c> anywhere, for <c>openid</c> under a registration whose
+    /// <see cref="ClientRecord.ScopeToAudience"/> maps <c>openid</c> to <see cref="OpenIdScopeAudience"/>, is
+    /// issued an access token whose <c>aud</c> is that one mapped audience, written as a JSON array, the general
+    /// representation of <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.3">RFC 7519 Section
+    /// 4.1.3</see>; <see cref="DecodeAudienceFromTokenResponse"/> refuses a bare string.
     /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
     public async Task NoResourceAnywhereFallsBackToScopeToAudienceAsArray()
     {
@@ -703,6 +709,8 @@ internal sealed class Rfc8707ResourceIndicatorTests
         using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         _ = host.SeedTestSubject(subject: SubjectId);
+        _ = await host.AddScopeWithAudienceAsync(
+            material, WellKnownScopes.OpenId, OpenIdScopeAudience, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         (string code, string verifier) = await PushAuthorizeAsync(
             host, material, resource: null, scope: WellKnownScopes.OpenId).ConfigureAwait(false);
@@ -712,8 +720,8 @@ internal sealed class Rfc8707ResourceIndicatorTests
         Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
         List<string> aud = DecodeAudienceFromTokenResponse(tokenResponse.Body);
         Assert.HasCount(1, aud);
-        Assert.AreEqual("https://rs.example.com", aud[0],
-            "With no resource anywhere, RegisterDpopClient's ScopeToAudience[openid] fallback must still resolve the aud.");
+        Assert.AreEqual(OpenIdScopeAudience, aud[0],
+            "With no resource anywhere, the registration's ScopeToAudience[openid] entry resolves the aud.");
     }
 
 
@@ -730,6 +738,8 @@ internal sealed class Rfc8707ResourceIndicatorTests
         using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         _ = host.SeedTestSubject(subject: SubjectId);
+        _ = await host.AddScopeWithAudienceAsync(
+            material, WellKnownScopes.OpenId, OpenIdScopeAudience, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         (string code, string verifier) = await PushAuthorizeAsync(
             host, material, ResourceA, scope: WellKnownScopes.OpenId).ConfigureAwait(false);
@@ -1131,12 +1141,14 @@ internal sealed class Rfc8707ResourceIndicatorTests
         using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         _ = host.SeedTestSubject(subject: SubjectId);
+        _ = await host.AddScopeWithAudienceAsync(
+            material, WellKnownScopes.OpenId, OpenIdScopeAudience, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         (string code, string verifier) = await PushAuthorizeAsync(host, material, [""]).ConfigureAwait(false);
         ServerHttpResponse tokenResponse = await TokenAsync(host, material, code, verifier).ConfigureAwait(false);
 
         Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
-        Assert.AreSequenceEqual(["https://rs.example.com"], DecodeAudienceFromTokenResponse(tokenResponse.Body));
+        Assert.AreSequenceEqual([OpenIdScopeAudience], DecodeAudienceFromTokenResponse(tokenResponse.Body));
     }
 
 
@@ -1606,6 +1618,8 @@ internal sealed class Rfc8707ResourceIndicatorTests
         using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
         _ = host.SeedTestSubject(subject: SubjectId);
+        _ = await host.AddScopeWithAudienceAsync(
+            material, WellKnownScopes.OpenId, OpenIdScopeAudience, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
 
@@ -1616,7 +1630,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
         (int status, string body) = await PostTokenAsync(host, segment, code, pkce.EncodedVerifier, []).ConfigureAwait(false);
 
         Assert.AreEqual(200, status, body);
-        Assert.AreSequenceEqual(["https://rs.example.com"], DecodeAudienceFromTokenResponse(body));
+        Assert.AreSequenceEqual([OpenIdScopeAudience], DecodeAudienceFromTokenResponse(body));
     }
 
 
@@ -1713,9 +1727,10 @@ internal sealed class Rfc8707ResourceIndicatorTests
 
         Assert.AreEqual(200, absentResourceResponse.StatusCode, absentResourceResponse.Body);
         Assert.AreEqual(200, emptyResourceResponse.StatusCode, emptyResourceResponse.Body);
-        Assert.IsFalse(AccessTokenCarriesAudienceClaim(absentResourceResponse.Body),
-            "The request with the resource parameter absent is issued no aud claim.");
-        Assert.IsFalse(AccessTokenCarriesAudienceClaim(emptyResourceResponse.Body),
+        string issuer = material.Registration.IssuerUri!.OriginalString;
+        Assert.AreSequenceEqual([issuer], DecodeAudienceFromTokenResponse(absentResourceResponse.Body),
+            "The request with the resource parameter absent is issued the default audience, the issuer.");
+        Assert.AreSequenceEqual([issuer], DecodeAudienceFromTokenResponse(emptyResourceResponse.Body),
             "The request with an empty resource parameter is issued what the request with the parameter absent is.");
     }
 
@@ -1771,8 +1786,8 @@ internal sealed class Rfc8707ResourceIndicatorTests
     /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.2">Section 3.2</see> repeats the
     /// sentence for the token endpoint.) Over the real loopback listener, a
     /// <c>client_credentials</c> request whose only <c>resource</c> occurrence is empty is a request
-    /// without a <c>resource</c> parameter: it answers 200 and is issued the same access token shape
-    /// the request with the parameter absent is, which carries no <c>aud</c> claim. A blank element
+    /// without a <c>resource</c> parameter: it answers 200 and is issued the same audience the request
+    /// with the parameter absent is, the issuer as the one-element array. A blank element
     /// inside a request object's <c>resource</c> claim is a different fact, not a parameter sent
     /// without a value, and stays refused as malformed.
     /// </summary>
@@ -1793,9 +1808,10 @@ internal sealed class Rfc8707ResourceIndicatorTests
 
         Assert.AreEqual(200, absentResourceResponse.StatusCode, absentResourceResponse.Body);
         Assert.AreEqual(200, emptyResourceResponse.StatusCode, emptyResourceResponse.Body);
-        Assert.IsFalse(AccessTokenCarriesAudienceClaim(absentResourceResponse.Body),
-            "The request with the resource parameter absent is issued no aud claim.");
-        Assert.IsFalse(AccessTokenCarriesAudienceClaim(emptyResourceResponse.Body),
+        string issuer = material.Registration.IssuerUri!.OriginalString;
+        Assert.AreSequenceEqual([issuer], DecodeAudienceFromTokenResponse(absentResourceResponse.Body),
+            "The request with the resource parameter absent is issued the default audience, the issuer.");
+        Assert.AreSequenceEqual([issuer], DecodeAudienceFromTokenResponse(emptyResourceResponse.Body),
             "The request with an empty resource parameter is issued what the request with the parameter absent is.");
     }
 
@@ -1825,6 +1841,57 @@ internal sealed class Rfc8707ResourceIndicatorTests
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
         Assert.AreSequenceEqual([ResourceA], DecodeAudienceFromTokenResponse(response.Body));
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-2.2">RFC 9068 Section 2.2</see>: "aud  REQUIRED - as
+    /// defined in Section 4.1.3 of [RFC7519]." An audience entry that is empty or white space names no resource, so
+    /// an audience set the server's wiring answers with such an entry is a fault of that wiring, answered at
+    /// issuance: a <c>client_credentials</c> request over the real loopback listener is answered 500 with exactly the
+    /// body <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c>, and
+    /// no access token is issued. The rule is this library's. The rows: an application audience resolver that
+    /// answers <c>[""]</c>; a scope map whose entry for the granted scope is one space.
+    /// </summary>
+    /// <param name="caseName">Which part of the wiring answers the blank entry, by row name.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("resolver-answers-an-empty-entry", DisplayName = "an application resolver answering an empty entry")]
+    [DataRow("scope-map-entry-white-space", DisplayName = "a scope map entry of white space")]
+    public async Task ABlankAudienceEntryFromTheServersWiringFailsTheTokenRequestAsync(string caseName)
+    {
+        const string BlankAudienceScope = "blank.audience.read";
+
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.OAuthClientCredentials)).ConfigureAwait(false);
+        string? scope = caseName switch
+        {
+            "resolver-answers-an-empty-entry" => null,
+            "scope-map-entry-white-space" => BlankAudienceScope,
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+        if(scope is null)
+        {
+            await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+                candidateIntegration.ResolveAccessTokenAudienceAsync = static (_, _, _) =>
+                    ValueTask.FromResult<IReadOnlyList<string>?>([""])).ConfigureAwait(false);
+        }
+        else
+        {
+            _ = await host.AddScopeWithAudienceAsync(
+                material, scope, " ", cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        }
+
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        ServerHttpResponse response = await PostClientCredentialsOverTheWireAsync(
+            host, material.Registration.TenantId.Value, [], scope).ConfigureAwait(false);
+
+        Assert.AreEqual(500, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}",
+            response.Body);
     }
 
 
@@ -2062,13 +2129,16 @@ internal sealed class Rfc8707ResourceIndicatorTests
 
 
     /// <summary>
-    /// <see cref="AccessTokenAudPolicy.Suppressed"/> wins even over a validated, populated RFC 8707
-    /// <c>resource</c> request — the deployment's explicit choice overrides
-    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see>'s SHOULD to
-    /// audience-restrict, per <see cref="Rfc9068AccessTokenProducer"/>'s own remarks.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-3">RFC 9068 Section 3</see>: "If the request
+    /// includes a "resource" parameter (as defined in [RFC8707]), the resulting JWT access token "aud" claim SHOULD
+    /// have the same value as the "resource" parameter in the request." and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-2.2">Section 2.2</see>: "aud  REQUIRED - as
+    /// defined in Section 4.1.3 of [RFC7519]." An authorization-code redemption whose pushed request named one
+    /// validated <c>resource</c> is issued an access token whose <c>aud</c> is exactly that resource: the issuer,
+    /// the audience a request without a <c>resource</c> is given, is not added to it.
     /// </summary>
     [TestMethod]
-    public async Task SuppressedAudPolicyOmitsAudEvenWithValidatedResource()
+    public async Task AValidatedResourceIsTheWholeAudienceOfTheIssuedTokenAsync()
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
@@ -2076,20 +2146,6 @@ internal sealed class Rfc8707ResourceIndicatorTests
         _ = host.SeedTestSubject(subject: SubjectId);
 
         (string code, string verifier) = await PushAuthorizeAsync(host, material, ResourceA).ConfigureAwait(false);
-
-        //ResolvePolicyAsync runs unconditionally at dispatch entry (EndpointServer step 2.5) and
-        //ApplyRfc6749WithPkce sets AccessTokenAudPolicy.Optional there, so setting it directly on a
-        //pre-dispatch ExchangeContext would be clobbered before the token endpoint ever reads it.
-        //Wrap the profile's own resolver instead: run the normal profile resolution, then override
-        //just this one axis to Suppressed for this request.
-        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
-        {
-            candidateIntegration.ResolvePolicyAsync = async (registration, ctx, ct) =>
-            {
-                await PolicyProfiles.DefaultResolvePolicyAsync((ClientRecord)registration, ctx, ct).ConfigureAwait(false);
-                ctx.SetAccessTokenAudPolicy(AccessTokenAudPolicy.Suppressed);
-            };
-        }).ConfigureAwait(false);
 
         RequestFields tokenFields = new()
         {
@@ -2106,14 +2162,8 @@ internal sealed class Rfc8707ResourceIndicatorTests
             tokenFields, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
-        using JsonDocument responseDoc = JsonDocument.Parse(tokenResponse.Body);
-        string accessToken = responseDoc.RootElement.GetProperty("access_token").GetString()!;
-        string[] segments = accessToken.Split('.');
-        Assert.HasCount(3, segments);
-        byte[] payloadBytes = SecurityEventTestJson.DecodeSegment(segments[1], BaseMemoryPool.Shared);
-        using JsonDocument payload = JsonDocument.Parse(payloadBytes);
-        Assert.IsFalse(payload.RootElement.TryGetProperty(WellKnownJwtClaimNames.Aud, out _),
-            "AccessTokenAudPolicy.Suppressed must win even over a validated, populated RFC 8707 resource.");
+        Assert.AreSequenceEqual([ResourceA], DecodeAudienceFromTokenResponse(tokenResponse.Body),
+            "The validated resource is the whole audience; the issuer is not added to it.");
     }
 
 
@@ -3419,14 +3469,15 @@ internal sealed class Rfc8707ResourceIndicatorTests
     /// Wires the client secret check of the <c>client_credentials</c> grant on the live server, then
     /// posts a <c>client_credentials</c> token request over the real loopback listener carrying one
     /// <c>resource</c> occurrence per entry of <paramref name="resources"/>, in order, and none when
-    /// the list is empty.
+    /// the list is empty, and the <c>scope</c> <paramref name="scope"/> when it is given.
     /// </summary>
     /// <param name="host">The fixture owning the listener.</param>
     /// <param name="segment">The tenant route segment.</param>
     /// <param name="resources">The <c>resource</c> occurrences the request carries.</param>
+    /// <param name="scope">The <c>scope</c> the request carries, or <see langword="null"/> for none.</param>
     /// <returns>The listener's answer.</returns>
     private async Task<ServerHttpResponse> PostClientCredentialsOverTheWireAsync(
-        TestHostShell host, string segment, IReadOnlyList<string> resources)
+        TestHostShell host, string segment, IReadOnlyList<string> resources, string? scope = null)
     {
         const string clientSecret = "s3cret-for-client-credentials";
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
@@ -3446,6 +3497,11 @@ internal sealed class Rfc8707ResourceIndicatorTests
         foreach(string resource in resources)
         {
             fields.Add(OAuthRequestParameterNames.Resource, resource);
+        }
+
+        if(scope is not null)
+        {
+            fields[OAuthRequestParameterNames.Scope] = scope;
         }
 
         return await RawAuthCodeWirePushers.PushNamedEndpointAsync(
@@ -3935,32 +3991,12 @@ internal sealed class Rfc8707ResourceIndicatorTests
         byte[] payloadBytes = SecurityEventTestJson.DecodeSegment(segments[1], BaseMemoryPool.Shared);
         using JsonDocument payload = JsonDocument.Parse(payloadBytes);
 
-        JsonElement aud = payload.RootElement.GetProperty(WellKnownJwtClaimNames.Aud);
+        Assert.IsTrue(payload.RootElement.TryGetProperty(WellKnownJwtClaimNames.Aud, out JsonElement aud),
+            $"The issued access token carries aud. Payload: {payload.RootElement}");
         Assert.AreEqual(JsonValueKind.Array, aud.ValueKind,
             $"aud must always be the RFC 7519 §4.1.3 JSON array shape, never a bare string. Payload: {payload.RootElement}");
 
         return aud.EnumerateArray().Select(e => e.GetString()!).ToList();
-    }
-
-
-    /// <summary>
-    /// Decodes the issued access token from a token-endpoint response body and reports whether its
-    /// payload carries an <c>aud</c> claim at all; the counterpart of
-    /// <see cref="DecodeAudienceFromTokenResponse"/> for a grant that issues no audience.
-    /// </summary>
-    /// <param name="tokenResponseBody">The token-endpoint response body.</param>
-    /// <returns><see langword="true"/> when the access token payload has an <c>aud</c> member.</returns>
-    private static bool AccessTokenCarriesAudienceClaim(string tokenResponseBody)
-    {
-        using JsonDocument responseDoc = JsonDocument.Parse(tokenResponseBody);
-        string accessToken = responseDoc.RootElement.GetProperty("access_token").GetString()!;
-
-        string[] segments = accessToken.Split('.');
-        Assert.HasCount(3, segments);
-        byte[] payloadBytes = SecurityEventTestJson.DecodeSegment(segments[1], BaseMemoryPool.Shared);
-        using JsonDocument payload = JsonDocument.Parse(payloadBytes);
-
-        return payload.RootElement.TryGetProperty(WellKnownJwtClaimNames.Aud, out _);
     }
 
 

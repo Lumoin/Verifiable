@@ -22,36 +22,44 @@ namespace Verifiable.OAuth.Server;
 /// Consumed indirectly via <c>TokenProducer.Rfc9068AccessToken</c>.
 /// </para>
 /// <para>
-/// <strong>Audience resolution.</strong> RFC 9068 §2.2 mandates the <c>aud</c>
-/// claim. Audience values are resolved at issuance time through
-/// <see cref="AuthorizationServerIntegration.ResolveAccessTokenAudienceAsync"/>;
-/// when that slot is unwired the library's default
-/// <see cref="DefaultResolveAccessTokenAudienceAsync"/> reads from
-/// <see cref="ClientRecord.ScopeToAudience"/>. The active
-/// <see cref="AccessTokenAudPolicy"/> from per-request policy decides what
-/// happens when no audience can be resolved:
+/// <strong>Audience.</strong> Every access token this producer writes carries <c>aud</c>:
+/// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-2.2">RFC 9068 Section 2.2</see>, "aud
+/// REQUIRED - as defined in Section 4.1.3 of [RFC7519].", and
+/// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-3">Section 3</see>, "If the request does not
+/// include a "resource" parameter, the authorization server MUST use a default resource indicator in the
+/// "aud" claim." The value, in order:
 /// </para>
-/// <list type="bullet">
+/// <list type="number">
 /// <item><description>
-/// <see cref="AccessTokenAudPolicy.Required"/> — the producer raises
-/// <see cref="InvalidOperationException"/> when no audience is available.
-/// RFC 9068-conformant default.
+/// <see cref="IssuanceContext.Audience"/> when the grant populated it: the request's granted
+/// <c>resource</c> set, or a Token Exchange target.
 /// </description></item>
 /// <item><description>
-/// <see cref="AccessTokenAudPolicy.Optional"/> — the producer emits the
-/// token without an <c>aud</c> claim. Useful during migrations where
-/// resource servers do not yet enforce the claim.
+/// Otherwise the audiences the resolver answers, when it answers any:
+/// <see cref="AuthorizationServerIntegration.ResolveAccessTokenAudienceAsync"/> when wired, else the
+/// library's <see cref="DefaultResolveAccessTokenAudienceAsync"/>, the union of the granted scopes'
+/// entries in <see cref="ClientRecord.ScopeToAudience"/>.
 /// </description></item>
 /// <item><description>
-/// <see cref="AccessTokenAudPolicy.Suppressed"/> — the producer never
-/// emits <c>aud</c>, even if audiences are available. Used by deployments
-/// that explicitly opt out during a phased rollout. This wins even over a
-/// validated, populated RFC 8707 <c>resource</c> request — §2's SHOULD to
-/// audience-restrict is a recommendation the deployment's own explicit
-/// Suppressed choice is entitled to override; see
-/// <see cref="AccessTokenAudPolicy.Suppressed"/>'s own remarks.
+/// Otherwise the issuer, the value the token's <c>iss</c> takes: the default resource indicator, and the
+/// identifier of this Authorization Server's own resources (UserInfo and the OID4VCI Credential,
+/// Deferred Credential and Notification endpoints).
 /// </description></item>
 /// </list>
+/// <para>
+/// An audience that names no recipient, an entry that is null, empty or white space only from any of the three
+/// sources or an <c>aud</c> a claim contributor writes over the composed one, fails the token request with 500
+/// <c>server_error</c> and <see cref="WellKnownOAuthErrorDescriptions.ServerNotReady"/>, and no token of the
+/// request is issued.
+/// </para>
+/// <para>
+/// The issuer is never added to an audience the request or the application named. Those resources
+/// validate the token against the issuer
+/// (<see href="https://www.rfc-editor.org/rfc/rfc9068#section-4">RFC 9068 Section 4</see>), so a token
+/// audienced only at another resource is refused there: a deployment whose clients call UserInfo or the
+/// issuance endpoints with a token it audiences elsewhere names the issuer among that token's audiences in
+/// its resolver or its scope map, or the client names the issuer as a <c>resource</c>.
+/// </para>
 /// <para>
 /// Multi-audience tokens are supported per RFC 7519 §4.1.3:
 /// <see cref="JwtPayloadExtensions.ForAccessToken"/> always emits <c>aud</c> as a JSON array,
@@ -90,6 +98,7 @@ internal static class Rfc9068AccessTokenProducer
     /// <para>
     /// Returns <see langword="null"/> when the registration has no
     /// <c>ScopeToAudience</c> map or when no granted scope maps to any
+    /// audience; the producer then writes the issuer as the token's one
     /// audience. Applications with dynamic audience needs supply their own
     /// <see cref="ResolveAccessTokenAudienceDelegate"/> via
     /// <see cref="AuthorizationServerIntegration.ResolveAccessTokenAudienceAsync"/>.
@@ -141,7 +150,7 @@ internal static class Rfc9068AccessTokenProducer
 
 
     /// <summary>
-    /// Builds a signed access token with the admitted issuer, audience policy and signing resources.
+    /// Builds a signed access token with the admitted issuer, its audience and signing resources.
     /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-2.2">RFC 9068 §2.2</see>:
     /// "The JWT access token MUST include the following claims."
     /// </summary>
@@ -169,48 +178,30 @@ internal static class Rfc9068AccessTokenProducer
             WellKnownIdentifierPurposes.OAuthJti, context.Context, cancellationToken)
             .ConfigureAwait(false);
 
-        //RFC 8414 §3 + RFC 9207 §2.4 require exact-string equality on the
-        //issuer identifier. Preserve the URL verbatim — path component, port,
-        //etc. — so multi-tenant deployments where the segment is in the path
-        //emit the right iss claim. The previous GetLeftPart(UriPartial.Authority)
-        //collapse stripped the tenant segment and broke exact-match comparison
-        //at the relying-party side.
+        //RFC 8414 Section 3 and RFC 9207 Section 2.4 require exact-string equality on the issuer
+        //identifier. The URL is written verbatim, path component and port included, so a multi-tenant
+        //deployment whose tenant segment is in the path writes the iss a relying party compares exactly.
         string issuerValue = context.IssuerUri.OriginalString;
 
         ResolveAccessTokenAudienceDelegate resolver =
             oauth.ResolveAccessTokenAudienceAsync
             ?? DefaultResolveAccessTokenAudienceAsync;
 
-        //An explicit audience override on the issuance context — RFC 8693 §2.1.1 Token Exchange
-        //target binding, or the RFC 8707 §2.2 granted/narrowed resource set on the
-        //authorization_code, refresh_token, and client_credentials grants — is the issued token's
-        //aud verbatim, taking precedence over the scope→audience resolver per §2's SHOULD.
-        //ScopeToAudience (via the resolver) is the fallback for every issuance that resolved
-        //neither: IssuanceContext.Audience stays null and this falls through as before.
-        IReadOnlyList<string>? audiences = context.Audience is { Count: > 0 }
+        //An audience on the issuance context (RFC 8693 Section 2.1.1 Token Exchange target binding,
+        //or the RFC 8707 Section 2.2 granted or narrowed resource set on the authorization_code,
+        //refresh_token and client_credentials grants) is the issued token's aud verbatim, taking
+        //precedence over the scope-to-audience resolver per RFC 8707 Section 2's SHOULD. Otherwise
+        //the resolver's answer is the aud when it names any audience, and otherwise the issuer is:
+        //RFC 9068 Section 3, "If the request does not include a "resource" parameter, the
+        //authorization server MUST use a default resource indicator in the "aud" claim." The issuer
+        //is never added to an audience the request or the application named.
+        IReadOnlyList<string>? resolvedAudiences = context.Audience is { Count: > 0 }
             ? context.Audience
             : await resolver(
                 context.Registration, context, cancellationToken).ConfigureAwait(false);
-
-        AccessTokenAudPolicy policy = context.Context.AccessTokenAudPolicy;
-
-        if(policy == AccessTokenAudPolicy.Required
-            && (audiences is null || audiences.Count == 0))
-        {
-            throw new InvalidOperationException(
-                "AccessTokenAudPolicy is Required but no audience was resolved. " +
-                "Either wire ResolveAccessTokenAudienceAsync, populate " +
-                "registration.ScopeToAudience, or set the policy to Optional or Suppressed.");
-        }
-
-        //Suppressed wins even over a populated, resource-validated audiences (the block above may
-        //have set it from a genuine RFC 8707 §2.2 grant): the deployment's explicit
-        //"never emit aud" choice overrides §2's SHOULD to audience-restrict, which is a
-        //recommendation, not a MUST — see AccessTokenAudPolicy.Suppressed's own remarks.
-        if(policy == AccessTokenAudPolicy.Suppressed)
-        {
-            audiences = null;
-        }
+        IReadOnlyList<string> audiences = resolvedAudiences is { Count: > 0 }
+            ? resolvedAudiences
+            : [issuerValue];
 
         JwtHeader header = JwtHeader.ForAccessToken(algorithm, signingKeyId.Value);
         JwtPayload payload = JwtPayload.ForAccessToken(

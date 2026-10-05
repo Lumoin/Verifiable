@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Verifiable.Cryptography;
 using Verifiable.Tests.OAuth;
 
@@ -87,6 +88,32 @@ internal static class CompactJwsResigning
         string payloadSegment = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(payloadJson));
 
         return await SignAsync(host, parts[0], payloadSegment, keyId).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Rebuilds <paramref name="compactJws"/> with its protected header segment unchanged and its payload
+    /// parsed, rewritten by <paramref name="alterPayload"/> and written again, and signs it with the private
+    /// half the host holds for <paramref name="keyId"/> through <see cref="ResignWithPayloadAsync"/>, so the
+    /// token verifies and differs from the issued one only in the claims the caller rewrote.
+    /// </summary>
+    /// <param name="host">The host whose signing-key store holds the key's private half.</param>
+    /// <param name="compactJws">The compact JWS the server issued.</param>
+    /// <param name="keyId">The key the issued header names and the rebuilt token is signed under.</param>
+    /// <param name="alterPayload">Rewrites the parsed payload.</param>
+    /// <returns>The re-signed compact JWS.</returns>
+    public static async Task<string> ResignWithAlteredPayloadAsync(
+        TestHostShell host, string compactJws, KeyId keyId, Action<JsonObject> alterPayload)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(compactJws);
+        ArgumentNullException.ThrowIfNull(alterPayload);
+
+        string[] parts = compactJws.Split('.');
+        using IMemoryOwner<byte> payloadOwner = TestSetup.Base64UrlDecoder(parts[1], BaseMemoryPool.Shared);
+        JsonObject payload = JsonNode.Parse(payloadOwner.Memory.Span)!.AsObject();
+        alterPayload(payload);
+
+        return await ResignWithPayloadAsync(host, compactJws, keyId, payload.ToJsonString()).ConfigureAwait(false);
     }
 
 

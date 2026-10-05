@@ -12,18 +12,31 @@ namespace Verifiable.OAuth.Server;
 /// <summary>
 /// Validates a bearer access token presented to a protected endpoint per
 /// <see href="https://www.rfc-editor.org/rfc/rfc6750">RFC 6750</see>. The token must be a
-/// compact JWS this Authorization Server issued — its <c>iss</c> claim matches the resolved
-/// issuer URI and it is unexpired.
+/// compact JWS this Authorization Server issued: its <c>iss</c> claim matches the resolved
+/// issuer URI, its <c>aud</c> claim contains the identifier of the resource it is presented at,
+/// and it is unexpired.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Both the OIDC Core §5.3 UserInfo endpoint and the OID4VCI 1.0 §8 Credential Endpoint are
-/// protected resources that accept an AS-issued access token on the <c>Authorization</c>
-/// header; the structural-parse → <c>alg</c>/<c>typ</c>/<c>kid</c> → key admission → key-resolve →
-/// signature-verify → <c>iss</c> → <c>exp</c> sequence is identical and lives here once so the
-/// security-critical validation cannot drift between call sites. Scope and subject-claim
-/// requirements are endpoint-specific and stay at the caller (UserInfo enforces <c>openid</c>
-/// per §5.3.1).
+/// The OIDC Core 1.0 Section 5.3 UserInfo endpoint and the OID4VCI 1.0 Credential, Deferred
+/// Credential and Notification endpoints are protected resources of this library that accept an
+/// AS-issued access token on the <c>Authorization</c> header; the structural parse, the <c>alg</c>,
+/// <c>typ</c> and <c>kid</c> checks, key admission, key resolution, signature verification, <c>iss</c>,
+/// <c>aud</c> and <c>exp</c> sequence is one body that lives here once, so the security-critical
+/// validation cannot drift between call sites. Each step names its own source. The length cap, a token
+/// longer than <see cref="Jws.DefaultMaxJwsLength"/> refused before it is parsed, is this library's own
+/// bound on the compact JWS it verifies, stated by no specification; the non-blank <c>kid</c> is this
+/// library's rule, since the verification key is resolved by it; the key admission is
+/// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.12">RFC 8725 Section 3.12</see> (the next
+/// paragraph). The <c>typ</c>, <c>alg</c>, signature, <c>iss</c>, <c>aud</c> and <c>exp</c> checks are the
+/// rules of <see href="https://www.rfc-editor.org/rfc/rfc9068#section-4">RFC 9068 Section 4</see>; its audience
+/// step is: "The resource server MUST validate that the "aud" claim contains a resource indicator value
+/// corresponding to an identifier the resource server expects for itself.  The JWT access token MUST be
+/// rejected if "aud" does not contain a resource indicator of the current resource server as a valid
+/// audience." The library's own resources are identified by this Authorization Server's issuer, the
+/// value the <c>iss</c> claim is compared with; a resource an application serves names its own
+/// identifier. Scope and subject-claim requirements are endpoint-specific and stay at the caller
+/// (UserInfo enforces <c>openid</c> per OIDC Core 1.0 Section 5.3.1).
 /// </para>
 /// <para>
 /// By the library's key-admission policy (<see cref="IssuedKeyAdmission"/>), the token verifies only
@@ -47,15 +60,19 @@ namespace Verifiable.OAuth.Server;
 /// token.
 /// </para>
 /// <para>
-/// The overload without <c>expectedAudience</c>
-/// (<see cref="ValidateAsync(string, EndpointServer, ClientRecord, ExchangeContext, CancellationToken)"/>)
-/// does not check the <c>aud</c> claim: a protected resource that accepts any AS-issued access token
-/// whose <c>iss</c> matches the resolved issuer calls it directly. A resource server that fronts one
-/// identified resource calls the
+/// A resource an application serves calls
 /// <see cref="ValidateAsync(string, string, EndpointServer, ClientRecord, ExchangeContext, CancellationToken)"/>
-/// overload instead, which additionally requires the token's <c>aud</c> claim to contain that
-/// resource's identifier per
-/// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-4">RFC 9068 §4</see>.
+/// with its own identifier as the expected audience. The library's own resources run the same body with
+/// the issuer as the expected audience, resolved once by the validation itself. A token whose <c>aud</c>
+/// does not contain that identifier, a token without <c>aud</c>, and a token at or past the instant of its
+/// <c>exp</c> are refused with <c>invalid_token</c>.
+/// </para>
+/// <para>
+/// A fault of the server's own wiring met during the validation, the codecs or the verification-key
+/// resolver unwired or an issuer that does not resolve (the default resolver's refusal, or an application
+/// resolver that answers nothing), is answered 500 <c>server_error</c> with the fixed description
+/// <see cref="WellKnownOAuthErrorDescriptions.ServerNotReady"/>. No description the validation writes
+/// carries an exception's message, a configuration member's name or a value taken from the token.
 /// </para>
 /// <para>
 /// The extractors read the <c>Authorization</c> field through <see cref="AuthorizationFieldReading.Read"/>: the
@@ -180,13 +197,12 @@ public static class BearerTokenValidation
 
 
     /// <summary>
-    /// Validates the structure, signature, issuer, and expiry of a bearer access token. Composes
-    /// against <see cref="JwsParsing.ParseCompact"/>,
-    /// <see cref="Jws.VerifyAsync(string, DecodeDelegate, BaseMemoryPool, PublicKeyMemory, CancellationToken)"/>,
-    /// and the AS's wired <see cref="AuthorizationServerCryptography.VerificationKeyResolver"/> /
-    /// <see cref="AuthorizationServerCodecs.JwtPayloadDeserializer"/>. Does not check the audience;
-    /// see the <see cref="ValidateAsync(string, string, EndpointServer, ClientRecord, ExchangeContext, CancellationToken)"/>
-    /// overload for a caller that must bind the token to one resource identifier.
+    /// Validates an access token presented at one of this library's own resources, UserInfo and the OID4VCI
+    /// Credential, Deferred Credential and Notification endpoints, whose identifier is this Authorization
+    /// Server's issuer: the token's <c>aud</c> claim must contain the issuer the validation resolves for the
+    /// request, the value its <c>iss</c> claim is compared with, so the issuer is resolved once. The sequence
+    /// and the refusals are those of
+    /// <see cref="ValidateAsync(string, string, EndpointServer, ClientRecord, ExchangeContext, CancellationToken)"/>.
     /// </summary>
     /// <param name="bearerToken">The compact-JWS access token, exactly as presented on the wire.</param>
     /// <param name="server">The authorization server holding codecs, cryptography, and integration delegates.</param>
@@ -195,9 +211,9 @@ public static class BearerTokenValidation
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>
     /// The validated <see cref="JwtPayload"/> and a <see langword="null"/> failure on success;
-    /// a <see langword="null"/> payload and the RFC 6750 error response on failure.
+    /// a <see langword="null"/> payload and the RFC 6750 / RFC 9068 error response on failure.
     /// </returns>
-    public static ValueTask<(JwtPayload? Payload, ServerHttpResponse? Failure)> ValidateAsync(
+    internal static ValueTask<(JwtPayload? Payload, ServerHttpResponse? Failure)> ValidateAtLibraryResourceAsync(
         string bearerToken,
         EndpointServer server,
         ClientRecord registration,
@@ -207,9 +223,8 @@ public static class BearerTokenValidation
 
 
     /// <summary>
-    /// Validates a bearer access token exactly as
-    /// <see cref="ValidateAsync(string, EndpointServer, ClientRecord, ExchangeContext, CancellationToken)"/>
-    /// does, and additionally requires the token's <c>aud</c> claim to contain
+    /// Validates a bearer access token presented at a resource the application serves: its structure,
+    /// signature, issuer, audience and expiry, and requires the token's <c>aud</c> claim to contain
     /// <paramref name="expectedAudience"/>, the resource-indicator binding
     /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-4">RFC 9068 §4</see> requires: "The
     /// resource server MUST validate that the "aud" claim contains a resource indicator value
@@ -260,14 +275,19 @@ public static class BearerTokenValidation
 
 
     /// <summary>
-    /// The shared validation body both <see cref="ValidateAsync(string, EndpointServer, ClientRecord, ExchangeContext, CancellationToken)"/>
-    /// and its audience-checking overload run, so the structural-parse → signature → <c>iss</c> →
-    /// (optional) <c>aud</c> → <c>exp</c> sequence cannot drift between the two call shapes.
+    /// The one validation body <see cref="ValidateAtLibraryResourceAsync"/> and
+    /// <see cref="ValidateAsync(string, string, EndpointServer, ClientRecord, ExchangeContext, CancellationToken)"/>
+    /// run, so the structural parse, signature, <c>iss</c>, <c>aud</c> and <c>exp</c> sequence cannot drift
+    /// between the library's own resources and an application's. The audience is always checked.
     /// </summary>
     /// <param name="bearerToken">The compact-JWS access token, exactly as presented on the wire.</param>
     /// <param name="expectedAudience">
-    /// The resource identifier the <c>aud</c> claim must contain, or <see langword="null"/> to skip
-    /// the audience check (the plain <see cref="ValidateAsync(string, EndpointServer, ClientRecord, ExchangeContext, CancellationToken)"/> shape).
+    /// The resource identifier the <c>aud</c> claim must contain, or <see langword="null"/> for one of the
+    /// library's own resources, whose identifier is the issuer this validation resolves for the request:
+    /// <see langword="null"/> means that issuer is the expected audience, never that no audience is checked.
+    /// Only <see cref="ValidateAtLibraryResourceAsync"/> passes <see langword="null"/>;
+    /// <see cref="ValidateAsync(string, string, EndpointServer, ClientRecord, ExchangeContext, CancellationToken)"/>
+    /// refuses a <see langword="null"/> or empty audience before this body runs.
     /// </param>
     /// <param name="server">The authorization server holding codecs, cryptography, and integration delegates.</param>
     /// <param name="registration">The client (tenant) the request belongs to.</param>
@@ -307,20 +327,14 @@ public static class BearerTokenValidation
 
         var oauth = server.OAuth();
 
+        //A fault of the server's own wiring is answered with the library's fixed description, which names
+        //no configuration member.
         if(oauth.Codecs.JwtHeaderDeserializer is null
             || oauth.Codecs.JwtPayloadDeserializer is null
-            || oauth.Codecs.Decoder is null)
+            || oauth.Codecs.Decoder is null
+            || oauth.Cryptography.VerificationKeyResolver is null)
         {
-            return (null, ServerHttpResponse.ServerError(
-                OAuthErrors.ServerError,
-                "AuthorizationServerCodecs is not fully configured for bearer-token validation."));
-        }
-
-        if(oauth.Cryptography.VerificationKeyResolver is null)
-        {
-            return (null, ServerHttpResponse.ServerError(
-                OAuthErrors.ServerError,
-                "AuthorizationServerCryptography.VerificationKeyResolver is not configured."));
+            return (null, ServerNotReady());
         }
 
         //A token longer than the compact JWS the signature verification accepts
@@ -340,14 +354,14 @@ public static class BearerTokenValidation
                 bearerToken,
                 oauth.Codecs.Decoder,
                 bytes => oauth.Codecs.JwtHeaderDeserializer(bytes),
-                oauth.MemoryPool!);
+                oauth.MemoryPool);
         }
         catch(Exception ex) when(ex is FormatException or InvalidOperationException or System.Text.Json.JsonException)
         {
             //A protected header that is not a JSON object (for example "[]") fails in the wired
-            //header deserializer; the token is malformed input, refused with its challenge.
-            return (null, RefuseToken(
-                $"Access token is malformed: {ex.Message}"));
+            //header deserializer; the token is malformed input, refused with its challenge and a fixed
+            //description that carries nothing the parser said about the token.
+            return (null, RefuseToken("Access token is malformed."));
         }
 
         using(unverified)
@@ -420,14 +434,14 @@ public static class BearerTokenValidation
                 signatureValid = await Jws.VerifyAsync(
                     bearerToken,
                     oauth.Codecs.Decoder,
-                    oauth.MemoryPool!,
+                    oauth.MemoryPool,
                     publicKey,
                     cancellationToken).ConfigureAwait(false);
             }
             catch(Exception ex) when(ex is FormatException or InvalidOperationException)
             {
-                return (null, RefuseToken(
-                    $"Signature verification raised: {ex.Message}"));
+                //The description is fixed: a verification that cannot run is a signature that does not verify.
+                return (null, RefuseToken("Access token signature verification failed."));
             }
 
             if(!signatureValid)
@@ -454,55 +468,55 @@ public static class BearerTokenValidation
             }
             catch(Exception ex) when(ex is FormatException or InvalidOperationException or System.Text.Json.JsonException)
             {
-                return (null, RefuseToken(
-                    $"Access token payload could not be parsed: {ex.Message}"));
+                //The description is fixed: it carries nothing the deserializer said about the payload.
+                return (null, RefuseToken("Access token payload could not be parsed."));
             }
 
-            //6. iss claim must match the resolved issuer for this request.
-            Uri issuerUri;
+            //6. iss claim must match the resolved issuer for this request. An issuer that does not
+            //   resolve, by the default resolver's refusal or by an application resolver that answers
+            //   nothing, is a fault of the server's own wiring.
+            Uri? issuerUri;
             try
             {
                 issuerUri = oauth.ResolveIssuerAsync is not null
-                    ? (await oauth.ResolveIssuerAsync(registration, context, cancellationToken)
-                        .ConfigureAwait(false))!
-                    : await DefaultIssuerResolver.ResolveAsync(registration, context, cancellationToken)
-                        .ConfigureAwait(false);
+                    ? await oauth.ResolveIssuerAsync(registration, context, cancellationToken).ConfigureAwait(false)
+                    : await DefaultIssuerResolver.ResolveAsync(registration, context, cancellationToken).ConfigureAwait(false);
             }
-            catch(InvalidOperationException ex)
+            catch(InvalidOperationException)
             {
-                return (null, ServerHttpResponse.ServerError(
-                    OAuthErrors.ServerError,
-                    $"Could not resolve issuer for bearer-token validation: {ex.Message}"));
+                return (null, ServerNotReady());
             }
 
+            if(issuerUri is null)
+            {
+                return (null, ServerNotReady());
+            }
+
+            string issuer = issuerUri.OriginalString;
             if(!payload.TryGetValue(WellKnownJwtClaimNames.Iss, out object? issObj)
                 || issObj is not string iss
-                || !string.Equals(iss, issuerUri.OriginalString, StringComparison.Ordinal))
+                || !string.Equals(iss, issuer, StringComparison.Ordinal))
             {
                 return (null, RefuseToken(
                     "Access token iss claim does not match this Authorization Server."));
             }
 
-            //6a. aud claim must contain the caller's expected resource identifier, when the caller
-            //    asked for that binding. RFC 9068 §4: "The resource server MUST validate that the
-            //    "aud" claim contains a resource indicator value corresponding to an identifier the
-            //    resource server expects for itself. The JWT access token MUST be rejected if "aud"
-            //    does not contain a resource indicator of the current resource server as a valid
-            //    audience." and "in case of any failure in the validation checks listed above, the
-            //    authorization server response MUST include the error code "invalid_token"." The
-            //    claim's shape is read strictly (TryReadWellFormedAudience): an array holding anything
-            //    other than non-empty strings is refused outright, never narrowed to its string
-            //    entries, so a malformed aud is never admitted on the entries beside the malformed one.
-            if(expectedAudience is not null)
-            {
-                bool isAudienceMatched = TryReadWellFormedAudience(payload, out IReadOnlyList<string> audience)
-                    && ContainsOrdinal(audience, expectedAudience);
+            //6a. aud claim must contain the resource's identifier: the caller's, or for the library's own
+            //    resources the issuer resolved above. RFC 9068 Section 4: "The resource server MUST
+            //    validate that the "aud" claim contains a resource indicator value corresponding to an
+            //    identifier the resource server expects for itself.  The JWT access token MUST be rejected
+            //    if "aud" does not contain a resource indicator of the current resource server as a valid
+            //    audience." A token without aud contains no audience and is refused. The claim's shape is
+            //    read strictly (TryReadWellFormedAudience): an array holding anything other than non-empty
+            //    strings is refused outright, never narrowed to its string entries, so a malformed aud is
+            //    never admitted on the entries beside the malformed one.
+            bool isAudienceMatched = TryReadWellFormedAudience(payload, out IReadOnlyList<string> audience)
+                && ContainsOrdinal(audience, expectedAudience ?? issuer);
 
-                if(!isAudienceMatched)
-                {
-                    return (null, RefuseToken(
-                        "Access token aud claim does not contain the expected resource identifier."));
-                }
+            if(!isAudienceMatched)
+            {
+                return (null, RefuseToken(
+                    "Access token aud claim does not contain the expected resource identifier."));
             }
 
             //7. exp claim must be in the future. JwtClaimReaders.TryToInt64
@@ -523,8 +537,10 @@ public static class BearerTokenValidation
                     "Access token exp claim is not a representable NumericDate."));
             }
 
+            //RFC 9068 Section 4: "The current time MUST be before the time represented by the "exp"
+            //claim." A token at the instant of its exp is expired.
             DateTimeOffset now = server.TimeProvider.GetUtcNow();
-            if(DateTimeOffset.FromUnixTimeSeconds(expSeconds) < now)
+            if(DateTimeOffset.FromUnixTimeSeconds(expSeconds) <= now)
             {
                 return (null, RefuseToken(
                     "Access token has expired."));
@@ -563,6 +579,19 @@ public static class BearerTokenValidation
     private static ServerHttpResponse RefuseToken(string description) =>
         ServerHttpResponse.Unauthorized(OAuthErrors.InvalidToken, description)
             .WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, InvalidTokenChallenge);
+
+
+    /// <summary>
+    /// Builds the 500 answer to a fault of the server's own wiring met while validating a token: the
+    /// codecs or the verification-key resolver unwired, or an issuer that does not resolve. The body's
+    /// <c>error</c> is <see cref="OAuthErrors.ServerError"/> and its description the library's fixed
+    /// <see cref="WellKnownOAuthErrorDescriptions.ServerNotReady"/>, which names no configuration member and
+    /// carries no exception text; it carries no challenge, since it answers the server's wiring, not a
+    /// refused token.
+    /// </summary>
+    /// <returns>The 500 response.</returns>
+    private static ServerHttpResponse ServerNotReady() =>
+        ServerHttpResponse.ServerError(OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady);
 
 
     /// <summary>

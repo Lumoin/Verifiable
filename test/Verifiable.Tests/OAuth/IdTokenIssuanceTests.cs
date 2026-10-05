@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Time.Testing;
+using System.Collections;
 using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.Core.Assessment;
@@ -43,6 +44,18 @@ internal sealed class IdTokenIssuanceTests
 
     /// <summary>The test-local claim id of the application contributor that writes the access token's <c>sub</c>.</summary>
     private static ClaimId AccessTokenSubjectClaimId { get; } = ClaimId.Create(9120, "TestAccessTokenSubject");
+
+    /// <summary>The test-local claim id of the application contributor that writes the access token's <c>aud</c>.</summary>
+    private static ClaimId AccessTokenAudienceClaimId { get; } = ClaimId.Create(9121, "TestAccessTokenAudience");
+
+    /// <summary>The test-local claim id of the application contributor that writes the ID Token's <c>aud</c>.</summary>
+    private static ClaimId IdTokenAudienceClaimId { get; } = ClaimId.Create(9122, "TestIdTokenAudience");
+
+    /// <summary>The identifier of a recipient that is not the client, which a contributor writes under <c>aud</c>.</summary>
+    private static string OtherAudience { get; } = "https://other.example.com";
+
+    /// <summary>The identifier of a resource server a contributor writes under the access token's <c>aud</c>.</summary>
+    private static string ResourceAudience { get; } = "https://rs.example.com/orders";
 
 
     [TestMethod]
@@ -323,24 +336,297 @@ internal sealed class IdTokenIssuanceTests
     /// contributor's own defect; answering it <c>server_error</c> with no token of the response is this library's
     /// rule.
     /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
     public async Task AContributorThatWritesANullSubjectForTheAccessTokenReturnsNoTokenAsync()
     {
-        List<ClaimDelegate<ClaimContributionTarget>> rules = ContributionProfiles.StandardRules();
-        rules.Add(new ClaimDelegate<ClaimContributionTarget>(
-            new ClaimDelegateAsync<ClaimContributionTarget>(static (target, _) => ValueTask.FromResult<List<Claim>>(
-                target is AccessTokenTarget
-                    ?
-                    [
-                        new Claim(AccessTokenSubjectClaimId, ClaimOutcome.Success,
-                            new ClaimContributionContext(WellKnownJwtClaimNames.Sub, null!), Claim.NoSubClaims)
-                    ]
-                    : [new Claim(AccessTokenSubjectClaimId, ClaimOutcome.NotApplicable)])),
-            [AccessTokenSubjectClaimId]));
+        await AssertTheCodeExchangeReturnsNoTokenAsync(candidateIntegration =>
+            candidateIntegration.ClaimIssuer = CreateContributionIssuer(
+                AccessTokenSubjectClaimId, WellKnownJwtClaimNames.Sub, null!)).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-2.2">RFC 9068 Section 2.2</see> lists the access
+    /// token's <c>aud</c> claim: "aud  REQUIRED - as defined in Section 4.1.3 of [RFC7519].  See Section 3 for
+    /// indications on how an authorization server should determine the value of "aud" depending on the request."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.3">RFC 7519 Section 4.1.3</see>: "In the general
+    /// case, the "aud" value is an array of case-sensitive strings, each containing a StringOrURI value.  In the
+    /// special case when the JWT has one audience, the "aud" value MAY be a single case-sensitive string containing a
+    /// StringOrURI value." An application's claim contributor for the access token target that writes <c>aud</c> as
+    /// a value that names no recipient replaces the audience the access token's producer composed, so the code
+    /// exchange is answered over the wire with 500 and the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c>: no
+    /// token of the response is returned, and no access token whose <c>aud</c> names no recipient is sent. The value
+    /// is the contributor's own defect; answering it <c>server_error</c> with no token of the response is this
+    /// library's rule. The rows: a null value; an empty sequence; a sequence holding an entry of white space; a
+    /// number.
+    /// </summary>
+    /// <param name="caseName">The value the contributor writes under <c>aud</c>, by row name.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("null", DisplayName = "a null value")]
+    [DataRow("empty-sequence", DisplayName = "an empty sequence")]
+    [DataRow("sequence-with-a-blank-entry", DisplayName = "a sequence holding an entry of white space")]
+    [DataRow("number", DisplayName = "a number")]
+    public async Task AContributorThatWritesAnAudienceNamingNoRecipientForTheAccessTokenReturnsNoTokenAsync(string caseName)
+    {
+        object audience = caseName switch
+        {
+            "null" => null!,
+            "empty-sequence" => Array.Empty<string>(),
+            "sequence-with-a-blank-entry" => new[] { "https://rs.example.com/orders", " " },
+            "number" => 42L,
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
 
         await AssertTheCodeExchangeReturnsNoTokenAsync(candidateIntegration =>
-            candidateIntegration.ClaimIssuer = new ClaimIssuer<ClaimContributionTarget>(
-                WellKnownAssessorIds.ClaimContributors, rules, TimeProvider)).ConfigureAwait(false);
+            candidateIntegration.ClaimIssuer = CreateContributionIssuer(
+                AccessTokenAudienceClaimId, WellKnownJwtClaimNames.Aud, audience)).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.3">RFC 7519 Section 4.1.3</see>: "In the general
+    /// case, the "aud" value is an array of case-sensitive strings, each containing a StringOrURI value.  In the
+    /// special case when the JWT has one audience, the "aud" value MAY be a single case-sensitive string containing a
+    /// StringOrURI value." An application's claim contributor for the access token target that writes <c>aud</c> in
+    /// either form, each value naming a recipient, is answered over the wire with 200, and the issued access token's
+    /// <c>aud</c> is the value the contributor wrote. The rows: one string; a sequence of two strings.
+    /// </summary>
+    /// <param name="caseName">The value the contributor writes under <c>aud</c>, by row name.</param>
+    /// <param name="expectedAudienceJson">The JSON text of the issued access token's <c>aud</c>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("one-string", "\"https://rs.example.com/orders\"", DisplayName = "one string")]
+    [DataRow("two-strings", "[\"https://rs.example.com/orders\",\"https://rs.example.com/billing\"]", DisplayName = "a sequence of two strings")]
+    public async Task AContributorThatWritesAnAudienceNamingRecipientsForTheAccessTokenIsIssuedItAsync(
+        string caseName, string expectedAudienceJson)
+    {
+        object audience = caseName switch
+        {
+            "one-string" => "https://rs.example.com/orders",
+            "two-strings" => new[] { "https://rs.example.com/orders", "https://rs.example.com/billing" },
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        (int status, string body) = await RedeemTheCodeUnderAsync(candidateIntegration =>
+            candidateIntegration.ClaimIssuer = CreateContributionIssuer(
+                AccessTokenAudienceClaimId, WellKnownJwtClaimNames.Aud, audience)).ConfigureAwait(false);
+        Assert.AreEqual(200, status, body);
+
+        using JsonDocument answer = JsonDocument.Parse(body);
+        Assert.AreEqual(
+            expectedAudienceJson,
+            DescribeIssuedClaim(answer.RootElement, OAuthRequestParameterNames.AccessToken, WellKnownJwtClaimNames.Aud),
+            body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.3">RFC 7519 Section 4.1.3</see>: "In the general
+    /// case, the "aud" value is an array of case-sensitive strings, each containing a StringOrURI value." An
+    /// application's claim contributor for the access token target that writes <c>aud</c> as a sequence whose one
+    /// entry is a resource server's identifier on its first enumerations and the number 7 on every later one is read
+    /// once, and the token is signed with what was read and checked: the code exchange is answered over the wire with
+    /// 200, and the issued access token's <c>aud</c> is exactly <c>["https://rs.example.com/orders"]</c>. Reading a
+    /// written <c>aud</c> once and signing the value read is this library's rule. The rows: the sequence yields the
+    /// identifier on its first enumeration only; on its first two.
+    /// </summary>
+    /// <param name="wellFormedEnumerations">
+    /// How many enumerations of the sequence yield the resource server's identifier before it yields the number.
+    /// </param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(1, DisplayName = "the identifier on the first enumeration only")]
+    [DataRow(2, DisplayName = "the identifier on the first two enumerations")]
+    public async Task AContributorWhoseAudienceSequenceChangesWhenEnumeratedAgainIsIssuedTheAudienceReadOnceAsync(
+        int wellFormedEnumerations)
+    {
+        (int status, string body) = await RedeemTheCodeUnderAsync(candidateIntegration =>
+            candidateIntegration.ClaimIssuer = CreateContributionIssuer(
+                AccessTokenAudienceClaimId,
+                WellKnownJwtClaimNames.Aud,
+                new ShiftingAudienceSequence(ResourceAudience, wellFormedEnumerations))).ConfigureAwait(false);
+
+        string accessTokenAudience = "none";
+        if(status == 200)
+        {
+            using JsonDocument answer = JsonDocument.Parse(body);
+            accessTokenAudience = DescribeIssuedClaim(
+                answer.RootElement, OAuthRequestParameterNames.AccessToken, WellKnownJwtClaimNames.Aud);
+        }
+
+        string record = $"{status} '{body}' access_token aud {accessTokenAudience}";
+
+        Assert.AreEqual(200, status, record);
+        Assert.AreEqual("[\"https://rs.example.com/orders\"]", accessTokenAudience, record);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-2.2">RFC 9068 Section 2.2</see> lists the access
+    /// token's <c>aud</c> claim: "aud  REQUIRED - as defined in Section 4.1.3 of [RFC7519].  See Section 3 for
+    /// indications on how an authorization server should determine the value of "aud" depending on the request." An
+    /// application-defined producer for the access token, installed through
+    /// <see cref="AuthorizationServerIntegration.TokenProducers"/>, whose payload carries no <c>aud</c> composes an
+    /// access token that names no recipient, so the code exchange is answered over the wire with 500 and the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c>: no
+    /// token of the response is returned, and no access token without <c>aud</c> is sent. The payload is the
+    /// producer's own defect; answering it <c>server_error</c> with no token of the response is this library's rule.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task AnAccessTokenProducerThatWritesNoAudienceReturnsNoTokenAsync()
+    {
+        await AssertTheCodeExchangeReturnsNoTokenAsync(candidateIntegration =>
+            candidateIntegration.TokenProducers = new TokenProducerSet(
+            [
+                WithoutAudience(TokenProducer.Rfc9068AccessToken),
+                TokenProducer.Oidc10IdToken
+            ])).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#IDToken">OpenID Connect Core 1.0
+    /// Section 2</see> describes the ID Token's <c>aud</c> Claim: "REQUIRED. Audience(s) that this ID Token is
+    /// intended for. It MUST contain the OAuth 2.0 client_id of the Relying Party as an audience value. It MAY also
+    /// contain identifiers for other audiences." An application's claim contributor for the ID Token target that
+    /// writes <c>aud</c> as an audience that is not the client's <c>client_id</c> replaces the audience the ID
+    /// Token's producer composed, so the code exchange is answered over the wire with 500 and the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c>: no
+    /// token of the response is returned, and no ID Token that is not intended for the Relying Party is sent. The
+    /// value is the contributor's own defect; answering it <c>server_error</c> with no token of the response is this
+    /// library's rule. The rows: one string; a sequence of one string.
+    /// </summary>
+    /// <param name="caseName">The value the contributor writes under the ID Token's <c>aud</c>, by row name.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("one-string", DisplayName = "one string")]
+    [DataRow("sequence-of-one", DisplayName = "a sequence of one string")]
+    public async Task AContributorThatWritesAnIdTokenAudienceWithoutTheClientIdReturnsNoTokenAsync(string caseName)
+    {
+        object audience = caseName switch
+        {
+            "one-string" => OtherAudience,
+            "sequence-of-one" => new[] { OtherAudience },
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        await AssertTheCodeExchangeReturnsNoTokenAsync(candidateIntegration =>
+            candidateIntegration.ClaimIssuer = CreateContributionIssuer(
+                IdTokenAudienceClaimId, WellKnownJwtClaimNames.Aud, audience, isWrittenForTheIdToken: true))
+            .ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#IDToken">OpenID Connect Core 1.0
+    /// Section 2</see> describes the ID Token's <c>aud</c> Claim: "REQUIRED. Audience(s) that this ID Token is
+    /// intended for. It MUST contain the OAuth 2.0 client_id of the Relying Party as an audience value." An
+    /// application-defined producer for the ID Token, installed through
+    /// <see cref="AuthorizationServerIntegration.TokenProducers"/>, whose payload carries no <c>aud</c> composes an
+    /// ID Token intended for no audience, so the code exchange is answered over the wire with 500 and the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c>: no
+    /// token of the response is returned, and no ID Token without <c>aud</c> is sent. The payload is the producer's
+    /// own defect; answering it <c>server_error</c> with no token of the response is this library's rule.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task AnIdTokenProducerThatWritesNoAudienceReturnsNoTokenAsync()
+    {
+        await AssertTheCodeExchangeReturnsNoTokenAsync(candidateIntegration =>
+            candidateIntegration.TokenProducers = new TokenProducerSet(
+            [
+                TokenProducer.Rfc9068AccessToken,
+                WithoutAudience(TokenProducer.Oidc10IdToken)
+            ])).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#IDToken">OpenID Connect Core 1.0
+    /// Section 2</see> describes the ID Token's <c>aud</c> Claim: "It MUST contain the OAuth 2.0 client_id of the
+    /// Relying Party as an audience value. It MAY also contain identifiers for other audiences." An application's
+    /// claim contributor for the ID Token target that writes <c>aud</c> as the client's <c>client_id</c> beside
+    /// another audience is answered over the wire with 200, and the issued ID Token's <c>aud</c> is exactly
+    /// <c>["https://client.example.com","https://other.example.com"]</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task AContributorThatWritesTheClientIdBesideAnotherAudienceForTheIdTokenIsIssuedItAsync()
+    {
+        (int status, string body) = await RedeemTheCodeUnderAsync(candidateIntegration =>
+            candidateIntegration.ClaimIssuer = CreateContributionIssuer(
+                IdTokenAudienceClaimId,
+                WellKnownJwtClaimNames.Aud,
+                new[] { ClientId, OtherAudience },
+                isWrittenForTheIdToken: true)).ConfigureAwait(false);
+        Assert.AreEqual(200, status, body);
+
+        using JsonDocument answer = JsonDocument.Parse(body);
+        Assert.AreEqual(
+            "[\"https://client.example.com\",\"https://other.example.com\"]",
+            DescribeIssuedClaim(answer.RootElement, OAuthRequestParameterNames.IdToken, WellKnownJwtClaimNames.Aud),
+            body);
+    }
+
+
+    /// <summary>
+    /// Builds the claim issuer of the standard rules plus an application contributor that writes
+    /// <paramref name="claimName"/> as <paramref name="claimValue"/> into every access token the host signs, or into
+    /// every ID Token when <paramref name="isWrittenForTheIdToken"/> is <see langword="true"/>, the value written over
+    /// the one that token's producer composed.
+    /// </summary>
+    /// <param name="claimId">The test-local claim id of the contributor.</param>
+    /// <param name="claimName">The claim the contributor writes.</param>
+    /// <param name="claimValue">The value it writes, null included.</param>
+    /// <param name="isWrittenForTheIdToken">
+    /// Whether the contributor writes for the ID Token target (<see cref="IdTokenTarget"/>) instead of the access token
+    /// target (<see cref="AccessTokenTarget"/>).
+    /// </param>
+    /// <returns>The claim issuer the host's integration is altered to.</returns>
+    private ClaimIssuer<ClaimContributionTarget> CreateContributionIssuer(
+        ClaimId claimId, string claimName, object claimValue, bool isWrittenForTheIdToken = false)
+    {
+        List<ClaimDelegate<ClaimContributionTarget>> rules = ContributionProfiles.StandardRules();
+        rules.Add(new ClaimDelegate<ClaimContributionTarget>(
+            new ClaimDelegateAsync<ClaimContributionTarget>((target, _) => ValueTask.FromResult<List<Claim>>(
+                (isWrittenForTheIdToken ? target is IdTokenTarget : target is AccessTokenTarget)
+                    ?
+                    [
+                        new Claim(claimId, ClaimOutcome.Success,
+                            new ClaimContributionContext(claimName, claimValue), Claim.NoSubClaims)
+                    ]
+                    : [new Claim(claimId, ClaimOutcome.NotApplicable)])),
+            [claimId]));
+
+        return new ClaimIssuer<ClaimContributionTarget>(WellKnownAssessorIds.ClaimContributors, rules, TimeProvider);
+    }
+
+
+    /// <summary>
+    /// Builds a copy of <paramref name="producer"/> whose <see cref="TokenProducer.BuildAsync"/> composes what the
+    /// original composes and then removes <c>aud</c> from the payload: an application-defined producer whose payload
+    /// carries no <c>aud</c>.
+    /// </summary>
+    /// <param name="producer">The producer whose composition is kept apart from <c>aud</c>.</param>
+    /// <returns>The producer without <c>aud</c>.</returns>
+    private static TokenProducer WithoutAudience(TokenProducer producer)
+    {
+
+        return producer with
+        {
+            BuildAsync = async (context, signingKeyId, algorithm, cancellationToken) =>
+            {
+                TokenProducerOutput output = await producer.BuildAsync(
+                    context, signingKeyId, algorithm, cancellationToken).ConfigureAwait(false);
+                _ = output.Payload.Remove(WellKnownJwtClaimNames.Aud);
+
+                return output;
+            }
+        };
     }
 
 
@@ -350,11 +636,54 @@ internal sealed class IdTokenIssuanceTests
     /// host's integration before the flow, and asserts that the code exchange returns no token: 500 with the body
     /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c> and no
     /// other member. A 200 answer is rendered in the assertion message with the <c>sub</c> its <c>id_token</c> and
-    /// its <c>access_token</c> carry, each as its JSON text, <c>absent</c>, or <c>none</c> when that token is not
-    /// in the answer.
+    /// its <c>access_token</c> carry and the <c>aud</c> each of them carries, each as its JSON text,
+    /// <c>absent</c>, or <c>none</c> when that token is not in the answer.
     /// </summary>
     /// <param name="alteration">The change to the host's integration the tokens are issued under.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
     private async Task AssertTheCodeExchangeReturnsNoTokenAsync(Action<AuthorizationServerIntegration> alteration)
+    {
+        (int status, string body) = await RedeemTheCodeUnderAsync(alteration).ConfigureAwait(false);
+
+        //A 200 answer is rendered with the sub and the aud its id_token and its access_token carry, as JSON text, or
+        //absent.
+        string idTokenSubject = "none";
+        string accessTokenSubject = "none";
+        string idTokenAudience = "none";
+        string accessTokenAudience = "none";
+        if(status == 200)
+        {
+            using JsonDocument answer = JsonDocument.Parse(body);
+            idTokenSubject = DescribeIssuedClaim(
+                answer.RootElement, OAuthRequestParameterNames.IdToken, WellKnownJwtClaimNames.Sub);
+            accessTokenSubject = DescribeIssuedClaim(
+                answer.RootElement, OAuthRequestParameterNames.AccessToken, WellKnownJwtClaimNames.Sub);
+            idTokenAudience = DescribeIssuedClaim(
+                answer.RootElement, OAuthRequestParameterNames.IdToken, WellKnownJwtClaimNames.Aud);
+            accessTokenAudience = DescribeIssuedClaim(
+                answer.RootElement, OAuthRequestParameterNames.AccessToken, WellKnownJwtClaimNames.Aud);
+        }
+
+        string record = $"{status} '{body}' id_token sub {idTokenSubject} access_token sub {accessTokenSubject}"
+            + $" id_token aud {idTokenAudience} access_token aud {accessTokenAudience}";
+
+        Assert.AreEqual(500, status, record);
+        Assert.AreEqual(
+            "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}",
+            body,
+            record);
+    }
+
+
+    /// <summary>
+    /// Drives the code flow of a request that asks for <c>openid</c> over the loopback listener, the pushed
+    /// request, the authorize redirect and the code exchange, on a host whose integration
+    /// <paramref name="alteration"/> changes before the flow.
+    /// </summary>
+    /// <param name="alteration">The change to the host's integration the tokens are issued under.</param>
+    /// <returns>The token endpoint's status code and body for the code exchange.</returns>
+    private async Task<(int StatusCode, string Body)> RedeemTheCodeUnderAsync(
+        Action<AuthorizationServerIntegration> alteration)
     {
         await using TestHostShell host = new(TimeProvider);
         _ = host.SeedTestSubject(subject: SubjectId);
@@ -366,25 +695,37 @@ internal sealed class IdTokenIssuanceTests
 
         //The pushed request, the authorize redirect and the code exchange each cross the loopback listener.
         (string code, string verifier) = await PushOpenIdAuthorizationAsync(host, segment).ConfigureAwait(false);
-        (int status, string body) = await RedeemOverTheWireAsync(host, segment, code, verifier).ConfigureAwait(false);
 
-        //A 200 answer is rendered with the sub its id_token and its access_token carry, as JSON text, or absent.
-        string idTokenSubject = "none";
-        string accessTokenSubject = "none";
-        if(status == 200)
+        return await RedeemOverTheWireAsync(host, segment, code, verifier).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// A sequence of one <c>aud</c> entry that changes when it is enumerated again: its first
+    /// <c>wellFormedEnumerations</c> enumerations yield a recipient's identifier, and every later one yields the
+    /// number 7, an entry that names no recipient. It stands for a contributor's lazily computed value, which a
+    /// reader that enumerates it more than once reads differently each time.
+    /// </summary>
+    /// <param name="recipient">The identifier the first enumerations yield.</param>
+    /// <param name="wellFormedEnumerations">How many enumerations yield <paramref name="recipient"/>.</param>
+    private sealed class ShiftingAudienceSequence(string recipient, int wellFormedEnumerations): IEnumerable<object>
+    {
+        /// <summary>How many times the sequence has been enumerated.</summary>
+        private int Enumerations { get; set; }
+
+        /// <summary>Enumerates the one entry, the identifier or the number by the count of enumerations so far.</summary>
+        /// <returns>An enumerator over the one entry.</returns>
+        public IEnumerator<object> GetEnumerator()
         {
-            using JsonDocument answer = JsonDocument.Parse(body);
-            idTokenSubject = DescribeIssuedSubject(answer.RootElement, OAuthRequestParameterNames.IdToken);
-            accessTokenSubject = DescribeIssuedSubject(answer.RootElement, OAuthRequestParameterNames.AccessToken);
+            Enumerations++;
+            IEnumerable<object> entries = [Enumerations <= wellFormedEnumerations ? recipient : 7];
+
+            return entries.GetEnumerator();
         }
 
-        string record = $"{status} '{body}' id_token sub {idTokenSubject} access_token sub {accessTokenSubject}";
-
-        Assert.AreEqual(500, status, record);
-        Assert.AreEqual(
-            "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}",
-            body,
-            record);
+        /// <summary>Enumerates the one entry as <see cref="GetEnumerator"/> does.</summary>
+        /// <returns>An enumerator over the one entry.</returns>
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
     }
 
 
@@ -545,14 +886,15 @@ internal sealed class IdTokenIssuanceTests
 
 
     /// <summary>
-    /// Renders the <c>sub</c> of the token a token response carries under <paramref name="responseMember"/> for an
-    /// assertion message: its JSON text, <c>absent</c> when the token's payload has no <c>sub</c>, or <c>none</c>
-    /// when the response carries no such token.
+    /// Renders the claim <paramref name="claimName"/> of the token a token response carries under
+    /// <paramref name="responseMember"/>: its JSON text, <c>absent</c> when the token's payload has no such claim, or
+    /// <c>none</c> when the response carries no such token.
     /// </summary>
     /// <param name="answer">The token response's JSON object.</param>
     /// <param name="responseMember">The response member that carries the compact token.</param>
-    /// <returns>The rendering of the token's <c>sub</c>.</returns>
-    private static string DescribeIssuedSubject(JsonElement answer, string responseMember)
+    /// <param name="claimName">The claim rendered.</param>
+    /// <returns>The rendering of the token's claim.</returns>
+    private static string DescribeIssuedClaim(JsonElement answer, string responseMember, string claimName)
     {
         if(!answer.TryGetProperty(responseMember, out JsonElement token))
         {
@@ -561,8 +903,8 @@ internal sealed class IdTokenIssuanceTests
 
         using JsonDocument payload = JwtPayloadReader.ParsePayloadJson(token.GetString()!);
 
-        return payload.RootElement.TryGetProperty(WellKnownJwtClaimNames.Sub, out JsonElement sub)
-            ? sub.GetRawText()
+        return payload.RootElement.TryGetProperty(claimName, out JsonElement claim)
+            ? claim.GetRawText()
             : "absent";
     }
 

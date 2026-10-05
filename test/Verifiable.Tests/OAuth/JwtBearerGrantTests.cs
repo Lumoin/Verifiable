@@ -1245,6 +1245,7 @@ internal sealed class JwtBearerGrantTests
     /// exact status open; the concrete refusal the shared validator issues for a missing-but-mandated
     /// proof is the §8 <c>use_dpop_nonce</c> challenge, asserted here by error code.
     /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
     public async Task RegistrationRequiringDpopWithoutAProofIsRefused()
     {
@@ -1253,11 +1254,6 @@ internal sealed class JwtBearerGrantTests
         await WireClientAuthenticationAsync(app).ConfigureAwait(false);
         await WireAcceptingValidatorAsync(app).ConfigureAwait(false);
         _ = await app.EnableDpopAsync().ConfigureAwait(false);
-        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
-        {
-            candidateIntegration.ResolveAccessTokenAudienceAsync = static (registration, issuance, ct) =>
-                ValueTask.FromResult<IReadOnlyList<string>?>(["https://rs.example.com"]);
-        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -1283,6 +1279,7 @@ internal sealed class JwtBearerGrantTests
     /// registration whose profile mandates DPoP, a jwt-bearer request presenting a valid proof binds
     /// the issued access token to it — <c>token_type</c> answers <c>DPoP</c>.
     /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
     public async Task RegistrationRequiringDpopWithAProofAnswersDpopTokenType()
     {
@@ -1291,11 +1288,6 @@ internal sealed class JwtBearerGrantTests
         await WireClientAuthenticationAsync(app).ConfigureAwait(false);
         await WireAcceptingValidatorAsync(app).ConfigureAwait(false);
         _ = await app.EnableDpopAsync().ConfigureAwait(false);
-        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
-        {
-            candidateIntegration.ResolveAccessTokenAudienceAsync = static (registration, issuance, ct) =>
-                ValueTask.FromResult<IReadOnlyList<string>?>(["https://rs.example.com"]);
-        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         material.Registration = app.AlignRegistrationToHostHttpBase("default", material.Registration);
@@ -1361,6 +1353,7 @@ internal sealed class JwtBearerGrantTests
     /// two distinct objects, neither a replay of the other: the access token is issued, 200 with
     /// <c>token_type</c> <c>DPoP</c>.
     /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
     public async Task DpopProofAndAssertionSharingAnIdentifierAreBothFirstUsesAsync()
     {
@@ -1373,9 +1366,6 @@ internal sealed class JwtBearerGrantTests
         DateTimeOffset assertionExpiration = TimeProvider.GetUtcNow() + TimeSpan.FromMinutes(5);
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            candidateIntegration.ResolveAccessTokenAudienceAsync = static (registration, issuance, ct) =>
-                ValueTask.FromResult<IReadOnlyList<string>?>(["https://rs.example.com"]);
-
             //The assertion is issued by the authorization server's own issuer and carries the very jti
             //the DPoP proof of the same request carries.
             candidateIntegration.ValidateJwtBearerAssertionAsync = (assertion, requestedScope, registration, context, ct) =>

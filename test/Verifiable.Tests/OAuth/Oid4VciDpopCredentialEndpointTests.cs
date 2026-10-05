@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -50,7 +51,9 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
             WellKnownCapabilityIdentifiers.OidcOpenIdConnect,
             WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
             WellKnownCapabilityIdentifiers.OAuthJwksEndpoint,
-            WellKnownCapabilityIdentifiers.Oid4VciCredentialEndpoint);
+            WellKnownCapabilityIdentifiers.Oid4VciCredentialEndpoint,
+            WellKnownCapabilityIdentifiers.Oid4VciDeferredCredentialEndpoint,
+            WellKnownCapabilityIdentifiers.Oid4VciNotificationEndpoint);
 
 
     /// <summary>
@@ -463,21 +466,141 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
 
 
     /// <summary>
-    /// Carries the live host, fixture, minted bound token and the key the registration signs access
-    /// tokens under through a credential-request variation.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-4">RFC 9068 Section 4</see>: "The JWT access
+    /// token MUST be rejected if "aud" does not contain a resource indicator of the current resource server as a
+    /// valid audience." and "Please note that this requirement does not prevent JWT access tokens from using
+    /// authentication schemes other than "Bearer"." The Credential, the Deferred Credential and the Notification
+    /// endpoint are resources of this Authorization Server, whose identifier is the issuer. A DPoP-bound access
+    /// token signed again under the registration's access-token key with its <c>aud</c> naming another resource
+    /// alone, presented over the wire under the <c>DPoP</c> scheme with a well-formed request body and a proof from
+    /// the bound key carrying the nonce the server provided, at the endpoint a row addresses, is refused with 401,
+    /// <c>invalid_token</c> and the one challenge <c>DPoP error="invalid_token", algs="..."</c>.
     /// </summary>
+    /// <param name="endpointName">The protected endpoint addressed: <see cref="CredentialEndpointRow"/>, <see cref="DeferredEndpointRow"/> or <see cref="NotificationEndpointRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(CredentialEndpointRow)]
+    [DataRow(DeferredEndpointRow)]
+    [DataRow(NotificationEndpointRow)]
+    public async Task AProtectedEndpointRefusesADpopBoundTokenAudiencedAtAnotherResourceAsync(string endpointName)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        BoundTokenContext ctx = await AcquireAsync(host).ConfigureAwait(false);
+        using DpopClientFixture fixture = ctx.Fixture;
+        string nonce = await ObtainResourceNonceAsync(ctx).ConfigureAwait(false);
+
+        string otherAudienceToken = await CompactJwsResigning.ResignWithAlteredPayloadAsync(
+            host, ctx.AccessToken, ctx.SigningKeyId,
+            static payload => payload["aud"] = new JsonArray(OtherResourceAudience)).ConfigureAwait(false);
+        (string endpointWireName, string requestBody) = endpointName switch
+        {
+            CredentialEndpointRow => (WellKnownEndpointNames.Oid4VciCredential,
+                "{\"credential_configuration_id\":\"" + ConfigurationId + "\",\"proofs\":{\"jwt\":[\"p\"]}}"),
+            DeferredEndpointRow => (WellKnownEndpointNames.Oid4VciDeferredCredential, "{\"transaction_id\":\"8xLOxBtZp8\"}"),
+            NotificationEndpointRow => (WellKnownEndpointNames.Oid4VciNotification,
+                "{\"notification_id\":\"3fwe98js\",\"event\":\"credential_accepted\"}"),
+            _ => throw new ArgumentOutOfRangeException(nameof(endpointName), endpointName, "Unknown endpoint row.")
+        };
+        Uri endpointUrl = new(host.Host("default").HttpBaseAddress!, TestHostShell.ComposeEndpointPath(endpointWireName, ctx.Segment));
+        string proof = await ResourceDpopProofs.BuildAsync(
+            ctx.Fixture.DpopKey, WellKnownHttpMethods.Post, endpointUrl.ToString(), otherAudienceToken,
+            nonce, TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        using StringContent content = new(requestBody, Encoding.UTF8, WellKnownMediaTypes.Application.Json);
+        using HttpRequestMessage request = new(HttpMethod.Post, endpointUrl) { Content = content };
+        _ = request.Headers.TryAddWithoutValidation(WellKnownHttpHeaderNames.Authorization, "DPoP " + otherAudienceToken);
+        _ = request.Headers.TryAddWithoutValidation(WellKnownHttpHeaderNames.DPoP, proof);
+        using HttpResponseMessage response = await ctx.Http.SendAsync(request, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
+        Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges),
+            "RFC 6750 Section 3: the refusal carries a WWW-Authenticate challenge.");
+        Assert.AreEqual(ResourceDpopProofs.DpopChallenge("invalid_token"), challenges.Single());
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual("invalid_token", document.RootElement.GetProperty("error").GetString());
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-5.1.2">OpenID
+    /// for Verifiable Credential Issuance 1.0 Section 5.1.2</see>: "If the Credential Issuer metadata contains an
+    /// authorization_servers property, it is RECOMMENDED to use a resource parameter [RFC8707] whose value is the
+    /// Credential Issuer's identifier value to allow the Authorization Server to differentiate Credential
+    /// Issuers." and <see href="https://www.rfc-editor.org/rfc/rfc9068#section-3">RFC 9068 Section 3</see>: "If
+    /// the request includes a "resource" parameter (as defined in [RFC8707]), the resulting JWT access token
+    /// "aud" claim SHOULD have the same value as the "resource" parameter in the request." The authorization-code
+    /// flow over the wire whose pushed request names the Credential Issuer's identifier, the issuer, as its
+    /// <c>resource</c> issues a DPoP-bound access token whose <c>aud</c> is <c>["&lt;issuer&gt;"]</c>; presented at
+    /// the Credential Endpoint over the wire under the <c>DPoP</c> scheme with a proof from the bound key carrying
+    /// the nonce the endpoint provided, it is served 200.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ATokenRequestedForTheCredentialIssuerIsServedAtTheCredentialEndpointAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        BoundTokenContext ctx = await AcquireAsync(host, isIssuerRequestedAsResource: true).ConfigureAwait(false);
+        using DpopClientFixture fixture = ctx.Fixture;
+
+        using JsonDocument payload = JsonDocument.Parse(
+            SecurityEventTestJson.DecodeSegment(ctx.AccessToken.Split('.')[1], BaseMemoryPool.Shared));
+        Assert.AreEqual(
+            $"[\"{ctx.Fixture.Registration.AuthorizationServerIssuer.OriginalString}\"]",
+            payload.RootElement.GetProperty("aud").GetRawText(),
+            "The requested resource, the Credential Issuer's identifier, is the token's audience.");
+
+        string nonce = await ObtainResourceNonceAsync(ctx).ConfigureAwait(false);
+        string proof = await BuildCredentialProofAsync(ctx, freshKey: null, nonce).ConfigureAwait(false);
+        using HttpResponseMessage response = await PostCredentialAsync(ctx, ctx.AccessToken, proof).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode, body);
+    }
+
+
+    /// <summary>The identifier of a resource other than this Authorization Server.</summary>
+    private static string OtherResourceAudience { get; } = "https://rs.example.com";
+
+    /// <summary>The row addressing the Credential Endpoint.</summary>
+    private const string CredentialEndpointRow = "oid4vci-credential";
+
+    /// <summary>The row addressing the Deferred Credential Endpoint.</summary>
+    private const string DeferredEndpointRow = "oid4vci-deferred-credential";
+
+    /// <summary>The row addressing the Notification Endpoint.</summary>
+    private const string NotificationEndpointRow = "oid4vci-notification";
+
+
+    /// <summary>
+    /// Carries the live host, fixture, minted bound token, the registration's path segment and the key the
+    /// registration signs access tokens under through a credential-request variation.
+    /// </summary>
+    /// <param name="Host">The live host the issuer is registered on.</param>
+    /// <param name="Fixture">The DPoP client fixture whose public key the access token is bound to.</param>
+    /// <param name="AccessToken">The minted <c>cnf.jkt</c>-bound access token.</param>
+    /// <param name="CredentialUrl">The Credential Endpoint's address on the host's loopback listener.</param>
+    /// <param name="Http">The client that sends the requests over the loopback listener.</param>
+    /// <param name="SigningKeyId">The identifier of the signing key the registration signs access tokens under.</param>
+    /// <param name="Segment">The registration's tenant segment of the endpoint paths.</param>
     private sealed record BoundTokenContext(
-        TestHostShell Host, DpopClientFixture Fixture, string AccessToken, Uri CredentialUrl, HttpClient Http, KeyId SigningKeyId);
+        TestHostShell Host, DpopClientFixture Fixture, string AccessToken, Uri CredentialUrl, HttpClient Http, KeyId SigningKeyId, string Segment);
 
 
     /// <summary>
     /// Registers a DPoP issuer, drives the full PAR → Authorize → callback → token DPoP flow to
     /// mint a <c>cnf.jkt</c>-bound Access Token, and wires the credential issuance seam.
     /// </summary>
+    /// <param name="host">The host the issuer is registered on.</param>
+    /// <param name="isIssuerRequestedAsResource">
+    /// Whether the pushed authorization request names the registration's issuer, the Credential Issuer's
+    /// identifier, as its <c>resource</c>; otherwise it names none.
+    /// </param>
+    /// <returns>The bound-token context.</returns>
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "The host's key stores own and dispose the registration's key material; the returned " +
         "VerifierKeyMaterial is a handle to those same instances, released when the host is disposed.")]
-    private async Task<BoundTokenContext> AcquireAsync(TestHostShell host)
+    private async Task<BoundTokenContext> AcquireAsync(TestHostShell host, bool isIssuerRequestedAsResource = false)
     {
         VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
             ClientId, ClientBaseUri, PolicyProfile.Haip10, Capabilities).ConfigureAwait(false);
@@ -489,6 +612,10 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
 
             candidateIntegration.IssueCredentialAsync = static (_, _, _, _, _) =>
                 ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
+            candidateIntegration.ResolveDeferredCredentialAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(DeferredCredentialDecision.Defer(60));
+            candidateIntegration.ProcessCredentialNotificationAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(CredentialNotificationDecision.Accept);
         }).ConfigureAwait(false);
 
         DpopClientFixture fixture = await host.CreateDpopEnabledOAuthClientAsync(
@@ -498,8 +625,11 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
         string segment = material.Registration.TenantId.Value;
 
         //Step 1 — PAR.
+        IReadOnlyList<string>? resource = isIssuerRequestedAsResource
+            ? [fixture.Registration.AuthorizationServerIssuer.OriginalString]
+            : null;
         AuthCodeFlowEndpointResult parResult = await fixture.Client.AuthCode.StartParAsync(
-            fixture.Registration, RedirectUri, OAuthFormEncodedFieldsFixtures.OpenIdScope, TestContext.CancellationToken)
+            fixture.Registration, RedirectUri, OAuthFormEncodedFieldsFixtures.OpenIdScope, [], resource, TestContext.CancellationToken)
             .ConfigureAwait(false);
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, parResult.Outcome,
             $"PAR must redirect. {parResult.ErrorCode} {parResult.ErrorDescription}");
@@ -548,7 +678,7 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
             TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.Oid4VciCredential, segment));
 
         return new BoundTokenContext(
-            host, fixture, accessToken, credentialUrl, host.Host("default").SharedHttpClient!, material.SigningKeyId);
+            host, fixture, accessToken, credentialUrl, host.Host("default").SharedHttpClient!, material.SigningKeyId, segment);
     }
 
 

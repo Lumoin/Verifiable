@@ -318,21 +318,6 @@ public static class PolicyExchangeContextExtensions
 
 
         /// <summary>
-        /// Gets the access-token <c>aud</c> policy. Defaults to
-        /// <see cref="Server.AccessTokenAudPolicy.Required"/> (RFC 9068 §2.2).
-        /// </summary>
-        public AccessTokenAudPolicy AccessTokenAudPolicy =>
-            context.TryGetValue(PolicyContextKeys.AccessTokenAudPolicy, out object? v)
-                && v is AccessTokenAudPolicy p ? p : Server.AccessTokenAudPolicy.Required;
-
-        /// <summary>Sets the access-token <c>aud</c> policy.</summary>
-        public void SetAccessTokenAudPolicy(AccessTokenAudPolicy value)
-        {
-            context[PolicyContextKeys.AccessTokenAudPolicy] = value;
-        }
-
-
-        /// <summary>
         /// Gets the wire shape of the ID-token <c>aud</c> claim. Defaults to
         /// <see cref="AudClaimFormat.Either"/>.
         /// </summary>

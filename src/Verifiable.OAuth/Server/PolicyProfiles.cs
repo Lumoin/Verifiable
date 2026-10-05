@@ -54,7 +54,6 @@ public static class PolicyProfiles
         context.SetEmitIssOnRedirect(true);
         context.SetScopeRequiredOnRequest(true);
         context.SetDiscoveryIssuerShape(IssuerShape.FullUrl);
-        context.SetAccessTokenAudPolicy(AccessTokenAudPolicy.Required);
         context.SetIdTokenAudFormat(AudClaimFormat.Either);
         context.SetStateMatchingMode(StateMatchingMode.ExactOrdinal);
         context.SetJtiReplayPolicy(JtiReplayPolicy.Required);
@@ -84,7 +83,7 @@ public static class PolicyProfiles
 
     /// <summary>
     /// Populates the RFC 6749 with PKCE profile, relaxing the redirect issuer, scope,
-    /// audience, replay-store and pushed-authorization requirements of <see cref="ApplyFapi20"/>.
+    /// replay-store and pushed-authorization requirements of <see cref="ApplyFapi20"/>.
     /// PKCE accepts S256 under every profile.
     /// </summary>
     /// <remarks>
@@ -101,7 +100,6 @@ public static class PolicyProfiles
         ApplyFapi20(context);
         context.SetEmitIssOnRedirect(false);
         context.SetScopeRequiredOnRequest(false);
-        context.SetAccessTokenAudPolicy(AccessTokenAudPolicy.Optional);
         context.SetJtiReplayPolicy(JtiReplayPolicy.OptionalIfStorePresent);
         //RFC 6749 + PKCE has no PAR mandate; allow the direct and JAR-by-value paths.
         context.SetRequirePushedAuthorizationRequests(false);
@@ -114,7 +112,7 @@ public static class PolicyProfiles
     /// registration issues the signed Authorization Request and verifies the
     /// returned <c>vp_token</c>, but exposes no token/authorize endpoint, so the
     /// FAPI 2.0 token-endpoint axes (PKCE, token lifetimes, scope-required,
-    /// access/id-token <c>aud</c>, JTI replay) and the inbound-JAR audience/timing
+    /// ID Token <c>aud</c>, JTI replay) and the inbound-JAR audience/timing
     /// axes do not apply. The OID4VP verification pipeline reads only the two
     /// KB-JWT timing-leeway axes from the policy bag; this sets exactly those.
     /// </summary>

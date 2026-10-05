@@ -40,7 +40,9 @@ namespace Verifiable.OAuth.Oidc;
 /// a token bound to the client's DPoP key, under the <c>DPoP</c> scheme with a proof per
 /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7">RFC 9449 §7</see>. The access token
 /// must have been issued by this Authorization Server (the <c>iss</c> claim matches the resolved
-/// issuer URI) and must be unexpired. A token carrying a <c>cnf.jkt</c> binding is served only under
+/// issuer URI), must be audienced at it (the <c>aud</c> claim contains that issuer, UserInfo's identifier,
+/// per <see href="https://www.rfc-editor.org/rfc/rfc9068#section-4">RFC 9068 Section 4</see>) and must be
+/// unexpired. A token carrying a <c>cnf.jkt</c> binding is served only under
 /// the <c>DPoP</c> scheme with a proof from the bound key:
 /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 §7.2</see> "such a protected
 /// resource MUST reject a DPoP-bound access token received as a bearer token per [RFC6750]." An
@@ -58,7 +60,7 @@ namespace Verifiable.OAuth.Oidc;
 /// used to deliver error information".
 /// </para>
 /// <para>
-/// The endpoint performs bearer validation, the <c>iss</c> / <c>exp</c> /
+/// The endpoint performs bearer validation, the <c>iss</c> / <c>aud</c> / <c>exp</c> /
 /// scope checks, and emits a response body carrying the validated <c>sub</c>
 /// together with the per-subject claim emission via the
 /// <see cref="AuthorizationServerIntegration.ClaimIssuer"/> contributor walk against
@@ -193,8 +195,10 @@ public static class UserInfoEndpoints
                         .WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, MissingCredentialsChallenge));
                 }
 
+                //RFC 9068 Section 4: UserInfo is a resource of this Authorization Server, identified by
+                //its issuer, so the token's aud must contain the issuer the validation resolves.
                 (JwtPayload? validatedPayload, ServerHttpResponse? validationFailure) =
-                    await BearerTokenValidation.ValidateAsync(accessToken!, server, registration, context, ct)
+                    await BearerTokenValidation.ValidateAtLibraryResourceAsync(accessToken!, server, registration, context, ct)
                         .ConfigureAwait(false);
 
                 //RFC 9449 §7.2 — the refusal of a token presented under the DPoP scheme is

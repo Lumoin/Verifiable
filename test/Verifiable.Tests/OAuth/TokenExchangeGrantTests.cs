@@ -2018,9 +2018,8 @@ internal sealed class TokenExchangeGrantTests
 
             //The policy seam reads the requested scope off the request and echoes it into the granted
             //authorization — the issued token carries exactly the requested scope (§2.2.1). The custom
-            //scope has no ScopeToAudience entry; the registration's AccessTokenAudPolicy is not Required
-            //(the impersonation happy path issues with the unmapped "read" scope and no audience), so the
-            //custom scope does not force a server_error.
+            //scope has no ScopeToAudience entry, so the issued token's aud is the issuer, the producer's
+            //default.
 
             candidateIntegration.AuthorizeTokenExchangeAsync =
                 static (subject, actor, request, registration, context, ct) =>
@@ -2698,6 +2697,7 @@ internal sealed class TokenExchangeGrantTests
     /// refusal the shared validator issues for a missing-but-mandated proof is the §8
     /// <c>use_dpop_nonce</c> challenge, asserted here by error code.
     /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
     public async Task RegistrationRequiringDpopWithoutAProofIsRefused()
     {
@@ -2705,11 +2705,6 @@ internal sealed class TokenExchangeGrantTests
         using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app, PolicyProfile.Haip10).ConfigureAwait(false);
         await WireBoundSubjectSeamsAsync(app, requiredKeyThumbprint: null).ConfigureAwait(false);
         _ = await app.EnableDpopAsync().ConfigureAwait(false);
-        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
-        {
-            candidateIntegration.ResolveAccessTokenAudienceAsync = static (registration, issuance, ct) =>
-                ValueTask.FromResult<IReadOnlyList<string>?>(["https://rs.example.com"]);
-        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -2738,6 +2733,7 @@ internal sealed class TokenExchangeGrantTests
     /// presenting a valid proof still issues a token sender-constrained to that proof's key —
     /// <c>token_type</c> answers <c>DPoP</c>.
     /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
     public async Task RegistrationRequiringDpopWithAProofAnswersDpopTokenType()
     {
@@ -2745,11 +2741,6 @@ internal sealed class TokenExchangeGrantTests
         using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app, PolicyProfile.Haip10).ConfigureAwait(false);
         await WireBoundSubjectSeamsAsync(app, requiredKeyThumbprint: null).ConfigureAwait(false);
         _ = await app.EnableDpopAsync().ConfigureAwait(false);
-        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
-        {
-            candidateIntegration.ResolveAccessTokenAudienceAsync = static (registration, issuance, ct) =>
-                ValueTask.FromResult<IReadOnlyList<string>?>(["https://rs.example.com"]);
-        }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -2817,6 +2808,7 @@ internal sealed class TokenExchangeGrantTests
     /// a challenge the client retries must not already have run it once. The retry, presenting the
     /// fresh nonce, consults the seam exactly once.
     /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
     public async Task RegistrationRequiringDpopChallengeDoesNotConsultTheSubjectSeamBeforeTheRetry()
     {
@@ -2836,8 +2828,6 @@ internal sealed class TokenExchangeGrantTests
                         new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope });
                 };
             WirePermissivePolicy(candidateIntegration);
-            candidateIntegration.ResolveAccessTokenAudienceAsync = static (registration, issuance, ct) =>
-                ValueTask.FromResult<IReadOnlyList<string>?>(["https://rs.example.com"]);
         }).ConfigureAwait(false);
         _ = await app.EnableDpopAsync().ConfigureAwait(false);
 
@@ -3068,20 +3058,406 @@ internal sealed class TokenExchangeGrantTests
 
 
     /// <summary>
-    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 §2.1</see>'s
-    /// <c>audience</c> is a logical name the authorization seam MAY set to anything — it need not be
-    /// an <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see> absolute
-    /// resource indicator, and MAY itself contain spaces. Space-joining such a name verbatim into
-    /// the refresh state's space-delimited <c>Resource</c> slot would corrupt it — a later
-    /// <c>ParseResourceIndicators</c> read would split the single logical name into bogus
-    /// "indicators". The carry is gated: when any granted audience entry is not a well-formed,
-    /// whitespace-free absolute URI, <c>Resource</c> stays <see langword="null"/> on the minted
-    /// refresh state — the same fail-closed outcome as "nothing was granted" — so a later
-    /// <c>resource</c>-narrowing refresh against it is refused
-    /// <see cref="OAuthErrors.InvalidTarget"/>, never silently narrowed against a corrupted value.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see>: "If the
+    /// authorization server is unwilling or unable to issue a token for any target service indicated by the
+    /// "resource" or "audience" parameters, the "invalid_target" error code SHOULD be used in the error response."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 Section 2.1</see> defines an
+    /// <c>audience</c> as "The logical name of the target service where the client intends to use the requested
+    /// security token", so the authorization seam may authorize a name that is no
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 Section 2</see> resource indicator. A
+    /// refresh token is issued only for a grant whose audience a refresh of it issues again, and the refresh state
+    /// holds an authorized audience only as entries each an absolute URI with no white space and no fragment
+    /// component, the rule this library carries an audience by. An exchange whose authorization seam authorizes a
+    /// refresh token for an audience that holds an entry outside that rule is refused before anything is stored:
+    /// 400 with exactly the body
+    /// <c>{"error":"invalid_target","error_description":"A refresh token cannot be issued for the authorized audience."}</c>,
+    /// and the flow store holds no refresh state. The rule is this library's. The rows: a logical name
+    /// (<c>billing</c>); a logical name with spaces (<c>internal billing service</c>); a URI-shaped name with a
+    /// space (<c>https://api.example.com/orders v2</c>), which <see cref="Uri.TryCreate(string, UriKind, out Uri)"/>
+    /// reads as absolute by escaping the space; and an absolute URI beside a logical name
+    /// (<c>https://billing.example.com/api</c> and <c>billing</c>).
     /// </summary>
+    /// <param name="caseName">The audience the seam authorizes, by row name.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
-    public async Task RefreshTokenMintedFromSpaceyLogicalAudienceCarriesNoResourceAndFailsClosedOnNarrowing()
+    [DataRow("logical-name", DisplayName = "a logical name")]
+    [DataRow("logical-name-with-spaces", DisplayName = "a logical name with spaces")]
+    [DataRow("uri-shaped-name-with-a-space", DisplayName = "a URI-shaped name with a space")]
+    [DataRow("uri-beside-logical-name", DisplayName = "an absolute URI beside a logical name")]
+    public async Task AnExchangeForARefreshTokenUnderAnAudienceARefreshCannotIssueIsRefusedAsync(string caseName)
+    {
+        IReadOnlyList<string> authorizedAudience = caseName switch
+        {
+            "logical-name" => ["billing"],
+            "logical-name-with-spaces" => ["internal billing service"],
+            "uri-shaped-name-with-a-space" => ["https://api.example.com/orders v2"],
+            "uri-beside-logical-name" => ["https://billing.example.com/api", "billing"],
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId,
+            new Uri(ClientId),
+            profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: ImmutableHashSet.Create(
+                WellKnownCapabilityIdentifiers.OAuthTokenExchange,
+                WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
+                WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = WellKnownScopes.OpenId });
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                (subject, actor, request, registration, context, ct) =>
+                    ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = subject.Subject,
+                            Scope = WellKnownScopes.OpenId,
+                            IssuedTokenType = TokenType.RefreshToken,
+                            Audience = authorizedAudience
+                        });
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        (int status, string body) = await PostExchangeAsync(host.SharedHttpClient!, tokenUrl, TokenType.RefreshToken)
+            .ConfigureAwait(false);
+        string[] storedRefreshResources =
+        [
+            .. host.FlowStates.Values
+                .Select(entry => entry.State)
+                .OfType<ServerRefreshTokenIssuedState>()
+                .Select(state => $"'{state.Resource}'")
+        ];
+        string record = $"{status} '{body}' stored refresh states with resource [{string.Join(", ", storedRefreshResources)}]";
+
+        Assert.AreEqual(400, status, record);
+        Assert.AreEqual(
+            "{\"error\":\"invalid_target\",\"error_description\":\"A refresh token cannot be issued for the authorized audience.\"}",
+            body,
+            record);
+        Assert.IsEmpty(storedRefreshResources, $"A refused exchange stores no refresh state. {record}");
+    }
+
+
+    /// <summary>
+    /// An authorization seam that authorizes a refresh token for an audience holding an entry that is null or white
+    /// space only, a <see cref="TokenExchangeAuthorization.Audience"/> entry that names no target service, is answered
+    /// <c>server_error</c> with the fixed description and nothing is issued: the answer is 500 with the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c>, the
+    /// flow store holds no refresh state, and the identifier seam is never called, so the refusal draws no identifier
+    /// for a refresh token or its flow. The authorization is the application's decision and names the audience of
+    /// the issued token, so an entry that names none is the seam's own defect, answered as
+    /// <see cref="AnAuthorizationThatNamesNoSubjectIssuesNothingAsync"/> answers the same seam's blank subject. The
+    /// answer departs from <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section
+    /// 2.2.2</see>, whose <c>invalid_target</c> is the error for a target service the server is unwilling or unable to
+    /// issue a token for; answering the server's own defect <c>server_error</c> is this library's rule. The rows: a
+    /// null entry; an entry of white space beside an absolute URI.
+    /// </summary>
+    /// <param name="caseName">The audience the seam authorizes, by row name.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("null-entry", DisplayName = "a null entry")]
+    [DataRow("white-space-entry", DisplayName = "an entry of white space beside an absolute URI")]
+    public async Task AnExchangeForARefreshTokenUnderAnAudienceHoldingAnEntryThatNamesNoTargetIssuesNothingAsync(string caseName)
+    {
+        IReadOnlyList<string> authorizedAudience = caseName switch
+        {
+            "null-entry" => [null!],
+            "white-space-entry" => ["https://cal.example.com/", " "],
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId,
+            new Uri(ClientId),
+            profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: ImmutableHashSet.Create(
+                WellKnownCapabilityIdentifiers.OAuthTokenExchange,
+                WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
+                WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        Func<int> countIdentifierSeamCalls = static () => 0;
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = WellKnownScopes.OpenId });
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                (subject, actor, request, registration, context, ct) =>
+                    ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = subject.Subject,
+                            Scope = WellKnownScopes.OpenId,
+                            IssuedTokenType = TokenType.RefreshToken,
+                            Audience = authorizedAudience
+                        });
+
+            countIdentifierSeamCalls = CountIdentifierSeamCalls(candidateIntegration);
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        (int status, string body) = await PostExchangeAsync(host.SharedHttpClient!, tokenUrl, TokenType.RefreshToken)
+            .ConfigureAwait(false);
+        int storedRefreshStates = host.FlowStates.Values
+            .Select(entry => entry.State)
+            .OfType<ServerRefreshTokenIssuedState>()
+            .Count();
+        int identifierSeamCalls = countIdentifierSeamCalls();
+        string record = $"{status} '{body}' stored refresh states {storedRefreshStates} identifier seam calls {identifierSeamCalls}";
+
+        Assert.AreEqual(500, status, record);
+        Assert.AreEqual(
+            "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}",
+            body,
+            record);
+        Assert.AreEqual(0, storedRefreshStates, $"An exchange that issues nothing stores no refresh state. {record}");
+        Assert.AreEqual(0, identifierSeamCalls, $"An exchange that issues nothing draws no identifier. {record}");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.2">RFC 8707 Section 2.2</see>: "In the case of a
+    /// "refresh_token" or "authorization_code" grant type request, such policy may limit the acceptable resources to
+    /// those that were originally granted by the resource owner or a subset thereof." An exchange whose authorization
+    /// seam authorizes a refresh token for an audience list that reads differently when it is read again (its first
+    /// enumeration yields the absolute URI <c>https://cal.example.com/</c>, every later reading the logical name
+    /// <c>billing api</c>) is answered 200 with the refresh token, the stored refresh state's granted resource set is
+    /// <c>https://cal.example.com/</c>, the audience the exchange's checks read, the list is read once at the mint
+    /// (one enumeration and no read through its indexer), and a refresh of the token naming no <c>resource</c>
+    /// issues an access token whose <c>aud</c> is exactly <c>["https://cal.example.com/"]</c>. The authorized
+    /// audience is read once and the refresh state holds what was checked; that rule is this library's.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task AnExchangeForARefreshTokenUnderAnAudienceThatReadsDifferentlyAgainIsIssuedTheAudienceReadOnceAsync()
+    {
+        const string CheckedAudience = "https://cal.example.com/";
+        ShiftingReadOnlyList authorizedAudience = new([CheckedAudience], ["billing api"]);
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId,
+            new Uri(ClientId),
+            profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: ImmutableHashSet.Create(
+                WellKnownCapabilityIdentifiers.OAuthTokenExchange,
+                WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
+                WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = WellKnownScopes.OpenId });
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                (subject, actor, request, registration, context, ct) =>
+                    ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = subject.Subject,
+                            Scope = WellKnownScopes.OpenId,
+                            IssuedTokenType = TokenType.RefreshToken,
+                            Audience = authorizedAudience
+                        });
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+        HttpClient http = host.SharedHttpClient!;
+
+        (int mintStatus, string mintBody) = await PostExchangeAsync(http, tokenUrl, TokenType.RefreshToken).ConfigureAwait(false);
+        Assert.AreEqual(200, mintStatus, mintBody);
+        string mintedRefreshToken = ReadMember(mintBody, WellKnownTokenTypes.AccessToken);
+        string[] storedRefreshResources =
+        [
+            .. host.FlowStates.Values
+                .Select(entry => entry.State)
+                .OfType<ServerRefreshTokenIssuedState>()
+                .Select(state => state.Resource ?? "null")
+        ];
+        int enumerationsAtTheMint = authorizedAudience.Enumerations;
+        int indexerReadsAtTheMint = authorizedAudience.IndexerReads;
+        string audienceAtTheMint = authorizedAudience.ToString();
+
+        //The refresh is drawn before any assertion of the stored state, so a red answer renders both.
+        (int refreshStatus, string refreshBody) = await PostRefreshAsync(
+            http, tokenUrl, mintedRefreshToken, resource: null).ConfigureAwait(false);
+        string refreshAudience = "none";
+        if(refreshStatus == 200)
+        {
+            using JsonDocument refreshPayload = DecodePayload(ReadMember(refreshBody, WellKnownTokenTypes.AccessToken));
+            refreshAudience = refreshPayload.RootElement.GetProperty(WellKnownJwtClaimNames.Aud).GetRawText();
+        }
+
+        string record = $"stored refresh Resource [{string.Join(", ", storedRefreshResources.Select(static resource => $"'{resource}'"))}]"
+            + $" audience at the mint {audienceAtTheMint} refresh {refreshStatus} aud {refreshAudience} '{refreshBody}'";
+
+        Assert.HasCount(1, storedRefreshResources, record);
+        Assert.AreEqual(CheckedAudience, storedRefreshResources[0], record);
+        Assert.AreEqual(1, enumerationsAtTheMint, record);
+        Assert.AreEqual(0, indexerReadsAtTheMint, record);
+        Assert.AreEqual(200, refreshStatus, record);
+        Assert.AreEqual("[\"https://cal.example.com/\"]", refreshAudience, record);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.2">RFC 8707 Section 2.2</see>: "In the case of a
+    /// "refresh_token" or "authorization_code" grant type request, such policy may limit the acceptable resources to
+    /// those that were originally granted by the resource owner or a subset thereof." An exchange whose authorization
+    /// seam authorizes a refresh token for an audience list that is a collection whose enumerator yields the
+    /// absolute URI <c>https://cal.example.com/</c> and whose bulk copy writes the logical name <c>billing api</c> is
+    /// answered 200 with the refresh token, the stored refresh state's granted resource set is
+    /// <c>https://cal.example.com/</c>, the enumerator's entry, a refresh of the token naming no <c>resource</c>
+    /// issues an access token whose <c>aud</c> is exactly <c>["https://cal.example.com/"]</c>, and the list's bulk
+    /// copy is never called. The authorized audience is copied by its enumerator into the library's own buffer, never
+    /// by a bulk copy that hands that buffer to the application; that rule is this library's.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task AnExchangeForARefreshTokenUnderAnAudienceCollectionIsIssuedTheEnumeratedAudienceWithoutABulkCopyAsync()
+    {
+        const string CheckedAudience = "https://cal.example.com/";
+        DivergentBulkCopyList authorizedAudience = new([CheckedAudience], ["billing api"]);
+
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId,
+            new Uri(ClientId),
+            profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: ImmutableHashSet.Create(
+                WellKnownCapabilityIdentifiers.OAuthTokenExchange,
+                WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
+                WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = WellKnownScopes.OpenId });
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                (subject, actor, request, registration, context, ct) =>
+                    ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = subject.Subject,
+                            Scope = WellKnownScopes.OpenId,
+                            IssuedTokenType = TokenType.RefreshToken,
+                            Audience = authorizedAudience
+                        });
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+        HttpClient http = host.SharedHttpClient!;
+
+        (int mintStatus, string mintBody) = await PostExchangeAsync(http, tokenUrl, TokenType.RefreshToken).ConfigureAwait(false);
+        string[] storedRefreshResources =
+        [
+            .. host.FlowStates.Values
+                .Select(entry => entry.State)
+                .OfType<ServerRefreshTokenIssuedState>()
+                .Select(state => state.Resource ?? "null")
+        ];
+        int copyToCallsAtTheMint = authorizedAudience.CopyToCalls;
+
+        //The refresh is drawn before any assertion of the stored state, so a red answer renders both.
+        int refreshStatus = 0;
+        string refreshBody = "none";
+        string refreshAudience = "none";
+        if(mintStatus == 200)
+        {
+            string mintedRefreshToken = ReadMember(mintBody, WellKnownTokenTypes.AccessToken);
+            (refreshStatus, refreshBody) = await PostRefreshAsync(
+                http, tokenUrl, mintedRefreshToken, resource: null).ConfigureAwait(false);
+            if(refreshStatus == 200)
+            {
+                using JsonDocument refreshPayload = DecodePayload(ReadMember(refreshBody, WellKnownTokenTypes.AccessToken));
+                refreshAudience = refreshPayload.RootElement.GetProperty(WellKnownJwtClaimNames.Aud).GetRawText();
+            }
+        }
+
+        string record = $"mint {mintStatus} '{mintBody}' stored refresh Resource [{string.Join(", ", storedRefreshResources.Select(static resource => $"'{resource}'"))}]"
+            + $" audience at the mint {authorizedAudience} refresh {refreshStatus} aud {refreshAudience} '{refreshBody}'";
+
+        Assert.AreEqual(200, mintStatus, record);
+        Assert.HasCount(1, storedRefreshResources, record);
+        Assert.AreEqual(CheckedAudience, storedRefreshResources[0], record);
+        Assert.AreEqual(0, copyToCallsAtTheMint, record);
+        Assert.AreEqual(200, refreshStatus, record);
+        Assert.AreEqual("[\"https://cal.example.com/\"]", refreshAudience, record);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.2">RFC 8707 Section 2.2</see>: "In the case of a
+    /// "refresh_token" or "authorization_code" grant type request, such policy may limit the acceptable resources to
+    /// those that were originally granted by the resource owner or a subset thereof." An exchange whose
+    /// authorization seam authorizes a refresh token for two absolute URIs (<c>https://cal.example.com/</c> and
+    /// <c>https://contacts.example.com/</c>), an audience a refresh issues again, is answered 200 with the refresh
+    /// token, and a refresh of it naming no <c>resource</c> issues an access token whose <c>aud</c> is exactly those
+    /// two in the authorized order, the grant's audience.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task AnExchangeForARefreshTokenUnderAbsoluteUriAudiencesIssuesARefreshOfExactlyThoseAsync()
+    {
+        await AssertARefreshOfAnExchangedRefreshTokenIsIssuedItsGrantAudienceAsync(
+            ["https://cal.example.com/", "https://contacts.example.com/"]).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-3">RFC 9068 Section 3</see>: "If the request does
+    /// not include a "resource" parameter, the authorization server MUST use a default resource indicator in the
+    /// "aud" claim." An exchange whose authorization seam authorizes a refresh token and names no audience is
+    /// answered 200 with the refresh token, and a refresh of it naming no <c>resource</c> issues an access token
+    /// whose <c>aud</c> is the producer's default resource indicator, the issuer.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task AnExchangeForARefreshTokenUnderNoAudienceIssuesARefreshOfTheDefaultAudienceAsync()
+    {
+        await AssertARefreshOfAnExchangedRefreshTokenIsIssuedItsGrantAudienceAsync([]).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Drives a token exchange over the wire whose authorization seam authorizes a refresh token for
+    /// <paramref name="authorizedAudience"/>, asserts the mint's 200 and its refresh token type, then redeems the
+    /// refresh token naming no <c>resource</c> and asserts the refresh's 200 and that its access token's <c>aud</c>
+    /// is exactly <paramref name="authorizedAudience"/>, or the issuer when that is empty.
+    /// </summary>
+    /// <param name="authorizedAudience">The audience the seam authorizes for the refresh token.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    private async Task AssertARefreshOfAnExchangedRefreshTokenIsIssuedItsGrantAudienceAsync(
+        IReadOnlyList<string> authorizedAudience)
     {
         await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
@@ -3094,11 +3470,6 @@ internal sealed class TokenExchangeGrantTests
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
                 WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
         await WireClientAuthenticationAsync(app).ConfigureAwait(false);
-
-
-        //A logical audience name that is NOT a resource indicator — spaces and all — is exactly the
-        //RFC 8693 §2.1 shape the authorization seam is free to grant.
-        const string SpaceyLogicalAudience = "internal billing service";
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
             candidateIntegration.ValidateTokenExchangeTokenAsync =
@@ -3107,178 +3478,46 @@ internal sealed class TokenExchangeGrantTests
                         new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = WellKnownScopes.OpenId });
 
             candidateIntegration.AuthorizeTokenExchangeAsync =
-                static (subject, actor, request, registration, context, ct) =>
+                (subject, actor, request, registration, context, ct) =>
                     ValueTask.FromResult<TokenExchangeAuthorization?>(
                         new TokenExchangeAuthorization
                         {
                             Subject = subject.Subject,
                             Scope = WellKnownScopes.OpenId,
                             IssuedTokenType = TokenType.RefreshToken,
-                            Audience = [SpaceyLogicalAudience]
+                            Audience = authorizedAudience
                         });
         }).ConfigureAwait(false);
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+        HttpClient http = host.SharedHttpClient!;
+        string[] expectedAudience = authorizedAudience.Count == 0
+            ? [material.Registration.IssuerUri!.OriginalString]
+            : [.. authorizedAudience];
 
-        OutgoingFormFields exchangeForm = BuildRequest(new TokenExchangeBuilderOptions
-        {
-            SubjectToken = SubjectTokenValue,
-            SubjectTokenType = TokenType.AccessToken
-        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+        (int mintStatus, string mintBody) = await PostExchangeAsync(http, tokenUrl, TokenType.RefreshToken).ConfigureAwait(false);
+        Assert.AreEqual(200, mintStatus, mintBody);
+        Assert.AreEqual(TokenTypeNames.GetName(TokenType.RefreshToken), ReadMember(mintBody, OAuthRequestParameterNames.IssuedTokenType));
+        string mintedRefreshToken = ReadMember(mintBody, WellKnownTokenTypes.AccessToken);
 
-        using HttpResponseMessage exchangeResponse = await OAuthTestTransport.PostFormAsync(
-            host.SharedHttpClient!, tokenUrl, exchangeForm, TestContext.CancellationToken).ConfigureAwait(false);
-        string exchangeBody = await exchangeResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(200, (int)exchangeResponse.StatusCode, exchangeBody);
-
-        using JsonDocument exchangeDoc = JsonDocument.Parse(exchangeBody);
-        string refreshToken = exchangeDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
-
-        //A resource-narrowing refresh against the spacey-audience-derived refresh token fails closed
-        //— proving Resource was carried as null (nothing granted to narrow from), not as the corrupted
-        //logical name. (Refresh tokens single-use rotate here, so this is the only redemption of the
-        //token issued above — a prior no-resource redemption would invalidate it before this call.)
-        using HttpResponseMessage narrowedRefresh = await OAuthTestTransport.PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
-        {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.RefreshToken,
-            [OAuthRequestParameterNames.RefreshToken] = refreshToken,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.Resource] = "https://billing.example.com/api"
-        }, TestContext.CancellationToken).ConfigureAwait(false);
-        string narrowedBody = await narrowedRefresh.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
-
-        Assert.AreEqual(400, (int)narrowedRefresh.StatusCode, narrowedBody);
-        Assert.Contains($"\"error\":\"{OAuthErrors.InvalidTarget}\"", narrowedBody, StringComparison.Ordinal,
-            $"A resource-narrowing refresh must fail closed when the spacey logical audience left "
-            + $"nothing granted to narrow from. Got: {narrowedBody}");
-
-        //Discriminator: the refusal did not consume the refresh token — a no-resource refresh
-        //(nothing to narrow, nothing requested) still succeeds.
-        using HttpResponseMessage plainRefresh = await OAuthTestTransport.PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
-        {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.RefreshToken,
-            [OAuthRequestParameterNames.RefreshToken] = refreshToken,
-            [OAuthRequestParameterNames.ClientId] = ClientId
-        }, TestContext.CancellationToken).ConfigureAwait(false);
-        string plainBody = await plainRefresh.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(200, (int)plainRefresh.StatusCode, plainBody);
+        (int refreshStatus, string refreshBody) = await PostRefreshAsync(
+            http, tokenUrl, mintedRefreshToken, resource: null).ConfigureAwait(false);
+        Assert.AreEqual(200, refreshStatus, refreshBody);
+        Assert.AreSequenceEqual(expectedAudience, ReadAudience(ReadMember(refreshBody, WellKnownTokenTypes.AccessToken)));
     }
 
 
     /// <summary>
-    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 §2.1</see>'s
-    /// <c>audience</c> logical name MAY embed a space while still looking like an absolute URI at a
-    /// glance — <c>"https://api.example.com/orders v2"</c> is such a value.
-    /// <see cref="Uri.TryCreate(string, UriKind, out Uri)"/> parses it successfully because it
-    /// percent-escapes the embedded space into the path, so a shape gate that trusted
-    /// <see cref="UriKind.Absolute"/> parsing alone would treat it as a genuine RFC 8707 §2
-    /// resource indicator and carry it verbatim into the minted refresh state's <c>Resource</c>
-    /// slot. A later resource-narrowing refresh with <c>resource=v2</c> would then split that carried
-    /// value at <c>ParseResourceIndicators</c> into the fabricated indicators
-    /// <c>https://api.example.com/orders</c> and <c>v2</c> and match the second — narrowing the
-    /// issued access token's <c>aud</c> to a target the authorization seam never granted. The carry's
-    /// whitespace-freeness check closes this: the spacey audience fails the gate, <c>Resource</c>
-    /// stays <see langword="null"/> on the minted refresh state, and the narrowing refresh fails
-    /// closed with <see cref="OAuthErrors.InvalidTarget"/> instead of fabricating a grant.
-    /// </summary>
-    [TestMethod]
-    public async Task RefreshTokenMintedFromSpaceyUriShapedAudienceCarriesNoResourceAndFailsClosedOnNarrowing()
-    {
-        await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
-            ClientId,
-            new Uri(ClientId),
-            profile: PolicyProfile.Rfc6749WithPkce,
-            capabilities: ImmutableHashSet.Create(
-                WellKnownCapabilityIdentifiers.OAuthTokenExchange,
-                WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
-                WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
-                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
-        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
-
-
-        //A URI-shaped logical audience with an embedded space: Uri.TryCreate percent-escapes it and
-        //still parses as absolute, so this is exactly the value that would slip a shape gate relying
-        //on UriKind.Absolute parsing alone.
-        const string SpaceyUriShapedAudience = "https://api.example.com/orders v2";
-        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
-        {
-            candidateIntegration.ValidateTokenExchangeTokenAsync =
-                static (token, tokenType, registration, context, ct) =>
-                    ValueTask.FromResult<ValidatedSecurityToken?>(
-                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = WellKnownScopes.OpenId });
-
-            candidateIntegration.AuthorizeTokenExchangeAsync =
-                static (subject, actor, request, registration, context, ct) =>
-                    ValueTask.FromResult<TokenExchangeAuthorization?>(
-                        new TokenExchangeAuthorization
-                        {
-                            Subject = subject.Subject,
-                            Scope = WellKnownScopes.OpenId,
-                            IssuedTokenType = TokenType.RefreshToken,
-                            Audience = [SpaceyUriShapedAudience]
-                        });
-        }).ConfigureAwait(false);
-
-        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
-        HostedAuthorizationServer host = app.Host("default");
-        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
-
-        OutgoingFormFields exchangeForm = BuildRequest(new TokenExchangeBuilderOptions
-        {
-            SubjectToken = SubjectTokenValue,
-            SubjectTokenType = TokenType.AccessToken
-        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
-
-        using HttpResponseMessage exchangeResponse = await OAuthTestTransport.PostFormAsync(
-            host.SharedHttpClient!, tokenUrl, exchangeForm, TestContext.CancellationToken).ConfigureAwait(false);
-        string exchangeBody = await exchangeResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(200, (int)exchangeResponse.StatusCode, exchangeBody);
-
-        using JsonDocument exchangeDoc = JsonDocument.Parse(exchangeBody);
-        string refreshToken = exchangeDoc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
-
-        //A fabricated-narrowing attempt: "v2" was never a granted resource indicator, only the second
-        //space-split fragment of the spacey audience. It must fail closed, proving Resource was
-        //carried as null rather than the unsplit spacey value.
-        using HttpResponseMessage narrowedRefresh = await OAuthTestTransport.PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
-        {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.RefreshToken,
-            [OAuthRequestParameterNames.RefreshToken] = refreshToken,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.Resource] = "v2"
-        }, TestContext.CancellationToken).ConfigureAwait(false);
-        string narrowedBody = await narrowedRefresh.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
-
-        Assert.AreEqual(400, (int)narrowedRefresh.StatusCode, narrowedBody);
-        Assert.Contains($"\"error\":\"{OAuthErrors.InvalidTarget}\"", narrowedBody, StringComparison.Ordinal,
-            $"A resource-narrowing refresh requesting the fabricated 'v2' fragment must fail closed "
-            + $"as invalid_target rather than matching a grant fabricated by splitting the spacey "
-            + $"URI-shaped audience. Got: {narrowedBody}");
-
-        //Discriminator: the refusal did not consume the refresh token — a no-resource refresh
-        //(nothing to narrow, nothing requested) still succeeds.
-        using HttpResponseMessage plainRefresh = await OAuthTestTransport.PostFormAsync(host.SharedHttpClient!, tokenUrl, new Dictionary<string, string>
-        {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.RefreshToken,
-            [OAuthRequestParameterNames.RefreshToken] = refreshToken,
-            [OAuthRequestParameterNames.ClientId] = ClientId
-        }, TestContext.CancellationToken).ConfigureAwait(false);
-        string plainBody = await plainRefresh.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(200, (int)plainRefresh.StatusCode, plainBody);
-    }
-
-
-    /// <summary>
-    /// The converse of <see cref="RefreshTokenMintedFromSpaceyLogicalAudienceCarriesNoResourceAndFailsClosedOnNarrowing"/>:
+    /// The converse of <see cref="AnExchangeForARefreshTokenUnderAnAudienceARefreshCannotIssueIsRefusedAsync"/>:
     /// when every granted <see cref="TokenExchangeAuthorization.Audience"/> entry IS a well-formed,
     /// whitespace-free absolute URI (<see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC
     /// 8707 §2</see> shape), the carry populates the minted refresh state's <c>Resource</c>, and a
     /// later <c>resource</c>-narrowing refresh against it succeeds, narrowing the issued access
     /// token's <c>aud</c> to that subset.
     /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
     public async Task RefreshTokenMintedFromUriAudiencesCarriesResourceAndNarrowsOnRefresh()
     {
@@ -4815,6 +5054,27 @@ internal sealed class TokenExchangeGrantTests
         };
 
         return () => Volatile.Read(ref tokenIdentifierCalls);
+    }
+
+
+    /// <summary>
+    /// Installs on the editable candidate an identifier seam that counts every identifier the host is asked for,
+    /// whatever its purpose, and hands every request to the seam it wraps.
+    /// </summary>
+    /// <param name="candidateIntegration">The editable candidate the seam is installed on.</param>
+    /// <returns>Reads how many identifiers the host has been asked for.</returns>
+    private static Func<int> CountIdentifierSeamCalls(AuthorizationServerIntegration candidateIntegration)
+    {
+        int identifierSeamCalls = 0;
+        Verifiable.Server.GenerateIdentifierDelegate original = candidateIntegration.GenerateIdentifierAsync!;
+        candidateIntegration.GenerateIdentifierAsync = (purpose, context, ct) =>
+        {
+            _ = Interlocked.Increment(ref identifierSeamCalls);
+
+            return original(purpose, context, ct);
+        };
+
+        return () => Volatile.Read(ref identifierSeamCalls);
     }
 
 

@@ -178,16 +178,17 @@ public sealed record IssuanceContext
 
     /// <summary>
     /// An explicit audience override; when populated it is the issued token's <c>aud</c> claim,
-    /// bypassing the <c>ClientRecord.ScopeToAudience</c> resolver (unless
-    /// <see cref="Server.AccessTokenAudPolicy.Suppressed"/> is active, which wins over any
-    /// populated value). Populated from three sources: the RFC 8693 §2.1.1 Token Exchange target
+    /// bypassing the <c>ClientRecord.ScopeToAudience</c> resolver. Populated from three sources: the RFC 8693
+    /// Section 2.1.1 Token Exchange target
     /// binding (the authorization seam's resolved audience); for the <c>authorization_code</c> and
     /// <c>refresh_token</c> grants, the RFC 8707 §2.2 effective resource set (the grant's resource,
     /// optionally narrowed by a token/refresh-request subset); and for <c>client_credentials</c> —
     /// which has no prior authorization to narrow against — the validated token-request
     /// <c>resource</c> set itself, taken as the grant. Precedence over <c>ScopeToAudience</c>
     /// follows §2's SHOULD to audience-restrict to the indicated resource(s).
-    /// <see langword="null"/> for every issuance that resolved none of the three.
+    /// <see langword="null"/> for every issuance that resolved none of the three. An entry that is null, empty or white
+    /// space only fails the token request with 500 <c>server_error</c> and
+    /// <see cref="WellKnownOAuthErrorDescriptions.ServerNotReady"/>, and no token is issued.
     /// </summary>
     public IReadOnlyList<string>? Audience { get; init; }
 

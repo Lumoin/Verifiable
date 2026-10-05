@@ -824,9 +824,10 @@ internal sealed class Oid4VciConfigurationConstraintsTests
     private async Task<string> MintAccessTokenAsync(
         TestHostShell host, VerifierKeyMaterial material, string? credentialScope)
     {
-        //openid keeps the RFC 9068 audience resolvable (ScopeToAudience maps it); the credential
-        //scope rides alongside it and is what the section 8.2 binding matches against. Without a
-        //credential scope the grant names no scope at all, and the token carries no scope claim.
+        //The credential scope rides beside openid and is what the section 8.2 binding matches against.
+        //The registration maps no scope to an audience, so the token's aud is the issuer, the producer's
+        //default. Without a credential scope the grant names no scope at all, and the token carries no
+        //scope claim.
         string? grantedScope = credentialScope is null ? null : $"{WellKnownScopes.OpenId} {credentialScope}";
         //OID4VCI 1.0 §13.10: "Long-lived Access Tokens giving access to Credentials MUST not be
         //issued unless sender-constrained." Keep this plain-bearer credential token within the

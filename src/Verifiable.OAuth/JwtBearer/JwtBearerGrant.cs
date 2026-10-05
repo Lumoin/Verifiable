@@ -49,7 +49,9 @@ public sealed record JwtBearerGrant
     /// <summary>
     /// The target audience(s) that confine the issued access token (its <c>aud</c> claim). When
     /// non-empty the value becomes the access token's audience verbatim, bypassing the scope→audience
-    /// resolver; MAY be empty, in which case the resolver shapes the audience.
+    /// resolver; MAY be empty, in which case the resolver shapes the audience. An entry that is null, empty or white
+    /// space only fails the token request with 500 <c>server_error</c> and
+    /// <see cref="WellKnownOAuthErrorDescriptions.ServerNotReady"/>, and no token is issued.
     /// </summary>
     public IReadOnlyList<string> Audience { get; init; } = [];
 

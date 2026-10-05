@@ -663,13 +663,6 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
 
                     return ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject));
                 };
-
-            //HAIP 1.0's AccessTokenAudPolicy.Required needs a resolved audience; the granted
-            //scope is empty here (RFC 6749 §3.3 narrowing drops every identity scope from this
-            //grant, so ClientRecord.ScopeToAudience's openid mapping never matches). Fixed
-            //resource-server audience, matching the one ScopeToAudience already carries.
-            candidateIntegration.ResolveAccessTokenAudienceAsync = static (registration, issuance, ct) =>
-                ValueTask.FromResult<IReadOnlyList<string>?>(["https://rs.example.com"]);
         }).ConfigureAwait(false);
         await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);

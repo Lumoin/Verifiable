@@ -222,16 +222,6 @@ public static class PolicyContextKeys
     /// </summary>
     public static string DiscoveryIssuerShape { get; } = Utf8Constants.ToInternedString(DiscoveryIssuerShapeUtf8);
 
-    /// <summary>The UTF-8 source literal of <see cref="AccessTokenAudPolicy"/>.</summary>
-    public static ReadOnlySpan<byte> AccessTokenAudPolicyUtf8 => "policy.accessTokenAudPolicy"u8;
-
-    /// <summary>
-    /// The policy applied to the <c>aud</c> claim on RFC 9068 access tokens.
-    /// Value type: <see cref="AccessTokenAudPolicy"/>. Audit row: "RFC 9068
-    /// access-token <c>aud</c> claim shape".
-    /// </summary>
-    public static string AccessTokenAudPolicy { get; } = Utf8Constants.ToInternedString(AccessTokenAudPolicyUtf8);
-
     /// <summary>The UTF-8 source literal of <see cref="IdTokenAudFormat"/>.</summary>
     public static ReadOnlySpan<byte> IdTokenAudFormatUtf8 => "policy.idTokenAudFormat"u8;
 

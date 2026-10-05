@@ -2661,7 +2661,20 @@ public static class AuthCodeEndpoints
     /// makes it REQUIRED for the ID Token, whose producer composes none of its own, and
     /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-2.2">RFC 9068 Section 2.2</see> makes it REQUIRED
     /// for the access token, whose composed <c>sub</c> a claim contributor can replace; for any other producer,
-    /// which may carry no <c>sub</c>, a string that is empty or white space only. The rule is this library's.
+    /// which may carry no <c>sub</c>, a string that is empty or white space only. The same failure, with the same
+    /// description and no token of the walk, answers a payload whose <c>aud</c> after the claim-contributor merge
+    /// names no recipient (<see cref="IsAudienceNamingRecipients"/>): for any producer, an <c>aud</c> that is present
+    /// and is not a string that names a recipient or a sequence of one or more such strings, the forms of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.3">RFC 7519 Section 4.1.3</see>; for the producer
+    /// whose <see cref="TokenProducer.ResponseField"/> is <see cref="WellKnownTokenTypes.AccessToken"/>, also an absent
+    /// <c>aud</c>, since <see href="https://www.rfc-editor.org/rfc/rfc9068#section-2.2">RFC 9068 Section 2.2</see>
+    /// makes it REQUIRED; for the producer whose <see cref="TokenProducer.ResponseField"/> is
+    /// <see cref="WellKnownTokenTypes.IdToken"/>, also an <c>aud</c> that is absent or that holds no value equal, by
+    /// ordinal comparison, to the issuance's <see cref="IssuanceContext.ClientId"/>, since
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#IDToken">OpenID Connect Core 1.0 Section 2</see>
+    /// makes it REQUIRED and says it MUST contain the Relying Party's <c>client_id</c>. A present <c>aud</c> is read
+    /// once: a sequence is copied in one pass into the library's own array, the array is checked and is written back
+    /// under <c>aud</c>, so the payload signed holds what was checked. The rules are this library's.
     /// </returns>
     private static async ValueTask<(TokenIssuanceResult? Result, ServerHttpResponse? Failure)> IssueTokensAsync(
         EndpointServer server,
@@ -2750,6 +2763,62 @@ public static class AuthCodeEndpoints
                     OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady));
             }
 
+            //RFC 9068 Section 2.2 (https://www.rfc-editor.org/rfc/rfc9068#section-2.2) lists the access token's aud:
+            //"aud  REQUIRED - as defined in Section 4.1.3 of [RFC7519].  See Section 3 for indications on how an
+            //authorization server should determine the value of "aud" depending on the request." RFC 7519 Section
+            //4.1.3 (https://www.rfc-editor.org/rfc/rfc7519#section-4.1.3): "In the general case, the "aud" value is an
+            //array of case-sensitive strings, each containing a StringOrURI value.  In the special case when the JWT
+            //has one audience, the "aud" value MAY be a single case-sensitive string containing a StringOrURI value."
+            //An aud names the token's recipients as a string that is not empty or white space only, or as a sequence of
+            //one or more such strings. Every source of the access token's audience meets here, after the
+            //claim-contributor merge: the issuance context, the application's resolver, the default resolver's union
+            //over the scope map, and a contributor that writes over the composed value. For any producer, an aud that
+            //is present and names no recipient (a null value, an empty sequence, an entry that is null, blank or no
+            //string, a value of another type) ends the walk before this payload is signed; for the producer whose
+            //ResponseField is access_token, aud is also present. A present aud is read once: a sequence is copied in one
+            //pass into the library's own array, an entry that is no string copied as null, and that array is checked
+            //and written back under aud, so the payload signed holds what was checked even when a contributor's
+            //sequence yields other entries when it is enumerated again. A string is checked as it is. An enumeration
+            //that throws is not caught: the exception leaves the walk, and the host answers it as an unhandled
+            //exception. A fault thrown inside the contributor itself is caught by the claim issuer, which drops that
+            //contribution.
+            //OpenID Connect Core 1.0 Section 2 (https://openid.net/specs/openid-connect-core-1_0.html#IDToken) lists the
+            //ID Token's aud: "REQUIRED. Audience(s) that this ID Token is intended for. It MUST contain the OAuth 2.0
+            //client_id of the Relying Party as an audience value. It MAY also contain identifiers for other
+            //audiences. In the general case, the aud value is an array of case-sensitive strings. In the common special
+            //case when there is one audience, the aud value MAY be a single case-sensitive string." For the producer
+            //whose ResponseField is id_token, aud is therefore present and holds the issuance's client_id by ordinal
+            //equality, as the string or as an entry of the array beside any other audience; a producer or a contributor
+            //that leaves it out ends the walk. No token of the walk is returned. The rules are this library's.
+            bool isAudiencePresent = payload.TryGetValue(WellKnownJwtClaimNames.Aud, out object? payloadAudience);
+            object? readAudience = payloadAudience is IEnumerable<object> audienceEntries
+                ? audienceEntries.Select(static entry => entry as string).ToArray()
+                : payloadAudience;
+            if(isAudiencePresent
+                ? !IsAudienceNamingRecipients(readAudience)
+                : WellKnownTokenTypes.IsAccessToken(producer.ResponseField))
+            {
+                return (null, ServerHttpResponse.ServerError(
+                    OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady));
+            }
+
+            if(readAudience is { } checkedAudience)
+            {
+                payload[WellKnownJwtClaimNames.Aud] = checkedAudience;
+            }
+
+            if(WellKnownTokenTypes.IsIdToken(producer.ResponseField)
+                && readAudience switch
+                {
+                    string singleAudience => !string.Equals(singleAudience, issuance.ClientId, StringComparison.Ordinal),
+                    string?[] audienceArray => !audienceArray.Contains(issuance.ClientId, StringComparer.Ordinal),
+                    _ => true
+                })
+            {
+                return (null, ServerHttpResponse.ServerError(
+                    OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady));
+            }
+
             UnsignedJwt unsigned = new(output.Header, payload);
 
             using JwsMessage jws = await unsigned.SignAsync(
@@ -2806,6 +2875,28 @@ public static class AuthCodeEndpoints
             LatestExpiry = latestExpiry
         }, null);
     }
+
+
+    /// <summary>
+    /// Whether the value <see cref="IssueTokensAsync"/> read under a payload's <c>aud</c> names the token's recipients
+    /// in one of the two forms <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.3">RFC 7519 Section
+    /// 4.1.3</see> defines: a string that is not empty or white space only, or an array of one or more entries none of
+    /// which is null, empty or white space only. <see cref="IssueTokensAsync"/> reads a sequence once into the
+    /// library's own array, an entry that is no string read as null, so a sequence holding an entry that is null,
+    /// blank or no string names no recipient; a null value, an empty sequence and a value of any other type name no
+    /// recipient either. <see cref="IssueTokensAsync"/> ends its walk on such a value.
+    /// </summary>
+    /// <param name="audience">
+    /// The value read under <c>aud</c> after the claim-contributor merge: a string as written, the library's own array
+    /// copied from a sequence, or any other value as written.
+    /// </param>
+    /// <returns><see langword="true"/> when the value names one or more recipients and nothing else.</returns>
+    private static bool IsAudienceNamingRecipients(object? audience) => audience switch
+    {
+        string single => !string.IsNullOrWhiteSpace(single),
+        string?[] entries => entries.Length > 0 && entries.All(static entry => !string.IsNullOrWhiteSpace(entry)),
+        _ => false
+    };
 
 
     /// <summary>
@@ -5626,6 +5717,17 @@ public static class AuthCodeEndpoints
 
 
     /// <summary>
+    /// The fixed <c>error_description</c> of the <c>invalid_target</c> <see cref="BuildRefreshTokenExchangeResponseAsync"/>
+    /// answers when the authorization seam authorizes a refresh token for an audience that names an entry
+    /// <see cref="IsCarriedAudienceEntry"/> does not store, so a refresh of the token could not issue that audience
+    /// again (<see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see>). The text
+    /// carries no value of the audience.
+    /// </summary>
+    private static string RefreshTokenUncarriedAudienceDescription { get; } =
+        "A refresh token cannot be issued for the authorized audience.";
+
+
+    /// <summary>
     /// Mints an opaque Refresh Token and writes the
     /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2">RFC 8693 §2.2</see> Token Exchange
     /// response that carries it, per draft-ietf-oauth-identity-assertion-authz-grant-04 §4.5 — the SAML 2.0
@@ -5647,7 +5749,19 @@ public static class AuthCodeEndpoints
     /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 §5</see> the minted Refresh
     /// Token itself carries <paramref name="confirmation"/> when the subject token's binding (or a
     /// fresh proof under an unbound one) sender-constrained this issuance, so a later
-    /// <c>refresh_token</c> grant enforces the same binding the code grant already does.
+    /// <c>refresh_token</c> grant enforces the same binding the code grant already does. A refresh token is
+    /// issued only for a grant whose audience a refresh of it issues again: an authorization whose
+    /// <see cref="TokenExchange.TokenExchangeAuthorization.Audience"/> names an entry
+    /// <see cref="IsCarriedAudienceEntry"/> does not store is answered 400 <see cref="OAuthErrors.InvalidTarget"/>
+    /// with <see cref="RefreshTokenUncarriedAudienceDescription"/> before any identifier is obtained or any state
+    /// is saved
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see>); the rule is
+    /// this library's. An authorization whose audience holds an entry that is null, empty or white space only is the
+    /// seam's own defect and is answered 500 <see cref="OAuthErrors.ServerError"/> with
+    /// <see cref="WellKnownOAuthErrorDescriptions.ServerNotReady"/> before that check, with nothing obtained or saved;
+    /// that rule is this library's too. The authorized audience is copied once by enumeration into the library's own
+    /// buffer, and both refusals and the refresh state's granted resource set read that buffer, so the refresh state
+    /// holds what was checked.
     /// </remarks>
     /// <param name="server">The endpoint server.</param>
     /// <param name="registration">The authenticated client requesting the exchange.</param>
@@ -5672,6 +5786,49 @@ public static class AuthCodeEndpoints
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
+        //The authorized audience is copied once by enumeration into the library's own buffer, here, and that buffer
+        //alone is what the two refusals below and the carry into the refresh state read: the seam's list is not
+        //enumerated again, so a list that reads differently when read again cannot store a value the refusals never
+        //saw. The copy is one foreach that adds each entry, never a bulk copy, which for a collection would hand the
+        //library's buffer to the application's own CopyTo. A list that is absent reads as an empty buffer. The rule
+        //is this library's.
+        List<string?> readAudience = [];
+        if(authorization.Audience is { } authorizedEntries)
+        {
+            foreach(string? authorizedEntry in authorizedEntries)
+            {
+                readAudience.Add(authorizedEntry);
+            }
+        }
+
+        //An authorized audience entry that is null, empty or white space only names no target service at all: it is
+        //the authorization seam's own defect, as a blank subject or a blank ID-JAG audience is, so it is answered
+        //server_error with the fixed description before the carry rule reads any entry of the buffer copied above,
+        //and nothing is obtained or saved. The rule is this library's.
+        if(readAudience.Any(static entry => string.IsNullOrWhiteSpace(entry)))
+        {
+            return (null, ServerHttpResponse.ServerError(
+                OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady));
+        }
+
+        //A refresh token is issued only for a grant whose audience a refresh of it issues again. The refresh state
+        //holds an authorized audience only as entries the carry rule stores whole (IsCarriedAudienceEntry), so an
+        //audience that names an entry outside that rule would leave the refresh token with no granted set, and a
+        //refresh of it would be issued an audience the authorization never named. Such an exchange is refused before
+        //any identifier is obtained or any state is saved, with RFC 8693 Section 2.2.2's code
+        //(https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2): "If the authorization server is unwilling or unable to
+        //issue a token for any target service indicated by the "resource" or "audience" parameters, the
+        //"invalid_target" error code SHOULD be used in the error response." The description carries no value of the
+        //audience. An authorization that names no audience is issued; a refresh of it is issued the producer's
+        //default, the audience its grant was issued under. The check reads the buffer copied above, whose entries the
+        //refusal above left all non-blank. The rule is this library's.
+        if(readAudience.Count > 0
+            && !readAudience.All(static entry => entry is { } carriedEntry && IsCarriedAudienceEntry(carriedEntry)))
+        {
+            return (null, ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidTarget, RefreshTokenUncarriedAudienceDescription));
+        }
+
         var oauth = server.OAuth();
 
         //§4.5: a Refresh Token is an opaque random string (not a JWT), minted through the identifier seam
@@ -5710,17 +5867,19 @@ public static class AuthCodeEndpoints
             //(the authorization seam's own shaping, not this library's parsed indicators).
             //Space-joining it into the space-delimited Resource slot unparsed would corrupt
             //that slot: ParseResourceIndicators/ResolveEffectiveResource would later split a
-            //single spacey audience name into several bogus "indicators". The carry is
-            //therefore gated: it populates Resource ONLY when every audience entry parses as an
-            //absolute, whitespace-free URI with no fragment component (IsCarriedAudienceEntry).
-            //That is the carry rule, not the grammar ResourceIndicatorSyntax reads an incoming
-            //resource by: it admits entries that grammar refuses (a userinfo in an https value,
-            //a host that is not ASCII), and each entry is carried as the seam spelled it.
-            //Otherwise Resource stays null, the same fail-closed outcome as "nothing was
-            //granted", rather than a joined value the split would not return entry by entry.
-            Resource = authorization.Audience is { Count: > 0 } audienceEntries
-                && audienceEntries.All(IsCarriedAudienceEntry)
-                ? string.Join(' ', audienceEntries)
+            //single spacey audience name into several bogus "indicators". The carry rule is
+            //therefore that every audience entry parses as an absolute, whitespace-free URI with
+            //no fragment component (IsCarriedAudienceEntry). That is the carry rule, not the
+            //grammar ResourceIndicatorSyntax reads an incoming resource by: it admits entries that
+            //grammar refuses (a userinfo in an https value, a host that is not ASCII), and each
+            //entry is carried as the seam spelled it. The carry joins the buffer copied once at the
+            //top of this member, the very entries both refusals read, and every one of them is
+            //carried: an audience holding an entry that is null, empty or white space only was
+            //answered server_error above, and one holding an entry outside the carry rule was
+            //refused invalid_target above. An authorization that names no audience leaves
+            //Resource null, and a refresh of the token is issued the producer's default.
+            Resource = readAudience.Count > 0
+                ? string.Join(' ', readAudience)
                 : null,
 
             Confirmation = confirmation
@@ -5798,7 +5957,14 @@ public static class AuthCodeEndpoints
     /// "issued and signed by an IdP Authorization Server similar to an ID Token" (§3) — and returned in
     /// the <c>access_token</c> field with <c>issued_token_type</c> the id-jag URN and <c>token_type</c>
     /// <c>N_A</c> (§4.3.4). The crypto seams are the same the access-token producers use; only the claim
-    /// shaping and response assembly differ.
+    /// shaping and response assembly differ. The shaped audience
+    /// (<see cref="TokenExchange.TokenExchangeAuthorization.Audience"/>) and the granted resource list
+    /// (<see cref="TokenExchange.TokenExchangeAuthorization.Resource"/>) are each copied once by enumeration into a
+    /// buffer of the library's own, after every refusal ahead of the list's first use that does not read it, and
+    /// before that use, so an enumeration that throws pre-empts none of those refusals: the audience-count refusal,
+    /// the several-values refusal and the <c>aud</c> claim read the audience buffer alone, and the resource grammar
+    /// check and the <c>resource</c> claim read the resource buffer alone, so the signed claims hold what was
+    /// checked; that rule is this library's.
     /// </remarks>
     /// <param name="server">The endpoint server.</param>
     /// <param name="registration">The authenticated client requesting the exchange.</param>
@@ -5846,6 +6012,24 @@ public static class AuthCodeEndpoints
                 "The authorization seam selected the id-jag issued type but the client lacks the id-jag capability."));
         }
 
+        //The shaped audience is copied once by enumeration into the library's own buffer, here, after the capability
+        //refusal above, which does not read it, and before its first use, the audience-count refusal below; that
+        //buffer alone is what the audience-count refusal, the aud claim's value and the several-values refusal read:
+        //the seam's list is not read again, so a list that reads differently when read again cannot pass a refusal on
+        //one reading and be signed into the claim from another. Each list is copied once, after every refusal ahead
+        //of its first use that does not read it, and before that use, so an enumeration that throws pre-empts none of
+        //those refusals. The copy is one foreach that adds each entry, never a bulk copy, which for a collection
+        //would hand the library's buffer to the application's own CopyTo. A list that is absent reads as an empty
+        //buffer. The rule is this library's.
+        List<string?> readAudience = [];
+        if(authorization.Audience is { } shapedEntries)
+        {
+            foreach(string? shapedEntry in shapedEntries)
+            {
+                readAudience.Add(shapedEntry);
+            }
+        }
+
         //§3.1 aud / §4.3: the audience is the Resource Authorization Server's issuer identifier. The
         //authorization seam's shaped audience wins — §4.3 lets the IdP resolve an implementation-
         //specific audience value (e.g. a URN) to the RS issuer it stamps into aud — otherwise the
@@ -5855,8 +6039,9 @@ public static class AuthCodeEndpoints
         //when the seam shaped no audience a request naming none or several is answered with RFC 8693 Section
         //2.2.2's invalid_request for a request that is not valid, with a fixed description that names the issued
         //ID-JAG (IdJagAudienceNamedNoneDescription, IdJagAudienceNamedSeveralDescription), before the grant's jti is
-        //obtained. The count is keyed on what is issued, a rule of this library.
-        if(authorization.Audience is not { Count: > 0 })
+        //obtained. The count is keyed on what is issued, a rule of this library. The shaped audience is read in the
+        //buffer copied above.
+        if(readAudience.Count == 0)
         {
             ServerHttpResponse? audienceCountRefusal = exchangeRequest.Audience.Count switch
             {
@@ -5870,8 +6055,8 @@ public static class AuthCodeEndpoints
             }
         }
 
-        string resourceAudience = authorization.Audience is { Count: > 0 } shaped
-            ? shaped[0]
+        string? resourceAudience = readAudience.Count > 0
+            ? readAudience[0]
             : exchangeRequest.Audience[0];
 
         //§3.1 client_id: the client at the Resource Authorization Server that will act on behalf of the
@@ -5883,22 +6068,46 @@ public static class AuthCodeEndpoints
         //of the seam mints nothing: a shaped audience whose first value is null, empty or white space only (it
         //names no Resource Authorization Server for the aud claim), a shaped audience of more than one value (the
         //one aud claim of an ID-JAG holds one Resource Authorization Server, and the library does not choose among
-        //them), a sub_id that is not well formed (the redeem reads the same member), a granted resource the
-        //resource indicator grammar refuses (Section 3.1 makes the claim an RFC 8707 Section 2 resource
-        //identifier, and the redeem refuses such a claim), a granted scope that is set and breaks the grammar of
-        //RFC 6749 Section 3.3 (Section 3.1 makes the claim a list in that format, and the redeem refuses such a
-        //claim), or a tenant, aud_tenant or aud_sub that is set and is white space only (the redeem refuses such a
-        //claim). A tenant relationship value that is null or empty omits its claim, as an empty scope does. The
-        //rule is this library's.
+        //them), a sub_id that is not well formed (the redeem reads the same member), a granted scope that is set and
+        //breaks the grammar of RFC 6749 Section 3.3 (Section 3.1 makes the claim a list in that format, and the
+        //redeem refuses such a claim), or a tenant, aud_tenant or aud_sub that is set and is white space only (the
+        //redeem refuses such a claim). A tenant relationship value that is null or empty omits its claim, as an empty
+        //scope does. The shaped audience is checked in the buffer copied after the capability refusal; no arm here
+        //reads the granted resource list, which is copied and checked below. The rule is this library's.
         if(string.IsNullOrWhiteSpace(resourceAudience)
-            || authorization.Audience is { Count: > 1 }
+            || readAudience.Count > 1
             || (authorization.SubjectIdentifier is { } chosenIdentifier && !chosenIdentifier.IsWellFormed())
-            || (authorization.Resource is { Count: > 0 } chosenResources
-                && chosenResources.Any(static chosenResource => !ResourceIndicatorSyntax.IsAbsoluteResourceIndicator(chosenResource)))
             || (authorization.Scope is { Length: > 0 } chosenScope && !ScopeTokenSyntax.IsScopeList(chosenScope))
             || (authorization.Tenant is { Length: > 0 } chosenTenant && string.IsNullOrWhiteSpace(chosenTenant))
             || (authorization.AudienceTenant is { Length: > 0 } chosenAudienceTenant && string.IsNullOrWhiteSpace(chosenAudienceTenant))
             || (authorization.AudienceSubject is { Length: > 0 } chosenAudienceSubject && string.IsNullOrWhiteSpace(chosenAudienceSubject)))
+        {
+            return (null, ServerHttpResponse.ServerError(
+                OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady));
+        }
+
+        //The granted resource list is copied once by enumeration into the library's own buffer, here, after every
+        //refusal ahead of its first use (the capability refusal, the audience-count refusal and the seam-defect check
+        //above), none of which reads it, and before that use, the resource grammar check below; that buffer alone is
+        //what the grammar check and the resource claim read: the seam's list is not read again, so a list that reads
+        //differently when read again cannot be signed into the claim with a value the check never saw, and an
+        //enumeration that throws pre-empts none of those refusals. The copy is one foreach that adds each entry, never
+        //a bulk copy, which for a collection would hand the library's buffer to the application's own CopyTo. A list
+        //that is absent reads as an empty buffer. The rule is this library's.
+        List<string?> readResource = [];
+        if(authorization.Resource is { } grantedEntries)
+        {
+            foreach(string? grantedEntry in grantedEntries)
+            {
+                readResource.Add(grantedEntry);
+            }
+        }
+
+        //A granted resource the resource indicator grammar refuses is the seam's own defect too (Section 3.1 makes
+        //the claim an RFC 8707 Section 2 resource identifier, and the redeem refuses such a claim): it is answered as
+        //the seam-defect check above answers, before the grant's jti and signing material are obtained, and nothing
+        //is minted. The granted resources are checked in the buffer copied just above. The rule is this library's.
+        if(readResource.Any(static chosenResource => !ResourceIndicatorSyntax.IsAbsoluteResourceIndicator(chosenResource)))
         {
             return (null, ServerHttpResponse.ServerError(
                 OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady));
@@ -5929,14 +6138,17 @@ public static class AuthCodeEndpoints
 
         //§3.1 / §4.3.3: the IdP MUST include the granted resource and authorization_details (if any) in
         //the JAG. RFC 8707 / §3.1 allow a single resource URI as a JSON string or multiple as a JSON
-        //array; authorization_details is a JSON array of authorization detail objects.
+        //array; authorization_details is a JSON array of authorization detail objects. The resource claim is written
+        //from the buffer copied after the seam-defect check, whose every entry the grammar check above accepted: one
+        //entry as that string, several as the buffer itself, which the payload serializer enumerates in place of the
+        //seam's list.
         Dictionary<string, object>? extraClaims = null;
-        if(authorization.Resource is { Count: > 0 } grantedResources)
+        if(readResource.Count > 0)
         {
             extraClaims ??= new(StringComparer.Ordinal);
-            extraClaims[OAuthRequestParameterNames.Resource] = grantedResources.Count == 1
-                ? grantedResources[0]
-                : grantedResources;
+            extraClaims[OAuthRequestParameterNames.Resource] = readResource.Count == 1
+                ? readResource[0]!
+                : readResource;
         }
 
         if(authorization.AuthorizationDetailsClaim is { Count: > 0 } grantedDetails)

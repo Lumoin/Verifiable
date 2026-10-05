@@ -61,6 +61,8 @@ internal sealed class AccessTokenTypeValidationTests
         _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        _ = await host.AddScopeWithAudienceAsync(
+            material, WellKnownScopes.OpenId, ResourceServerAudience, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         (string accessToken, string idToken) = await DriveCodeExchangeAsync(
             host, material, WellKnownScopes.OpenId).ConfigureAwait(false);
@@ -159,7 +161,7 @@ internal sealed class AccessTokenTypeValidationTests
 
     /// <summary>
     /// <see cref="BearerTokenValidation"/> is a structurally independent implementation (its own
-    /// parse/alg/kid/typ/key-resolve/signature/iss/exp sequence, not a delegation to
+    /// parse/alg/kid/typ/key-resolve/signature/iss/aud/exp sequence, not a delegation to
     /// <see cref="JwsAccessTokenValidator"/>) that gates every protected resource endpoint — exercised
     /// here through the real, HTTP-reachable OIDC Core §5.3 UserInfo endpoint. The genuine access
     /// token from a real issuance succeeds; the SAME issuance's id_token is rejected by BearerTokenValidation's

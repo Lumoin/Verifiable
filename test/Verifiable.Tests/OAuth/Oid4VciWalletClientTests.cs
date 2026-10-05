@@ -489,13 +489,6 @@ internal sealed class Oid4VciWalletClientTests
 
                     return original(code, txCode, clientId, registration, context, ct);
                 };
-
-            //HAIP 1.0's AccessTokenAudPolicy.Required needs a resolved audience; the seam's
-            //granted openid scope is dropped by RFC 6749 §3.3 narrowing before it ever reaches
-            //ClientRecord.ScopeToAudience. Fixed resource-server audience, matching the one
-            //ScopeToAudience already carries.
-            candidateIntegration.ResolveAccessTokenAudienceAsync = static (registration, issuance, ct) =>
-                ValueTask.FromResult<IReadOnlyList<string>?>(["https://rs.example.com"]);
         }).ConfigureAwait(false);
         await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
@@ -569,10 +562,6 @@ internal sealed class Oid4VciWalletClientTests
         bool isNonceKeyRotated = false;
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            //HAIP 1.0's AccessTokenAudPolicy.Required needs a resolved audience.
-            candidateIntegration.ResolveAccessTokenAudienceAsync = static (registration, issuance, ct) =>
-                ValueTask.FromResult<IReadOnlyList<string>?>(["https://rs.example.com"]);
-
             ValidateDpopProofDelegate validateProof = candidateIntegration.ValidateDpopProofAsync!;
             candidateIntegration.ValidateDpopProofAsync = (request, ct) =>
             {

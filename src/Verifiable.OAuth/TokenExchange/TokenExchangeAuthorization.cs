@@ -64,6 +64,19 @@ public sealed record TokenExchangeAuthorization
     /// space only, is the authorization seam's own defect, which the token exchange answers <c>server_error</c> before
     /// any grant identifier is obtained; an empty list leaves the audience to the request's one <c>audience</c>. That
     /// rule is this library's.
+    /// <para>
+    /// For an issued refresh token (<see cref="IssuedTokenType"/> <see cref="TokenType.RefreshToken"/>) the list is
+    /// the audience a refresh of that token reproduces, and the token exchange gives one of three answers. A list
+    /// whose every value is an absolute URI with no white space and no fragment component is carried: the refresh
+    /// token is issued, and a refresh of it is audienced at exactly those values; an empty list issues the refresh
+    /// token too, whose refresh is audienced as an access token of a request that names no <c>resource</c>. A list
+    /// that holds a value that is null, empty or white space only is the authorization seam's own defect: the token
+    /// exchange answers 500 <c>server_error</c> with <see cref="WellKnownOAuthErrorDescriptions.ServerNotReady"/>, and
+    /// nothing is stored or issued. A list that holds a value of another form, such as a logical name, is refused
+    /// under <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.2">RFC 8693 Section 2.2.2</see>: the token
+    /// exchange answers 400 <c>invalid_target</c> with the description "A refresh token cannot be issued for the
+    /// authorized audience.", and no refresh token is stored. These rules are this library's.
+    /// </para>
     /// </summary>
     public IReadOnlyList<string> Audience { get; init; } = [];
 
