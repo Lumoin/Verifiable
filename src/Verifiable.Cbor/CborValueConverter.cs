@@ -310,6 +310,18 @@ public static class CborValueConverter
     }
 
 
+    /// <summary>
+    /// Reads a CBOR map into a dictionary, refusing a map key that appears twice.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-3.1">RFC 8949 Section 3.1</see>: "A map
+    /// that has duplicate keys may be well-formed, but it is not valid, and thus it causes indeterminate
+    /// decoding; see also Section 5.6." Two map keys are the same by value (Section 5.6.1): integers are
+    /// decoded to one boxed value whatever their encoded width, and byte strings compare by content.
+    /// </remarks>
+    /// <param name="reader">The CBOR reader positioned at the start of the map.</param>
+    /// <returns>The map's entries.</returns>
+    /// <exception cref="CborContentException">A map key appears twice in the map.</exception>
     private static Dictionary<object, object?> ReadMap(ref CborReader reader)
     {
         int? count = reader.ReadStartMap();
@@ -318,12 +330,45 @@ public static class CborValueConverter
         while(reader.PeekState() != CborReaderState.EndMap)
         {
             object key = ReadValue(ref reader)!;
+            if(IsRepeatedMapKey(dict, key))
+            {
+                throw new CborContentException(
+                    "A CBOR map carries the same map key twice; the map is not valid (RFC 8949 Section 3.1).");
+            }
+
             object? value = ReadValue(ref reader);
-            dict[key] = value;
+            dict.Add(key, value);
         }
 
         reader.ReadEndMap();
         return dict;
+    }
+
+
+    /// <summary>
+    /// Tells whether <paramref name="mapKey"/> is already a map key of <paramref name="map"/> by the value
+    /// equivalence of <see href="https://www.rfc-editor.org/rfc/rfc8949#section-5.6.1">RFC 8949 Section 5.6.1</see>:
+    /// a byte string compares by its content, every other decoded map key by its value.
+    /// </summary>
+    /// <param name="map">The entries read so far.</param>
+    /// <param name="mapKey">The map key just read.</param>
+    /// <returns><see langword="true"/> when the map already holds an equivalent map key.</returns>
+    private static bool IsRepeatedMapKey(Dictionary<object, object?> map, object mapKey)
+    {
+        if(mapKey is not byte[] bytes)
+        {
+            return map.ContainsKey(mapKey);
+        }
+
+        foreach(object existing in map.Keys)
+        {
+            if(existing is byte[] existingBytes && existingBytes.AsSpan().SequenceEqual(bytes))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
 

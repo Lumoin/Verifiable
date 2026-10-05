@@ -235,6 +235,57 @@ internal sealed class CborRoundTripTests
 
 
     /// <summary>
+    /// A map whose integer map key appears twice (in one width, or in two widths) is refused by
+    /// <see cref="CborReaderExtensions.ReadIntKeyedMap{TValue}"/>, and one whose text map key appears twice
+    /// by <see cref="CborReaderExtensions.ReadStringKeyedMap{TValue}"/>, under a reader that judges no map key.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-3.1">RFC 8949 Section 3.1</see>: "A map
+    /// that has duplicate keys may be well-formed, but it is not valid, and thus it causes indeterminate
+    /// decoding; see also Section 5.6."
+    /// </remarks>
+    /// <param name="encodedMap">The encoded map.</param>
+    /// <param name="isTextKeyed">Whether the row drives the text-keyed reader.</param>
+    [TestMethod]
+    [DataRow(new byte[] { 0xA2, 0x01, 0x61, 0x61, 0x01, 0x61, 0x62 }, false, DisplayName = "integer map key twice")]
+    [DataRow(new byte[] { 0xA2, 0x01, 0x61, 0x61, 0x18, 0x01, 0x61, 0x62 }, false, DisplayName = "integer map key twice, two widths")]
+    [DataRow(new byte[] { 0xA2, 0x61, 0x61, 0x01, 0x61, 0x61, 0x02 }, true, DisplayName = "text map key twice")]
+    public void KeyedMapReadersRefuseARepeatedMapKey(byte[] encodedMap, bool isTextKeyed)
+    {
+        var reader = new CborReader(encodedMap, CborOptions.Lax);
+
+        _ = Assert.ThrowsExactly<CborContentException>(() => isTextKeyed switch
+        {
+            true => (object)reader.ReadStringKeyedMap(r => r.ReadInt32()),
+            false => reader.ReadIntKeyedMap(r => r.ReadTextString())
+        });
+    }
+
+
+    /// <summary>
+    /// A nested map read through <see cref="CborValueConverter.ReadValue(CborReader)"/> whose map key appears
+    /// twice is refused: an integer map key in one width or in two widths, and a byte-string map key
+    /// compared by its content.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-3.1">RFC 8949 Section 3.1</see>: "A map
+    /// that has duplicate keys may be well-formed, but it is not valid, and thus it causes indeterminate
+    /// decoding; see also Section 5.6."
+    /// </remarks>
+    /// <param name="encodedMap">The encoded map.</param>
+    [TestMethod]
+    [DataRow(new byte[] { 0xA2, 0x01, 0x00, 0x01, 0x01 }, DisplayName = "integer map key twice")]
+    [DataRow(new byte[] { 0xA2, 0x01, 0x00, 0x18, 0x01, 0x01 }, DisplayName = "integer map key twice, two widths")]
+    [DataRow(new byte[] { 0xA2, 0x41, 0x01, 0x00, 0x41, 0x01, 0x01 }, DisplayName = "byte-string map key twice")]
+    public void ValueConverterRefusesARepeatedMapKey(byte[] encodedMap)
+    {
+        var reader = new CborReader(encodedMap, CborOptions.Lax);
+
+        _ = Assert.ThrowsExactly<CborContentException>(() => CborValueConverter.ReadValue(reader));
+    }
+
+
+    /// <summary>
     /// A definite-length array read with the exact expected length succeeds; a mismatched expectation is
     /// rejected.
     /// </summary>

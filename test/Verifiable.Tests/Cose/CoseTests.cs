@@ -416,6 +416,94 @@ internal sealed class CoseTests
     }
 
 
+    /// <summary>
+    /// A protected bucket whose map carries one label twice is refused as malformed, judged on the decoded
+    /// label: <c>alg</c> twice in minimal form, <c>alg</c> twice with the second label in a two-byte width,
+    /// and <c>alg</c> twice with the same value. <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052
+    /// Section 3</see>: "Labels in each of the maps MUST be unique. When processing messages, if a label
+    /// appears multiple times, the message MUST be rejected as malformed."
+    /// </summary>
+    /// <param name="protectedHeader">The serialized protected bucket.</param>
+    [TestMethod]
+    [DataRow(new byte[] { 0xA2, 0x01, 0x26, 0x01, 0x38, 0x22 }, DisplayName = "alg twice, minimal form")]
+    [DataRow(new byte[] { 0xA2, 0x01, 0x26, 0x18, 0x01, 0x38, 0x22 }, DisplayName = "alg twice, second label in two widths")]
+    [DataRow(new byte[] { 0xA2, 0x01, 0x26, 0x01, 0x26 }, DisplayName = "alg twice, same value")]
+    public void ParseProtectedHeaderRefusesARepeatedLabel(byte[] protectedHeader)
+    {
+        _ = Assert.ThrowsExactly<CborContentException>(() => CoseSerialization.ParseProtectedHeader(protectedHeader));
+    }
+
+
+    /// <summary>
+    /// A correctly signed COSE_Sign1 whose protected bucket carries <c>alg</c> twice (ES384, then ES256,
+    /// the public key's own algorithm) is NOT verified: the message is malformed, so neither the last
+    /// algorithm nor an absent one may stand in for the refused header.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "When
+    /// processing messages, if a label appears multiple times, the message MUST be rejected as malformed."
+    /// </summary>
+    [TestMethod]
+    public async Task VerifyAndDecodeRefusesACorrectlySignedMessageWithARepeatedAlgorithm()
+    {
+        byte[] repeatedAlgorithmHeader = [0xA2, 0x01, 0x38, 0x22, 0x01, 0x26];
+        EncodedCoseProtectedHeader protectedHeader = EncodedCoseProtectedHeader.FromBytes(repeatedAlgorithmHeader, BaseMemoryPool.Shared);
+        byte[] payload = BuildTestPayload();
+
+        var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
+        using var publicKey = keyPair.PublicKey;
+        using var privateKey = keyPair.PrivateKey;
+
+        var message = await Verifiable.JCose.Cose.SignAsync(
+            protectedHeader,
+            unprotectedHeader: null,
+            payload,
+            CoseSerialization.BuildSigStructure,
+            privateKey,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
+            BaseMemoryPool.Shared,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        using EncodedCoseSign1 coseBytes = CoseSerialization.SerializeCoseSign1(message, BaseMemoryPool.Shared);
+
+        CoseVerificationResult result = await CoseVerification.VerifyAndDecodeAsync(
+            coseBytes.AsReadOnlyMemory(),
+            publicKey,
+            BaseMemoryPool.Shared,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsValid, "A COSE_Sign1 whose protected bucket repeats alg is malformed and must not verify.");
+        Assert.IsNull(result.Algorithm, "No algorithm may be reported for a refused protected bucket.");
+    }
+
+
+    /// <summary>
+    /// A COSE_Sign1 whose unprotected bucket carries one label twice (in one width, or in two widths), or
+    /// whose two buckets share a label, is refused as malformed by both COSE_Sign1 parsers.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "Labels in
+    /// each of the maps MUST be unique. When processing messages, if a label appears multiple times, the
+    /// message MUST be rejected as malformed. Applications SHOULD verify that the same label does not occur
+    /// in both the protected and unprotected header parameters."
+    /// </summary>
+    /// <param name="wireBytes">The tagged COSE_Sign1 wire bytes.</param>
+    /// <param name="isNilPayloadParser">Whether the row drives <see cref="CoseSerialization.ParseCoseSign1AllowingNilPayload"/> rather than <see cref="CoseSerialization.ParseCoseSign1"/>.</param>
+    [TestMethod]
+    [DataRow(new byte[] { 0xD2, 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA2, 0x04, 0x41, 0x01, 0x04, 0x41, 0x02, 0x41, 0x00, 0x41, 0x00 }, false, DisplayName = "ParseCoseSign1: unprotected kid twice")]
+    [DataRow(new byte[] { 0xD2, 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA2, 0x04, 0x41, 0x01, 0x18, 0x04, 0x41, 0x02, 0x41, 0x00, 0x41, 0x00 }, false, DisplayName = "ParseCoseSign1: unprotected kid twice, two widths")]
+    [DataRow(new byte[] { 0xD2, 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA1, 0x01, 0x26, 0x41, 0x00, 0x41, 0x00 }, false, DisplayName = "ParseCoseSign1: alg in both buckets")]
+    [DataRow(new byte[] { 0xD2, 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA2, 0x04, 0x41, 0x01, 0x04, 0x41, 0x02, 0x41, 0x00, 0x41, 0x00 }, true, DisplayName = "AllowingNilPayload: unprotected kid twice")]
+    [DataRow(new byte[] { 0xD2, 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA2, 0x04, 0x41, 0x01, 0x18, 0x04, 0x41, 0x02, 0x41, 0x00, 0x41, 0x00 }, true, DisplayName = "AllowingNilPayload: unprotected kid twice, two widths")]
+    [DataRow(new byte[] { 0xD2, 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA1, 0x01, 0x26, 0x41, 0x00, 0x41, 0x00 }, true, DisplayName = "AllowingNilPayload: alg in both buckets")]
+    public void ParseCoseSign1RefusesARepeatedOrSharedLabel(byte[] wireBytes, bool isNilPayloadParser)
+    {
+        ParseCoseSign1Delegate parse = isNilPayloadParser switch
+        {
+            true => CoseSerialization.ParseCoseSign1AllowingNilPayload,
+            false => CoseSerialization.ParseCoseSign1
+        };
+
+        _ = Assert.ThrowsExactly<CborContentException>(() => parse(wireBytes, BaseMemoryPool.Shared));
+    }
+
+
     [TestMethod]
     public void DefaultTagToCoseConverterMapsP256Correctly()
     {

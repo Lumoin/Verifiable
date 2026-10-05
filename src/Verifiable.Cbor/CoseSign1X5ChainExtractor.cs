@@ -37,7 +37,9 @@ public static class CoseSign1X5ChainExtractor
     /// </returns>
     /// <exception cref="CborContentException">
     /// Thrown when the COSE_Sign1 wire shape is malformed or the
-    /// <c>x5chain</c> value is neither a bstr nor an array of bstrs.
+    /// <c>x5chain</c> value is neither a bstr nor an array of bstrs, or when a label appears twice in the
+    /// unprotected bucket (<see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>:
+    /// "When processing messages, if a label appears multiple times, the message MUST be rejected as malformed.").
     /// </exception>
     public static IReadOnlyList<PkiCertificateMemory> Extract(
         ReadOnlyMemory<byte> encodedCoseSign1,
@@ -85,6 +87,7 @@ public static class CoseSign1X5ChainExtractor
         int? entryCount = reader.ReadStartMap();
 
         List<PkiCertificateMemory> chain = [];
+        HashSet<int> seenLabels = [];
         int entriesRead = 0;
 
         try
@@ -93,6 +96,14 @@ public static class CoseSign1X5ChainExtractor
             {
                 int label = (int)reader.ReadInt64();
                 entriesRead++;
+
+                //RFC 9052 Section 3: a label that appears twice in one map makes the message malformed;
+                //a second x5chain is refused, never merged into the first.
+                if(!seenLabels.Add(label))
+                {
+                    throw new CborContentException(
+                        $"COSE header label {label} appears more than once in the unprotected bucket; the message is malformed (RFC 9052 Section 3).");
+                }
 
                 if(label == MdocCoseHeaderLabels.X5Chain)
                 {

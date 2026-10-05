@@ -199,7 +199,12 @@ public static class CredentialCoseExtensions
     /// <param name="credentialDeserializer">Delegate for deserializing the credential from the payload.</param>
     /// <param name="headerParser">Delegate for parsing the protected header bytes.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The verification result containing validity status and decoded credential.</returns>
+    /// <returns>
+    /// The verification result containing validity status and decoded credential; a protected header
+    /// that <paramref name="headerParser"/> refuses as malformed (a label that appears twice among them,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>) answers
+    /// <see cref="CoseCredentialVerificationResult.Failed()"/>, never an exception.
+    /// </returns>
     public static ValueTask<CoseCredentialVerificationResult> VerifyCoseAsync(
         CoseSign1Message message,
         BuildSigStructureDelegate buildSigStructure,
@@ -249,7 +254,12 @@ public static class CredentialCoseExtensions
     /// <param name="credentialDeserializer">Delegate for deserializing the credential from the payload.</param>
     /// <param name="headerParser">Delegate for parsing the protected header bytes.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The verification result containing validity status and decoded credential.</returns>
+    /// <returns>
+    /// The verification result containing validity status and decoded credential; a protected header
+    /// that <paramref name="headerParser"/> refuses as malformed (a label that appears twice among them,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>) answers
+    /// <see cref="CoseCredentialVerificationResult.Failed()"/>, never an exception.
+    /// </returns>
     public static async ValueTask<CoseCredentialVerificationResult> VerifyCoseAsync(
         CoseSign1Message message,
         BuildSigStructureDelegate buildSigStructure,
@@ -278,7 +288,22 @@ public static class CredentialCoseExtensions
             return CoseCredentialVerificationResult.Failed();
         }
 
-        Dictionary<int, object> header = new(headerParser(message.ProtectedHeader.AsReadOnlySpan()));
+        //A protected bucket the parser refuses (a repeated label among them, RFC 9052 Section 3) is a
+        //malformed message on untrusted input: a failure value, never an exception.
+        Dictionary<int, object> header;
+        try
+        {
+            header = new(headerParser(message.ProtectedHeader.AsReadOnlySpan()));
+        }
+        catch(OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            return CoseCredentialVerificationResult.Failed();
+        }
+
         VerifiableCredential credential = credentialDeserializer(message.Payload.Span);
 
         int? alg = header.TryGetValue(CoseHeaderParameters.Alg, out object? algValue) && algValue is int a ? a : null;
@@ -418,7 +443,12 @@ public static class CredentialCoseExtensions
     /// <param name="credentialDeserializer">Delegate for deserializing the credential from the payload.</param>
     /// <param name="headerParser">Delegate for parsing the protected header bytes.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The verification result containing validity status and decoded credential.</returns>
+    /// <returns>
+    /// The verification result containing validity status and decoded credential; a protected header
+    /// that <paramref name="headerParser"/> refuses as malformed (a label that appears twice among them,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>) answers
+    /// <see cref="CoseCredentialVerificationResult.Failed()"/>, never an exception.
+    /// </returns>
     public static async ValueTask<CoseCredentialVerificationResult> VerifyCoseAsync(
         CoseSign1Message message,
         BuildSigStructureDelegate buildSigStructure,
@@ -449,7 +479,22 @@ public static class CredentialCoseExtensions
             return CoseCredentialVerificationResult.Failed();
         }
 
-        Dictionary<int, object> header = new(headerParser(message.ProtectedHeader.AsReadOnlySpan()));
+        //A protected bucket the parser refuses (a repeated label among them, RFC 9052 Section 3) is a
+        //malformed message on untrusted input: a failure value, never an exception.
+        Dictionary<int, object> header;
+        try
+        {
+            header = new(headerParser(message.ProtectedHeader.AsReadOnlySpan()));
+        }
+        catch(OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            return CoseCredentialVerificationResult.Failed();
+        }
+
         VerifiableCredential credential = credentialDeserializer(message.Payload.Span);
 
         int? alg = header.TryGetValue(CoseHeaderParameters.Alg, out object? algValue) && algValue is int a ? a : null;

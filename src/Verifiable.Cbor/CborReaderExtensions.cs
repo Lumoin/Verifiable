@@ -443,7 +443,13 @@ public static class CborReaderExtensions
         {
             long key = reader.ReadInt64();
             TValue value = valueReader(reader);
-            result[key] = value;
+
+            //RFC 8949 Section 3.1: a map with duplicate keys is not valid.
+            if(!result.TryAdd(key, value))
+            {
+                throw new CborContentException(
+                    $"The CBOR map carries the map key {key} twice; the map is not valid (RFC 8949 Section 3.1).");
+            }
         }
 
         reader.ReadEndMap();
@@ -476,7 +482,13 @@ public static class CborReaderExtensions
         {
             string key = reader.ReadTextString();
             TValue value = valueReader(reader);
-            result[key] = value;
+
+            //RFC 8949 Section 3.1: a map with duplicate keys is not valid.
+            if(!result.TryAdd(key, value))
+            {
+                throw new CborContentException(
+                    "The CBOR map carries the same text map key twice; the map is not valid (RFC 8949 Section 3.1).");
+            }
         }
 
         reader.ReadEndMap();

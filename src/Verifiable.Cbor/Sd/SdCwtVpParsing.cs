@@ -52,7 +52,10 @@ public static class SdCwtVpParsing
     /// <param name="kbtProtectedHeader">The CBOR-encoded KBT protected header map.</param>
     /// <returns>The embedded SD-CWT COSE_Sign1 wire bytes.</returns>
     /// <exception cref="FormatException">
-    /// Thrown when <c>kcwt</c> is absent from the header or the header is not well-formed CBOR
+    /// Thrown when <c>kcwt</c> is absent from the header, when a label appears twice in the header
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "When
+    /// processing messages, if a label appears multiple times, the message MUST be rejected as malformed."),
+    /// or the header is not well-formed CBOR
     /// (the <see cref="CborContentException"/> or <see cref="InvalidOperationException"/> the CBOR
     /// reader raises rides as the <see cref="Exception.InnerException"/>, when one was raised).
     /// </exception>
@@ -62,6 +65,10 @@ public static class SdCwtVpParsing
         {
             var reader = new CborReader(kbtProtectedHeader, CborOptions.Lax);
 
+            //The whole map is read, so a label that appears twice (kcwt among them) is seen and the
+            //header refused as malformed (RFC 9052 Section 3).
+            ReadOnlyMemory<byte>? kcwt = null;
+            HashSet<int> seenLabels = [];
             int? count = reader.ReadStartMap();
             int read = 0;
             while(count is null ? reader.PeekState() != CborReaderState.EndMap : read < count.Value)
@@ -69,15 +76,25 @@ public static class SdCwtVpParsing
                 int label = reader.ReadInt32();
                 read++;
 
-                if(label == CoseHeaderParameters.Kcwt)
+                if(!seenLabels.Add(label))
                 {
-                    return reader.ReadEncodedValue();
+                    throw new FormatException(
+                        $"The KBT protected header carries the label {label} more than once; the header is malformed (RFC 9052 Section 3).");
                 }
 
-                reader.SkipValue();
+                if(label == CoseHeaderParameters.Kcwt)
+                {
+                    kcwt = reader.ReadEncodedValue();
+                }
+                else
+                {
+                    reader.SkipValue();
+                }
             }
 
-            throw new FormatException(
+            reader.ReadEndMap();
+
+            return kcwt ?? throw new FormatException(
                 "The KBT protected header does not carry the kcwt (13) parameter.");
         }
         catch(Exception exception) when(exception is CborException or InvalidOperationException)
@@ -388,6 +405,11 @@ public static class SdCwtVpParsing
     /// </remarks>
     /// <param name="kbtPayload">The CBOR-encoded KBT payload claims map.</param>
     /// <returns>The parsed claims as a <see cref="KbtCwtClaims"/>.</returns>
+    /// <exception cref="CborContentException">
+    /// Thrown when a claim key appears twice in the map
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052 Section 9</see>: "Applications
+    /// MUST NOT parse and process messages with the same label used twice as a key in a single map.").
+    /// </exception>
     public static KbtCwtClaims ReadKbtClaims(ReadOnlyMemory<byte> kbtPayload)
     {
         var reader = new CborReader(kbtPayload, CborOptions.Lax);
@@ -396,12 +418,20 @@ public static class SdCwtVpParsing
         long? iat = null;
         string? cnonce = null;
 
+        HashSet<int> seenClaimKeys = [];
         int? count = reader.ReadStartMap();
         int read = 0;
         while(count is null ? reader.PeekState() != CborReaderState.EndMap : read < count.Value)
         {
             int key = reader.ReadInt32();
             read++;
+
+            //RFC 9052 Section 9: a map key used twice in one map is not parsed and processed.
+            if(!seenClaimKeys.Add(key))
+            {
+                throw new CborContentException(
+                    $"The KBT claims map carries the claim key {key} more than once; the token is malformed (RFC 9052 Section 9).");
+            }
 
             _ = key switch
             {

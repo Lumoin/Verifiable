@@ -24,7 +24,9 @@ public static class CoseVerification
     /// <remarks>
     /// Fail-closed over untrusted input: malformed bytes or a failed signature yield a result with
     /// <see cref="CoseVerificationResult.IsValid"/> <see langword="false"/>, never a thrown exception —
-    /// matching the JWS verify paths. The verifying function is resolved from <paramref name="publicKey"/>'s
+    /// matching the JWS verify paths. A protected bucket the parser refuses as malformed (a label that
+    /// appears twice among them, <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>)
+    /// fails the verification; it is never read as an absent algorithm. The verifying function is resolved from <paramref name="publicKey"/>'s
     /// tag through the crypto-function registry, so the caller supplies only the key.
     /// </remarks>
     /// <param name="encodedCoseSign1">The tagged COSE_Sign1 wire bytes.</param>
@@ -60,7 +62,14 @@ public static class CoseVerification
             //Copy the bytes the result exposes out of the message before dispose releases its pooled
             //protected-header carrier and the borrowed payload view.
             byte[] protectedHeaderCopy = message.ProtectedHeader.AsReadOnlySpan().ToArray();
-            int? algorithm = ReadAlgorithm(protectedHeaderCopy, out IReadOnlyDictionary<int, object>? protectedMap);
+            if(!TryReadProtectedHeader(protectedHeaderCopy, out IReadOnlyDictionary<int, object>? protectedMap))
+            {
+                //A protected bucket the parser refuses (a repeated label among them) is a malformed
+                //message: the verification fails rather than going on without an algorithm.
+                return CoseVerificationResult.Failed();
+            }
+
+            int? algorithm = ReadAlgorithm(protectedMap);
             string? keyId = ReadKeyId(protectedMap, message.UnprotectedHeader);
 
             bool isValid = await Cose.VerifyAsync(
@@ -81,14 +90,23 @@ public static class CoseVerification
     }
 
 
-    //Reads the COSE algorithm (protected-header label 1) and hands back the parsed protected-header map
-    //for a subsequent kid lookup. An empty or unparseable protected header yields a null algorithm/map.
-    private static int? ReadAlgorithm(byte[] protectedHeader, out IReadOnlyDictionary<int, object>? protectedMap)
+    /// <summary>
+    /// Parses the protected bucket, telling an ABSENT bucket (zero bytes: a null map, the read succeeds)
+    /// apart from a MALFORMED one (the parser refuses it: the read fails).
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "When
+    /// processing messages, if a label appears multiple times, the message MUST be rejected as malformed."
+    /// </remarks>
+    /// <param name="protectedHeader">The serialized protected bucket.</param>
+    /// <param name="protectedMap">The parsed map, or <see langword="null"/> when the bucket is empty or refused.</param>
+    /// <returns><see langword="false"/> when the parser refuses the bucket as malformed; otherwise <see langword="true"/>.</returns>
+    private static bool TryReadProtectedHeader(byte[] protectedHeader, out IReadOnlyDictionary<int, object>? protectedMap)
     {
         protectedMap = null;
         if(protectedHeader.Length == 0)
         {
-            return null;
+            return true;
         }
 
         try
@@ -97,10 +115,21 @@ public static class CoseVerification
         }
         catch(Exception ex) when(ex is CborException or InvalidOperationException)
         {
-            return null;
+            return false;
         }
 
-        return protectedMap.TryGetValue(CoseHeaderParameters.Alg, out object? value) && value is int algorithm
+        return true;
+    }
+
+
+    /// <summary>
+    /// Reads the COSE algorithm (protected-header label 1) from an already parsed protected bucket.
+    /// </summary>
+    /// <param name="protectedMap">The parsed protected bucket, or <see langword="null"/> when it is empty.</param>
+    /// <returns>The algorithm identifier, or <see langword="null"/> when the bucket carries no integer <c>alg</c>.</returns>
+    private static int? ReadAlgorithm(IReadOnlyDictionary<int, object>? protectedMap)
+    {
+        return protectedMap is not null && protectedMap.TryGetValue(CoseHeaderParameters.Alg, out object? value) && value is int algorithm
             ? algorithm
             : null;
     }

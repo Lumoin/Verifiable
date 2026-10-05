@@ -28,10 +28,18 @@ public static class MdocCborCoseKeyReader
     /// <param name="encodedCoseKey">The CBOR-encoded COSE_Key bytes.</param>
     /// <returns>The parsed <see cref="CoseKey"/>.</returns>
     /// <exception cref="CborContentException">
-    /// Thrown when the bytes are not a valid CBOR map or when the
-    /// mandatory <see cref="CoseKeyParameters.Kty"/> parameter is missing.
+    /// Thrown when the bytes are not a valid CBOR map, when the
+    /// mandatory <see cref="CoseKeyParameters.Kty"/> parameter is missing, or when a label appears
+    /// twice in the map (<see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>:
+    /// "When processing messages, if a label appears multiple times, the message MUST be rejected as malformed.").
     /// </exception>
-    public static CoseKey Read(ReadOnlySpan<byte> encodedCoseKey) => Read(encodedCoseKey, out _);
+    public static CoseKey Read(ReadOnlySpan<byte> encodedCoseKey)
+    {
+        CoseKey coseKey = Read(encodedCoseKey, out IReadOnlyList<int> labels);
+        RefuseRepeatedLabel(labels);
+
+        return coseKey;
+    }
 
 
     /// <summary>
@@ -41,7 +49,11 @@ public static class MdocCborCoseKeyReader
     /// <param name="encodedCoseKey">The CBOR-encoded COSE_Key bytes.</param>
     /// <param name="labels">
     /// Receives the top-level integer labels encountered while parsing, in wire order, including
-    /// duplicates if the wire bytes carried any.
+    /// duplicates if the wire bytes carried any: this overload passes every label to the caller, which
+    /// performs the duplicate check (<see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052
+    /// Section 9</see>: "Applications can enforce the parse-and-process requirement by using parsers that
+    /// will fail the parse step or by using parsers that will pass all keys to the application, and the
+    /// application can perform the check for duplicate keys.").
     /// </param>
     /// <returns>The parsed <see cref="CoseKey"/>.</returns>
     /// <exception cref="CborContentException">
@@ -63,7 +75,39 @@ public static class MdocCborCoseKeyReader
     /// </summary>
     /// <param name="reader">The CBOR reader positioned at the start of the COSE_Key map.</param>
     /// <returns>The parsed <see cref="CoseKey"/>.</returns>
-    public static CoseKey ReadFromReader(CborReader reader) => ReadFromReader(reader, out _);
+    /// <exception cref="CborContentException">
+    /// Thrown when a label appears twice in the map
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "When
+    /// processing messages, if a label appears multiple times, the message MUST be rejected as malformed."),
+    /// or when the map is otherwise not a valid COSE_Key.
+    /// </exception>
+    public static CoseKey ReadFromReader(CborReader reader)
+    {
+        CoseKey coseKey = ReadFromReader(reader, out IReadOnlyList<int> labels);
+        RefuseRepeatedLabel(labels);
+
+        return coseKey;
+    }
+
+
+    /// <summary>
+    /// Refuses a COSE_Key whose map carried one label twice, as malformed. The labels are the decoded
+    /// integers, so one label written in two widths is one label.
+    /// </summary>
+    /// <param name="labels">The top-level labels read from the map, in wire order.</param>
+    /// <exception cref="CborContentException">A label appears more than once in <paramref name="labels"/>.</exception>
+    private static void RefuseRepeatedLabel(IReadOnlyList<int> labels)
+    {
+        HashSet<int> seenLabels = [];
+        foreach(int label in labels)
+        {
+            if(!seenLabels.Add(label))
+            {
+                throw new CborContentException(
+                    $"COSE_Key label {label} appears more than once in one map; the COSE_Key is malformed (RFC 9052 Section 3).");
+            }
+        }
+    }
 
 
     /// <summary>
@@ -73,7 +117,11 @@ public static class MdocCborCoseKeyReader
     /// <param name="reader">The CBOR reader positioned at the start of the COSE_Key map.</param>
     /// <param name="labels">
     /// Receives the top-level integer labels encountered while parsing, in wire order, including
-    /// duplicates if the wire bytes carried any.
+    /// duplicates if the wire bytes carried any: this overload passes every label to the caller, which
+    /// performs the duplicate check (<see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052
+    /// Section 9</see>: "Applications can enforce the parse-and-process requirement by using parsers that
+    /// will fail the parse step or by using parsers that will pass all keys to the application, and the
+    /// application can perform the check for duplicate keys.").
     /// </param>
     /// <returns>The parsed <see cref="CoseKey"/>.</returns>
     public static CoseKey ReadFromReader(CborReader reader, out IReadOnlyList<int> labels)

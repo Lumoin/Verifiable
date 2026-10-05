@@ -192,11 +192,21 @@ public static class SdCwtSerializer
         var wireBytes = new List<byte[]>();
         _ = reader.ReadStartMap();
 
+        HashSet<int> seenLabels = [];
         try
         {
             while(reader.PeekState() != CborReaderState.EndMap)
             {
                 int label = reader.ReadInt32();
+
+                //RFC 9052 Section 3: a label that appears twice in one map makes the message malformed;
+                //a second sd_claims is refused, never merged into the first.
+                if(!seenLabels.Add(label))
+                {
+                    throw new CborContentException(
+                        $"COSE header label {label} appears more than once in the unprotected bucket; the message is malformed (RFC 9052 Section 3).");
+                }
+
                 if(label == CoseHeaderParameters.SdClaims)
                 {
                     //Read sd_claims array.
