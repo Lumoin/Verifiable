@@ -266,7 +266,7 @@ internal sealed class CoseCredentialSecuringTests
         byte[] repeated = new byte[serialized.Length + 3];
         serialized.CopyTo(repeated, 0);
         repeated[0] = (byte)(serialized[0] + 1);
-        repeated[^3] = (byte)CoseHeaderParameters.Kid;
+        repeated[^3] = CoseHeaderParameters.Kid;
         repeated[^2] = 0x61;
         repeated[^1] = (byte)'x';
 

@@ -256,7 +256,7 @@ internal sealed class CborRoundTripTests
 
         _ = Assert.ThrowsExactly<CborContentException>(() => isTextKeyed switch
         {
-            true => (object)reader.ReadStringKeyedMap(r => r.ReadInt32()),
+            true => reader.ReadStringKeyedMap(r => r.ReadInt32()),
             false => reader.ReadIntKeyedMap(r => r.ReadTextString())
         });
     }

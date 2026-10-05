@@ -1149,7 +1149,7 @@ public static class CoseSerialization
 
         var reader = new CborReader(protectedHeaderBytes, CborOptions.Lax);
         HashSet<int> protectedLabels = [];
-        reader.ReadStartMap();
+        _ = reader.ReadStartMap();
         while(reader.PeekState() != CborReaderState.EndMap)
         {
             int label = reader.ReadInt32();
