@@ -1,3 +1,4 @@
+using Lumoin.Veritas.Cbor;
 using System.Buffers;
 using System.Buffers.Text;
 using Verifiable.Cbor;
@@ -8,6 +9,7 @@ using Verifiable.Core.Model.Mdoc;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
+using Verifiable.JCose;
 using Verifiable.JCose.Eudi;
 using Verifiable.OAuth.Oid4Vp.Server;
 using Verifiable.Tests.TestDataProviders;
@@ -167,6 +169,108 @@ internal sealed class MdocVpTokenVerificationTests
             DisposeKeyMaterial(issuerKeys);
             DisposeKeyMaterial(deviceKeys);
         }
+    }
+
+
+    /// <summary>
+    /// A presentation whose DeviceSignature COSE_Sign1 carries one label twice in its unprotected bucket is
+    /// refused as malformed, with the COSE parser's own failure, before any device signature is judged.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "Labels in each of
+    /// the maps MUST be unique. When processing messages, if a label appears multiple times, the message MUST be
+    /// rejected as malformed."
+    /// </summary>
+    [TestMethod]
+    public async Task DeviceSignatureWithARepeatedLabelIsRefusedAsMalformed()
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> issuerKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> deviceKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+
+        try
+        {
+            (string vpTokenValue, string transmittedNonce) =
+                await ProduceVpTokenAsync(issuerKeys, deviceKeys).ConfigureAwait(false);
+
+            //The unprotected bucket is outside the device signature, so the signature over the rest stays genuine.
+            string malformedVpTokenValue = RewriteVpToken(
+                vpTokenValue,
+                ["documents", 0, "deviceSigned", "deviceAuth", "deviceSignature", 1],
+                unprotected => MdocVpFixture.WithLabelTwice(unprotected, CoseHeaderParameters.Kid, new byte[] { 0x41, 0x01 }));
+
+            using IMemoryOwner<byte> nonceOwner = Oid4VpMdocPresentation.DecodeMdocGeneratedNonceForTransmissionRoundTrip(
+                transmittedNonce, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared);
+
+            _ = await Assert.ThrowsExactlyAsync<CborContentException>(
+                async () => await VerifyAsync(
+                    malformedVpTokenValue, MdocVpFixture.TrustAnchorFor(issuerKeys.PublicKey), nonceOwner.Memory).ConfigureAwait(false),
+                "RFC 9052 Section 3: a DeviceSignature whose unprotected bucket repeats a label is rejected as malformed.").ConfigureAwait(false);
+        }
+        finally
+        {
+            DisposeKeyMaterial(issuerKeys);
+            DisposeKeyMaterial(deviceKeys);
+        }
+    }
+
+
+    /// <summary>
+    /// A presentation whose Mobile Security Object commits a <c>deviceKey</c> COSE_Key carrying its <c>x</c>
+    /// coordinate (label -2) twice is refused as malformed at the DeviceResponse parse, even with a genuine
+    /// issuer signature over that Mobile Security Object.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052 Section 9</see>: "Applications MUST
+    /// NOT parse and process messages with the same label used twice as a key in a single map."
+    /// </summary>
+    [TestMethod]
+    public async Task MobileSecurityObjectDeviceKeyWithARepeatedLabelIsRefusedAsMalformed()
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> issuerKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> deviceKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+
+        try
+        {
+            (string vpTokenValue, string transmittedNonce) =
+                await ProduceVpTokenAsync(issuerKeys, deviceKeys).ConfigureAwait(false);
+
+            object[] issuerAuthPath = ["documents", 0, "issuerSigned", "issuerAuth"];
+            using IMemoryOwner<byte> deviceResponse = TestSetup.Base64UrlDecoder(vpTokenValue, BaseMemoryPool.Shared);
+            byte[] issuerAuth = MdocVpFixture.ReadAt(deviceResponse.Memory, issuerAuthPath);
+            byte[] resignedIssuerAuth = await MdocVpFixture.ResignIssuerAuthWithDeviceKeyXTwiceAsync(
+                issuerAuth, issuerKeys.PrivateKey, TestContext.CancellationToken).ConfigureAwait(false);
+            string malformedVpTokenValue = TestSetup.Base64UrlEncoder(
+                MdocVpFixture.RewriteAt(deviceResponse.Memory, issuerAuthPath, _ => resignedIssuerAuth));
+
+            using IMemoryOwner<byte> nonceOwner = Oid4VpMdocPresentation.DecodeMdocGeneratedNonceForTransmissionRoundTrip(
+                transmittedNonce, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared);
+
+            _ = await Assert.ThrowsExactlyAsync<FormatException>(
+                async () => await VerifyAsync(
+                    malformedVpTokenValue, MdocVpFixture.TrustAnchorFor(issuerKeys.PublicKey), nonceOwner.Memory).ConfigureAwait(false),
+                "RFC 9052 Section 9: a deviceKey COSE_Key repeating a label is neither parsed nor processed.").ConfigureAwait(false);
+        }
+        finally
+        {
+            DisposeKeyMaterial(issuerKeys);
+            DisposeKeyMaterial(deviceKeys);
+        }
+    }
+
+
+    /// <summary>
+    /// Decodes a base64url DeviceResponse, rewrites the data item at <paramref name="path"/> and encodes the
+    /// result again, every other byte copied as the wallet produced it.
+    /// </summary>
+    /// <param name="vpTokenValue">The base64url DeviceResponse.</param>
+    /// <param name="path">The steps from the DeviceResponse to the item to rewrite.</param>
+    /// <param name="rewrite">Answers the replacement encoding of the item.</param>
+    /// <returns>The base64url rewritten DeviceResponse.</returns>
+    private static string RewriteVpToken(string vpTokenValue, IReadOnlyList<object> path, Func<ReadOnlyMemory<byte>, byte[]> rewrite)
+    {
+        using IMemoryOwner<byte> deviceResponse = TestSetup.Base64UrlDecoder(vpTokenValue, BaseMemoryPool.Shared);
+
+        return TestSetup.Base64UrlEncoder(MdocVpFixture.RewriteAt(deviceResponse.Memory, path, rewrite));
     }
 
 

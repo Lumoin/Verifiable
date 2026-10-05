@@ -185,6 +185,48 @@ verify,
 
 
     /// <summary>
+    /// A correctly signed credential whose protected bucket carries <c>kid</c> twice is refused as malformed,
+    /// and the second <c>kid</c>, which names the issuer's genuine assertion method, is never handed to the
+    /// resolver. <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "When
+    /// processing messages, if a label appears multiple times, the message MUST be rejected as malformed."
+    /// </summary>
+    [TestMethod]
+    public async Task RepeatedKidIsRefusedBeforeAnyResolution()
+    {
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(CredentialJson, CredentialSecuringMaterial.JsonOptions)!;
+        using var privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
+
+        CoseSign1Message message = await credential.SignCoseAsync(
+            privateKey,
+            "did:example:issuer#key-0",
+            CredentialToCborBytes,
+            CoseProtectedHeaderWithSignerKidAppendedToCborBytes,
+            CoseSerialization.BuildSigStructure,
+            BaseMemoryPool.Shared,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        List<string> resolvedDids = [];
+        DidDocument document = CreateIssuerDidDocument();
+        DidResolver resolver = new(DidMethodSelectors.FromResolvers(
+            (ExampleDidPrefix, (did, _, _, _) => RecordAndResolve(resolvedDids, did, document))));
+
+        CoseCredentialVerificationResult result = await CredentialCoseExtensions.VerifyCoseAsync(
+            message,
+            CoseSerialization.BuildSigStructure,
+            resolver,
+            Context,
+            CredentialFromJsonBytes,
+            CoseSerialization.ParseProtectedHeader,
+            BaseMemoryPool.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsValid, "RFC 9052 Section 3: a protected bucket carrying kid twice is malformed and must be refused.");
+        Assert.IsNull(result.Credential);
+        Assert.IsEmpty(resolvedDids, "The malformed protected bucket is refused before its second kid reaches the resolver.");
+    }
+
+
+    /// <summary>
     /// The substitution the whole arc exists to refuse: a credential claims issuer A while the
     /// envelope is signed by a key whose kid names a DIFFERENT, genuinely-resolvable base DID (B).
     /// </summary>
@@ -383,6 +425,22 @@ verify,
     }
 
 
+    /// <summary>
+    /// Records the DID a resolution was asked for and answers <paramref name="document"/>, so a row can tell
+    /// which DIDs reached the resolver.
+    /// </summary>
+    /// <param name="resolvedDids">The DIDs asked for so far.</param>
+    /// <param name="did">The DID this resolution is asked for.</param>
+    /// <param name="document">The document every resolution answers.</param>
+    /// <returns>The successful resolution of <paramref name="document"/>.</returns>
+    private static ValueTask<DidResolutionResult> RecordAndResolve(List<string> resolvedDids, string did, DidDocument document)
+    {
+        resolvedDids.Add(did);
+
+        return ValueTask.FromResult(DidResolutionResult.Success(document, new DidDocumentMetadata()));
+    }
+
+
     private static DidResolver CreateResolver(DidDocument document)
     {
         return new DidResolver(DidMethodSelectors.FromResolvers(
@@ -395,6 +453,29 @@ verify,
 
     private static ReadOnlySpan<byte> CoseProtectedHeaderToCborBytes(IReadOnlyDictionary<int, object> header) =>
         CoseSerialization.SerializeProtectedHeader(header);
+
+
+    /// <summary>
+    /// Serializes <paramref name="header"/> and appends a second <c>kid</c>, the text <see cref="SignerKeyId"/>,
+    /// raising the map's entry count by one, so the protected bucket carries <c>kid</c> twice and its last
+    /// <c>kid</c> names the issuer's genuine assertion method.
+    /// </summary>
+    /// <param name="header">The protected header map; fewer than 23 entries, so the count is in the initial byte.</param>
+    /// <returns>The serialized protected bucket with <c>kid</c> twice.</returns>
+    private static ReadOnlySpan<byte> CoseProtectedHeaderWithSignerKidAppendedToCborBytes(IReadOnlyDictionary<int, object> header)
+    {
+        byte[] serialized = CoseSerialization.SerializeProtectedHeader(header);
+        byte[] signerKid = System.Text.Encoding.ASCII.GetBytes(SignerKeyId);
+        byte[] repeated = new byte[serialized.Length + 3 + signerKid.Length];
+        serialized.CopyTo(repeated, 0);
+        repeated[0] = (byte)(serialized[0] + 1);
+        repeated[serialized.Length] = CoseHeaderParameters.Kid;
+        repeated[serialized.Length + 1] = 0x78;
+        repeated[serialized.Length + 2] = (byte)signerKid.Length;
+        signerKid.CopyTo(repeated, serialized.Length + 3);
+
+        return repeated;
+    }
 
     private static VerifiableCredential CredentialFromJsonBytes(ReadOnlySpan<byte> bytes) =>
         JsonSerializerExtensions.Deserialize<VerifiableCredential>(bytes, CredentialSecuringMaterial.JsonOptions)!;

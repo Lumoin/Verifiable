@@ -551,6 +551,227 @@ internal static class MdocVpFixture
     }
 
 
+    /// <summary>
+    /// Rewrites the CBOR data item found at <paramref name="path"/> inside <paramref name="encoded"/> and copies
+    /// every other byte of the surrounding structure as encoded, so a test can put one exact malformed shape
+    /// into an otherwise genuine wire form. A path step is a text map key, an integer map key, or an array
+    /// index; a tag on the way is kept and passed through.
+    /// </summary>
+    /// <param name="encoded">The encoded data item to rewrite inside.</param>
+    /// <param name="path">The steps from <paramref name="encoded"/> to the item to rewrite.</param>
+    /// <param name="rewrite">Answers the replacement encoding of the item found at the path.</param>
+    /// <returns>The rewritten encoding.</returns>
+    public static byte[] RewriteAt(ReadOnlyMemory<byte> encoded, IReadOnlyList<object> path, Func<ReadOnlyMemory<byte>, byte[]> rewrite)
+    {
+        return RewriteAt(encoded, path, 0, rewrite);
+    }
+
+
+    /// <summary>
+    /// Answers a copy of the CBOR data item found at <paramref name="path"/> inside <paramref name="encoded"/>.
+    /// </summary>
+    /// <param name="encoded">The encoded data item to read inside.</param>
+    /// <param name="path">The steps from <paramref name="encoded"/> to the item, as <see cref="RewriteAt(ReadOnlyMemory{byte}, IReadOnlyList{object}, Func{ReadOnlyMemory{byte}, byte[]})"/> takes them.</param>
+    /// <returns>The item's encoding.</returns>
+    public static byte[] ReadAt(ReadOnlyMemory<byte> encoded, IReadOnlyList<object> path)
+    {
+        byte[] found = [];
+        _ = RewriteAt(encoded, path, 0, item =>
+        {
+            found = item.ToArray();
+
+            return found;
+        });
+
+        return found;
+    }
+
+
+    /// <summary>
+    /// Copies an integer-labelled CBOR map and makes it carry <paramref name="label"/> twice: a label the map
+    /// already holds gains a second entry with the same value, and an absent label is added twice with
+    /// <paramref name="valueWhenAbsent"/>.
+    /// </summary>
+    /// <param name="map">The encoded definite-length map whose labels are integers.</param>
+    /// <param name="label">The label the copy carries twice.</param>
+    /// <param name="valueWhenAbsent">The encoded value the label is added with when the map does not hold it.</param>
+    /// <returns>The encoded map carrying <paramref name="label"/> twice.</returns>
+    public static byte[] WithLabelTwice(ReadOnlyMemory<byte> map, int label, ReadOnlyMemory<byte> valueWhenAbsent)
+    {
+        var reader = new CborReader(map, CborOptions.Lax);
+        var entries = new List<(int Label, ReadOnlyMemory<byte> Value)>();
+        int count = reader.ReadStartMap() ?? throw new InvalidOperationException("The map is a definite-length map.");
+        for(int i = 0; i < count; i++)
+        {
+            entries.Add((reader.ReadInt32(), reader.ReadEncodedValue()));
+        }
+
+        bool isLabelHeld = entries.Exists(entry => entry.Label == label);
+        ReadOnlyMemory<byte> repeatedValue = isLabelHeld ? entries.Find(entry => entry.Label == label).Value : valueWhenAbsent;
+        int addedEntries = isLabelHeld ? 1 : 2;
+
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Lax);
+        writer.WriteStartMap(count + addedEntries);
+        foreach((int entryLabel, ReadOnlyMemory<byte> value) in entries)
+        {
+            writer.WriteInt32(entryLabel);
+            writer.WriteEncodedValue(value.Span);
+        }
+
+        for(int i = 0; i < addedEntries; i++)
+        {
+            writer.WriteInt32(label);
+            writer.WriteEncodedValue(repeatedValue.Span);
+        }
+
+        writer.WriteEndMap();
+
+        return buffer.WrittenSpan.ToArray();
+    }
+
+
+    /// <summary>
+    /// Rewrites an IssuerAuth COSE_Sign1 so the Mobile Security Object's <c>deviceKey</c> COSE_Key carries its
+    /// <c>x</c> coordinate (label -2) twice, and signs the rewritten payload again under the issuer key, so the
+    /// issuer signature over the malformed Mobile Security Object is genuine.
+    /// </summary>
+    /// <param name="issuerAuth">The encoded IssuerAuth COSE_Sign1.</param>
+    /// <param name="issuerKey">The issuer's signing key.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The encoded IssuerAuth whose Mobile Security Object repeats the device key's <c>x</c>.</returns>
+    public static async ValueTask<byte[]> ResignIssuerAuthWithDeviceKeyXTwiceAsync(
+        ReadOnlyMemory<byte> issuerAuth, PrivateKeyMemory issuerKey, CancellationToken cancellationToken)
+    {
+        const int CoseKeyX = -2;
+
+        var reader = new CborReader(issuerAuth, CborOptions.Lax);
+        CborTag? issuerAuthTag = reader.PeekState() == CborReaderState.Tag ? reader.ReadTag() : null;
+        _ = reader.ReadStartArray();
+        byte[] protectedHeader = reader.ReadByteString();
+        ReadOnlyMemory<byte> unprotectedHeader = reader.ReadEncodedValue();
+        byte[] payload = reader.ReadByteString();
+
+        var payloadReader = new CborReader(payload, CborOptions.Lax);
+        CborTag payloadTag = payloadReader.ReadTag();
+        byte[] mso = payloadReader.ReadByteString();
+        byte[] rewrittenMso = RewriteAt(
+            mso, ["deviceKeyInfo", "deviceKey"], deviceKey => WithLabelTwice(deviceKey, CoseKeyX, ReadOnlyMemory<byte>.Empty));
+
+        var payloadBuffer = new ArrayBufferWriter<byte>();
+        var payloadWriter = new CborWriter(payloadBuffer, CborOptions.Lax);
+        payloadWriter.WriteTag(payloadTag);
+        payloadWriter.WriteByteString(rewrittenMso);
+        byte[] rewrittenPayload = payloadBuffer.WrittenSpan.ToArray();
+
+        using CoseSign1Message signed = await Verifiable.JCose.Cose.SignAsync(
+            EncodedCoseProtectedHeader.FromBytes(protectedHeader, Pool),
+            unprotectedHeader: null,
+            rewrittenPayload,
+            CoseSerialization.BuildSigStructure,
+            issuerKey,
+            Pool,
+            cancellationToken).ConfigureAwait(false);
+
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Lax);
+        if(issuerAuthTag is CborTag tag)
+        {
+            writer.WriteTag(tag);
+        }
+
+        writer.WriteStartArray(4);
+        writer.WriteByteString(protectedHeader);
+        writer.WriteEncodedValue(unprotectedHeader.Span);
+        writer.WriteByteString(rewrittenPayload);
+        writer.WriteByteString(signed.Signature.AsReadOnlySpan());
+        writer.WriteEndArray();
+
+        return buffer.WrittenSpan.ToArray();
+    }
+
+
+    /// <summary>
+    /// Walks one step of <paramref name="path"/> per nesting level for
+    /// <see cref="RewriteAt(ReadOnlyMemory{byte}, IReadOnlyList{object}, Func{ReadOnlyMemory{byte}, byte[]})"/>.
+    /// </summary>
+    /// <param name="encoded">The encoded data item at this level.</param>
+    /// <param name="path">The whole path.</param>
+    /// <param name="depth">How many steps of the path lie above this level.</param>
+    /// <param name="rewrite">Answers the replacement encoding of the item found at the path.</param>
+    /// <returns>The rewritten encoding of this level.</returns>
+    private static byte[] RewriteAt(ReadOnlyMemory<byte> encoded, IReadOnlyList<object> path, int depth, Func<ReadOnlyMemory<byte>, byte[]> rewrite)
+    {
+        if(depth == path.Count)
+        {
+            return rewrite(encoded);
+        }
+
+        var reader = new CborReader(encoded, CborOptions.Lax);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Lax);
+        CborReaderState state = reader.PeekState();
+
+        if(state == CborReaderState.Tag)
+        {
+            writer.WriteTag(reader.ReadTag());
+            writer.WriteEncodedValue(RewriteAt(reader.ReadEncodedValue(), path, depth, rewrite));
+        }
+        else if(state == CborReaderState.StartMap)
+        {
+            int count = reader.ReadStartMap() ?? throw new InvalidOperationException("The map on the path is a definite-length map.");
+            writer.WriteStartMap(count);
+            for(int i = 0; i < count; i++)
+            {
+                ReadOnlyMemory<byte> key = reader.ReadEncodedValue();
+                ReadOnlyMemory<byte> value = reader.ReadEncodedValue();
+                writer.WriteEncodedValue(key.Span);
+                writer.WriteEncodedValue(IsPathStep(key, path[depth]) ? RewriteAt(value, path, depth + 1, rewrite) : value.Span);
+            }
+
+            reader.ReadEndMap();
+            writer.WriteEndMap();
+        }
+        else if(state == CborReaderState.StartArray)
+        {
+            int count = reader.ReadStartArray() ?? throw new InvalidOperationException("The array on the path is a definite-length array.");
+            writer.WriteStartArray(count);
+            for(int i = 0; i < count; i++)
+            {
+                ReadOnlyMemory<byte> element = reader.ReadEncodedValue();
+                writer.WriteEncodedValue(path[depth] is int index && index == i ? RewriteAt(element, path, depth + 1, rewrite) : element.Span);
+            }
+
+            reader.ReadEndArray();
+            writer.WriteEndArray();
+        }
+        else
+        {
+            throw new InvalidOperationException($"The path step {path[depth]} lands on a {state}, not a map or an array.");
+        }
+
+        return buffer.WrittenSpan.ToArray();
+    }
+
+
+    /// <summary>Tells whether an encoded map key is the map-key step of a path.</summary>
+    /// <param name="encodedKey">The encoded map key.</param>
+    /// <param name="step">The path step: a text map key or an integer map key.</param>
+    /// <returns><see langword="true"/> when the map key is the step.</returns>
+    private static bool IsPathStep(ReadOnlyMemory<byte> encodedKey, object step)
+    {
+        var reader = new CborReader(encodedKey, CborOptions.Lax);
+        CborReaderState state = reader.PeekState();
+
+        return step switch
+        {
+            string text => state == CborReaderState.TextString && string.Equals(reader.ReadTextString(), text, StringComparison.Ordinal),
+            int label => state is CborReaderState.UnsignedInteger or CborReaderState.NegativeInteger && reader.ReadInt32() == label,
+            _ => false
+        };
+    }
+
+
     /// <summary>The fixed validity window every mdoc this fixture issues carries — a one-year window signed 2026-05-25.</summary>
     /// <returns>The validity window.</returns>
     public static MdocValidityInfo SampleValidity() =>

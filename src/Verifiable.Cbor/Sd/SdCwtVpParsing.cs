@@ -1,5 +1,6 @@
 using Lumoin.Veritas.Cbor;
 using System.Buffers;
+using System.Globalization;
 using Verifiable.Cbor.Mdoc;
 using Verifiable.Cbor.StatusList;
 using Verifiable.Core.Model.SelectiveDisclosure;
@@ -162,47 +163,17 @@ public static class SdCwtVpParsing
     /// </summary>
     /// <param name="sdCwt">The embedded presentation SD-CWT.</param>
     /// <returns>The <c>iss</c> claim value, or <see langword="null"/> when absent.</returns>
+    /// <exception cref="CborContentException">
+    /// Thrown when the claims map carries one label twice
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052 Section 9</see>: "Applications MUST
+    /// NOT parse and process messages with the same label used twice as a key in a single map."), or when the
+    /// COSE_Sign1 envelope is not well-formed.
+    /// </exception>
     public static string? ExtractIssuer(SdToken<ReadOnlyMemory<byte>> sdCwt)
     {
         ArgumentNullException.ThrowIfNull(sdCwt);
 
-        ReadOnlyMemory<byte> payload = ReadCoseSign1Payload(sdCwt.IssuerSigned);
-        var reader = new CborReader(payload, CborOptions.Lax);
-
-        int? count = reader.ReadStartMap();
-        int read = 0;
-        while(count is null ? reader.PeekState() != CborReaderState.EndMap : read < count.Value)
-        {
-            read++;
-
-            //A redacted-claim-keys entry (draft-ietf-spice-sd-cwt) is keyed by a CBOR simple
-            //value, not an integer or text string — skip the key and its digest array without
-            //attempting to read it as a claim key.
-            if(reader.PeekState() == CborReaderState.SimpleValue)
-            {
-                reader.SkipValue();
-                reader.SkipValue();
-                continue;
-            }
-
-            //RFC 8392 Section 4: "The Claim Key MUST be an integer or a text string." A claim
-            //whose key is neither is not a CWT claim key at all, and one keyed by a text string
-            //is skipped by name rather than misread as an integer.
-            if(!TryReadClaimKey(reader, out int key))
-            {
-                reader.SkipValue();
-                continue;
-            }
-
-            if(key == WellKnownCwtClaimNames.Iss)
-            {
-                return reader.ReadTextString();
-            }
-
-            reader.SkipValue();
-        }
-
-        return null;
+        return ReadIssuerSignedClaim(sdCwt.IssuerSigned, WellKnownCwtClaimNames.Iss, static reader => reader.ReadTextString());
     }
 
 
@@ -212,47 +183,17 @@ public static class SdCwtVpParsing
     /// </summary>
     /// <param name="sdCwt">The embedded presentation SD-CWT.</param>
     /// <returns>The <c>vct</c> claim value, or <see langword="null"/> when absent.</returns>
+    /// <exception cref="CborContentException">
+    /// Thrown when the claims map carries one label twice
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052 Section 9</see>: "Applications MUST
+    /// NOT parse and process messages with the same label used twice as a key in a single map."), or when the
+    /// COSE_Sign1 envelope is not well-formed.
+    /// </exception>
     public static string? ExtractCredentialType(SdToken<ReadOnlyMemory<byte>> sdCwt)
     {
         ArgumentNullException.ThrowIfNull(sdCwt);
 
-        ReadOnlyMemory<byte> payload = ReadCoseSign1Payload(sdCwt.IssuerSigned);
-        var reader = new CborReader(payload, CborOptions.Lax);
-
-        int? count = reader.ReadStartMap();
-        int read = 0;
-        while(count is null ? reader.PeekState() != CborReaderState.EndMap : read < count.Value)
-        {
-            read++;
-
-            //A redacted-claim-keys entry (draft-ietf-spice-sd-cwt) is keyed by a CBOR simple
-            //value, not an integer or text string — skip the key and its digest array without
-            //attempting to read it as a claim key.
-            if(reader.PeekState() == CborReaderState.SimpleValue)
-            {
-                reader.SkipValue();
-                reader.SkipValue();
-                continue;
-            }
-
-            //RFC 8392 Section 4: "The Claim Key MUST be an integer or a text string." A claim
-            //whose key is neither is not a CWT claim key at all, and one keyed by a text string
-            //is skipped by name rather than misread as an integer.
-            if(!TryReadClaimKey(reader, out int key))
-            {
-                reader.SkipValue();
-                continue;
-            }
-
-            if(key == WellKnownCwtClaimNames.Vct)
-            {
-                return reader.ReadTextString();
-            }
-
-            reader.SkipValue();
-        }
-
-        return null;
+        return ReadIssuerSignedClaim(sdCwt.IssuerSigned, WellKnownCwtClaimNames.Vct, static reader => reader.ReadTextString());
     }
 
 
@@ -268,8 +209,8 @@ public static class SdCwtVpParsing
     /// Token Status List, Section 6.3</see>: "The Referenced Token MAY be encoded as a "CBOR Web
     /// Token (CWT)" object according to [RFC8392], as an SD-CWTs [I-D.ietf-spice-sd-cwt] or as an
     /// ISO mdoc". The Status structure is bound to the CWT claim key, not to a text-string
-    /// <c>status</c> key: a text-string key is not a CWT claim key at all and is skipped by
-    /// <see cref="TryReadClaimKey"/> along with its value.
+    /// <c>status</c> key: a text-string key is a label of its own, read by
+    /// <see cref="ReadClaimLabel"/> and passed over with its value.
     /// <see cref="ExtractSdCwtStatusDelegate"/> declares implementations as throwing
     /// <see cref="FormatException"/> for a wire-shape rejection, so a malformed Status structure is
     /// normalized to <see cref="FormatException"/> here, at the public boundary, rather than left to
@@ -279,7 +220,10 @@ public static class SdCwtVpParsing
     /// <param name="sdCwt">The embedded presentation SD-CWT.</param>
     /// <returns>The decoded status claim, or <see langword="null"/> when the claim is absent.</returns>
     /// <exception cref="FormatException">
-    /// Thrown when the <c>status</c> claim is present but its Status structure is not well-formed
+    /// Thrown when the <c>status</c> claim is present but its Status structure is not well-formed, or
+    /// when the claims map carries one label twice
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052 Section 9</see>: "Applications
+    /// MUST NOT parse and process messages with the same label used twice as a key in a single map.")
     /// (the <see cref="CborContentException"/> or <see cref="InvalidOperationException"/> the CBOR
     /// reader raised rides as the inner exception).
     /// </exception>
@@ -289,43 +233,7 @@ public static class SdCwtVpParsing
 
         try
         {
-            ReadOnlyMemory<byte> payload = ReadCoseSign1Payload(sdCwt.IssuerSigned);
-            var reader = new CborReader(payload, CborOptions.Lax);
-
-            int? count = reader.ReadStartMap();
-            int read = 0;
-            while(count is null ? reader.PeekState() != CborReaderState.EndMap : read < count.Value)
-            {
-                read++;
-
-                //A redacted-claim-keys entry (draft-ietf-spice-sd-cwt) is keyed by a CBOR simple
-                //value, not an integer or text string — skip the key and its digest array without
-                //attempting to read it as a claim key.
-                if(reader.PeekState() == CborReaderState.SimpleValue)
-                {
-                    reader.SkipValue();
-                    reader.SkipValue();
-                    continue;
-                }
-
-                //RFC 8392 Section 4: "The Claim Key MUST be an integer or a text string." A claim
-                //whose key is neither is not a CWT claim key at all, and one keyed by a text string
-                //is skipped by name rather than misread as an integer.
-                if(!TryReadClaimKey(reader, out int key))
-                {
-                    reader.SkipValue();
-                    continue;
-                }
-
-                if(key == StatusListCborConstants.Status)
-                {
-                    return StatusClaimCborReader.Read(reader);
-                }
-
-                reader.SkipValue();
-            }
-
-            return null;
+            return ReadIssuerSignedClaim(sdCwt.IssuerSigned, StatusListCborConstants.Status, StatusClaimCborReader.Read);
         }
         catch(Exception exception) when(exception is CborException or InvalidOperationException)
         {
@@ -357,6 +265,12 @@ public static class SdCwtVpParsing
     /// The holder public key the caller owns and disposes, or <see langword="null"/>
     /// when no <c>cnf</c> COSE_Key is present.
     /// </returns>
+    /// <exception cref="CborContentException">
+    /// Thrown when the claims map, the <c>cnf</c> confirmation map or the COSE_Key carries one label twice
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052 Section 9</see>: "Applications MUST
+    /// NOT parse and process messages with the same label used twice as a key in a single map."), or when the
+    /// COSE_Key carries no <c>x</c> coordinate.
+    /// </exception>
     public static PublicKeyMemory? ExtractHolderKey(
         SdToken<ReadOnlyMemory<byte>> sdCwt,
         BaseMemoryPool pool)
@@ -364,7 +278,7 @@ public static class SdCwtVpParsing
         ArgumentNullException.ThrowIfNull(sdCwt);
         ArgumentNullException.ThrowIfNull(pool);
 
-        CoseKey? coseKey = ReadCnfCoseKey(sdCwt.IssuerSigned);
+        CoseKey? coseKey = ReadIssuerSignedClaim(sdCwt.IssuerSigned, WellKnownCwtClaimNames.Cnf, ReadConfirmationMethods);
         if(coseKey is null)
         {
             return null;
@@ -483,38 +397,93 @@ public static class SdCwtVpParsing
 
 
     /// <summary>
-    /// Reads one CWT claim key, which
-    /// <see href="https://www.rfc-editor.org/rfc/rfc8392#section-4">RFC 8392 Section 4</see>
-    /// defines as "an integer or a text string": an integer key is returned as itself, while a
-    /// text-string key is consumed and reported as no integer key, so the caller passes over its
-    /// value instead of misreading the key as an integer and faulting the reader.
+    /// Reads the claims map of a COSE_Sign1's payload whole and answers the value of the integer claim key
+    /// <paramref name="claimKey"/>. Every entry is read, so a label the map carries twice is seen wherever it
+    /// sits, also after the claim asked for, and the map is refused; labels are judged on their decoded value,
+    /// so an integer label written in two widths is one label.
     /// </summary>
-    /// <param name="reader">The reader, positioned at a claim key.</param>
-    /// <param name="key">The integer claim key, when the key is an integer.</param>
-    /// <returns><see langword="true"/> when the key is an integer claim key.</returns>
-    private static bool TryReadClaimKey(CborReader reader, out int key)
+    /// <remarks>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052 Section 9</see>: "Applications MUST
+    /// NOT parse and process messages with the same label used twice as a key in a single map." The labels a CWT
+    /// claims map carries are the claim keys
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8392#section-4">RFC 8392 Section 4</see> defines ("The Claim
+    /// Key MUST be an integer or a text string.") and the CBOR simple value SD-CWT keys its redacted claim keys
+    /// with; <see cref="ReadClaimLabel"/> reads each one.
+    /// </remarks>
+    /// <typeparam name="TClaim">The decoded claim's type.</typeparam>
+    /// <param name="coseSign1">The COSE_Sign1 wire form whose payload is the claims map.</param>
+    /// <param name="claimKey">The integer claim key whose value is answered.</param>
+    /// <param name="readClaim">Reads the claim's value, the reader positioned at it.</param>
+    /// <returns>The decoded claim, or the default when the map carries no such claim.</returns>
+    /// <exception cref="CborContentException">Thrown when a label appears twice in the claims map.</exception>
+    private static TClaim? ReadIssuerSignedClaim<TClaim>(ReadOnlyMemory<byte> coseSign1, int claimKey, Func<CborReader, TClaim> readClaim)
     {
-        CborReaderState state = reader.PeekState();
+        ReadOnlyMemory<byte> payload = ReadCoseSign1Payload(coseSign1);
+        var reader = new CborReader(payload, CborOptions.Lax);
 
-        if(state is CborReaderState.UnsignedInteger or CborReaderState.NegativeInteger)
+        TClaim? claim = default;
+        HashSet<(bool IsSimpleValue, int Number, string? Text)> seenLabels = [];
+        int? count = reader.ReadStartMap();
+        int read = 0;
+        while(count is null ? reader.PeekState() != CborReaderState.EndMap : read < count.Value)
         {
-            key = reader.ReadInt32();
+            read++;
 
-            return true;
+            (bool IsSimpleValue, int Number, string? Text)? label = ReadClaimLabel(reader);
+            if(label is { } readLabel && !seenLabels.Add(readLabel))
+            {
+                throw new CborContentException(
+                    $"The claims map carries the label {readLabel.Text ?? readLabel.Number.ToString(CultureInfo.InvariantCulture)} more than once; the map is malformed (RFC 9052 Section 9).");
+            }
+
+            if(label is { IsSimpleValue: false, Text: null } integerLabel && integerLabel.Number == claimKey)
+            {
+                claim = readClaim(reader);
+            }
+            else
+            {
+                reader.SkipValue();
+            }
         }
 
-        if(state == CborReaderState.TextString)
-        {
-            _ = reader.ReadTextString();
-        }
-        else
-        {
-            reader.SkipValue();
-        }
+        reader.ReadEndMap();
 
-        key = 0;
+        return claim;
+    }
 
-        return false;
+
+    /// <summary>
+    /// Reads one claims-map key as a label: an integer claim key and a text-string claim key, which
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8392#section-4">RFC 8392 Section 4</see> defines as "an
+    /// integer or a text string", and the CBOR simple value a redacted-claim-keys entry
+    /// (draft-ietf-spice-sd-cwt) is keyed by. A text-string key is read as text rather than misread as an
+    /// integer; a map key of any other kind is not a claim key, is passed over and answers no label.
+    /// </summary>
+    /// <param name="reader">The reader, positioned at a claims-map key.</param>
+    /// <returns>
+    /// The label: whether it is a simple value, its number (an integer claim key or the simple value) and its
+    /// text (a text-string claim key); <see langword="null"/> for a map key of another kind.
+    /// </returns>
+    private static (bool IsSimpleValue, int Number, string? Text)? ReadClaimLabel(CborReader reader)
+    {
+        return reader.PeekState() switch
+        {
+            CborReaderState.UnsignedInteger or CborReaderState.NegativeInteger => (false, reader.ReadInt32(), null),
+            CborReaderState.TextString => (false, 0, reader.ReadTextString()),
+            CborReaderState.SimpleValue => (true, reader.ReadSimpleValue(), null),
+            _ => PassOverMapKey(reader)
+        };
+    }
+
+
+    /// <summary>Passes over a claims-map key that is no claim key, so its value can be passed over next.</summary>
+    /// <param name="reader">The reader, positioned at the map key.</param>
+    /// <returns>No label.</returns>
+    private static (bool IsSimpleValue, int Number, string? Text)? PassOverMapKey(CborReader reader)
+    {
+        reader.SkipValue();
+
+        return null;
     }
 
 
@@ -544,50 +513,49 @@ public static class SdCwtVpParsing
     }
 
 
-    //Reads the cnf (8) claim from a COSE_Sign1 payload and, when it carries an embedded
-    //COSE_Key confirmation method (cnf map key 1), parses it into a CoseKey view.
-    private static CoseKey? ReadCnfCoseKey(ReadOnlyMemory<byte> coseSign1)
+    /// <summary>
+    /// Reads the <c>cnf</c> (8) claim's confirmation-method map whole and parses its embedded COSE_Key
+    /// confirmation method (member 1) into a <see cref="CoseKey"/> view. Every member is read, so a member the
+    /// map carries twice is seen and the map refused; members are judged on their decoded value.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052 Section 9</see>: "Applications MUST
+    /// NOT parse and process messages with the same label used twice as a key in a single map." The COSE_Key
+    /// itself is read by <see cref="MdocCborCoseKeyReader.ReadFromReader(CborReader)"/>, which refuses a label
+    /// the COSE_Key carries twice.
+    /// </remarks>
+    /// <param name="reader">The reader, positioned at the confirmation-method map.</param>
+    /// <returns>The COSE_Key view, or <see langword="null"/> when the map carries no COSE_Key member.</returns>
+    /// <exception cref="CborContentException">Thrown when a member appears twice in the confirmation-method map.</exception>
+    private static CoseKey? ReadConfirmationMethods(CborReader reader)
     {
-        ReadOnlyMemory<byte> payload = ReadCoseSign1Payload(coseSign1);
-        var reader = new CborReader(payload, CborOptions.Lax);
-
+        CoseKey? coseKey = null;
+        HashSet<int> seenMembers = [];
         int? count = reader.ReadStartMap();
         int read = 0;
         while(count is null ? reader.PeekState() != CborReaderState.EndMap : read < count.Value)
         {
-            int key = reader.ReadInt32();
+            int member = reader.ReadInt32();
             read++;
 
-            if(key != WellKnownCwtClaimNames.Cnf)
+            if(!seenMembers.Add(member))
+            {
+                throw new CborContentException(
+                    $"The cnf confirmation map carries the member {member} more than once; the map is malformed (RFC 9052 Section 9).");
+            }
+
+            if(member == CnfCoseKeyMember)
+            {
+                coseKey = MdocCborCoseKeyReader.ReadFromReader(reader);
+            }
+            else
             {
                 reader.SkipValue();
-
-                continue;
             }
-
-            //cnf is a confirmation-method map; the COSE_Key method lives under member 1.
-            int? cnfCount = reader.ReadStartMap();
-            int cnfRead = 0;
-            CoseKey? coseKey = null;
-            while(cnfCount is null ? reader.PeekState() != CborReaderState.EndMap : cnfRead < cnfCount.Value)
-            {
-                int cnfKey = reader.ReadInt32();
-                cnfRead++;
-
-                if(cnfKey == CnfCoseKeyMember)
-                {
-                    coseKey = MdocCborCoseKeyReader.ReadFromReader(reader);
-                }
-                else
-                {
-                    reader.SkipValue();
-                }
-            }
-            reader.ReadEndMap();
-
-            return coseKey;
         }
 
-        return null;
+        reader.ReadEndMap();
+
+        return coseKey;
     }
 }

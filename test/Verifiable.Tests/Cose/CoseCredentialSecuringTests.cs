@@ -1,6 +1,8 @@
 using Verifiable.BouncyCastle;
 using Verifiable.Cbor;
 using Verifiable.Core.Model.Credentials;
+using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Tests.DataIntegrity;
@@ -235,6 +237,57 @@ internal sealed class CoseCredentialSecuringTests
             message,
             CoseSerialization.BuildSigStructure,
             publicKey,
+            CredentialFromJsonBytes,
+            CoseSerialization.ParseProtectedHeader,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsValid, "A protected bucket repeating kid is malformed and must not verify.");
+        Assert.IsNull(result.Credential);
+    }
+
+
+    /// <summary>
+    /// A correctly signed COSE credential whose protected bucket carries <c>kid</c> twice is answered with a
+    /// failure value by the caller-held-public-key overload that runs the caller's own verification function,
+    /// never an exception.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "When
+    /// processing messages, if a label appears multiple times, the message MUST be rejected as malformed."
+    /// </summary>
+    [TestMethod]
+    public async Task VerifyWithAnExplicitFunctionRefusesARepeatedProtectedLabelWithAFailureValue()
+    {
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(CredentialSecuringMaterial.UnsignedCredentialJson, CredentialSecuringMaterial.JsonOptions)!;
+
+        using var privateKey = CredentialSecuringMaterial.DecodeEd25519PrivateKey();
+        using var publicKey = CredentialSecuringMaterial.DecodeEd25519PublicKey();
+
+        CoseSign1Message message = await credential.SignCoseAsync(
+            privateKey,
+            CredentialSecuringMaterial.VerificationMethodId,
+            CredentialToCborBytes,
+            CoseProtectedHeaderWithKidTwiceToCborBytes,
+            CoseSerialization.BuildSigStructure,
+            BaseMemoryPool.Shared,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        VerificationDelegate verificationDelegate = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(
+            CryptoAlgorithm.Ed25519, Purpose.Verification);
+
+        async ValueTask<bool> verify(ReadOnlyMemory<byte> keyBytes, ReadOnlyMemory<byte> data, Signature signature)
+        {
+            (bool isValid, CryptoEvent? evt) = await verificationDelegate(
+                data, signature.AsReadOnlyMemory(), keyBytes, context: null, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            CryptographicKeyEvents.Emit(evt);
+
+            return isValid;
+        }
+
+        CoseCredentialVerificationResult result = await CredentialCoseExtensions.VerifyCoseAsync(
+            message,
+            CoseSerialization.BuildSigStructure,
+            publicKey,
+            verify,
+            BaseMemoryPool.Shared,
             CredentialFromJsonBytes,
             CoseSerialization.ParseProtectedHeader,
             TestContext.CancellationToken).ConfigureAwait(false);

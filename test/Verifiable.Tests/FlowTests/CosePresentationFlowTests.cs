@@ -156,6 +156,101 @@ internal sealed class CosePresentationFlowTests
     }
 
 
+    /// <summary>
+    /// A presentation carrying a COSE-secured credential whose genuinely signed protected bucket repeats
+    /// <c>kid</c> is reconstructed from the wire JSON like any other, and the verifier refuses the credential
+    /// with a failure value. <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section
+    /// 3</see>: "When processing messages, if a label appears multiple times, the message MUST be rejected as
+    /// malformed."
+    /// </summary>
+    [TestMethod]
+    public async Task PresentationOfACoseCredentialRepeatingKidIsRefused()
+    {
+        using var privateKey = DataIntegrity.CredentialSecuringMaterial.DecodeEd25519PrivateKey();
+        using var publicKey = DataIntegrity.CredentialSecuringMaterial.DecodeEd25519PublicKey();
+
+        const string holderDid = "did:example:holder";
+        var issuer = new Issuer { Id = IssuerDidWeb, Name = ClaimValueUniversityName };
+        var subject = new CredentialSubjectInput
+        {
+            Id = holderDid,
+            Claims = new Dictionary<string, object> { [ClaimAlumniOf] = ClaimValueUniversityName }
+        };
+
+        var unsignedCredential = await CredentialBuilder.BuildAsync(
+            issuer,
+            subject,
+            TimeProvider.GetUtcNow().UtcDateTime,
+            additionalTypes: [AlumniCredentialType],
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        //The issuer signs over a protected bucket that carries kid twice; the signature itself is genuine.
+        CoseSign1Message message = await unsignedCredential.SignCoseAsync(
+            privateKey,
+            IssuerDidWeb + "#key-1",
+            CredentialToCborBytes,
+            CoseProtectedHeaderWithKidTwiceToCborBytes,
+            CoseSerialization.BuildSigStructure,
+            BaseMemoryPool.Shared,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        using EncodedCoseSign1 coseBytes = CoseSerialization.SerializeCoseSign1(message, BaseMemoryPool.Shared);
+
+        var presentation = new VerifiablePresentation
+        {
+            Context = Context.FromIris(Context.Credentials20),
+            Type = ["VerifiablePresentation"],
+            Holder = holderDid,
+            EnvelopedVerifiableCredential =
+            [
+                new EnvelopedVerifiableCredential
+                {
+                    Id = VcCoseDataUrlPrefix + Convert.ToBase64String(coseBytes.AsReadOnlyMemory().Span),
+                    Type = [CredentialConstants.EnvelopedVerifiableCredentialType]
+                }
+            ]
+        };
+
+        string presentationJson = JsonSerializerExtensions.Serialize(presentation, JsonOptions);
+        var receivedPresentation = JsonSerializerExtensions.Deserialize<VerifiablePresentation>(presentationJson, JsonOptions)!;
+
+        string envelopedId = receivedPresentation.EnvelopedVerifiableCredential![0].Id!;
+        byte[] decodedCose = Convert.FromBase64String(envelopedId[VcCoseDataUrlPrefix.Length..]);
+        using CoseSign1Message parsed = CoseSerialization.ParseCoseSign1(decodedCose, BaseMemoryPool.Shared);
+
+        CoseCredentialVerificationResult result = await CredentialCoseExtensions.VerifyCoseAsync(
+            parsed,
+            CoseSerialization.BuildSigStructure,
+            publicKey,
+            CredentialFromJsonBytes,
+            CoseSerialization.ParseProtectedHeader,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsValid, "RFC 9052 Section 3: a credential whose protected bucket repeats kid is malformed and is not verified.");
+        Assert.IsNull(result.Credential, "A refused credential yields no verified credential.");
+    }
+
+
+    /// <summary>
+    /// Serializes <paramref name="header"/> and appends a second <c>kid</c> (the text <c>"x"</c>) to the map,
+    /// raising the map's entry count by one, so the protected bucket carries <c>kid</c> twice.
+    /// </summary>
+    /// <param name="header">The protected header map; fewer than 23 entries, so the count is in the initial byte.</param>
+    /// <returns>The serialized protected bucket with <c>kid</c> twice.</returns>
+    private static ReadOnlySpan<byte> CoseProtectedHeaderWithKidTwiceToCborBytes(IReadOnlyDictionary<int, object> header)
+    {
+        byte[] serialized = CoseSerialization.SerializeProtectedHeader(header);
+        byte[] repeated = new byte[serialized.Length + 3];
+        serialized.CopyTo(repeated, 0);
+        repeated[0] = (byte)(serialized[0] + 1);
+        repeated[^3] = CoseHeaderParameters.Kid;
+        repeated[^2] = 0x61;
+        repeated[^1] = (byte)'x';
+
+        return repeated;
+    }
+
+
     private static ReadOnlySpan<byte> CredentialToCborBytes(VerifiableCredential credential) =>
         JsonSerializerExtensions.SerializeToUtf8Bytes(credential, JsonOptions);
 

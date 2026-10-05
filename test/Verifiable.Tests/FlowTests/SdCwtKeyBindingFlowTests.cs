@@ -1,3 +1,4 @@
+using Lumoin.Veritas.Cbor;
 using Microsoft.Extensions.Time.Testing;
 using System.Globalization;
 using System.Security.Cryptography;
@@ -6,6 +7,7 @@ using Verifiable.Cbor.Sd;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
+using Verifiable.Tests.OAuth;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -216,14 +218,113 @@ internal sealed class SdCwtKeyBindingFlowTests
     }
 
 
+    /// <summary>
+    /// A Key Binding Token whose genuinely signed protected header carries the <c>kcwt</c> (13) label twice is
+    /// refused as malformed with the <c>kcwt</c> reader's own failure, before any embedded SD-CWT is parsed.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "When processing
+    /// messages, if a label appears multiple times, the message MUST be rejected as malformed."
+    /// </summary>
+    [TestMethod]
+    public async Task VerifierRefusesAKbtRepeatingKcwt()
+    {
+        await AssertKbtRefusedAsync<FormatException>(
+            SdCwtVpFixture.BuildProtectedHeaderWithKcwtTwice, SdKbtIssuance.BuildPayload).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// A Key Binding Token whose embedded SD-CWT carries <c>sd_claims</c> twice in its unprotected bucket, every
+    /// Disclosure still present, is refused as malformed with the embedded SD-CWT parse's own failure.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "When processing
+    /// messages, if a label appears multiple times, the message MUST be rejected as malformed."
+    /// </summary>
+    [TestMethod]
+    public async Task VerifierRefusesAKbtWhoseSdCwtRepeatsSdClaims()
+    {
+        await AssertKbtRefusedAsync<FormatException>(
+            SdCwtVpFixture.BuildProtectedHeaderWithSdClaimsTwice, SdKbtIssuance.BuildPayload).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// A Key Binding Token whose genuinely signed claims map carries the <c>aud</c> (3) claim twice is refused as
+    /// malformed with the claims reader's own failure.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052 Section 9</see>: "Applications MUST
+    /// NOT parse and process messages with the same label used twice as a key in a single map."
+    /// </summary>
+    [TestMethod]
+    public async Task VerifierRefusesAKbtRepeatingAClaim()
+    {
+        await AssertKbtRefusedAsync<CborContentException>(
+            SdKbtIssuance.BuildProtectedHeader, SdCwtVpFixture.BuildPayloadWithAudTwice).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Issues an SD-CWT, signs a genuine Key Binding Token over it with the supplied header and payload builders,
+    /// and asserts the verifier refuses the token with <typeparamref name="TException"/>.
+    /// </summary>
+    /// <typeparam name="TException">The refusing reader's own failure type.</typeparam>
+    /// <param name="buildProtectedHeader">Builds the Key Binding Token's protected header.</param>
+    /// <param name="buildPayload">Builds the Key Binding Token's payload.</param>
+    /// <returns>A task that completes when the refusal has been asserted.</returns>
+    private async Task AssertKbtRefusedAsync<TException>(
+        BuildKbtProtectedHeaderDelegate buildProtectedHeader, BuildKbtPayloadDelegate buildPayload)
+        where TException : Exception
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> issuerKeys =
+            TestKeyMaterialProvider.CreateP256KeyMaterial();
+        using PublicKeyMemory issuerPublic = issuerKeys.PublicKey;
+        using PrivateKeyMemory issuerPrivate = issuerKeys.PrivateKey;
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> holderKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+
+        using EncodedCoseSign1 kbt = await IssueKbtAsync(
+            issuerPrivate, holderPublic, holderPrivate, Cnonce, TimeProvider.GetUtcNow(),
+            buildProtectedHeader, buildPayload).ConfigureAwait(false);
+
+        _ = await Assert.ThrowsExactlyAsync<TException>(
+            async () => await VerifyAsync(kbt.AsReadOnlyMemory(), issuerPublic).ConfigureAwait(false),
+            "A Key Binding Token repeating a label in one map is malformed and is never verified.").ConfigureAwait(false);
+    }
+
+
     //Issuer issues an SD-CWT (cnf = holder COSE_Key + selectively disclosable claims),
     //then the wallet selects given_name + family_name and signs the KBT with its private key.
+    private ValueTask<EncodedCoseSign1> IssueKbtAsync(
+        PrivateKeyMemory issuerPrivate,
+        PublicKeyMemory holderPublic,
+        PrivateKeyMemory holderPrivate,
+        string cnonce,
+        DateTimeOffset iat) =>
+        IssueKbtAsync(
+            issuerPrivate, holderPublic, holderPrivate, cnonce, iat,
+            SdKbtIssuance.BuildProtectedHeader, SdKbtIssuance.BuildPayload);
+
+
+    /// <summary>
+    /// Issues an SD-CWT and signs the Key Binding Token over the given_name and family_name Disclosures with the
+    /// supplied header and payload builders.
+    /// </summary>
+    /// <param name="issuerPrivate">The issuer's signing key.</param>
+    /// <param name="holderPublic">The holder's public key, embedded in the <c>cnf</c> claim.</param>
+    /// <param name="holderPrivate">The key the Key Binding Token is signed with.</param>
+    /// <param name="cnonce">The verifier nonce bound into the Key Binding Token.</param>
+    /// <param name="iat">The instant the Key Binding Token is issued at.</param>
+    /// <param name="buildProtectedHeader">Builds the Key Binding Token's protected header.</param>
+    /// <param name="buildPayload">Builds the Key Binding Token's payload.</param>
+    /// <returns>The Key Binding Token wire bytes.</returns>
     private async ValueTask<EncodedCoseSign1> IssueKbtAsync(
         PrivateKeyMemory issuerPrivate,
         PublicKeyMemory holderPublic,
         PrivateKeyMemory holderPrivate,
         string cnonce,
-        DateTimeOffset iat)
+        DateTimeOffset iat,
+        BuildKbtProtectedHeaderDelegate buildProtectedHeader,
+        BuildKbtPayloadDelegate buildPayload)
     {
         using SdToken<ReadOnlyMemory<byte>> issuedToken = await IssueSdCwtTokenAsync(
             issuerPrivate, holderPublic, TestContext.CancellationToken).ConfigureAwait(false);
@@ -236,8 +337,8 @@ internal sealed class SdCwtKeyBindingFlowTests
             verifierAud: VerifierAud,
             verifierCnonce: cnonce,
             iat: iat,
-            buildProtectedHeader: SdKbtIssuance.BuildProtectedHeader,
-            buildPayload: SdKbtIssuance.BuildPayload,
+            buildProtectedHeader: buildProtectedHeader,
+            buildPayload: buildPayload,
             buildSigStructure: CoseSerialization.BuildSigStructure,
             serializeCoseSign1: CoseSerialization.SerializeCoseSign1,
             memoryPool: Pool,

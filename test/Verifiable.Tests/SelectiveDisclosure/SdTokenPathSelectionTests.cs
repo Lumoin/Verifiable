@@ -767,6 +767,122 @@ internal sealed class SdTokenPathSelectionTests
 
 
     /// <summary>
+    /// The SD-CWT <c>iss</c> reader refuses an issuer-signed claims map that carries the <c>iss</c> claim
+    /// twice, also when the second label is written in a wider encoding of the same value.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052, Section 9</see>: "Applications
+    /// MUST NOT parse and process messages with the same label used twice as a key in a single map."
+    /// </summary>
+    /// <param name="claimsMapHex">The issuer-signed claims map, as hexadecimal.</param>
+    [TestMethod]
+    [DataRow("A2016161016162", DisplayName = "iss twice")]
+    [DataRow("A201616118016162", DisplayName = "iss twice, second label in two widths")]
+    public void SdCwtIssuerReaderRefusesARepeatedClaimKey(string claimsMapHex)
+    {
+        using SdToken<ReadOnlyMemory<byte>> token = new(ComposeUnsignedCoseSign1(Convert.FromHexString(claimsMapHex)), []);
+
+        _ = Assert.ThrowsExactly<CborContentException>(
+            () => SdCwtVpParsing.ExtractIssuer(token),
+            "RFC 9052 Section 9: a claims map carrying iss twice is neither parsed nor processed.");
+    }
+
+
+    /// <summary>
+    /// The SD-CWT <c>vct</c> reader refuses an issuer-signed claims map that carries the <c>vct</c> claim
+    /// twice, also when the second label is written in a wider encoding of the same value.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052, Section 9</see>: "Applications
+    /// MUST NOT parse and process messages with the same label used twice as a key in a single map."
+    /// </summary>
+    /// <param name="claimsMapHex">The issuer-signed claims map, as hexadecimal.</param>
+    [TestMethod]
+    [DataRow("A20B61610B6162", DisplayName = "vct twice")]
+    [DataRow("A20B6161180B6162", DisplayName = "vct twice, second label in two widths")]
+    public void SdCwtCredentialTypeReaderRefusesARepeatedClaimKey(string claimsMapHex)
+    {
+        using SdToken<ReadOnlyMemory<byte>> token = new(ComposeUnsignedCoseSign1(Convert.FromHexString(claimsMapHex)), []);
+
+        _ = Assert.ThrowsExactly<CborContentException>(
+            () => SdCwtVpParsing.ExtractCredentialType(token),
+            "RFC 9052 Section 9: a claims map carrying vct twice is neither parsed nor processed.");
+    }
+
+
+    /// <summary>
+    /// The SD-CWT <c>status</c> reader refuses an issuer-signed claims map that carries the <c>status</c>
+    /// claim (65535) twice, also when the second label is written in a wider encoding of the same value, and
+    /// a Status structure that names the <c>status_list</c> mechanism twice.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052, Section 9</see>: "Applications
+    /// MUST NOT parse and process messages with the same label used twice as a key in a single map."
+    /// </summary>
+    /// <param name="claimsMapHex">The issuer-signed claims map, as hexadecimal.</param>
+    [TestMethod]
+    [DataRow(
+        "A2"
+        + "19FFFF" + "A16B7374617475735F6C697374A26369647800637572697568747470733A2F2F6578616D706C652E636F6D2F73"
+        + "19FFFF" + "A16B7374617475735F6C697374A26369647800637572697568747470733A2F2F6578616D706C652E636F6D2F73",
+        DisplayName = "status twice")]
+    [DataRow(
+        "A2"
+        + "19FFFF" + "A16B7374617475735F6C697374A26369647800637572697568747470733A2F2F6578616D706C652E636F6D2F73"
+        + "1A0000FFFF" + "A16B7374617475735F6C697374A26369647800637572697568747470733A2F2F6578616D706C652E636F6D2F73",
+        DisplayName = "status twice, second label in two widths")]
+    [DataRow(
+        "A1"
+        + "19FFFF" + "A2"
+        + "6B7374617475735F6C697374" + "A26369647800637572697568747470733A2F2F6578616D706C652E636F6D2F73"
+        + "6B7374617475735F6C697374" + "A26369647800637572697568747470733A2F2F6578616D706C652E636F6D2F73",
+        DisplayName = "status_list twice inside the Status structure")]
+    public void SdCwtStatusReaderRefusesARepeatedLabel(string claimsMapHex)
+    {
+        using SdToken<ReadOnlyMemory<byte>> token = new(ComposeUnsignedCoseSign1(Convert.FromHexString(claimsMapHex)), []);
+
+        _ = Assert.ThrowsExactly<FormatException>(
+            () => SdCwtVpParsing.ExtractStatus(token),
+            "RFC 9052 Section 9: a map carrying one label twice is neither parsed nor processed.");
+    }
+
+
+    /// <summary>
+    /// The SD-CWT holder-key reader refuses an issuer-signed claims map that carries the <c>cnf</c> claim
+    /// twice, and a <c>cnf</c> confirmation map that carries its COSE_Key member (1) twice, each also when the
+    /// second label is written in a wider encoding of the same value.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052, Section 9</see>: "Applications
+    /// MUST NOT parse and process messages with the same label used twice as a key in a single map."
+    /// </summary>
+    /// <param name="claimsMapHex">The issuer-signed claims map, as hexadecimal.</param>
+    [TestMethod]
+    [DataRow(
+        "A2"
+        + "08" + "A101" + "A3010120062158201111111111111111111111111111111111111111111111111111111111111111"
+        + "08" + "A101" + "A3010120062158201111111111111111111111111111111111111111111111111111111111111111",
+        DisplayName = "cnf twice")]
+    [DataRow(
+        "A2"
+        + "08" + "A101" + "A3010120062158201111111111111111111111111111111111111111111111111111111111111111"
+        + "1808" + "A101" + "A3010120062158201111111111111111111111111111111111111111111111111111111111111111",
+        DisplayName = "cnf twice, second label in two widths")]
+    [DataRow(
+        "A1"
+        + "08" + "A2"
+        + "01" + "A3010120062158201111111111111111111111111111111111111111111111111111111111111111"
+        + "01" + "A3010120062158201111111111111111111111111111111111111111111111111111111111111111",
+        DisplayName = "COSE_Key member twice inside cnf")]
+    [DataRow(
+        "A1"
+        + "08" + "A2"
+        + "01" + "A3010120062158201111111111111111111111111111111111111111111111111111111111111111"
+        + "1801" + "A3010120062158201111111111111111111111111111111111111111111111111111111111111111",
+        DisplayName = "COSE_Key member twice inside cnf, second label in two widths")]
+    public void SdCwtHolderKeyReaderRefusesARepeatedLabel(string claimsMapHex)
+    {
+        using SdToken<ReadOnlyMemory<byte>> token = new(ComposeUnsignedCoseSign1(Convert.FromHexString(claimsMapHex)), []);
+
+        _ = Assert.ThrowsExactly<CborContentException>(
+            () => SdCwtVpParsing.ExtractHolderKey(token, Pool),
+            "RFC 9052 Section 9: a map carrying one label twice is neither parsed nor processed.");
+    }
+
+
+    /// <summary>
     /// Proves a wire form carrying two Disclosures under one salt is refused.
     /// <see href="https://www.rfc-editor.org/rfc/rfc9901">RFC 9901, Section 9.3</see>: "The Issuer
     /// MUST ensure that a new salt value is chosen for each claim, including when the same claim
@@ -1388,6 +1504,29 @@ internal sealed class SdTokenPathSelectionTests
         writer.WriteStartArray(1);
         writer.WriteByteString(disclosureBytes);
         writer.WriteEndArray();
+        writer.WriteEndMap();
+        writer.WriteByteString(payload);
+        writer.WriteByteString(UnverifiableCoseSignature.Span);
+        writer.WriteEndArray();
+
+        return buffer.WrittenSpan.ToArray();
+    }
+
+
+    /// <summary>
+    /// Assembles a COSE_Sign1 with an empty unprotected header around the given claims map bytes, so a
+    /// claim reader can be handed an exact wire encoding of the issuer-signed payload.
+    /// </summary>
+    /// <param name="payload">The CWT claims map bytes, carried as they are.</param>
+    /// <returns>The COSE_Sign1 bytes.</returns>
+    private static byte[] ComposeUnsignedCoseSign1(byte[] payload)
+    {
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Lax);
+        writer.WriteTag(new CborTag(CoseTags.Sign1));
+        writer.WriteStartArray(4);
+        writer.WriteByteString(UnverifiableCoseProtectedHeader.Span);
+        writer.WriteStartMap(0);
         writer.WriteEndMap();
         writer.WriteByteString(payload);
         writer.WriteByteString(UnverifiableCoseSignature.Span);

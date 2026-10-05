@@ -558,6 +558,208 @@ truncateProtectedHeader,
 
 
     /// <summary>
+    /// A <c>dc+sd-cwt</c> Key Binding Token whose genuinely signed protected header carries the <c>kcwt</c>
+    /// (13) label twice is refused over the wire with the answer every other malformed Key Binding Token
+    /// protected header gets: HTTP 400, <c>invalid_request</c>, the Malformed refusal class's sentence.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "When processing
+    /// messages, if a label appears multiple times, the message MUST be rejected as malformed."
+    /// </summary>
+    [TestMethod]
+    public async Task AnSdCwtKeyBindingTokenRepeatingKcwtIsRefusedAsMalformed()
+    {
+        await AssertSdCwtPresentationRefusedAsMalformedAsync(
+            SdCwtVpFixture.BuildProtectedHeaderWithKcwtTwice,
+            SdKbtIssuance.BuildPayload,
+            "nonce-sdcwt-kcwt-twice").ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// A <c>dc+sd-cwt</c> presentation whose embedded SD-CWT carries <c>sd_claims</c> twice in its unprotected
+    /// bucket, every Disclosure still present, is refused over the wire with the answer every other malformed
+    /// embedded SD-CWT gets: HTTP 400, <c>invalid_request</c>, the Malformed refusal class's sentence.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "When processing
+    /// messages, if a label appears multiple times, the message MUST be rejected as malformed."
+    /// </summary>
+    [TestMethod]
+    public async Task AnSdCwtPresentationRepeatingSdClaimsIsRefusedAsMalformed()
+    {
+        await AssertSdCwtPresentationRefusedAsMalformedAsync(
+            SdCwtVpFixture.BuildProtectedHeaderWithSdClaimsTwice,
+            SdKbtIssuance.BuildPayload,
+            "nonce-sdcwt-sd-claims-twice").ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// An <c>mso_mdoc</c> presentation whose IssuerAuth COSE_Sign1 carries label 33 (<c>x5chain</c>) twice in its
+    /// unprotected bucket is refused over the encrypted <c>direct_post.jwt</c> wire with the answer every other
+    /// malformed DeviceResponse gets: HTTP 400, <c>invalid_request</c>, the Malformed refusal class's sentence.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "When processing
+    /// messages, if a label appears multiple times, the message MUST be rejected as malformed."
+    /// </summary>
+    [TestMethod]
+    public async Task AnMdocIssuerAuthRepeatingX5ChainIsRefusedAsMalformed()
+    {
+        await using FormatRun run = await MdocVpFixture.Format.StartAsync(
+            TimeProvider, TestContext.CancellationToken).ConfigureAwait(false);
+        TestHostShell app = run.App;
+
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
+
+        async ValueTask<Oid4VpPresentationSet> repeatingProduce(Oid4VpPresentationContext context, CancellationToken cancellationToken)
+        {
+            Oid4VpPresentationSet valid = await run.Produce(context, cancellationToken).ConfigureAwait(false);
+
+            using IMemoryOwner<byte> fullDeviceResponseBytes = Oid4VpMdocPresentation.DecodeVpTokenValue(
+                valid.PresentationsByQueryId[PidCredentialQueryId], TestSetup.Base64UrlDecoder, context.MemoryPool);
+            byte[] repeatingDeviceResponse = MdocVpFixture.RewriteAt(
+                fullDeviceResponseBytes.Memory,
+                ["documents", 0, "issuerSigned", "issuerAuth", 1],
+                unprotected => MdocVpFixture.WithLabelTwice(unprotected, CoseHeaderParameters.X5Chain, new byte[] { 0x41, 0x00 }));
+
+            return new Oid4VpPresentationSet
+            {
+                PresentationsByQueryId = new Dictionary<string, string>(valid.PresentationsByQueryId, StringComparer.Ordinal)
+                {
+                    [PidCredentialQueryId] = TestSetup.Base64UrlEncoder(repeatingDeviceResponse)
+                },
+                ResponseEncryptionApu = valid.ResponseEncryptionApu
+            };
+        }
+
+        Oid4VpWalletClient walletClient = await app.CreateHttpBackedOid4VpWalletClientAsync(
+            verifierKeys,
+            repeatingProduce,
+            TestHostShell.PinnedVerifierKeyResolver(verifierKeys.SigningPublicKey),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        (Uri requestUri, string parHandle) = await app.HandleParAsync(
+            verifierKeys,
+            new TransactionNonce("nonce-mdoc-x5chain-twice"),
+            run.Query,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        using HttpResponseMessage jarResponse = await app.Host("default").SharedHttpClient!
+            .GetAsync(requestUri, TestContext.CancellationToken).ConfigureAwait(false);
+        _ = jarResponse.EnsureSuccessStatusCode();
+        string compactJar = await jarResponse.Content
+            .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        InvalidOperationException refusal = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
+            async () => await walletClient.PresentJarAsync(
+                new PresentJarOptions
+                {
+                    CompactJar = compactJar,
+                    RequestUri = requestUri,
+                    ExpectedVerifierClientId = VerifierClientId,
+                    FlowId = $"wallet-mdoc-x5chain-twice-{Guid.NewGuid():N}"
+                },
+                TestContext.CancellationToken).ConfigureAwait(false),
+            "The Verifier refuses an IssuerAuth repeating x5chain, so the wallet client throws on the non-200 answer.").ConfigureAwait(false);
+
+        Assert.Contains("returned status 400", refusal.Message, StringComparison.Ordinal,
+            "RFC 9052 Section 3: an IssuerAuth repeating a label is malformed, answered as HTTP 400.");
+
+        (string wireError, string wireDescription) = OAuthErrorAssertions.ReadOAuthErrorBody(
+            refusal.Message[refusal.Message.IndexOf('{', StringComparison.Ordinal)..]);
+        Assert.AreEqual("invalid_request", wireError,
+            "RFC 6749 Section 4.1.2.1: an otherwise malformed request is invalid_request.");
+        Assert.AreEqual("The Authorization Response could not be parsed.", wireDescription,
+            "The Malformed refusal class's one fixed wire sentence, the answer every malformed DeviceResponse gets.");
+
+        VerifierFlowFailedState failed = ReadFailedState(app, parHandle);
+        Assert.AreEqual(VerifierFlowRefusalKind.Malformed, failed.Refusal!.Value.Kind,
+            "An IssuerAuth repeating x5chain is the Malformed refusal class.");
+    }
+
+
+    /// <summary>
+    /// Issues an SD-CWT, signs a genuine Key Binding Token over the claims <see cref="SdCwtVpFixture.BuildSdCwtPreparedQuery"/>
+    /// asks for with the supplied header and payload builders, posts it as the unencrypted <c>vp_token</c> under
+    /// the transaction's own nonce and audience, and asserts the Malformed answer: HTTP 400, <c>invalid_request</c>,
+    /// the Malformed refusal class's one fixed sentence, and the Malformed terminal state.
+    /// </summary>
+    /// <param name="buildProtectedHeader">Builds the Key Binding Token's protected header.</param>
+    /// <param name="buildPayload">Builds the Key Binding Token's payload.</param>
+    /// <param name="nonce">The transaction nonce, bound into the Key Binding Token's <c>cnonce</c>.</param>
+    /// <returns>A task that completes when the answer has been asserted.</returns>
+    private async Task AssertSdCwtPresentationRefusedAsMalformedAsync(
+        BuildKbtProtectedHeaderDelegate buildProtectedHeader, BuildKbtPayloadDelegate buildPayload, string nonce)
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> issuerKeys =
+            TestKeyMaterialProvider.CreateP256KeyMaterial();
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> holderKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+
+        try
+        {
+            using SdToken<ReadOnlyMemory<byte>> issued = await SdCwtVpFixture.IssueSdCwtTokenAsync(
+                TimeProvider, issuerKeys.PrivateKey, holderKeys.PublicKey, TestContext.CancellationToken)
+                .ConfigureAwait(false);
+
+            string vpTokenValue = await SdCwtVpFixture.ProduceVpTokenValueAsync(
+                issued,
+                holderKeys.PrivateKey,
+                VerifierClientId,
+                nonce,
+                TimeProvider.GetUtcNow(),
+                buildProtectedHeader,
+                buildPayload,
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+            SdCwtVpVerificationSeams seams = SdCwtVpFixture.BuildSeams(issuerKeys.PublicKey);
+
+            await using TestHostShell app = new(TimeProvider, sdCwtSeams: seams);
+            using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+                VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
+
+            (Uri _, string parHandle) = await app.HandleParAsync(
+                verifierKeys,
+                new TransactionNonce(nonce),
+                SdCwtVpFixture.BuildSdCwtPreparedQuery(),
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+            _ = await app.HandleJarRequestAsync(
+                verifierKeys, parHandle, TestContext.CancellationToken).ConfigureAwait(false);
+
+            string vpTokenJson = $$"""{"{{SdCwtVpFixture.EmployeeCwtCredentialQueryId}}":["{{vpTokenValue}}"]}""";
+
+            (int statusCode, string body, string? contentType) = await app.PostDirectPostFormAsync(
+                verifierKeys.Registration.TenantId.Value,
+                [
+                    new(AuthorizationResponseParameters.VpToken, vpTokenJson),
+                    new(OAuthRequestParameterNames.State, parHandle)
+                ],
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.AreEqual(400, statusCode,
+                "RFC 9052: a presentation repeating a label is malformed, answered as HTTP 400, not as an HTTP 500 Verifier fault.");
+            Assert.AreEqual(WellKnownMediaTypes.Application.Json, contentType,
+                "The RFC 6749 Section 4.1.2.1 error object is a JSON body.");
+
+            (string wireError, string wireDescription) = OAuthErrorAssertions.ReadOAuthErrorBody(body);
+            Assert.AreEqual("invalid_request", wireError,
+                "RFC 6749 Section 4.1.2.1: an otherwise malformed request is invalid_request.");
+            Assert.AreEqual("The Authorization Response could not be parsed.", wireDescription,
+                "The Malformed refusal class's one fixed wire sentence, the answer every malformed Key Binding Token gets.");
+
+            VerifierFlowFailedState failed = ReadFailedState(app, parHandle);
+            Assert.AreEqual(VerifierFlowRefusalKind.Malformed, failed.Refusal!.Value.Kind,
+                "A presentation repeating a label is the Malformed refusal class.");
+        }
+        finally
+        {
+            issuerKeys.PublicKey.Dispose();
+            issuerKeys.PrivateKey.Dispose();
+            holderKeys.PublicKey.Dispose();
+            holderKeys.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
     /// A credential whose Token Status List index lies outside the resolved list is refused:
     /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-21#section-8.3">Token
     /// Status List, Section 8.3</see> — "If the provided index is out of bounds of the Status List, no

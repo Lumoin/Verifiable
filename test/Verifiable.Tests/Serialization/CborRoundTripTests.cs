@@ -286,6 +286,78 @@ internal sealed class CborRoundTripTests
 
 
     /// <summary>
+    /// A nested map read through <see cref="CborValueConverter.ReadValue(CborReader)"/> whose map key appears
+    /// twice by the equivalence of map keys is refused: one floating-point value written in two widths,
+    /// -0.0 and 0.0, two arrays equal element by element, and two maps holding the same pairs in another order.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-5.6.1">RFC 8949 Section 5.6.1</see>: "Within
+    /// each of these groups, numeric values are distinct unless they are numerically equal (specifically, -0.0
+    /// is equal to 0.0)" and "Both byte strings and text strings are compared byte by byte, arrays are compared
+    /// element by element, and are equal if they have the same number of bytes/elements and the same values at
+    /// the same positions. Two maps are equal if they have the same set of pairs regardless of their order;
+    /// pairs are equal if both the key and value are equal."
+    /// </remarks>
+    /// <param name="encodedMap">The encoded map.</param>
+    [TestMethod]
+    [DataRow(new byte[] { 0xA2, 0xF9, 0x3C, 0x00, 0x00, 0xFA, 0x3F, 0x80, 0x00, 0x00, 0x01 }, DisplayName = "float map key 1.0 twice, half and single width")]
+    [DataRow(new byte[] { 0xA2, 0xF9, 0x80, 0x00, 0x00, 0xFA, 0x00, 0x00, 0x00, 0x00, 0x01 }, DisplayName = "-0.0 and 0.0 as map keys")]
+    [DataRow(new byte[] { 0xA2, 0x82, 0x01, 0x02, 0x00, 0x82, 0x01, 0x02, 0x01 }, DisplayName = "array map key twice")]
+    [DataRow(new byte[] { 0xA2, 0xA2, 0x01, 0x02, 0x03, 0x04, 0x00, 0xA2, 0x03, 0x04, 0x01, 0x02, 0x01 }, DisplayName = "map as map key twice, pairs in another order")]
+    public void ValueConverterRefusesAnEquivalentMapKey(byte[] encodedMap)
+    {
+        var reader = new CborReader(encodedMap, CborOptions.Lax);
+
+        _ = Assert.ThrowsExactly<CborContentException>(() => CborValueConverter.ReadValue(reader));
+    }
+
+
+    /// <summary>
+    /// An integer map key and a floating-point map key of the same numeric value are two map keys, so a map
+    /// carrying 1 and 1.0 is read with both entries.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-5.6.1">RFC 8949 Section 5.6.1</see>: "At the
+    /// generic data model level, numerically equivalent integer and floating-point values are distinct from each
+    /// other, as they are from the various big numbers (Tags 2 to 5)."
+    /// </remarks>
+    [TestMethod]
+    public void ValueConverterReadsAnIntegerAndAFloatOfOneValueAsTwoMapKeys()
+    {
+        byte[] encodedMap = [0xA2, 0x01, 0x00, 0xF9, 0x3C, 0x00, 0x01];
+        var reader = new CborReader(encodedMap, CborOptions.Lax);
+
+        Dictionary<object, object?> map = Assert.IsInstanceOfType<Dictionary<object, object?>>(CborValueConverter.ReadValue(reader));
+
+        Assert.HasCount(2, map, "Section 5.6.1: the integer 1 and the float 1.0 are distinct map keys.");
+    }
+
+
+    /// <summary>
+    /// <see cref="CborValueConverter.WriteValue(CborWriter, object?)"/> refuses, as the caller's own argument, a
+    /// dictionary whose entries would be written as the same map key twice: a boxed <see cref="int"/> 1 and a
+    /// boxed <see cref="long"/> 1 are two dictionary entries but one CBOR integer.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052 Section 9</see>: "Applications MUST
+    /// NOT generate messages with the same label used twice as a key in a single map."
+    /// </remarks>
+    [TestMethod]
+    public void ValueConverterRefusesToWriteOneMapKeyTwice()
+    {
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
+        Dictionary<object, object?> map = new()
+        {
+            [1] = "a",
+            [1L] = "b"
+        };
+
+        _ = Assert.ThrowsExactly<ArgumentException>(() => CborValueConverter.WriteValue(writer, map));
+    }
+
+
+    /// <summary>
     /// A definite-length array read with the exact expected length succeeds; a mismatched expectation is
     /// rejected.
     /// </summary>

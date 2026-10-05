@@ -1,4 +1,6 @@
+using Lumoin.Veritas.Cbor;
 using Microsoft.Extensions.Time.Testing;
+using System.Buffers;
 using System.Globalization;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Sd;
@@ -269,12 +271,40 @@ internal static class SdCwtVpFixture
     /// <param name="iat">The instant the Key Binding Token is issued at.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The base64url <c>vp_token</c> value.</returns>
+    public static ValueTask<string> ProduceVpTokenValueAsync(
+        SdToken<ReadOnlyMemory<byte>> storedCredential,
+        PrivateKeyMemory holderKey,
+        string verifierAud,
+        string verifierCnonce,
+        DateTimeOffset iat,
+        CancellationToken cancellationToken) =>
+        ProduceVpTokenValueAsync(
+            storedCredential, holderKey, verifierAud, verifierCnonce, iat,
+            SdKbtIssuance.BuildProtectedHeader, SdKbtIssuance.BuildPayload, cancellationToken);
+
+
+    /// <summary>
+    /// <see cref="ProduceVpTokenValueAsync(SdToken{ReadOnlyMemory{byte}}, PrivateKeyMemory, string, string, DateTimeOffset, CancellationToken)"/>
+    /// with the Key Binding Token's protected header and payload built by the supplied builders, so a caller can
+    /// put an exact wire shape of either in front of the Verifier while the holder signature over it stays genuine.
+    /// </summary>
+    /// <param name="storedCredential">The issued SD-CWT the wallet holds.</param>
+    /// <param name="holderKey">The holder's signing key, matching the credential's <c>cnf</c> COSE_Key.</param>
+    /// <param name="verifierAud">The Verifier identifier bound into the Key Binding Token's <c>aud</c>.</param>
+    /// <param name="verifierCnonce">The Verifier's nonce bound into the Key Binding Token's <c>cnonce</c>.</param>
+    /// <param name="iat">The instant the Key Binding Token is issued at.</param>
+    /// <param name="buildProtectedHeader">Builds the Key Binding Token's protected header.</param>
+    /// <param name="buildPayload">Builds the Key Binding Token's payload.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The base64url <c>vp_token</c> value.</returns>
     public static async ValueTask<string> ProduceVpTokenValueAsync(
         SdToken<ReadOnlyMemory<byte>> storedCredential,
         PrivateKeyMemory holderKey,
         string verifierAud,
         string verifierCnonce,
         DateTimeOffset iat,
+        BuildKbtProtectedHeaderDelegate buildProtectedHeader,
+        BuildKbtPayloadDelegate buildPayload,
         CancellationToken cancellationToken)
     {
         var selectedPaths = new HashSet<CredentialPath>
@@ -291,14 +321,193 @@ internal static class SdCwtVpFixture
             verifierAud: verifierAud,
             verifierCnonce: verifierCnonce,
             iat: iat,
-            SdKbtIssuance.BuildProtectedHeader,
-            SdKbtIssuance.BuildPayload,
+            buildProtectedHeader,
+            buildPayload,
             CoseSerialization.BuildSigStructure,
             CoseSerialization.SerializeCoseSign1,
             Pool,
             cancellationToken).ConfigureAwait(false);
 
         return TestSetup.Base64UrlEncoder(kbt.AsReadOnlyMemory().Span);
+    }
+
+
+    /// <summary>
+    /// A <see cref="BuildKbtProtectedHeaderDelegate"/> that builds the genuine Key Binding Token protected header
+    /// and appends a second <c>kcwt</c> (13) entry carrying the same embedded SD-CWT, so the header map carries
+    /// label 13 twice and nothing else differs.
+    /// </summary>
+    /// <param name="coseAlgorithm">The holder key's COSE algorithm identifier.</param>
+    /// <param name="presentationToken">The SD-CWT presentation token to embed.</param>
+    /// <param name="pool">Memory pool the returned carrier rents from.</param>
+    /// <returns>The protected header carrying <c>kcwt</c> twice.</returns>
+    public static EncodedCoseProtectedHeader BuildProtectedHeaderWithKcwtTwice(
+        int coseAlgorithm, SdToken<ReadOnlyMemory<byte>> presentationToken, BaseMemoryPool pool)
+    {
+        using EncodedCoseProtectedHeader validHeader = SdKbtIssuance.BuildProtectedHeader(coseAlgorithm, presentationToken, pool);
+
+        var reader = new CborReader(validHeader.AsReadOnlyMemory(), CborOptions.Lax);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Lax);
+
+        int count = reader.ReadStartMap() ?? throw new InvalidOperationException("The genuine protected header is a definite-length map.");
+        writer.WriteStartMap(count + 1);
+        ReadOnlyMemory<byte> kcwt = ReadOnlyMemory<byte>.Empty;
+        for(int i = 0; i < count; i++)
+        {
+            int label = reader.ReadInt32();
+            ReadOnlyMemory<byte> value = reader.ReadEncodedValue();
+            writer.WriteInt32(label);
+            writer.WriteEncodedValue(value.Span);
+            if(label == CoseHeaderParameters.Kcwt)
+            {
+                kcwt = value;
+            }
+        }
+
+        writer.WriteInt32(CoseHeaderParameters.Kcwt);
+        writer.WriteEncodedValue(kcwt.Span);
+        writer.WriteEndMap();
+
+        return EncodedCoseProtectedHeader.FromBytes(buffer.WrittenSpan, pool);
+    }
+
+
+    /// <summary>
+    /// A <see cref="BuildKbtProtectedHeaderDelegate"/> that builds the genuine Key Binding Token protected header
+    /// and rewrites the embedded SD-CWT so its unprotected bucket carries <c>sd_claims</c> twice: the first entry
+    /// holds the first selected Disclosure and the second entry the rest. The issuer signature does not cover
+    /// the unprotected bucket and every Disclosure still travels, so only the repeated label differs.
+    /// </summary>
+    /// <param name="coseAlgorithm">The holder key's COSE algorithm identifier.</param>
+    /// <param name="presentationToken">The SD-CWT presentation token to embed.</param>
+    /// <param name="pool">Memory pool the returned carrier rents from.</param>
+    /// <returns>The protected header whose embedded SD-CWT carries <c>sd_claims</c> twice.</returns>
+    public static EncodedCoseProtectedHeader BuildProtectedHeaderWithSdClaimsTwice(
+        int coseAlgorithm, SdToken<ReadOnlyMemory<byte>> presentationToken, BaseMemoryPool pool)
+    {
+        using EncodedCoseProtectedHeader validHeader = SdKbtIssuance.BuildProtectedHeader(coseAlgorithm, presentationToken, pool);
+
+        var reader = new CborReader(validHeader.AsReadOnlyMemory(), CborOptions.Lax);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Lax);
+
+        int count = reader.ReadStartMap() ?? throw new InvalidOperationException("The genuine protected header is a definite-length map.");
+        writer.WriteStartMap(count);
+        for(int i = 0; i < count; i++)
+        {
+            int label = reader.ReadInt32();
+            ReadOnlyMemory<byte> value = reader.ReadEncodedValue();
+            writer.WriteInt32(label);
+            writer.WriteEncodedValue(label == CoseHeaderParameters.Kcwt ? SplitSdClaims(value) : value.Span);
+        }
+
+        writer.WriteEndMap();
+
+        return EncodedCoseProtectedHeader.FromBytes(buffer.WrittenSpan, pool);
+    }
+
+
+    /// <summary>
+    /// A <see cref="BuildKbtPayloadDelegate"/> that builds the genuine Key Binding Token payload and appends a
+    /// second <c>aud</c> (3) claim with the same value, so the claims map carries claim key 3 twice and nothing
+    /// else differs.
+    /// </summary>
+    /// <param name="aud">The verifier audience for the <c>aud</c> claim.</param>
+    /// <param name="iat">The issuance timestamp in Unix seconds for the <c>iat</c> claim.</param>
+    /// <param name="cnonce">The verifier nonce for the <c>cnonce</c> claim, or <see langword="null"/> to omit it.</param>
+    /// <param name="pool">Memory pool the returned buffer is rented from.</param>
+    /// <returns>The payload carrying <c>aud</c> twice, in a pool-rented buffer the caller owns.</returns>
+    public static IMemoryOwner<byte> BuildPayloadWithAudTwice(string aud, long iat, string? cnonce, BaseMemoryPool pool)
+    {
+        using IMemoryOwner<byte> validPayload = SdKbtIssuance.BuildPayload(aud, iat, cnonce, pool);
+
+        var reader = new CborReader(validPayload.Memory, CborOptions.Lax);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Lax);
+
+        int count = reader.ReadStartMap() ?? throw new InvalidOperationException("The genuine payload is a definite-length map.");
+        writer.WriteStartMap(count + 1);
+        for(int i = 0; i < count; i++)
+        {
+            writer.WriteInt32(reader.ReadInt32());
+            writer.WriteEncodedValue(reader.ReadEncodedValue().Span);
+        }
+
+        writer.WriteInt32(WellKnownCwtClaimNames.Aud);
+        writer.WriteTextString(aud);
+        writer.WriteEndMap();
+
+        IMemoryOwner<byte> owner = pool.Rent(buffer.WrittenCount);
+        buffer.WrittenSpan.CopyTo(owner.Memory.Span);
+
+        return owner;
+    }
+
+
+    /// <summary>
+    /// Rewrites an SD-CWT COSE_Sign1 so its unprotected bucket carries <c>sd_claims</c> twice: the first entry
+    /// holds the first Disclosure and the second entry the rest, every other part copied as encoded.
+    /// </summary>
+    /// <param name="sdCwt">The tagged SD-CWT COSE_Sign1, carrying one <c>sd_claims</c> entry with at least one Disclosure.</param>
+    /// <returns>The rewritten COSE_Sign1 bytes.</returns>
+    private static byte[] SplitSdClaims(ReadOnlyMemory<byte> sdCwt)
+    {
+        var reader = new CborReader(sdCwt, CborOptions.Lax);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Lax);
+
+        _ = reader.ReadTag();
+        writer.WriteTag(new CborTag(CoseTags.Sign1));
+        _ = reader.ReadStartArray();
+        writer.WriteStartArray(4);
+        writer.WriteEncodedValue(reader.ReadEncodedValue().Span);
+
+        int count = reader.ReadStartMap() ?? throw new InvalidOperationException("The unprotected bucket is a definite-length map.");
+        writer.WriteStartMap(count + 1);
+        for(int i = 0; i < count; i++)
+        {
+            int label = reader.ReadInt32();
+            if(label != CoseHeaderParameters.SdClaims)
+            {
+                writer.WriteInt32(label);
+                writer.WriteEncodedValue(reader.ReadEncodedValue().Span);
+
+                continue;
+            }
+
+            var disclosures = new List<ReadOnlyMemory<byte>>();
+            _ = reader.ReadStartArray();
+            while(reader.PeekState() != CborReaderState.EndArray)
+            {
+                disclosures.Add(reader.ReadEncodedValue());
+            }
+
+            reader.ReadEndArray();
+
+            writer.WriteInt32(CoseHeaderParameters.SdClaims);
+            writer.WriteStartArray(1);
+            writer.WriteEncodedValue(disclosures[0].Span);
+            writer.WriteEndArray();
+
+            writer.WriteInt32(CoseHeaderParameters.SdClaims);
+            writer.WriteStartArray(disclosures.Count - 1);
+            foreach(ReadOnlyMemory<byte> disclosure in disclosures.Skip(1))
+            {
+                writer.WriteEncodedValue(disclosure.Span);
+            }
+
+            writer.WriteEndArray();
+        }
+
+        reader.ReadEndMap();
+        writer.WriteEndMap();
+        writer.WriteEncodedValue(reader.ReadEncodedValue().Span);
+        writer.WriteEncodedValue(reader.ReadEncodedValue().Span);
+        reader.ReadEndArray();
+        writer.WriteEndArray();
+
+        return buffer.WrittenSpan.ToArray();
     }
 
 
