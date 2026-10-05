@@ -39,6 +39,12 @@ namespace Verifiable.OAuth.Federation;
 ///     <c>exp</c> is present and the assertion is neither expired nor not-yet-valid;
 ///     temporal claims are mutually consistent.
 ///   </description></item>
+///   <item><description>
+///     an <c>iat</c>, when present, lies no later than the current instant plus the skew, the refusal
+///     <see cref="Server.PrivateKeyJwtClientAuthentication"/> applies: this library's policy under
+///     <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see>: "Application of
+///     additional restrictions and policy are at the discretion of the authorization server."
+///   </description></item>
 /// </list>
 /// </remarks>
 public static class FederationClientAuthentication
@@ -57,8 +63,11 @@ public static class FederationClientAuthentication
     /// and <c>client_id</c> must all equal it, and the Federation Entity Key the
     /// caller verified the signature with must belong to it.
     /// </param>
-    /// <param name="now">The instant expiry / not-before are evaluated against.</param>
-    /// <param name="clockSkew">Tolerance applied to the <c>exp</c> and <c>nbf</c> comparisons.</param>
+    /// <param name="now">The instant the exp, nbf and iat are evaluated against.</param>
+    /// <param name="clockSkew">
+    /// Tolerance applied to the <c>exp</c>, <c>nbf</c> and <c>iat</c> comparisons: an <c>nbf</c> or an <c>iat</c>
+    /// later than the current instant plus this tolerance is refused, and one equal to it is accepted.
+    /// </param>
     /// <returns>
     /// A successful result carrying the authenticated <c>client_id</c>, <c>jti</c>,
     /// and expiry, or a failed result whose
@@ -116,8 +125,9 @@ public static class FederationClientAuthentication
 
         //exp is REQUIRED; a present-but-malformed temporal claim is rejected
         //rather than silently ignored, which would suppress the expiry check. The time claims are read by the
-        //one reader the RFC 7523 claim rules share: a number, a fraction kept, and a JSON string or a number no
-        //instant can hold refused as malformed.
+        //NumericDate reader the RFC 7523 claim rules share: a long, int, short, byte, ulong, uint, double or decimal
+        //is read, a fraction kept, and a float, any other shape, a JSON string or a number no instant can hold is
+        //refused as malformed.
         if(JwtBearer.Rfc7523AssertionValidation.ReadNumericDate(
             payload, WellKnownJwtClaimNames.Exp, out _, out DateTimeOffset exp) != Validation.NumericDateReadResult.Value)
         {
@@ -137,6 +147,15 @@ public static class FederationClientAuthentication
         {
             return FederationClientAuthenticationResult.Rejected(
                 "The client authentication JWT exp is at or before iat (non-positive lifetime).");
+        }
+
+        //A client authentication JWT issued later than the clock plus the skew names a time that has not come,
+        //refused as the private_key_jwt client authentication refuses it; the instants are compared through their
+        //difference, so no sum leaves the representable range.
+        if(iatRead == Validation.NumericDateReadResult.Value && iat - now > clockSkew)
+        {
+            return FederationClientAuthenticationResult.Rejected(
+                "The client assertion iat is in the future beyond the skew tolerance.");
         }
 
         Validation.NumericDateReadResult nbfRead = JwtBearer.Rfc7523AssertionValidation.ReadNumericDate(

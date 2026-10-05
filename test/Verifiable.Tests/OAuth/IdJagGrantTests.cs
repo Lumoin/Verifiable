@@ -2406,6 +2406,97 @@ internal sealed class IdJagGrantTests
 
 
     /// <summary>
+    /// A hand-built ID-JAG without an <c>iss</c>, or without an <c>exp</c>, is refused over the wire with
+    /// <c>invalid_grant</c> before the <c>sub_id</c> step, recorded as
+    /// <see cref="IdJagValidationFailureReason.MissingIssuer"/> or
+    /// <see cref="IdJagValidationFailureReason.MissingExpiration"/>. Both refusals exist in the validator; the
+    /// rows pin them on the wire. The rows run inside a <see cref="ServedCultureScope"/> set to "tr-TR".
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.1</see>:
+    /// "iss: REQUIRED - The issuer identifier of the IdP Authorization Server as defined in [RFC8414]." and "exp:
+    /// REQUIRED - as defined in Section 4.1.4 of [RFC7519]."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3.1">RFC 7523 Section 3.1</see>: "The value of
+    /// the "error" parameter MUST be the "invalid_grant" error code."
+    /// </summary>
+    /// <param name="omittedClaim">The REQUIRED claim the grant does not carry: <c>iss</c> or <c>exp</c>.</param>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DoNotParallelize]
+    [DataRow("iss", DisplayName = "a grant without iss")]
+    [DataRow("exp", DisplayName = "a grant without exp")]
+    public async Task AnIdJagWithoutIssOrExpIsRefusedAtTheRedeemAsync(string omittedClaim)
+    {
+        IdJagValidationFailureReason expected = omittedClaim switch
+        {
+            "iss" => IdJagValidationFailureReason.MissingIssuer,
+            "exp" => IdJagValidationFailureReason.MissingExpiration,
+            _ => throw new ArgumentOutOfRangeException(nameof(omittedClaim), omittedClaim, null)
+        };
+
+        await AssertRefusedBeforeTheAssociationAsync(
+            static _ => new Dictionary<string, object>(StringComparer.Ordinal),
+            expected,
+            omittedClaims: [omittedClaim]).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// A hand-built ID-JAG whose <c>iat</c> lies 61 seconds after the clock, one second beyond the redeem seam's
+    /// skew of 60 seconds, is refused over the wire with <c>invalid_grant</c> before the <c>sub_id</c> step,
+    /// recorded as <see cref="IdJagValidationFailureReason.NotYetValid"/>, the association never called. The
+    /// refusal is this library's policy. The row runs inside a <see cref="ServedCultureScope"/> set to "tr-TR".
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see>: "Application of
+    /// additional restrictions and policy are at the discretion of the authorization server."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.6">RFC 7519 Section 4.1.6</see>: "The "iat"
+    /// (issued at) claim identifies the time at which the JWT was issued."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3.1">RFC 7523 Section 3.1</see>: "The value of
+    /// the "error" parameter MUST be the "invalid_grant" error code."
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DoNotParallelize]
+    public async Task AnIdJagIssuedBeyondTheSkewIsRefusedAtTheRedeemAsync()
+    {
+        long issuedAtSeconds = TimeProvider.GetUtcNow().AddSeconds(61).ToUnixTimeSeconds();
+
+        await AssertRefusedBeforeTheAssociationAsync(
+            _ => new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [WellKnownJwtClaimNames.Iat] = issuedAtSeconds
+            },
+            IdJagValidationFailureReason.NotYetValid).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// A hand-built ID-JAG whose <c>iat</c> lies exactly 60 seconds after the clock, the edge of the redeem seam's
+    /// skew of 60 seconds, is redeemed over the wire, its <c>iat</c> surfaced as signed. The row runs inside a
+    /// <see cref="ServedCultureScope"/> set to "tr-TR".
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see>: "Application of
+    /// additional restrictions and policy are at the discretion of the authorization server."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.6">RFC 7519 Section 4.1.6</see>: "The "iat"
+    /// (issued at) claim identifies the time at which the JWT was issued."
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DoNotParallelize]
+    public async Task AnIdJagIssuedAtTheEdgeOfTheSkewIsRedeemedAsync()
+    {
+        DateTimeOffset issuedAt = TimeProvider.GetUtcNow().AddSeconds(60);
+        (int statusCode, string body, IdJagAssertionValidationResult? recorded, _) = await RedeemSubIdGrantAsync(
+            static _ => IdJagSubjectIdentifierRule.Default,
+            signedClaims: _ => new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [WellKnownJwtClaimNames.Iat] = issuedAt.ToUnixTimeSeconds()
+            },
+            servedCulture: "tr-TR").ConfigureAwait(false);
+
+        Assert.AreEqual(200, statusCode, body);
+        Assert.IsNotNull(recorded);
+        Assert.AreEqual(issuedAt, recorded.IssuedAt);
+    }
+
+
+    /// <summary>
     /// A hand-built ID-JAG whose <c>aud</c> differs from the Resource Authorization Server's issuer only in the
     /// case of its scheme and host is refused over the wire with <c>invalid_grant</c> before the <c>sub_id</c>
     /// step: the grant's own <c>aud</c> is compared as signed, not folded as its <c>resource</c> claim is. The

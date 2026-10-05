@@ -403,6 +403,89 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
 
 
     /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#IDToken">OpenID Connect Core 1.0
+    /// section 2</see>: <c>auth_time</c> is the "Time when the End-User authentication occurred. Its value is a
+    /// JSON number representing the number of seconds from 1970-01-01T00:00:00Z as measured in UTC until the
+    /// date/time." The issuer's deployment contributes an <c>auth_time</c> 100 seconds after
+    /// 1970-01-01T00:00:00Z plus the row's fraction to the ID Token it signs; the relying party receives that
+    /// id_token in the token response over the real wire and validates it with a parser delegate that hands the
+    /// <c>auth_time</c> as a <see cref="long"/>, an <see cref="int"/>, a <see cref="short"/>, a <see cref="byte"/>,
+    /// a <see cref="ulong"/>, a <see cref="uint"/>, a <see cref="double"/> or a <see cref="decimal"/>:
+    /// <see cref="Oidc10IdTokenValidator.ValidateAsync"/> surfaces the instant the number names, the fraction of a
+    /// <see cref="double"/> and of a <see cref="decimal"/> kept to the tick.
+    /// </summary>
+    /// <param name="shape">The CLR number shape the parser delegate hands the <c>auth_time</c> in.</param>
+    /// <param name="fraction">The fraction of a second the <c>auth_time</c> carries past its whole second, as invariant text.</param>
+    /// <param name="fractionTicks">That fraction in ticks.</param>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DataRow("long", "0", 0L, DisplayName = "an auth_time handed as a long")]
+    [DataRow("int", "0", 0L, DisplayName = "an auth_time handed as an int")]
+    [DataRow("short", "0", 0L, DisplayName = "an auth_time handed as a short")]
+    [DataRow("byte", "0", 0L, DisplayName = "an auth_time handed as a byte")]
+    [DataRow("ulong", "0", 0L, DisplayName = "an auth_time handed as a ulong")]
+    [DataRow("uint", "0", 0L, DisplayName = "an auth_time handed as a uint")]
+    [DataRow("double", "0.25", 2_500_000L, DisplayName = "an auth_time handed as a double with a fraction")]
+    [DataRow("decimal", "0.1234567", 1_234_567L, DisplayName = "an auth_time handed as a decimal with a fraction")]
+    public async Task IdTokenAuthTimeIsReadInEachNumberShapeTheReaderNames(string shape, string fraction, long fractionTicks)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        decimal authTimeSeconds = 100m + decimal.Parse(fraction, System.Globalization.CultureInfo.InvariantCulture);
+        await ApplyIdTokenClaimContributorAsync(host, WellKnownJwtClaimNames.AuthTime, authTimeSeconds).ConfigureAwait(false);
+
+        (string idToken, string issuer) = await DriveCodeExchangeOverWireForIdTokenAsync(host, material).ConfigureAwait(false);
+
+        Oidc10IdTokenValidationResult result = await ValidateAsRelyingPartyAsync(
+            idToken, material, expectedNonce: null, trustedAudiences: null, expectedIssuerOverride: issuer,
+            parser: JwsAccessTokenValidatorTests.ParserHandingTimeClaimsInShape(shape, WellKnownJwtClaimNames.AuthTime))
+            .ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsSuccess, $"The ID Token must validate; got {result.FailureReason}: {result.FailureDescription}");
+        Assert.AreEqual(DateTimeOffset.UnixEpoch.AddSeconds(100).AddTicks(fractionTicks), result.Claims!.AuthTime);
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#IDToken">OpenID Connect Core 1.0
+    /// section 2</see>: <c>auth_time</c> is the "Time when the End-User authentication occurred. Its value is a
+    /// JSON number representing the number of seconds from 1970-01-01T00:00:00Z as measured in UTC until the
+    /// date/time." The issuer's deployment contributes an <c>auth_time</c> 100 seconds after
+    /// 1970-01-01T00:00:00Z to the ID Token it signs; the relying party receives that id_token in the token
+    /// response over the real wire and validates it with a parser delegate that hands the <c>auth_time</c> as a
+    /// <see cref="float"/>, which holds that value exactly: <see cref="Oidc10IdTokenValidator.ValidateAsync"/>
+    /// rejects it with <see cref="JwsAccessTokenValidationFailureReason.Malformed"/> and the description "ID Token
+    /// auth_time claim is not a NumericDate naming a representable instant.". A <see cref="float"/> has 24
+    /// mantissa bits and holds only one epoch second in 128 of this era exactly (between 2^30 and 2^31 seconds its
+    /// spacing is 128 seconds, so an instant read from one is off by up to 64 seconds), and refusing the shape as a
+    /// whole is this library's rule.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task IdTokenAuthTimeHandedAsAFloatIsRejected()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        await ApplyIdTokenClaimContributorAsync(host, WellKnownJwtClaimNames.AuthTime, 100L).ConfigureAwait(false);
+
+        (string idToken, string issuer) = await DriveCodeExchangeOverWireForIdTokenAsync(host, material).ConfigureAwait(false);
+
+        Oidc10IdTokenValidationResult result = await ValidateAsRelyingPartyAsync(
+            idToken, material, expectedNonce: null, trustedAudiences: null, expectedIssuerOverride: issuer,
+            parser: JwsAccessTokenValidatorTests.ParserHandingTimeClaimsInShape("float", WellKnownJwtClaimNames.AuthTime))
+            .ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.AreEqual(JwsAccessTokenValidationFailureReason.Malformed, result.FailureReason);
+        Assert.AreEqual("ID Token auth_time claim is not a NumericDate naming a representable instant.", result.FailureDescription);
+    }
+
+
+    /// <summary>
     /// Drives PAR → Authorize → callback → Token over the host's loopback HTTPS listener through the
     /// library's own client with the <c>openid</c> scope, and returns the <c>id_token</c> of the token
     /// response together with the issuer the client registration names.
@@ -535,6 +618,15 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
     /// deployment resolves against the fetched JWKS. When <paramref name="recordedUsages"/> is given,
     /// the resolver first records the usage each call states.
     /// </summary>
+    /// <param name="idToken">The compact ID Token as received.</param>
+    /// <param name="material">The registration whose signing public key verifies the token.</param>
+    /// <param name="expectedNonce">The nonce the relying party expects, or <see langword="null"/> for none.</param>
+    /// <param name="trustedAudiences">The relying party's trusted audiences, or <see langword="null"/> when it checks none.</param>
+    /// <param name="expectedIssuerOverride">The issuer expected in place of the registration's, or <see langword="null"/>.</param>
+    /// <param name="expectedAudienceOverride">The audience expected in place of <see cref="ClientId"/>, or <see langword="null"/>.</param>
+    /// <param name="recordedUsages">The queue the resolver records each stated usage into, or <see langword="null"/>.</param>
+    /// <param name="parser">The parser delegate, or <see langword="null"/> for <see cref="JwsAccessTokenTestSupport.Parser"/>.</param>
+    /// <returns>The validation result.</returns>
     private async Task<Oidc10IdTokenValidationResult> ValidateAsRelyingPartyAsync(
         string idToken,
         VerifierKeyMaterial material,
@@ -542,7 +634,8 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
         IReadOnlyCollection<string>? trustedAudiences,
         string? expectedIssuerOverride = null,
         string? expectedAudienceOverride = null,
-        ConcurrentQueue<KeyUsageContext>? recordedUsages = null)
+        ConcurrentQueue<KeyUsageContext>? recordedUsages = null,
+        JwsAccessTokenJsonParser? parser = null)
     {
         ValueTask<PublicKeyMemory?> resolveKey(KeyId kid, KeyUsageContext usage, TenantId tenant, ExchangeContext ctx, CancellationToken ct)
         {
@@ -559,7 +652,7 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
             expectedAudienceOverride ?? ClientId,
             resolveKey,
             MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
-            JwsAccessTokenTestSupport.Parser,
+            parser ?? JwsAccessTokenTestSupport.Parser,
             TestSetup.Base64UrlDecoder,
             TimeProvider,
             BaseMemoryPool.Shared,

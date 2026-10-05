@@ -4,6 +4,7 @@ using System.Collections.Immutable;
 using System.Text.Json;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
+using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Federation;
 using Verifiable.OAuth.Server;
@@ -345,6 +346,79 @@ internal sealed class FederationFetchEndpointTests
 
 
     /// <summary>
+    /// A fetch request POSTed over the wire with a <c>client_assertion</c> whose <c>iat</c> lies 61 seconds after
+    /// the clock, one second beyond the skew of 60 seconds the deployment's gate applies through
+    /// <see cref="FederationClientAuthentication.Validate"/>, is refused: the gate records the description "The
+    /// client assertion iat is in the future beyond the skew tolerance." and the answer is 400 with the body
+    /// <c>{"error":"invalid_client","error_description":"The client assertion iat is in the future beyond the skew
+    /// tolerance."}</c>; the subordinate-statement resolver is never consulted. The refusal is this library's
+    /// policy, the one its <c>private_key_jwt</c> client authentication applies.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see>: "In order to issue
+    /// an access token response as described in OAuth 2.0 [RFC6749] or to rely on a JWT for client
+    /// authentication, the authorization server MUST validate the JWT according to the criteria below.
+    /// Application of additional restrictions and policy are at the discretion of the authorization server."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.6">RFC 7519 Section 4.1.6</see>: "The "iat"
+    /// (issued at) claim identifies the time at which the JWT was issued."
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.9">OpenID Federation 1.0 Section
+    /// 8.9</see> defines <c>invalid_client</c> as "The Client cannot be authorized or is not a valid participant of
+    /// the federation." and continues "The HTTP response status code SHOULD be 401 (Unauthorized)." The 400 is a
+    /// named deviation from that SHOULD: the request used no <c>Authorization</c> field and the server advertises
+    /// no <c>client_secret_basic</c>, so the server has no challenge applicable to the endpoint to send with a 401
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.5.2">RFC 9110 Section 15.5.2</see>).
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task FetchEndpointRefusesAClientAssertionIssuedBeyondTheSkew()
+    {
+        (int statusCode, string body, FederationClientAuthenticationResult? recorded, bool isResolverInvoked, _) =
+            await FetchWithClientAssertionAsync(TimeProvider.GetUtcNow().AddSeconds(61)).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        Assert.AreEqual(
+            "{\"error\":\"invalid_client\",\"error_description\":\"The client assertion iat is in the future beyond the skew tolerance.\"}",
+            body);
+        Assert.IsNotNull(recorded);
+        Assert.IsFalse(recorded.IsValid);
+        Assert.AreEqual("The client assertion iat is in the future beyond the skew tolerance.", recorded.FailureReason);
+        Assert.IsFalse(isResolverInvoked, "The client-authentication gate refuses before the endpoint's own resolver.");
+    }
+
+
+    /// <summary>
+    /// A fetch request POSTed over the wire with a <c>client_assertion</c> whose <c>iat</c> lies exactly 60 seconds
+    /// after the clock, the edge of the skew of 60 seconds the deployment's gate applies through
+    /// <see cref="FederationClientAuthentication.Validate"/>, is authenticated and served: 200 with the Subordinate
+    /// Statement, a compact JWS that verifies under the anchor's federation public key, whose <c>iss</c> is the
+    /// anchor, whose <c>sub</c> is the queried subordinate and differs from the <c>iss</c>, and which carries the
+    /// subject's <c>jwks</c>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see>: "Application of
+    /// additional restrictions and policy are at the discretion of the authorization server."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.6">RFC 7519 Section 4.1.6</see>: "The "iat"
+    /// (issued at) claim identifies the time at which the JWT was issued."
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task FetchEndpointServesAClientAssertionIssuedAtTheEdgeOfTheSkew()
+    {
+        (int statusCode, string body, FederationClientAuthenticationResult? recorded, bool isResolverInvoked, bool isBodyVerifiedUnderAnchorKey) =
+            await FetchWithClientAssertionAsync(TimeProvider.GetUtcNow().AddSeconds(60)).ConfigureAwait(false);
+
+        Assert.AreEqual(200, statusCode, body);
+        Assert.IsNotNull(recorded);
+        Assert.IsTrue(recorded.IsValid, recorded.FailureReason);
+        Assert.AreEqual(RequesterEntityId, recorded.ClientId);
+        Assert.IsTrue(isResolverInvoked, "An authenticated fetch reaches the endpoint's resolver.");
+
+        Dictionary<string, object> payload = DecodeSegment(body, 1);
+        Assert.AreEqual(new Uri(AnchorEntityId).ToString(), (string)payload["iss"], "iss must be the issuing anchor.");
+        Assert.AreEqual(new Uri(SubordinateEntityId).ToString(), (string)payload["sub"], "sub must be the queried subordinate.");
+        Assert.AreNotEqual((string)payload["iss"], (string)payload["sub"], "A Subordinate Statement is never self-issued (iss != sub).");
+        Assert.IsTrue(payload.ContainsKey("jwks"), "A Subordinate Statement carries the subject's jwks.");
+        Assert.IsTrue(isBodyVerifiedUnderAnchorKey, "The Subordinate Statement must verify under the anchor's federation public key.");
+    }
+
+
+    /// <summary>
     /// Returns a JSON error without invoking resolution when the required subject is missing.
     /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.1.1">Federation §8.1.1</see>.
     /// </summary>
@@ -392,6 +466,168 @@ internal sealed class FederationFetchEndpointTests
             "Federation §8.1.2: the error response must be a JSON object carrying an error code.");
         Assert.IsFalse(delegateInvoked,
             "A request missing sub must be rejected before consulting the application resolver.");
+    }
+
+
+    /// <summary>The Entity Identifier of the requester that authenticates to the anchor's fetch endpoint with a client assertion.</summary>
+    private static string RequesterEntityId => "https://requester.example.com";
+
+
+    /// <summary>The skew of 60 seconds the deployment's client-authentication gate applies to the client assertion's time claims.</summary>
+    private static TimeSpan GateClockSkew { get; } = TimeSpan.FromSeconds(60);
+
+
+    /// <summary>Serializes a client assertion's protected header to UTF-8 JSON bytes for signing.</summary>
+    private static JwtHeaderSerializer ClientAssertionHeaderSerializer { get; } =
+        static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
+            (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions);
+
+
+    /// <summary>Serializes a client assertion's claims to UTF-8 JSON bytes for signing.</summary>
+    private static JwtPayloadSerializer ClientAssertionPayloadSerializer { get; } =
+        static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
+            (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions);
+
+
+    /// <summary>
+    /// Sends one fetch request over the wire to the anchor's fetch endpoint carrying a client assertion signed
+    /// by the requester, whose <c>iat</c> is <paramref name="issuedAt"/> and whose <c>exp</c> lies five minutes
+    /// after it. The request is a POST whose form body carries <c>sub</c>, <c>client_assertion_type</c> and
+    /// <c>client_assertion</c>, and its URI no parameter:
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.1.1">OpenID Federation 1.0 Section
+    /// 8.1.1</see>: "When client authentication is used, the request MUST be an HTTP request using the POST
+    /// method, with the parameters passed in the POST body." The deployment's gate, wired as an application
+    /// writes it, reads the <c>client_assertion</c> field, verifies its signature under the requester's public
+    /// key, and judges its claims with <see cref="FederationClientAuthentication.Validate"/> at the test clock's
+    /// current instant under <see cref="GateClockSkew"/>; the anchor vouches for <see cref="SubordinateEntityId"/>.
+    /// </summary>
+    /// <param name="issuedAt">The instant the client assertion's <c>iat</c> names.</param>
+    /// <returns>
+    /// The status code and body of the answer, the result the gate decided on (<see langword="null"/> when the
+    /// gate recorded none), whether the subordinate-statement resolver was consulted, and whether the body is a
+    /// compact JWS that verifies under the anchor's federation public key.
+    /// </returns>
+    private async Task<(int StatusCode, string Body, FederationClientAuthenticationResult? Recorded, bool IsResolverInvoked, bool IsBodyVerifiedUnderAnchorKey)> FetchWithClientAssertionAsync(
+        DateTimeOffset issuedAt)
+    {
+        await using TestHostShell app = new(TimeProvider);
+
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> anchorKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> requesterKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            using VerifierKeyMaterial anchor = await RegisterAnchorAsync(app, anchorKeys).ConfigureAwait(false);
+            EntityIdentifier endpointEntity = new(AnchorEntityId);
+            EntityIdentifier requesterEntity = new(RequesterEntityId);
+
+            FederationClientAuthenticationResult? recorded = null;
+            bool isResolverInvoked = false;
+            await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+            {
+                candidateIntegration.ResolveSubordinateStatementAsync = (subject, _, _, _) =>
+                {
+                    isResolverInvoked = true;
+
+                    return string.Equals(subject.Value, SubordinateEntityId, StringComparison.Ordinal)
+                        ? ValueTask.FromResult<SubordinateStatementContribution?>(
+                            new SubordinateStatementContribution
+                            {
+                                Jwks = new Dictionary<string, object>(StringComparer.Ordinal) { ["keys"] = new List<object>() },
+                            })
+                        : ValueTask.FromResult<SubordinateStatementContribution?>(null);
+                };
+
+                candidateIntegration.AuthenticateFederationClientAsync = async (_, fields, _, _, ct) =>
+                {
+                    if(!fields.TryGetValue(OAuthRequestParameterNames.ClientAssertion, out string? presented))
+                    {
+                        return FederationClientAuthenticationResult.Rejected("No client assertion was presented.");
+                    }
+
+                    bool isSignatureValid = await Jws.VerifyAsync(
+                        presented, TestSetup.Base64UrlDecoder, Pool, requesterKeys.PublicKey, ct).ConfigureAwait(false);
+                    if(!isSignatureValid)
+                    {
+                        return FederationClientAuthenticationResult.Rejected("The client assertion signature does not verify.");
+                    }
+
+                    string[] segments = presented.Split('.');
+                    using IMemoryOwner<byte> payloadBytes = TestSetup.Base64UrlDecoder(segments[1], Pool);
+                    JwtPayload payload = JwsAccessTokenTestSupport.Parser.ParseClaims(payloadBytes.Memory);
+                    FederationClientAuthenticationResult result = FederationClientAuthentication.Validate(
+                        payload, endpointEntity, requesterEntity, TimeProvider.GetUtcNow(), GateClockSkew);
+                    recorded = result;
+
+                    return result;
+                };
+            }).ConfigureAwait(false);
+
+            await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+            HostedAuthorizationServer host = app.Host("default");
+            string segment = anchor.Registration.TenantId.Value;
+
+            string clientAssertion = await SignClientAssertionAsync(
+                requesterKeys.PrivateKey, endpointEntity.Value, issuedAt).ConfigureAwait(false);
+            Uri url = new(host.HttpBaseAddress!, $"/connect/{segment}/federation_fetch");
+            KeyValuePair<string, string>[] formFields =
+            [
+                new("sub", SubordinateEntityId),
+                new(OAuthRequestParameterNames.ClientAssertionType, WellKnownClientAssertionTypes.JwtBearer),
+                new(OAuthRequestParameterNames.ClientAssertion, clientAssertion)
+            ];
+            using System.Net.Http.HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+                host.SharedHttpClient!, url, formFields, TestContext.CancellationToken).ConfigureAwait(false);
+            string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+            bool isBodyVerifiedUnderAnchorKey = (int)response.StatusCode == 200
+                && await Jws.VerifyAsync(
+                    body, TestSetup.Base64UrlDecoder, Pool, anchorKeys.PublicKey, TestContext.CancellationToken).ConfigureAwait(false);
+
+            return ((int)response.StatusCode, body, recorded, isResolverInvoked, isBodyVerifiedUnderAnchorKey);
+        }
+        finally
+        {
+            requesterKeys.PublicKey.Dispose();
+            requesterKeys.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// Signs a client assertion of the <c>private_key_jwt</c> shape a federation requester presents
+    /// (<see href="https://openid.net/specs/openid-federation-1_0.html#section-8.8">OpenID Federation 1.0 Section
+    /// 8.8</see>): <c>iss</c> and <c>sub</c> the requester, <c>aud</c> <paramref name="audience"/>, a fresh
+    /// <c>jti</c>, the <c>iat</c> <paramref name="issuedAt"/> and an <c>exp</c> five minutes after it.
+    /// </summary>
+    /// <param name="signingKey">The requester's private signing material.</param>
+    /// <param name="audience">The Entity Identifier of the endpoint's entity.</param>
+    /// <param name="issuedAt">The instant the <c>iat</c> names.</param>
+    /// <returns>The compact JWS.</returns>
+    private async Task<string> SignClientAssertionAsync(PrivateKeyMemory signingKey, string audience, DateTimeOffset issuedAt)
+    {
+        string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(signingKey.Tag);
+        JwtHeader header = JwtHeader.ForSigning(algorithm, WellKnownJwkValues.TypeJwt, "requester-signing-1");
+        JwtPayload payload = new(capacity: 6)
+        {
+            [WellKnownJwtClaimNames.Iss] = RequesterEntityId,
+            [WellKnownJwtClaimNames.Sub] = RequesterEntityId,
+            [WellKnownJwtClaimNames.Aud] = audience,
+            [WellKnownJwtClaimNames.Jti] = $"federation-assertion-{Guid.NewGuid():N}",
+            [WellKnownJwtClaimNames.Iat] = issuedAt.ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Exp] = issuedAt.AddMinutes(5).ToUnixTimeSeconds()
+        };
+
+        UnsignedJwt unsigned = new(header, payload);
+        using JwsMessage jws = await unsigned.SignAsync(
+            signingKey,
+            ClientAssertionHeaderSerializer,
+            ClientAssertionPayloadSerializer,
+            TestSetup.Base64UrlEncoder,
+            Pool,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        return JwsSerialization.SerializeCompact(jws, TestSetup.Base64UrlEncoder);
     }
 
 

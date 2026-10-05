@@ -1548,6 +1548,115 @@ internal sealed class JwtBearerGrantTests
 
 
     /// <summary>
+    /// A signed assertion whose <c>iat</c> lies one second beyond the exchange's clock-skew tolerance of 60
+    /// seconds after the test clock, posted over the wire to a token endpoint whose application validates the
+    /// claims with <see cref="Rfc7523AssertionValidation.Validate"/>, is not valid: the validator records
+    /// <see cref="Rfc7523AssertionValidationFailureReason.NotYetValid"/> with the description "The assertion iat
+    /// is in the future beyond the skew tolerance.", and the answer is 400 with the body
+    /// <c>{"error":"invalid_grant","error_description":"The JWT assertion is not valid."}</c>. The refusal is
+    /// this library's policy.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see>: "Application of
+    /// additional restrictions and policy are at the discretion of the authorization server."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.6">RFC 7519 Section 4.1.6</see>: "The "iat"
+    /// (issued at) claim identifies the time at which the JWT was issued."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3.1">RFC 7523 Section 3.1</see>: "The value of
+    /// the "error" parameter MUST be the "invalid_grant" error code."
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task AnAssertionIssuedBeyondTheSkewIsRefusedAsNotValidAsync()
+    {
+        //The exchange's clock-skew tolerance is the default of TimingPolicy.ClockSkewTolerance, 60 seconds.
+        DateTimeOffset issuedAt = TimeProvider.GetUtcNow().AddSeconds(60 + 1);
+        (int statusCode, string body, Rfc7523AssertionValidationResult? recorded) =
+            await PostAssertionIssuedAtAsync(issuedAt).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        Assert.AreEqual("{\"error\":\"invalid_grant\",\"error_description\":\"The JWT assertion is not valid.\"}", body);
+        Assert.IsNotNull(recorded);
+        Assert.AreEqual(Rfc7523AssertionValidationFailureReason.NotYetValid, recorded.FailureReason);
+        Assert.AreEqual("The assertion iat is in the future beyond the skew tolerance.", recorded.FailureDescription);
+    }
+
+
+    /// <summary>
+    /// A signed assertion whose <c>iat</c> lies exactly the exchange's clock-skew tolerance of 60 seconds after
+    /// the test clock, posted over the wire to a token endpoint whose application validates the claims with
+    /// <see cref="Rfc7523AssertionValidation.Validate"/>, is valid at the edge: the validator surfaces the
+    /// <c>iat</c> as signed and the answer is 200 with an access token.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see>: "Application of
+    /// additional restrictions and policy are at the discretion of the authorization server."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.6">RFC 7519 Section 4.1.6</see>: "The "iat"
+    /// (issued at) claim identifies the time at which the JWT was issued."
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task AnAssertionIssuedAtTheEdgeOfTheSkewIsValidAsync()
+    {
+        //The exchange's clock-skew tolerance is the default of TimingPolicy.ClockSkewTolerance, 60 seconds.
+        DateTimeOffset issuedAt = TimeProvider.GetUtcNow().AddSeconds(60);
+        (int statusCode, string body, Rfc7523AssertionValidationResult? recorded) =
+            await PostAssertionIssuedAtAsync(issuedAt).ConfigureAwait(false);
+
+        Assert.AreEqual(200, statusCode, body);
+        using JsonDocument tokenResponse = JsonDocument.Parse(body);
+        Assert.IsFalse(string.IsNullOrEmpty(tokenResponse.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()), body);
+        Assert.IsNotNull(recorded);
+        Assert.IsTrue(recorded.IsValid, recorded.FailureDescription);
+        Assert.AreEqual(issuedAt, recorded.IssuedAt);
+    }
+
+
+    /// <summary>
+    /// Posts over the wire, to the token endpoint of a host whose application validates the claims with
+    /// <see cref="Rfc7523AssertionValidation.Validate"/> (<see cref="WireRfc7523ClaimValidatorAsync"/>), a
+    /// JWT bearer grant request authenticated with <c>client_secret_post</c> whose assertion is signed for
+    /// <see cref="AssertionSubject"/> with the <c>iat</c> <paramref name="issuedAt"/> and an <c>exp</c> five
+    /// minutes after it, and records the claim validation result the validator decides on.
+    /// </summary>
+    /// <param name="issuedAt">The instant the assertion's <c>iat</c> names.</param>
+    /// <returns>
+    /// The status code and body of the answer, and the claim validation result the validator recorded
+    /// (<see langword="null"/> when it recorded none).
+    /// </returns>
+    private async Task<(int StatusCode, string Body, Rfc7523AssertionValidationResult? Recorded)> PostAssertionIssuedAtAsync(
+        DateTimeOffset issuedAt)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterJwtBearerClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+        string asAudience = material.Registration.IssuerUri!.OriginalString;
+
+        var signingMaterial = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            Rfc7523AssertionValidationResult? recorded = null;
+            await WireRfc7523ClaimValidatorAsync(app, signingMaterial.PublicKey, asAudience, result => recorded = result).ConfigureAwait(false);
+            string assertion = await SignAssertionAsync(signingMaterial.PrivateKey, AssertionSubject, asAudience, issuedAt).ConfigureAwait(false);
+
+            OutgoingFormFields form = BuildRequest(new JwtBearerBuilderOptions
+            {
+                Assertion = assertion
+            }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+            using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+                host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+            string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+            return ((int)response.StatusCode, body, recorded);
+        }
+        finally
+        {
+            signingMaterial.PublicKey.Dispose();
+            signingMaterial.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3.1">RFC 7523 Section 3.1</see>: "The value
     /// of the "error" parameter MUST be the "invalid_grant" error code." for a JWT that is not valid. A
     /// grant the application's <see cref="AuthorizationServerIntegration.ValidateJwtBearerAssertionAsync"/>
@@ -1780,15 +1889,17 @@ internal sealed class JwtBearerGrantTests
     /// Signs an <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see> assertion
     /// under <paramref name="signingKey"/>: <c>iss</c> the client,
     /// <c>sub</c> <paramref name="subject"/> exactly as given, <c>aud</c> <paramref name="audience"/>, a
-    /// fresh <c>jti</c>, and <c>iat</c> and <c>exp</c> around the test clock's current instant.
+    /// fresh <c>jti</c>, an <c>iat</c> of <paramref name="issuedAt"/> or the test clock's current instant, and an
+    /// <c>exp</c> five minutes after that <c>iat</c>.
     /// </summary>
     /// <param name="signingKey">The private signing material the application's validator trusts.</param>
     /// <param name="subject">The <c>sub</c> value, written as given so a value no issuer should mint reaches the wire.</param>
     /// <param name="audience">The authorization server's own identity the assertion names.</param>
+    /// <param name="issuedAt">The instant the <c>iat</c> names, or <see langword="null"/> for the test clock's current instant.</param>
     /// <returns>The compact JWS.</returns>
-    private async Task<string> SignAssertionAsync(PrivateKeyMemory signingKey, string subject, string audience)
+    private async Task<string> SignAssertionAsync(PrivateKeyMemory signingKey, string subject, string audience, DateTimeOffset? issuedAt = null)
     {
-        DateTimeOffset issuedAt = TimeProvider.GetUtcNow();
+        DateTimeOffset assertionIssuedAt = issuedAt ?? TimeProvider.GetUtcNow();
         string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(signingKey.Tag);
         JwtHeader header = JwtHeader.ForSigning(algorithm, WellKnownJwkValues.TypeJwt, "assertion-signing-1");
         JwtPayload payload = new(capacity: 6)
@@ -1797,8 +1908,8 @@ internal sealed class JwtBearerGrantTests
             [WellKnownJwtClaimNames.Sub] = subject,
             [WellKnownJwtClaimNames.Aud] = audience,
             [WellKnownJwtClaimNames.Jti] = $"assertion-{Guid.NewGuid():N}",
-            [WellKnownJwtClaimNames.Iat] = issuedAt.ToUnixTimeSeconds(),
-            [WellKnownJwtClaimNames.Exp] = issuedAt.AddMinutes(5).ToUnixTimeSeconds()
+            [WellKnownJwtClaimNames.Iat] = assertionIssuedAt.ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Exp] = assertionIssuedAt.AddMinutes(5).ToUnixTimeSeconds()
         };
 
         UnsignedJwt unsigned = new(header, payload);
@@ -1826,7 +1937,10 @@ internal sealed class JwtBearerGrantTests
     /// <param name="app">The host to wire.</param>
     /// <param name="verificationKey">The public verification material of the trusted assertion issuer.</param>
     /// <param name="audience">The authorization server's own identity an assertion must name.</param>
-    private async Task WireRfc7523ClaimValidatorAsync(TestHostShell app, PublicKeyMemory verificationKey, string audience) =>
+    /// <param name="recorder">Receives the claim validation result the validator decides on, or <see langword="null"/>.</param>
+    /// <returns>A task that completes when the validator is wired.</returns>
+    private async Task WireRfc7523ClaimValidatorAsync(
+        TestHostShell app, PublicKeyMemory verificationKey, string audience, Action<Rfc7523AssertionValidationResult>? recorder = null) =>
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
             candidateIntegration.ValidateJwtBearerAssertionAsync =
@@ -1842,6 +1956,7 @@ internal sealed class JwtBearerGrantTests
                     JwtPayload payload = ParseClaims(presentedAssertion);
                     Rfc7523AssertionValidationResult result = Rfc7523AssertionValidation.Validate(
                         payload, audience, TimeProvider.GetUtcNow(), context.ClockSkewTolerance);
+                    recorder?.Invoke(result);
                     if(!result.IsValid)
                     {
                         return null;

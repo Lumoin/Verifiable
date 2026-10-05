@@ -27,6 +27,13 @@ internal sealed class JwsAccessTokenValidatorTests
     private static DateTimeOffset NowInstant { get; } = TestClock.CanonicalEpoch.AddDays(-15);
     private static TimeSpan IatSkew { get; } = TimeSpan.FromSeconds(60);
 
+    /// <summary>
+    /// The instant of the clock the rows of the CLR number shapes validate under, 120 seconds after
+    /// 1970-01-01T00:00:00Z, so the time claims they carry, 100 to 200 seconds after it, fit in each of the eight
+    /// shapes the reader names, a <see cref="byte"/> included.
+    /// </summary>
+    private static DateTimeOffset ShapeClockInstant { get; } = DateTimeOffset.UnixEpoch.AddSeconds(120);
+
     private FakeTimeProvider TimeProvider { get; } = new(NowInstant);
 
 
@@ -842,6 +849,192 @@ internal sealed class JwsAccessTokenValidatorTests
 
 
     /// <summary>
+    /// An access token whose <c>exp</c>, <c>iat</c> or <c>nbf</c> is no NumericDate naming an instant a
+    /// <see cref="DateTimeOffset"/> can hold, a JSON string of digits or the integer 1000000000000000, is refused
+    /// as <see cref="JwsAccessTokenValidationFailureReason.Malformed"/> with the description "Access token
+    /// &lt;claim&gt; claim is not a NumericDate naming a representable instant.", never read as an absent claim
+    /// and never an exception.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.4">RFC 7519 Section 4.1.4</see>, of the
+    /// <c>exp</c>, <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.5">Section 4.1.5</see>, of the
+    /// <c>nbf</c>, and <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.6">Section 4.1.6</see>, of
+    /// the <c>iat</c>: "Its value MUST be a number containing a NumericDate value."
+    /// </summary>
+    /// <param name="claimName">The time claim the value is set on.</param>
+    /// <param name="caseName">The value: <c>digitString</c> or <c>tenToTheFifteen</c>.</param>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DataRow("exp", "digitString", DisplayName = "an exp of a string of digits")]
+    [DataRow("iat", "digitString", DisplayName = "an iat of a string of digits")]
+    [DataRow("nbf", "digitString", DisplayName = "an nbf of a string of digits")]
+    [DataRow("iat", "tenToTheFifteen", DisplayName = "an iat of 1e15")]
+    public async Task ValidatorRefusesATimeClaimThatIsNoRepresentableNumericDateAsMalformed(string claimName, string caseName)
+    {
+        object value = caseName switch
+        {
+            "digitString" => NowInstant.ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture),
+            "tenToTheFifteen" => 1_000_000_000_000_000L,
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory publicKey = keys.PublicKey;
+        using PrivateKeyMemory privateKey = keys.PrivateKey;
+        JwtPayload payload = BuildDefaultPayload();
+        payload[claimName] = value;
+        string token = await BuildSignedAccessTokenAsync(privateKey, payload).ConfigureAwait(false);
+
+        JwsAccessTokenValidationResult result = await ValidateAsync(token, publicKey).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.AreEqual(JwsAccessTokenValidationFailureReason.Malformed, result.FailureReason);
+        Assert.AreEqual($"Access token {claimName} claim is not a NumericDate naming a representable instant.", result.FailureDescription);
+    }
+
+
+    /// <summary>
+    /// An access token whose decoder hands its <c>exp</c>, <c>iat</c> or <c>nbf</c> as a <see cref="float"/> is
+    /// refused as <see cref="JwsAccessTokenValidationFailureReason.Malformed"/> with the description "Access token
+    /// &lt;claim&gt; claim is not a NumericDate naming a representable instant.", whatever value the
+    /// <see cref="float"/> holds: here the claims name 200, 100 and 110 seconds after 1970-01-01T00:00:00Z under a
+    /// clock 120 seconds after it, each held exactly. A <see cref="float"/> has 24 mantissa bits and holds only one
+    /// epoch second in 128 of this era exactly (between 2^30 and 2^31 seconds its spacing is 128 seconds, so an
+    /// instant read from one is off by up to 64 seconds), and refusing the shape as a whole is this library's rule.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.4">RFC 7519 Section 4.1.4</see>, of the
+    /// <c>exp</c>, <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.5">Section 4.1.5</see>, of the
+    /// <c>nbf</c>, and <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.6">Section 4.1.6</see>, of
+    /// the <c>iat</c>: "Its value MUST be a number containing a NumericDate value."
+    /// </summary>
+    /// <param name="claimName">The time claim the parser delegate hands as a <see cref="float"/>.</param>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DataRow("exp", DisplayName = "an exp handed as a float")]
+    [DataRow("iat", DisplayName = "an iat handed as a float")]
+    [DataRow("nbf", DisplayName = "an nbf handed as a float")]
+    public async Task ValidatorRefusesATimeClaimHandedAsAFloatAsMalformed(string claimName)
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory publicKey = keys.PublicKey;
+        using PrivateKeyMemory privateKey = keys.PrivateKey;
+        JwtPayload payload = BuildDefaultPayload();
+        payload[WellKnownJwtClaimNames.Iat] = 100L;
+        payload[WellKnownJwtClaimNames.Nbf] = 110L;
+        payload[WellKnownJwtClaimNames.Exp] = 200L;
+        string token = await BuildSignedAccessTokenAsync(privateKey, payload).ConfigureAwait(false);
+
+        JwsAccessTokenValidationResult result = await ValidateAsync(
+            token,
+            publicKey,
+            parser: ParserHandingTimeClaimsInShape("float", claimName),
+            timeProvider: new FakeTimeProvider(ShapeClockInstant)).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.AreEqual(JwsAccessTokenValidationFailureReason.Malformed, result.FailureReason);
+        Assert.AreEqual($"Access token {claimName} claim is not a NumericDate naming a representable instant.", result.FailureDescription);
+    }
+
+
+    /// <summary>
+    /// An access token whose decoder hands its <c>exp</c>, <c>nbf</c> and <c>iat</c> as a <see cref="long"/>, an
+    /// <see cref="int"/>, a <see cref="short"/>, a <see cref="byte"/>, a <see cref="ulong"/>, a <see cref="uint"/>,
+    /// a <see cref="double"/> or a <see cref="decimal"/> is valid, and the instants surfaced are the ones the
+    /// numbers name, the fraction of a <see cref="double"/> and of a <see cref="decimal"/> kept to the tick. The
+    /// parser delegate hands the three claims of the signed token in the row's shape; the clock is 120 seconds after
+    /// 1970-01-01T00:00:00Z, and the <c>iat</c>, <c>nbf</c> and <c>exp</c> are 100, 110 and 200 seconds after it
+    /// plus the row's fraction, so every shape, a <see cref="byte"/> included, holds them.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-2">RFC 7519 Section 2</see>: "NumericDate A JSON
+    /// numeric value representing the number of seconds from 1970-01-01T00:00:00Z UTC until the specified UTC
+    /// date/time, ignoring leap seconds. This is equivalent to the IEEE Std 1003.1, 2013 Edition [POSIX.1]
+    /// definition "Seconds Since the Epoch", in which each day is accounted for by exactly 86400 seconds, other
+    /// than that non-integer values can be represented."
+    /// </summary>
+    /// <param name="shape">The CLR number shape the parser delegate hands the three claims in.</param>
+    /// <param name="fraction">The fraction of a second each claim carries past its whole second, as invariant text.</param>
+    /// <param name="fractionTicks">That fraction in ticks.</param>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DataRow("long", "0", 0L, DisplayName = "exp, nbf and iat handed as a long")]
+    [DataRow("int", "0", 0L, DisplayName = "exp, nbf and iat handed as an int")]
+    [DataRow("short", "0", 0L, DisplayName = "exp, nbf and iat handed as a short")]
+    [DataRow("byte", "0", 0L, DisplayName = "exp, nbf and iat handed as a byte")]
+    [DataRow("ulong", "0", 0L, DisplayName = "exp, nbf and iat handed as a ulong")]
+    [DataRow("uint", "0", 0L, DisplayName = "exp, nbf and iat handed as a uint")]
+    [DataRow("double", "0.25", 2_500_000L, DisplayName = "exp, nbf and iat handed as a double with a fraction")]
+    [DataRow("decimal", "0.1234567", 1_234_567L, DisplayName = "exp, nbf and iat handed as a decimal with a fraction")]
+    public async Task ValidatorReadsTheTimeClaimsInEachNumberShapeTheReaderNames(string shape, string fraction, long fractionTicks)
+    {
+        decimal fractionSeconds = decimal.Parse(fraction, System.Globalization.CultureInfo.InvariantCulture);
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory publicKey = keys.PublicKey;
+        using PrivateKeyMemory privateKey = keys.PrivateKey;
+        JwtPayload payload = BuildDefaultPayload();
+        payload[WellKnownJwtClaimNames.Iat] = 100m + fractionSeconds;
+        payload[WellKnownJwtClaimNames.Nbf] = 110m + fractionSeconds;
+        payload[WellKnownJwtClaimNames.Exp] = 200m + fractionSeconds;
+        string token = await BuildSignedAccessTokenAsync(privateKey, payload).ConfigureAwait(false);
+
+        JwsAccessTokenValidationResult result = await ValidateAsync(
+            token,
+            publicKey,
+            parser: ParserHandingTimeClaimsInShape(shape, WellKnownJwtClaimNames.Exp, WellKnownJwtClaimNames.Nbf, WellKnownJwtClaimNames.Iat),
+            timeProvider: new FakeTimeProvider(ShapeClockInstant)).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsSuccess, $"Validation must succeed; got {result.FailureReason}: {result.FailureDescription}");
+        Assert.AreEqual(DateTimeOffset.UnixEpoch.AddSeconds(100).AddTicks(fractionTicks), result.Claims!.IssuedAt);
+        Assert.AreEqual(DateTimeOffset.UnixEpoch.AddSeconds(110).AddTicks(fractionTicks), result.Claims.NotBefore);
+        Assert.AreEqual(DateTimeOffset.UnixEpoch.AddSeconds(200).AddTicks(fractionTicks), result.Claims.Expiration);
+    }
+
+
+    /// <summary>
+    /// A parser delegate over <see cref="JwsAccessTokenTestSupport.Parser"/> that hands the named claims of the
+    /// payload in the CLR number shape <paramref name="shape"/> names, each read from its JSON number as a decoder
+    /// of that shape reads it; every other member is handed as the test parser reads it.
+    /// </summary>
+    /// <param name="shape">
+    /// The shape: <c>long</c>, <c>int</c>, <c>short</c>, <c>byte</c>, <c>ulong</c>, <c>uint</c>, <c>double</c>,
+    /// <c>decimal</c> or <c>float</c>.
+    /// </param>
+    /// <param name="claimNames">The claims handed in that shape; each is a number in the signed payload.</param>
+    /// <returns>The parser.</returns>
+    internal static JwsAccessTokenJsonParser ParserHandingTimeClaimsInShape(string shape, params string[] claimNames) => new()
+    {
+        ParseHeader = JwsAccessTokenTestSupport.Parser.ParseHeader,
+        ParseClaims = bytes =>
+        {
+            JwtPayload payload = JwsAccessTokenTestSupport.Parser.ParseClaims(bytes);
+            using JsonDocument document = JsonDocument.Parse(bytes);
+            foreach(string claimName in claimNames)
+            {
+                payload[claimName] = InShape(document.RootElement.GetProperty(claimName), shape);
+            }
+
+            return payload;
+        }
+    };
+
+
+    /// <summary>
+    /// The JSON number <paramref name="number"/> read in the CLR shape <paramref name="shape"/> names, boxed.
+    /// </summary>
+    /// <param name="number">The JSON number.</param>
+    /// <param name="shape">The shape, as <see cref="ParserHandingTimeClaimsInShape"/> names them.</param>
+    /// <returns>The number in that shape.</returns>
+    private static object InShape(JsonElement number, string shape) => shape switch
+    {
+        "long" => number.GetInt64(),
+        "int" => number.GetInt32(),
+        "short" => number.GetInt16(),
+        "byte" => number.GetByte(),
+        "ulong" => number.GetUInt64(),
+        "uint" => number.GetUInt32(),
+        "double" => number.GetDouble(),
+        "decimal" => number.GetDecimal(),
+        "float" => number.GetSingle(),
+        _ => throw new ArgumentOutOfRangeException(nameof(shape), shape, null)
+    };
+
+
+    /// <summary>
     /// The fixture's baseline RFC 9068 access-token payload — valid <c>iss</c>/<c>aud</c>/timing for
     /// this suite's trust anchor — that the <c>act</c>/<c>may_act</c> tests overlay their claim under
     /// test onto.
@@ -875,18 +1068,47 @@ internal sealed class JwsAccessTokenValidatorTests
     }
 
 
+    /// <summary>
+    /// Validates <paramref name="token"/> with the verification key resolved for <see cref="DefaultKid"/> as
+    /// <paramref name="publicKey"/>.
+    /// </summary>
+    /// <param name="token">The compact access token.</param>
+    /// <param name="publicKey">The verification key the resolver answers for <see cref="DefaultKid"/>.</param>
+    /// <param name="expectedAuthorizedParty">The authorized party the validator enforces, or <see langword="null"/> for none.</param>
+    /// <param name="parser">The parser delegate, or <see langword="null"/> for <see cref="JwsAccessTokenTestSupport.Parser"/>.</param>
+    /// <param name="timeProvider">The clock, or <see langword="null"/> for the class clock at <see cref="NowInstant"/>.</param>
+    /// <returns>The validation result.</returns>
     private async Task<JwsAccessTokenValidationResult> ValidateAsync(
-        string token, PublicKeyMemory publicKey, string? expectedAuthorizedParty = null)
+        string token,
+        PublicKeyMemory publicKey,
+        string? expectedAuthorizedParty = null,
+        JwsAccessTokenJsonParser? parser = null,
+        TimeProvider? timeProvider = null)
     {
         ValueTask<PublicKeyMemory?> resolver(KeyId kid, KeyUsageContext usage, TenantId tenant, ExchangeContext ctx, CancellationToken ct) =>
             ValueTask.FromResult<PublicKeyMemory?>(string.Equals(kid.Value, DefaultKid, StringComparison.Ordinal)
                 ? publicKey : null);
-        return await ValidateInternalAsync(token, resolver, expectedAuthorizedParty).ConfigureAwait(false);
+
+        return await ValidateInternalAsync(token, resolver, expectedAuthorizedParty, parser, timeProvider).ConfigureAwait(false);
     }
 
 
+    /// <summary>
+    /// Validates <paramref name="token"/> through <see cref="JwsAccessTokenValidator.ValidateAsync"/> with the
+    /// class's issuer, audience and skew.
+    /// </summary>
+    /// <param name="token">The compact access token.</param>
+    /// <param name="resolver">The verification-key resolver.</param>
+    /// <param name="expectedAuthorizedParty">The authorized party the validator enforces, or <see langword="null"/> for none.</param>
+    /// <param name="parser">The parser delegate, or <see langword="null"/> for <see cref="JwsAccessTokenTestSupport.Parser"/>.</param>
+    /// <param name="timeProvider">The clock, or <see langword="null"/> for the class clock at <see cref="NowInstant"/>.</param>
+    /// <returns>The validation result.</returns>
     private async Task<JwsAccessTokenValidationResult> ValidateInternalAsync(
-        string token, ServerVerificationKeyResolverDelegate resolver, string? expectedAuthorizedParty = null)
+        string token,
+        ServerVerificationKeyResolverDelegate resolver,
+        string? expectedAuthorizedParty = null,
+        JwsAccessTokenJsonParser? parser = null,
+        TimeProvider? timeProvider = null)
     {
         return await JwsAccessTokenValidator.ValidateAsync(
             token,
@@ -894,9 +1116,9 @@ internal sealed class JwsAccessTokenValidatorTests
             DefaultAudience,
             resolver,
             MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
-            JwsAccessTokenTestSupport.Parser,
+            parser ?? JwsAccessTokenTestSupport.Parser,
             TestSetup.Base64UrlDecoder,
-            TimeProvider,
+            timeProvider ?? TimeProvider,
             BaseMemoryPool.Shared,
             IatSkew,
             tenantId: default,

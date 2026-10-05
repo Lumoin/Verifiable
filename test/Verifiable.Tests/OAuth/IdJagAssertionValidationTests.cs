@@ -264,6 +264,43 @@ internal sealed class IdJagAssertionValidationTests
     }
 
 
+    /// <summary>
+    /// The edge of the skew decides a grant's <c>iat</c> ahead of the clock to the tick: an <c>iat</c> exactly one
+    /// skew after the clock is accepted and surfaced, and one a tick later (a fraction of 0.0000001 second) is
+    /// refused as <see cref="IdJagValidationFailureReason.NotYetValid"/> with the description "The assertion iat
+    /// is in the future beyond the skew tolerance." The refusal is this library's policy:
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see>: "Application of
+    /// additional restrictions and policy are at the discretion of the authorization server."
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 3.1</see>:
+    /// "iat: REQUIRED - as defined in Section 4.1.6 of [RFC7519]."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.6">RFC 7519 Section 4.1.6</see>: "The "iat"
+    /// (issued at) claim identifies the time at which the JWT was issued."
+    /// </summary>
+    /// <param name="caseName">The <c>iat</c>: <c>atTheEdge</c> or <c>oneTickLater</c>.</param>
+    [TestMethod]
+    [DataRow("atTheEdge", DisplayName = "an iat exactly one skew after the clock")]
+    [DataRow("oneTickLater", DisplayName = "an iat one tick later than that")]
+    public void TheEdgeOfTheSkewDecidesTheIssuedAtToTheTick(string caseName)
+    {
+        long edgeSeconds = Now.Add(Skew).ToUnixTimeSeconds();
+        (object issuedAt, IdJagValidationFailureReason? expectedReason, string? expectedDescription, DateTimeOffset? expectedIssuedAt) = caseName switch
+        {
+            "atTheEdge" => ((object)edgeSeconds, (IdJagValidationFailureReason?)null, (string?)null, (DateTimeOffset?)DateTimeOffset.FromUnixTimeSeconds(edgeSeconds)),
+            "oneTickLater" => (edgeSeconds + 0.0000001m, IdJagValidationFailureReason.NotYetValid, "The assertion iat is in the future beyond the skew tolerance.", null),
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        JwtPayload payload = ValidPayload();
+        payload[WellKnownJwtClaimNames.Iat] = issuedAt;
+
+        IdJagAssertionValidationResult result = Validate(ValidHeader(), payload);
+
+        Assert.AreEqual(expectedReason, result.FailureReason, result.FailureDescription);
+        Assert.AreEqual(expectedDescription, result.FailureDescription);
+        Assert.AreEqual(expectedIssuedAt, result.IssuedAt);
+    }
+
+
     [TestMethod]
     public void ExpiryAtOrBeforeIssuedAtIsInconsistent()
     {
@@ -639,6 +676,29 @@ internal sealed class IdJagAssertionValidationTests
 
         Assert.AreEqual(IdJagValidationFailureReason.InconsistentTemporalClaims, result.FailureReason);
         Assert.AreEqual("The assertion iat claim is not a numeric timestamp.", result.FailureDescription);
+    }
+
+
+    /// <summary>
+    /// An <c>iat</c> a decoder hands as a <see cref="float"/> is a number the reader refuses as not representable:
+    /// the grant is refused with the time claims' reason and the description of a NumericDate this server cannot
+    /// represent. A <see cref="float"/> holds only one epoch second in 128 of this era exactly (between 2^30 and
+    /// 2^31 seconds its spacing is 128 seconds, so the <see cref="float"/> nearest the class clock less one minute
+    /// names an instant up to 64 seconds away from it); refusing the shape as a whole is this library's rule.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-2">RFC 7519 Section 2</see> defines the NumericDate
+    /// as "A JSON numeric value representing the number of seconds from 1970-01-01T00:00:00Z UTC until the specified
+    /// UTC date/time, ignoring leap seconds.", so the claim is a number.
+    /// </summary>
+    [TestMethod]
+    public void AnIssuedAtAsAFloatIsANumericDateThisServerCannotRepresent()
+    {
+        JwtPayload payload = ValidPayload();
+        payload[WellKnownJwtClaimNames.Iat] = (float)Now.AddMinutes(-1).ToUnixTimeSeconds();
+
+        IdJagAssertionValidationResult result = Validate(ValidHeader(), payload);
+
+        Assert.AreEqual(IdJagValidationFailureReason.InconsistentTemporalClaims, result.FailureReason);
+        Assert.AreEqual("The assertion iat claim is a NumericDate this server cannot represent.", result.FailureDescription);
     }
 
 

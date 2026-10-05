@@ -241,8 +241,9 @@ public static class PrivateKeyJwtClientAuthentication
                 "The client assertion is missing the jti claim.");
         }
 
-        //The time claims are read by the one reader the RFC 7523 claim rules share: a number, a fraction kept, and
-        //a JSON string or a number no instant can hold refused as malformed.
+        //The time claims are read by the NumericDate reader the RFC 7523 claim rules share: a long, int, short, byte,
+        //ulong, uint, double or decimal is read, a fraction kept, and a float, any other shape, a JSON string or a
+        //number no instant can hold is refused as malformed.
         if(JwtBearer.Rfc7523AssertionValidation.ReadNumericDate(
             payload, WellKnownJwtClaimNames.Exp, out _, out DateTimeOffset exp) != Validation.NumericDateReadResult.Value)
         {

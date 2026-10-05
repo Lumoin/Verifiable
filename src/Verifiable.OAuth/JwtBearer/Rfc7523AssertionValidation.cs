@@ -41,7 +41,17 @@ public enum Rfc7523AssertionValidationFailureReason
     /// <summary>§3 item 4: the assertion has expired (<c>exp</c> at or before now, within skew).</summary>
     Expired,
 
-    /// <summary>§3 item 5: the assertion is not yet valid (<c>nbf</c> after now, beyond skew).</summary>
+    /// <summary>
+    /// The assertion is not yet valid: its <c>nbf</c> or its <c>iat</c> lies after the current instant plus the
+    /// skew. The <c>nbf</c> case is
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see> item 5. The <c>iat</c>
+    /// case is this library's policy under that section's "Application of additional restrictions and policy are
+    /// at the discretion of the authorization server.", since
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.6">RFC 7519 Section 4.1.6</see> reads "The
+    /// "iat" (issued at) claim identifies the time at which the JWT was issued. This claim can be used to
+    /// determine the age of the JWT. Its value MUST be a number containing a NumericDate value. Use of this claim
+    /// is OPTIONAL." and a JWT issued beyond the skew after the current instant names a time that has not come.
+    /// </summary>
     NotYetValid,
 
     /// <summary>
@@ -145,7 +155,10 @@ internal enum Rfc7523TemporalOutcome
     /// <summary>The assertion has expired.</summary>
     Expired,
 
-    /// <summary>The assertion is not yet valid.</summary>
+    /// <summary>
+    /// The assertion is not yet valid: its <c>nbf</c> or its <c>iat</c> lies after the current instant plus the
+    /// skew (<see cref="Rfc7523AssertionValidationFailureReason.NotYetValid"/> states the clauses).
+    /// </summary>
     NotYetValid,
 
     /// <summary>The temporal claims are internally inconsistent, not numbers, or NumericDates this server cannot represent.</summary>
@@ -177,8 +190,12 @@ public static class Rfc7523AssertionValidation
     /// </summary>
     /// <param name="payload">The decoded (signature-verified) JWT payload.</param>
     /// <param name="audience">The caller's own identity — the value <c>aud</c> (§3 item 3) must name.</param>
-    /// <param name="now">The current instant for expiry / not-before evaluation.</param>
-    /// <param name="clockSkew">Tolerance applied to the <c>exp</c> and <c>nbf</c> comparisons.</param>
+    /// <param name="now">The instant the exp, nbf and iat are evaluated against.</param>
+    /// <param name="clockSkew">
+    /// Tolerance applied to the <c>exp</c>, <c>nbf</c> and <c>iat</c> comparisons: an <c>nbf</c> or an <c>iat</c>
+    /// later than the current instant plus this tolerance is
+    /// <see cref="Rfc7523AssertionValidationFailureReason.NotYetValid"/>, and one equal to it is accepted.
+    /// </param>
     public static Rfc7523AssertionValidationResult Validate(
         JwtPayload payload, string audience, DateTimeOffset now, TimeSpan clockSkew)
     {
@@ -273,11 +290,19 @@ public static class Rfc7523AssertionValidation
 
     /// <summary>
     /// §3 items 4–6: <c>exp</c> MUST be present and the assertion MUST NOT be expired; <c>nbf</c> and
-    /// <c>iat</c> are OPTIONAL but, when present, MUST be numeric timestamps consistent with <c>exp</c>.
+    /// <c>iat</c> are OPTIONAL but, when present, MUST be numeric timestamps consistent with <c>exp</c>. An
+    /// <c>nbf</c> or an <c>iat</c> later than the current instant plus <paramref name="clockSkew"/> is
+    /// <see cref="Rfc7523TemporalOutcome.NotYetValid"/>; for the <c>iat</c> that refusal is this library's policy
+    /// under <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see>: "Application of
+    /// additional restrictions and policy are at the discretion of the authorization server." No maximum age of
+    /// the <c>iat</c> is applied: an <c>iat</c> unreasonably far in the past is the application's to judge.
     /// </summary>
     /// <param name="payload">The decoded JWT payload.</param>
     /// <param name="now">The current instant.</param>
-    /// <param name="clockSkew">Tolerance applied to the <c>exp</c> and <c>nbf</c> comparisons.</param>
+    /// <param name="clockSkew">
+    /// Tolerance applied to the <c>exp</c>, <c>nbf</c> and <c>iat</c> comparisons; an <c>nbf</c> or an <c>iat</c>
+    /// equal to the current instant plus this tolerance is accepted.
+    /// </param>
     /// <param name="expiration">The validated <c>exp</c> claim on <see cref="Rfc7523TemporalOutcome.Valid"/>.</param>
     /// <param name="issuedAt">The <c>iat</c> claim, when present, on <see cref="Rfc7523TemporalOutcome.Valid"/>.</param>
     /// <param name="failureDescription">A human-readable description of the specific rule that failed, or <see langword="null"/> on success.</param>
@@ -325,6 +350,16 @@ public static class Rfc7523AssertionValidation
             failureDescription = "The assertion exp is at or before iat (non-positive lifetime).";
 
             return Rfc7523TemporalOutcome.InconsistentTemporalClaims;
+        }
+
+        //An assertion issued later than the clock plus the skew names a time that has not come; refusing it is
+        //this library's policy under RFC 7523 Section 3's additional restrictions. The instants are compared through
+        //their difference, as the not-before is, so no sum leaves the representable range.
+        if(iatRead == NumericDateReadResult.Value && iat - now > clockSkew)
+        {
+            failureDescription = "The assertion iat is in the future beyond the skew tolerance.";
+
+            return Rfc7523TemporalOutcome.NotYetValid;
         }
 
         NumericDateReadResult nbfRead = ReadNumericDate(payload, WellKnownJwtClaimNames.Nbf, out bool isNbfNumber, out DateTimeOffset nbf);
@@ -414,15 +449,20 @@ public static class Rfc7523AssertionValidation
     /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-2">RFC 7519 Section 2</see> defines, "A JSON
     /// numeric value representing the number of seconds from 1970-01-01T00:00:00Z UTC until the specified UTC
     /// date/time, ignoring leap seconds", where "non-integer values can be represented". This is the one reader
-    /// of a time claim the RFC 7523 Section 3 claim rules here, <see cref="Server.PrivateKeyJwtClientAuthentication"/>
-    /// and <see cref="Federation.FederationClientAuthentication"/> share.
+    /// of a time claim the RFC 7523 Section 3 claim rules here, <see cref="Server.PrivateKeyJwtClientAuthentication"/>,
+    /// <see cref="Federation.FederationClientAuthentication"/>, <see cref="JwsAccessTokenValidator"/> and
+    /// <see cref="Oidc10IdTokenValidator"/> (its <c>auth_time</c>) share.
     /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.4">RFC 7519 Section 4.1.4</see>, of the
     /// <c>exp</c>, <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.5">Section 4.1.5</see>, of the
     /// <c>nbf</c>, and <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.6">Section 4.1.6</see>, of
     /// the <c>iat</c>, each read "Its value MUST be a number containing a NumericDate value.", so a JSON string is
-    /// no time claim, digits included, and is malformed. A number of any CLR numeric shape a decoder hands
+    /// no time claim, digits included, and is malformed. A number a decoder hands in one of eight CLR shapes
     /// (<see cref="long"/>, <see cref="int"/>, <see cref="short"/>, <see cref="byte"/>, <see cref="ulong"/>,
-    /// <see cref="uint"/>, <see cref="double"/>, <see cref="float"/>, <see cref="decimal"/>) is read through
+    /// <see cref="uint"/>, <see cref="double"/>, <see cref="decimal"/>) is read. A <see cref="float"/> is a number
+    /// the reader refuses as a NumericDate this server cannot represent: its 24 mantissa bits hold only one epoch
+    /// second in 128 of this era exactly (between 2^30 and 2^31 seconds its spacing is 128 seconds, so an instant
+    /// read from one is off by up to 64 seconds), and refusing the shape as a whole is this library's rule. A claim
+    /// in any other shape is no number to this reader and is malformed. A number of the eight is read through
     /// <see cref="JwtTemporalChecks.TryFromUnixSeconds(decimal, out DateTimeOffset)"/> or its
     /// <see cref="double"/> overload, which keep the fraction to the tick and answer a value no
     /// <see cref="DateTimeOffset"/> can hold, or one that is not finite, as not representable rather than
@@ -430,10 +470,12 @@ public static class Rfc7523AssertionValidation
     /// refusing it is this library's fail-closed reading, since no instant the checks compare can hold it.
     /// </summary>
     /// <param name="payload">The decoded JWT payload.</param>
-    /// <param name="claimName">The name of the time claim: <c>exp</c>, <c>nbf</c> or <c>iat</c>.</param>
+    /// <param name="claimName">The name of the time claim: <c>exp</c>, <c>nbf</c>, <c>iat</c> or <c>auth_time</c>.</param>
     /// <param name="isNumber">
-    /// Whether a present claim is a number, so a caller can tell a NumericDate this server cannot represent
-    /// from a value that is no number; <see langword="false"/> for an absent claim.
+    /// Whether a present claim is a number to this reader, so a caller can tell a NumericDate this server cannot
+    /// represent from a value that is no number: <see langword="true"/> for a claim in one of the eight shapes the
+    /// reader reads and for a <see cref="float"/>, which it refuses; <see langword="false"/> for a claim in any
+    /// other shape, a JSON string included, and for an absent claim.
     /// </param>
     /// <param name="value">The instant the claim names when the read answers <see cref="NumericDateReadResult.Value"/>.</param>
     /// <returns>Whether the claim is absent, names an instant, or is malformed.</returns>
@@ -457,8 +499,8 @@ public static class Rfc7523AssertionValidation
             ulong u => (true, JwtTemporalChecks.TryFromUnixSeconds((decimal)u, out value)),
             uint ui => (true, JwtTemporalChecks.TryFromUnixSeconds((decimal)ui, out value)),
             double d => (true, JwtTemporalChecks.TryFromUnixSeconds(d, out value)),
-            float f => (true, JwtTemporalChecks.TryFromUnixSeconds((double)f, out value)),
             decimal dec => (true, JwtTemporalChecks.TryFromUnixSeconds(dec, out value)),
+            float => (true, false),
             _ => (false, false)
         };
 

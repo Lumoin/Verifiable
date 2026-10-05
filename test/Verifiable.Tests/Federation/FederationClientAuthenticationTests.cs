@@ -262,6 +262,29 @@ internal sealed class FederationClientAuthenticationTests
 
 
     /// <summary>
+    /// An <c>iat</c> a decoder hands as a <see cref="float"/> refuses the client authentication JWT as a malformed
+    /// <c>iat</c>. The claim is a number, and the reader refuses the shape as a whole as this library's rule: a
+    /// <see cref="float"/> holds only one epoch second in 128 of this era exactly (between 2^30 and 2^31 seconds
+    /// its spacing is 128 seconds, so the <see cref="float"/> nearest the class clock less one minute names an
+    /// instant up to 64 seconds away from it).
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-2">RFC 7519 Section 2</see> defines the NumericDate
+    /// as "A JSON numeric value representing the number of seconds from 1970-01-01T00:00:00Z UTC until the specified
+    /// UTC date/time, ignoring leap seconds."
+    /// </summary>
+    [TestMethod]
+    public void AnIssuedAtAsAFloatIsRejectedAsMalformed()
+    {
+        JwtPayload payload = ValidPayload();
+        payload[WellKnownJwtClaimNames.Iat] = (float)Now.AddMinutes(-1).ToUnixTimeSeconds();
+
+        FederationClientAuthenticationResult result = Validate(payload);
+
+        Assert.IsFalse(result.IsValid, "The float was read as the iat claim.");
+        Assert.AreEqual("The client authentication JWT iat claim is malformed.", result.FailureReason);
+    }
+
+
+    /// <summary>
     /// The edge of the skew decides the expiry to the tick: an <c>exp</c> exactly one skew before the clock
     /// refuses the client authentication JWT as expired, and one a tick later (a fraction of 0.0000001 second) is
     /// not expired, its fraction kept.

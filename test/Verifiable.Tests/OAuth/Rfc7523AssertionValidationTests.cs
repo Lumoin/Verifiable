@@ -297,6 +297,47 @@ internal sealed class Rfc7523AssertionValidationTests
 
 
     /// <summary>
+    /// An <c>exp</c>, <c>iat</c> or <c>nbf</c> a decoder hands as a <see cref="float"/> is a number the reader
+    /// refuses as not representable: it is refused as
+    /// <see cref="Rfc7523AssertionValidationFailureReason.InconsistentTemporalClaims"/> with the description of a
+    /// NumericDate this server cannot represent. A <see cref="float"/> has 24 mantissa bits and holds only one epoch
+    /// second in 128 of this era exactly: between 2^30 and 2^31 seconds its spacing is 128 seconds, so the
+    /// <see cref="float"/> nearest the class clock less one minute, or plus five minutes, names an instant up to 64
+    /// seconds away from it. Refusing the shape as a whole is this library's rule.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-2">RFC 7519 Section 2</see> defines the NumericDate
+    /// as "A JSON numeric value representing the number of seconds from 1970-01-01T00:00:00Z UTC until the specified
+    /// UTC date/time, ignoring leap seconds.", so the claim is a number;
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.4">RFC 7519 Section 4.1.4</see>, of the
+    /// <c>exp</c>, <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.5">Section 4.1.5</see>, of the
+    /// <c>nbf</c>, and <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.6">Section 4.1.6</see>, of
+    /// the <c>iat</c>: "Its value MUST be a number containing a NumericDate value."
+    /// </summary>
+    /// <param name="claimName">The time claim set as a <see cref="float"/>.</param>
+    [TestMethod]
+    [DataRow("exp", DisplayName = "an exp as a float")]
+    [DataRow("iat", DisplayName = "an iat as a float")]
+    [DataRow("nbf", DisplayName = "an nbf as a float")]
+    public void ATimeClaimAsAFloatIsInconsistent(string claimName)
+    {
+        float value = claimName switch
+        {
+            "exp" => Now.AddMinutes(5).ToUnixTimeSeconds(),
+            "iat" => Now.AddMinutes(-1).ToUnixTimeSeconds(),
+            "nbf" => Now.AddMinutes(-1).ToUnixTimeSeconds(),
+            _ => throw new ArgumentOutOfRangeException(nameof(claimName), claimName, null)
+        };
+
+        JwtPayload payload = ValidPayload();
+        payload[claimName] = value;
+
+        Rfc7523AssertionValidationResult result = Validate(payload);
+
+        Assert.AreEqual(Rfc7523AssertionValidationFailureReason.InconsistentTemporalClaims, result.FailureReason);
+        Assert.AreEqual($"The assertion {claimName} claim is a NumericDate this server cannot represent.", result.FailureDescription);
+    }
+
+
+    /// <summary>
     /// The edge of the skew decides the expiry to the tick: an <c>exp</c> exactly one skew before the clock is
     /// expired, and one an instant of a tick later (a fraction of 0.0000001 second) is not, its fraction kept.
     /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see> item 4: "The
@@ -359,10 +400,45 @@ internal sealed class Rfc7523AssertionValidationTests
 
 
     /// <summary>
+    /// The edge of the skew decides an <c>iat</c> ahead of the clock to the tick: an <c>iat</c> exactly one skew
+    /// after the clock is accepted and surfaced, and one a tick later (a fraction of 0.0000001 second) is refused
+    /// as <see cref="Rfc7523AssertionValidationFailureReason.NotYetValid"/> with the description "The assertion
+    /// iat is in the future beyond the skew tolerance." The refusal is this library's policy:
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see>: "Application of
+    /// additional restrictions and policy are at the discretion of the authorization server."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.6">RFC 7519 Section 4.1.6</see>: "The "iat"
+    /// (issued at) claim identifies the time at which the JWT was issued."
+    /// </summary>
+    /// <param name="caseName">The <c>iat</c>: <c>atTheEdge</c> or <c>oneTickLater</c>.</param>
+    [TestMethod]
+    [DataRow("atTheEdge", DisplayName = "an iat exactly one skew after the clock")]
+    [DataRow("oneTickLater", DisplayName = "an iat one tick later than that")]
+    public void TheEdgeOfTheSkewDecidesTheIssuedAtToTheTick(string caseName)
+    {
+        long edgeSeconds = Now.Add(Skew).ToUnixTimeSeconds();
+        (object issuedAt, Rfc7523AssertionValidationFailureReason? expectedReason, string? expectedDescription, DateTimeOffset? expectedIssuedAt) = caseName switch
+        {
+            "atTheEdge" => ((object)edgeSeconds, (Rfc7523AssertionValidationFailureReason?)null, (string?)null, (DateTimeOffset?)DateTimeOffset.FromUnixTimeSeconds(edgeSeconds)),
+            "oneTickLater" => (edgeSeconds + 0.0000001m, Rfc7523AssertionValidationFailureReason.NotYetValid, "The assertion iat is in the future beyond the skew tolerance.", null),
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
+        };
+
+        JwtPayload payload = ValidPayload();
+        payload[WellKnownJwtClaimNames.Iat] = issuedAt;
+
+        Rfc7523AssertionValidationResult result = Validate(payload);
+
+        Assert.AreEqual(expectedReason, result.FailureReason, result.FailureDescription);
+        Assert.AreEqual(expectedDescription, result.FailureDescription);
+        Assert.AreEqual(expectedIssuedAt, result.IssuedAt);
+    }
+
+
+    /// <summary>
     /// A fractional NumericDate keeps its fraction, and the fraction decides: an <c>exp</c> half a second past
     /// the clock skew's edge is not expired, as a <see cref="decimal"/> (the library's decoder) or a
-    /// <see cref="double"/>; and an <c>iat</c> and an <c>exp</c> a fraction apart within one whole second keep a
-    /// positive lifetime.
+    /// <see cref="double"/>; and an <c>iat</c> and an <c>exp</c> a fraction apart within the clock's own whole
+    /// second keep a positive lifetime, the <c>iat</c> a tenth of a second after the clock and so inside the skew.
     /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-2">RFC 7519 Section 2</see>: "This is equivalent
     /// to the IEEE Std 1003.1, 2013 Edition [POSIX.1] definition "Seconds Since the Epoch", in which each day is
     /// accounted for by exactly 86400 seconds, other than that non-integer values can be represented."
@@ -378,7 +454,7 @@ internal sealed class Rfc7523AssertionValidationTests
     public void AFractionalNumericDateKeepsItsFraction(string caseName)
     {
         long edgeSeconds = Now.Add(-Skew).ToUnixTimeSeconds();
-        long laterSeconds = Now.AddMinutes(1).ToUnixTimeSeconds();
+        long clockSeconds = Now.ToUnixTimeSeconds();
         (object IssuedAt, object Expiration, DateTimeOffset ExpectedExpiration) fractionCase = caseName switch
         {
             "decimalExpiration" => (
@@ -390,9 +466,9 @@ internal sealed class Rfc7523AssertionValidationTests
                 edgeSeconds + 0.5d,
                 DateTimeOffset.FromUnixTimeSeconds(edgeSeconds).AddMilliseconds(500)),
             "oneSecond" => (
-                laterSeconds + 0.1m,
-                laterSeconds + 0.9m,
-                DateTimeOffset.FromUnixTimeSeconds(laterSeconds).AddMilliseconds(900)),
+                clockSeconds + 0.1m,
+                clockSeconds + 0.9m,
+                DateTimeOffset.FromUnixTimeSeconds(clockSeconds).AddMilliseconds(900)),
             _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, null)
         };
 

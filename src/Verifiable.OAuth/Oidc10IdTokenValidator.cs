@@ -163,8 +163,8 @@ public static class Oidc10IdTokenValidator
         //OIDC Core §2: auth_time's "value is a JSON number representing the number of seconds from
         //1970-01-01T00:00:00Z as measured in UTC until the date/time". A present auth_time no instant
         //can be read from is refused, never surfaced as an absent one a max_age check would misread.
-        NumericDateReadResult authTimeRead = JwsAccessTokenValidator.TryReadEpochSeconds(
-            payload, WellKnownJwtClaimNames.AuthTime, out DateTimeOffset authTimeValue);
+        NumericDateReadResult authTimeRead = JwtBearer.Rfc7523AssertionValidation.ReadNumericDate(
+            payload, WellKnownJwtClaimNames.AuthTime, out _, out DateTimeOffset authTimeValue);
         if(authTimeRead == NumericDateReadResult.Malformed)
         {
             return Oidc10IdTokenValidationResult.Failure(

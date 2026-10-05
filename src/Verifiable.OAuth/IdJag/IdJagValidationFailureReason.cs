@@ -78,13 +78,24 @@ public enum IdJagValidationFailureReason
     /// <summary>The grant has expired (<c>exp</c> at or before now, within skew).</summary>
     Expired,
 
-    /// <summary>The grant is not yet valid (<c>nbf</c> after now, beyond skew).</summary>
+    /// <summary>
+    /// The grant is not yet valid: its <c>nbf</c> or its <c>iat</c> lies after the current instant plus the skew.
+    /// The <c>iat</c> case is this library's policy under
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see>: "Application of
+    /// additional restrictions and policy are at the discretion of the authorization server."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.6">RFC 7519 Section 4.1.6</see>: "The "iat"
+    /// (issued at) claim identifies the time at which the JWT was issued. This claim can be used to determine the
+    /// age of the JWT. Its value MUST be a number containing a NumericDate value. Use of this claim is OPTIONAL."
+    /// <see cref="JwtBearer.Rfc7523AssertionValidationFailureReason.NotYetValid"/> is the same refusal of the
+    /// shared rules.
+    /// </summary>
     NotYetValid,
 
     /// <summary>
     /// The temporal claims are internally inconsistent — <c>exp</c> at or before <c>iat</c> or
     /// <c>nbf</c> (the validity window never opens, independent of the current clock), or an
-    /// <c>exp</c>/<c>iat</c>/<c>nbf</c> claim that is present but not a numeric timestamp.
+    /// <c>exp</c>/<c>iat</c>/<c>nbf</c> claim that is present and is not a number, or is a NumericDate this
+    /// server cannot represent.
     /// </summary>
     InconsistentTemporalClaims,
 

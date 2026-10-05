@@ -448,7 +448,11 @@ public static class JwsAccessTokenValidator
             }
         }
 
-        NumericDateReadResult expRead = TryReadEpochSeconds(payload, WellKnownJwtClaimNames.Exp, out DateTimeOffset exp);
+        //The time claims are read by the NumericDate reader the RFC 7523 claim rules, PrivateKeyJwtClientAuthentication,
+        //FederationClientAuthentication, this validator and Oidc10IdTokenValidator's auth_time share: a long, int,
+        //short, byte, ulong, uint, double or decimal is read, and a float or any other shape is malformed.
+        NumericDateReadResult expRead = JwtBearer.Rfc7523AssertionValidation.ReadNumericDate(
+            payload, WellKnownJwtClaimNames.Exp, out _, out DateTimeOffset exp);
         if(expRead != NumericDateReadResult.Value)
         {
             return expRead == NumericDateReadResult.Absent
@@ -460,7 +464,8 @@ public static class JwsAccessTokenValidator
                     "Access token exp claim is not a NumericDate naming a representable instant.");
         }
 
-        NumericDateReadResult iatRead = TryReadEpochSeconds(payload, WellKnownJwtClaimNames.Iat, out DateTimeOffset iat);
+        NumericDateReadResult iatRead = JwtBearer.Rfc7523AssertionValidation.ReadNumericDate(
+            payload, WellKnownJwtClaimNames.Iat, out _, out DateTimeOffset iat);
         if(iatRead != NumericDateReadResult.Value)
         {
             return iatRead == NumericDateReadResult.Absent
@@ -501,7 +506,8 @@ public static class JwsAccessTokenValidator
         //be read from names a time that cannot be checked, so the token is refused rather than read
         //as carrying no nbf.
         DateTimeOffset? nbf = null;
-        NumericDateReadResult nbfRead = TryReadEpochSeconds(payload, WellKnownJwtClaimNames.Nbf, out DateTimeOffset nbfValue);
+        NumericDateReadResult nbfRead = JwtBearer.Rfc7523AssertionValidation.ReadNumericDate(
+            payload, WellKnownJwtClaimNames.Nbf, out _, out DateTimeOffset nbfValue);
         if(nbfRead == NumericDateReadResult.Malformed)
         {
             return SignedJwtValidationOutcome.Failure(
@@ -625,50 +631,6 @@ public static class JwsAccessTokenValidator
         }
 
         return false;
-    }
-
-
-    /// <summary>
-    /// Reads the NumericDate claim <paramref name="claimName"/> (RFC 7519 §2, seconds since the Unix
-    /// epoch, "other than that non-integer values can be represented") of a verified payload as an
-    /// instant, a fraction of a second included (<see cref="JwtTemporalChecks.TryFromUnixSeconds(double, out DateTimeOffset)"/>),
-    /// so a comparison with the clock is never made against a value truncated to its whole second. An
-    /// absent claim is <see cref="NumericDateReadResult.Absent"/>; a present value that is not a number, or
-    /// that names no instant a <see cref="DateTimeOffset"/> can hold, is
-    /// <see cref="NumericDateReadResult.Malformed"/>, so every caller, the optional <c>nbf</c> and
-    /// <c>auth_time</c> ones included, refuses the token as malformed instead of reading the value as
-    /// absent or letting an exception escape from the conversion.
-    /// </summary>
-    /// <param name="payload">The verified payload.</param>
-    /// <param name="claimName">The NumericDate claim to read.</param>
-    /// <param name="value">The instant when the result is <see cref="NumericDateReadResult.Value"/>.</param>
-    /// <returns>Whether the claim is absent, holds an instant, or is malformed.</returns>
-    internal static NumericDateReadResult TryReadEpochSeconds(JwtPayload payload, string claimName, out DateTimeOffset value)
-    {
-        value = default;
-        if(!payload.TryGetValue(claimName, out object? raw))
-        {
-            return NumericDateReadResult.Absent;
-        }
-
-        DateTimeOffset instant = default;
-        bool isRepresentable = raw switch
-        {
-            long l => JwtTemporalChecks.TryFromUnixSeconds((decimal)l, out instant),
-            int i => JwtTemporalChecks.TryFromUnixSeconds((decimal)i, out instant),
-            double d => JwtTemporalChecks.TryFromUnixSeconds(d, out instant),
-            decimal dec => JwtTemporalChecks.TryFromUnixSeconds(dec, out instant),
-            _ => false
-        };
-
-        if(!isRepresentable)
-        {
-            return NumericDateReadResult.Malformed;
-        }
-
-        value = instant;
-
-        return NumericDateReadResult.Value;
     }
 
 

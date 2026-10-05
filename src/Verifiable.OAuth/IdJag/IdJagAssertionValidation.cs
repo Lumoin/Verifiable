@@ -33,7 +33,7 @@ namespace Verifiable.OAuth.IdJag;
 ///   <item><description><c>iss</c> is present and is not the Resource Authorization Server's own issuer (§9.3).</description></item>
 ///   <item><description><c>aud</c> is the Resource Authorization Server's issuer as a string, or a single-element array of it; any other shape (multi-element array, mismatch) is rejected.</description></item>
 ///   <item><description><c>client_id</c> equals the authenticated client.</description></item>
-///   <item><description><c>sub</c> is present and not white space only, <c>exp</c> is present, the temporal claims are consistent, and the grant is neither expired nor not-yet-valid (<see href="https://www.rfc-editor.org/rfc/rfc7521#section-5.2">RFC 7521 Section 5.2</see>).</description></item>
+///   <item><description><c>sub</c> is present and not white space only, <c>exp</c> is present, the temporal claims are consistent, and the grant is neither expired nor not-yet-valid (<see href="https://www.rfc-editor.org/rfc/rfc7521#section-5.2">RFC 7521 Section 5.2</see>); a grant whose <c>nbf</c> or <c>iat</c> lies after the current instant plus the skew is not yet valid, the <c>iat</c> case this library's policy under <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see>: "Application of additional restrictions and policy are at the discretion of the authorization server." The age of a grant's <c>iat</c> is the application's to judge; no maximum age is applied.</description></item>
 ///   <item><description>
 ///     an <c>act</c> or <c>may_act</c> claim, when present, is a well-formed
 ///     <see href="https://www.rfc-editor.org/rfc/rfc8693#section-4.1">RFC 8693 §4.1</see> /
@@ -156,8 +156,11 @@ public static class IdJagAssertionValidation
     /// The <c>client_id</c> of the client authenticated on the redeem request — the grant's
     /// <c>client_id</c> claim must equal it.
     /// </param>
-    /// <param name="now">The current instant for expiry / not-before evaluation.</param>
-    /// <param name="clockSkew">Tolerance applied to the <c>exp</c> and <c>nbf</c> comparisons.</param>
+    /// <param name="now">The instant the exp, nbf and iat are evaluated against.</param>
+    /// <param name="clockSkew">
+    /// Tolerance applied to the <c>exp</c>, <c>nbf</c> and <c>iat</c> comparisons: an <c>nbf</c> or an <c>iat</c>
+    /// later than the current instant plus this tolerance is <see cref="IdJagValidationFailureReason.NotYetValid"/>.
+    /// </param>
     /// <returns>
     /// A successful <see cref="IdJagAssertionValidationResult"/> carrying the validated claims, or a
     /// failed result whose <see cref="IdJagAssertionValidationResult.FailureReason"/> the caller maps
@@ -189,8 +192,11 @@ public static class IdJagAssertionValidation
     /// <param name="payload">The decoded (signature-verified) JWT payload.</param>
     /// <param name="resourceServerIssuer">The Resource Authorization Server's own issuer identifier.</param>
     /// <param name="authenticatedClientId">The <c>client_id</c> of the client authenticated on the redeem request.</param>
-    /// <param name="now">The current instant for expiry / not-before evaluation.</param>
-    /// <param name="clockSkew">Tolerance applied to the <c>exp</c> and <c>nbf</c> comparisons.</param>
+    /// <param name="now">The instant the exp, nbf and iat are evaluated against.</param>
+    /// <param name="clockSkew">
+    /// Tolerance applied to the <c>exp</c>, <c>nbf</c> and <c>iat</c> comparisons: an <c>nbf</c> or an <c>iat</c>
+    /// later than the current instant plus this tolerance is <see cref="IdJagValidationFailureReason.NotYetValid"/>.
+    /// </param>
     /// <param name="rule">The rule applied to the grant's <c>sub_id</c> claim.</param>
     /// <param name="reference">
     /// The grant's validated subject when the claim is to be compared with it under <paramref name="rule"/>;
@@ -521,8 +527,11 @@ public static class IdJagAssertionValidation
     /// The <c>client_id</c> of the client authenticated on the redeem request: the grant's
     /// <c>client_id</c> claim must equal it.
     /// </param>
-    /// <param name="now">The current instant for expiry / not-before evaluation.</param>
-    /// <param name="clockSkew">Tolerance applied to the <c>exp</c> and <c>nbf</c> comparisons.</param>
+    /// <param name="now">The instant the exp, nbf and iat are evaluated against.</param>
+    /// <param name="clockSkew">
+    /// Tolerance applied to the <c>exp</c>, <c>nbf</c> and <c>iat</c> comparisons: an <c>nbf</c> or an <c>iat</c>
+    /// later than the current instant plus this tolerance is <see cref="IdJagValidationFailureReason.NotYetValid"/>.
+    /// </param>
     /// <param name="rule">The rule the redeem applies to the grant's <c>sub_id</c> claim.</param>
     /// <param name="cancellationToken">The token that cancels the application's association.</param>
     /// <returns>
