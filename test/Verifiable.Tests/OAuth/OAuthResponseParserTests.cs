@@ -875,9 +875,9 @@ internal sealed class OAuthResponseParsersTests
 
 
     /// <summary>
-    /// A Token Response whose <c>access_token</c> or <c>id_token</c> string holds an escaped lone surrogate
-    /// or an escaped U+0000 is not a well-formed document to the reader: it is refused whole, before any
-    /// member is read, as a malformed response that carries an empty body and echoes neither token.
+    /// A Token Response whose <c>access_token</c> string holds an escaped lone surrogate is not a
+    /// well-formed document to the reader: it is refused whole, before any member is read, as a malformed
+    /// response that carries an empty body and echoes none of the token.
     /// <see href="https://www.rfc-editor.org/rfc/rfc7493#section-2.1">RFC 7493 Section 2.1</see>:
     /// "Object member names, and string values in arrays and object members, MUST NOT include code points
     /// that identify Surrogates or Noncharacters as defined by [UNICODE]."
@@ -890,10 +890,38 @@ internal sealed class OAuthResponseParsersTests
     /// </summary>
     /// <param name="body">The whole Token Response body, as JSON text.</param>
     [TestMethod]
-    [DataRow("{\"access_token\":\"SlAV32hkKG\\u0000\",\"token_type\":\"Bearer\"}")]
     [DataRow("{\"access_token\":\"SlAV32hkKG\\ud800\",\"token_type\":\"Bearer\"}")]
-    [DataRow("{\"access_token\":\"SlAV32hkKG\",\"token_type\":\"Bearer\",\"id_token\":\"eyJhbGciOiJub25lIn0.e30.\\u0000\"}")]
     public void ParseTokenResponseRefusesATokenStringOutsideIJsonAsNotWellFormed(string body)
+    {
+        HttpResponseData response = Respond(body);
+
+        Result<TokenResponse, OAuthParseError> result =
+            OAuthResponseParsers.ParseTokenResponse(response, DateTimeOffset.UnixEpoch);
+
+        OAuthMalformedResponse malformed = Assert.IsInstanceOfType<OAuthMalformedResponse>(result.Error);
+        Assert.Contains("not well-formed", malformed.Support.Summary, StringComparison.Ordinal);
+        Assert.IsEmpty(malformed.Body, "A refused JSON-shaped body must not be carried in the error.");
+        Assert.DoesNotContain("SlAV32hkKG", malformed.ToString(), StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// A Token Response whose <c>access_token</c> or <c>id_token</c> string holds an escaped U+0000 is not
+    /// a well-formed document to the reader: it is refused whole, before any member is read, as a
+    /// malformed response that carries an empty body and echoes neither token. The refusal is this
+    /// library's own rule, since a store of text cannot hold U+0000; the JSON grammar admits the escape.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-9">RFC 8259 Section 9</see>:
+    /// "An implementation may set limits on the length and character contents of strings."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-10.3">RFC 6749 Section 10.3</see>:
+    /// "Access token credentials (as well as any confidential access token attributes) MUST be kept
+    /// confidential in transit and storage, and only shared among the authorization server, the resource
+    /// servers the access token is valid for, and the client to whom the access token is issued."
+    /// </summary>
+    /// <param name="body">The whole Token Response body, as JSON text.</param>
+    [TestMethod]
+    [DataRow("{\"access_token\":\"SlAV32hkKG\\u0000\",\"token_type\":\"Bearer\"}")]
+    [DataRow("{\"access_token\":\"SlAV32hkKG\",\"token_type\":\"Bearer\",\"id_token\":\"eyJhbGciOiJub25lIn0.e30.\\u0000\"}")]
+    public void ParseTokenResponseRefusesATokenStringHoldingAnEscapedControlCharacterAsNotWellFormed(string body)
     {
         HttpResponseData response = Respond(body);
 

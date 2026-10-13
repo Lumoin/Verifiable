@@ -197,6 +197,45 @@ internal sealed class Oid4VciAuthorizationCodeIssuanceTests
 
 
     /// <summary>
+    /// A Token Response whose <c>authorization_details</c> member name is spelled with an escape (the
+    /// underscore written as a six-char escape of U+005F) names the same member as the unescaped
+    /// spelling: the wallet's authorization-code path reads the granted authorization from it, the
+    /// token result carries the configuration and the identifier, and the Credential Request names that
+    /// identifier and no configuration.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.3">RFC 8259 Section 8.3</see>:
+    /// "Implementations that transform the textual representation into sequences of Unicode code units
+    /// and then perform the comparison numerically, code unit by code unit, are interoperable in the
+    /// sense that implementations will agree in all cases on equality or inequality of two strings."
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task AnAuthorizationDetailsNameSpelledWithAnEscapeIsReadAsTheMemberOnTheAuthorizationCodePath()
+    {
+        //The library's Authorization Server writes the member name unescaped, so the Token Response is
+        //rewritten after it crossed the wire and before the client reads it.
+        TokenResponseRewrite rewrite = new();
+        JourneyOutcome journey = await DriveJourneyAsync(
+            [CredentialIdentifier],
+            rewrite,
+            body => body.Replace("\"authorization_details\":[", "\"authorization\\u005fdetails\":[", StringComparison.Ordinal))
+            .ConfigureAwait(false);
+
+        Assert.IsTrue(rewrite.IsRewritten, "The Token Response must have carried authorization_details to respell.");
+        Assert.HasCount(1, journey.TokenResult.GrantedCredentialAuthorizations,
+            "The token result must carry the authorization the escaped member name spells.");
+        Assert.AreEqual(ConfigurationId, journey.TokenResult.GrantedCredentialAuthorizations[0].CredentialConfigurationId);
+        Assert.AreSequenceEqual(
+            [CredentialIdentifier],
+            journey.TokenResult.GrantedCredentialAuthorizations[0].CredentialIdentifiers.ToArray(),
+            "The token result must list the identifier the escaped member granted.");
+        Assert.IsTrue(journey.IssuedOutcome.IsSuccess, "The issuance over the granted identifier must succeed over the wire.");
+        Assert.AreEqual(CredentialIdentifier, journey.Observations.RequestedIdentifier,
+            "The Credential Request must name the identifier the escaped member granted.");
+        Assert.IsNull(journey.Observations.RequestedConfigurationId,
+            "The Credential Request must not name a credential_configuration_id beside the identifier.");
+    }
+
+    /// <summary>
     /// A Token Response whose <c>authorization_details</c> member holds an entry that is not an
     /// object fails the token exchange as <c>invalid_response</c> naming the member: no token is
     /// surfaced, the flow keeps its code pending, and no Nonce or Credential Request is sent.
@@ -750,8 +789,13 @@ internal sealed class Oid4VciAuthorizationCodeIssuanceTests
     /// The identifiers the authorization seam grants for the pushed details, or <see langword="null"/>
     /// for a pushed request that carries no <c>authorization_details</c>.
     /// </param>
+    /// <param name="rewrite">Where the rewrite of the Token Response records what it saw and did, or <see langword="null"/> for no rewrite.</param>
+    /// <param name="rewriteBody">The rewrite of the Token Response body before the client reads it, or <see langword="null"/> for none.</param>
     /// <returns>What the journey observed.</returns>
-    private async Task<JourneyOutcome> DriveJourneyAsync(IReadOnlyList<string>? grantedIdentifiers)
+    private async Task<JourneyOutcome> DriveJourneyAsync(
+        IReadOnlyList<string>? grantedIdentifiers,
+        TokenResponseRewrite? rewrite = null,
+        Func<string, string>? rewriteBody = null)
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = await RegisterWalletAsync(host).ConfigureAwait(false);
@@ -762,7 +806,12 @@ internal sealed class Oid4VciAuthorizationCodeIssuanceTests
         }
 
         TokenExchange exchange = await ExchangeAuthorizationCodeAsync(
-            host, material, isComposingAuthorizationDetails: grantedIdentifiers is not null, rewriteTokenResponse: null)
+            host,
+            material,
+            isComposingAuthorizationDetails: grantedIdentifiers is not null,
+            rewriteTokenResponse: rewrite is not null && rewriteBody is not null
+                ? RewriteTokenEndpointAnswer(host, material, rewriteBody, rewrite)
+                : null)
             .ConfigureAwait(false);
         AuthCodeFlowEndpointResult tokenResult = exchange.TokenResult;
 

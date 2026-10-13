@@ -175,8 +175,15 @@ public static class OAuthResponseParsers
     /// For every grant this parser serves, a body that is not an RFC 9457 problem is read as one JSON
     /// document: a body longer than <see cref="JwkJsonReader.MaximumDocumentLength"/>, counted in chars
     /// and then in UTF-8 bytes, is refused before any buffer is rented; the body is then converted to
-    /// UTF-8 once, and a body that is not well-formed JSON (a member name repeated in any object
-    /// included) is refused before any member is read. Both refusals are an
+    /// UTF-8 once, and a body is refused before any member is read when it is not well-formed JSON
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8259#section-2">RFC 8259 Section 2</see>), when it
+    /// repeats a member name in any object
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8259#section-4">RFC 8259 Section 4</see>), or when
+    /// a string holds a code point the reader refuses: an unpaired surrogate or a noncharacter, escaped or
+    /// not (<see href="https://www.rfc-editor.org/rfc/rfc7493#section-2.1">RFC 7493 Section 2.1</see>), or
+    /// an escaped U+0000, which is this library's own rule under
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-9">RFC 8259 Section 9</see>. Both
+    /// refusals are an
     /// <see cref="OAuthMalformedResponse"/>. Every member is then read by
     /// <see cref="ReadTokenResponse"/> from that copy, and only at the top level of the response
     /// object, so a member of the same name inside a nested object is never read in its place.
@@ -382,10 +389,12 @@ public static class OAuthResponseParsers
             return Result.Failure<TokenResponse, OAuthParseError>(
                 new OAuthMalformedResponse(
                     diagnosticBody,
-                    new DecisionSupport("The token response is not well-formed JSON, or repeats a member name.")
+                    new DecisionSupport("The token response is not well-formed JSON, repeats a member name, or holds a string the reader refuses.")
                     {
-                        LikelyCause = "The server returned a body two JSON readers could read differently.",
-                        SpecificationReference = "RFC 8259 Section 4"
+                        LikelyCause = "The server returned a body that is not a JSON text, one two JSON readers could read differently " +
+                                      "because it repeats a member name, or one with a string holding an unpaired surrogate, a noncharacter " +
+                                      "or an escaped U+0000.",
+                        SpecificationReference = "RFC 8259 Section 2 and Section 4, RFC 7493 Section 2.1, RFC 8259 Section 9"
                     }).WithTransportMetadata(response));
         }
 
