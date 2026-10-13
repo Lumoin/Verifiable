@@ -3,12 +3,11 @@ using Verifiable.Core.Transport;
 namespace Verifiable.Core.Outbound;
 
 /// <summary>
-/// The result of a single outbound HTTP hop returned by an
-/// <see cref="OutboundTransportDelegate"/> — the status code, response headers
+/// The completed response read by the guarded fetch from a single outbound HTTP hop — the status code, response headers
 /// (including <c>Location</c> on a redirect), and the body as a tracked carrier.
 /// </summary>
 /// <remarks>
-/// The transport that produces this MUST NOT follow redirects itself
+/// The transport that supplies the body stream MUST NOT follow redirects itself
 /// (auto-redirect off): the guarded <see cref="OutboundFetch"/> owns the
 /// redirect loop so it can re-validate every hop against the policy. The
 /// <see cref="Body"/> is a <see cref="TaggedMemory{T}"/> (GC-managed, no dispose

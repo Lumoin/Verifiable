@@ -1050,6 +1050,71 @@ internal sealed class Oid4VciWalletClientTests
 
 
     /// <summary>
+    /// A Token Response whose <c>authorization_details</c> member name is spelled with an escape is read as
+    /// that member: the wallet spends the token on one Credential Request naming the identifier the member
+    /// grants, alone. The library's Authorization Server writes the name without an escape, so the response
+    /// is delivered through the wallet's transport delegate.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.3">RFC 8259 Section 8.3</see>:
+    /// "Implementations that transform the textual representation into sequences of Unicode code units and
+    /// then perform the comparison numerically, code unit by code unit, are interoperable in the sense that
+    /// implementations will agree in all cases on equality or inequality of two strings."
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.2">OID4VCI 1.0 Section 6.2</see>:
+    /// "The Wallet MUST use these identifiers together with an Access Token in subsequent Credential
+    /// Requests."
+    /// </summary>
+    /// <param name="memberName">The member's name as the Token Response spells it, between its quotation marks.</param>
+    [TestMethod]
+    [DataRow("authorization\\u005fdetails")]
+    [DataRow("\\u0061uthorization_details")]
+    public async Task AnAuthorizationDetailsNameSpelledWithAnEscapeIsReadAsTheMember(string memberName)
+    {
+        GrantedDetailsIssuance issuance = await IssueOverTokenResponseAsync(
+            "{\"access_token\":\"tok\",\"token_type\":\"Bearer\",\"" + memberName + "\":"
+            + "[{\"type\":\"openid_credential\",\"credential_configuration_id\":\"" + ConfigurationId + "\","
+            + "\"credential_identifiers\":[\"pid-dataset-1\"]}]}").ConfigureAwait(false);
+
+        Assert.IsTrue(issuance.Outcome.IsSuccess, "The grant under an escaped member name must be spent.");
+        Assert.HasCount(1, issuance.CredentialRequestBodies, "Exactly one Credential Request must be sent.");
+        byte[] credentialRequest = Encoding.UTF8.GetBytes(issuance.CredentialRequestBodies[0]);
+        Assert.AreEqual("pid-dataset-1", JwkJsonReader.ExtractStringValue(credentialRequest, "credential_identifier"u8));
+        Assert.IsFalse(JwkJsonReader.ContainsKey(credentialRequest, "credential_configuration_id"u8),
+            "The Credential Request must not name a credential_configuration_id beside the identifier.");
+    }
+
+
+    /// <summary>
+    /// An <c>openid_credential</c> entry whose <c>type</c> member is spelled with an escape, in its name or in
+    /// its value, is read as an entry of that type: the wallet spends the token on one Credential Request
+    /// naming the identifier the entry grants, alone. A pin: the entries are read by the reader that compares
+    /// every name and every string as the text it spells. The library's Authorization Server writes the
+    /// entry without an escape, so the response is delivered through the wallet's transport delegate.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-7">RFC 8259 Section 7</see>: "Any character
+    /// may be escaped."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9396#section-2">RFC 9396 Section 2</see>:
+    /// "type: An identifier for the authorization details type as a string. The value of the type field
+    /// determines the allowable contents of the object that contains it. The value is unique for the
+    /// described API in the context of the AS. This field is REQUIRED."
+    /// </summary>
+    /// <param name="typeMember">The entry's <c>type</c> member, its name and its value, as the Token Response spells it.</param>
+    [TestMethod]
+    [DataRow("\"t\\u0079pe\":\"openid_credential\"")]
+    [DataRow("\"type\":\"openid\\u005fcredential\"")]
+    public async Task AnEntryTypeSpelledWithAnEscapeIsReadAsItsType(string typeMember)
+    {
+        GrantedDetailsIssuance issuance = await IssueOverGrantedDetailsAsync(
+            "[{" + typeMember + ",\"credential_configuration_id\":\"" + ConfigurationId + "\","
+            + "\"credential_identifiers\":[\"pid-dataset-1\"]}]").ConfigureAwait(false);
+
+        Assert.IsTrue(issuance.Outcome.IsSuccess, "The grant of an entry whose type is escaped must be spent.");
+        Assert.HasCount(1, issuance.CredentialRequestBodies, "Exactly one Credential Request must be sent.");
+        byte[] credentialRequest = Encoding.UTF8.GetBytes(issuance.CredentialRequestBodies[0]);
+        Assert.AreEqual("pid-dataset-1", JwkJsonReader.ExtractStringValue(credentialRequest, "credential_identifier"u8));
+        Assert.IsFalse(JwkJsonReader.ContainsKey(credentialRequest, "credential_configuration_id"u8),
+            "The Credential Request must not name a credential_configuration_id beside the identifier.");
+    }
+
+
+    /// <summary>
     /// A configuration identifier carrying a quotation mark and a reverse solidus reaches the Issuer as the
     /// wallet was given it, alone: the Credential Request body escapes the value and names no
     /// <c>credential_identifier</c>.
@@ -1740,7 +1805,7 @@ internal sealed class Oid4VciWalletClientTests
     {
         List<Uri> invocations = [];
         Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
-            fetchCredentialOffer: (request, _, _) =>
+            fetchCredentialOffer: (request, _, readResponse, cancellationToken) =>
             {
                 invocations.Add(request.Target);
                 throw new InvalidOperationException("The offer GET must never be dialed once the policy denies it.");
@@ -2677,8 +2742,8 @@ internal sealed class Oid4VciWalletClientTests
 
     /// <summary>
     /// Drives a Pre-Authorized Code issuance over the in-process transport whose Token Request is answered
-    /// with <paramref name="tokenResponse"/>, and records every Nonce and Credential Request that follows
-    /// it, answered by <see cref="CredentialFlowStub"/>.
+    /// with <paramref name="tokenResponse"/> as written, and records every Nonce and Credential Request
+    /// that follows it, answered by <see cref="CredentialFlowStub"/>.
     /// </summary>
     /// <param name="tokenResponse">The whole Token Response body, as JSON text.</param>
     /// <param name="tokenStatusCode">The HTTP status the Token Request is answered with.</param>
@@ -2746,7 +2811,7 @@ internal sealed class Oid4VciWalletClientTests
         OutboundFetchPolicy loopbackAllowing = OutboundFetchPolicy.SecureDefault with { BlockPrivateAndLoopback = false };
 
         Oid4VciWalletClient deniedClient = BuildInProcessWalletClient(
-            fetchCredentialOffer: (request, _, _) =>
+            fetchCredentialOffer: (request, _, readResponse, cancellationToken) =>
                 throw new InvalidOperationException("The offer GET must never be dialed once the policy denies it."));
 
         Result<CredentialOffer, Oid4VciRequestFailure> denial = await deniedClient.FetchCredentialOfferAsync(
@@ -2763,7 +2828,7 @@ internal sealed class Oid4VciWalletClientTests
         string offerJson = CredentialOfferSerializer.ToJson(minimalOffer);
 
         Oid4VciWalletClient allowedClient = BuildInProcessWalletClient(
-            fetchCredentialOffer: (request, _, _) => ValueTask.FromResult(JsonOfferResponse(offerJson)),
+            fetchCredentialOffer: (request, _, readResponse, cancellationToken) => ScriptedOutboundTransport.ReadAsync(readResponse, JsonOfferResponse(offerJson), cancellationToken),
             outboundFetchPolicy: loopbackAllowing);
 
         Result<CredentialOffer, Oid4VciRequestFailure> allowed = await allowedClient.FetchCredentialOfferAsync(
@@ -2786,7 +2851,7 @@ internal sealed class Oid4VciWalletClientTests
         OutboundFetchPolicy loopbackAllowing = OutboundFetchPolicy.SecureDefault with { BlockPrivateAndLoopback = false };
 
         Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
-            fetchCredentialOffer: (request, _, _) =>
+            fetchCredentialOffer: (request, _, readResponse, cancellationToken) =>
                 throw new InvalidOperationException("The offer GET must never be dialed once the policy denies it."),
             outboundFetchPolicy: loopbackAllowing);
 
@@ -2812,15 +2877,15 @@ internal sealed class Oid4VciWalletClientTests
     {
         int invocationCount = 0;
         Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
-            fetchCredentialOffer: (request, _, _) =>
+            fetchCredentialOffer: (request, _, readResponse, cancellationToken) =>
             {
                 invocationCount++;
-                return ValueTask.FromResult(new OutboundResponse
+                return ScriptedOutboundTransport.ReadAsync(readResponse, new OutboundResponse
                 {
                     StatusCode = 302,
                     Headers = HttpHeaderSet.FromPairs(
                         (WellKnownHttpHeaderNames.Location, "https://elsewhere.example.com/credential-offer"))
-                });
+                }, cancellationToken);
             });
 
         Result<CredentialOffer, Oid4VciRequestFailure> outcome = await walletClient.FetchCredentialOfferAsync(
@@ -2836,13 +2901,9 @@ internal sealed class Oid4VciWalletClientTests
 
 
     /// <summary>
-    /// The authoritative post-read size check in
-    /// <see cref="Oid4VciWalletClient.FetchCredentialOfferAsync"/> rejects a response exceeding
-    /// <see cref="Oid4VciWalletConfiguration.MaximumCredentialOfferBytes"/> even when the transport
-    /// disregards the <see cref="OutboundRequest.MaxResponseBytes"/> hint and returns the full,
-    /// oversize body — the same defense
-    /// <see cref="AuthorizationServerMetadataDocuments.ResolveAsync"/> applies to its own
-    /// document fetch.
+    /// The guarded reader rejects an offer exceeding
+    /// <see cref="Oid4VciWalletConfiguration.MaximumCredentialOfferBytes"/> and the wallet preserves
+    /// its declared or observed size evidence.
     /// </summary>
     [TestMethod]
     public async Task ByReferenceOfferGetRefusesOversizeBody()
@@ -2851,12 +2912,12 @@ internal sealed class Oid4VciWalletClientTests
         {
             SendFormPost = (_, _, _, _, _) => throw new InvalidOperationException("No §6 Token Request is expected in this test."),
             SendJsonPost = (_, _, _, _, _) => throw new InvalidOperationException("No §7/§8/§9 request is expected in this test."),
-            FetchCredentialOffer = (request, _, _) => ValueTask.FromResult(new OutboundResponse
+            FetchCredentialOffer = (request, _, readResponse, cancellationToken) => ScriptedOutboundTransport.ReadAsync(readResponse, new OutboundResponse
             {
                 StatusCode = 200,
                 Headers = HttpHeaderSet.FromPairs((WellKnownHttpHeaderNames.ContentType, "application/json")),
                 Body = new TaggedMemory<byte>(new byte[128], Tag.Empty)
-            }),
+            }, cancellationToken),
             JwtHeaderSerializer = HeaderSerializer,
             JwtPayloadSerializer = PayloadSerializer,
             Base64UrlEncoder = TestSetup.Base64UrlEncoder,
@@ -2871,9 +2932,8 @@ internal sealed class Oid4VciWalletClientTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(outcome.IsSuccess, "A body exceeding MaximumCredentialOfferBytes must be a refusal.");
-        Assert.AreEqual(Oid4VciRequestFailureKind.MalformedResponse, outcome.Error.Kind);
-        Assert.AreEqual(200, outcome.Error.StatusCode, "The size check runs after a 200 was received.");
-        Assert.Contains("maximum size", outcome.Error.ErrorDescription!, StringComparison.OrdinalIgnoreCase);
+        Assert.AreEqual(Oid4VciRequestFailureKind.TooLarge, outcome.Error.Kind);
+        Assert.AreEqual(new OutboundResponseTooLarge(64, 65, OutboundResponseLengthKind.Observed), outcome.Error.TooLarge);
     }
 
 
@@ -2885,8 +2945,8 @@ internal sealed class Oid4VciWalletClientTests
     public async Task ByReferenceOfferGetNotFoundAnswersErrorResponseWithNullCode()
     {
         Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
-            fetchCredentialOffer: (request, _, _) =>
-                ValueTask.FromResult(new OutboundResponse { StatusCode = 404 }));
+            fetchCredentialOffer: (request, _, readResponse, cancellationToken) =>
+                ScriptedOutboundTransport.ReadAsync(readResponse, new OutboundResponse { StatusCode = 404 }, cancellationToken));
 
         Result<CredentialOffer, Oid4VciRequestFailure> outcome = await walletClient.FetchCredentialOfferAsync(
             new Uri("https://issuer.example.com/credential-offer"), new ExchangeContext(),
@@ -2909,8 +2969,8 @@ internal sealed class Oid4VciWalletClientTests
     public async Task ByReferenceOfferGetWithNonJsonBodyAnswersMalformedResponseNamingTheRule()
     {
         Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
-            fetchCredentialOffer: (request, _, _) =>
-                ValueTask.FromResult(JsonOfferResponse("not-a-json-object")));
+            fetchCredentialOffer: (request, _, readResponse, cancellationToken) =>
+                ScriptedOutboundTransport.ReadAsync(readResponse, JsonOfferResponse("not-a-json-object"), cancellationToken));
 
         Result<CredentialOffer, Oid4VciRequestFailure> outcome = await walletClient.FetchCredentialOfferAsync(
             new Uri("https://issuer.example.com/credential-offer"), new ExchangeContext(),
@@ -2932,9 +2992,9 @@ internal sealed class Oid4VciWalletClientTests
     public async Task ByReferenceOfferGetWithNoCredentialIssuerAnswersMalformedResponseNamingTheRule()
     {
         Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
-            fetchCredentialOffer: (request, _, _) =>
-                ValueTask.FromResult(JsonOfferResponse(
-                    "{\"credential_configuration_ids\":[\"" + ConfigurationId + "\"]}")));
+            fetchCredentialOffer: (request, _, readResponse, cancellationToken) =>
+                ScriptedOutboundTransport.ReadAsync(readResponse, JsonOfferResponse(
+                    "{\"credential_configuration_ids\":[\"" + ConfigurationId + "\"]}"), cancellationToken));
 
         Result<CredentialOffer, Oid4VciRequestFailure> outcome = await walletClient.FetchCredentialOfferAsync(
             new Uri("https://issuer.example.com/credential-offer"), new ExchangeContext(),
@@ -2957,9 +3017,9 @@ internal sealed class Oid4VciWalletClientTests
     public async Task ByReferenceOfferGetWithUnparseableCredentialIssuerAnswersMalformedResponseNamingTheRule()
     {
         Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
-            fetchCredentialOffer: (request, _, _) =>
-                ValueTask.FromResult(JsonOfferResponse(
-                    "{\"credential_issuer\":\"http://\",\"credential_configuration_ids\":[\"" + ConfigurationId + "\"]}")));
+            fetchCredentialOffer: (request, _, readResponse, cancellationToken) =>
+                ScriptedOutboundTransport.ReadAsync(readResponse, JsonOfferResponse(
+                    "{\"credential_issuer\":\"http://\",\"credential_configuration_ids\":[\"" + ConfigurationId + "\"]}"), cancellationToken));
 
         Result<CredentialOffer, Oid4VciRequestFailure> outcome = await walletClient.FetchCredentialOfferAsync(
             new Uri("https://issuer.example.com/credential-offer"), new ExchangeContext(),
@@ -2981,8 +3041,8 @@ internal sealed class Oid4VciWalletClientTests
     public async Task ByReferenceOfferGetWithWrongContentTypeAnswersMalformedResponse()
     {
         Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
-            fetchCredentialOffer: (request, _, _) =>
-                ValueTask.FromResult(OfferResponseWithContentType(MinimalOfferJson(), "text/html")));
+            fetchCredentialOffer: (request, _, readResponse, cancellationToken) =>
+                ScriptedOutboundTransport.ReadAsync(readResponse, OfferResponseWithContentType(MinimalOfferJson(), "text/html"), cancellationToken));
 
         Result<CredentialOffer, Oid4VciRequestFailure> outcome = await walletClient.FetchCredentialOfferAsync(
             new Uri("https://issuer.example.com/credential-offer"), new ExchangeContext(),
@@ -3000,8 +3060,8 @@ internal sealed class Oid4VciWalletClientTests
     public async Task ByReferenceOfferGetWithNoContentTypeHeaderAnswersMalformedResponse()
     {
         Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
-            fetchCredentialOffer: (request, _, _) =>
-                ValueTask.FromResult(OfferResponseWithContentType(MinimalOfferJson(), contentType: null)));
+            fetchCredentialOffer: (request, _, readResponse, cancellationToken) =>
+                ScriptedOutboundTransport.ReadAsync(readResponse, OfferResponseWithContentType(MinimalOfferJson(), contentType: null), cancellationToken));
 
         Result<CredentialOffer, Oid4VciRequestFailure> outcome = await walletClient.FetchCredentialOfferAsync(
             new Uri("https://issuer.example.com/credential-offer"), new ExchangeContext(),
@@ -3023,8 +3083,8 @@ internal sealed class Oid4VciWalletClientTests
     public async Task ByReferenceOfferGetWithContentTypeParameterIsAccepted()
     {
         Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
-            fetchCredentialOffer: (request, _, _) =>
-                ValueTask.FromResult(OfferResponseWithContentType(MinimalOfferJson(), "application/json; charset=utf-8")));
+            fetchCredentialOffer: (request, _, readResponse, cancellationToken) =>
+                ScriptedOutboundTransport.ReadAsync(readResponse, OfferResponseWithContentType(MinimalOfferJson(), "application/json; charset=utf-8"), cancellationToken));
 
         Result<CredentialOffer, Oid4VciRequestFailure> outcome = await walletClient.FetchCredentialOfferAsync(
             new Uri("https://issuer.example.com/credential-offer"), new ExchangeContext(),
@@ -3111,6 +3171,266 @@ internal sealed class Oid4VciWalletClientTests
         Assert.AreEqual(Oid4VciRequestFailureKind.MalformedResponse, pollResult.Error.Kind);
         Assert.AreEqual(200, pollResult.Error.StatusCode);
         Assert.Contains("application/jwt", pollResult.Error.ErrorDescription!, StringComparison.OrdinalIgnoreCase);
+    }
+
+
+    /// <summary>
+    /// The §6 Token Request carries the pre-authorized code, so a token endpoint answering it with a
+    /// redirect is refused as <see cref="Oid4VciRequestFailureKind.RedirectRefused"/>: the request was sent
+    /// once and nothing followed, neither to the location nor to any later step (RFC 9110 §15.4.8).
+    /// </summary>
+    [TestMethod]
+    public async Task PreAuthorizedTokenRequestAnsweredWithARedirectIsRefusedAndNothingFollows()
+    {
+        Uri tokenEndpoint = new("https://issuer.example.com/token");
+        List<Uri> formPosts = [];
+        List<Uri> jsonPosts = [];
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+
+        Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
+            sendFormPost: (endpoint, _, _, _, _) =>
+            {
+                formPosts.Add(endpoint);
+
+                return ValueTask.FromResult(RedirectResponse(TemporaryRedirectStatusCode));
+            },
+            sendJsonPost: (endpoint, _, _, _, _) =>
+            {
+                jsonPosts.Add(endpoint);
+
+                throw new InvalidOperationException("Nothing may follow a refused §6 Token Request.");
+            });
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await walletClient.IssuePreAuthorizedDetailedAsync(
+            new CredentialOffer
+            {
+                CredentialIssuer = new Uri("https://issuer.example.com"),
+                CredentialConfigurationIds = [ConfigurationId],
+                PreAuthorizedCodeGrant = new PreAuthorizedCodeOfferGrant { PreAuthorizedCode = PreAuthorizedCode }
+            },
+            ConfigurationId,
+            holderPrivate,
+            holderPublic,
+            new Oid4VciIssuanceEndpoints
+            {
+                TokenEndpoint = tokenEndpoint,
+                NonceEndpoint = new Uri("https://issuer.example.com/nonce"),
+                CredentialEndpoint = new Uri("https://issuer.example.com/credential")
+            },
+            transactionCode: null,
+            responseEncryption: null,
+            new ExchangeContext(),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(outcome.IsSuccess);
+        AssertRedirectRefused(outcome.Error, tokenEndpoint, TemporaryRedirectStatusCode);
+        Assert.HasCount(1, formPosts, "The pre-authorized code is sent once and nothing after the redirect.");
+        Assert.IsEmpty(jsonPosts, "No later step follows a refused token request.");
+    }
+
+
+    /// <summary>
+    /// The §7 Nonce Request carries the access token, so a nonce endpoint answering it with a redirect is
+    /// refused as <see cref="Oid4VciRequestFailureKind.RedirectRefused"/>: the request was sent once and the
+    /// §8 Credential Request never followed.
+    /// </summary>
+    [TestMethod]
+    public async Task NonceRequestAnsweredWithARedirectIsRefusedAndNothingFollows()
+    {
+        Uri nonceEndpoint = new("https://issuer.example.com/nonce");
+        List<Uri> jsonPosts = [];
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+
+        Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
+            sendJsonPost: (endpoint, _, _, _, _) =>
+            {
+                jsonPosts.Add(endpoint);
+
+                return ValueTask.FromResult(RedirectResponse(PermanentRedirectStatusCode));
+            });
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await walletClient.IssueWithAccessTokenDetailedAsync(
+            "access-token",
+            WellKnownAuthenticationSchemes.Bearer,
+            accessTokenExpiresAt: null,
+            new Uri("https://issuer.example.com"),
+            CredentialRequestTarget.ForConfiguration(ConfigurationId),
+            holderPrivate,
+            holderPublic,
+            new Oid4VciIssuanceEndpoints
+            {
+                TokenEndpoint = new Uri("https://issuer.example.com/token"),
+                NonceEndpoint = nonceEndpoint,
+                CredentialEndpoint = new Uri("https://issuer.example.com/credential")
+            },
+            responseEncryption: null,
+            new ExchangeContext(),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(outcome.IsSuccess);
+        AssertRedirectRefused(outcome.Error, nonceEndpoint, PermanentRedirectStatusCode);
+        Assert.HasCount(1, jsonPosts, "The access token is sent once and nothing after the redirect.");
+    }
+
+
+    /// <summary>
+    /// The §8 Credential Request carries the access token and the key proof, so a credential endpoint
+    /// answering it with a redirect is refused as <see cref="Oid4VciRequestFailureKind.RedirectRefused"/>:
+    /// after the §7 Nonce Request, the Credential Request was sent once and nothing followed.
+    /// </summary>
+    [TestMethod]
+    public async Task CredentialRequestAnsweredWithARedirectIsRefusedAndNothingFollows()
+    {
+        Uri nonceEndpoint = new("https://issuer.example.com/nonce");
+        Uri credentialEndpoint = new("https://issuer.example.com/credential");
+        List<Uri> jsonPosts = [];
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+
+        Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
+            sendJsonPost: (endpoint, _, _, _, _) =>
+            {
+                jsonPosts.Add(endpoint);
+
+                return ValueTask.FromResult(endpoint == nonceEndpoint
+                    ? JsonResponse(200, "{\"c_nonce\":\"nonce-value\"}")
+                    : RedirectResponse(TemporaryRedirectStatusCode));
+            });
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await walletClient.IssueWithAccessTokenDetailedAsync(
+            "access-token",
+            WellKnownAuthenticationSchemes.Bearer,
+            accessTokenExpiresAt: null,
+            new Uri("https://issuer.example.com"),
+            CredentialRequestTarget.ForConfiguration(ConfigurationId),
+            holderPrivate,
+            holderPublic,
+            new Oid4VciIssuanceEndpoints
+            {
+                TokenEndpoint = new Uri("https://issuer.example.com/token"),
+                NonceEndpoint = nonceEndpoint,
+                CredentialEndpoint = credentialEndpoint
+            },
+            responseEncryption: null,
+            new ExchangeContext(),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(outcome.IsSuccess);
+        AssertRedirectRefused(outcome.Error, credentialEndpoint, TemporaryRedirectStatusCode);
+        Assert.HasCount(2, jsonPosts, "The nonce request and the one credential request, and nothing after the redirect.");
+        Assert.AreEqual(credentialEndpoint, jsonPosts[1]);
+    }
+
+
+    /// <summary>
+    /// The §9 Deferred Credential Request carries the access token, so a deferred credential endpoint
+    /// answering it with a redirect is refused as <see cref="Oid4VciRequestFailureKind.RedirectRefused"/>
+    /// and the poll was sent once.
+    /// </summary>
+    [TestMethod]
+    public async Task DeferredPollAnsweredWithARedirectIsRefusedAndNothingFollows()
+    {
+        Uri deferredEndpoint = new("https://issuer.example.com/deferred");
+        List<Uri> jsonPosts = [];
+        Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
+            sendJsonPost: (endpoint, _, _, _, _) =>
+            {
+                jsonPosts.Add(endpoint);
+
+                return ValueTask.FromResult(RedirectResponse(TemporaryRedirectStatusCode));
+            });
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await walletClient.PollDeferredCredentialAsync(
+            "txn-redirected",
+            "access-token",
+            WellKnownAuthenticationSchemes.Bearer,
+            accessTokenExpiresAt: null,
+            deferredEndpoint,
+            responseEncryption: null,
+            new ExchangeContext(),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(outcome.IsSuccess);
+        AssertRedirectRefused(outcome.Error, deferredEndpoint, TemporaryRedirectStatusCode);
+        Assert.HasCount(1, jsonPosts, "The access token is sent once and nothing after the redirect.");
+    }
+
+
+    /// <summary>
+    /// The §11 Notification Request carries the access token, so a notification endpoint answering it with
+    /// a redirect is refused as <see cref="Oid4VciRequestFailureKind.RedirectRefused"/> rather than read as
+    /// acknowledged, and the notification was sent once.
+    /// </summary>
+    [TestMethod]
+    public async Task NotificationAnsweredWithARedirectIsRefusedAndNothingFollows()
+    {
+        Uri notificationEndpoint = new("https://issuer.example.com/notification");
+        List<Uri> jsonPosts = [];
+        Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
+            sendJsonPost: (endpoint, _, _, _, _) =>
+            {
+                jsonPosts.Add(endpoint);
+
+                return ValueTask.FromResult(RedirectResponse(PermanentRedirectStatusCode));
+            });
+
+        Oid4VciRequestFailure? failure = await walletClient.SendCredentialNotificationAsync(
+            "notification-redirected",
+            Oid4VciNotificationEvents.CredentialAccepted,
+            "access-token",
+            WellKnownAuthenticationSchemes.Bearer,
+            notificationEndpoint,
+            eventDescription: null,
+            new ExchangeContext(),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsNotNull(failure, "A redirect is not an acknowledgement.");
+        AssertRedirectRefused(failure, notificationEndpoint, PermanentRedirectStatusCode);
+        Assert.HasCount(1, jsonPosts, "The access token is sent once and nothing after the redirect.");
+    }
+
+
+    /// <summary>The 307 (Temporary Redirect) status, RFC 9110 §15.4.8.</summary>
+    private const int TemporaryRedirectStatusCode = 307;
+
+    /// <summary>The 308 (Permanent Redirect) status, RFC 9110 §15.4.9.</summary>
+    private const int PermanentRedirectStatusCode = 308;
+
+    /// <summary>The origin the redirect rows' answers name: another origin than the endpoint's.</summary>
+    private const string ElsewhereLocation = "https://elsewhere.example.net/collect";
+
+
+    /// <summary>Builds a redirect answer naming <see cref="ElsewhereLocation"/>.</summary>
+    /// <param name="statusCode">The 3xx status.</param>
+    /// <returns>The answer.</returns>
+    private static HttpResponseData RedirectResponse(int statusCode) =>
+        JsonResponse(statusCode, string.Empty, (WellKnownHttpHeaderNames.Location, ElsewhereLocation));
+
+
+    /// <summary>
+    /// Asserts <paramref name="failure"/> is the Wallet's refusal of a redirect from
+    /// <paramref name="endpoint"/>, carrying the typed refusal with the status and the location.
+    /// </summary>
+    /// <param name="failure">The failure the request answered.</param>
+    /// <param name="endpoint">The endpoint the request was sent to.</param>
+    /// <param name="statusCode">The redirect status the endpoint answered with.</param>
+    private static void AssertRedirectRefused(Oid4VciRequestFailure failure, Uri endpoint, int statusCode)
+    {
+        Assert.AreEqual(Oid4VciRequestFailureKind.RedirectRefused, failure.Kind);
+        Assert.AreEqual(endpoint, failure.Endpoint);
+        Assert.AreEqual(statusCode, failure.StatusCode);
+        Assert.IsNotNull(failure.RedirectRefusal);
+        Assert.AreEqual(endpoint, failure.RedirectRefusal.Endpoint);
+        Assert.AreEqual(statusCode, failure.RedirectRefusal.StatusCode);
+        Assert.AreEqual(ElsewhereLocation, failure.RedirectRefusal.Location);
     }
 
 

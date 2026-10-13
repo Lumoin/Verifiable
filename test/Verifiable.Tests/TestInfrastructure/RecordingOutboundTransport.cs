@@ -23,10 +23,11 @@ internal static class RecordingOutboundTransport
 
         List<string?> contentTypes = [];
 
-        async ValueTask<OutboundResponse> recording(OutboundRequest request, Verifiable.Core.ExchangeContext context, CancellationToken cancellationToken)
+        //Forwards the reader unchanged and records the completed response content type.
+        async ValueTask<OutboundTransportResult> recording(OutboundRequest request, Verifiable.Core.ExchangeContext context, OutboundResponseReaderDelegate readResponse, CancellationToken cancellationToken)
         {
-            OutboundResponse response = await transport(request, context, cancellationToken).ConfigureAwait(false);
-            _ = response.Headers.TryGetValue(WellKnownHttpHeaderNames.ContentType, out string? contentType);
+            OutboundTransportResult response = await transport(request, context, readResponse, cancellationToken).ConfigureAwait(false);
+            string? contentType = response.Response?.Headers.ContentType;
             contentTypes.Add(contentType);
 
             return response;

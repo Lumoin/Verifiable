@@ -959,9 +959,9 @@ internal sealed class ClientCredentialsGrantTests
             parseRegistrationResponseAsync: (body, ct) =>
                 throw new NotImplementedException("Test does not exercise dynamic registration."),
             resolveAuthorizationServerMetadataAsync: (_, _, _) =>
-                ValueTask.FromResult(new AuthorizationServerMetadataResolution
+                ValueTask.FromResult<AuthorizationServerMetadataResolution>(new AuthorizationServerMetadataResolved
                 {
-                    Outcome = AuthorizationServerMetadataResolutionOutcome.Resolved,
+                    MetadataLocation = WellKnownPaths.OAuthAuthorizationServer.ComputeUri(metadata.Issuer.OriginalString),
                     Metadata = metadata
                 }),
             resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
@@ -1280,9 +1280,9 @@ internal sealed class ClientCredentialsGrantTests
                 parseRegistrationResponseAsync: (body, ct) =>
                     throw new NotImplementedException("Test does not exercise dynamic registration."),
                 resolveAuthorizationServerMetadataAsync: (_, _, _) =>
-                    ValueTask.FromResult(new AuthorizationServerMetadataResolution
+                    ValueTask.FromResult<AuthorizationServerMetadataResolution>(new AuthorizationServerMetadataResolved
                     {
-                        Outcome = AuthorizationServerMetadataResolutionOutcome.Resolved,
+                        MetadataLocation = WellKnownPaths.OAuthAuthorizationServer.ComputeUri(metadata.Issuer.OriginalString),
                         Metadata = metadata
                     }),
                 resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
@@ -1401,9 +1401,9 @@ internal sealed class ClientCredentialsGrantTests
                     parseRegistrationResponseAsync: (body, ct) =>
                         throw new NotImplementedException("Test does not exercise dynamic registration."),
                     resolveAuthorizationServerMetadataAsync: (_, _, _) =>
-                        ValueTask.FromResult(new AuthorizationServerMetadataResolution
+                        ValueTask.FromResult<AuthorizationServerMetadataResolution>(new AuthorizationServerMetadataResolved
                         {
-                            Outcome = AuthorizationServerMetadataResolutionOutcome.Resolved,
+                            MetadataLocation = WellKnownPaths.OAuthAuthorizationServer.ComputeUri(metadata.Issuer.OriginalString),
                             Metadata = metadata
                         }),
                     resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,

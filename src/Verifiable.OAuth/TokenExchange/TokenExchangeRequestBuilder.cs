@@ -69,7 +69,7 @@ public sealed record TokenExchangeBuilderOptions
     /// The target-resource URIs (RFC 8693 §2.1 / <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see>
     /// <c>resource</c>, OPTIONAL, REPEATABLE). Each entry MUST be an absolute URI with no fragment
     /// component. <see cref="TokenExchangeRequestBuilder.Build(TokenExchangeBuilderOptions)"/> reads each
-    /// entry by <see cref="ResourceIndicatorSyntax.IsAbsoluteResourceIndicator(ReadOnlySpan{char})"/>, the
+    /// entry by <see cref="ResourceIndicator.Parse"/>, the
     /// rule the token endpoint reads a <c>resource</c> value by: an absolute URI of any scheme, in
     /// ASCII, with well-formed percent triplets and no fragment; for <c>http</c> and <c>https</c>, an
     /// authority with a non-empty host and no userinfo. The rule admits the userinfo of any other
@@ -153,7 +153,7 @@ public static class TokenExchangeRequestBuilder
     /// <summary>
     /// Composes <paramref name="options"/> into the RFC 8693 §2.1 request body, or a
     /// <see cref="TokenRequestBuilderError"/> when an entry of <see cref="TokenExchangeBuilderOptions.Resource"/>
-    /// is refused by <see cref="ResourceIndicatorSyntax.IsAbsoluteResourceIndicator(ReadOnlySpan{char})"/>,
+    /// is refused by <see cref="ResourceIndicator.Parse"/>,
     /// the rule the token endpoint reads a <c>resource</c> value by (RFC 8693 section 2.1 / RFC 8707 section 2):
     /// an absolute URI of any scheme, in ASCII, with well-formed percent triplets and no fragment; for
     /// <c>http</c> and <c>https</c>, an authority with a non-empty host and no userinfo. The rule
@@ -177,13 +177,17 @@ public static class TokenExchangeRequestBuilder
     {
         ArgumentNullException.ThrowIfNull(options);
 
+        List<ResourceIndicator> resources = new(options.Resource.Count);
         foreach(string resource in options.Resource)
         {
-            if(!IsValidResource(resource))
+            Result<ResourceIndicator, ResourceIndicatorFault> parsed = ResourceIndicator.Parse(resource);
+            if(!parsed.IsSuccess)
             {
                 return Result.Failure<OutgoingFormFields, TokenRequestBuilderError>(
                     new InvalidResourceParameter(resource, InvalidResourceReason));
             }
+
+            resources.Add(parsed.Value);
         }
 
         OutgoingFormFields form = new(capacity: 8)
@@ -209,9 +213,9 @@ public static class TokenExchangeRequestBuilder
         //(OutgoingFormFields.Add) — the genuine RFC 8707 §2 multi-resource wire form the
         //authorization server's own ReadResource/RequestFields.GetValues read expects, never one
         //occurrence carrying several space-joined URIs.
-        foreach(string resource in options.Resource)
+        foreach(ResourceIndicator resource in resources)
         {
-            form.Add(OAuthRequestParameterNames.Resource, resource);
+            form.Add(OAuthRequestParameterNames.Resource, resource.OriginalString);
         }
 
         if(!string.IsNullOrEmpty(options.Audience))
@@ -226,20 +230,4 @@ public static class TokenExchangeRequestBuilder
 
         return Result.Success<OutgoingFormFields, TokenRequestBuilderError>(form);
     }
-
-
-    /// <summary>
-    /// RFC 8707 §2 / RFC 8693 §2.1: a <c>resource</c> value MUST be an absolute URI
-    /// (<see href="https://www.rfc-editor.org/rfc/rfc3986#section-4.3">RFC 3986 section 4.3</see>) and
-    /// MUST NOT include a fragment component. The value is read by
-    /// <see cref="ResourceIndicatorSyntax.IsAbsoluteResourceIndicator(ReadOnlySpan{char})"/>, the rule
-    /// the token endpoint reads a <c>resource</c> value by, so the builder refuses every value the
-    /// token endpoint refuses. An empty entry, which the endpoint reads as omitted
-    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 Section 3.1</see>:
-    /// "Parameters sent without a value MUST be treated as if they were omitted from the request."),
-    /// is refused here.
-    /// </summary>
-    /// <param name="resource">The <c>resource</c> value.</param>
-    private static bool IsValidResource(string resource) =>
-        ResourceIndicatorSyntax.IsAbsoluteResourceIndicator(resource);
 }

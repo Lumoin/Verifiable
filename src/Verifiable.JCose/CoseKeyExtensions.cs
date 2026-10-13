@@ -1,6 +1,5 @@
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using System.Formats.Asn1;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 
@@ -49,7 +48,8 @@ public static class CoseKeyExtensions
         /// </summary>
         /// <param name="pool">Memory pool the returned key's carrier rents from. Caller owns and disposes the result.</param>
         /// <returns>The tagged public key in the codebase's canonical internal form (compressed SEC1 for EC2; raw bytes for OKP; DER PKCS#1 RSAPublicKey for RSA).</returns>
-        /// <exception cref="ArgumentException">Thrown when an RSA COSE_Key omits its mandatory <c>n</c>/<c>e</c> parameters, or carries a modulus length no registered tag covers.</exception>
+        /// <exception cref="ArgumentException">Thrown when an RSA COSE_Key omits its mandatory <c>n</c> parameter, or carries a modulus length no registered tag covers.</exception>
+        /// <exception cref="RsaPublicKeyException">Thrown when the RSA public exponent is missing or invalid.</exception>
         /// <exception cref="InvalidOperationException">Thrown when the COSE_Key omits coordinates required to reconstruct the public point.</exception>
         /// <exception cref="NotSupportedException">Thrown when the key type / curve is not one the algorithm converter recognises.</exception>
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented carrier transfers to the returned PublicKeyMemory; the caller disposes it.")]
@@ -180,9 +180,7 @@ public static class CoseKeyExtensions
 
         //RSA (kty=3): the public key is a DER PKCS#1 RSAPublicKey — SEQUENCE { modulus
         //INTEGER, publicExponent INTEGER } — built from the n/e labels per RFC 8230 §4.
-        //DER (not the raw modulus) is required because the framework's raw-import
-        //fallback hardcodes the exponent to 65537, silently ignoring a COSE_Key that
-        //carries a different one.
+        //The shared conversion validates and retains the supplied public exponent.
         if(coseKey.Kty == CoseKeyTypes.Rsa)
         {
             if(coseKey.N is not ReadOnlyMemory<byte> n || n.Length == 0)
@@ -191,20 +189,13 @@ public static class CoseKeyExtensions
                     "RSA COSE_Key is missing the mandatory n (modulus) parameter per RFC 8230 §4.", nameof(coseKey));
             }
 
-            if(coseKey.E is not ReadOnlyMemory<byte> e || e.Length == 0)
+            if(coseKey.E is not ReadOnlyMemory<byte> e)
             {
-                throw new ArgumentException(
-                    "RSA COSE_Key is missing the mandatory e (exponent) parameter per RFC 8230 §4.", nameof(coseKey));
+                throw new RsaPublicKeyException(RsaPublicKeyFailureKind.InvalidPublicExponent,
+                    "RSA COSE_Key is missing the mandatory e (exponent) parameter per RFC 8230 §4.");
             }
 
-            AsnWriter writer = new(AsnEncodingRules.DER);
-            using(writer.PushSequence())
-            {
-                writer.WriteIntegerUnsigned(n.Span);
-                writer.WriteIntegerUnsigned(e.Span);
-            }
-
-            return writer.Encode();
+            return RsaPublicKeyEncoding.Encode(n.Span, e.Span);
         }
 
         throw new NotSupportedException(

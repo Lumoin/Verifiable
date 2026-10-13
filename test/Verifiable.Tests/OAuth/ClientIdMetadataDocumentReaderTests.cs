@@ -347,6 +347,67 @@ internal sealed class ClientIdMetadataDocumentReaderTests
     }
 
 
+    /// <summary>
+    /// A document naming <c>client_secret</c> with an escape, <c>"client_s\u0065cret"</c>, carries the
+    /// member CIMD-013 forbids: a member name is the text it spells (RFC 8259 §8.3), whatever any other
+    /// reader of the same bytes makes of it.
+    /// </summary>
+    [TestMethod]
+    public void ParseFlagsAClientSecretNamedWithAnEscape()
+    {
+        string document = """
+            {"client_id":"https://client.example.com/app","client_s\u0065cret":"s3cr3t"}
+            """;
+        Assert.DoesNotContain("client_secret", document, StringComparison.Ordinal, "The fixture names the member with an escape.");
+
+        ClientIdMetadataDocumentReadResult result = Parse(document);
+
+        Assert.IsTrue(result.Defects.HasFlag(ClientIdMetadataDocumentDefects.ClientSecretFieldsPresent));
+    }
+
+
+    /// <summary>
+    /// A document whose <c>jwks_uri</c> member name begins with an escape, <c>"\u006awks_uri"</c>, states
+    /// its <c>jwks_uri</c>: the reader answers the URI the document names.
+    /// </summary>
+    [TestMethod]
+    public void ParseReadsAJwksUriNamedWithALeadingEscape()
+    {
+        string document = """
+            {"client_id":"https://client.example.com/app","\u006awks_uri":"https://client.example.com/jwks"}
+            """;
+        Assert.DoesNotContain("\"jwks_uri\"", document, StringComparison.Ordinal, "The fixture names the member with an escape.");
+
+        ClientIdMetadataDocumentReadResult result = Parse(document);
+
+        Assert.AreEqual(ClientIdMetadataDocumentDefects.None, result.Defects);
+        Assert.AreEqual(new Uri("https://client.example.com/jwks"), result.Metadata!.JwksUri);
+    }
+
+
+    /// <summary>
+    /// A key in the document's <c>jwks</c> whose private member <c>d</c> is named <c>"\u0064"</c> carries
+    /// private key material (CIMD-023), as the plain spelling does, and so does a set whose <c>keys</c>
+    /// member is named with an escape.
+    /// </summary>
+    /// <param name="jwks">The document's <c>jwks</c> member value.</param>
+    /// <param name="plainSpelling">The plain spelling of the escaped member name, which the fixture must not hold.</param>
+    [TestMethod]
+    [DataRow("""{"keys":[{"kty":"EC","crv":"P-256","x":"f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU","y":"x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0","\u0064":"private"}]}""", "\"d\"", DisplayName = "d named with an escape")]
+    [DataRow("""{"\u006beys":[{"kty":"oct","k":"c2VjcmV0"}]}""", "\"keys\"", DisplayName = "keys named with an escape")]
+    public void ParseFlagsPrivateKeyMaterialNamedWithAnEscape(string jwks, string plainSpelling)
+    {
+        Assert.DoesNotContain(plainSpelling, jwks, StringComparison.Ordinal, "The fixture names the member with an escape.");
+        string document = $$"""
+            {"client_id":"https://client.example.com/app","jwks":{{jwks}}}
+            """;
+
+        ClientIdMetadataDocumentReadResult result = Parse(document);
+
+        Assert.IsTrue(result.Defects.HasFlag(ClientIdMetadataDocumentDefects.PrivateKeyMaterialInJwks));
+    }
+
+
     private static ClientIdMetadataDocumentReadResult Parse(string document) =>
         ClientIdMetadataDocumentReader.Parse(Encoding.UTF8.GetBytes(document));
 }

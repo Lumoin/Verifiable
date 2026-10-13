@@ -1,7 +1,6 @@
 using System.Buffers;
 using System.Text;
 using System.Text.Json;
-using Verifiable.Core;
 using Verifiable.Core.Outbound;
 using Verifiable.JCose;
 using Verifiable.OAuth.Federation;
@@ -37,50 +36,7 @@ internal static class FederationHttpClientTransport
     {
         ArgumentNullException.ThrowIfNull(httpClient);
 
-        //The HttpClient is the single-hop transport: a bare custom HttpMessageHandler
-        //does not auto-redirect, and a real handler would set AllowAutoRedirect=false.
-        //OutboundFetch owns the redirect loop and re-checks every hop against the policy.
-        async ValueTask<OutboundResponse> transport(OutboundRequest request, ExchangeContext context, CancellationToken cancellationToken)
-        {
-            using HttpRequestMessage httpRequest = new(new HttpMethod(request.Method), request.Target);
-
-            using HttpResponseMessage httpResponse = await httpClient
-                .SendAsync(httpRequest, HttpCompletionOption.ResponseContentRead, cancellationToken)
-                .ConfigureAwait(false);
-
-            //Repeated field lines (RFC 9110 §5.3) are kept in received order, never comma-joined;
-            //FromReceived groups both header collections by name and takes RFC 9110 §5.5's recipient
-            //arm on a hostile line rather than throwing out of the fetch.
-            List<(string Name, string Value)> responsePairs = [];
-            foreach(KeyValuePair<string, IEnumerable<string>> header in httpResponse.Headers)
-            {
-                foreach(string value in header.Value)
-                {
-                    responsePairs.Add((header.Key, value));
-                }
-            }
-
-            foreach(KeyValuePair<string, IEnumerable<string>> header in httpResponse.Content.Headers)
-            {
-                foreach(string value in header.Value)
-                {
-                    responsePairs.Add((header.Key, value));
-                }
-            }
-
-            HttpHeaderSet headers = HttpHeaderSet.FromReceived(responsePairs);
-
-            byte[] body = await httpResponse.Content
-                .ReadAsByteArrayAsync(cancellationToken)
-                .ConfigureAwait(false);
-
-            return new OutboundResponse
-            {
-                StatusCode = (int)httpResponse.StatusCode,
-                Headers = headers,
-                Body = new TaggedMemory<byte>(body, Tag.Empty),
-            };
-        }
+        OutboundTransportDelegate transport = GuardedHttpClientTransport.BuildSingleHopTransport(httpClient);
 
         return async (subject, fetchEndpoint, context, cancellationToken) =>
         {

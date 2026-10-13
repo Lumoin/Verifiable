@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
 using Verifiable.Tpm.Spec.Algorithms;
@@ -15,8 +16,9 @@ namespace Verifiable.Tpm.Spec;
 /// <para>
 /// A TPM signature (from <c>TPM2_Sign</c>) or attestation signature (from <c>TPM2_Quote</c>/<c>TPM2_Certify</c>)
 /// and the signer's public key arrive in TPM-specific shapes (<see cref="TpmuSignature"/>,
-/// <see cref="TpmsEccPoint"/>). Projecting them here lets a TPM attestation be verified through the same seam the
-/// rest of the library uses for X.509, DID, and mdoc signatures — the verification delegate resolved from
+/// <see cref="TpmsEccPoint"/>, an RSA <see cref="TpmtPublic"/>). Projecting them here lets a TPM attestation be
+/// verified through the same seam the rest of the library uses for X.509, DID, and mdoc signatures — the
+/// verification delegate resolved from
 /// <c>CryptoFunctionRegistry</c> — with no TPM types leaking past this boundary. This is the foundation on which
 /// a higher layer can treat a quote or certify as an attestation log entry whose proof is the neutral
 /// <see cref="Signature"/> and whose signer is the neutral <see cref="PublicKeyMemory"/>.
@@ -158,6 +160,44 @@ public static class TpmCryptographicProjections
         byte[] compressed = EllipticCurveUtilities.Compress(x, y);
         IMemoryOwner<byte> owner = pool.Rent(compressed.Length);
         compressed.CopyTo(owner.Memory.Span);
+
+        return new PublicKeyMemory(owner, tag);
+    }
+
+    /// <summary>
+    /// Projects a TPM RSA public area into a <see cref="PublicKeyMemory"/> carrying the DER PKCS#1
+    /// <c>RSAPublicKey</c> the library's RSA verifiers read (<see cref="RsaPublicKeyEncoding"/>): the area's
+    /// <c>unique</c> modulus with the public exponent its <c>parameters</c> state.
+    /// </summary>
+    /// <remarks>
+    /// The exponent is <see cref="TpmsRsaParms.EffectiveExponent"/>, where the TPM's zero encoding of 2^16 + 1 is
+    /// resolved; this projection supplies no exponent of its own.
+    /// </remarks>
+    /// <param name="publicArea">The TPM public area (for example a signing key's <c>OutPublic</c> area).</param>
+    /// <param name="tag">The tag to stamp on the produced key (for example <see cref="CryptoTags.Rsa2048PublicKey"/>).</param>
+    /// <param name="pool">The memory pool backing the returned key.</param>
+    /// <returns>The neutral public key; the caller owns it and must dispose it.</returns>
+    /// <exception cref="ArgumentException"><paramref name="publicArea"/> is not an RSA public area carrying a modulus.</exception>
+    /// <exception cref="RsaPublicKeyException">The modulus and the stated exponent are not a valid RSA public key.</exception>
+    [SuppressMessage("Microsoft.Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the returned PublicKeyMemory transfers to the caller.")]
+    public static PublicKeyMemory ToRsaPublicKeyMemory(this TpmtPublic publicArea, Tag tag, BaseMemoryPool pool)
+    {
+        ArgumentNullException.ThrowIfNull(publicArea);
+        ArgumentNullException.ThrowIfNull(tag);
+        ArgumentNullException.ThrowIfNull(pool);
+
+        ReadOnlySpan<byte> modulus = publicArea.Unique.GetRsaModulus();
+        if(publicArea.Type != TpmAlgIdConstants.TPM_ALG_RSA || publicArea.Parameters.RsaDetail is not { } rsaParameters || modulus.IsEmpty)
+        {
+            throw new ArgumentException("The public area is not an RSA public area carrying a modulus.", nameof(publicArea));
+        }
+
+        Span<byte> exponent = stackalloc byte[sizeof(uint)];
+        BinaryPrimitives.WriteUInt32BigEndian(exponent, rsaParameters.EffectiveExponent);
+
+        byte[] encoded = RsaPublicKeyEncoding.Encode(modulus, exponent);
+        IMemoryOwner<byte> owner = pool.Rent(encoded.Length);
+        encoded.CopyTo(owner.Memory.Span);
 
         return new PublicKeyMemory(owner, tag);
     }

@@ -179,7 +179,7 @@ public sealed class Oid4VciWalletClient
     /// GET request to the URI to retrieve the referenced Credential Offer Object ... and parse it
     /// to recreate the Credential Offer parameters." Follows the same fetch-validate shape
     /// <see cref="Client.AuthorizationServerMetadataDocuments.ResolveAsync"/> applies to its own
-    /// document fetch: a transport hint plus an authoritative post-read size check, an exact
+    /// document fetch: a guarded response read with one size decision, an exact
     /// <c>200</c> status, and a media-type gate — so <see cref="OutboundFetch.FetchAsync"/>'s own
     /// redirect re-validation and per-hop policy evaluation cover this GET exactly as they cover
     /// that resolver's.
@@ -198,11 +198,12 @@ public sealed class Oid4VciWalletClient
     /// to follow the redirect at all; <see cref="Oid4VciRequestFailureKind.ErrorResponse"/> for a
     /// non-<c>200</c> status (§4.1.3 defines no error body for this GET, so <see cref="Oid4VciRequestFailure.ErrorCode"/>
     /// is always <see langword="null"/>); <see cref="Oid4VciRequestFailureKind.MalformedResponse"/>
-    /// when the content type is not <c>application/json</c>, the body exceeds
-    /// <see cref="Oid4VciWalletConfiguration.MaximumCredentialOfferBytes"/>, or the body does not
+    /// when the content type is not <c>application/json</c> or the body does not
     /// satisfy §4.1.1's <c>credential_issuer</c> and <c>credential_configuration_ids</c> rules —
     /// the same rules <see cref="CredentialOfferSerializer.FromJson"/> raises for a caller-supplied
     /// offer, answered here as a value since the body is the Issuer's own.
+    /// <see cref="Oid4VciRequestFailureKind.TooLarge"/> retains a declared or observed excess, and
+    /// <see cref="Oid4VciRequestFailureKind.Unreachable"/> retains an unrelated transport failure kind.
     /// </returns>
     /// <exception cref="InvalidOperationException">
     /// Thrown when no <see cref="Oid4VciWalletConfiguration.FetchCredentialOffer"/> transport is configured.
@@ -214,6 +215,7 @@ public sealed class Oid4VciWalletClient
     {
         ArgumentNullException.ThrowIfNull(credentialOfferUri);
         ArgumentNullException.ThrowIfNull(context);
+        cancellationToken.ThrowIfCancellationRequested();
 
         if(Configuration.FetchCredentialOffer is null)
         {
@@ -235,10 +237,30 @@ public sealed class Oid4VciWalletClient
             MaxResponseBytes = Configuration.MaximumCredentialOfferBytes
         };
 
-        //A transport exception propagates as itself; the guarded fetch chokepoint answers policy
-        //and redirect refusals as OutboundFetchResult values, not exceptions.
         OutboundFetchResult fetch = await OutboundFetch.FetchAsync(
             request, context, Configuration.FetchCredentialOffer, cancellationToken).ConfigureAwait(false);
+
+        if(fetch.FailureKind is Type failureKind)
+        {
+            return Result<CredentialOffer, Oid4VciRequestFailure>.Failure(new Oid4VciRequestFailure
+            {
+                Kind = Oid4VciRequestFailureKind.Unreachable,
+                Endpoint = credentialOfferUri,
+                StatusCode = null,
+                FailureKind = failureKind
+            });
+        }
+
+        if(fetch.TooLarge is OutboundResponseTooLarge tooLarge)
+        {
+            return Result<CredentialOffer, Oid4VciRequestFailure>.Failure(new Oid4VciRequestFailure
+            {
+                Kind = Oid4VciRequestFailureKind.TooLarge,
+                Endpoint = credentialOfferUri,
+                StatusCode = null,
+                TooLarge = tooLarge
+            });
+        }
 
         if(!fetch.IsFetched || fetch.Response is null)
         {
@@ -274,17 +296,6 @@ public sealed class Oid4VciWalletClient
                     credentialOfferUri,
                     response.StatusCode,
                     $"§4.1.3 the response content type was '{contentType}', not application/json."));
-        }
-
-        //The authoritative post-read size check — MaxResponseBytes above is only a transport hint a
-        //hostile or non-conforming transport may not honor.
-        if(response.Body.Length > Configuration.MaximumCredentialOfferBytes)
-        {
-            return Result<CredentialOffer, Oid4VciRequestFailure>.Failure(
-                MalformedResponseFailure(
-                    credentialOfferUri,
-                    response.StatusCode,
-                    "§4.1.3 the response exceeded the configured maximum size."));
         }
 
         //The offer body is remote input, so a malformed parse answers MalformedResponse rather
@@ -778,6 +789,13 @@ public sealed class Oid4VciWalletClient
         HttpResponseData response = await SendTokenRequestAsync(
             formFields, tokenEndpoint, context, cancellationToken).ConfigureAwait(false);
 
+        //The request carries the pre-authorized code; a redirect followed would re-send it to the origin
+        //its Location field names (RFC 9110 Section 15.4.8), so the Wallet refuses it.
+        if(RefuseRedirection(tokenEndpoint, response) is Oid4VciRequestFailure tokenRedirectRefusal)
+        {
+            return Result<(string, string, DateTimeOffset?, CredentialRequestTarget), Oid4VciRequestFailure>.Failure(tokenRedirectRefusal);
+        }
+
         if(response.StatusCode is < 200 or >= 300)
         {
             return Result<(string, string, DateTimeOffset?, CredentialRequestTarget), Oid4VciRequestFailure>.Failure(
@@ -987,6 +1005,13 @@ public sealed class Oid4VciWalletClient
         HttpResponseData response = await SendAuthorizedJsonPostAsync(
             nonceEndpoint, string.Empty, accessToken, tokenType, context, cancellationToken).ConfigureAwait(false);
 
+        //The request carries the access token; a redirect followed would re-send it to the origin its
+        //Location field names (RFC 9110 Section 15.4.8), so the Wallet refuses it.
+        if(RefuseRedirection(nonceEndpoint, response) is Oid4VciRequestFailure nonceRedirectRefusal)
+        {
+            return Result<string, Oid4VciRequestFailure>.Failure(nonceRedirectRefusal);
+        }
+
         if(response.StatusCode is < 200 or >= 300)
         {
             return Result<string, Oid4VciRequestFailure>.Failure(
@@ -1057,6 +1082,13 @@ public sealed class Oid4VciWalletClient
 
         HttpResponseData response = await SendAuthorizedJsonPostAsync(
             credentialEndpoint, requestBody, accessToken, tokenType, context, cancellationToken).ConfigureAwait(false);
+
+        //The request carries the access token and the key proof; a redirect followed would re-send both to
+        //the origin its Location field names (RFC 9110 Section 15.4.8), so the Wallet refuses it.
+        if(RefuseRedirection(credentialEndpoint, response) is Oid4VciRequestFailure credentialRedirectRefusal)
+        {
+            return Result<CredentialIssuanceResult, Oid4VciRequestFailure>.Failure(credentialRedirectRefusal);
+        }
 
         //§8.3: a deferral answers HTTP 202 with transaction_id + interval (plaintext metadata, not the
         //encrypted credential payload); the Wallet later polls the Deferred Credential Endpoint.
@@ -1139,6 +1171,13 @@ public sealed class Oid4VciWalletClient
         HttpResponseData response = await SendAuthorizedJsonPostAsync(
             deferredCredentialEndpoint, requestBody, accessToken, tokenType, context, cancellationToken).ConfigureAwait(false);
 
+        //The request carries the access token; a redirect followed would re-send it to the origin its
+        //Location field names (RFC 9110 Section 15.4.8), so the Wallet refuses it.
+        if(RefuseRedirection(deferredCredentialEndpoint, response) is Oid4VciRequestFailure deferredRedirectRefusal)
+        {
+            return Result<CredentialIssuanceResult, Oid4VciRequestFailure>.Failure(deferredRedirectRefusal);
+        }
+
         //§9.2: still pending answers HTTP 202 echoing the transaction_id with a fresh interval.
         if(response.StatusCode == HttpAcceptedStatusCode)
         {
@@ -1184,8 +1223,9 @@ public sealed class Oid4VciWalletClient
     /// <see langword="null"/> when the Issuer acknowledged the notification — §11.2 requires an HTTP
     /// status in the 2xx range, with 204 (No Content) RECOMMENDED; otherwise the
     /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-11.3">§11.3</see>
-    /// failure — the policy's <see cref="Oid4VciRequestFailureKind.OutboundPolicyDenied"/> refusal, or
-    /// the endpoint's own <see cref="Oid4VciRequestFailureKind.ErrorResponse"/> such as <c>invalid_notification_id</c>.
+    /// failure — the policy's <see cref="Oid4VciRequestFailureKind.OutboundPolicyDenied"/> refusal, the
+    /// <see cref="Oid4VciRequestFailureKind.RedirectRefused"/> refusal of a redirect answer, or the
+    /// endpoint's own <see cref="Oid4VciRequestFailureKind.ErrorResponse"/> such as <c>invalid_notification_id</c>.
     /// </returns>
     public async ValueTask<Oid4VciRequestFailure?> SendCredentialNotificationAsync(
         string notificationId,
@@ -1214,6 +1254,13 @@ public sealed class Oid4VciWalletClient
 
         HttpResponseData response = await SendAuthorizedJsonPostAsync(
             notificationEndpoint, requestBody, accessToken, tokenType, context, cancellationToken).ConfigureAwait(false);
+
+        //The request carries the access token; a redirect followed would re-send it to the origin its
+        //Location field names (RFC 9110 Section 15.4.8), so the Wallet refuses it.
+        if(RefuseRedirection(notificationEndpoint, response) is Oid4VciRequestFailure notificationRedirectRefusal)
+        {
+            return notificationRedirectRefusal;
+        }
 
         //§11.2: success is HTTP 204 No Content; §11.3 maps failures to error bodies.
         if(response.StatusCode is < 200 or >= 300)
@@ -1529,7 +1576,7 @@ public sealed class Oid4VciWalletClient
 
     /// <summary>
     /// Builds a <see cref="Oid4VciRequestFailureKind.MalformedResponse"/> failure for a response whose
-    /// body, content type, size or <c>error</c> member breaks the request's section rule: a success
+    /// body, content type or <c>error</c> member breaks the request's section rule: a success
     /// status, or an error response whose <c>error</c> is empty or outside its set.
     /// </summary>
     /// <param name="endpoint">The endpoint that answered the malformed response.</param>
@@ -1545,6 +1592,29 @@ public sealed class Oid4VciWalletClient
             ErrorCode = null,
             ErrorDescription = rule
         };
+
+
+    /// <summary>
+    /// Builds the <see cref="Oid4VciRequestFailureKind.RedirectRefused"/> failure when
+    /// <paramref name="response"/> is a redirect, an HTTP status of the 3xx class, answering a request
+    /// that carried a credential: the refusal is recorded and typed by
+    /// <see cref="CredentialBearingRedirect.Refuse"/> and the Wallet sends nothing further.
+    /// </summary>
+    /// <param name="endpoint">The endpoint the request was sent to.</param>
+    /// <param name="response">The endpoint's answer, as the single-hop transport returned it.</param>
+    /// <returns>The failure, or <see langword="null"/> when the status is not of the 3xx class.</returns>
+    private static Oid4VciRequestFailure? RefuseRedirection(Uri endpoint, HttpResponseData response) =>
+        CredentialBearingRedirect.Refuse(endpoint, response) is OAuthRedirectRefused refusal
+            ? new Oid4VciRequestFailure
+            {
+                Kind = Oid4VciRequestFailureKind.RedirectRefused,
+                Endpoint = endpoint,
+                StatusCode = response.StatusCode,
+                ErrorCode = null,
+                ErrorDescription = refusal.Support.Summary,
+                RedirectRefusal = refusal
+            }
+            : null;
 
 
     /// <summary>

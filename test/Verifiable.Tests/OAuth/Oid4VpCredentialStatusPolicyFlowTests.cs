@@ -355,7 +355,7 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
     {
         const int credentialIndex = 55;
 
-        static ValueTask<ResolvedStatusListToken?> failingResolver(StatusListResolutionContext context, CancellationToken ct = default) =>
+        static ValueTask<StatusListTokenResolution?> failingResolver(StatusListResolutionContext context, CancellationToken ct = default) =>
             throw new StatusListResolutionException(context.Reference.Uri, "The status list host refused the connection.");
 
         CountingCredentialStatusPolicy policy = new(CredentialStatusPolicies.RefuseNotValid);

@@ -104,7 +104,9 @@ public sealed class OAuthClientInfrastructure
     /// <summary>
     /// Sends an HTTP POST with a form-encoded body and returns the full HTTP
     /// response. Used for PAR, token exchange, refresh, revocation, and
-    /// dynamic-registration management requests.
+    /// dynamic-registration management requests. A single hop that never follows a redirect: every
+    /// request it carries holds a credential, and a flow refuses a 3xx answer as an
+    /// <see cref="OAuthRedirectRefused"/> (see <see cref="SendFormPostDelegate"/>).
     /// </summary>
     public SendFormPostDelegate SendFormPostAsync { get; private init; } = null!;
 

@@ -753,7 +753,7 @@ public static class TrustedListQualification
 
                         if(!parsed.RsaModulus.IsEmpty)
                         {
-                            key = parsed.RsaModulus;
+                            key = parsed.SubjectPublicKeyBitStringContent;
                             return true;
                         }
                     }

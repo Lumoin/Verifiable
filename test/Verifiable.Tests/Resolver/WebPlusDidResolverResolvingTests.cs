@@ -242,7 +242,7 @@ internal sealed class WebPlusDidResolverResolvingTests
     {
         string oversized = WebPlusWorkedExamples.ToMicroledger(WebPlusWorkedExamples.Example1Root) + "\n" + new string(' ', 9 * 1024 * 1024);
 
-        var transport = new RoutingTransport(new Dictionary<string, (int, string?)>(StringComparer.Ordinal)
+        RoutingTransport transport = new(new Dictionary<string, (int, string?)>(StringComparer.Ordinal)
         {
             [WebPlusDidResolver.Resolve(WebPlusWorkedExamples.Example1Did)] = (200, oversized)
         });
@@ -250,7 +250,10 @@ internal sealed class WebPlusDidResolverResolvingTests
         DidResolutionResult result = await WebPlusTestResolver.ResolveAsync(WebPlusWorkedExamples.Example1Did, transport, options: null, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSuccessful, "An oversized did:webplus microledger MUST NOT resolve.");
-        Assert.AreEqual(DidResolutionErrors.InvalidDid, result.ResolutionMetadata.Error);
+        Assert.AreEqual(DidResolutionErrors.NotFound, result.ResolutionMetadata.Error);
+        DidRetrievalTooLarge refusal = Assert.IsInstanceOfType<DidRetrievalTooLarge>(result.ResolutionMetadata.Error!.RetrievalFailure);
+        Assert.AreEqual(new OutboundResponseTooLarge(OutboundFetchPolicy.DefaultMaxResponseBytes,
+            OutboundFetchPolicy.DefaultMaxResponseBytes + 1, OutboundResponseLengthKind.Observed), refusal.Evidence);
     }
 
 
@@ -269,7 +272,7 @@ internal sealed class WebPlusDidResolverResolvingTests
 
         DidResolver composed = DidResolverComposition.Build(
             BaseMemoryPool.Shared,
-            static (request, context, cancellationToken) => ValueTask.FromResult(new OutboundResponse { StatusCode = 404, Body = TaggedMemory<byte>.Empty }),
+            static (request, context, readResponse, cancellationToken) => ScriptedOutboundTransport.ReadAsync(readResponse, new OutboundResponse { StatusCode = 404, Body = TaggedMemory<byte>.Empty }, cancellationToken),
             static jsonUtf8 => null,
             static jsonUtf8 => null,
             additionalMethods: [(WellKnownDidMethodPrefixes.WebPlusDidMethodPrefix, webPlus)]);
@@ -284,15 +287,7 @@ internal sealed class WebPlusDidResolverResolvingTests
     }
 
 
-    /// <summary>
-    /// <see href="https://www.w3.org/TR/did-resolution/#resolving-algorithm">DID Resolution §4.4</see>: "If the input DID
-    /// does not exist, return the following result: didResolutionMetadata: error object with type set to
-    /// https://www.w3.org/ns/did#NOT_FOUND". A microledger fetch that was cancelled has not shown the DID absent. When the
-    /// transport reports that cancellation inside an exception of its own, as the inner exception of its own fault or
-    /// among an aggregate's inner exceptions, the resolver lets it propagate as the cancellation it is instead of
-    /// answering not found, both when the caller abandoned the resolution while the fetch ran and when the fetch ended on
-    /// its own budget while the caller still waits, so the caller tells the two apart by its own token.
-    /// </summary>
+    /// <summary>Caller cancellation propagates; a wrapped transport timeout retains its typed retrieval kind.</summary>
     /// <param name="cancellationShape">How the transport carries the cancellation: <c>wrapped</c> or <c>aggregated</c>.</param>
     /// <param name="isCallerCancelled">Whether the caller abandons the resolution while the fetch runs.</param>
     [TestMethod]
@@ -300,7 +295,7 @@ internal sealed class WebPlusDidResolverResolvingTests
     [DataRow("wrapped", true)]
     [DataRow("aggregated", false)]
     [DataRow("aggregated", true)]
-    public async Task MicroledgerFetchCancellationCarriedInsideTheTransportFaultPropagates(string cancellationShape, bool isCallerCancelled)
+    public async Task MicroledgerFetchCancellationCarriedInsideTheTransportFaultDistinguishesCallerCancellationFromTimeout(string cancellationShape, bool isCallerCancelled)
     {
         using CancellationTokenSource caller = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
         DidMethodResolverDelegate resolver = WebPlusTestResolver.Build(
@@ -308,10 +303,20 @@ internal sealed class WebPlusDidResolverResolvingTests
         ExchangeContext context = [];
         context.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault);
 
-        await CarriedCancellationFixtures.AssertPropagatesAsTheCancellationAsync(
-            async () => await resolver(WebPlusWorkedExamples.Example1Did, DidResolutionOptions.Empty, context, caller.Token).ConfigureAwait(false),
-            isCallerCancelled,
-            caller.Token).ConfigureAwait(false);
+        if(isCallerCancelled)
+        {
+            OperationCanceledException caught = await Assert.ThrowsExactlyAsync<OperationCanceledException>(
+                async () => await resolver(WebPlusWorkedExamples.Example1Did, DidResolutionOptions.Empty, context, caller.Token).ConfigureAwait(false)).ConfigureAwait(false);
+            Assert.AreEqual(caller.Token, caught.CancellationToken);
+        }
+        else
+        {
+            DidResolutionResult result = await resolver(WebPlusWorkedExamples.Example1Did, DidResolutionOptions.Empty, context, caller.Token).ConfigureAwait(false);
+            Assert.IsFalse(result.IsSuccessful);
+            Assert.IsNotNull(result.ResolutionMetadata.Error);
+            DidRetrievalUnreachable failure = Assert.IsInstanceOfType<DidRetrievalUnreachable>(result.ResolutionMetadata.Error.RetrievalFailure);
+            Assert.AreEqual(typeof(TimeoutException), failure.FailureKind);
+        }
     }
 
 

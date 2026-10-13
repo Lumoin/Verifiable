@@ -557,7 +557,7 @@ internal sealed class Oid4VciDeferredAndNotificationTests
                 "https://xn--bcher-kva.example/tenant"),
             _ => throw new ArgumentOutOfRangeException(nameof(issuerRow), issuerRow, "Unknown issuer row.")
         };
-        Assert.IsTrue(IssuerIdentifierValidation.IsValidIssuerShape(configuredIssuer),
+        Assert.IsTrue(IssuerIdentifier.Parse(configuredIssuer.OriginalString).IsSuccess,
             "The configured issuer is one the server accepts as an issuer identifier.");
 
         await using TestHostShell host = new(TimeProvider);

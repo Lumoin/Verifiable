@@ -303,6 +303,22 @@ internal sealed class GeneralJweParsingRejectionTests
     }
 
 
+    /// <summary>
+    /// A Shared Unprotected Header naming the cryptographic parameter <c>apu</c> with an escape,
+    /// <c>"\u0061pu"</c>, carries <c>apu</c> (RFC 8259 §8.3 compares names as the text they spell) and is
+    /// rejected exactly as the plain spelling is.
+    /// </summary>
+    [TestMethod]
+    public async Task RejectsUnprotectedHeaderCarryingACryptographicParameterNamedWithAnEscape()
+    {
+        string general = await EncryptAnoncryptSingleRecipientJsonAsync().ConfigureAwait(false);
+        string mutated = InsertTopLevelMember(general, "\"unprotected\":{\"\\u0061pu\":\"QWxpY2U\"}");
+
+        _ = Assert.ThrowsExactly<FormatException>(() => ParseAnoncrypt(mutated),
+            "An 'unprotected' header carrying 'apu' named with an escape must be rejected.");
+    }
+
+
     [TestMethod]
     public async Task AcceptsUnprotectedHeaderWithBenignHint()
     {

@@ -55,15 +55,14 @@ public static class JwtVcIssuerMetadataDocuments
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(transport);
         ArgumentNullException.ThrowIfNull(options);
+        cancellationToken.ThrowIfCancellationRequested();
 
         //§4: "The iss MUST be a case-sensitive URL using the HTTPS scheme that contains scheme, host
         //and, optionally, port number and path components as defined in [RFC3986], but no query or
         //fragment components." A shape defect here never contacts the network, mirroring
         //AuthorizationServerMetadataDocuments.ResolveAsync's own pre-fetch shape check.
-        if(!issuer.IsAbsoluteUri
-            || !string.Equals(issuer.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal)
-            || !string.IsNullOrEmpty(issuer.Query)
-            || !string.IsNullOrEmpty(issuer.Fragment))
+        Result<IssuerIdentifier, IssuerIdentifierFault> expectedIssuer = IssuerIdentifier.Parse(issuer.OriginalString);
+        if(!expectedIssuer.IsSuccess)
         {
             return new JwtVcIssuerMetadataResolution
             {
@@ -81,22 +80,25 @@ public static class JwtVcIssuerMetadataDocuments
             MaxResponseBytes = options.MaximumDocumentBytes
         };
 
-        OutboundFetchResult fetch;
-        try
-        {
-            fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(
-                request, context, transport, cancellationToken).ConfigureAwait(false);
-        }
-        catch(OperationCanceledException)
-        {
-            throw;
-        }
-        catch
+        OutboundFetchResult fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(
+            request, context, transport, cancellationToken).ConfigureAwait(false);
+
+        if(fetch.FailureKind is Type failureKind)
         {
             return new JwtVcIssuerMetadataResolution
             {
-                Outcome = JwtVcIssuerMetadataResolutionOutcome.FetchFailed,
+                Outcome = JwtVcIssuerMetadataResolutionOutcome.Unreachable,
+                FailureKind = failureKind,
                 Defect = "Transport failure while fetching the JWT VC Issuer Metadata."
+            };
+        }
+
+        if(fetch.TooLarge is OutboundResponseTooLarge tooLarge)
+        {
+            return new JwtVcIssuerMetadataResolution
+            {
+                Outcome = JwtVcIssuerMetadataResolutionOutcome.TooLarge,
+                TooLarge = tooLarge
             };
         }
 
@@ -134,15 +136,6 @@ public static class JwtVcIssuerMetadataDocuments
             };
         }
 
-        if(response.Body.Length > options.MaximumDocumentBytes)
-        {
-            return new JwtVcIssuerMetadataResolution
-            {
-                Outcome = JwtVcIssuerMetadataResolutionOutcome.FetchFailed,
-                Defect = "The JWT VC Issuer Metadata document exceeds the configured maximum size."
-            };
-        }
-
         ReadOnlySpan<byte> body = response.Body.Span;
         if(!JwkJsonReader.IsWellFormedJsonDocument(body))
         {
@@ -158,8 +151,8 @@ public static class JwtVcIssuerMetadataDocuments
         //§4.3: "The issuer value returned MUST be identical to the iss value of the Issuer-signed
         //JWT. If these values are not identical, the data contained in the response MUST NOT be
         //used." Reuses the code-point-by-code-point comparison RFC 8414 §3.3 metadata already applies.
-        if(!AuthorizationServerMetadataValidation.IsIssuerIdentifierMatch(documentIssuer ?? string.Empty, issuer)
-            || documentIssuer is null)
+        Result<IssuerIdentifier, IssuerIdentifierFault> publishedIssuer = IssuerIdentifier.Parse(documentIssuer);
+        if(!publishedIssuer.IsSuccess || publishedIssuer.Value != expectedIssuer.Value)
         {
             return new JwtVcIssuerMetadataResolution
             {
@@ -264,6 +257,7 @@ public static class JwtVcIssuerMetadataDocuments
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);
+        cancellationToken.ThrowIfCancellationRequested();
 
         if(!resolution.IsResolved)
         {

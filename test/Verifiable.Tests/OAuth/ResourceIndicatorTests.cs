@@ -1,22 +1,23 @@
 using System.Globalization;
+using Verifiable.Core;
 using Verifiable.OAuth;
 
 namespace Verifiable.Tests.OAuth;
 
 /// <summary>
-/// One normative case per test method for <see cref="ResourceIndicatorSyntax"/>, each method's
-/// cases carried as its data rows. Every row runs under the Turkish culture so a row that passes
-/// there proves the reader's case handling is culture-free.
+/// One normative case per test method for <see cref="ResourceIndicator"/>, each method's
+/// cases carried as its data rows. Grammar and case-folding rows run under the Turkish culture
+/// to prove the reader's case handling is culture-free. Equality is exercised through hash sets.
 /// </summary>
 [TestClass]
-internal sealed class ResourceIndicatorSyntaxTests
+internal sealed class ResourceIndicatorTests
 {
     /// <summary>
     /// Runs <paramref name="assertions"/> with <see cref="CultureInfo.CurrentCulture"/> set to
     /// <c>tr-TR</c> on this thread, passing the culture's name observed right after the switch so
     /// every caller can assert it, and restores the prior culture in <c>finally</c>. Under tr-TR a
     /// culture-aware lowering maps an ASCII <c>I</c> to U+0131 (dotless i), so a row that passes
-    /// here proves <see cref="ResourceIndicatorSyntax"/> folds without consulting the thread's
+    /// here proves <see cref="ResourceIndicator"/> folds without consulting the thread's
     /// culture. The setting is per-thread, so no <c>[DoNotParallelize]</c> is needed.
     /// </summary>
     /// <param name="assertions">
@@ -53,11 +54,14 @@ internal sealed class ResourceIndicatorSyntaxTests
     [DataRow("FILE:///C:/Data", "file:///C:/Data")]
     [DataRow("HTTPS://XN--BCHER-KVA.EXAMPLE/", "https://xn--bcher-kva.example/")]
     [DataRow("URN:Example:Thing", "urn:Example:Thing")]
-    public void FoldLowersOnlyTheAsciiLettersOfTheSchemeAndHost(string indicator, string expected)
+    public void ParseLowersOnlyTheAsciiLettersOfTheSchemeAndHost(string indicator, string expected)
     {
         RunUnderTurkishCulture(observedCultureName =>
         {
-            Assert.AreEqual(expected, ResourceIndicatorSyntax.Fold(indicator));
+            ResourceIndicator accepted = ParseAccepted(indicator);
+            Assert.AreEqual(expected, accepted.ComparisonKey);
+            Assert.AreEqual(indicator, accepted.OriginalString);
+            Assert.AreEqual(indicator, accepted.ToString());
             Assert.AreEqual("tr-TR", observedCultureName);
         });
     }
@@ -81,7 +85,7 @@ internal sealed class ResourceIndicatorSyntaxTests
     [DataRow("", 0x212A, "ey://host.example/", ResourceIndicatorFault.NonAscii)]
     [DataRow("http", 0x017F, "://api.example.com/", ResourceIndicatorFault.NonAscii)]
     [DataRow("https://api.example.com/", -1, "", ResourceIndicatorFault.None)]
-    public void CheckRefusesEveryCodePointOutsideAscii(string prefix, int codePointOrSentinel, string suffix, ResourceIndicatorFault expectedFault)
+    public void ParseRefusesEveryCodePointOutsideAscii(string prefix, int codePointOrSentinel, string suffix, ResourceIndicatorFault expectedFault)
     {
         string indicator = codePointOrSentinel < 0
             ? prefix + suffix
@@ -89,13 +93,15 @@ internal sealed class ResourceIndicatorSyntaxTests
 
         RunUnderTurkishCulture(observedCultureName =>
         {
-            Assert.AreEqual(expectedFault, ResourceIndicatorSyntax.Check(indicator));
+            Result<ResourceIndicator, ResourceIndicatorFault> parsed = ResourceIndicator.Parse(indicator);
+            Assert.AreEqual(expectedFault == ResourceIndicatorFault.None, parsed.IsSuccess);
+            Assert.AreEqual(expectedFault, parsed.Match(static _ => ResourceIndicatorFault.None, static fault => fault));
             Assert.AreEqual("tr-TR", observedCultureName);
         });
     }
 
     /// <summary>
-    /// <see cref="ResourceIndicatorSyntax.Check(ReadOnlySpan{char})"/> names the first part of the
+    /// <see cref="ResourceIndicator.Parse"/> names the first part of the
     /// <see href="https://www.rfc-editor.org/rfc/rfc3986#appendix-A"><c>absolute-URI</c></see>
     /// grammar that fails, scanning left to right: a missing or malformed <c>scheme</c>, a
     /// malformed <c>pct-encoded</c> triplet
@@ -176,11 +182,13 @@ internal sealed class ResourceIndicatorSyntaxTests
     [DataRow("urn:example:thing", ResourceIndicatorFault.None)]
     [DataRow("https://api.example.com/A%2fB?X=Y", ResourceIndicatorFault.None)]
     [DataRow("https://api.example.com", ResourceIndicatorFault.None)]
-    public void CheckNamesTheFirstPartThatFails(string indicator, ResourceIndicatorFault expectedFault)
+    public void ParseNamesTheFirstPartThatFails(string indicator, ResourceIndicatorFault expectedFault)
     {
         RunUnderTurkishCulture(observedCultureName =>
         {
-            Assert.AreEqual(expectedFault, ResourceIndicatorSyntax.Check(indicator));
+            Result<ResourceIndicator, ResourceIndicatorFault> parsed = ResourceIndicator.Parse(indicator);
+            Assert.AreEqual(expectedFault == ResourceIndicatorFault.None, parsed.IsSuccess);
+            Assert.AreEqual(expectedFault, parsed.Match(static _ => ResourceIndicatorFault.None, static fault => fault));
             Assert.AreEqual("tr-TR", observedCultureName);
         });
     }
@@ -212,56 +220,193 @@ internal sealed class ResourceIndicatorSyntaxTests
     [DataRow("[v1.]", ResourceIndicatorFault.Authority)]
     [DataRow("[]", ResourceIndicatorFault.Authority)]
     [DataRow("[1:2:3:4:5:6:7]", ResourceIndicatorFault.Authority)]
-    public void CheckReadsEveryIpLiteralForm(string host, ResourceIndicatorFault expectedFault)
+    public void ParseReadsEveryIpLiteralForm(string host, ResourceIndicatorFault expectedFault)
     {
         string indicator = "https://" + host + "/";
 
         RunUnderTurkishCulture(observedCultureName =>
         {
-            Assert.AreEqual(expectedFault, ResourceIndicatorSyntax.Check(indicator));
+            Result<ResourceIndicator, ResourceIndicatorFault> parsed = ResourceIndicator.Parse(indicator);
+            Assert.AreEqual(expectedFault == ResourceIndicatorFault.None, parsed.IsSuccess);
+            Assert.AreEqual(expectedFault, parsed.Match(static _ => ResourceIndicatorFault.None, static fault => fault));
             Assert.AreEqual("tr-TR", observedCultureName);
         });
     }
 
-    /// <summary>
-    /// A rule of this library, not a specification clause: the comparison key of a stored
-    /// value <see cref="ResourceIndicatorSyntax.Check(ReadOnlySpan{char})"/> refuses is the value
-    /// itself, so a stored value outside the grammar (an IRI, or any other value outside the ASCII
-    /// grammar) compares by simple string identity
-    /// (<see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.1">RFC 3986 section 6.2.1</see>).
-    /// </summary>
+    /// <summary>A missing indicator has no scheme.</summary>
     [TestMethod]
-    [DataRow("HTTPS://API.EXAMPLE.COM/x", "https://api.example.com/x")]
-    [DataRow("https://api.example.com/%GG", "https://api.example.com/%GG")]
-    [DataRow("HTTPS://API.EXAMPLE.COM/%GG", "HTTPS://API.EXAMPLE.COM/%GG")]
-    public void ComparisonKeyFoldsAnAcceptedIndicatorAndKeepsAnyOtherValue(string value, string expected)
+    public void ParseRefusesEmpty()
+    {
+        AssertRefused(null, ResourceIndicatorFault.Empty);
+    }
+
+
+    /// <summary>An indicator outside the ASCII grammar is refused before component checks.</summary>
+    [TestMethod]
+    public void ParseRefusesNonAscii()
+    {
+        AssertRefused("https://api.example/" + char.ConvertFromUtf32(0x017F), ResourceIndicatorFault.NonAscii);
+    }
+
+
+    /// <summary>An absolute indicator requires a scheme.</summary>
+    [TestMethod]
+    public void ParseRefusesScheme()
+    {
+        AssertRefused("/relative", ResourceIndicatorFault.Scheme);
+    }
+
+
+    /// <summary>An unterminated IP literal is a malformed authority.</summary>
+    [TestMethod]
+    public void ParseRefusesAuthority()
+    {
+        AssertRefused("https://[::1/path", ResourceIndicatorFault.Authority);
+    }
+
+
+    /// <summary>A raw space cannot appear in an indicator path.</summary>
+    [TestMethod]
+    public void ParseRefusesPath()
+    {
+        AssertRefused("https://api.example/a b", ResourceIndicatorFault.Path);
+    }
+
+
+    /// <summary>A query must use the query character set.</summary>
+    [TestMethod]
+    public void ParseRefusesQuery()
+    {
+        AssertRefused("https://api.example/?q=^", ResourceIndicatorFault.Query);
+    }
+
+
+    /// <summary>A fragment is forbidden even when empty.</summary>
+    [TestMethod]
+    public void ParseRefusesFragment()
+    {
+        AssertRefused("https://api.example/#", ResourceIndicatorFault.Fragment);
+    }
+
+
+    /// <summary>A percent sign must begin a complete hexadecimal triplet.</summary>
+    [TestMethod]
+    public void ParseRefusesPercentEncoding()
+    {
+        AssertRefused("https://api.example/%GG", ResourceIndicatorFault.PercentEncoding);
+    }
+
+
+    /// <summary>An HTTPS indicator requires an authority.</summary>
+    [TestMethod]
+    public void ParseRefusesHttpAuthority()
+    {
+        AssertRefused("https:api.example", ResourceIndicatorFault.HttpAuthority);
+    }
+
+
+    /// <summary>An HTTPS indicator cannot carry userinfo.</summary>
+    [TestMethod]
+    public void ParseRefusesHttpUserInfo()
+    {
+        AssertRefused("https://user@api.example/", ResourceIndicatorFault.HttpUserInfo);
+    }
+
+
+    /// <summary>An HTTPS indicator requires a non-empty host.</summary>
+    [TestMethod]
+    public void ParseRefusesHttpHost()
+    {
+        AssertRefused("https:///path", ResourceIndicatorFault.HttpHost);
+    }
+
+
+    /// <summary>Case folded by the key is also folded by equality and hash-based membership.</summary>
+    /// <param name="firstSpelling">The registered resource spelling.</param>
+    /// <param name="secondSpelling">An equivalent candidate spelling.</param>
+    [TestMethod]
+    [DataRow("HTTPS://api.example/Path", "https://api.example/Path")]
+    [DataRow("https://API.EXAMPLE/Path", "https://api.example/Path")]
+    [DataRow("HTTPS://API.EXAMPLE:443/Path", "https://api.example:443/Path")]
+    [DataRow("FOO://User:Pass@HOST/P", "foo://User:Pass@host/P")]
+    [DataRow("HTTPS://[2001:DB8::1]/P", "https://[2001:db8::1]/P")]
+    [DataRow("FOO://B%C3%BCCHER.EXAMPLE/P", "foo://b%C3%BCcher.example/P")]
+    [DataRow("URN:Example:Thing", "urn:Example:Thing")]
+    public void EqualityAndHashingUseOnlyTheComparisonKey(string firstSpelling, string secondSpelling)
     {
         RunUnderTurkishCulture(observedCultureName =>
         {
-            Assert.AreEqual(expected, ResourceIndicatorSyntax.ComparisonKey(value));
+            ResourceIndicator first = ParseAccepted(firstSpelling);
+            ResourceIndicator second = ParseAccepted(secondSpelling);
+            HashSet<ResourceIndicator> registered = [first];
+
+            Assert.AreEqual(first.ComparisonKey, second.ComparisonKey);
+            Assert.AreEqual(first, second);
+            Assert.IsTrue(first.Equals((object)second));
+            Assert.IsTrue(first == second);
+            Assert.IsFalse(first != second);
+            Assert.AreEqual(first.GetHashCode(), second.GetHashCode());
+            Assert.IsFalse(registered.Add(second));
+            Assert.HasCount(1, registered);
             Assert.AreEqual("tr-TR", observedCultureName);
         });
     }
 
-    /// <summary>
-    /// A rule of this library, not a specification clause: <c>Fold</c> is total, so an
-    /// indicator <see cref="ResourceIndicatorSyntax.Check(ReadOnlySpan{char})"/> refuses is
-    /// returned unchanged rather than partially folded. The look-alike code point is built from
-    /// its value, never typed raw: U+0130 (Latin capital I with dot above).
-    /// </summary>
-    [TestMethod]
-    [DataRow("HTTPS://API.EXAMPLE.COM/x#", -1, "")]
-    [DataRow("HTTPS://AP", 0x0130, ".EXAMPLE/")]
-    public void FoldReturnsAValueTheCheckRefusesUnchanged(string prefix, int codePointOrSentinel, string suffix)
-    {
-        string indicator = codePointOrSentinel < 0
-            ? prefix + suffix
-            : prefix + char.ConvertFromUtf32(codePointOrSentinel) + suffix;
 
-        RunUnderTurkishCulture(observedCultureName =>
-        {
-            Assert.AreEqual(indicator, ResourceIndicatorSyntax.Fold(indicator));
-            Assert.AreEqual("tr-TR", observedCultureName);
-        });
+    /// <summary>Components the key keeps cannot select a registered resource by normalization.</summary>
+    /// <param name="firstSpelling">The registered resource spelling.</param>
+    /// <param name="secondSpelling">A distinct candidate spelling.</param>
+    [TestMethod]
+    [DataRow("https://api.example", "https://api.example:443")]
+    [DataRow("http://api.example", "http://api.example:80")]
+    [DataRow("https://api.example", "https://api.example/")]
+    [DataRow("https://api.example/Path", "https://api.example/Path/child")]
+    [DataRow("https://api.example/Path", "https://api.example/Path/")]
+    [DataRow("https://api.example/Path", "https://api.example/path")]
+    [DataRow("https://api.example/a/../b", "https://api.example/b")]
+    [DataRow("https://api.example/%41", "https://api.example/A")]
+    [DataRow("https://api.example/%2f", "https://api.example/%2F")]
+    [DataRow("foo://b%2f.example/P", "foo://b%2F.example/P")]
+    [DataRow("https://api.example/?Q=1", "https://api.example/?q=1")]
+    [DataRow("https://api.example/", "https://api.example/?")]
+    [DataRow("foo://User@host/P", "foo://user@host/P")]
+    public void EqualityKeepsEveryDifferenceOutsideTheFold(string firstSpelling, string secondSpelling)
+    {
+        ResourceIndicator first = ParseAccepted(firstSpelling);
+        ResourceIndicator second = ParseAccepted(secondSpelling);
+        HashSet<ResourceIndicator> registered = [first];
+
+        Assert.AreNotEqual(first.ComparisonKey, second.ComparisonKey);
+        Assert.AreNotEqual(first, second);
+        Assert.IsFalse(first.Equals((object)second));
+        Assert.IsFalse(first == second);
+        Assert.IsTrue(first != second);
+        Assert.IsTrue(registered.Add(second));
+        Assert.HasCount(2, registered);
+    }
+
+
+    /// <summary>A refusal never manufactures an accepted value with a key.</summary>
+    /// <param name="indicator">The original spelling to refuse.</param>
+    /// <param name="expectedFault">The rule the spelling breaks.</param>
+    private static void AssertRefused(string? indicator, ResourceIndicatorFault expectedFault)
+    {
+        Result<ResourceIndicator, ResourceIndicatorFault> parsed = ResourceIndicator.Parse(indicator);
+
+        Assert.IsFalse(parsed.IsSuccess);
+        Assert.AreEqual(expectedFault, parsed.Error);
+        Assert.IsNull(parsed.Value);
+    }
+
+
+    /// <summary>Reads an accepted fixture through the same public parser a host uses.</summary>
+    /// <param name="indicator">The fixture's original spelling.</param>
+    /// <returns>The accepted indicator.</returns>
+    private static ResourceIndicator ParseAccepted(string indicator)
+    {
+        Result<ResourceIndicator, ResourceIndicatorFault> parsed = ResourceIndicator.Parse(indicator);
+        Assert.IsTrue(parsed.IsSuccess, $"Unexpected refusal: {parsed.Error}.");
+
+        return parsed.Value;
     }
 }

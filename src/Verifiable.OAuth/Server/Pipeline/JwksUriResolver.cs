@@ -47,6 +47,7 @@ public static class JwksUriResolver
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(transport);
         ArgumentNullException.ThrowIfNull(options);
+        cancellationToken.ThrowIfCancellationRequested();
 
         OutboundRequest request = new()
         {
@@ -55,22 +56,25 @@ public static class JwksUriResolver
             MaxResponseBytes = options.MaximumDocumentBytes
         };
 
-        OutboundFetchResult fetch;
-        try
-        {
-            fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(
-                request, context, transport, cancellationToken).ConfigureAwait(false);
-        }
-        catch(OperationCanceledException)
-        {
-            throw;
-        }
-        catch
+        OutboundFetchResult fetch = await Verifiable.Core.Outbound.OutboundFetch.FetchAsync(
+            request, context, transport, cancellationToken).ConfigureAwait(false);
+
+        if(fetch.FailureKind is Type failureKind)
         {
             return new JwksUriResolution
             {
-                Outcome = JwksUriResolutionOutcome.FetchFailed,
+                Outcome = JwksUriResolutionOutcome.Unreachable,
+                FailureKind = failureKind,
                 Defect = "Transport failure while fetching the JWK Set."
+            };
+        }
+
+        if(fetch.TooLarge is OutboundResponseTooLarge tooLarge)
+        {
+            return new JwksUriResolution
+            {
+                Outcome = JwksUriResolutionOutcome.TooLarge,
+                TooLarge = tooLarge
             };
         }
 
@@ -93,15 +97,6 @@ public static class JwksUriResolver
             {
                 Outcome = JwksUriResolutionOutcome.FetchFailed,
                 Defect = $"The JWK Set fetch returned HTTP status {response.StatusCode}."
-            };
-        }
-
-        if(response.Body.Length > options.MaximumDocumentBytes)
-        {
-            return new JwksUriResolution
-            {
-                Outcome = JwksUriResolutionOutcome.FetchFailed,
-                Defect = "The JWK Set exceeds the configured maximum size."
             };
         }
 

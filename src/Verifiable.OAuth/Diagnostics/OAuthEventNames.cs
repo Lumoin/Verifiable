@@ -135,13 +135,9 @@ public static class OAuthEventNames
         "oauth.client.authorization_server_metadata_resolution_failed"u8;
 
     /// <summary>
-    /// A client flow's <c>ResolveAuthorizationServerMetadataAsync</c> call ended with a
-    /// non-<c>Resolved</c> outcome. The flow's own wire response never names the outcome or the
-    /// resolver's internal defect text, since the metadata document a defect quotes from is served
-    /// from a URL the authorization server itself controls; both ride this event's
-    /// <see cref="AuthorizationServerMetadataResolutionOutcomeTagName"/> and
-    /// <see cref="AuthorizationServerMetadataResolutionDefectTagName"/> tags instead, for
-    /// deployments that want the detail in their own traces.
+    /// A client flow's metadata resolution failed. The outcome type name rides the
+    /// <see cref="AuthorizationServerMetadataResolutionOutcomeTagName"/> tag; evidence controlled
+    /// by the responding server is not copied into the flow's wire response.
     /// </summary>
     public static string AuthorizationServerMetadataResolutionFailed { get; } =
         Utf8Constants.ToInternedString(AuthorizationServerMetadataResolutionFailedUtf8);
@@ -152,14 +148,6 @@ public static class OAuthEventNames
     /// </summary>
     public static string AuthorizationServerMetadataResolutionOutcomeTagName { get; } =
         "oauth.client.authorization_server_metadata_resolution_outcome";
-
-    /// <summary>
-    /// The <see cref="System.Diagnostics.ActivityTagsCollection"/> key carrying the resolver's
-    /// internal defect text for an <see cref="AuthorizationServerMetadataResolutionFailed"/> event.
-    /// Recorded only when the resolution supplied one.
-    /// </summary>
-    public static string AuthorizationServerMetadataResolutionDefectTagName { get; } =
-        "oauth.client.authorization_server_metadata_resolution_defect";
 
     /// <summary>The UTF-8 source literal of <see cref="OutboundFetchPolicyDenied"/>.</summary>
     public static ReadOnlySpan<byte> OutboundFetchPolicyDeniedUtf8 =>
@@ -233,4 +221,81 @@ public static class OAuthEventNames
     /// </summary>
     public static string ResourceIndicatorFaultTagName { get; } =
         Utf8Constants.ToInternedString(ResourceIndicatorFaultTagNameUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="CredentialBearingRedirectRefused"/>.</summary>
+    public static ReadOnlySpan<byte> CredentialBearingRedirectRefusedUtf8 =>
+        "oauth.client.credential_bearing_redirect_refused"u8;
+
+    /// <summary>
+    /// A client flow sent a request carrying a credential and the endpoint answered with a redirect, an
+    /// HTTP status of the 3xx class; the flow refused the answer as an <see cref="OAuthRedirectRefused"/>
+    /// without following it or sending anything further. The endpoint, the status and the
+    /// <c>Location</c> value the endpoint sent ride this event's
+    /// <see cref="RedirectRefusalEndpointTagName"/>, <see cref="RedirectRefusalStatusCodeTagName"/> and
+    /// <see cref="RedirectRefusalLocationTagName"/> tags, for deployments that want the detail in their
+    /// own traces.
+    /// </summary>
+    public static string CredentialBearingRedirectRefused { get; } =
+        Utf8Constants.ToInternedString(CredentialBearingRedirectRefusedUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="RedirectRefusalEndpointTagName"/>.</summary>
+    public static ReadOnlySpan<byte> RedirectRefusalEndpointTagNameUtf8 =>
+        "oauth.client.redirect_refusal_endpoint"u8;
+
+    /// <summary>
+    /// The <see cref="System.Diagnostics.ActivityTagsCollection"/> key carrying the URL of the endpoint
+    /// that answered with a redirect, for a <see cref="CredentialBearingRedirectRefused"/> event.
+    /// </summary>
+    public static string RedirectRefusalEndpointTagName { get; } =
+        Utf8Constants.ToInternedString(RedirectRefusalEndpointTagNameUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="RedirectRefusalStatusCodeTagName"/>.</summary>
+    public static ReadOnlySpan<byte> RedirectRefusalStatusCodeTagNameUtf8 =>
+        "oauth.client.redirect_refusal_status_code"u8;
+
+    /// <summary>
+    /// The <see cref="System.Diagnostics.ActivityTagsCollection"/> key carrying the 3xx status the
+    /// endpoint answered with, for a <see cref="CredentialBearingRedirectRefused"/> event.
+    /// </summary>
+    public static string RedirectRefusalStatusCodeTagName { get; } =
+        Utf8Constants.ToInternedString(RedirectRefusalStatusCodeTagNameUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="RedirectRefusalLocationTagName"/>.</summary>
+    public static ReadOnlySpan<byte> RedirectRefusalLocationTagNameUtf8 =>
+        "oauth.client.redirect_refusal_location"u8;
+
+    /// <summary>
+    /// The <see cref="System.Diagnostics.ActivityTagsCollection"/> key carrying the <c>Location</c> value
+    /// the endpoint sent with its redirect, for a <see cref="CredentialBearingRedirectRefused"/> event.
+    /// Recorded only when the answer carried one.
+    /// </summary>
+    public static string RedirectRefusalLocationTagName { get; } =
+        Utf8Constants.ToInternedString(RedirectRefusalLocationTagNameUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="ClientAssertionAlgorithmRefused"/>.</summary>
+    public static ReadOnlySpan<byte> ClientAssertionAlgorithmRefusedUtf8 =>
+        "oauth.client_assertion.algorithm_refused"u8;
+
+    /// <summary>
+    /// A <c>private_key_jwt</c> client assertion's <c>alg</c> header failed one of the holds the
+    /// validators <see cref="Server.PrivateKeyJwtClientAuthentication"/> builds apply, so the assertion
+    /// was refused before any key verified its signature and the client was not authenticated. The hold
+    /// it failed rides <see cref="ClientAssertionAlgorithmFaultTagName"/> as a
+    /// <see cref="Server.ClientAssertionAlgorithmFault"/> name; neither the assertion nor any of its
+    /// values is carried.
+    /// </summary>
+    public static string ClientAssertionAlgorithmRefused { get; } =
+        Utf8Constants.ToInternedString(ClientAssertionAlgorithmRefusedUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="ClientAssertionAlgorithmFaultTagName"/>.</summary>
+    public static ReadOnlySpan<byte> ClientAssertionAlgorithmFaultTagNameUtf8 =>
+        "oauth.client_assertion.algorithm_fault"u8;
+
+    /// <summary>
+    /// The <see cref="System.Diagnostics.ActivityTagsCollection"/> key carrying the name of the
+    /// <see cref="Server.ClientAssertionAlgorithmFault"/> that refused the assertion, for a
+    /// <see cref="ClientAssertionAlgorithmRefused"/> event.
+    /// </summary>
+    public static string ClientAssertionAlgorithmFaultTagName { get; } =
+        Utf8Constants.ToInternedString(ClientAssertionAlgorithmFaultTagNameUtf8);
 }

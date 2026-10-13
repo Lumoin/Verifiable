@@ -15,7 +15,7 @@ namespace Verifiable.Tests.OAuth;
 
 /// <summary>
 /// Proves that <see cref="IdJagFlowHandlers.MintAsync"/> and <see cref="IdJagFlowHandlers.RedeemAsync"/>
-/// map a non-<see cref="AuthorizationServerMetadataResolutionOutcome.Resolved"/>
+/// map a non-<see cref="AuthorizationServerMetadataResolved"/>
 /// <see cref="ResolveAuthorizationServerMetadataDelegate"/> answer to an
 /// <see cref="OAuthAuthorizationServerMetadataUnresolved"/> failure, without throwing and without
 /// sending a token request.
@@ -40,7 +40,7 @@ internal sealed class IdJagFlowHandlersMetadataResolutionTests
 
     /// <summary>
     /// A mint call whose metadata resolution answers
-    /// <see cref="AuthorizationServerMetadataResolutionOutcome.FetchFailed"/> returns
+    /// <see cref="AuthorizationServerMetadataUnreachable"/> returns
     /// <see cref="OAuthAuthorizationServerMetadataUnresolved"/> naming that outcome, and never reaches
     /// the token endpoint send.
     /// </summary>
@@ -48,7 +48,7 @@ internal sealed class IdJagFlowHandlersMetadataResolutionTests
     public async Task MintAsyncReturnsUnresolvedFailureWhenMetadataFetchFails()
     {
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
-            AuthorizationServerMetadataResolutionOutcome.FetchFailed, "simulated transport failure");
+            new AuthorizationServerMetadataUnreachable { FailureKind = typeof(IOException) });
 
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyMaterial = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         using PublicKeyMemory publicKey = keyMaterial.PublicKey;
@@ -70,13 +70,15 @@ internal sealed class IdJagFlowHandlersMetadataResolutionTests
         Assert.IsFalse(result.IsSuccess);
         OAuthAuthorizationServerMetadataUnresolved failure =
             Assert.IsInstanceOfType<OAuthAuthorizationServerMetadataUnresolved>(result.Error);
-        Assert.AreEqual(AuthorizationServerMetadataResolutionOutcome.FetchFailed, failure.Outcome);
+        AuthorizationServerMetadataUnreachable unreachable =
+            Assert.IsInstanceOfType<AuthorizationServerMetadataUnreachable>(failure.Resolution);
+        Assert.AreEqual(typeof(IOException), unreachable.FailureKind);
     }
 
 
     /// <summary>
     /// A redeem call whose metadata resolution answers
-    /// <see cref="AuthorizationServerMetadataResolutionOutcome.FetchFailed"/> returns
+    /// <see cref="AuthorizationServerMetadataUnreachable"/> returns
     /// <see cref="OAuthAuthorizationServerMetadataUnresolved"/> naming that outcome, and never reaches
     /// the token endpoint send.
     /// </summary>
@@ -84,7 +86,7 @@ internal sealed class IdJagFlowHandlersMetadataResolutionTests
     public async Task RedeemAsyncReturnsUnresolvedFailureWhenMetadataFetchFails()
     {
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
-            AuthorizationServerMetadataResolutionOutcome.FetchFailed, "simulated transport failure");
+            new AuthorizationServerMetadataUnreachable { FailureKind = typeof(IOException) });
 
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyMaterial = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         using PublicKeyMemory publicKey = keyMaterial.PublicKey;
@@ -104,7 +106,9 @@ internal sealed class IdJagFlowHandlersMetadataResolutionTests
         Assert.IsFalse(result.IsSuccess);
         OAuthAuthorizationServerMetadataUnresolved failure =
             Assert.IsInstanceOfType<OAuthAuthorizationServerMetadataUnresolved>(result.Error);
-        Assert.AreEqual(AuthorizationServerMetadataResolutionOutcome.FetchFailed, failure.Outcome);
+        AuthorizationServerMetadataUnreachable unreachable =
+            Assert.IsInstanceOfType<AuthorizationServerMetadataUnreachable>(failure.Resolution);
+        Assert.AreEqual(typeof(IOException), unreachable.FailureKind);
     }
 
 
@@ -120,8 +124,7 @@ internal sealed class IdJagFlowHandlersMetadataResolutionTests
     {
         List<Uri> invocations = [];
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
-            AuthorizationServerMetadataResolutionOutcome.Resolved,
-            defect: null,
+            resolution: null,
             tokenEndpointOverride: new Uri("https://127.0.0.1/token"),
             sendFormPostInvocations: invocations);
 
@@ -158,8 +161,7 @@ internal sealed class IdJagFlowHandlersMetadataResolutionTests
     {
         List<Uri> invocations = [];
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
-            AuthorizationServerMetadataResolutionOutcome.Resolved,
-            defect: null,
+            resolution: null,
             tokenEndpointOverride: new Uri("https://127.0.0.1/token"),
             sendFormPostInvocations: invocations);
 
@@ -185,9 +187,9 @@ internal sealed class IdJagFlowHandlersMetadataResolutionTests
     }
 
 
+    /// <summary>Builds an in-process resolver with a supplied failure or resolved endpoint metadata.</summary>
     private (OAuthClientInfrastructure Infrastructure, ClientRegistration Registration) CreateInfrastructureAndRegistration(
-        AuthorizationServerMetadataResolutionOutcome outcome,
-        string? defect,
+        AuthorizationServerMetadataResolution? resolution,
         Uri? tokenEndpointOverride = null,
         List<Uri>? sendFormPostInvocations = null)
     {
@@ -212,18 +214,17 @@ internal sealed class IdJagFlowHandlersMetadataResolutionTests
             parseRegistrationResponseAsync: (body, ct) =>
                 throw new NotImplementedException("This test does not exercise dynamic registration."),
             resolveAuthorizationServerMetadataAsync: (issuer, context, ct) =>
-                ValueTask.FromResult(outcome == AuthorizationServerMetadataResolutionOutcome.Resolved
-                    ? new AuthorizationServerMetadataResolution
+                ValueTask.FromResult(resolution
+                    ?? new AuthorizationServerMetadataResolved
                     {
-                        Outcome = outcome,
+                        MetadataLocation = WellKnownPaths.OAuthAuthorizationServer.ComputeUri(issuerUri.OriginalString),
                         Metadata = new AuthorizationServerMetadata
                         {
                             Issuer = issuerUri,
                             AuthorizationEndpoint = new Uri("https://as.example.com/authorize"),
                             TokenEndpoint = tokenEndpoint
                         }
-                    }
-                    : new AuthorizationServerMetadataResolution { Outcome = outcome, Defect = defect }),
+                    }),
             resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
             base64UrlEncoder: TestSetup.Base64UrlEncoder,
             memoryPool: BaseMemoryPool.Shared,

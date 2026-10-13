@@ -48,6 +48,12 @@ namespace Verifiable.OAuth;
 ///       <see cref="Verifiable.Core.Outbound.OutboundFetchPolicy"/> before any request was sent.
 ///     </description>
 ///   </item>
+///   <item>
+///     <description>
+///       <see cref="OAuthRedirectRefused"/> — the endpoint answered a request carrying a credential
+///       with a redirect, which the flow refused without following it or sending anything further.
+///     </description>
+///   </item>
 /// </list>
 /// <para>
 /// Each case carries a <see cref="DecisionSupport"/> record with the library's
@@ -163,15 +169,13 @@ public sealed record OAuthInvalidFieldValue(
 /// grant-exchange call needed before a request could even be built.
 /// </summary>
 /// <remarks>
-/// Carries the <see cref="Verifiable.OAuth.Client.ResolveAuthorizationServerMetadataDelegate"/>'s own
-/// <see cref="Verifiable.OAuth.Client.AuthorizationServerMetadataResolutionOutcome"/> rather than an
-/// HTTP status or a parsed field, since no usable document — sometimes no document at all, for
-/// <see cref="Verifiable.OAuth.Client.AuthorizationServerMetadataResolutionOutcome.InvalidIssuer"/> or
-/// <see cref="Verifiable.OAuth.Client.AuthorizationServerMetadataResolutionOutcome.PolicyDenied"/> —
-/// was ever obtained to parse.
+/// Carries the resolver's complete typed evidence, allowing the application to inspect the failure
+/// without parsing a diagnostic sentence or repeating the library's metadata decision.
 /// </remarks>
+/// <param name="Resolution">The metadata resolution failure and its evidence.</param>
+/// <param name="Support">Guidance for the calling application.</param>
 public sealed record OAuthAuthorizationServerMetadataUnresolved(
-    Verifiable.OAuth.Client.AuthorizationServerMetadataResolutionOutcome Outcome,
+    Verifiable.OAuth.Client.AuthorizationServerMetadataResolution Resolution,
     DecisionSupport Support): OAuthParseError(Support);
 
 
@@ -190,4 +194,39 @@ public sealed record OAuthAuthorizationServerMetadataUnresolved(
 public sealed record OAuthOutboundFetchPolicyDenied(
     Uri Endpoint,
     string DenyReason,
+    DecisionSupport Support): OAuthParseError(Support);
+
+
+/// <summary>
+/// The endpoint answered a request carrying a credential — a client assertion or secret, an
+/// authorization code and its verifier, a refresh token, a token to revoke, a registration access
+/// token, a presentation — with a redirect, an HTTP status of the 3xx class, and the flow refused the
+/// answer: it did not follow the redirect, did not read the body as the endpoint's answer, and sent
+/// nothing further.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Every transport delegate that carries such a request performs a single hop and returns a 3xx answer
+/// as received (<see cref="Verifiable.OAuth.AuthCode.SendFormPostDelegate"/>). Following it would re-send
+/// the credential to whatever origin the <c>Location</c> field names:
+/// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.4.8">RFC 9110 §15.4.8</see> says of a
+/// 307 that "the user agent MUST NOT change the request method if it performs an automatic redirection
+/// to that URI", so a followed POST carries its body, credential included, to the new target, and
+/// removing the <c>Authorization</c> field on the way, which
+/// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.4">RFC 9110 §15.4</see> asks a
+/// redirect-following client to consider, leaves a credential the body carries in place.
+/// </para>
+/// <para>
+/// <see cref="Location"/> is the field value as the endpoint sent it, a value the endpoint chose and the
+/// flow never dereferenced; it is carried for diagnosis only.
+/// </para>
+/// </remarks>
+/// <param name="Endpoint">The endpoint the refused request was sent to.</param>
+/// <param name="StatusCode">The 3xx status the endpoint answered with.</param>
+/// <param name="Location">The answer's <c>Location</c> field value, or <see langword="null"/> when it carried none.</param>
+/// <param name="Support">The library's assessment of the refusal.</param>
+public sealed record OAuthRedirectRefused(
+    Uri Endpoint,
+    int StatusCode,
+    string? Location,
     DecisionSupport Support): OAuthParseError(Support);

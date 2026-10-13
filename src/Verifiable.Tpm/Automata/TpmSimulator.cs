@@ -12487,11 +12487,12 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
     /// <summary>
     /// Builds an identity-based seed transport to an RSA recipient (TPM 2.0 Library Part 1, clause 20.3.2.3): a
-    /// fresh random seed from the entropy delegate, OAEP-encrypted to the recipient's modulus under the given
+    /// fresh random seed from the entropy delegate, OAEP-encrypted to the recipient's public key under the given
     /// use label — "IDENTITY" for credential protection, "DUPLICATE" for duplication, each with its
     /// terminating zero — on this otherwise shared path.
     /// </summary>
     /// <param name="recipientModulus">The recipient key's public modulus.</param>
+    /// <param name="recipientExponent">The recipient key's public exponent, as its public area states it (<see cref="TpmsRsaParms.EffectiveExponent"/>).</param>
     /// <param name="nameAlg">The recipient's Name algorithm, driving the OAEP hash and the seed width.</param>
     /// <param name="labelOctets">The OAEP label octets, terminating zero included.</param>
     /// <param name="context">The effect context supplying the RSA backend, the entropy delegate, and the memory pool.</param>
@@ -12500,7 +12501,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the seed rental and the secret carrier transfers to the caller, which clears and releases the seed once the wrap has consumed it and rides the secret to the response intent released by SerializeResponse.")]
     private static async ValueTask<(IMemoryOwner<byte> Seed, int SeedSize, Tpm2bEncryptedSecret Secret)> BuildRsaSeedTransportAsync(
-        Tpm2bPublicKeyRsa recipientModulus, TpmiAlgHash nameAlg, ReadOnlyMemory<byte> labelOctets,
+        Tpm2bPublicKeyRsa recipientModulus, uint recipientExponent, TpmiAlgHash nameAlg, ReadOnlyMemory<byte> labelOctets,
         TpmActionContext context, CancellationToken cancellationToken)
     {
         TpmRsaSigningBackend backend = context.RsaSigningBackend
@@ -12513,7 +12514,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         {
             context.Rng(seed.Memory.Span[..seedSize]);
             IMemoryOwner<byte> secretStorage = await backend.EncryptOaep(
-                recipientModulus.AsReadOnlyMemory(), TpmsRsaParms.DefaultExponent, seed.Memory[..seedSize], labelOctets,
+                recipientModulus.AsReadOnlyMemory(), recipientExponent, seed.Memory[..seedSize], labelOctets,
                 nameAlg.Value, nameAlg.Value, pool, cancellationToken).ConfigureAwait(false);
 
             return (seed, seedSize, Tpm2bEncryptedSecret.FromMarshaled(secretStorage, secretStorage.Memory.Length));
@@ -12652,7 +12653,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             }
 
             (IMemoryOwner<byte> seed, int seedSize, Tpm2bEncryptedSecret outSymSeed) = action.NewParentKeyType.Value == TpmAlgIdConstants.TPM_ALG_RSA
-                ? await BuildRsaSeedTransportAsync(action.NewParentModulus, action.NewParentNameAlg, DuplicationSeedLabelOctets, context, cancellationToken).ConfigureAwait(false)
+                ? await BuildRsaSeedTransportAsync(action.NewParentModulus, action.NewParentExponent, action.NewParentNameAlg, DuplicationSeedLabelOctets, context, cancellationToken).ConfigureAwait(false)
                 : await BuildEccSeedTransportAsync(action.NewParentPublicPoint, action.NewParentCurve, action.NewParentNameAlg, DuplicationSeedLabel, context, cancellationToken).ConfigureAwait(false);
             try
             {
@@ -13174,7 +13175,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         BaseMemoryPool pool = context.Pool;
 
         (IMemoryOwner<byte> seed, int seedSize, Tpm2bEncryptedSecret secret) = await BuildRsaSeedTransportAsync(
-            action.CredentialKeyModulus, action.NameAlg, CredentialIdentityLabelOctets, context, cancellationToken).ConfigureAwait(false);
+            action.CredentialKeyModulus, action.CredentialKeyExponent, action.NameAlg, CredentialIdentityLabelOctets, context, cancellationToken).ConfigureAwait(false);
         try
         {
             (IMemoryOwner<byte> credentialBlobStorage, int credentialBlobLength) = await BuildCredentialBlobAsync(

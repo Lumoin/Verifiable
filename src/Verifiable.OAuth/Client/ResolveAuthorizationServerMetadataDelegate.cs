@@ -15,7 +15,8 @@ namespace Verifiable.OAuth.Client;
 /// library's one attempt: the guarded fetch, RFC 8414 §3's well-known URL computation, the §3.2
 /// content-type and status checks, the §3.3 issuer match, and the RFC 9111 §5.2 freshness the
 /// response headers imply, reported alongside the typed outcome. It caches nothing and retains no
-/// state between calls.
+/// state between calls. Its required parser delegate is supplied by the serialization adapter;
+/// Verifiable.Json provides AuthorizationServerMetadataJson.Parse over the original UTF-8 bytes.
 /// </para>
 /// <para>
 /// The implementation of THIS delegate is the caching layer: it composes the attempt above, owns the

@@ -15,7 +15,13 @@ public enum OutboundFetchOutcome
     RedirectNotFollowed,
 
     /// <summary>The redirect chain exceeded <see cref="OutboundFetchPolicy.MaxRedirects"/>.</summary>
-    TooManyRedirects
+    TooManyRedirects,
+
+    /// <summary>The response reader stopped because a declared or observed length exceeded the byte limit.</summary>
+    TooLarge,
+
+    /// <summary>The transport failed, including a timeout while the caller's token was live.</summary>
+    Unreachable
 }
 
 
@@ -23,8 +29,9 @@ public enum OutboundFetchOutcome
 /// The outcome of a guarded <see cref="OutboundFetch"/>. Fail-closed by return,
 /// not by exception: a denied or over-long fetch yields a non-<see cref="OutboundFetchOutcome.Fetched"/>
 /// outcome with a diagnostic <see cref="DenyReason"/>, never a thrown policy
-/// error. Carries provenance (requested vs final URL, hop count) suitable for an
-/// audit/trust log.
+/// error. A size refusal carries <see cref="TooLarge"/> instead of a partial response; a transport
+/// failure carries <see cref="FailureKind"/>. Carries provenance (requested vs final URL, hop count)
+/// suitable for an audit/trust log.
 /// </summary>
 public sealed record OutboundFetchResult
 {
@@ -37,8 +44,24 @@ public sealed record OutboundFetchResult
     /// </summary>
     public OutboundResponse? Response { get; init; }
 
-    /// <summary>A diagnostic reason for a non-fetched outcome. Do not surface verbatim to untrusted callers.</summary>
+    /// <summary>The size refusal evidence when the outcome is <see cref="OutboundFetchOutcome.TooLarge"/>.</summary>
+    public OutboundResponseTooLarge? TooLarge { get; init; }
+
+    /// <summary>
+    /// The transport failure's concrete type when the outcome is Unreachable. A bare or wrapped
+    /// cancellation while the caller's token is live is classified as <see cref="TimeoutException"/>.
+    /// No exception instance or message is retained.
+    /// </summary>
+    public Type? FailureKind { get; init; }
+
+    /// <summary>A diagnostic reason for a policy or redirect refusal. Do not surface verbatim to untrusted callers.</summary>
     public string? DenyReason { get; init; }
+
+    /// <summary>
+    /// The redirect response whose hop was refused, including a next-hop policy denial.
+    /// Null for an initial-target denial or a terminal response.
+    /// </summary>
+    public OutboundRedirectRefusal? RefusedRedirect { get; init; }
 
     /// <summary>The URL originally requested.</summary>
     public required Uri RequestedUri { get; init; }
@@ -53,3 +76,9 @@ public sealed record OutboundFetchResult
     /// <summary>Whether a terminal response was obtained.</summary>
     public bool IsFetched => Outcome == OutboundFetchOutcome.Fetched;
 }
+
+
+/// <summary>The response evidence retained when a guarded fetch refuses a redirect.</summary>
+/// <param name="StatusCode">The redirect response's HTTP status.</param>
+/// <param name="Location">The Location header exactly as received, without URI normalization.</param>
+public sealed record OutboundRedirectRefusal(int StatusCode, string Location);

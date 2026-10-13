@@ -114,7 +114,7 @@ internal sealed class HttpWireFidelityTests
             .ResolveAuthorizationServerMetadataAsync(
                 registration.AuthorizationServerIssuer, [], TestContext.CancellationToken)
             .ConfigureAwait(false);
-        AuthorizationServerMetadata metadata = resolution.Metadata!;
+        AuthorizationServerMetadata metadata = Assert.IsInstanceOfType<AuthorizationServerMetadataResolved>(resolution).Metadata;
 
         HttpResponseData parResponse = await client.Infrastructure.SendFormPostAsync(
             metadata.PushedAuthorizationRequestEndpoint!,

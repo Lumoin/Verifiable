@@ -1,4 +1,3 @@
-using System.Net.Http.Headers;
 using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.Outbound;
@@ -104,47 +103,9 @@ internal sealed class DidCommCoordinateMediationTests
 
     //A single-hop HttpClient transport that reads back the response body/Content-Type — mirrors
     //DidCommMessagePickupTests.BuildExchangeTransport, the exchange seam's HTTPS binding.
-    private static OutboundTransportDelegate BuildExchangeTransport(HttpClient httpClient)
-    {
-        return async (request, context, cancellationToken) =>
-        {
-            using var httpRequest = new HttpRequestMessage(new HttpMethod(request.Method), request.Target);
-            if(request.Body is { } body)
-            {
-                var content = new ReadOnlyMemoryContent(body.Memory);
-                if(request.Headers.TryGetValue("Content-Type", out string? contentType))
-                {
-                    content.Headers.ContentType = MediaTypeHeaderValue.Parse(contentType);
-                }
-
-                httpRequest.Content = content;
-            }
-
-            using HttpResponseMessage httpResponse = await httpClient
-                .SendAsync(httpRequest, HttpCompletionOption.ResponseContentRead, cancellationToken)
-                .ConfigureAwait(false);
-
-            byte[] responseBytes = await httpResponse.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
-
-            //FromReceived (not the composing-side Builder) takes RFC 9110 §5.5's recipient arm on a
-            //hostile line rather than throwing.
-            List<(string Name, string Value)> responsePairs = [];
-            foreach(KeyValuePair<string, IEnumerable<string>> header in httpResponse.Content.Headers)
-            {
-                foreach(string value in header.Value)
-                {
-                    responsePairs.Add((header.Key, value));
-                }
-            }
-
-            return new OutboundResponse
-            {
-                StatusCode = (int)httpResponse.StatusCode,
-                Headers = HttpHeaderSet.FromReceived(responsePairs),
-                Body = responseBytes.Length == 0 ? TaggedMemory<byte>.Empty : new TaggedMemory<byte>(responseBytes, BufferTags.Json)
-            };
-        };
-    }
+    /// <summary>Uses the shared single-hop adapter to hand live response bytes to the guarded reader.</summary>
+    private static OutboundTransportDelegate BuildExchangeTransport(HttpClient httpClient) =>
+        GuardedHttpClientTransport.BuildSingleHopTransport(httpClient);
 
 
     /// <summary>

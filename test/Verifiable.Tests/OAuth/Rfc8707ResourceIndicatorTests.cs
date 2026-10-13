@@ -157,7 +157,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
     /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see>: "Its value
     /// MUST be an absolute URI". A relative value has no scheme
-    /// (<see cref="ResourceIndicatorSyntax.Check(ReadOnlySpan{char})"/> finds no <c>:</c> before a
+    /// (<see cref="ResourceIndicator.Parse"/> finds no <c>:</c> before a
     /// character the <c>scheme</c> production disallows) and must be refused on every platform, not
     /// merely on Windows where <see cref="UriKind.Absolute"/> alone would already fail it.
     /// </summary>
@@ -222,7 +222,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
     /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see>: "Its value
     /// MUST be an absolute URI". A Windows-style path carries a backslash, a character none of the
     /// <c>scheme</c>, <c>path</c> or <c>query</c> productions admit
-    /// (<see cref="ResourceIndicatorSyntax.Check(ReadOnlySpan{char})"/>,
+    /// (<see cref="ResourceIndicator.Parse"/>,
     /// <see href="https://www.rfc-editor.org/rfc/rfc3986#appendix-A">RFC 3986 Appendix A</see>), so
     /// the grammar itself refuses it, never .NET's implicit path-to-<c>file:</c>-URI coercion, which
     /// this reader never consults, exactly like the Unix leading-slash case
@@ -245,7 +245,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
     /// <summary>
     /// The mirror of the two grammar tests above: <c>file:///srv/resources/orders</c> is an
     /// <c>absolute-URI</c> with an empty authority (the <c>//</c> after the scheme's <c>:</c> is
-    /// present, so <see cref="ResourceIndicatorSyntax.Check(ReadOnlySpan{char})"/> reads a genuine,
+    /// present, so <see cref="ResourceIndicator.Parse"/> reads a genuine,
     /// deliberate <c>file:</c> indicator; <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 section 2</see>
     /// places no scheme restriction) and must be ACCEPTED, a genuinely different shape from the
     /// Windows path above, which carries no <c>//</c> and no scheme at all.
@@ -450,7 +450,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
     /// fix. The resulting projected <see cref="AuthCodeRequestObject.Resource"/> is checked against
     /// RFC 8707 section 2's own resource-indicator shape (an absolute URI with no fragment
     /// component), the same grammar <c>ValidateResourceIndicatorsShape</c> applies downstream via
-    /// <see cref="ResourceIndicatorSyntax.Check(ReadOnlySpan{char})"/>, whose rejection is what
+    /// <see cref="ResourceIndicator.Parse"/>, whose rejection is what
     /// ultimately produces <c>invalid_target</c> on the wire: silently dropping the blank entry would leave a bare,
     /// well-formed resource indicator here; failing closed leaves a value that itself is not one.
     /// </summary>
@@ -2541,7 +2541,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
     /// ABNF notation defines its terminal values to be non-negative integers (codepoints) based on
     /// the US-ASCII coded character set". A code point above U+007F anywhere in the <c>resource</c>
     /// value (in its host, its path, or its scheme) is outside that set, so
-    /// <see cref="ResourceIndicatorSyntax.Check(ReadOnlySpan{char})"/> refuses it and the pushed
+    /// <see cref="ResourceIndicator.Parse"/> refuses it and the pushed
     /// request answers <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707
     /// section 2.1</see>'s <c>invalid_target</c>
     /// (<see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 section 2</see>: "Its
@@ -2592,7 +2592,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
     /// <c>pchar = unreserved / pct-encoded / sub-delims / ":" / "@"</c> admits none of a backslash,
     /// <c>[</c>, <c>]</c>, <c>^</c>, <c>{</c>, <c>}</c>, <c>|</c> or a backtick in a path segment.
     /// The last case, an empty fragment (<c>x#</c>), fails the fragment check
-    /// <see cref="ResourceIndicatorSyntax.Check(ReadOnlySpan{char})"/> makes and is refused with the
+    /// <see cref="ResourceIndicator.Parse"/> makes and is refused with the
     /// same description.
     /// </summary>
     [TestMethod]

@@ -324,9 +324,7 @@ internal sealed class ManagedCertificate
         {
             //The subjectPublicKey BIT STRING wraps RSAPublicKey ::= SEQUENCE { modulus, publicExponent }.
             byte[] rsaPublicKey = subjectPublicKeyInfo.ReadBitString(out _);
-            var rsa = new AsnReader(rsaPublicKey, AsnEncodingRules.DER).ReadSequence();
-            ReadOnlyMemory<byte> modulus = StripLeadingZero(rsa.ReadIntegerBytes());
-            ReadOnlyMemory<byte> exponent = StripLeadingZero(rsa.ReadIntegerBytes());
+            (byte[] modulus, byte[] exponent) = RsaPublicKeyEncoding.Decode(rsaPublicKey);
 
             return new ParsedPublicKey(EllipticCurveTypes.None, ReadOnlyMemory<byte>.Empty, modulus, exponent, string.Empty, ReadOnlyMemory<byte>.Empty, rsaPublicKey);
         }
@@ -353,13 +351,6 @@ internal sealed class ManagedCertificate
         string.Equals(algorithmOid, WellKnownOids.MlDsa44, StringComparison.Ordinal)
         || string.Equals(algorithmOid, WellKnownOids.MlDsa65, StringComparison.Ordinal)
         || string.Equals(algorithmOid, WellKnownOids.MlDsa87, StringComparison.Ordinal);
-
-
-    /// <summary>
-    /// Strips a single leading <c>0x00</c> sign octet from a DER INTEGER's two's-complement encoding.
-    /// </summary>
-    private static ReadOnlyMemory<byte> StripLeadingZero(ReadOnlyMemory<byte> integer) =>
-        integer.Length > 1 && integer.Span[0] == 0x00 ? integer[1..] : integer;
 
 
     /// <summary>

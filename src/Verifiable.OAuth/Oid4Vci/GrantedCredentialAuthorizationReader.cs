@@ -27,6 +27,18 @@ namespace Verifiable.OAuth.Oid4Vci;
 /// document to <see cref="JwkJsonReader.IsWellFormedJsonDocument"/> first.
 /// </para>
 /// <para>
+/// Every member, the <c>authorization_details</c> member itself included, is found by the text its name
+/// spells with its escapes decoded, and the member's value is read at the offset
+/// <see cref="JwkJsonReader.IndexOfValue"/> answers, since an escaped spelling makes the raw name longer
+/// than the text it spells.
+/// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-7">RFC 8259 Section 7</see>:
+/// "Any character may be escaped."
+/// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.3">RFC 8259 Section 8.3</see>:
+/// "Implementations that transform the textual representation into sequences of Unicode code units and
+/// then perform the comparison numerically, code unit by code unit, are interoperable in the sense that
+/// implementations will agree in all cases on equality or inequality of two strings."
+/// </para>
+/// <para>
 /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.2">OID4VCI 1.0 Section 6.2</see>:
 /// "It is a non-empty array of objects, as defined in Section 7 of [RFC9396]." And:
 /// "credential_identifiers: REQUIRED. A non-empty array of strings, each uniquely identifying a
@@ -69,15 +81,17 @@ internal static class GrantedCredentialAuthorizationReader
         ReadOnlySpan<byte> tokenJson, out IReadOnlyList<GrantedCredentialAuthorization> grantedAuthorizations)
     {
         grantedAuthorizations = [];
-        ReadOnlySpan<byte> detailsKey = OAuthRequestParameterNames.AuthorizationDetailsUtf8;
-        int keyStart = JwkJsonReader.IndexOfKey(tokenJson, detailsKey);
-        if(keyStart < 0)
+
+        //The member is found by the text its name spells, an escaped spelling included, and read at the
+        //offset of its value the reader answers, since an escape makes the raw name longer than the text
+        //it spells.
+        int position = JwkJsonReader.IndexOfValue(tokenJson, OAuthRequestParameterNames.AuthorizationDetailsUtf8);
+        if(position < 0)
         {
             return true;
         }
 
-        int position = JwkJsonReader.SkipWhitespaceAndColon(tokenJson, keyStart + detailsKey.Length + 1);
-        if(position < 0 || position >= tokenJson.Length || tokenJson[position] != (byte)'[')
+        if(position >= tokenJson.Length || tokenJson[position] != (byte)'[')
         {
             return false;
         }

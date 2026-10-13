@@ -3,6 +3,8 @@ using System.Collections.Immutable;
 using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.Outbound;
+using Verifiable.JCose;
+using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Server;
@@ -11,7 +13,7 @@ using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.OAuth;
 
 /// <summary>
-/// Tests for <see cref="OAuthResponseParsers.ParseAuthorizationServerMetadata"/>, for
+/// Tests for <see cref="AuthorizationServerMetadataJson.Parse"/>, for
 /// <see cref="AuthorizationServerMetadataDocuments.ResolveAsync"/> — the authorization server
 /// metadata fetch-validate attempt (<see href="https://www.rfc-editor.org/rfc/rfc8414#section-3">RFC
 /// 8414 §3</see>) — and for <see cref="AuthorizationServerMetadataResolutionCache"/>, the reference
@@ -23,9 +25,13 @@ namespace Verifiable.Tests.OAuth;
 [TestClass]
 internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
 {
+    /// <summary>The runner's per-test cancellation context.</summary>
     public TestContext TestContext { get; set; } = null!;
 
+    /// <summary>The requested issuer used by scripted resolutions.</summary>
     private const string Issuer = "https://as.example.com";
+
+    /// <summary>The issuer's RFC 8414 well-known location.</summary>
     private const string MetadataUrl = "https://as.example.com/.well-known/oauth-authorization-server";
 
 
@@ -67,8 +73,8 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
             }
             """;
 
-        Result<AuthorizationServerMetadata, OAuthParseError> result =
-            OAuthResponseParsers.ParseAuthorizationServerMetadata(new HttpResponseData { Body = body, StatusCode = 200 });
+        Result<AuthorizationServerMetadata, AuthorizationServerMetadataParseError> result =
+            AuthorizationServerMetadataJson.Parse(Encoding.UTF8.GetBytes(body));
 
         Assert.IsTrue(result.IsSuccess, $"Defect: {result.Error}");
         AuthorizationServerMetadata metadata = result.Value;
@@ -109,11 +115,11 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
     [TestMethod]
     public void ParserRejectsBodyWithoutIssuerAsMalformed()
     {
-        Result<AuthorizationServerMetadata, OAuthParseError> result = OAuthResponseParsers.ParseAuthorizationServerMetadata(
-            new HttpResponseData { Body = """{"token_endpoint":"https://server.example.com/token"}""", StatusCode = 200 });
+        Result<AuthorizationServerMetadata, AuthorizationServerMetadataParseError> result = AuthorizationServerMetadataJson.Parse(
+            Encoding.UTF8.GetBytes("""{"token_endpoint":"https://server.example.com/token"}"""));
 
         Assert.IsFalse(result.IsSuccess);
-        _ = Assert.IsInstanceOfType<OAuthMalformedResponse>(result.Error);
+        Assert.AreEqual(AuthorizationServerMetadataUnreadableReason.MissingIssuer, result.Error.Reason);
     }
 
 
@@ -121,16 +127,12 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
     [TestMethod]
     public void ParserRejectsNonAbsoluteEndpointAsInvalidFieldNamingMember()
     {
-        Result<AuthorizationServerMetadata, OAuthParseError> result = OAuthResponseParsers.ParseAuthorizationServerMetadata(
-            new HttpResponseData
-            {
-                Body = """{"issuer":"https://server.example.com","token_endpoint":"not-a-uri"}""",
-                StatusCode = 200
-            });
+        Result<AuthorizationServerMetadata, AuthorizationServerMetadataParseError> result = AuthorizationServerMetadataJson.Parse(
+            Encoding.UTF8.GetBytes("""{"issuer":"https://server.example.com","token_endpoint":"not-a-uri"}"""));
 
         Assert.IsFalse(result.IsSuccess);
-        OAuthInvalidFieldValue invalid = Assert.IsInstanceOfType<OAuthInvalidFieldValue>(result.Error);
-        Assert.AreEqual(AuthorizationServerMetadataParameterNames.TokenEndpoint, invalid.FieldName);
+        Assert.AreEqual(AuthorizationServerMetadataUnreadableReason.InvalidUri, result.Error.Reason);
+        Assert.AreEqual(AuthorizationServerMetadataParameterNames.TokenEndpoint, result.Error.MemberName);
     }
 
 
@@ -141,12 +143,8 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
     [TestMethod]
     public void ParserIgnoresAnUnknownMember()
     {
-        Result<AuthorizationServerMetadata, OAuthParseError> result = OAuthResponseParsers.ParseAuthorizationServerMetadata(
-            new HttpResponseData
-            {
-                Body = """{"issuer":"https://server.example.com","service_documentation":"http://server.example.com/docs.html"}""",
-                StatusCode = 200
-            });
+        Result<AuthorizationServerMetadata, AuthorizationServerMetadataParseError> result = AuthorizationServerMetadataJson.Parse(
+            Encoding.UTF8.GetBytes("""{"issuer":"https://server.example.com","service_documentation":"http://server.example.com/docs.html"}"""));
 
         Assert.IsTrue(result.IsSuccess, $"Defect: {result.Error}");
         Assert.AreEqual("https://server.example.com", result.Value.Issuer.OriginalString);
@@ -157,12 +155,8 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
     [TestMethod]
     public void ParserRoundTripsATwoValueSupportedList()
     {
-        Result<AuthorizationServerMetadata, OAuthParseError> result = OAuthResponseParsers.ParseAuthorizationServerMetadata(
-            new HttpResponseData
-            {
-                Body = """{"issuer":"https://server.example.com","scopes_supported":["openid","profile"]}""",
-                StatusCode = 200
-            });
+        Result<AuthorizationServerMetadata, AuthorizationServerMetadataParseError> result = AuthorizationServerMetadataJson.Parse(
+            Encoding.UTF8.GetBytes("""{"issuer":"https://server.example.com","scopes_supported":["openid","profile"]}"""));
 
         Assert.IsTrue(result.IsSuccess, $"Defect: {result.Error}");
         Assert.AreSequenceEqual(RoundTripScopes, result.Value.ScopesSupported);
@@ -173,8 +167,8 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
     [TestMethod]
     public void ParserReadsAnAbsentBooleanAsFalse()
     {
-        Result<AuthorizationServerMetadata, OAuthParseError> result = OAuthResponseParsers.ParseAuthorizationServerMetadata(
-            new HttpResponseData { Body = """{"issuer":"https://server.example.com"}""", StatusCode = 200 });
+        Result<AuthorizationServerMetadata, AuthorizationServerMetadataParseError> result = AuthorizationServerMetadataJson.Parse(
+            Encoding.UTF8.GetBytes("""{"issuer":"https://server.example.com"}"""));
 
         Assert.IsTrue(result.IsSuccess, $"Defect: {result.Error}");
         Assert.IsFalse(result.Value.RequirePushedAuthorizationRequests);
@@ -186,7 +180,7 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
     public async Task MetadataUrlForRootIssuerHasNoPathInsertion()
     {
         ScriptedTransport transport = new();
-        transport.Enqueue(MetadataUrl, 200, ValidDocumentJson(Issuer), contentType: "application/json");
+        transport.Enqueue(MetadataUrl, 200, ValidDocumentJson(Issuer), contentType: WellKnownMediaTypes.Application.Json);
 
         _ = await ResolveAsync(Issuer, transport).ConfigureAwait(false);
 
@@ -207,13 +201,15 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
         const string ExpectedUrl = "https://as.example.com/.well-known/oauth-authorization-server/tenant1";
 
         ScriptedTransport transport = new();
-        transport.Enqueue(ExpectedUrl, 200, ValidDocumentJson(PathIssuer), contentType: "application/json");
+        transport.Enqueue(ExpectedUrl, 200, ValidDocumentJson(PathIssuer), contentType: WellKnownMediaTypes.Application.Json);
 
         AuthorizationServerMetadataResolution resolution = await ResolveAsync(PathIssuer, transport).ConfigureAwait(false);
 
-        Assert.IsTrue(resolution.IsResolved, $"Defect: {resolution.Defect}");
+        AuthorizationServerMetadataResolved resolved =
+            Assert.IsInstanceOfType<AuthorizationServerMetadataResolved>(resolution);
         Assert.HasCount(1, transport.Calls);
         Assert.AreEqual(ExpectedUrl, transport.Calls[0].Target.AbsoluteUri);
+        Assert.AreEqual(ExpectedUrl, resolved.MetadataLocation.OriginalString);
     }
 
 
@@ -225,7 +221,9 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
 
         AuthorizationServerMetadataResolution resolution = await ResolveAsync("http://as.example.com", transport).ConfigureAwait(false);
 
-        Assert.AreEqual(AuthorizationServerMetadataResolutionOutcome.InvalidIssuer, resolution.Outcome);
+        AuthorizationServerMetadataInvalidIssuer invalid =
+            Assert.IsInstanceOfType<AuthorizationServerMetadataInvalidIssuer>(resolution);
+        Assert.AreEqual("http://as.example.com", invalid.Issuer.OriginalString);
         Assert.IsEmpty(transport.Calls, "A plain-http issuer must never reach the transport.");
     }
 
@@ -238,21 +236,25 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
 
         AuthorizationServerMetadataResolution resolution = await ResolveAsync("https://127.0.0.1", transport).ConfigureAwait(false);
 
-        Assert.AreEqual(AuthorizationServerMetadataResolutionOutcome.PolicyDenied, resolution.Outcome);
+        AuthorizationServerMetadataPolicyDenied denied =
+            Assert.IsInstanceOfType<AuthorizationServerMetadataPolicyDenied>(resolution);
+        Assert.AreEqual("https://127.0.0.1/.well-known/oauth-authorization-server", denied.Target.OriginalString);
         Assert.IsEmpty(transport.Calls, "SecureDefault MUST deny a loopback target before any transport call.");
     }
 
 
-    /// <summary>RFC 8414 §3.2: "A successful response MUST use the 200 OK HTTP status code." Any other status is a fetch failure.</summary>
+    /// <summary>RFC 8414 §3.2: "A successful response MUST use the 200 OK HTTP status code." Any other terminal status is reported with its code.</summary>
     [TestMethod]
-    public async Task NonTwoHundredStatusIsFetchFailed()
+    public async Task NonTwoHundredStatusIsNotAnsweredWithStatus()
     {
         ScriptedTransport transport = new();
         transport.Enqueue(MetadataUrl, 404);
 
         AuthorizationServerMetadataResolution resolution = await ResolveAsync(Issuer, transport).ConfigureAwait(false);
 
-        Assert.AreEqual(AuthorizationServerMetadataResolutionOutcome.FetchFailed, resolution.Outcome);
+        AuthorizationServerMetadataNotAnswered notAnswered =
+            Assert.IsInstanceOfType<AuthorizationServerMetadataNotAnswered>(resolution);
+        Assert.AreEqual(404, notAnswered.StatusCode);
     }
 
 
@@ -261,14 +263,16 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
     /// JWKS fetch, no <c>+json</c> structured-suffix is accepted here.
     /// </summary>
     [TestMethod]
-    public async Task WrongContentTypeIsInvalidDocument()
+    public async Task WrongContentTypeIsUnsupportedMediaType()
     {
         ScriptedTransport transport = new();
         transport.Enqueue(MetadataUrl, 200, ValidDocumentJson(Issuer), contentType: "text/html");
 
         AuthorizationServerMetadataResolution resolution = await ResolveAsync(Issuer, transport).ConfigureAwait(false);
 
-        Assert.AreEqual(AuthorizationServerMetadataResolutionOutcome.InvalidDocument, resolution.Outcome);
+        AuthorizationServerMetadataUnsupportedMediaType unsupported =
+            Assert.IsInstanceOfType<AuthorizationServerMetadataUnsupportedMediaType>(resolution);
+        Assert.AreEqual("text/html", unsupported.ContentType);
     }
 
 
@@ -276,18 +280,18 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
     /// RFC 8414 §3.3: "the issuer value returned MUST be identical ... If these values are not
     /// identical, the data contained in the response MUST NOT be used." A default-port suffix the
     /// spec's own comparison rule treats as non-equivalent is refused with the distinct
-    /// <see cref="AuthorizationServerMetadataResolutionOutcome.IssuerMismatch"/> outcome, not folded
-    /// into <see cref="AuthorizationServerMetadataResolutionOutcome.InvalidDocument"/>.
+    /// <see cref="AuthorizationServerMetadataIssuerMismatch"/> outcome, not folded
+    /// into <see cref="AuthorizationServerMetadataUnreadable"/>.
     /// </summary>
     [TestMethod]
     public async Task DefaultPortSuffixIssuerMismatchIsADistinctOutcome()
     {
         ScriptedTransport transport = new();
-        transport.Enqueue(MetadataUrl, 200, ValidDocumentJson("https://as.example.com:443"), contentType: "application/json");
+        transport.Enqueue(MetadataUrl, 200, ValidDocumentJson("https://as.example.com:443"), contentType: WellKnownMediaTypes.Application.Json);
 
         AuthorizationServerMetadataResolution resolution = await ResolveAsync(Issuer, transport).ConfigureAwait(false);
 
-        Assert.AreEqual(AuthorizationServerMetadataResolutionOutcome.IssuerMismatch, resolution.Outcome);
+        _ = Assert.IsInstanceOfType<AuthorizationServerMetadataIssuerMismatch>(resolution);
     }
 
 
@@ -296,11 +300,11 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
     public async Task TrailingSlashIssuerMismatchIsADistinctOutcome()
     {
         ScriptedTransport transport = new();
-        transport.Enqueue(MetadataUrl, 200, ValidDocumentJson(Issuer + "/"), contentType: "application/json");
+        transport.Enqueue(MetadataUrl, 200, ValidDocumentJson(Issuer + "/"), contentType: WellKnownMediaTypes.Application.Json);
 
         AuthorizationServerMetadataResolution resolution = await ResolveAsync(Issuer, transport).ConfigureAwait(false);
 
-        Assert.AreEqual(AuthorizationServerMetadataResolutionOutcome.IssuerMismatch, resolution.Outcome);
+        _ = Assert.IsInstanceOfType<AuthorizationServerMetadataIssuerMismatch>(resolution);
     }
 
 
@@ -309,28 +313,30 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
     public async Task ResolvedAttemptReportsMaxAgeFreshness()
     {
         ScriptedTransport transport = new();
-        transport.Enqueue(MetadataUrl, 200, ValidDocumentJson(Issuer), contentType: "application/json",
-            headers: Headers(("Cache-Control", "max-age=300")));
+        transport.Enqueue(MetadataUrl, 200, ValidDocumentJson(Issuer), contentType: WellKnownMediaTypes.Application.Json,
+            headers: Headers((WellKnownHttpHeaderNames.CacheControl, "max-age=300")));
 
         AuthorizationServerMetadataResolution resolution = await ResolveAsync(Issuer, transport).ConfigureAwait(false);
 
-        Assert.IsTrue(resolution.IsResolved, $"Defect: {resolution.Defect}");
-        Assert.IsTrue(resolution.Freshness.IsStorable);
-        Assert.AreEqual(TimeSpan.FromSeconds(300), resolution.Freshness.FreshnessLifetime);
+        AuthorizationServerMetadataResolved resolved =
+            Assert.IsInstanceOfType<AuthorizationServerMetadataResolved>(resolution);
+        Assert.IsTrue(resolved.Freshness.IsStorable);
+        Assert.AreEqual(TimeSpan.FromSeconds(300), resolved.Freshness.FreshnessLifetime);
     }
 
 
-    /// <summary>A failed attempt reports a freshness that is not storable, so a caller cannot infer a cacheable lifetime.</summary>
+    /// <summary>A failed attempt carries its status; only the resolved type exposes a cacheable document.</summary>
     [TestMethod]
-    public async Task FailedAttemptReportsNonStorableFreshness()
+    public async Task FailedAttemptCarriesStatus()
     {
         ScriptedTransport transport = new();
         transport.Enqueue(MetadataUrl, 500);
 
         AuthorizationServerMetadataResolution resolution = await ResolveAsync(Issuer, transport).ConfigureAwait(false);
 
-        Assert.AreEqual(AuthorizationServerMetadataResolutionOutcome.FetchFailed, resolution.Outcome);
-        Assert.IsFalse(resolution.Freshness.IsStorable, "A failed fetch must report a freshness that is not storable.");
+        AuthorizationServerMetadataNotAnswered notAnswered =
+            Assert.IsInstanceOfType<AuthorizationServerMetadataNotAnswered>(resolution);
+        Assert.AreEqual(500, notAnswered.StatusCode);
     }
 
 
@@ -364,16 +370,17 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
         context.SetOutboundFetchPolicy(TestHostShell.LoopbackOutboundFetchPolicy);
 
         AuthorizationServerMetadataResolution resolution = await AuthorizationServerMetadataDocuments.ResolveAsync(
-            issuer, WellKnownPaths.OAuthAuthorizationServer, context, transport,
+            issuer, WellKnownPaths.OAuthAuthorizationServer, context, transport, AuthorizationServerMetadataJson.Parse,
             new AuthorizationServerMetadataResolverOptions(), TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsTrue(resolution.IsResolved, $"Defect: {resolution.Defect}");
-        Assert.IsTrue(AuthorizationServerMetadataValidation.IsIssuerMatch(resolution.Metadata!, issuer),
+        AuthorizationServerMetadataResolved resolved =
+            Assert.IsInstanceOfType<AuthorizationServerMetadataResolved>(resolution);
+        Assert.IsTrue(AuthorizationServerMetadataValidation.IsIssuerMatch(resolved.Metadata, issuer),
             "The real-wire document's issuer must match the identifier the metadata URL was derived from.");
 
         Uri expectedTokenEndpoint = TestHostShell.ComposeEndpointUri(
             hosted.HttpBaseAddress!, aligned.TenantId.Value, WellKnownEndpointNames.AuthCodeToken);
-        Assert.AreEqual(expectedTokenEndpoint, resolution.Metadata!.TokenEndpoint);
+        Assert.AreEqual(expectedTokenEndpoint, resolved.Metadata.TokenEndpoint);
     }
 
 
@@ -382,8 +389,8 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
     public async Task ReferenceCacheFreshHitDoesNotRedial()
     {
         ScriptedTransport transport = new();
-        transport.Enqueue(MetadataUrl, 200, ValidDocumentJson(Issuer), contentType: "application/json",
-            headers: Headers(("Cache-Control", "max-age=300")));
+        transport.Enqueue(MetadataUrl, 200, ValidDocumentJson(Issuer), contentType: WellKnownMediaTypes.Application.Json,
+            headers: Headers((WellKnownHttpHeaderNames.CacheControl, "max-age=300")));
 
         FakeTimeProvider timeProvider = new(TestClock.CanonicalEpoch);
         AuthorizationServerMetadataResolutionCache cache = NewCache(transport, timeProvider);
@@ -391,8 +398,15 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
         AuthorizationServerMetadataResolution first = await cache.ResolveAsync(new Uri(Issuer), NewContext(), TestContext.CancellationToken).ConfigureAwait(false);
         AuthorizationServerMetadataResolution second = await cache.ResolveAsync(new Uri(Issuer), NewContext(), TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(Issuer, first.Metadata!.Issuer.OriginalString);
-        Assert.AreEqual(Issuer, second.Metadata!.Issuer.OriginalString);
+        AuthorizationServerMetadataResolved firstResolved =
+            Assert.IsInstanceOfType<AuthorizationServerMetadataResolved>(first);
+        Assert.AreEqual(Issuer, firstResolved.PublishedIssuer);
+        AuthorizationServerMetadataResolved secondResolved =
+            Assert.IsInstanceOfType<AuthorizationServerMetadataResolved>(second);
+        Assert.AreEqual(Issuer, secondResolved.PublishedIssuer);
+        Assert.AreEqual(MetadataUrl, secondResolved.MetadataLocation.OriginalString);
+        Assert.IsTrue(firstResolved.Freshness.IsStorable);
+        Assert.IsFalse(secondResolved.Freshness.IsStorable, "A cache hit must not advertise a new response freshness lifetime.");
         Assert.HasCount(1, transport.Calls, "A fresh cache hit must not re-dial the transport.");
     }
 
@@ -402,10 +416,10 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
     public async Task ReferenceCacheStaleEntryReFetches()
     {
         ScriptedTransport transport = new();
-        transport.Enqueue(MetadataUrl, 200, ValidDocumentJson(Issuer), contentType: "application/json",
-            headers: Headers(("Cache-Control", "max-age=300")));
-        transport.Enqueue(MetadataUrl, 200, ValidDocumentJson(Issuer), contentType: "application/json",
-            headers: Headers(("Cache-Control", "max-age=300")));
+        transport.Enqueue(MetadataUrl, 200, ValidDocumentJson(Issuer), contentType: WellKnownMediaTypes.Application.Json,
+            headers: Headers((WellKnownHttpHeaderNames.CacheControl, "max-age=300")));
+        transport.Enqueue(MetadataUrl, 200, ValidDocumentJson(Issuer), contentType: WellKnownMediaTypes.Application.Json,
+            headers: Headers((WellKnownHttpHeaderNames.CacheControl, "max-age=300")));
 
         FakeTimeProvider timeProvider = new(TestClock.CanonicalEpoch);
         AuthorizationServerMetadataResolutionCache cache = NewCache(transport, timeProvider);
@@ -429,23 +443,327 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
     public async Task ReferenceCacheFailedReattemptDoesNotServeStaleRecord()
     {
         ScriptedTransport transport = new();
-        transport.Enqueue(MetadataUrl, 200, ValidDocumentJson(Issuer), contentType: "application/json",
-            headers: Headers(("Cache-Control", "max-age=300")));
+        transport.Enqueue(MetadataUrl, 200, ValidDocumentJson(Issuer), contentType: WellKnownMediaTypes.Application.Json,
+            headers: Headers((WellKnownHttpHeaderNames.CacheControl, "max-age=300")));
         transport.Enqueue(MetadataUrl, 500);
 
         FakeTimeProvider timeProvider = new(TestClock.CanonicalEpoch);
         AuthorizationServerMetadataResolutionCache cache = NewCache(transport, timeProvider);
 
         AuthorizationServerMetadataResolution first = await cache.ResolveAsync(new Uri(Issuer), NewContext(), TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(Issuer, first.Metadata!.Issuer.OriginalString);
+        AuthorizationServerMetadataResolved firstResolved =
+            Assert.IsInstanceOfType<AuthorizationServerMetadataResolved>(first);
+        Assert.AreEqual(Issuer, firstResolved.PublishedIssuer);
 
         timeProvider.Advance(TimeSpan.FromSeconds(301));
 
         AuthorizationServerMetadataResolution second = await cache.ResolveAsync(new Uri(Issuer), NewContext(), TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsFalse(second.IsResolved);
-        Assert.AreEqual(AuthorizationServerMetadataResolutionOutcome.FetchFailed, second.Outcome);
-        Assert.IsNull(second.Metadata, "A non-resolved re-attempt must not serve the stale record.");
+        AuthorizationServerMetadataNotAnswered notAnswered =
+            Assert.IsInstanceOfType<AuthorizationServerMetadataNotAnswered>(second);
+        Assert.AreEqual(500, notAnswered.StatusCode);
+    }
+
+
+    /// <summary>The resolved outcome preserves the published issuer and the document's location.</summary>
+    [TestMethod]
+    public async Task MatchingIssuerResolvesWithPublishedIssuerAndLocation()
+    {
+        ScriptedTransport transport = new();
+        transport.Enqueue(MetadataUrl, 200, ValidDocumentJson(Issuer), contentType: WellKnownMediaTypes.Application.Json);
+
+        AuthorizationServerMetadataResolution resolution = await ResolveAsync(Issuer, transport).ConfigureAwait(false);
+
+        AuthorizationServerMetadataResolved resolved =
+            Assert.IsInstanceOfType<AuthorizationServerMetadataResolved>(resolution);
+        Assert.AreEqual(Issuer, resolved.PublishedIssuer);
+        Assert.AreEqual(Issuer, resolved.Metadata.Issuer.OriginalString);
+        Assert.AreEqual(MetadataUrl, resolved.MetadataLocation.OriginalString);
+    }
+
+
+    /// <summary>A mismatch preserves both identifiers and where the server published its value.</summary>
+    [TestMethod]
+    public async Task DifferentIssuerReportsBothValuesAndLocation()
+    {
+        const string PublishedIssuer = "https://other.example.com";
+        ScriptedTransport transport = new();
+        transport.Enqueue(MetadataUrl, 200, ValidDocumentJson(PublishedIssuer), contentType: WellKnownMediaTypes.Application.Json);
+
+        AuthorizationServerMetadataResolution resolution = await ResolveAsync(Issuer, transport).ConfigureAwait(false);
+
+        AuthorizationServerMetadataIssuerMismatch mismatch =
+            Assert.IsInstanceOfType<AuthorizationServerMetadataIssuerMismatch>(resolution);
+        Assert.AreEqual(Issuer, mismatch.RequestedIssuer.OriginalString);
+        Assert.AreEqual(PublishedIssuer, mismatch.PublishedIssuer);
+        Assert.AreEqual(MetadataUrl, mismatch.MetadataLocation.OriginalString);
+    }
+
+
+    /// <summary>
+    /// A quoted, non-object body with an unescaped issuer fragment is invalid JSON. The former
+    /// substring scanner accepted the embedded fragment without checking the enclosing document.
+    /// </summary>
+    [TestMethod]
+    public async Task IssuerSubstringInsideMalformedStringIsUnreadable()
+    {
+        string body = "\"prefix " + ValidDocumentJson(Issuer) + " suffix\"";
+        ScriptedTransport transport = new();
+        transport.Enqueue(MetadataUrl, 200, body, contentType: WellKnownMediaTypes.Application.Json);
+
+        AuthorizationServerMetadataResolution resolution = await ResolveAsync(Issuer, transport).ConfigureAwait(false);
+
+        AuthorizationServerMetadataUnreadable unreadable =
+            Assert.IsInstanceOfType<AuthorizationServerMetadataUnreadable>(resolution);
+        Assert.AreEqual(AuthorizationServerMetadataUnreadableReason.InvalidJson, unreadable.Error.Reason);
+    }
+
+
+    /// <summary>A valid JSON array containing an issuer object is not a metadata object.</summary>
+    [TestMethod]
+    public async Task IssuerInsideArrayIsUnreadableAsNotObject()
+    {
+        ScriptedTransport transport = new();
+        transport.Enqueue(MetadataUrl, 200, "[" + ValidDocumentJson(Issuer) + "]",
+            contentType: WellKnownMediaTypes.Application.Json);
+
+        AuthorizationServerMetadataResolution resolution = await ResolveAsync(Issuer, transport).ConfigureAwait(false);
+
+        AuthorizationServerMetadataUnreadable unreadable =
+            Assert.IsInstanceOfType<AuthorizationServerMetadataUnreadable>(resolution);
+        Assert.AreEqual(AuthorizationServerMetadataUnreadableReason.NotObject, unreadable.Error.Reason);
+    }
+
+
+    /// <summary>A valid JSON string containing escaped issuer syntax is not a metadata object.</summary>
+    [TestMethod]
+    public async Task IssuerInsideJsonStringIsUnreadableAsNotObject()
+    {
+        const string Body = """
+            "{\"issuer\":\"https://as.example.com\"}"
+            """;
+        ScriptedTransport transport = new();
+        transport.Enqueue(MetadataUrl, 200, Body, contentType: WellKnownMediaTypes.Application.Json);
+
+        AuthorizationServerMetadataResolution resolution = await ResolveAsync(Issuer, transport).ConfigureAwait(false);
+
+        AuthorizationServerMetadataUnreadable unreadable =
+            Assert.IsInstanceOfType<AuthorizationServerMetadataUnreadable>(resolution);
+        Assert.AreEqual(AuthorizationServerMetadataUnreadableReason.NotObject, unreadable.Error.Reason);
+    }
+
+
+    /// <summary>JSON escapes are decoded before the ordinal issuer comparison and evidence capture.</summary>
+    [TestMethod]
+    public async Task EscapedIssuerResolvesToDecodedValue()
+    {
+        const string Body = """{"issuer":"https:\/\/as\u002eexample.com"}""";
+        ScriptedTransport transport = new();
+        transport.Enqueue(MetadataUrl, 200, Body, contentType: WellKnownMediaTypes.Application.Json);
+
+        AuthorizationServerMetadataResolution resolution = await ResolveAsync(Issuer, transport).ConfigureAwait(false);
+
+        AuthorizationServerMetadataResolved resolved =
+            Assert.IsInstanceOfType<AuthorizationServerMetadataResolved>(resolution);
+        Assert.AreEqual(Issuer, resolved.PublishedIssuer);
+        Assert.AreEqual(Issuer, resolved.Metadata.Issuer.OriginalString);
+        Assert.AreEqual(MetadataUrl, resolved.MetadataLocation.OriginalString);
+    }
+
+
+    /// <summary>A transport exception is returned as its concrete failure kind, without message parsing.</summary>
+    [TestMethod]
+    public async Task TransportFailureIsUnreachableWithFailureKind()
+    {
+        AuthorizationServerMetadataResolution resolution = await AuthorizationServerMetadataDocuments.ResolveAsync(
+            new Uri(Issuer), WellKnownPaths.OAuthAuthorizationServer, NewContext(),
+            static (_, _, _, _) => throw new IOException("Scripted transport failure."),
+            AuthorizationServerMetadataJson.Parse, new AuthorizationServerMetadataResolverOptions(),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        AuthorizationServerMetadataUnreachable unreachable =
+            Assert.IsInstanceOfType<AuthorizationServerMetadataUnreachable>(resolution);
+        Assert.AreEqual(typeof(IOException), unreachable.FailureKind);
+    }
+
+
+    /// <summary>Caller cancellation remains an exception rather than becoming an unreachable server.</summary>
+    [TestMethod]
+    public async Task TransportCancellationPropagates()
+    {
+        using CancellationTokenSource cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
+        await cancellation.CancelAsync().ConfigureAwait(false);
+
+        _ = await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
+            await AuthorizationServerMetadataDocuments.ResolveAsync(
+                new Uri(Issuer), WellKnownPaths.OAuthAuthorizationServer, NewContext(),
+                static (_, _, _, token) => throw new OperationCanceledException(token),
+                AuthorizationServerMetadataJson.Parse, new AuthorizationServerMetadataResolverOptions(),
+                cancellation.Token).ConfigureAwait(false)).ConfigureAwait(false);
+    }
+
+
+    /// <summary>A refused redirect preserves its status and original relative Location without following it.</summary>
+    [TestMethod]
+    public async Task RedirectRefusedReportsStatusAndLocation()
+    {
+        const string Location = "/moved-metadata";
+        ScriptedTransport transport = new();
+        transport.Enqueue(MetadataUrl, 302, headers: Headers((WellKnownHttpHeaderNames.Location, Location)));
+
+        AuthorizationServerMetadataResolution resolution = await ResolveAsync(Issuer, transport).ConfigureAwait(false);
+
+        AuthorizationServerMetadataRedirectRefused refused =
+            Assert.IsInstanceOfType<AuthorizationServerMetadataRedirectRefused>(resolution);
+        Assert.AreEqual(302, refused.StatusCode);
+        Assert.AreEqual(Location, refused.Location);
+        Assert.HasCount(1, transport.Calls);
+    }
+
+
+    /// <summary>A next-hop policy denial retains the redirect response that led to the blocked target.</summary>
+    [TestMethod]
+    public async Task RedirectToBlockedTargetRetainsRefusalEvidence()
+    {
+        const string Location = "https://127.0.0.1/metadata";
+        ScriptedTransport transport = new();
+        transport.Enqueue(MetadataUrl, 307, headers: Headers((WellKnownHttpHeaderNames.Location, Location)));
+        ExchangeContext context = NewContext();
+        context.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault with
+        {
+            Redirects = RedirectMode.PolicyChecked,
+            MaxRedirects = 1
+        });
+
+        AuthorizationServerMetadataResolution resolution = await AuthorizationServerMetadataDocuments.ResolveAsync(
+            new Uri(Issuer), WellKnownPaths.OAuthAuthorizationServer, context, transport.Delegate,
+            AuthorizationServerMetadataJson.Parse, new AuthorizationServerMetadataResolverOptions(),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        AuthorizationServerMetadataRedirectRefused refused =
+            Assert.IsInstanceOfType<AuthorizationServerMetadataRedirectRefused>(resolution);
+        Assert.AreEqual(307, refused.StatusCode);
+        Assert.AreEqual(Location, refused.Location);
+        Assert.HasCount(1, transport.Calls);
+    }
+
+
+    /// <summary>Successful permitted redirects report the actual metadata location.</summary>
+    [TestMethod]
+    public async Task FollowedRedirectReportsFinalMetadataLocation()
+    {
+        const string Location = "https://as.example.com/moved-metadata";
+        ScriptedTransport transport = new();
+        transport.Enqueue(MetadataUrl, 302, headers: Headers((WellKnownHttpHeaderNames.Location, Location)));
+        transport.Enqueue(Location, 200, ValidDocumentJson(Issuer), contentType: WellKnownMediaTypes.Application.Json);
+        ExchangeContext context = NewContext();
+        context.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault with
+        {
+            Redirects = RedirectMode.SameOrigin,
+            MaxRedirects = 1
+        });
+
+        AuthorizationServerMetadataResolution resolution = await AuthorizationServerMetadataDocuments.ResolveAsync(
+            new Uri(Issuer), WellKnownPaths.OAuthAuthorizationServer, context, transport.Delegate,
+            AuthorizationServerMetadataJson.Parse, new AuthorizationServerMetadataResolverOptions(),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        AuthorizationServerMetadataResolved resolved =
+            Assert.IsInstanceOfType<AuthorizationServerMetadataResolved>(resolution);
+        Assert.AreEqual(Location, resolved.MetadataLocation.OriginalString);
+        Assert.AreEqual(Issuer, resolved.PublishedIssuer);
+        Assert.HasCount(2, transport.Calls);
+    }
+
+
+    /// <summary>The guarded reader reports both the cap and the observed length.</summary>
+    [TestMethod]
+    public async Task OversizedBodyReportsLimitAndLengthSeen()
+    {
+        string body = ValidDocumentJson(Issuer);
+        long length = Encoding.UTF8.GetByteCount(body);
+        AuthorizationServerMetadataResolverOptions options = new() { MaximumDocumentBytes = length - 1 };
+        ScriptedTransport transport = new();
+        transport.Enqueue(MetadataUrl, 200, body, contentType: WellKnownMediaTypes.Application.Json);
+
+        AuthorizationServerMetadataResolution resolution = await ResolveAsync(Issuer, transport, options).ConfigureAwait(false);
+
+        AuthorizationServerMetadataTooLarge tooLarge =
+            Assert.IsInstanceOfType<AuthorizationServerMetadataTooLarge>(resolution);
+        Assert.AreEqual(options.MaximumDocumentBytes, tooLarge.Limit);
+        Assert.AreEqual(length, tooLarge.LengthSeen);
+        Assert.AreEqual(options.MaximumDocumentBytes, transport.Calls[0].MaxResponseBytes);
+    }
+
+
+    /// <summary>Invalid UTF-8 in an otherwise ignored member must not be replaced and accepted.</summary>
+    [TestMethod]
+    public async Task InvalidUtf8IsUnreadable()
+    {
+        byte[] body = [.. Encoding.UTF8.GetBytes("{\"issuer\":\"" + Issuer + "\",\"extra\":\""), 0xFF, .. "\"}"u8];
+        ScriptedTransport transport = new();
+        transport.EnqueueRoute(MetadataUrl, 200, body,
+            Headers((WellKnownHttpHeaderNames.ContentType, WellKnownMediaTypes.Application.Json)));
+
+        AuthorizationServerMetadataResolution resolution = await ResolveAsync(Issuer, transport).ConfigureAwait(false);
+
+        AuthorizationServerMetadataUnreadable unreadable =
+            Assert.IsInstanceOfType<AuthorizationServerMetadataUnreadable>(resolution);
+        Assert.AreEqual(AuthorizationServerMetadataUnreadableReason.InvalidUtf8, unreadable.Error.Reason);
+    }
+
+
+    /// <summary>Missing, mistyped, malformed and non-object bodies have distinct typed decoding reasons.</summary>
+    [TestMethod]
+    [DataRow("{}", AuthorizationServerMetadataUnreadableReason.MissingIssuer)]
+    [DataRow("{\"issuer\":42}", AuthorizationServerMetadataUnreadableReason.IssuerNotString)]
+    [DataRow("{\"issuer\":null}", AuthorizationServerMetadataUnreadableReason.IssuerNotString)]
+    [DataRow("null", AuthorizationServerMetadataUnreadableReason.NotObject)]
+    [DataRow("", AuthorizationServerMetadataUnreadableReason.InvalidJson)]
+    public async Task UnreadableDocumentReportsTypedReason(string body, AuthorizationServerMetadataUnreadableReason expected)
+    {
+        ScriptedTransport transport = new();
+        transport.Enqueue(MetadataUrl, 200, body, contentType: WellKnownMediaTypes.Application.Json);
+
+        AuthorizationServerMetadataResolution resolution = await ResolveAsync(Issuer, transport).ConfigureAwait(false);
+
+        AuthorizationServerMetadataUnreadable unreadable =
+            Assert.IsInstanceOfType<AuthorizationServerMetadataUnreadable>(resolution);
+        Assert.AreEqual(expected, unreadable.Error.Reason);
+    }
+
+
+    /// <summary>The complete document is validated, even when a valid issuer occurs before trailing garbage.</summary>
+    [TestMethod]
+    public async Task TrailingGarbageIsUnreadable()
+    {
+        ScriptedTransport transport = new();
+        transport.Enqueue(MetadataUrl, 200, ValidDocumentJson(Issuer) + " trailing",
+            contentType: WellKnownMediaTypes.Application.Json);
+
+        AuthorizationServerMetadataResolution resolution = await ResolveAsync(Issuer, transport).ConfigureAwait(false);
+
+        AuthorizationServerMetadataUnreadable unreadable =
+            Assert.IsInstanceOfType<AuthorizationServerMetadataUnreadable>(resolution);
+        Assert.AreEqual(AuthorizationServerMetadataUnreadableReason.InvalidJson, unreadable.Error.Reason);
+    }
+
+
+    /// <summary>Unpaired surrogate escapes fail even in unknown nested members or property names.</summary>
+    [TestMethod]
+    [DataRow("{\"issuer\":\"https://as.example.com/\\uD800\"}")]
+    [DataRow("{\"issuer\":\"https://as.example.com\",\"extra\":[\"\\uDC00\"]}")]
+    [DataRow("{\"issuer\":\"https://as.example.com\",\"\\uD800\":true}")]
+    public async Task UnpairedSurrogateIsUnreadable(string body)
+    {
+        ScriptedTransport transport = new();
+        transport.Enqueue(MetadataUrl, 200, body, contentType: WellKnownMediaTypes.Application.Json);
+
+        AuthorizationServerMetadataResolution resolution = await ResolveAsync(Issuer, transport).ConfigureAwait(false);
+
+        AuthorizationServerMetadataUnreadable unreadable =
+            Assert.IsInstanceOfType<AuthorizationServerMetadataUnreadable>(resolution);
+        Assert.AreEqual(AuthorizationServerMetadataUnreadableReason.UnpairedSurrogate, unreadable.Error.Reason);
     }
 
 
@@ -458,7 +776,7 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
     private async Task<AuthorizationServerMetadataResolution> ResolveAsync(
         string issuer, ScriptedTransport transport, AuthorizationServerMetadataResolverOptions? options = null) =>
         await AuthorizationServerMetadataDocuments.ResolveAsync(
-            new Uri(issuer, UriKind.Absolute), WellKnownPaths.OAuthAuthorizationServer, NewContext(), transport.Delegate,
+            new Uri(issuer, UriKind.Absolute), WellKnownPaths.OAuthAuthorizationServer, NewContext(), transport.Delegate, AuthorizationServerMetadataJson.Parse,
             options ?? new AuthorizationServerMetadataResolverOptions(), TestContext.CancellationToken)
             .ConfigureAwait(false);
 
@@ -501,13 +819,17 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
     /// </summary>
     private sealed class ScriptedTransport
     {
+        /// <summary>The scripted responses by URL.</summary>
         private Dictionary<string, List<ScriptedResponse>> Routes { get; } = new(StringComparer.Ordinal);
+        /// <summary>The next response index for each URL.</summary>
         private Dictionary<string, int> CallIndex { get; } = new(StringComparer.Ordinal);
 
 
+        /// <summary>The requests the resolver sent.</summary>
         public List<OutboundRequest> Calls { get; } = [];
 
 
+        /// <summary>Adds a UTF-8 response to a URL's script.</summary>
         public void Enqueue(
             string url, int status, string? body = null, string? contentType = null,
             IReadOnlyDictionary<string, string>? headers = null)
@@ -518,7 +840,7 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
 
             if(contentType is not null)
             {
-                merged["Content-Type"] = contentType;
+                merged[WellKnownHttpHeaderNames.ContentType] = contentType;
             }
 
             byte[]? bodyBytes = body is null ? null : Encoding.UTF8.GetBytes(body);
@@ -526,7 +848,8 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
         }
 
 
-        private void EnqueueRoute(string url, int status, byte[]? body, IReadOnlyDictionary<string, string> headers)
+        /// <summary>Adds an original-byte response to a URL's script.</summary>
+        public void EnqueueRoute(string url, int status, byte[]? body, IReadOnlyDictionary<string, string> headers)
         {
             if(!Routes.TryGetValue(url, out List<ScriptedResponse>? list))
             {
@@ -538,7 +861,8 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
         }
 
 
-        public OutboundTransportDelegate Delegate => (request, context, cancellationToken) =>
+        /// <summary>The single-hop playback transport.</summary>
+        public OutboundTransportDelegate Delegate => (request, context, readResponse, cancellationToken) =>
         {
             Calls.Add(request);
 
@@ -559,21 +883,25 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
                 ? TaggedMemory<byte>.Empty
                 : new TaggedMemory<byte>(response.Body, BufferTags.Json);
 
-            var headerBuilder = new HttpHeaderSet.Builder();
+            HttpHeaderSet.Builder headerBuilder = new();
             foreach(KeyValuePair<string, string> header in response.Headers)
             {
                 _ = headerBuilder.Add(header.Key, header.Value);
             }
 
-            return ValueTask.FromResult(new OutboundResponse
+            return ScriptedOutboundTransport.ReadAsync(readResponse, new OutboundResponse
             {
                 StatusCode = response.Status,
                 Headers = headerBuilder.Build(),
                 Body = responseBody
-            });
+            }, cancellationToken);
         };
 
 
+        /// <summary>A scripted HTTP response.</summary>
+        /// <param name="Status">The response status.</param>
+        /// <param name="Body">The original body bytes.</param>
+        /// <param name="Headers">The response headers.</param>
         private sealed record ScriptedResponse(int Status, byte[]? Body, IReadOnlyDictionary<string, string> Headers);
     }
 }

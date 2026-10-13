@@ -421,6 +421,43 @@ internal sealed class OAuthResponseParsersTests
 
 
     /// <summary>
+    /// A Token Response whose <c>authorization_details</c> member name is spelled with an escape is read as
+    /// that member: the granted <c>openid_credential</c> entry is answered with its configuration and its
+    /// identifiers.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-7">RFC 8259 Section 7</see>: "Any character
+    /// may be escaped."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.3">RFC 8259 Section 8.3</see>:
+    /// "Implementations that transform the textual representation into sequences of Unicode code units and
+    /// then perform the comparison numerically, code unit by code unit, are interoperable in the sense that
+    /// implementations will agree in all cases on equality or inequality of two strings."
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.2">OID4VCI 1.0 Section 6.2</see>:
+    /// "The Wallet MUST use these identifiers together with an Access Token in subsequent Credential
+    /// Requests."
+    /// </summary>
+    /// <param name="memberName">The member's name as the Token Response spells it, between its quotation marks.</param>
+    [TestMethod]
+    [DataRow("authorization\\u005fdetails")]
+    [DataRow("\\u0061uthorization_details")]
+    public void ParseTokenResponseReadsAnAuthorizationDetailsNameSpelledWithAnEscape(string memberName)
+    {
+        HttpResponseData response = Respond(
+            "{\"access_token\":\"at\",\"token_type\":\"Bearer\",\"" + memberName + "\":"
+            + "[{\"type\":\"openid_credential\",\"credential_configuration_id\":\"UniversityDegreeCredential\","
+            + "\"credential_identifiers\":[\"CivilEngineeringDegree-2023\"]}]}");
+
+        Result<TokenResponse, OAuthParseError> result =
+            OAuthResponseParsers.ParseTokenResponse(response, DateTimeOffset.UnixEpoch);
+
+        Assert.IsTrue(result.IsSuccess, "The grant under an escaped member name must be read.");
+        Assert.HasCount(1, result.Value.GrantedCredentialAuthorizations);
+        Assert.AreEqual("UniversityDegreeCredential", result.Value.GrantedCredentialAuthorizations[0].CredentialConfigurationId);
+        Assert.AreSequenceEqual(
+            ["CivilEngineeringDegree-2023"],
+            result.Value.GrantedCredentialAuthorizations[0].CredentialIdentifiers.ToArray());
+    }
+
+
+    /// <summary>
     /// A Token Response without <c>authorization_details</c> grants no <c>openid_credential</c>
     /// authorization, and the parse succeeds with an empty list.
     /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.2">OID4VCI 1.0 Section 6.2</see>:
@@ -813,8 +850,8 @@ internal sealed class OAuthResponseParsersTests
 
     /// <summary>
     /// An <c>access_token</c> whose decoded value holds a char outside <c>%x20-7E</c> (a carriage return
-    /// and a line feed, a NUL, a lone surrogate) is refused as an invalid value of the member, and the
-    /// refusal echoes none of the token.
+    /// and a line feed, a U+0001, a char above <c>%x7E</c>) in a well-formed document is refused as an
+    /// invalid value of the member, and the refusal echoes none of the token.
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#appendix-A.12">RFC 6749 Appendix A.12</see>:
     /// "access-token = 1*VSCHAR", where
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#appendix-A">RFC 6749 Appendix A</see> defines
@@ -823,8 +860,8 @@ internal sealed class OAuthResponseParsersTests
     /// <param name="accessToken">The <c>access_token</c> member's value, as JSON string content.</param>
     [TestMethod]
     [DataRow("SlAV32hkKG\\r\\nX-Injected: yes")]
-    [DataRow("SlAV32hkKG\\u0000")]
-    [DataRow("SlAV32hkKG\\ud800")]
+    [DataRow("SlAV32hkKG\\u0001")]
+    [DataRow("SlAV32hkKG\\u00e9")]
     public void ParseTokenResponseRefusesAnAccessTokenOutsideItsGrammar(string accessToken)
     {
         HttpResponseData response = Respond(
@@ -834,6 +871,40 @@ internal sealed class OAuthResponseParsersTests
             OAuthResponseParsers.ParseTokenResponse(response, DateTimeOffset.UnixEpoch);
 
         _ = AssertRefusedWithoutItsValue(result, "access_token", "SlAV32hkKG");
+    }
+
+
+    /// <summary>
+    /// A Token Response whose <c>access_token</c> or <c>id_token</c> string holds an escaped lone surrogate
+    /// or an escaped U+0000 is not a well-formed document to the reader: it is refused whole, before any
+    /// member is read, as a malformed response that carries an empty body and echoes neither token.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7493#section-2.1">RFC 7493 Section 2.1</see>:
+    /// "Object member names, and string values in arrays and object members, MUST NOT include code points
+    /// that identify Surrogates or Noncharacters as defined by [UNICODE]."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.2">RFC 8259 Section 8.2</see>:
+    /// "The behavior of software that receives JSON texts containing such values is unpredictable".
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-10.3">RFC 6749 Section 10.3</see>:
+    /// "Access token credentials (as well as any confidential access token attributes) MUST be kept
+    /// confidential in transit and storage, and only shared among the authorization server, the resource
+    /// servers the access token is valid for, and the client to whom the access token is issued."
+    /// </summary>
+    /// <param name="body">The whole Token Response body, as JSON text.</param>
+    [TestMethod]
+    [DataRow("{\"access_token\":\"SlAV32hkKG\\u0000\",\"token_type\":\"Bearer\"}")]
+    [DataRow("{\"access_token\":\"SlAV32hkKG\\ud800\",\"token_type\":\"Bearer\"}")]
+    [DataRow("{\"access_token\":\"SlAV32hkKG\",\"token_type\":\"Bearer\",\"id_token\":\"eyJhbGciOiJub25lIn0.e30.\\u0000\"}")]
+    public void ParseTokenResponseRefusesATokenStringOutsideIJsonAsNotWellFormed(string body)
+    {
+        HttpResponseData response = Respond(body);
+
+        Result<TokenResponse, OAuthParseError> result =
+            OAuthResponseParsers.ParseTokenResponse(response, DateTimeOffset.UnixEpoch);
+
+        OAuthMalformedResponse malformed = Assert.IsInstanceOfType<OAuthMalformedResponse>(result.Error);
+        Assert.Contains("not well-formed", malformed.Support.Summary, StringComparison.Ordinal);
+        Assert.IsEmpty(malformed.Body, "A refused JSON-shaped body must not be carried in the error.");
+        Assert.DoesNotContain("SlAV32hkKG", malformed.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("eyJhbGciOiJub25lIn0", malformed.ToString(), StringComparison.Ordinal);
     }
 
 
@@ -956,7 +1027,13 @@ internal sealed class OAuthResponseParsersTests
 
     /// <summary>
     /// The refusal of a Token Response whose <c>access_token</c> member name is spelled with JSON escapes
-    /// carries an empty body: the token it holds is not preserved in the error.
+    /// and which carries no <c>token_type</c> carries an empty body: the token it holds is not preserved in
+    /// the error. The refusal names the missing <c>token_type</c>, which is read after the
+    /// <c>access_token</c>, so the escaped name was read as that member.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.3">RFC 8259 Section 8.3</see>:
+    /// "Implementations that transform the textual representation into sequences of Unicode code units and
+    /// then perform the comparison numerically, code unit by code unit, are interoperable in the sense that
+    /// implementations will agree in all cases on equality or inequality of two strings."
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-10.3">RFC 6749 Section 10.3</see>:
     /// "Access token credentials (as well as any confidential access token attributes) MUST be kept
     /// confidential in transit and storage, and only shared among the authorization server, the resource
@@ -966,14 +1043,40 @@ internal sealed class OAuthResponseParsersTests
     public void ParseTokenResponseRefusalOfAnEscapedAccessTokenNameCarriesNoCredential()
     {
         HttpResponseData response = Respond(
-            """{"\u0061ccess\u005ftoken":"SlAV32hkKG","token_type":"Bearer"}""");
+            """{"\u0061ccess\u005ftoken":"SlAV32hkKG","refresh_token":"tGzv3JOkF0XG5Qx2TlKWIA"}""");
 
         Result<TokenResponse, OAuthParseError> result =
             OAuthResponseParsers.ParseTokenResponse(response, DateTimeOffset.UnixEpoch);
 
         OAuthMalformedResponse malformed = Assert.IsInstanceOfType<OAuthMalformedResponse>(result.Error);
+        Assert.Contains("token_type", malformed.Support.Summary, StringComparison.Ordinal);
         Assert.DoesNotContain("SlAV32hkKG", malformed.Body, StringComparison.Ordinal);
+        Assert.DoesNotContain("tGzv3JOkF0XG5Qx2TlKWIA", malformed.Body, StringComparison.Ordinal);
         Assert.IsEmpty(malformed.Body, "A refused JSON-shaped body must not be carried in the error.");
+    }
+
+
+    /// <summary>
+    /// A Token Response whose <c>access_token</c> member name is spelled with JSON escapes is read as that
+    /// member: the parse succeeds and surfaces the token.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-7">RFC 8259 Section 7</see>: "Any character
+    /// may be escaped."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.3">RFC 8259 Section 8.3</see>:
+    /// "Implementations that transform the textual representation into sequences of Unicode code units and
+    /// then perform the comparison numerically, code unit by code unit, are interoperable in the sense that
+    /// implementations will agree in all cases on equality or inequality of two strings."
+    /// </summary>
+    [TestMethod]
+    public void ParseTokenResponseReadsAnAccessTokenNameSpelledWithAnEscape()
+    {
+        HttpResponseData response = Respond(
+            """{"\u0061ccess\u005ftoken":"SlAV32hkKG","token_type":"Bearer"}""");
+
+        Result<TokenResponse, OAuthParseError> result =
+            OAuthResponseParsers.ParseTokenResponse(response, DateTimeOffset.UnixEpoch);
+
+        Assert.IsTrue(result.IsSuccess, "The token under an escaped member name must be read.");
+        Assert.AreEqual("SlAV32hkKG", result.Value.AccessToken);
     }
 
 
@@ -1632,8 +1735,9 @@ internal sealed class OAuthResponseParsersTests
 
     /// <summary>
     /// A present <c>id_token</c> that is empty or holds a char outside the JWS Compact Serialization's
-    /// alphabet (a carriage return and a line feed, a NUL, a <c>+</c>, a space) is refused as an invalid
-    /// value of the member, and the refusal echoes none of it or of the access token beside it.
+    /// alphabet (a carriage return and a line feed, a U+0001, a <c>+</c>, a space) in a well-formed document
+    /// is refused as an invalid value of the member, and the refusal echoes none of it or of the access
+    /// token beside it.
     /// <see href="https://www.rfc-editor.org/rfc/rfc7515#section-7.1">RFC 7515 Section 7.1</see>:
     /// "The JWS Compact Serialization represents digitally signed or MACed content as a compact, URL-safe
     /// string. This string is: BASE64URL(UTF8(JWS Protected Header)) || '.' || BASE64URL(JWS Payload) ||
@@ -1642,7 +1746,7 @@ internal sealed class OAuthResponseParsersTests
     /// <param name="idToken">The <c>id_token</c> the Token Response carries, as JSON string content.</param>
     [TestMethod]
     [DataRow("eyJhbGciOiJub25lIn0.e30.\\r\\nX-Injected: yes")]
-    [DataRow("eyJhbGciOiJub25lIn0.e30.\\u0000")]
+    [DataRow("eyJhbGciOiJub25lIn0.e30.\\u0001")]
     [DataRow("eyJhbGciOiJub25lIn0+.e30.")]
     [DataRow("eyJhbGciOiJub25lIn0 .e30.")]
     [DataRow("")]

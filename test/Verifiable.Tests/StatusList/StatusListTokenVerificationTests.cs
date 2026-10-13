@@ -344,6 +344,36 @@ internal sealed class StatusListTokenVerificationTests
 
 
     /// <summary>
+    /// A header naming an asymmetric algorithm that is not the resolved issuer key's own, of another key
+    /// family or of another curve, over a token that key genuinely signed, is refused as
+    /// <see cref="StatusListTokenVerificationFailure.AlgorithmUnsupported"/>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.1">RFC 8725 section 3.1</see>: "The
+    /// library MUST ensure that the "alg" or "enc" header specifies the same algorithm that is used for
+    /// the cryptographic operation."
+    /// </summary>
+    /// <param name="declaredAlgorithm">The algorithm the header names over a P-256 key's ES256 signature.</param>
+    [TestMethod]
+    [DataRow("RS256")]
+    [DataRow("ES384")]
+    public async Task TokenWhoseAlgorithmIsAnotherAsymmetricAlgorithmThanTheResolvedKeysIsRefused(string declaredAlgorithm)
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> issuerKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory issuerPublic = issuerKeys.PublicKey;
+        using PrivateKeyMemory issuerPrivate = issuerKeys.PrivateKey;
+
+        string compact = await SignAsync(BuildHeaderWithAlgorithm(declaredAlgorithm), BuildPayload(), issuerPrivate).ConfigureAwait(false);
+
+        ValueTask<ResolvedStatusListIssuerKey?> resolveIssuerKey(StatusListKeyResolutionContext _1, CancellationToken _2) =>
+            ValueTask.FromResult<ResolvedStatusListIssuerKey?>(ResolvedStatusListIssuerKey.Borrowed(issuerPublic));
+
+        StatusListTokenVerificationResult result = await VerifyAsync(compact, resolveIssuerKey).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsVerified, $"A header naming {declaredAlgorithm} over an ES256 signature MUST be refused.");
+        Assert.AreEqual(StatusListTokenVerificationFailure.AlgorithmUnsupported, result.Failure);
+    }
+
+
+    /// <summary>
     /// "Relying Parties MUST reject JWTs with an invalid signature." — the refusal lands before a single claim
     /// is read: the payload of this token is not JSON at all, and the read still reports the signature, not
     /// the unreadable claims, because it never reached them.

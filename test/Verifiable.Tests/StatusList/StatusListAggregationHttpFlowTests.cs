@@ -107,8 +107,8 @@ internal sealed class StatusListAggregationHttpFlowTests
                 int revokedIndex = string.Equals(listUri, firstSubject, StringComparison.Ordinal) ? FirstRevokedIndex : SecondRevokedIndex;
                 var listReference = new StatusListReference(revokedIndex, listUri);
 
-                ResolvedStatusListToken? resolved = await resolve(
-                    StatusListFixtures.ContextFor(listReference), TestContext.CancellationToken).ConfigureAwait(false);
+                ResolvedStatusListToken resolved = Assert.IsInstanceOfType<ResolvedStatusListToken>(await resolve(
+                    StatusListFixtures.ContextFor(listReference), TestContext.CancellationToken).ConfigureAwait(false));
                 Assert.IsNotNull(resolved, $"'{listUri}' MUST resolve to a verified Status List Token.");
                 fetchedTokens.Add(resolved.Token);
 

@@ -75,14 +75,31 @@ public delegate ValueTask<FlowState?> LoadFlowStateByRequestUriDelegate(
 
 
 /// <summary>
-/// Posts a form-encoded request to an OAuth endpoint and returns the full
-/// HTTP response including transport-level metadata.
+/// Posts a form-encoded request to an OAuth endpoint in a <strong>single hop</strong> and returns the
+/// full HTTP response including transport-level metadata. The implementation
+/// <strong>must not follow a redirect</strong>.
 /// </summary>
 /// <remarks>
 /// <para>
 /// The implementation supplies the HTTP client and any authentication headers
 /// (DPoP, client assertion, mTLS, etc.). The library does not create or own
 /// HTTP connections.
+/// </para>
+/// <para>
+/// <strong>Single hop.</strong> The implementation performs exactly one request and response and
+/// returns a 3xx answer as received (configure the underlying handler with automatic redirection
+/// off), the contract <see cref="Verifiable.Core.Outbound.OutboundTransportDelegate"/> states for a
+/// resolved-data fetch. Every request a flow posts here carries a credential: a client assertion or
+/// secret, an authorization code and its PKCE verifier, a refresh token, a token to revoke, a subject
+/// token or an assertion grant, a pushed or signed authorization request, a presentation.
+/// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.4.8">RFC 9110 §15.4.8</see> says of a
+/// 307 that "the user agent MUST NOT change the request method if it performs an automatic redirection
+/// to that URI", so a handler that follows one re-sends the body, credential included, to whatever
+/// origin the <c>Location</c> field names; removing the <c>Authorization</c> field on the way, which
+/// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.4">RFC 9110 §15.4</see> asks a
+/// redirect-following client to consider, does not reach a credential the body carries. The flow
+/// refuses a 3xx answer as an <see cref="OAuthRedirectRefused"/>, records an
+/// <see cref="OAuthEventNames.CredentialBearingRedirectRefused"/> event, and sends nothing further.
 /// </para>
 /// <para>
 /// The returned <see cref="HttpResponseData"/> carries the response body,
@@ -131,7 +148,8 @@ public delegate ValueTask<FlowState?> LoadFlowStateByRequestUriDelegate(
 /// </param>
 /// <param name="cancellationToken">Cancellation token.</param>
 /// <returns>
-/// The HTTP response carrying body, status code, and optional transport metadata.
+/// The single-hop HTTP response (a 3xx is returned, not followed) carrying body, status code, and
+/// optional transport metadata.
 /// </returns>
 public delegate ValueTask<HttpResponseData> SendFormPostDelegate(
     Uri endpoint,

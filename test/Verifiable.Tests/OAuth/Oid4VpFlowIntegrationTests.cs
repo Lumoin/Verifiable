@@ -1730,20 +1730,28 @@ internal sealed class Oid4VpFlowIntegrationTests
             using StatusListType statusList = StatusListType.Create(
                 64, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
 
-            CredentialStatusOutcome beforeRevocation = await CredentialStatusGate.CheckAsync(
+            Result<CredentialStatusOutcome, StatusListTokenResolutionFailure> beforeRevocationResult = await CredentialStatusGate.CheckAsync(
                 StatusListFixtures.ContextFor(parsed.Credential.Status.StatusList.Value),
                 StatusListFixtures.ResolverFor(new StatusListToken(statusListUri, now, statusList), now),
                 now,
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.IsTrue(beforeRevocationResult.IsSuccess);
+            Assert.IsNotNull(beforeRevocationResult.Value);
+            CredentialStatusOutcome beforeRevocation = beforeRevocationResult.Value;
             Assert.IsTrue(beforeRevocation.IsValid, "An unset status bit must read as valid.");
 
             statusList[credentialIndex] = StatusTypes.Invalid;
 
-            CredentialStatusOutcome afterRevocation = await CredentialStatusGate.CheckAsync(
+            Result<CredentialStatusOutcome, StatusListTokenResolutionFailure> afterRevocationResult = await CredentialStatusGate.CheckAsync(
                 StatusListFixtures.ContextFor(parsed.Credential.Status.StatusList.Value),
                 StatusListFixtures.ResolverFor(new StatusListToken(statusListUri, now, statusList), now),
                 now,
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.IsTrue(afterRevocationResult.IsSuccess);
+            Assert.IsNotNull(afterRevocationResult.Value);
+            CredentialStatusOutcome afterRevocation = afterRevocationResult.Value;
             Assert.IsFalse(afterRevocation.IsValid, "After flipping the credential's bit the status must read as revoked.");
             Assert.AreEqual(StatusTypes.Invalid, afterRevocation.Status);
         }
@@ -1769,11 +1777,11 @@ internal sealed class Oid4VpFlowIntegrationTests
         using StatusListType statusList = StatusListType.Create(
             64, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
 
-        ValueTask<ResolvedStatusListToken?> resolveStatusList(StatusListResolutionContext context, CancellationToken ct = default)
+        ValueTask<StatusListTokenResolution?> resolveStatusList(StatusListResolutionContext context, CancellationToken ct = default)
         {
             DateTimeOffset resolvedAt = TimeProvider.GetUtcNow();
 
-            return ValueTask.FromResult<ResolvedStatusListToken?>(new ResolvedStatusListToken
+            return ValueTask.FromResult<StatusListTokenResolution?>(new ResolvedStatusListToken
             {
                 Token = new StatusListToken(statusListUri, resolvedAt, statusList),
                 ResolvedAt = resolvedAt,
@@ -1878,11 +1886,11 @@ internal sealed class Oid4VpFlowIntegrationTests
         using StatusListType statusList = StatusListType.Create(
             64, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
 
-        ValueTask<ResolvedStatusListToken?> resolveStatusList(StatusListResolutionContext context, CancellationToken ct = default)
+        ValueTask<StatusListTokenResolution?> resolveStatusList(StatusListResolutionContext context, CancellationToken ct = default)
         {
             DateTimeOffset resolvedAt = TimeProvider.GetUtcNow();
 
-            return ValueTask.FromResult<ResolvedStatusListToken?>(new ResolvedStatusListToken
+            return ValueTask.FromResult<StatusListTokenResolution?>(new ResolvedStatusListToken
             {
                 Token = new StatusListToken(statusListUri, resolvedAt, statusList),
                 ResolvedAt = resolvedAt,

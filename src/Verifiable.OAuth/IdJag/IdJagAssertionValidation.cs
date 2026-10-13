@@ -1,4 +1,5 @@
 
+using Verifiable.Core;
 using Verifiable.Core.Relations;
 using Verifiable.Core.SecurityEvents;
 using Verifiable.JCose;
@@ -77,7 +78,7 @@ namespace Verifiable.OAuth.IdJag;
 ///   </description></item>
 ///   <item><description>
 ///     a <c>resource</c> claim, when present, is a JSON string or a non-empty JSON array of JSON strings, each an
-///     <c>absolute-URI</c> without a fragment by <see cref="ResourceIndicatorSyntax"/>
+///     <c>absolute-URI</c> without a fragment by <see cref="ResourceIndicator.Parse"/>
 ///     (<see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.4.1">Section 4.4.1</see>:
 ///     "If the resource claim is present, the Resource Authorization Server MUST process it according to Section
 ///     2 of [RFC8707]."), surfaced folded (<see cref="IdJagAssertionValidationResult.Resource"/>); any other value
@@ -837,11 +838,11 @@ public static class IdJagAssertionValidation
     /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-3.1">Section 3.1</see>
     /// carries as "either a single URI or an array of URIs", as one of three things: absent, read as no value;
     /// a JSON string, or a non-empty JSON array whose every element is a JSON string, each value accepted by
-    /// <see cref="ResourceIndicatorSyntax.IsAbsoluteResourceIndicator(ReadOnlySpan{char})"/> (the
+    /// <see cref="ResourceIndicator.Parse"/> (the
     /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-4.3">RFC 3986 Section 4.3</see>
     /// <c>absolute-URI</c> without a fragment that
     /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 Section 2</see> requires); or
-    /// malformed. Every accepted value is surfaced folded by <see cref="ResourceIndicatorSyntax.Fold(string)"/>
+    /// malformed. Every accepted value is surfaced folded, as its <see cref="ResourceIndicator.ComparisonKey"/>
     /// (<see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.1">RFC 3986 Section 6.2.2.1</see>: the
     /// scheme and host lowered, every other part as sent), in the order given. An empty string, an empty array,
     /// an element that is not a JSON string, a value the grammar refuses and any other JSON type are malformed:
@@ -862,7 +863,9 @@ public static class IdJagAssertionValidation
 
         if(raw is string single)
         {
-            return ResourceIndicatorSyntax.IsAbsoluteResourceIndicator(single) ? [ResourceIndicatorSyntax.Fold(single)] : null;
+            Result<ResourceIndicator, ResourceIndicatorFault> parsedSingle = ResourceIndicator.Parse(single);
+
+            return parsedSingle.IsSuccess ? [parsedSingle.Value.ComparisonKey] : null;
         }
 
         //Array elements decode as object (List<object>, a covariant string[] or typed list of strings included).
@@ -874,12 +877,18 @@ public static class IdJagAssertionValidation
         List<string> folded = [];
         foreach(object? element in elements)
         {
-            if(element is not string value || !ResourceIndicatorSyntax.IsAbsoluteResourceIndicator(value))
+            if(element is not string value)
             {
                 return null;
             }
 
-            folded.Add(ResourceIndicatorSyntax.Fold(value));
+            Result<ResourceIndicator, ResourceIndicatorFault> parsed = ResourceIndicator.Parse(value);
+            if(!parsed.IsSuccess)
+            {
+                return null;
+            }
+
+            folded.Add(parsed.Value.ComparisonKey);
         }
 
         return folded.Count == 0 ? null : folded;

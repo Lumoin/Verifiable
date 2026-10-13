@@ -378,15 +378,13 @@ public static class GeneralJweParsing
     //slice — a string-aware brace scan keeps nested objects from biasing the depth counter.
     private static List<(string KeyId, string EncryptedKey, List<string> HeaderNames)> ParseRecipients(ReadOnlySpan<byte> json)
     {
-        int recipientsKey = JwkJsonReader.IndexOfKey(json, WellKnownJoseSerializationNames.RecipientsUtf8);
-        if(recipientsKey < 0)
+        if(!JwkJsonReader.ContainsKey(json, WellKnownJoseSerializationNames.RecipientsUtf8))
         {
             throw new FormatException(
                 "General JSON JWE must contain a 'recipients' member per RFC 7516 §7.2.1.");
         }
 
-        int afterKey = recipientsKey + WellKnownJoseSerializationNames.RecipientsUtf8.Length + 1;
-        afterKey = JwkJsonReader.SkipWhitespaceAndColon(json, afterKey);
+        int afterKey = JwkJsonReader.IndexOfValue(json, WellKnownJoseSerializationNames.RecipientsUtf8);
         if(afterKey < 0 || afterKey >= json.Length || json[afterKey] != (byte)'[')
         {
             throw new FormatException("General JSON JWE 'recipients' must be an array.");

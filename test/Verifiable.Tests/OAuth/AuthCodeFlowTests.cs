@@ -78,7 +78,7 @@ internal sealed class AuthCodeFlowTests
 
     /// <summary>
     /// A <see cref="ResolveAuthorizationServerMetadataDelegate"/> answering
-    /// <see cref="AuthorizationServerMetadataResolutionOutcome.FetchFailed"/> maps to this flow's own
+    /// <see cref="AuthorizationServerMetadataUnreachable"/> maps to this flow's own
     /// <c>server_error</c> failure without throwing, and without sending the PAR request or persisting
     /// any flow state — the resolution failed before the flow had a PAR endpoint to send to.
     /// </summary>
@@ -88,8 +88,7 @@ internal sealed class AuthCodeFlowTests
         Dictionary<string, FlowState> store = [];
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
             store,
-            metadataResolutionOutcome: AuthorizationServerMetadataResolutionOutcome.FetchFailed,
-            metadataResolutionDefect: "simulated transport failure");
+            metadataResolution: new AuthorizationServerMetadataUnreachable { FailureKind = typeof(IOException) });
 
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleParAsync(
             new Dictionary<string, string>(),
@@ -106,7 +105,7 @@ internal sealed class AuthCodeFlowTests
 
     /// <summary>
     /// A <see cref="ResolveAuthorizationServerMetadataDelegate"/> answering
-    /// <see cref="AuthorizationServerMetadataResolutionOutcome.IssuerMismatch"/> maps to this flow's own
+    /// <see cref="AuthorizationServerMetadataIssuerMismatch"/> maps to this flow's own
     /// <c>server_error</c> failure without throwing, the same channel a fetch failure takes.
     /// </summary>
     [TestMethod]
@@ -115,8 +114,12 @@ internal sealed class AuthCodeFlowTests
         Dictionary<string, FlowState> store = [];
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
             store,
-            metadataResolutionOutcome: AuthorizationServerMetadataResolutionOutcome.IssuerMismatch,
-            metadataResolutionDefect: "simulated issuer mismatch");
+            metadataResolution: new AuthorizationServerMetadataIssuerMismatch
+            {
+                RequestedIssuer = new Uri("https://as.example.com"),
+                PublishedIssuer = "https://other.example.com",
+                MetadataLocation = new Uri("https://as.example.com/.well-known/oauth-authorization-server")
+            });
 
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleParAsync(
             new Dictionary<string, string>(),
@@ -229,9 +232,9 @@ internal sealed class AuthCodeFlowTests
             parseRegistrationResponseAsync: (body, ct) =>
                 throw new NotImplementedException("Test does not exercise dynamic registration."),
             resolveAuthorizationServerMetadataAsync: (issuer, context, ct) =>
-                ValueTask.FromResult(new AuthorizationServerMetadataResolution
+                ValueTask.FromResult<AuthorizationServerMetadataResolution>(new AuthorizationServerMetadataResolved
                 {
-                    Outcome = AuthorizationServerMetadataResolutionOutcome.Resolved,
+                    MetadataLocation = WellKnownPaths.OAuthAuthorizationServer.ComputeUri(metadata.Issuer.OriginalString),
                     Metadata = metadata
                 }),
             resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
@@ -817,8 +820,7 @@ internal sealed class AuthCodeFlowTests
         Exception? httpException = null,
         Uri? revocationEndpoint = null,
         bool useDefaultRevocationEndpoint = true,
-        AuthorizationServerMetadataResolutionOutcome? metadataResolutionOutcome = null,
-        string? metadataResolutionDefect = null,
+        AuthorizationServerMetadataResolution? metadataResolution = null,
         Uri? pushedAuthorizationRequestEndpointOverride = null,
         Uri? tokenEndpointOverride = null,
         List<Uri>? sendFormPostInvocations = null,
@@ -880,11 +882,10 @@ internal sealed class AuthCodeFlowTests
             parseRegistrationResponseAsync: (body, ct) =>
                 throw new NotImplementedException("AuthCodeFlowTests does not exercise dynamic registration."),
             resolveAuthorizationServerMetadataAsync: (issuer, context, ct) =>
-                ValueTask.FromResult(metadataResolutionOutcome is AuthorizationServerMetadataResolutionOutcome outcome
-                    ? new AuthorizationServerMetadataResolution { Outcome = outcome, Defect = metadataResolutionDefect }
-                    : new AuthorizationServerMetadataResolution
+                ValueTask.FromResult(metadataResolution
+                    ?? new AuthorizationServerMetadataResolved
                     {
-                        Outcome = AuthorizationServerMetadataResolutionOutcome.Resolved,
+                        MetadataLocation = WellKnownPaths.OAuthAuthorizationServer.ComputeUri(metadata.Issuer.OriginalString),
                         Metadata = metadata
                     }),
             resolveCallbackValidator: (registration, timeProvider) =>

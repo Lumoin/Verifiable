@@ -76,6 +76,14 @@ public sealed class AuthCodeFlowEndpointResult
     public string? ErrorDescription { get; init; }
 
     /// <summary>
+    /// The typed reading of the endpoint's answer when the outcome is the flow's refusal of that answer:
+    /// the <see cref="OAuthProtocolError"/> the endpoint sent, the answer the flow could not read, or an
+    /// <see cref="OAuthRedirectRefused"/> when the endpoint answered a request carrying a credential with
+    /// a redirect. <see langword="null"/> for every outcome that did not come from reading an answer.
+    /// </summary>
+    public OAuthParseError? ResponseError { get; init; }
+
+    /// <summary>
     /// The individual validation claims produced during callback validation.
     /// Populated when the callback <see cref="ClaimIssuer{TInput}"/> was invoked — i.e., for
     /// all outcomes of <see cref="AuthCodeClient.HandleCallbackAsync(Verifiable.OAuth.Client.ClientRegistration, OAuthFormEncodedFields, CancellationToken)"/>. Empty for other handlers.

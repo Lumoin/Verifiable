@@ -200,10 +200,9 @@ internal sealed class JwkJsonReaderKeySelectionTests
 
 
     /// <summary>
-    /// <see cref="JwkJsonReader.SelectKeyByKeyId(ReadOnlySpan{byte}, string?)"/> compares member names
-    /// as raw bytes, so an escaped spelling of <c>use</c> is invisible to it; the member is not
-    /// recognised as <c>use</c> at all, and selection proceeds exactly as if it were an unrelated,
-    /// unread member.
+    /// <see cref="JwkJsonReader.SelectKeyByKeyId(ReadOnlySpan{byte}, string?)"/> reads no <c>use</c>
+    /// member, so a key whose <c>use</c>, spelled with an escape, names encryption is selected like any
+    /// other, and its members are keyed by their decoded names.
     /// </summary>
     [TestMethod]
     public void PinSelectKeyByKeyIdIgnoresAnEscapedUseMemberName()
@@ -211,6 +210,7 @@ internal sealed class JwkJsonReaderKeySelectionTests
         JwkSelectionResult result = JwkJsonReader.SelectKeyByKeyId(Utf8(DocEscapedUseNameEnc), "k");
 
         Assert.AreEqual(JwkSelectionOutcome.Selected, result.Outcome);
+        Assert.AreEqual("enc", result.Members?["use"]);
     }
 
 
@@ -228,30 +228,32 @@ internal sealed class JwkJsonReaderKeySelectionTests
 
 
     /// <summary>
-    /// <see cref="JwkJsonReader.SelectSoleKey(ReadOnlySpan{byte})"/>'s lookup of the <c>keys</c>
-    /// member compares raw bytes, so an escaped spelling of <c>keys</c> is not found and the set reads
-    /// as if it carried no <c>keys</c> array.
+    /// <see cref="JwkJsonReader.SelectSoleKey(ReadOnlySpan{byte})"/> finds the <c>keys</c> member by its
+    /// decoded name, so a set spelling <c>keys</c> with an escape selects its sole key exactly as the plain
+    /// spelling does (RFC 8259 §8.3).
     /// </summary>
     [TestMethod]
-    public void PinSelectSoleKeyReportsNoMatchWhenTheKeysMemberNameIsEscaped()
+    public void SelectSoleKeySelectsWhenTheKeysMemberNameIsEscaped()
     {
         JwkSelectionResult result = JwkJsonReader.SelectSoleKey(Utf8(DocEscapedKeysMemberName));
 
-        Assert.AreEqual(JwkSelectionOutcome.NoMatch, result.Outcome);
+        Assert.AreEqual(JwkSelectionOutcome.Selected, result.Outcome);
+        Assert.AreEqual("k", result.Members?["kid"]);
     }
 
 
     /// <summary>
-    /// An escaped <c>kid</c> member name is not found by
-    /// <see cref="JwkJsonReader.SelectKeyByKeyId(ReadOnlySpan{byte}, string?)"/>'s raw-byte key
-    /// lookup, so a request for that key's plain-spelled identifier reports no match.
+    /// <see cref="JwkJsonReader.SelectKeyByKeyId(ReadOnlySpan{byte}, string?)"/> finds a key's <c>kid</c>
+    /// by its decoded name, so a request for the identifier selects the key whose <c>kid</c> member is
+    /// spelled with an escape, and hands its consumer the plain <c>kid</c> key (RFC 8259 §8.3).
     /// </summary>
     [TestMethod]
-    public void PinSelectKeyByKeyIdReportsNoMatchWhenTheKidMemberNameIsEscaped()
+    public void SelectKeyByKeyIdSelectsWhenTheKidMemberNameIsEscaped()
     {
         JwkSelectionResult result = JwkJsonReader.SelectKeyByKeyId(Utf8(DocEscapedKidMemberName), "k");
 
-        Assert.AreEqual(JwkSelectionOutcome.NoMatch, result.Outcome);
+        Assert.AreEqual(JwkSelectionOutcome.Selected, result.Outcome);
+        Assert.AreEqual("k", result.Members?["kid"]);
     }
 
 

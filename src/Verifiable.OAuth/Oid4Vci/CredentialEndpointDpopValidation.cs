@@ -299,7 +299,7 @@ internal static class CredentialEndpointDpopValidation
     /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.6.4">RFC 9110 §5.6.4</see>
     /// quoted-string, whose characters are HTAB, SP and visible US-ASCII ("qdtext = HTAB / SP / %x21 /
     /// %x23-5B / %x5D-7E / obs-text", <c>"</c> and <c>\</c> through quoted-pair), while an issuer accepted by
-    /// <see cref="IssuerIdentifierValidation.IsValidIssuerShape"/> may hold Unicode text. An issuer written
+    /// <see cref="IssuerIdentifier.Parse"/> may hold Unicode text. An issuer written
     /// in that repertoire is used as written. Otherwise it is mapped to its URI form as
     /// <see href="https://www.rfc-editor.org/rfc/rfc3987#section-3.1">RFC 3987 Section 3.1</see> maps an IRI. A
     /// non-ASCII host is written in its IDNA ASCII form, the conversion of the ireg-name the section

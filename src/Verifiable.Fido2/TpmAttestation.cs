@@ -430,16 +430,18 @@ public static class TpmAttestation
     /// <summary>
     /// Builds a <see cref="PublicKeyMemory"/> from <paramref name="pubArea"/>'s <c>unique</c> and
     /// <c>parameters</c> fields — a compressed SEC1 point for an ECC public area (TPM_ECC_NIST_P256/
-    /// P384/P521 only), or a DER PKCS#1 <c>RSAPublicKey</c> for an RSA public area (2048/4096-bit
-    /// only) — in the same canonical forms <see cref="CoseKeyExtensions.ToPublicKeyMemory"/>
-    /// produces from a COSE_Key, so the two sides of <see cref="PubAreaKeyMatchesCredentialKey"/>'s
-    /// comparison are byte-comparable.
+    /// P384/P521 only), or a DER PKCS#1 <c>RSAPublicKey</c> carrying the exponent the area states for an
+    /// RSA public area (2048/4096-bit only, <see cref="TpmCryptographicProjections.ToRsaPublicKeyMemory"/>)
+    /// — in the same canonical forms <see cref="CoseKeyExtensions.ToPublicKeyMemory"/> produces from a
+    /// COSE_Key, so the two sides of <see cref="PubAreaKeyMatchesCredentialKey"/>'s comparison are
+    /// byte-comparable.
     /// </summary>
     /// <returns>
     /// <see langword="true"/> and the built key plus its algorithm tag when <paramref name="pubArea"/>
     /// is an ECC or RSA public area of a curve/key-size this library models; otherwise
-    /// <see langword="false"/> — a KEYEDHASH, SYMCIPHER, or unrecognised-curve/key-size public area
-    /// cannot be the credential's own signing key.
+    /// <see langword="false"/> — a KEYEDHASH, SYMCIPHER, or unrecognised-curve/key-size public area, or
+    /// an RSA public area whose modulus and exponent form no valid RSA public key, cannot be the
+    /// credential's own signing key.
     /// </returns>
     private static bool TryBuildPublicAreaKeyMemory(
         TpmtPublic pubArea, BaseMemoryPool pool, [NotNullWhen(true)] out PublicKeyMemory? keyMemory, out CryptoAlgorithm algorithm)
@@ -481,7 +483,6 @@ public static class TpmAttestation
 
         if(pubArea.Type == TpmAlgIdConstants.TPM_ALG_RSA && pubArea.Parameters.RsaDetail is { } rsaParms)
         {
-            ReadOnlySpan<byte> modulus = pubArea.Unique.GetRsaModulus();
             (bool supported, CryptoAlgorithm mappedAlgorithm, Tag tag) = rsaParms.KeyBits switch
             {
                 2048 => (true, CryptoAlgorithm.Rsa2048, CryptoTags.Rsa2048PublicKey),
@@ -489,17 +490,26 @@ public static class TpmAttestation
                 _ => (false, default!, default!)
             };
 
-            if(!supported || modulus.IsEmpty)
+            if(!supported || pubArea.Unique.GetRsaModulus().IsEmpty)
             {
                 keyMemory = null;
                 algorithm = default!;
                 return false;
             }
 
-            byte[] rsaPublicKeyDer = BuildRsaPublicKeyDer(modulus, rsaParms.EffectiveExponent);
-            IMemoryOwner<byte> owner = pool.Rent(rsaPublicKeyDer.Length);
-            rsaPublicKeyDer.CopyTo(owner.Memory.Span);
-            keyMemory = new PublicKeyMemory(owner, tag);
+            try
+            {
+                keyMemory = pubArea.ToRsaPublicKeyMemory(tag, pool);
+            }
+            catch(RsaPublicKeyException)
+            {
+                //A modulus and stated exponent that form no RSA public key cannot be the credential's key, so the
+                //refusal answers this comparison instead of escaping the attestation outcome.
+                keyMemory = null;
+                algorithm = default!;
+                return false;
+            }
+
             algorithm = mappedAlgorithm;
             return true;
         }
@@ -507,28 +517,6 @@ public static class TpmAttestation
         keyMemory = null;
         algorithm = default!;
         return false;
-    }
-
-
-    /// <summary>
-    /// DER-encodes a PKCS#1 <c>RSAPublicKey</c> (<c>SEQUENCE { modulus INTEGER, publicExponent
-    /// INTEGER }</c>) from a TPM public area's RSA <c>unique</c> modulus and effective exponent —
-    /// the same canonical RSA public-key form <see cref="CoseKeyExtensions.ToPublicKeyMemory"/>
-    /// builds from a COSE_Key's <c>n</c>/<c>e</c>.
-    /// </summary>
-    private static byte[] BuildRsaPublicKeyDer(ReadOnlySpan<byte> modulus, uint exponent)
-    {
-        Span<byte> exponentBytes = stackalloc byte[sizeof(uint)];
-        BinaryPrimitives.WriteUInt32BigEndian(exponentBytes, exponent);
-
-        var writer = new AsnWriter(AsnEncodingRules.DER);
-        using(writer.PushSequence())
-        {
-            writer.WriteIntegerUnsigned(modulus);
-            writer.WriteIntegerUnsigned(exponentBytes);
-        }
-
-        return writer.Encode();
     }
 
 

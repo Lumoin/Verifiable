@@ -915,7 +915,8 @@ internal sealed class CredentialDiVpProofTests
         //under the explicit permit it passes. The scheme rebind below is now a no-op (both sides are
         //https) but stays, since the chokepoint evaluates the resolved URL's scheme independently of
         //whatever the transport ultimately dials.
-        async ValueTask<OutboundResponse> transport(OutboundRequest request, ExchangeContext context, CancellationToken ct)
+        //Rebases the issuer target onto the test host and forwards the guarded reader.
+        async ValueTask<OutboundTransportResult> transport(OutboundRequest request, ExchangeContext context, OutboundResponseReaderDelegate readResponse, CancellationToken ct)
         {
             _ = await SsrfHardenedTransport.ResolveAndPinAsync(
                 request.Target.Host, context.OutboundFetchPolicy, ResolveHostAsync, ct).ConfigureAwait(false);
@@ -923,7 +924,7 @@ internal sealed class CredentialDiVpProofTests
             UriBuilder rebased = new(request.Target) { Scheme = loopbackBase.Scheme };
             OutboundRequest rebasedRequest = request with { Target = rebased.Uri };
 
-            return await singleHop(rebasedRequest, context, ct).ConfigureAwait(false);
+            return await singleHop(rebasedRequest, context, readResponse, ct).ConfigureAwait(false);
         }
 
         async ValueTask<DidResolutionResult> ResolveWebDidAsync(

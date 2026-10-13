@@ -83,8 +83,10 @@ public sealed record ClientMetadata
 
     /// <summary>
     /// Signing algorithm for <c>client_secret_jwt</c> and
-    /// <c>private_key_jwt</c> client assertions. RFC 7591 §2
-    /// <c>token_endpoint_auth_signing_alg</c>.
+    /// <c>private_key_jwt</c> client assertions.
+    /// <see href="https://openid.net/specs/openid-connect-registration-1_0.html#ClientMetadata">OpenID
+    /// Connect Dynamic Client Registration 1.0 §2</see> <c>token_endpoint_auth_signing_alg</c>, which
+    /// RFC 7591 §2 does not define.
     /// </summary>
     public string? TokenEndpointAuthSigningAlg { get; init; }
 

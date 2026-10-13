@@ -35,13 +35,13 @@ public static class IdJagFlowHandlers
             .ResolveAuthorizationServerMetadataAsync(registration.AuthorizationServerIssuer, context, cancellationToken)
             .ConfigureAwait(false);
 
-        if(!resolution.IsResolved)
+        if(resolution is not AuthorizationServerMetadataResolved resolved)
         {
             return Result<TokenResponse, OAuthParseError>.Failure(
                 BuildAuthorizationServerMetadataResolutionFailure(resolution));
         }
 
-        AuthorizationServerMetadata metadata = resolution.Metadata!;
+        AuthorizationServerMetadata metadata = resolved.Metadata;
         DateTimeOffset now = infrastructure.TimeProvider.GetUtcNow();
         Uri tokenEndpoint = metadata.TokenEndpoint!;
 
@@ -97,6 +97,13 @@ public static class IdJagFlowHandlers
             },
             context, cancellationToken).ConfigureAwait(false);
 
+        //The request carries the subject token and the signed client assertion; a redirect followed would
+        //re-send both to the origin its Location field names (RFC 9110 Section 15.4.8).
+        if(CredentialBearingRedirect.Refuse(tokenEndpoint, response) is OAuthRedirectRefused mintRedirectRefusal)
+        {
+            return Result<TokenResponse, OAuthParseError>.Failure(mintRedirectRefusal);
+        }
+
         return infrastructure.ParseTokenResponseAsync(response, now);
     }
 
@@ -122,13 +129,13 @@ public static class IdJagFlowHandlers
             .ResolveAuthorizationServerMetadataAsync(registration.AuthorizationServerIssuer, context, cancellationToken)
             .ConfigureAwait(false);
 
-        if(!resolution.IsResolved)
+        if(resolution is not AuthorizationServerMetadataResolved resolved)
         {
             return Result<TokenResponse, OAuthParseError>.Failure(
                 BuildAuthorizationServerMetadataResolutionFailure(resolution));
         }
 
-        AuthorizationServerMetadata metadata = resolution.Metadata!;
+        AuthorizationServerMetadata metadata = resolved.Metadata;
         DateTimeOffset now = infrastructure.TimeProvider.GetUtcNow();
         Uri tokenEndpoint = metadata.TokenEndpoint!;
 
@@ -159,6 +166,13 @@ public static class IdJagFlowHandlers
                 return OutgoingHeaders.Empty;
             },
             context, cancellationToken).ConfigureAwait(false);
+
+        //The request carries the ID-JAG and the signed client assertion; a redirect followed would re-send
+        //both to the origin its Location field names (RFC 9110 Section 15.4.8).
+        if(CredentialBearingRedirect.Refuse(tokenEndpoint, response) is OAuthRedirectRefused redeemRedirectRefusal)
+        {
+            return Result<TokenResponse, OAuthParseError>.Failure(redeemRedirectRefusal);
+        }
 
         return infrastructure.ParseTokenResponseAsync(response, now);
     }
@@ -212,20 +226,14 @@ public static class IdJagFlowHandlers
 
 
     /// <summary>
-    /// Builds the <see cref="OAuthAuthorizationServerMetadataUnresolved"/> failure for a non-
-    /// <see cref="AuthorizationServerMetadataResolutionOutcome.Resolved"/> <paramref name="resolution"/>,
-    /// carrying the outcome and the resolver's internal
-    /// <see cref="AuthorizationServerMetadataResolution.Defect"/> as
-    /// <see cref="DecisionSupport.LikelyCause"/> — safe here since this Result is consumed
-    /// in-process by the calling application rather than serialized onto an outbound wire response.
+    /// Preserves the complete typed resolution failure for the in-process caller of this exchange.
     /// </summary>
     private static OAuthAuthorizationServerMetadataUnresolved BuildAuthorizationServerMetadataResolutionFailure(
         AuthorizationServerMetadataResolution resolution) =>
         new(
-            resolution.Outcome,
+            resolution,
             new DecisionSupport("The authorization server metadata required for this exchange did not resolve.")
             {
-                LikelyCause = resolution.Defect,
                 SpecificationReference = "RFC 8414 §3"
             });
 }

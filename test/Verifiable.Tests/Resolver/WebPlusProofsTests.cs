@@ -1,5 +1,8 @@
+using System.Buffers.Text;
+using System.Text;
 using Verifiable.Core.Did.Methods.WebPlus;
 using Verifiable.Cryptography;
+using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -214,5 +217,33 @@ internal sealed class WebPlusProofsTests
         string? error = await VerifyAsync(tampered, NonRootSelfHash).ConfigureAwait(false);
 
         Assert.IsNotNull(error, "A tampered proof signature MUST fail verification.");
+    }
+
+
+    /// <summary>
+    /// A proof whose protected header names an algorithm that is not the algorithm its <c>kid</c> MBPubKey
+    /// fixes is refused on that mismatch (WP-PRF-3) before its signature is checked: the header names
+    /// ES256 for the worked example's Ed25519 key.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.1">RFC 8725 section 3.1</see>: "The
+    /// library MUST ensure that the "alg" or "enc" header specifies the same algorithm that is used for
+    /// the cryptographic operation."
+    /// </summary>
+    [TestMethod]
+    public async Task RejectsAProofWhoseAlgIsNotTheAlgorithmOfItsKey()
+    {
+        string[] segments = Proof.Split('.');
+        string headerJson = Encoding.UTF8.GetString(Base64Url.DecodeFromChars(segments[0]));
+        string ed25519Member = $"\"{WellKnownJoseHeaderNames.Alg}\":\"{WellKnownJwaValues.Ed25519}\"";
+        string es256Member = $"\"{WellKnownJoseHeaderNames.Alg}\":\"{WellKnownJwaValues.Es256}\"";
+        string rewrittenHeaderJson = headerJson.Replace(ed25519Member, es256Member, StringComparison.Ordinal);
+        Assert.AreNotEqual(headerJson, rewrittenHeaderJson, "The worked example's header names Ed25519.");
+
+        string rewrittenProof = $"{Base64UrlEncoder(Encoding.UTF8.GetBytes(rewrittenHeaderJson))}..{segments[2]}";
+        string document = NonRootDidDocument.Replace(Proof, rewrittenProof, StringComparison.Ordinal);
+
+        string? error = await VerifyAsync(document, NonRootSelfHash).ConfigureAwait(false);
+
+        Assert.IsNotNull(error, "A proof whose alg is not its key's algorithm MUST be refused.");
+        Assert.Contains("does not match its key algorithm", error);
     }
 }

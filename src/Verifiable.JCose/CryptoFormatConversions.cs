@@ -426,22 +426,16 @@ namespace Verifiable.JCose
                 ReadOnlySpan<byte> keyMaterial,
                 EncodeDelegate encoder)
             {
-                //Decode handles both raw and DER-encoded modulus input — raw
-                //pass-through for keys reconstructed from a JWK, DER-strip for
-                //keys generated through System.Security.Cryptography. The
-                //previous EncodingScheme switch hardcoded the DER path via
-                //the well-known CryptoTags.RsaXxxxPublicKey tag literal,
-                //which broke the JWK round-trip path; collapse to the single
-                //RsaUtilities.Decode call now that the function is length-
-                //tolerant.
-                byte[] rawModulus = RsaUtilities.Decode(keyMaterial);
+                //A public key the library holds is read by the rule the verification providers read it by: a DER key
+                //keeps the exponent it carries, and a bare modulus means 65537.
+                (byte[] modulus, byte[] exponent) = RsaPublicKeyEncoding.DecodeKeyMaterial(keyMaterial);
 
                 return new JsonWebKey
                 {
                     Kty = WellKnownKeyTypeValues.Rsa,
                     Alg = WellKnownJwaValues.Rs256,
-                    N = encoder(rawModulus),
-                    E = RsaUtilities.DefaultExponent
+                    N = encoder(modulus),
+                    E = encoder(exponent)
                 };
             }
 
@@ -582,6 +576,7 @@ namespace Verifiable.JCose
         /// <summary>
         /// Default converter from JWK to algorithm representation.
         /// </summary>
+        /// <exception cref="RsaPublicKeyException">The RSA public exponent is missing or invalid.</exception>
         /// <remarks>
         /// Resolves <see cref="Purpose"/> from the optional JWK <c>use</c> field
         /// (<c>sig</c> → <see cref="Purpose.Verification"/>,
@@ -620,19 +615,22 @@ namespace Verifiable.JCose
             }
 
             byte[] keyMaterial = DecodeKeyMaterial(jwk, keyType, base64UrlDecoder, memoryPool);
+            int keySize = WellKnownKeyTypeValues.IsRsa(keyType)
+                ? RsaPublicKeyEncoding.Decode(keyMaterial).Modulus.Length
+                : keyMaterial.Length;
             (CryptoAlgorithm cryptoAlgorithm, Purpose purpose) =
-                MapToAlgorithmAndPurpose(keyType, algorithm, crv, explicitPurpose, keyMaterial.Length);
+                MapToAlgorithmAndPurpose(keyType, algorithm, crv, explicitPurpose, keySize);
 
             IMemoryOwner<byte> keyMaterialOwner = memoryPool.Rent(keyMaterial.Length);
             keyMaterial.CopyTo(keyMaterialOwner.Memory.Span);
 
             //EC keys are decoded to a compressed SEC1 point (see DecodeEcKey -> EllipticCurveUtilities.Compress),
             //so the tag MUST say EcCompressed — consumers that build a JWK or run point-on-curve / key agreement
-            //rely on the EncodingScheme reflecting the actual bytes. OKP (Ed25519/X25519) and other key types
-            //carry raw single-coordinate / opaque material.
+            //rely on the EncodingScheme reflecting the actual bytes. RSA carries both parameters in DER;
+            //OKP (Ed25519/X25519) and other key types carry raw single-coordinate / opaque material.
             EncodingScheme encodingScheme = WellKnownKeyTypeValues.IsEc(keyType)
                 ? EncodingScheme.EcCompressed
-                : EncodingScheme.Raw;
+                : WellKnownKeyTypeValues.IsRsa(keyType) ? EncodingScheme.Der : EncodingScheme.Raw;
 
             return (cryptoAlgorithm, purpose, encodingScheme, keyMaterialOwner);
 
@@ -683,9 +681,10 @@ namespace Verifiable.JCose
                         throw new ArgumentException($"RSA JWK must contain a valid '{WellKnownJwkMemberNames.N}' field.", nameof(jwk));
                     }
 
-                    if(!jwk.TryGetValue(WellKnownJwkMemberNames.E, out object? rsaE) || rsaE is not string)
+                    if(!jwk.TryGetValue(WellKnownJwkMemberNames.E, out object? rsaE) || rsaE is not string { Length: > 0 })
                     {
-                        throw new ArgumentException($"RSA JWK must contain a valid '{WellKnownJwkMemberNames.E}' field.", nameof(jwk));
+                        throw new RsaPublicKeyException(RsaPublicKeyFailureKind.InvalidPublicExponent,
+                            $"RSA JWK must contain a non-empty '{WellKnownJwkMemberNames.E}' public exponent.");
                     }
 
                     return true;
@@ -739,9 +738,10 @@ namespace Verifiable.JCose
 
             static byte[] DecodeRsaKey(Dictionary<string, object> jwk, DecodeDelegate decoder, BaseMemoryPool pool)
             {
-                using IMemoryOwner<byte> decoded = decoder((string)jwk[WellKnownJwkMemberNames.N], pool);
+                using IMemoryOwner<byte> modulus = decoder((string)jwk[WellKnownJwkMemberNames.N], pool);
+                using IMemoryOwner<byte> exponent = decoder((string)jwk[WellKnownJwkMemberNames.E], pool);
 
-                return decoded.Memory.Span.ToArray();
+                return RsaPublicKeyEncoding.Encode(modulus.Memory.Span, exponent.Memory.Span);
             }
 
 
@@ -907,9 +907,17 @@ namespace Verifiable.JCose
         }
 
 
-        //Maps the leading multicodec varint of a decoded did:key payload to its algorithm, strips the
-        //header, validates the remaining raw-key length against the spec's expected length for the key
-        //type (the did:key invalidPublicKeyLength check), and copies the raw key into its own pooled buffer.
+        /// <summary>
+        /// Classifies the multicodec public key, validates its size and copies its material into pooled memory.
+        /// RSA size is determined from the modulus, independently of the public exponent's encoded length.
+        /// </summary>
+        /// <param name="prefixedBytes">The multicodec header followed by the public key.</param>
+        /// <param name="memoryPool">The pool for the returned key material.</param>
+        /// <returns>The algorithm, purpose, encoding and owned public-key material.</returns>
+        /// <exception cref="ArgumentException">
+        /// The payload is too short for a header, its header is not a registered one, its body is not the key the
+        /// header names, or its length is not the length that key has.
+        /// </exception>
         private static (CryptoAlgorithm Algorithm, Purpose Purpose, EncodingScheme Scheme, IMemoryOwner<byte> KeyMaterial) ClassifyMulticodecPublicKey(
             ReadOnlySpan<byte> prefixedBytes,
             BaseMemoryPool memoryPool)
@@ -926,7 +934,7 @@ namespace Verifiable.JCose
             int rawLength = prefixedBytes.Length - MulticodecHeaderLength;
 
             //EC multicodec public keys are compressed SEC1 points (e.g. p256-pub is 33 bytes), so the
-            //tag carries EcCompressed; the OKP keys (Ed25519/X25519) and RSA/BLS stay Raw.
+            //tag carries EcCompressed; RSA carries DER, and OKP/BLS carry Raw.
             (CryptoAlgorithm Algorithm, Purpose Purpose, EncodingScheme Scheme, int ExpectedRawLength) classified = header switch
             {
                 var h when MulticodecHeaders.IsSecp256k1PublicKey(h) => (CryptoAlgorithm.Secp256k1, Purpose.Verification, EncodingScheme.EcCompressed, 33),
@@ -937,10 +945,8 @@ namespace Verifiable.JCose
                 var h when MulticodecHeaders.IsP521PublicKey(h) => (CryptoAlgorithm.P521, Purpose.Verification, EncodingScheme.EcCompressed, 67),
                 var h when MulticodecHeaders.IsBls12381G2PublicKey(h) => (CryptoAlgorithm.Bls12381G2, Purpose.Verification, EncodingScheme.Raw, 96),
 
-                //RSA public keys are DER-encoded RSAPublicKey structures whose length is the modulus length
-                //plus DER framing rather than a fixed coordinate width, so the two registered sizes are matched
-                //against the actual modulus-derived encoding length (270 bytes for 2048-bit, 526 for 4096-bit).
-                var h when MulticodecHeaders.IsRsaPublicKey(h) => ClassifyRsa(rawLength),
+                //The exponent's length varies, so parse the DER key before classifying its modulus size.
+                var h when MulticodecHeaders.IsRsaPublicKey(h) => ClassifyRsa(prefixedBytes[MulticodecHeaderLength..]),
                 _ => throw new ArgumentException("Unknown or unsupported multicodec header.")
             };
 
@@ -959,15 +965,36 @@ namespace Verifiable.JCose
         }
 
 
-        //RSA did:key payloads share one multicodec header (rsa-pub) across modulus sizes; the registered
-        //sizes are distinguished by the DER-encoded RSAPublicKey length (270 bytes for a 2048-bit modulus,
-        //526 for a 4096-bit modulus). An unrecognized length is rejected as invalidPublicKeyLength.
-        private static (CryptoAlgorithm Algorithm, Purpose Purpose, EncodingScheme Scheme, int ExpectedRawLength) ClassifyRsa(int rawLength) => rawLength switch
+        /// <summary>
+        /// Classifies an RSA multicodec payload by its decoded modulus size while retaining its exponent. A payload
+        /// that is no DER PKCS#1 public key is refused the way every other malformed body is, so the caller's
+        /// refusal handling answers it.
+        /// </summary>
+        /// <param name="keyMaterial">The DER PKCS#1 public key.</param>
+        /// <returns>The registered RSA algorithm, verification purpose, DER encoding and payload length.</returns>
+        /// <exception cref="ArgumentException">
+        /// The payload is not a valid DER PKCS#1 RSA public key (the typed <see cref="RsaPublicKeyException"/> is the
+        /// inner exception), or its modulus size is not a registered one.
+        /// </exception>
+        private static (CryptoAlgorithm Algorithm, Purpose Purpose, EncodingScheme Scheme, int ExpectedRawLength) ClassifyRsa(ReadOnlySpan<byte> keyMaterial)
         {
-            270 => (CryptoAlgorithm.Rsa2048, Purpose.Verification, EncodingScheme.Raw, 270),
-            526 => (CryptoAlgorithm.Rsa4096, Purpose.Verification, EncodingScheme.Raw, 526),
-            _ => throw new ArgumentException($"Unsupported RSA public key encoding length: '{rawLength}' bytes.")
-        };
+            int modulusLength;
+            try
+            {
+                modulusLength = RsaPublicKeyEncoding.Decode(keyMaterial).Modulus.Length;
+            }
+            catch(RsaPublicKeyException exception)
+            {
+                throw new ArgumentException($"The RSA multicodec body is not a DER PKCS#1 public key: '{exception.FailureKind}'.", exception);
+            }
+
+            return modulusLength switch
+            {
+                256 => (CryptoAlgorithm.Rsa2048, Purpose.Verification, EncodingScheme.Der, keyMaterial.Length),
+                512 => (CryptoAlgorithm.Rsa4096, Purpose.Verification, EncodingScheme.Der, keyMaterial.Length),
+                _ => throw new ArgumentException($"Unsupported RSA modulus length: '{modulusLength}' bytes.")
+            };
+        }
 
 
         /// <summary>

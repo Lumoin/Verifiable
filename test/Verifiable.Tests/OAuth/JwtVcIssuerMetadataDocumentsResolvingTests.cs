@@ -475,7 +475,7 @@ internal sealed class JwtVcIssuerMetadataDocumentsResolvingTests
         }
 
 
-        public OutboundTransportDelegate Delegate => (request, context, cancellationToken) =>
+        public OutboundTransportDelegate Delegate => (request, context, readResponse, cancellationToken) =>
         {
             Calls.Add(request);
 
@@ -502,12 +502,12 @@ internal sealed class JwtVcIssuerMetadataDocumentsResolvingTests
                 _ = headerBuilder.Add(header.Key, header.Value);
             }
 
-            return ValueTask.FromResult(new OutboundResponse
+            return ScriptedOutboundTransport.ReadAsync(readResponse, new OutboundResponse
             {
                 StatusCode = response.Status,
                 Headers = headerBuilder.Build(),
                 Body = responseBody
-            });
+            }, cancellationToken);
         };
 
 

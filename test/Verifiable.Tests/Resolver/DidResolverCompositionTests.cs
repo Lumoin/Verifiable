@@ -126,15 +126,16 @@ internal sealed class DidResolverCompositionTests
     {
         string aliceJson = SerializeDocument(AliceWebDid);
 
-        ValueTask<OutboundResponse> webTransport(OutboundRequest request, ExchangeContext context, CancellationToken cancellationToken)
+        //Records the did:web request and supplies its document to the guarded reader.
+        ValueTask<OutboundTransportResult> webTransport(OutboundRequest request, ExchangeContext context, OutboundResponseReaderDelegate readResponse, CancellationToken cancellationToken)
         {
             bool isAlice = string.Equals(request.Target.AbsoluteUri, AliceWebUrl, StringComparison.Ordinal);
 
-            return ValueTask.FromResult(new OutboundResponse
+            return ScriptedOutboundTransport.ReadAsync(readResponse, new OutboundResponse
             {
                 StatusCode = isAlice ? 200 : 404,
                 Body = isAlice ? new TaggedMemory<byte>(Encoding.UTF8.GetBytes(aliceJson), BufferTags.Json) : TaggedMemory<byte>.Empty
-            });
+            }, cancellationToken);
         }
 
         ValueTask<DidResolutionResult> extension(string did, DidResolutionOptions options, ExchangeContext context, CancellationToken cancellationToken) =>

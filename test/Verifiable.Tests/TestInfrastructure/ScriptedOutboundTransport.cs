@@ -82,7 +82,7 @@ internal sealed class ScriptedOutboundTransport
 
 
     /// <summary>The transport seam the guarded fetch drives.</summary>
-    public OutboundTransportDelegate Delegate => (request, context, cancellationToken) =>
+    public OutboundTransportDelegate Delegate => (request, context, readResponse, cancellationToken) =>
     {
         Calls.Add(request);
 
@@ -90,11 +90,24 @@ internal sealed class ScriptedOutboundTransport
             ? scripted
             : ScriptedOutboundResponse.Default;
 
-        return ValueTask.FromResult(new OutboundResponse
+        return ScriptedOutboundTransport.ReadAsync(readResponse, new OutboundResponse
         {
             StatusCode = route.Status,
             Headers = route.Headers,
             Body = route.Body,
-        });
+        }, cancellationToken);
     };
+
+
+    /// <summary>Offers already scripted fixture bytes to the guarded reader without a separate size decision.</summary>
+    /// <param name="readResponse">The guarded fetch's reader.</param>
+    /// <param name="response">The scripted response facts and bytes.</param>
+    /// <param name="cancellationToken">The cancellation token from the transport call.</param>
+    public static async ValueTask<OutboundTransportResult> ReadAsync(
+        OutboundResponseReaderDelegate readResponse, OutboundResponse response, CancellationToken cancellationToken)
+    {
+        using MemoryStream body = new(response.Body.Memory.ToArray(), writable: false);
+        return await readResponse(response.StatusCode, response.Headers, body, cancellationToken).ConfigureAwait(false);
+    }
+
 }

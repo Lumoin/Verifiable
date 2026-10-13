@@ -255,7 +255,7 @@ public delegate ValueTask<bool> TpmRsaDigestVerifyDelegate(
 /// exception-driven control path.
 /// </remarks>
 /// <param name="modulus">The public modulus, unsigned big-endian.</param>
-/// <param name="exponent">The public exponent (zero meaning the default 65537, TPM 2.0 Library Part 2, Table 228's wire convention).</param>
+/// <param name="exponent">The public exponent the loaded public area states, its zero encoding already resolved at the TPM edge (<see cref="TpmsRsaParms.EffectiveExponent"/>).</param>
 /// <param name="prime">The supplied prime factor <c>P</c>, unsigned big-endian.</param>
 /// <param name="pool">The memory pool backing the returned key.</param>
 /// <param name="cancellationToken">A cancellation token.</param>

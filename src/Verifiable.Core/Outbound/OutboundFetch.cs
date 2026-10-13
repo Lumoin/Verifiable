@@ -1,3 +1,4 @@
+using System.Globalization;
 using Verifiable.Core.Transport;
 
 namespace Verifiable.Core.Outbound;
@@ -35,15 +36,18 @@ namespace Verifiable.Core.Outbound;
 /// </remarks>
 public static class OutboundFetch
 {
+    /// <summary>The redirect statuses whose next hop is governed by the fetch policy.</summary>
     private static HashSet<int> RedirectStatusCodes { get; } = [301, 302, 303, 307, 308];
 
 
     /// <summary>
-    /// Performs a policy-guarded fetch, following redirects per the policy.
+    /// Performs a policy-guarded fetch, following redirects per the policy and enforcing the response size
+    /// on every hop. A declared or observed excess returns typed evidence without a partial body.
     /// Fail-closed by return: a denied target/hop or an over-long chain yields a
     /// non-<see cref="OutboundFetchOutcome.Fetched"/> result, never a thrown
     /// policy error. The transport is invoked only after the target passes the
-    /// policy.
+    /// policy. Transport failures return their kind; cancellation propagates only when the caller's
+    /// token is cancelled. A transport's own cancellation is reported as a timeout.
     /// </summary>
     /// <param name="request">The initial request (carries the explicit method).</param>
     /// <param name="context">The per-call context; the policy is read from it.</param>
@@ -58,21 +62,66 @@ public static class OutboundFetch
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(transport);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if(request.MaxResponseBytes is long limit)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(limit);
+        }
+
+        ValueTask<OutboundTransportResult> ReadHopResponseAsync(int statusCode, HttpHeaderSet headers, Stream body, CancellationToken token) =>
+            ReadResponseAsync(statusCode, headers, body, request.MaxResponseBytes, token);
 
         OutboundFetchPolicy policy = context.OutboundFetchPolicy;
         Uri requested = request.Target;
         OutboundRequest current = request;
         int hops = 0;
+        OutboundRedirectRefusal? redirect = null;
 
         while(true)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             OutboundFetchDecision decision = policy.Evaluate(current.Target);
             if(!decision.IsAllowed)
             {
-                return Stopped(OutboundFetchOutcome.DeniedByPolicy, decision.DenyReason, requested, current.Target, hops);
+                return Stopped(OutboundFetchOutcome.DeniedByPolicy, decision.DenyReason, requested, current.Target, hops, redirect);
             }
 
-            OutboundResponse response = await transport(current, context, cancellationToken).ConfigureAwait(false);
+            OutboundTransportResult received;
+            try
+            {
+                received = await transport(current, context, ReadHopResponseAsync, cancellationToken).ConfigureAwait(false);
+            }
+            catch(Exception exception)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                return new OutboundFetchResult
+                {
+                    Outcome = OutboundFetchOutcome.Unreachable,
+                    FailureKind = WrappedCancellation.FindCancellation(exception) is not null
+                        ? typeof(TimeoutException)
+                        : exception.GetType(),
+                    RequestedUri = requested,
+                    FinalUri = current.Target,
+                    RedirectCount = hops
+                };
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            if(received.TooLarge is OutboundResponseTooLarge tooLarge)
+            {
+                return new OutboundFetchResult
+                {
+                    Outcome = OutboundFetchOutcome.TooLarge,
+                    TooLarge = tooLarge,
+                    RequestedUri = requested,
+                    FinalUri = current.Target,
+                    RedirectCount = hops
+                };
+            }
+
+            OutboundResponse response = received.Response!;
 
             if(!RedirectStatusCodes.Contains(response.StatusCode)
                 || !response.Headers.TryGetValue(WellKnownHttpHeaderNames.Location, out string? location)
@@ -89,29 +138,32 @@ public static class OutboundFetch
                 };
             }
 
+            //Retain the response facts if this redirect or its target is refused.
+            redirect = new OutboundRedirectRefusal(response.StatusCode, location);
+
             //It is a redirect.
             if(policy.Redirects == RedirectMode.None)
             {
                 return Stopped(OutboundFetchOutcome.RedirectNotFollowed,
-                    "Redirect not followed (RedirectMode.None).", requested, current.Target, hops);
+                    "Redirect not followed (RedirectMode.None).", requested, current.Target, hops, redirect);
             }
 
             if(hops >= policy.MaxRedirects)
             {
                 return Stopped(OutboundFetchOutcome.TooManyRedirects,
-                    $"Exceeded MaxRedirects ({policy.MaxRedirects}).", requested, current.Target, hops);
+                    $"Exceeded MaxRedirects ({policy.MaxRedirects}).", requested, current.Target, hops, redirect);
             }
 
             if(!Uri.TryCreate(current.Target, location, out Uri? next) || !next.IsAbsoluteUri)
             {
                 return Stopped(OutboundFetchOutcome.DeniedByPolicy,
-                    "Redirect Location is not a valid absolute URL.", requested, current.Target, hops);
+                    "Redirect Location is not a valid absolute URL.", requested, current.Target, hops, redirect);
             }
 
             if(policy.Redirects == RedirectMode.SameOrigin && !SameOrigin(current.Target, next))
             {
                 return Stopped(OutboundFetchOutcome.DeniedByPolicy,
-                    "Redirect crosses origin (RedirectMode.SameOrigin).", requested, next, hops);
+                    "Redirect crosses origin (RedirectMode.SameOrigin).", requested, next, hops, redirect);
             }
 
             //A 301/302/303 rewrites to GET and DROPS the body; silently turning a body-bearing request (e.g. a
@@ -121,7 +173,7 @@ public static class OutboundFetch
             if(current.Body is not null && response.StatusCode is not (307 or 308))
             {
                 return Stopped(OutboundFetchOutcome.DeniedByPolicy,
-                    "Redirect would drop the request body (only 307/308 may redirect a body-bearing request).", requested, next, hops);
+                    "Redirect would drop the request body (only 307/308 may redirect a body-bearing request).", requested, next, hops, redirect);
             }
 
             current = RewriteForRedirect(current, next, response.StatusCode);
@@ -131,24 +183,28 @@ public static class OutboundFetch
     }
 
 
+    /// <summary>Retains refusal provenance and any redirect response that led to the refusal.</summary>
     private static OutboundFetchResult Stopped(
-        OutboundFetchOutcome outcome, string? reason, Uri requested, Uri final, int hops) =>
+        OutboundFetchOutcome outcome, string? reason, Uri requested, Uri final, int hops, OutboundRedirectRefusal? redirect) =>
         new()
         {
             Outcome = outcome,
             DenyReason = reason,
+            RefusedRedirect = redirect,
             RequestedUri = requested,
             FinalUri = final,
             RedirectCount = hops,
         };
 
 
+    /// <summary>Compares the scheme, host, and effective port of two redirect targets.</summary>
     private static bool SameOrigin(Uri a, Uri b) =>
         string.Equals(a.Scheme, b.Scheme, StringComparison.OrdinalIgnoreCase)
         && string.Equals(a.Host, b.Host, StringComparison.OrdinalIgnoreCase)
         && a.Port == b.Port;
 
 
+    /// <summary>Preserves a 307/308 request and rewrites other allowed redirects to a bodyless GET.</summary>
     //HTTP redirect method/body rewrite: 307/308 preserve the method and body;
     //303 (and the universal browser handling of 301/302) fall back to GET and
     //drop the body. Falling back to GET is the safe choice — it never re-sends a
@@ -159,5 +215,63 @@ public static class OutboundFetch
         return preserve
             ? current with { Target = next }
             : current with { Target = next, Method = "GET", Body = null };
+    }
+
+
+    /// <summary>
+    /// The sole response-size decision: rejects a declared excess before reading, or stops at the first
+    /// observed byte over the limit. An exact-limit body needs an EOF read and remains acceptable.
+    /// </summary>
+    private static async ValueTask<OutboundTransportResult> ReadResponseAsync(
+        int statusCode, HttpHeaderSet headers, Stream body, long? limit, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(headers);
+        ArgumentNullException.ThrowIfNull(body);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if(limit is long maximum)
+        {
+            foreach(string value in headers.GetValues(WellKnownHttpHeaderNames.ContentLength))
+            {
+                if(long.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out long declared)
+                    && declared > maximum)
+                {
+                    return new OutboundTransportResult(new OutboundResponseTooLarge(
+                        maximum, declared, OutboundResponseLengthKind.Declared));
+                }
+            }
+        }
+
+        using MemoryStream buffered = new();
+        byte[] buffer = new byte[8192];
+        long observed = 0;
+        while(true)
+        {
+            int count = buffer.Length;
+            if(limit is long bound && bound - observed < count)
+            {
+                count = (int)(bound - observed) + 1;
+            }
+
+            int read = await body.ReadAsync(buffer.AsMemory(0, count), cancellationToken).ConfigureAwait(false);
+            if(read == 0)
+            {
+                return new OutboundTransportResult(new OutboundResponse
+                {
+                    StatusCode = statusCode,
+                    Headers = headers,
+                    Body = new TaggedMemory<byte>(buffered.ToArray(), Tag.Empty)
+                });
+            }
+
+            observed += read;
+            if(limit is long maximumBytes && observed > maximumBytes)
+            {
+                return new OutboundTransportResult(new OutboundResponseTooLarge(
+                    maximumBytes, observed, OutboundResponseLengthKind.Observed));
+            }
+
+            await buffered.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+        }
     }
 }

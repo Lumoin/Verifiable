@@ -11,9 +11,9 @@ namespace Verifiable.Apdu.Lds;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The bytes are the DER <c>RSAPublicKey</c> sequence — both the modulus and the public exponent, unlike the
-/// modulus-only form the library's PKCS#1/PSS RSA functions assume — because RSA Active Authentication
-/// (ISO/IEC 9796-2) needs the exact exponent. A verifier reconstructs the RSA key from these bytes.
+/// The bytes are the DER <c>RSAPublicKey</c> sequence carrying both the modulus and the public exponent,
+/// shared with the library's PKCS#1/PSS RSA functions. A verifier reconstructs the exact RSA key from
+/// these bytes for RSA Active Authentication (ISO/IEC 9796-2).
 /// </para>
 /// </remarks>
 [DebuggerDisplay("RsaPublicKey({Length} bytes)")]

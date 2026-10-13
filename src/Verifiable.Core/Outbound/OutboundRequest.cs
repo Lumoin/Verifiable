@@ -48,10 +48,9 @@ public sealed record OutboundRequest
     public TaggedMemory<byte>? Body { get; init; }
 
     /// <summary>
-    /// An optional upper bound, in bytes, on the response body the caller will accept. A transport SHOULD stop
-    /// reading and abort once the response exceeds this, so a hostile or misconfigured host cannot drive
-    /// unbounded buffering before the caller's post-read size check rejects it. <see langword="null"/> imposes
-    /// no transport-level bound; the caller's post-read cap remains the backstop either way.
+    /// An optional upper bound, in bytes, enforced only by the guarded fetch's response reader on every hop.
+    /// The transport supplies a live stream and returns the reader's typed result even when it stops early.
+    /// Zero accepts only an empty body; negative limits are invalid. Null imposes no byte bound.
     /// </summary>
     public long? MaxResponseBytes { get; init; }
 }

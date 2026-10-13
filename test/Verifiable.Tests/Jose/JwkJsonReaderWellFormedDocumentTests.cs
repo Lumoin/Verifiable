@@ -108,8 +108,8 @@ internal sealed class JwkJsonReaderWellFormedDocumentTests
     [TestMethod]
     public void RejectsDuplicateNameThatDiffersOnlyByEscape()
     {
-        //RFC 8259 §4 names compare by decoded value; k decodes to 'k' (RFC 8259 §7).
-        string json = """{"kid":"a","kid":"b"}""";
+        //RFC 8259 §4 names compare by decoded value; \u006b decodes to 'k' (RFC 8259 §7).
+        string json = """{"\u006bid":"a","kid":"b"}""";
 
         Assert.IsFalse(JwkJsonReader.IsWellFormedJsonDocument(Utf8(json)));
     }
@@ -232,15 +232,131 @@ internal sealed class JwkJsonReaderWellFormedDocumentTests
     }
 
 
+    /// <summary>
+    /// A surrogate escape that is not one half of an escaped high-then-low pair is refused, in a value and
+    /// in a member name, without throwing: RFC 7493 §2.1 (I-JSON) forbids a string that holds an unpaired
+    /// surrogate, escaped or not, though RFC 8259 §7's grammar admits the escape.
+    /// </summary>
+    /// <param name="json">The document holding the unpaired surrogate escape.</param>
     [TestMethod]
-    public void NeverThrowsOnALoneSurrogateEscape()
+    [DataRow("""{"a":"\ud800"}""", DisplayName = "a lone high surrogate in a value")]
+    [DataRow("""{"a":"\udc00"}""", DisplayName = "a lone low surrogate in a value")]
+    [DataRow("""{"a":"x\ud800"}""", DisplayName = "a high surrogate ending a value")]
+    [DataRow("""{"a":"\ud800\u0041"}""", DisplayName = "a high surrogate followed by another escape")]
+    [DataRow("""{"a":"\ud800x"}""", DisplayName = "a high surrogate followed by a character")]
+    [DataRow("""{"a":"\ud800\n"}""", DisplayName = "a high surrogate followed by a two-character escape")]
+    [DataRow("""{"a":"\udc00\ud800"}""", DisplayName = "a pair written low first")]
+    [DataRow("""{"a":"\ud800\ud800"}""", DisplayName = "two high surrogates")]
+    [DataRow("""{"\ud800":1}""", DisplayName = "a lone high surrogate in a member name")]
+    [DataRow("""{"a":{"b":["\udfff"]}}""", DisplayName = "a lone low surrogate in an array at depth")]
+    public void RefusesAnUnpairedSurrogateEscape(string json)
     {
-        //RFC 8259 §7 requires \u followed by four hex digits; it says nothing about the resulting
-        //code unit being paired, so a lone surrogate escape is syntactically valid and not a reason
-        //to refuse — this is a Unicode string well-formedness question, not a JSON grammar one.
-        string json = """{"a":"\ud800"}""";
+        Assert.IsFalse(JwkJsonReader.IsWellFormedJsonDocument(Utf8(json)));
+    }
 
+
+    /// <summary>
+    /// A high surrogate escape followed at once by a low surrogate escape spells one character above the
+    /// Basic Multilingual Plane and is admitted, in either hex letter case (RFC 8259 §7: "To escape an
+    /// extended character that is not in the Basic Multilingual Plane, the character is represented as a
+    /// 12-character sequence, encoding the UTF-16 surrogate pair.").
+    /// </summary>
+    /// <param name="json">The document holding the escaped pair.</param>
+    [TestMethod]
+    [DataRow("""{"a":"\ud83d\ude00"}""", DisplayName = "U+1F600 in a value")]
+    [DataRow("""{"a":"\uD834\uDD1E"}""", DisplayName = "U+1D11E in upper-case hex")]
+    [DataRow("""{"\ud83d\ude00":1}""", DisplayName = "U+1F600 as a member name")]
+    public void AcceptsAnEscapedSurrogatePair(string json)
+    {
         Assert.IsTrue(JwkJsonReader.IsWellFormedJsonDocument(Utf8(json)));
+    }
+
+
+    /// <summary>
+    /// U+0000 written as an escape is refused, in a value and in a member name, a rule of this library: the
+    /// text the reader extracts becomes a member name, a key identifier, a replay identifier or an issuer a
+    /// durable store holds, and a store of text cannot hold U+0000. RFC 8259 §7 and RFC 7493 §2.1 both admit
+    /// it. Written directly, it is a control character RFC 8259 §7 already requires to be escaped.
+    /// </summary>
+    /// <param name="json">The document holding the escaped U+0000.</param>
+    [TestMethod]
+    [DataRow("""{"a":"\u0000"}""", DisplayName = "U+0000 as a whole value")]
+    [DataRow("""{"a":"x\u0000y"}""", DisplayName = "U+0000 inside a value")]
+    [DataRow("""{"jti\u0000":"a"}""", DisplayName = "U+0000 in a member name")]
+    [DataRow("""{"a":["b",{"c":"\u0000"}]}""", DisplayName = "U+0000 at depth")]
+    public void RefusesAnEscapedNullCharacter(string json)
+    {
+        Assert.IsFalse(JwkJsonReader.IsWellFormedJsonDocument(Utf8(json)));
+    }
+
+
+    /// <summary>
+    /// A Unicode noncharacter is refused whether it is escaped, escaped as a surrogate pair, or written
+    /// directly as UTF-8 (RFC 7493 §2.1, I-JSON), while the code points beside each noncharacter range are
+    /// admitted.
+    /// </summary>
+    /// <param name="escapedText">The string content, in JSON escape form.</param>
+    /// <param name="isAdmitted">Whether the content is admitted.</param>
+    [TestMethod]
+    [DataRow("\\ufdd0", false, DisplayName = "U+FDD0, the first contiguous noncharacter")]
+    [DataRow("\\ufdef", false, DisplayName = "U+FDEF, the last contiguous noncharacter")]
+    [DataRow("\\ufffe", false, DisplayName = "U+FFFE")]
+    [DataRow("\\uFFFF", false, DisplayName = "U+FFFF")]
+    [DataRow("\\ud83f\\udffe", false, DisplayName = "U+1FFFE as a pair")]
+    [DataRow("\\udbff\\udfff", false, DisplayName = "U+10FFFF as a pair")]
+    [DataRow("\\ufdcf", true, DisplayName = "U+FDCF before the range")]
+    [DataRow("\\ufdf0", true, DisplayName = "U+FDF0 after the range")]
+    [DataRow("\\ufffd", true, DisplayName = "U+FFFD, the replacement character")]
+    [DataRow("\\ud83f\\udffd", true, DisplayName = "U+1FFFD as a pair")]
+    public void RefusesAnEscapedNoncharacterAndAdmitsItsNeighbours(string escapedText, bool isAdmitted)
+    {
+        string json = "{\"a\":\"" + escapedText + "\"}";
+
+        Assert.AreEqual(isAdmitted, JwkJsonReader.IsWellFormedJsonDocument(Utf8(json)));
+    }
+
+
+    /// <summary>
+    /// String content that is not well-formed UTF-8 is refused (RFC 7493 §2.1: I-JSON text is UTF-8;
+    /// RFC 3629 §3 makes an overlong form, an encoded surrogate, a code point past U+10FFFF and a truncated
+    /// sequence ill-formed), as is a noncharacter written directly; well-formed text of two, three and four
+    /// bytes is admitted.
+    /// </summary>
+    /// <param name="hexContent">The raw string content bytes, as hexadecimal.</param>
+    /// <param name="isAdmitted">Whether the content is admitted.</param>
+    [TestMethod]
+    [DataRow("FF", false, DisplayName = "a byte that begins no sequence")]
+    [DataRow("80", false, DisplayName = "a continuation byte alone")]
+    [DataRow("C080", false, DisplayName = "an overlong U+0000")]
+    [DataRow("C1BF", false, DisplayName = "an overlong U+007F")]
+    [DataRow("EDA080", false, DisplayName = "an encoded high surrogate")]
+    [DataRow("EDBFBF", false, DisplayName = "an encoded low surrogate")]
+    [DataRow("F4908080", false, DisplayName = "a code point past U+10FFFF")]
+    [DataRow("E282", false, DisplayName = "a truncated sequence")]
+    [DataRow("EFBFBF", false, DisplayName = "U+FFFF written directly")]
+    [DataRow("EFB790", false, DisplayName = "U+FDD0 written directly")]
+    [DataRow("C3A9", true, DisplayName = "U+00E9")]
+    [DataRow("E282AC", true, DisplayName = "U+20AC")]
+    [DataRow("F09F9880", true, DisplayName = "U+1F600")]
+    public void RefusesRawContentThatIsNotAUtf8CharacterAndAdmitsWellFormedText(string hexContent, bool isAdmitted)
+    {
+        byte[] json = [.. "{\"a\":\"x"u8, .. Convert.FromHexString(hexContent), .. "y\"}"u8];
+
+        Assert.AreEqual(isAdmitted, JwkJsonReader.IsWellFormedJsonDocument(json));
+    }
+
+
+    /// <summary>
+    /// A name repeated in an object at depth, once plain and once with a leading escape, is a repeated
+    /// name: names compare as the text they spell (RFC 8259 §8.3), and RFC 8259 §4 leaves the behavior of
+    /// software receiving such an object unpredictable.
+    /// </summary>
+    [TestMethod]
+    public void RefusesANameRepeatedAtDepthBehindALeadingEscape()
+    {
+        string json = """{"a":{"b":[{"kid":"one","\u006bid":"two"}]}}""";
+
+        Assert.IsFalse(JwkJsonReader.IsWellFormedJsonDocument(Utf8(json)));
     }
 
 

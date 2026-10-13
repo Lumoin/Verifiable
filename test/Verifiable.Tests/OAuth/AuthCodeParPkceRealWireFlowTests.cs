@@ -5148,9 +5148,9 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
             parseRegistrationResponseAsync: (body, ct) =>
                 throw new NotImplementedException("Test does not exercise dynamic registration."),
             resolveAuthorizationServerMetadataAsync: (_, _, _) =>
-                ValueTask.FromResult(new AuthorizationServerMetadataResolution
+                ValueTask.FromResult<AuthorizationServerMetadataResolution>(new AuthorizationServerMetadataResolved
                 {
-                    Outcome = AuthorizationServerMetadataResolutionOutcome.Resolved,
+                    MetadataLocation = WellKnownPaths.OAuthAuthorizationServer.ComputeUri(parRequiredMetadata.Issuer.OriginalString),
                     Metadata = parRequiredMetadata
                 }),
             resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,

@@ -524,7 +524,8 @@ internal sealed class WebVhCrossWireFlowTests
     {
         OutboundTransportDelegate singleHop = GuardedHttpClientTransport.BuildSingleHopTransport(httpClient);
 
-        async ValueTask<OutboundResponse> transport(OutboundRequest request, ExchangeContext context, CancellationToken cancellationToken)
+        //Rebases the request onto the loopback host and forwards the guarded reader.
+        async ValueTask<OutboundTransportResult> transport(OutboundRequest request, ExchangeContext context, OutboundResponseReaderDelegate readResponse, CancellationToken cancellationToken)
         {
             //The DID's domain is a registered name (localhost), which the transform maps to a genuine https URL;
             //this transport plays DNS + network by rebasing that URL's authority (host and port; the scheme is
@@ -539,7 +540,7 @@ internal sealed class WebVhCrossWireFlowTests
             };
             OutboundRequest rebasedRequest = request with { Target = rebased.Uri };
 
-            return await singleHop(rebasedRequest, context, cancellationToken).ConfigureAwait(false);
+            return await singleHop(rebasedRequest, context, readResponse, cancellationToken).ConfigureAwait(false);
         }
 
         DidMethodResolverDelegate webVhResolver = WebVhDidResolver.Build(

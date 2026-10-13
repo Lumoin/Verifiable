@@ -85,26 +85,33 @@ internal sealed class StatusListTokenHttpFlowTests
             transport, context, resolveIssuerKey, TestSetup.Base64UrlDecoder, JwtPartJson.Default, BaseMemoryPool.Shared, Clock);
 
         var fetchedTokens = new List<StatusListToken>();
-        async ValueTask<ResolvedStatusListToken?> resolve(StatusListResolutionContext context, CancellationToken cancellationToken = default)
+        async ValueTask<StatusListTokenResolution?> resolve(StatusListResolutionContext context, CancellationToken cancellationToken = default)
         {
-            ResolvedStatusListToken? resolved = await resolveVerified(context, cancellationToken).ConfigureAwait(false);
-            if(resolved is not null)
+            StatusListTokenResolution? result = await resolveVerified(context, cancellationToken).ConfigureAwait(false);
+            if(result is ResolvedStatusListToken resolved)
             {
                 fetchedTokens.Add(resolved.Token);
             }
 
-            return resolved;
+            return result;
         }
 
         try
         {
-            CredentialStatusOutcome revoked = await CredentialStatusGate.CheckAsync(
+            Result<CredentialStatusOutcome, StatusListTokenResolutionFailure> revokedResult = await CredentialStatusGate.CheckAsync(
                 StatusListFixtures.ContextFor(RevokedIndex, subject), resolve, Clock.GetUtcNow(), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsTrue(revokedResult.IsSuccess);
+            Assert.IsNotNull(revokedResult.Value);
+            CredentialStatusOutcome revoked = revokedResult.Value;
             Assert.IsFalse(revoked.IsValid, "The revoked index MUST evaluate as not valid from the fetched token.");
             Assert.AreEqual(StatusTypes.Invalid, revoked.Status);
 
-            CredentialStatusOutcome valid = await CredentialStatusGate.CheckAsync(
+            Result<CredentialStatusOutcome, StatusListTokenResolutionFailure> validResult = await CredentialStatusGate.CheckAsync(
                 StatusListFixtures.ContextFor(ValidIndex, subject), resolve, Clock.GetUtcNow(), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.IsTrue(validResult.IsSuccess);
+            Assert.IsNotNull(validResult.Value);
+            CredentialStatusOutcome valid = validResult.Value;
             Assert.IsTrue(valid.IsValid, "An untouched index MUST evaluate as valid from the fetched token.");
             Assert.AreEqual(StatusTypes.Valid, valid.Status);
 
@@ -164,11 +171,15 @@ internal sealed class StatusListTokenHttpFlowTests
 
             //fetched is disposed by this method's own finally block below, so the resolution does not
             //own it — CheckAsync's own disposal of a not-owned resolution is a no-op.
-            ValueTask<ResolvedStatusListToken?> resolve(StatusListResolutionContext _1, CancellationToken _2 = default) => ValueTask.FromResult<ResolvedStatusListToken?>(
+            ValueTask<StatusListTokenResolution?> resolve(StatusListResolutionContext _1, CancellationToken _2 = default) => ValueTask.FromResult<StatusListTokenResolution?>(
                 new ResolvedStatusListToken { Token = fetched, ResolvedAt = Clock.GetUtcNow(), IsTokenOwned = false });
 
-            CredentialStatusOutcome revoked = await CredentialStatusGate.CheckAsync(
+            Result<CredentialStatusOutcome, StatusListTokenResolutionFailure> revokedResult = await CredentialStatusGate.CheckAsync(
                 StatusListFixtures.ContextFor(RevokedIndex, subject), resolve, Clock.GetUtcNow(), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.IsTrue(revokedResult.IsSuccess);
+            Assert.IsNotNull(revokedResult.Value);
+            CredentialStatusOutcome revoked = revokedResult.Value;
             Assert.IsFalse(revoked.IsValid, "The revoked index MUST evaluate as not valid from the CWT-fetched token.");
             Assert.AreEqual(StatusTypes.Invalid, revoked.Status);
 

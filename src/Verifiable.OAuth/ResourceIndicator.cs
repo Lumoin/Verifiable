@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Text;
+using Verifiable.Core;
 
 namespace Verifiable.OAuth;
 
@@ -19,7 +21,8 @@ namespace Verifiable.OAuth;
 /// <see cref="System.StringComparison.InvariantCultureIgnoreCase"/> fold non-ASCII letters together
 /// (U+00E9 with U+00C9, and U+212A with <c>k</c>).
 /// </summary>
-internal static class ResourceIndicatorSyntax
+[DebuggerDisplay("ResourceIndicator {OriginalString,nq}")]
+public sealed class ResourceIndicator: IEquatable<ResourceIndicator>
 {
     /// <summary>
     /// The character classes this reader validates a run of characters against, each the
@@ -45,120 +48,102 @@ internal static class ResourceIndicatorSyntax
         Query,
     }
 
+    /// <summary>The accepted indicator exactly as supplied to <see cref="Parse"/>.</summary>
+    public string OriginalString { get; }
+
+
     /// <summary>
-    /// Names the first part of <paramref name="indicator"/> that fails the
-    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#appendix-A"><c>absolute-URI</c></see>
-    /// grammar, or <see cref="ResourceIndicatorFault.None"/> when every part admits it. An
-    /// <c>http</c> or <c>https</c> indicator whose authority carries a <c>userinfo</c> is
-    /// <see cref="ResourceIndicatorFault.HttpUserInfo"/>
-    /// (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-4.2.4">RFC 9110 section 4.2.4</see>:
-    /// "a recipient SHOULD parse for userinfo and treat its presence as an error"); every other
-    /// scheme keeps <c>userinfo</c> as RFC 3986 Appendix A's <c>authority</c> production admits it,
-    /// the deprecated <c>user:password</c> form included: a deviation from
-    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-3.2.1">RFC 3986 section 3.2.1</see>'s
-    /// "should reject the storage of such data in unencrypted form", because the generic grammar
-    /// admits it and no rule of RFC 8707 forbids it, with the look-alike hazard of
-    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-7.6">section 7.6</see> (a
-    /// <c>userinfo</c> that appears to identify one naming authority while another is hidden behind
-    /// it) left to the application's policy.
-    /// The scheme is <c>ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )</c>
-    /// (<see href="https://www.rfc-editor.org/rfc/rfc3986#section-3.1">RFC 3986 section 3.1</see>:
-    /// "Scheme names consist of a sequence of characters beginning with a letter and followed by any
-    /// combination of letters, digits, plus (&quot;+&quot;), period (&quot;.&quot;), or hyphen
-    /// (&quot;-&quot;)."), so a value that begins with <c>:</c>, or has no <c>:</c> after a
-    /// well-formed scheme, is <see cref="ResourceIndicatorFault.Scheme"/>.
-    /// Reads the original spelling in one left-to-right pass, allocates nothing, and never throws.
+    /// The ordinal comparison key: only ASCII scheme and host letters outside percent triplets
+    /// are lowered. Userinfo, ports (including default ports), paths, queries, percent triplets
+    /// and trailing slashes keep their spelling.
     /// </summary>
-    /// <param name="indicator">The indicator's original spelling.</param>
-    /// <returns>The fault of the first part that fails, or <see cref="ResourceIndicatorFault.None"/>.</returns>
-    internal static ResourceIndicatorFault Check(ReadOnlySpan<char> indicator)
+    public string ComparisonKey { get; }
+
+
+    /// <summary>Constructs an indicator only after its original spelling has passed the grammar.</summary>
+    /// <param name="originalString">The accepted original spelling.</param>
+    /// <param name="comparisonKey">The key derived during parsing.</param>
+    private ResourceIndicator(string originalString, string comparisonKey)
     {
-        return Check(indicator, out _, out _, out _, out _);
+        OriginalString = originalString;
+        ComparisonKey = comparisonKey;
     }
 
-    /// <summary>
-    /// <see langword="true"/> when <see cref="Check(ReadOnlySpan{char})"/> answers
-    /// <see cref="ResourceIndicatorFault.None"/> for <paramref name="indicator"/>.
-    /// </summary>
-    /// <param name="indicator">The indicator's original spelling.</param>
-    /// <returns><see langword="true"/> when <paramref name="indicator"/> is an accepted <c>absolute-URI</c>.</returns>
-    internal static bool IsAbsoluteResourceIndicator(ReadOnlySpan<char> indicator)
-    {
-        return Check(indicator) == ResourceIndicatorFault.None;
-    }
 
     /// <summary>
-    /// Lowers <paramref name="indicator"/>'s scheme letters
-    /// (<see href="https://www.rfc-editor.org/rfc/rfc3986#section-3.1">RFC 3986 section 3.1</see>) and,
-    /// when it has an authority, its host letters outside percent triplets
-    /// (<see href="https://www.rfc-editor.org/rfc/rfc3986#section-3.2.2">section 3.2.2</see>,
-    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.1">section 6.2.2.1</see>), leaving
-    /// userinfo, port, path and query as sent: the <c>userinfo</c> of a scheme other than <c>http</c>
-    /// and <c>https</c>, the deprecated <c>user:password</c> form included, is accepted by
-    /// <see cref="Check(ReadOnlySpan{char})"/> and kept as sent
-    /// (<see href="https://www.rfc-editor.org/rfc/rfc3986#section-3.2.1">RFC 3986 section 3.2.1</see>).
-    /// An indicator <see cref="Check(ReadOnlySpan{char})"/> refuses, an <c>http</c> or <c>https</c> indicator
-    /// carrying a <c>userinfo</c> included
-    /// (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-4.2.4">RFC 9110 section 4.2.4</see>),
-    /// is returned unchanged: the method is total, so a caller folds only what it accepts or compares.
+    /// Parses the original spelling against RFC 8707 section 2: an ASCII absolute URI without
+    /// a fragment. HTTP and HTTPS require an authority with a non-empty host and no userinfo;
+    /// other schemes admit userinfo. A query is permitted. The first failing rule is returned
+    /// as a typed refusal; null and empty inputs are <see cref="ResourceIndicatorFault.Empty"/>.
+    /// No URI canonicalization or culture-sensitive case conversion is performed.
     /// </summary>
-    /// <param name="indicator">The indicator to fold.</param>
-    /// <returns>The folded indicator, or <paramref name="indicator"/> itself when refused.</returns>
-    internal static string Fold(string indicator)
+    /// <param name="indicator">The original spelling, before any URI normalization.</param>
+    /// <returns>The accepted value with its comparison key, or the first grammar fault.</returns>
+    public static Result<ResourceIndicator, ResourceIndicatorFault> Parse(string? indicator)
     {
-        ArgumentNullException.ThrowIfNull(indicator);
-
-        ResourceIndicatorFault fault = Check(indicator, out int schemeEnd, out bool hasAuthority, out int hostStart, out int hostEnd);
-
-        if(fault != ResourceIndicatorFault.None)
+        if(string.IsNullOrEmpty(indicator))
         {
-            return indicator;
+            return Result.Failure<ResourceIndicator, ResourceIndicatorFault>(ResourceIndicatorFault.Empty);
         }
 
-        return string.Create(indicator.Length, (indicator, schemeEnd, hasAuthority, hostStart, hostEnd), static (destination, state) =>
+        ResourceIndicatorFault fault = Check(indicator, out int schemeEnd, out bool hasAuthority, out int hostStart, out int hostEnd);
+        if(fault != ResourceIndicatorFault.None)
+        {
+            return Result.Failure<ResourceIndicator, ResourceIndicatorFault>(fault);
+        }
+
+        string comparisonKey = string.Create(indicator.Length, (indicator, schemeEnd, hasAuthority, hostStart, hostEnd), static (destination, state) =>
         {
             ReadOnlySpan<char> source = state.indicator;
             source.CopyTo(destination);
 
             _ = Ascii.ToLower(source[..state.schemeEnd], destination[..state.schemeEnd], out _);
-
             if(state.hasAuthority)
             {
                 LowerHostOutsideTriplets(source, destination, state.hostStart, state.hostEnd);
             }
         });
+
+        return Result.Success<ResourceIndicator, ResourceIndicatorFault>(new ResourceIndicator(indicator, comparisonKey));
     }
 
-    /// <summary>
-    /// The key a stored grant's <c>resource</c> value is matched by
-    /// (<see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.1">RFC 3986 section 6.2.1</see>):
-    /// <see cref="Fold(string)"/> when <paramref name="value"/> is an accepted indicator,
-    /// <paramref name="value"/> itself otherwise, so a value the grammar refuses (an IRI, or any
-    /// other value outside the ASCII grammar) compares by simple string identity.
-    /// </summary>
-    /// <param name="value">The stored or requested indicator.</param>
-    /// <returns>The comparison key for <paramref name="value"/>.</returns>
-    internal static string ComparisonKey(string value)
-    {
-        ArgumentNullException.ThrowIfNull(value);
 
-        return IsAbsoluteResourceIndicator(value) ? Fold(value) : value;
-    }
+    /// <inheritdoc/>
+    public bool Equals(ResourceIndicator? other) =>
+        other is not null && string.Equals(ComparisonKey, other.ComparisonKey, StringComparison.Ordinal);
+
+
+    /// <inheritdoc/>
+    public override bool Equals(object? obj) => obj is ResourceIndicator other && Equals(other);
+
+
+    /// <inheritdoc/>
+    public override int GetHashCode() => StringComparer.Ordinal.GetHashCode(ComparisonKey);
+
+
+    /// <inheritdoc/>
+    public override string ToString() => OriginalString;
+
+
+    /// <summary>Determines whether two accepted indicators have the same comparison key.</summary>
+    public static bool operator ==(ResourceIndicator? left, ResourceIndicator? right) =>
+        left is null ? right is null : left.Equals(right);
+
+
+    /// <summary>Determines whether two accepted indicators have different comparison keys.</summary>
+    public static bool operator !=(ResourceIndicator? left, ResourceIndicator? right) => !(left == right);
+
 
     /// <summary>
-    /// The shared implementation of <see cref="Check(ReadOnlySpan{char})"/>, additionally
-    /// reporting the scheme and host ranges <see cref="Fold(string)"/> needs so the two methods
-    /// never parse the indicator twice. <paramref name="schemeEnd"/> is the exclusive end of the
-    /// scheme; <paramref name="hasAuthority"/> is whether <c>"//"</c> followed the scheme's
-    /// <c>:</c>; <paramref name="hostStart"/>/<paramref name="hostEnd"/> bound the host (including
-    /// its brackets for an IP-literal) when <paramref name="hasAuthority"/> is <see langword="true"/>.
+    /// Reads the original spelling in component order and reports the scheme and host ranges
+    /// used to derive the comparison key without parsing the indicator again.
     /// </summary>
     /// <param name="indicator">The indicator's original spelling.</param>
-    /// <param name="schemeEnd">The exclusive end of the scheme, valid only when the result is <see cref="ResourceIndicatorFault.None"/>.</param>
-    /// <param name="hasAuthority">Whether an authority followed the scheme, valid only when the result is <see cref="ResourceIndicatorFault.None"/>.</param>
-    /// <param name="hostStart">The inclusive start of the host, valid only when <paramref name="hasAuthority"/> is <see langword="true"/> and the result is <see cref="ResourceIndicatorFault.None"/>.</param>
-    /// <param name="hostEnd">The exclusive end of the host, valid only when <paramref name="hasAuthority"/> is <see langword="true"/> and the result is <see cref="ResourceIndicatorFault.None"/>.</param>
-    /// <returns>The fault of the first part that fails, or <see cref="ResourceIndicatorFault.None"/>.</returns>
+    /// <param name="schemeEnd">The exclusive end of the scheme on success.</param>
+    /// <param name="hasAuthority">Whether an authority followed the scheme on success.</param>
+    /// <param name="hostStart">The inclusive start of the host when an authority is present.</param>
+    /// <param name="hostEnd">The exclusive end of the host when an authority is present.</param>
+    /// <returns>The first failing rule, or <see cref="ResourceIndicatorFault.None"/>.</returns>
     private static ResourceIndicatorFault Check(ReadOnlySpan<char> indicator, out int schemeEnd, out bool hasAuthority, out int hostStart, out int hostEnd)
     {
         schemeEnd = 0;

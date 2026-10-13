@@ -122,10 +122,9 @@ namespace Verifiable.Tpm.Automata;
 /// an elliptic-curve key. Retained only by the RSA storage-parent effect (a standard RSA endorsement key, TCG EK
 /// Credential Profile, Annex B.3.3, Template L-1), so an RSA-OAEP secret-transport command can use it without
 /// reconstructing it from the private key; an RSA signing key's exported modulus is not retained here (it needs
-/// no OAEP transport). The public exponent is not carried alongside it: every template this simulator builds
-/// passes <c>exponent = 0</c> (Part 2, Table 228's wire convention for the default 2^16+1), so a consumer of
-/// <see cref="PublicModulus"/> assumes the default exponent rather than threading a fourth field through — a
-/// documented modelling simplification, not a spec-mandated one. Owned exactly like <see cref="AuthValue"/>:
+/// no OAEP transport). The public exponent is not duplicated beside it: a consumer of <see cref="PublicModulus"/>
+/// reads the exponent from <see cref="PublicArea"/>'s parameters through <see cref="TpmsRsaParms.EffectiveExponent"/>,
+/// the one place the TPM's zero encoding of 2^16+1 is resolved. Owned exactly like <see cref="AuthValue"/>:
 /// rented in the creation effect, adopted at the installing transition, deep-copied on persist so the transient
 /// and persistent entries never co-own it, and released on eviction.
 /// </param>

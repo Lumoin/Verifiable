@@ -5,6 +5,7 @@ using Org.BouncyCastle.Crypto.Digests;
 using Org.BouncyCastle.Crypto.Engines;
 using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.Crypto.Signers;
+using Org.BouncyCastle.Math;
 using Org.BouncyCastle.Security;
 using System.Buffers;
 using System.Collections.Frozen;
@@ -162,7 +163,7 @@ public static class BouncyCastleRecoverableSignatureFunctions
         {
             publicKey = ParseDerRsaPublicKey(publicKeyMaterial.Span);
         }
-        catch(Exception exception) when(exception is ArgumentException or InvalidOperationException or InvalidCastException or System.IO.IOException or FormatException)
+        catch(Exception exception) when(exception is ArgumentException or InvalidOperationException or InvalidCastException or System.IO.IOException or FormatException or RsaPublicKeyException)
         {
             //A malformed DER public key, or a degenerate/undersized RSA key, fails closed to a non-verifying result
             //rather than throwing out of this bool-returning API — inspection is fail-closed (Doc 9303 Part 11 §6.1):
@@ -313,30 +314,22 @@ public static class BouncyCastleRecoverableSignatureFunctions
 
     /// <summary>
     /// Parses a DER <c>RSAPublicKey</c> (<c>SEQUENCE { modulus INTEGER, publicExponent INTEGER }</c>) into
-    /// BouncyCastle key parameters, keeping the exact public exponent the eMRTD EF.DG15 carries — unlike the
-    /// modulus-only PKCS#1/PSS path, which assumes the exponent is 65537.
+    /// BouncyCastle key parameters, keeping the exact public exponent the eMRTD EF.DG15 carries through
+    /// the shared RSA public-key decoder.
     /// </summary>
     private static RsaKeyParameters ParseDerRsaPublicKey(ReadOnlySpan<byte> publicKeyMaterial)
     {
-        Asn1Sequence sequence = Asn1Sequence.GetInstance(publicKeyMaterial.ToArray());
-        if(sequence.Count < 2)
-        {
-            throw new ArgumentException(
-                "An RSA public key must be a DER SEQUENCE of a modulus and a public exponent.", nameof(publicKeyMaterial));
-        }
-
-        var modulus = DerInteger.GetInstance(sequence[0]).PositiveValue;
-        var publicExponent = DerInteger.GetInstance(sequence[1]).PositiveValue;
+        (byte[] modulus, byte[] publicExponent) = RsaPublicKeyEncoding.Decode(publicKeyMaterial);
 
         //Reject a degenerate self-declared key before verification. A chip announcing e = 1 makes RSA the identity
         //map (x^1 mod n == x), so a forged block verifies against the chip's own key with no private-key possession —
         //defeating Active Authentication's anti-cloning purpose (ICAO Doc 9303 Part 11 §6.1).
-        if(!RsaUtilities.IsValidPublicKey(modulus.ToByteArrayUnsigned(), publicExponent.ToByteArrayUnsigned()))
+        if(!RsaUtilities.IsValidPublicKey(modulus, publicExponent))
         {
             throw new ArgumentException(
                 "The RSA public key is not valid: the exponent is degenerate (for example e = 1) or the modulus is too small or even.", nameof(publicKeyMaterial));
         }
 
-        return new RsaKeyParameters(isPrivate: false, modulus, publicExponent);
+        return new RsaKeyParameters(isPrivate: false, new BigInteger(1, modulus), new BigInteger(1, publicExponent));
     }
 }
