@@ -169,6 +169,10 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
         using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities).ConfigureAwait(false);
 
+        //OID4VCI 1.0 Section 13.10 refuses a plain bearer Credential token of the default hour before the
+        //code-validation seam runs; the row's cases are the seam's denials, so the server issues tokens of five minutes.
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
+
         await AssertDenialAsync(host, material,
             PreAuthorizedCodeDecision.Deny(PreAuthorizedCodeDenialReason.InvalidCode),
             400, OAuthErrors.InvalidGrant).ConfigureAwait(false);
@@ -208,6 +212,10 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities).ConfigureAwait(false);
+
+        //OID4VCI 1.0 Section 13.10 refuses a plain bearer Credential token of the default hour before the
+        //code-validation seam runs; the row's case is the seam's grant, so the server issues tokens of five minutes.
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
             candidateIntegration.ValidatePreAuthorizedCodeAsync =
@@ -226,6 +234,253 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
             "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}",
             body,
             record);
+    }
+
+
+    /// <summary>
+    /// The library's own rule for a lifetime it cannot issue, at the Token Request of the Pre-Authorized Code grant
+    /// (<see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6">OpenID for
+    /// Verifiable Credential Issuance 1.0 Section 6</see>), whose single-use <c>pre-authorized_code</c> the
+    /// application's code-validation seam may consume: the access-token lifetime is resolved before that seam runs. An
+    /// access-token policy value of zero, set by the application's policy resolver, is answered over the real wire
+    /// with 500 and the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c>, the seam
+    /// is never called, no token is issued and the host records no fault; once the resolver sets a lifetime of five
+    /// minutes the same <c>pre-authorized_code</c>, presented to a seam that consumes it on first use, is redeemed with
+    /// 200.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task AnUnissuableAccessTokenLifetimeIsRefusedBeforeTheCodeIsConsumedAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities).ConfigureAwait(false);
+        int seamInvocations = 0;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidatePreAuthorizedCodeAsync =
+                (code, txCode, clientId, registration, context, ct) =>
+                {
+                    int invocation = Interlocked.Increment(ref seamInvocations);
+
+                    return ValueTask.FromResult(invocation == 1
+                        ? PreAuthorizedCodeDecision.Grant(OfferSubject)
+                        : PreAuthorizedCodeDecision.Deny(PreAuthorizedCodeDenialReason.InvalidCode));
+                };
+        }).ConfigureAwait(false);
+        await SetPolicyAccessTokenLifetimeAsync(host, TimeSpan.Zero).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        (int status, string body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, BuildPreAuthorizedFields(), TestContext.CancellationToken).ConfigureAwait(false);
+        Exception[] faults = host.Host("default").ConsumeHttpFaults();
+        string record = $"{status} '{body}'";
+
+        Assert.AreEqual(500, status, record);
+        Assert.AreEqual(0, Volatile.Read(ref seamInvocations),
+            "The single-use code must not reach the consuming seam under a lifetime the server cannot issue.");
+        Assert.AreEqual(
+            "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}",
+            body,
+            record);
+        Assert.IsEmpty(faults, string.Join(" | ", faults.Select(static fault => fault.Message)));
+
+        await SetPolicyAccessTokenLifetimeAsync(host, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
+        (int redeemedStatus, string redeemedBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, BuildPreAuthorizedFields(), TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, redeemedStatus, redeemedBody);
+        Assert.AreEqual(1, Volatile.Read(ref seamInvocations), "The redemption consults the seam exactly once.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-13.10">OpenID for
+    /// Verifiable Credential Issuance 1.0 Section 13.10</see>: "Long-lived Access Tokens giving access to Credentials
+    /// MUST not be issued unless sender-constrained." At the Pre-Authorized Code grant
+    /// (<see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6">Section 6</see>)
+    /// the refusal of a plain bearer access token of one hour is answered over the real wire with 400
+    /// <c>invalid_request</c> before the application's code-validation seam runs, so the single-use
+    /// <c>pre-authorized_code</c> is not consumed by a request the server refuses: the seam count is 0 after the
+    /// refusal, and once the resolver sets a lifetime of five minutes the same code, presented to a seam that consumes
+    /// it on first use, is redeemed with 200 and the seam count is 1.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task ALongLivedBearerTokenIsRefusedBeforeTheCodeIsConsumedAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities).ConfigureAwait(false);
+        int seamInvocations = 0;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidatePreAuthorizedCodeAsync =
+                (code, txCode, clientId, registration, context, ct) =>
+                {
+                    int invocation = Interlocked.Increment(ref seamInvocations);
+
+                    return ValueTask.FromResult(invocation == 1
+                        ? PreAuthorizedCodeDecision.Grant(OfferSubject)
+                        : PreAuthorizedCodeDecision.Deny(PreAuthorizedCodeDenialReason.InvalidCode));
+                };
+        }).ConfigureAwait(false);
+        await SetPolicyAccessTokenLifetimeAsync(host, TimeSpan.FromHours(1)).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        (int status, string body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, BuildPreAuthorizedFields(), TestContext.CancellationToken).ConfigureAwait(false);
+        string record = $"{status} '{body}'";
+
+        Assert.AreEqual(400, status, record);
+        Assert.AreEqual(0, Volatile.Read(ref seamInvocations),
+            "The single-use code must not reach the consuming seam when a plain bearer token of one hour is refused.");
+        using(JsonDocument refused = JsonDocument.Parse(body))
+        {
+            Assert.AreEqual(OAuthErrors.InvalidRequest, refused.RootElement.GetProperty("error").GetString(), record);
+        }
+
+        await SetPolicyAccessTokenLifetimeAsync(host, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
+        (int redeemedStatus, string redeemedBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, BuildPreAuthorizedFields(), TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, redeemedStatus, redeemedBody);
+        Assert.AreEqual(1, Volatile.Read(ref seamInvocations), "The redemption consults the seam exactly once.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-13.10">OpenID for
+    /// Verifiable Credential Issuance 1.0 Section 13.10</see>: "Long-lived Access Tokens giving access to Credentials
+    /// MUST not be issued unless sender-constrained. Access Tokens with lifetimes longer than 5 minutes are, in general,
+    /// considered long lived." The guard judges the lifetime the access token is issued with, the one the request holds
+    /// once the application's code-validation seam has run: on a server whose <see cref="TimingPolicy.AccessTokenLifetime"/>
+    /// is five minutes, a seam that grants the code and sets an access-token lifetime of one hour on the request makes the
+    /// plain bearer token long lived, so the Token Request of the Pre-Authorized Code grant
+    /// (<see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6">Section 6</see>)
+    /// over the real wire is refused 400 <c>invalid_request</c> and no <c>access_token</c> is issued.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task ABearerTokenTheCodeValidationSeamMakesLongLivedIsRefusedAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.Timings = TimingPolicy.Default with { AccessTokenLifetime = TimeSpan.FromMinutes(5) };
+            candidateIntegration.ValidatePreAuthorizedCodeAsync =
+                static (code, txCode, clientId, registration, context, ct) =>
+                {
+                    context.SetAccessTokenLifetime(TimeSpan.FromHours(1));
+
+                    return ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject));
+                };
+        }).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        (int status, string body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, material.Registration.TenantId.Value, BuildPreAuthorizedFields(), TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        string record = $"{status} '{body}'";
+
+        Assert.AreEqual(400, status, record);
+        using JsonDocument refused = JsonDocument.Parse(body);
+        Assert.AreEqual(OAuthErrors.InvalidRequest, refused.RootElement.GetProperty("error").GetString(), record);
+        Assert.IsFalse(refused.RootElement.TryGetProperty(WellKnownTokenTypes.AccessToken, out _), record);
+    }
+
+
+    /// <summary>
+    /// The library's own rule for a lifetime it cannot issue, at a sender-constrained Token Request of the Pre-Authorized
+    /// Code grant (<see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6">OpenID
+    /// for Verifiable Credential Issuance 1.0 Section 6</see>), whose single-use <c>pre-authorized_code</c> the
+    /// application's code-validation seam may consume. A request carrying a valid DPoP proof
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>) asks for a
+    /// sender-constrained token, which the Section 13.10 guard permits at any lifetime, so the access-token lifetime is
+    /// resolved on its own before the seam runs: under an access-token policy value of zero, set by the application's
+    /// policy resolver, the request over the real wire is answered 500 with the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c>, the seam is
+    /// never called and the host records no fault.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task ASenderConstrainedRedemptionUnderAnUnissuableLifetimeIsRefusedBeforeTheCodeIsConsumedAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        int seamInvocations = 0;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidatePreAuthorizedCodeAsync =
+                (code, txCode, clientId, registration, context, ct) =>
+                {
+                    int invocation = Interlocked.Increment(ref seamInvocations);
+
+                    return ValueTask.FromResult(invocation == 1
+                        ? PreAuthorizedCodeDecision.Grant(OfferSubject)
+                        : PreAuthorizedCodeDecision.Deny(PreAuthorizedCodeDenialReason.InvalidCode));
+                };
+        }).ConfigureAwait(false);
+        await SetPolicyAccessTokenLifetimeAsync(host, TimeSpan.Zero).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+        string segment = material.Registration.TenantId.Value;
+        Uri tokenEndpoint = RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment);
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+
+        //RFC 9449 Section 8: the server's nonce policy challenges the first, nonce-less proof; the proof that carries
+        //the echoed nonce is the sender-constrained request the row judges.
+        string firstProof = await BuildTokenProofAsync(host, segment, dpopKey, nonce: null, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        HttpResponseData challenge = await HttpClientTransport.SendFormPostAsync(
+            host.Host("default").SharedHttpClient!, tokenEndpoint, BuildPreAuthorizedFields(),
+            OutgoingHeaders.Empty.WithDpop(firstProof), TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, challenge.StatusCode, challenge.Body);
+        string freshNonce = challenge.Headers.TryGetSingle(WellKnownHttpHeaderNames.DPoPNonce)
+            ?? throw new AssertFailedException("RFC 9449, Section 8 requires a DPoP-Nonce header on the use_dpop_nonce challenge.");
+        string proof = await BuildTokenProofAsync(host, segment, dpopKey, nonce: freshNonce, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        (int status, string body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, BuildPreAuthorizedFields(), OutgoingHeaders.Empty.WithDpop(proof),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Exception[] faults = host.Host("default").ConsumeHttpFaults();
+        string record = $"{status} '{body}'";
+
+        Assert.AreEqual(500, status, record);
+        Assert.AreEqual(0, Volatile.Read(ref seamInvocations),
+            "The single-use code of a sender-constrained request must not reach the consuming seam under a lifetime the server cannot issue.");
+        Assert.AreEqual(
+            "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}",
+            body,
+            record);
+        Assert.IsEmpty(faults, string.Join(" | ", faults.Select(static fault => fault.Message)));
+    }
+
+
+    /// <summary>
+    /// Wires a policy resolver that applies the registration's built-in profile and then sets
+    /// <paramref name="lifetime"/> as the request's access-token policy value.
+    /// </summary>
+    /// <param name="host">The host whose server is altered.</param>
+    /// <param name="lifetime">The access-token lifetime the request's policy holds.</param>
+    /// <returns>A task that completes when the altered wiring is live.</returns>
+    private static async Task SetPolicyAccessTokenLifetimeAsync(TestHostShell host, TimeSpan lifetime)
+    {
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolvePolicyAsync = async (registration, context, ct) =>
+            {
+                await PolicyProfiles.DefaultResolvePolicyAsync((ClientRecord)registration, context, ct).ConfigureAwait(false);
+                context.SetAccessTokenLifetime(lifetime);
+            };
+        }).ConfigureAwait(false);
     }
 
 
@@ -634,6 +889,57 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, provenStatus, provenBody);
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-13.10">OID4VCI 1.0
+    /// Section 13.10</see>: "Long-lived Access Tokens giving access to Credentials MUST not be issued unless
+    /// sender-constrained. Access Tokens with lifetimes longer than 5 minutes are, in general, considered long lived."
+    /// The guard judges the lifetime the token is issued with: a policy value of 600 seconds set through the
+    /// application's policy resolver, over a server <see cref="TimingPolicy.AccessTokenLifetime"/> of 300 seconds, and
+    /// a registration's own override of 600 seconds over a policy value of 300 seconds each make the plain bearer
+    /// token long lived, so the Pre-Authorized Code grant over the real wire is refused 400 <c>invalid_request</c>.
+    /// </summary>
+    /// <param name="source">Where the 600-second lifetime is set: <c>policy resolver</c> or <c>registration</c>.</param>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DataRow("policy resolver")]
+    [DataRow("registration")]
+    public async Task ALongLivedBearerTokenIsRefusedAtThePreAuthorizedCodeGrantWhereverItsLifetimeIsSetAsync(string source)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities).ConfigureAwait(false);
+        bool isRegistrationSource = string.Equals(source, "registration", StringComparison.Ordinal);
+        TimeSpan policyLifetime = isRegistrationSource ? TimeSpan.FromSeconds(300) : TimeSpan.FromSeconds(600);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.Timings = TimingPolicy.Default with { AccessTokenLifetime = TimeSpan.FromSeconds(300) };
+            candidateIntegration.ResolvePolicyAsync = async (registration, context, ct) =>
+            {
+                await PolicyProfiles.DefaultResolvePolicyAsync((ClientRecord)registration, context, ct).ConfigureAwait(false);
+                context.SetAccessTokenLifetime(policyLifetime);
+            };
+            candidateIntegration.ValidatePreAuthorizedCodeAsync =
+                (code, txCode, clientId, registration, context, ct) =>
+                    ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject));
+        }).ConfigureAwait(false);
+        if(isRegistrationSource)
+        {
+            await host.SetTokenLifetimeAsync(
+                material, WellKnownTokenTypes.AccessToken, TimeSpan.FromSeconds(600), TestContext.CancellationToken).ConfigureAwait(false);
+        }
+
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+        string segment = material.Registration.TenantId.Value;
+
+        (int status, string body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, BuildPreAuthorizedFields(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, status, body);
+        Assert.Contains("\"error\":\"invalid_request\"", body, StringComparison.Ordinal);
     }
 
 
@@ -1134,6 +1440,10 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities).ConfigureAwait(false);
+
+        //OID4VCI 1.0 Section 13.10 refuses a plain bearer Credential token of the default hour before the
+        //code-validation seam runs; the row's case is the seam's denial, so the server issues tokens of five minutes.
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
             candidateIntegration.ValidatePreAuthorizedCodeAsync =

@@ -201,6 +201,49 @@ internal sealed class FederationEntityConfigurationEndpointTests
     }
 
 
+    /// <summary>
+    /// The library's own rule for a lifetime it issues: the library writes an Entity Statement's <c>iat</c> and
+    /// <c>exp</c> (<see href="https://openid.net/specs/openid-federation-1_0.html#section-3.1.1">OpenID Federation 1.0
+    /// Section 3.1.1</see>) as whole-second NumericDates, and every lifetime the server's <see cref="TimingPolicy"/>
+    /// holds is its whole seconds, so a <see cref="TimingPolicy.FederationEntityConfigurationLifetime"/> of 90.7
+    /// seconds issues an Entity Configuration, served over the real wire half a second past a whole second, whose
+    /// <c>exp</c> is 90 seconds after its <c>iat</c>.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task AnEntityConfigurationUnderAFractionalLifetimeLivesItsWholeSecondsAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> federationKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        Uri federationEntityId = new("https://fractional-verifier.example.com");
+        const string ClientId = "https://fractional-verifier.example.com";
+        using VerifierKeyMaterial keys = await app.RegisterFederationCapableClientAsync(
+            ClientId,
+            new Uri(ClientId),
+            federationEntityId,
+            federationKeys,
+            ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.OAuthAuthorizationCode)).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.Timings = TimingPolicy.Default with
+            {
+                FederationEntityConfigurationLifetime = TimeSpan.FromTicks(907_000_000L)
+            };
+        }).ConfigureAwait(false);
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        TimeProvider.Advance(TimeSpan.FromTicks(TimeSpan.TicksPerSecond / 2));
+
+        string compactEc = await AssertEndpointReturnsAsync(host,
+            $"/connect/{keys.Registration.TenantId.Value}/.well-known/openid-federation",
+            expectedContentType: WellKnownMediaTypes.Application.EntityStatementJwt).ConfigureAwait(false);
+        EntityStatement statement = ParseEntityConfiguration(compactEc);
+
+        Assert.AreEqual(TimeSpan.FromSeconds(90), statement.ExpiresAt - statement.IssuedAt, compactEc);
+    }
+
+
     [TestMethod]
     public async Task EntityConfigurationAdvertisesSupportedClientRegistrationTypes()
     {

@@ -1283,6 +1283,14 @@ internal sealed class ClientIdMetadataDocumentCrossWireFlowTests
                         ValueTask.FromResult<TokenExchangeAuthorization?>(null);
                     candidateIntegration.ValidatePreAuthorizedCodeAsync = static (_, _, _, _, _, _) =>
                         ValueTask.FromResult(PreAuthorizedCodeDecision.Deny(PreAuthorizedCodeDenialReason.InvalidCode));
+
+                    //OID4VCI 1.0 Section 13.10 refuses a plain bearer Credential token of the default hour before
+                    //the code-validation seam runs; the pre-authorized code row's case is that seam's denial, so the
+                    //server issues access tokens of five minutes.
+                    candidateIntegration.Timings = candidateIntegration.Timings with
+                    {
+                        AccessTokenLifetime = TimeSpan.FromMinutes(5)
+                    };
                     candidateIntegration.RevokeTokenAsync = static (_, _, _, _, _) => ValueTask.CompletedTask;
                     candidateIntegration.IntrospectTokenAsync = static (_, _, _, _, _) =>
                         ValueTask.FromResult(new TokenIntrospectionResult { IsActive = false });

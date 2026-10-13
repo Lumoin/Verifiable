@@ -65,7 +65,10 @@ public sealed record ResolveResponseContribution
     /// supplied the library clamps the response <c>exp</c> to it (never emitting a
     /// response that outlives what it was derived from); when <see langword="null"/>
     /// the library falls back to its configured Resolve Response lifetime, which a
-    /// §8.3.2-conformant resolver overrides by setting this.
+    /// Section 8.3.2 conformant resolver overrides by setting this. An instant that leaves
+    /// under one whole second after the response's issuance, the library's own rule
+    /// for a lifetime it issues, is never extended: the endpoint answers it with
+    /// Federation Section 8.9's <c>invalid_trust_chain</c> and signs nothing.
     /// </summary>
     public DateTimeOffset? ExpiresAt { get; init; }
 

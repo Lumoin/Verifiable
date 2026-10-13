@@ -2376,6 +2376,281 @@ internal sealed class TokenExchangeGrantTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.1">RFC 8693 Section 2.2.1</see>: "expires_in
+    /// RECOMMENDED. The validity lifetime, in seconds, of the token issued by the authorization server." A registration
+    /// whose own refresh-token lifetime is one hour, under a policy of 30 days, is answered <c>expires_in</c> 3600 over
+    /// the real wire for the refresh token a token exchange issues.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task AnExchangedRefreshTokensExpiresInStatesTheRegistrationsLifetimeAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterRefreshTokenExchangeClientAsync(app).ConfigureAwait(false);
+        (Uri tokenUrl, HttpClient http) =
+            await StartRefreshTokenExchangeHostAsync(app, material, TimeSpan.FromHours(1)).ConfigureAwait(false);
+
+        (int mintStatus, string mintBody) = await PostExchangeAsync(http, tokenUrl, TokenType.RefreshToken).ConfigureAwait(false);
+
+        Assert.AreEqual(200, mintStatus, mintBody);
+        using JsonDocument mintDoc = JsonDocument.Parse(mintBody);
+        Assert.AreEqual(3600L, mintDoc.RootElement.GetProperty("expires_in").GetInt64(), mintBody);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>: "invalid_grant The
+    /// provided authorization grant (e.g., authorization code, resource owner credentials) or refresh token is invalid,
+    /// expired, revoked, does not match the redirection URI used in the authorization request, or was issued to another
+    /// client." A registration whose own refresh-token lifetime is one hour, under a policy of 30 days, is issued a
+    /// refresh token by a token exchange that expires at the hour: presented at the refresh grant over the real wire one
+    /// hour and one minute later, it is refused <c>invalid_grant</c>.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task AnExchangedRefreshTokenExpiresAtTheRegistrationsLifetimeAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterRefreshTokenExchangeClientAsync(app).ConfigureAwait(false);
+        (Uri tokenUrl, HttpClient http) =
+            await StartRefreshTokenExchangeHostAsync(app, material, TimeSpan.FromHours(1)).ConfigureAwait(false);
+
+        (int mintStatus, string mintBody) = await PostExchangeAsync(http, tokenUrl, TokenType.RefreshToken).ConfigureAwait(false);
+        Assert.AreEqual(200, mintStatus, mintBody);
+        string refreshToken = ReadMember(mintBody, WellKnownTokenTypes.AccessToken);
+        TimeProvider.Advance(TimeSpan.FromHours(1) + TimeSpan.FromMinutes(1));
+
+        (int refreshStatus, string refreshBody) = await PostRefreshAsync(
+            http, tokenUrl, refreshToken, resource: null).ConfigureAwait(false);
+
+        Assert.AreEqual(400, refreshStatus, refreshBody);
+        Assert.Contains(OAuthErrors.InvalidGrant, refreshBody, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.1">RFC 8693 Section 2.2.1</see>: "expires_in
+    /// RECOMMENDED. The validity lifetime, in seconds, of the token issued by the authorization server." A refresh-token
+    /// lifetime that is not positive, set as a policy value of minus one minute through the application's policy
+    /// resolver, states no lifetime a token can be issued with. The library's own answer to a lifetime it cannot issue
+    /// is 500 <c>server_error</c>: the token exchange over the real wire is answered so and no refresh token is issued.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task AnExchangedRefreshTokenUnderANonPositiveLifetimeIsNotIssuedAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterRefreshTokenExchangeClientAsync(app).ConfigureAwait(false);
+        (Uri tokenUrl, HttpClient http) = await StartRefreshTokenExchangeHostAsync(app, material, null).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolvePolicyAsync = async (registration, context, ct) =>
+            {
+                await PolicyProfiles.DefaultResolvePolicyAsync((ClientRecord)registration, context, ct).ConfigureAwait(false);
+                context.SetRefreshTokenLifetime(TimeSpan.FromMinutes(-1));
+            };
+        }).ConfigureAwait(false);
+
+        (int mintStatus, string mintBody) = await PostExchangeAsync(http, tokenUrl, TokenType.RefreshToken).ConfigureAwait(false);
+
+        Assert.AreEqual(500, mintStatus, mintBody);
+        Assert.Contains("\"error\":\"server_error\"", mintBody, StringComparison.Ordinal);
+        Assert.DoesNotContain(WellKnownTokenTypes.AccessToken, mintBody, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// The library's own rule for a lifetime it cannot issue, at the token exchange of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.1">RFC 8693 Section 2.2.1</see>, whose response
+    /// states the issued token's lifetime in seconds: an access-token policy value of zero, set by the application's
+    /// policy resolver, states no lifetime the exchanged access token can be issued with, and the token endpoint answers
+    /// it itself without touching the presented subject token. The subject token is an access token this server issued
+    /// at an earlier exchange, held live in the application's token store until the expiry its response stated and
+    /// removed from it by the application's revocation seam. An impersonation exchange presenting it over the real wire
+    /// is answered with status 500 and exactly the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c>, the host
+    /// records no fault, no token is issued and the store still holds the subject token live; once the resolver sets
+    /// no such value the same request, presenting the same subject token, is answered 200 with an access token.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task AnAccessTokenUnderAZeroPolicyLifetimeIsNotIssuedAtTheTokenExchangeAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterTokenExchangeClientAsync(app).ConfigureAwait(false);
+        Dictionary<string, DateTimeOffset> liveTokens = new(StringComparer.Ordinal)
+        {
+            [SubjectTokenValue] = DateTimeOffset.MaxValue
+        };
+        Lock liveTokensLock = new();
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync = (token, tokenType, registration, context, ct) =>
+            {
+                lock(liveTokensLock)
+                {
+                    bool isLive = liveTokens.TryGetValue(token, out DateTimeOffset expiresAt) && TimeProvider.GetUtcNow() < expiresAt;
+
+                    return ValueTask.FromResult<ValidatedSecurityToken?>(isLive
+                        ? new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = GrantedScope }
+                        : null);
+                }
+            };
+            candidateIntegration.RevokeTokenAsync = (token, tokenTypeHint, registration, context, ct) =>
+            {
+                lock(liveTokensLock)
+                {
+                    _ = liveTokens.Remove(token);
+                }
+
+                return ValueTask.CompletedTask;
+            };
+            WirePermissivePolicy(candidateIntegration);
+        }).ConfigureAwait(false);
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        string issuedSubjectToken;
+        using(HttpResponseMessage issued = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, BuildImpersonationForm(SubjectTokenValue), TestContext.CancellationToken).ConfigureAwait(false))
+        {
+            string issuedBody = await issued.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.AreEqual(200, (int)issued.StatusCode, issuedBody);
+            using JsonDocument issuedDocument = JsonDocument.Parse(issuedBody);
+            issuedSubjectToken = issuedDocument.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+            int expiresIn = issuedDocument.RootElement.GetProperty("expires_in").GetInt32();
+            lock(liveTokensLock)
+            {
+                liveTokens[issuedSubjectToken] = TimeProvider.GetUtcNow().AddSeconds(expiresIn);
+            }
+        }
+
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolvePolicyAsync = async (registration, context, ct) =>
+            {
+                await PolicyProfiles.DefaultResolvePolicyAsync((ClientRecord)registration, context, ct).ConfigureAwait(false);
+                context.SetAccessTokenLifetime(TimeSpan.Zero);
+            };
+        }).ConfigureAwait(false);
+        OutgoingFormFields form = BuildImpersonationForm(issuedSubjectToken);
+
+        string refusedBody;
+        int refusedStatusCode;
+        using(HttpResponseMessage refused = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false))
+        {
+            refusedStatusCode = (int)refused.StatusCode;
+            refusedBody = await refused.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        }
+
+        Exception[] faults = host.ConsumeHttpFaults();
+
+        Assert.AreEqual(500, refusedStatusCode, refusedBody);
+        Assert.AreEqual(
+            "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}",
+            refusedBody);
+        Assert.IsEmpty(faults, string.Join(" | ", faults.Select(static fault => fault.Message)));
+        lock(liveTokensLock)
+        {
+            Assert.IsTrue(liveTokens.ContainsKey(issuedSubjectToken),
+                "The refused exchange must leave the presented subject token live in the application's token store.");
+        }
+
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolvePolicyAsync = static (registration, context, ct) =>
+                PolicyProfiles.DefaultResolvePolicyAsync((ClientRecord)registration, context, ct);
+        }).ConfigureAwait(false);
+        using HttpResponseMessage exchanged = await OAuthTestTransport.PostFormAsync(
+            host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+        string exchangedBody = await exchanged.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)exchanged.StatusCode, exchangedBody);
+        Assert.Contains($"\"{WellKnownTokenTypes.AccessToken}\":", exchangedBody, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// Builds an impersonation exchange of <paramref name="subjectToken"/>, presented as an access token, with the
+    /// fixture client's <c>client_secret_post</c> credentials.
+    /// </summary>
+    /// <param name="subjectToken">The subject token the exchange presents.</param>
+    /// <returns>The token request's form.</returns>
+    private static OutgoingFormFields BuildImpersonationForm(string subjectToken) =>
+        BuildRequest(new TokenExchangeBuilderOptions
+        {
+            SubjectToken = subjectToken,
+            SubjectTokenType = TokenType.AccessToken
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+
+    /// <summary>
+    /// Registers the fixture's client with token exchange, the code grant (which the refresh grant's endpoint match
+    /// requires) and the discovery and key-set endpoints.
+    /// </summary>
+    /// <param name="app">The test host the client is registered on.</param>
+    /// <returns>The registered client's key material.</returns>
+    private static Task<VerifierKeyMaterial> RegisterRefreshTokenExchangeClientAsync(TestHostShell app) =>
+        app.RegisterDpopClientAsync(
+            ClientId,
+            new Uri(ClientId),
+            profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: ImmutableHashSet.Create(
+                WellKnownCapabilityIdentifiers.OAuthTokenExchange,
+                WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
+                WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
+                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
+
+
+    /// <summary>
+    /// Sets <paramref name="material"/>'s registration refresh-token lifetime to <paramref name="refreshTokenLifetime"/>,
+    /// wires client authentication and an authorization seam that answers every exchange with a refresh token for
+    /// <c>openid</c>, and starts the host.
+    /// </summary>
+    /// <param name="app">The test host the client is registered on.</param>
+    /// <param name="material">The registered client.</param>
+    /// <param name="refreshTokenLifetime">
+    /// The registration's own refresh-token lifetime, or <see langword="null"/> for a registration that sets none.
+    /// </param>
+    /// <returns>The token endpoint and the client the host is reached with.</returns>
+    private async Task<(Uri TokenUrl, HttpClient Http)> StartRefreshTokenExchangeHostAsync(
+        TestHostShell app, VerifierKeyMaterial material, TimeSpan? refreshTokenLifetime)
+    {
+        if(refreshTokenLifetime is TimeSpan registered)
+        {
+            await app.SetTokenLifetimeAsync(material, WellKnownTokenTypes.RefreshToken, registered, TestContext.CancellationToken).ConfigureAwait(false);
+        }
+
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateTokenExchangeTokenAsync =
+                static (token, tokenType, registration, context, ct) =>
+                    ValueTask.FromResult<ValidatedSecurityToken?>(
+                        new ValidatedSecurityToken { Subject = SubjectIdentity, Scope = WellKnownScopes.OpenId });
+
+            candidateIntegration.AuthorizeTokenExchangeAsync =
+                static (subject, actor, request, registration, context, ct) =>
+                    ValueTask.FromResult<TokenExchangeAuthorization?>(
+                        new TokenExchangeAuthorization
+                        {
+                            Subject = subject.Subject,
+                            Scope = WellKnownScopes.OpenId,
+                            IssuedTokenType = TokenType.RefreshToken
+                        });
+        }).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        return (tokenUrl, host.SharedHttpClient!);
+    }
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 §5</see>: "This is
     /// applicable for all access token requests regardless of grant type." A <c>subject_token</c>
     /// whose validated claims surface a <c>cnf.jkt</c> binding

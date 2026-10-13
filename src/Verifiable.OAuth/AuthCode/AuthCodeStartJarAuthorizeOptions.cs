@@ -1,13 +1,14 @@
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth.Client;
+using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.AuthCode;
 
 /// <summary>
 /// Per-call inputs for
 /// <see cref="AuthCodeClient.StartJarAuthorizeAsync(ClientRegistration, AuthCodeStartJarAuthorizeOptions, CancellationToken)"/> — the JAR-by-value
-/// direct authorization flow per RFC 9101 §6.1. The client signs a JAR with
+/// direct authorization flow per RFC 9101 Section 5.1. The client signs a JAR with
 /// the AuthCode claims and constructs a redirect URL whose query carries
 /// <c>request=&lt;compact-jws&gt;</c> and the outer <c>client_id</c>; the user
 /// agent follows the URL to the Authorization Server's authorize endpoint.
@@ -72,9 +73,21 @@ public sealed record AuthCodeStartJarAuthorizeOptions
     public string? Nonce { get; init; }
 
     /// <summary>
-    /// The JAR's lifetime — used to compute the <c>exp</c> claim relative to
-    /// <c>iat</c>. Defaults to thirty seconds; servers commonly cap JAR
-    /// lifetimes at one minute per RFC 9101 §10.2 guidance.
+    /// The JAR's lifetime: the <c>exp</c> claim is the <c>iat</c> plus this value. Defaults to thirty seconds, the
+    /// library's own value.
     /// </summary>
-    public TimeSpan JarLifetime { get; init; } = TimeSpan.FromSeconds(30);
+    /// <remarks>
+    /// The library writes the request object's <c>iat</c> and <c>exp</c> as whole-second NumericDates, so the value
+    /// is at least one and at most <see cref="int.MaxValue"/> whole seconds, the library's own rule: the <c>init</c>
+    /// accessor refuses any other value with <see cref="ArgumentOutOfRangeException"/> and holds an issuable value as
+    /// its whole seconds.
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The value's whole seconds are under one or above <see cref="int.MaxValue"/>.
+    /// </exception>
+    public TimeSpan JarLifetime
+    {
+        get;
+        init => field = TokenLifetimes.RequireIssuable(value, nameof(JarLifetime));
+    } = TimeSpan.FromSeconds(30);
 }

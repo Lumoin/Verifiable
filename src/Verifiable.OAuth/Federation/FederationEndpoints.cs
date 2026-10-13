@@ -1041,6 +1041,16 @@ public static class FederationEndpoints
                     expiresAt = contributionExpiry;
                 }
 
+                //The library's own rule for a lifetime it issues: the time the minimum leaves after now is at least one
+                //whole second (TokenLifetimes.IsIssuable), since iat and exp are written as whole-second NumericDates.
+                //The exp stays the minimum Section 8.3.2 names and is never extended; a resolution that leaves less is
+                //a Trust Chain that cannot be validated by the time the response is read, answered with Section 8.9's
+                //invalid_trust_chain and nothing signed.
+                if(!TokenLifetimes.IsIssuable(expiresAt - now, out _))
+                {
+                    return (null, BuildFederationResolveErrorResponse(FederationResolveError.InvalidTrustChain, subject));
+                }
+
                 string alg = CryptoFormatConversions.DefaultTagToJwaConverter(privateKey.Tag);
 
                 Dictionary<string, object> headerDict =

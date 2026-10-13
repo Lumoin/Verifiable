@@ -31,8 +31,24 @@ public sealed record ClientAssertionOptions
     /// <summary>Serialises the client-assertion payload claims to UTF-8 JSON bytes.</summary>
     public required JwtPayloadSerializer PayloadSerializer { get; init; }
 
-    /// <summary>The validity window of the signed client assertion (RFC 7523 §3). Defaults to one minute.</summary>
-    public TimeSpan ClientAssertionLifetime { get; init; } = TimeSpan.FromMinutes(1);
+    /// <summary>
+    /// The validity window of the signed client assertion (RFC 7523 Section 3): its <c>exp</c> less its <c>iat</c>. Defaults
+    /// to one minute, the library's own value.
+    /// </summary>
+    /// <remarks>
+    /// The library writes the assertion's <c>iat</c> and <c>exp</c> as whole-second NumericDates, so the value is at
+    /// least one and at most <see cref="int.MaxValue"/> whole seconds, the library's own rule: the <c>init</c> accessor
+    /// refuses any other value with <see cref="ArgumentOutOfRangeException"/> and holds an issuable value as its whole
+    /// seconds.
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The value's whole seconds are under one or above <see cref="int.MaxValue"/>.
+    /// </exception>
+    public TimeSpan ClientAssertionLifetime
+    {
+        get;
+        init => field = TokenLifetimes.RequireIssuable(value, nameof(ClientAssertionLifetime));
+    } = TimeSpan.FromMinutes(1);
 }
 
 
@@ -75,11 +91,18 @@ public static class ClientTokenEndpointAuthentication
     /// <param name="signingKeyId">The <c>kid</c> header parameter value identifying the key to the AS.</param>
     /// <param name="headerSerializer">Serialises the protected header to UTF-8 JSON bytes.</param>
     /// <param name="payloadSerializer">Serialises the payload claims to UTF-8 JSON bytes.</param>
-    /// <param name="clientAssertionLifetime">The assertion's validity window (RFC 7523 Section 3 rule 4).</param>
+    /// <param name="clientAssertionLifetime">
+    /// The assertion's validity window (RFC 7523 Section 3 rule 4): at least one and at most <see cref="int.MaxValue"/>
+    /// whole seconds, the library's own rule, issued as its whole seconds.
+    /// </param>
     /// <param name="infrastructure">Supplies the <c>jti</c> generator, the encoder, and the memory pool.</param>
     /// <param name="now">The instant the assertion's <c>iat</c> and <c>exp</c> are computed from.</param>
     /// <param name="context">The per-operation exchange context passed to the <c>jti</c> generator.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The whole seconds of <paramref name="clientAssertionLifetime"/> are under one or above <see cref="int.MaxValue"/>;
+    /// nothing is added to <paramref name="form"/>.
+    /// </exception>
     public static async ValueTask AttachClientAssertionAsync(
         OutgoingFormFields form,
         ClientRegistration registration,
@@ -99,6 +122,10 @@ public static class ClientTokenEndpointAuthentication
         ArgumentNullException.ThrowIfNull(registration.ClientAssertionAudience);
         ArgumentNullException.ThrowIfNull(tokenEndpoint);
         ArgumentNullException.ThrowIfNull(infrastructure);
+
+        //The library writes iat and exp as whole-second NumericDates, so the assertion is issued for the whole
+        //seconds of its lifetime, at least one.
+        TimeSpan issuedLifetime = TokenLifetimes.RequireIssuable(clientAssertionLifetime, nameof(clientAssertionLifetime));
 
         string jti = await infrastructure.GenerateIdentifierAsync(
             WellKnownIdentifierPurposes.OAuthJti, context, cancellationToken).ConfigureAwait(false);
@@ -125,7 +152,7 @@ public static class ClientTokenEndpointAuthentication
             audience,
             jti,
             now,
-            now.Add(clientAssertionLifetime),
+            now.Add(issuedLifetime),
             signingKey,
             signingKeyId,
             type,

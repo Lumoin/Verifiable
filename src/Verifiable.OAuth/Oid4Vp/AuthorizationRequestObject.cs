@@ -27,13 +27,10 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// Property names <see cref="Iat"/>, <see cref="Nbf"/>, <see cref="Exp"/> match
 /// the JWT claim abbreviations defined in
 /// <see href="https://www.rfc-editor.org/rfc/rfc7519">RFC 7519 §4.1.4–§4.1.6</see>.
-/// All three are required because
-/// <see href="https://openid.net/specs/fapi-2_0-security-profile.html">FAPI 2.0 Security Profile §5.2.2</see>
-/// Clause 13 mandates an <c>exp</c> claim and constrains the <c>exp - nbf</c>
-/// window. Setting them unconditionally keeps the library conformant with the
-/// most demanding profile it supports;
-/// <see cref="Verifiable.OAuth.Server.TimingPolicy.Oid4VpRequestObjectLifetime"/> controls the
-/// chosen window.
+/// All three are required by the library's own rule: every request object it signs
+/// carries an <c>exp</c> claim, and its <c>exp - nbf</c> window is the library's own
+/// ceiling, <see cref="Verifiable.OAuth.Server.TimingPolicy.Oid4VpRequestObjectLifetime"/>
+/// (60 seconds by default), which controls the chosen window.
 /// </para>
 /// <para>
 /// The <see cref="State"/> claim is OPTIONAL per OID4VP 1.0 §5 / RFC 6749 §4.1.1 — a
@@ -118,9 +115,8 @@ public sealed class AuthorizationRequestObject: IEquatable<AuthorizationRequestO
 
     /// <summary>
     /// The instant after which the Authorization Request Object MUST NOT be
-    /// accepted. REQUIRED per
-    /// <see href="https://openid.net/specs/fapi-2_0-security-profile.html">FAPI 2.0 §5.2.2</see>
-    /// Clause 13. Serialized as the <c>exp</c> JWT claim per
+    /// accepted. REQUIRED by the library's own rule for every request object it
+    /// signs. Serialized as the <c>exp</c> JWT claim per
     /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.4">RFC 7519 §4.1.4</see>.
     /// </summary>
     public required DateTimeOffset Exp { get; init; }

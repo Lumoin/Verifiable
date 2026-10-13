@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Collections.Immutable;
+using System.Globalization;
 using System.Text.Json;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -103,6 +104,56 @@ internal sealed class FederationFetchEndpointTests
             anchorKeys.PublicKey,
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(verified, "The Subordinate Statement must verify under the anchor's federation key.");
+    }
+
+
+    /// <summary>
+    /// The library's own rule for a lifetime it issues: the library writes a Subordinate Statement's <c>iat</c> and
+    /// <c>exp</c> (<see href="https://openid.net/specs/openid-federation-1_0.html#section-3.1.1">OpenID Federation 1.0
+    /// Section 3.1.1</see>) as whole-second NumericDates, and every lifetime the server's <see cref="TimingPolicy"/>
+    /// holds is its whole seconds, so a <see cref="TimingPolicy.FederationEntityConfigurationLifetime"/> of 90.7
+    /// seconds issues a Subordinate Statement, fetched over the real wire half a second past a whole second, whose
+    /// <c>exp</c> is 90 seconds after its <c>iat</c>.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task ASubordinateStatementUnderAFractionalLifetimeLivesItsWholeSecondsAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> anchorKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using VerifierKeyMaterial anchor = await RegisterAnchorAsync(app, anchorKeys).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveSubordinateStatementAsync = static (subject, _, _, _) =>
+                ValueTask.FromResult<SubordinateStatementContribution?>(new SubordinateStatementContribution
+                {
+                    Jwks = new Dictionary<string, object>(StringComparer.Ordinal)
+                    {
+                        ["keys"] = new List<object>()
+                    }
+                });
+            candidateIntegration.Timings = TimingPolicy.Default with
+            {
+                FederationEntityConfigurationLifetime = TimeSpan.FromTicks(907_000_000L)
+            };
+        }).ConfigureAwait(false);
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        TimeProvider.Advance(TimeSpan.FromTicks(TimeSpan.TicksPerSecond / 2));
+
+        string compact = await GetAsync(
+            host,
+            $"/connect/{anchor.Registration.TenantId.Value}/federation_fetch?sub={Uri.EscapeDataString(SubordinateEntityId)}",
+            expectedStatus: 200,
+            expectedContentType: WellKnownMediaTypes.Application.EntityStatementJwt).ConfigureAwait(false);
+        Dictionary<string, object> payload = DecodeSegment(compact, 1);
+
+        Assert.AreEqual(
+            90L,
+            Convert.ToInt64(payload["exp"], CultureInfo.InvariantCulture)
+                - Convert.ToInt64(payload["iat"], CultureInfo.InvariantCulture),
+            compact);
     }
 
 

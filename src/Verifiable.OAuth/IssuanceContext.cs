@@ -44,9 +44,10 @@ namespace Verifiable.OAuth;
 /// access token, ID token, and any other tokens emitted by the same request.
 /// </para>
 /// <para>
-/// Per-token expiry is derived inside each producer from
-/// <see cref="ClientRecord.GetTokenLifetime"/> using the producer's own token
-/// type constant — different token types have different lifetimes.
+/// Each producer resolves its token's expiry through
+/// <see cref="TokenLifetimes.TryResolve"/> with its own <see cref="Client.TokenType"/>:
+/// the registration's override (<see cref="ClientRecord.GetTokenLifetime"/>), else the
+/// request's policy value of that kind, else the server's <see cref="TimingPolicy"/>.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("IssuanceContext Subject={Subject} Client={ClientId} Issuer={IssuerUri}")]

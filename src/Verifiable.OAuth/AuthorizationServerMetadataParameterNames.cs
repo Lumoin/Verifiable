@@ -231,7 +231,8 @@ public static class AuthorizationServerMetadataParameterNames
 
     /// <summary>
     /// Whether the authorization server requires Pushed Authorization Requests (RFC 9126 §5).
-    /// FAPI 2.0 §5.2.2 mandates this be <see langword="true"/>.
+    /// FAPI 2.0 Security Profile Section 5.3.2.2 mandates pushed authorization requests, so a FAPI 2.0
+    /// deployment advertises this as <see langword="true"/>.
     /// </summary>
     public static string RequirePushedAuthorizationRequests { get; } = Utf8Constants.ToInternedString(RequirePushedAuthorizationRequestsUtf8);
 

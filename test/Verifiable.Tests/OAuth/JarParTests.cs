@@ -1120,7 +1120,7 @@ internal sealed class JarParTests
     [TestMethod]
     public async Task RejectsRequestWithBothCodeChallengeAndRequestParameter()
     {
-        //RFC 9101 §6.1 — outer parameters must be ignored when a JAR is present.
+        //RFC 9101 Section 6.3: outer parameters must be ignored when a JAR is present.
         //The matcher routing puts a body carrying 'request' onto the JAR-PAR
         //matcher regardless of any outer code_challenge. Confirm the response
         //is a JAR validation outcome (200 happy path here), not the PKCE one.

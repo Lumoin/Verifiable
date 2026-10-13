@@ -607,7 +607,7 @@ public static class MetadataEndpoints
                             CodeChallengeMethodS256,
                             emittedFieldNames);
 
-                        //FAPI 2.0 §5.2.2 / RFC 9207: advertise whether PAR is mandatory and
+                        //FAPI 2.0 Security Profile Section 5.3.2.2 / RFC 9207: advertise whether PAR is mandatory and
                         //whether the iss authorization-response parameter is emitted. Both
                         //come from the resolved policy so the advertisement matches enforcement.
                         AppendBooleanField(

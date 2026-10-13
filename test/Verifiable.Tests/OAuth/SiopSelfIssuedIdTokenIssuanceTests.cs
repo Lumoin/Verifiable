@@ -181,6 +181,98 @@ resolver,
     }
 
 
+    /// <summary>
+    /// The library's own rule for a lifetime it issues: the wallet writes the <c>iat</c> and <c>exp</c> of a Self-Issued
+    /// ID Token (<see href="https://openid.net/specs/openid-connect-self-issued-v2-1_0.html#section-11">Self-Issued
+    /// OpenID Provider v2 Section 11</see>) as whole-second NumericDates, so it issues the token for the whole seconds of
+    /// the lifetime it is given: 90.7 seconds, issued half a second past a whole second, stamps an <c>exp</c> 90 seconds
+    /// after the <c>iat</c>, under the JWK Thumbprint and the Decentralized Identifier Subject Syntax Types alike.
+    /// </summary>
+    /// <param name="subjectSyntaxType">The Subject Syntax Type the token is issued under.</param>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DataRow(JwkThumbprintSubject)]
+    [DataRow(DecentralizedIdentifierSubject)]
+    public async Task ASelfIssuedIdTokenUnderAFractionalLifetimeLivesItsWholeSecondsAsync(string subjectSyntaxType)
+    {
+        DateTimeOffset issuedAt = TimeProvider.GetUtcNow() + TimeSpan.FromTicks(TimeSpan.TicksPerSecond / 2);
+
+        string idToken = await IssueUnderSubjectSyntaxTypeAsync(
+            subjectSyntaxType, issuedAt, TimeSpan.FromTicks(907_000_000L)).ConfigureAwait(false);
+
+        using JsonDocument payload = ParseSegment(idToken.Split('.')[1]);
+        long iat = payload.RootElement.GetProperty(WellKnownJwtClaimNames.Iat).GetInt64();
+        long exp = payload.RootElement.GetProperty(WellKnownJwtClaimNames.Exp).GetInt64();
+        Assert.AreEqual(90L, exp - iat, idToken);
+    }
+
+
+    /// <summary>
+    /// The library's own rule for a lifetime it issues: the wallet writes the <c>iat</c> and <c>exp</c> of a Self-Issued
+    /// ID Token (<see href="https://openid.net/specs/openid-connect-self-issued-v2-1_0.html#section-11">Self-Issued
+    /// OpenID Provider v2 Section 11</see>) as whole-second NumericDates, so a lifetime under one second would issue a
+    /// token whose <c>exp</c> equals its <c>iat</c>. The lifetime is the caller's own argument: 500 milliseconds is
+    /// refused with <see cref="ArgumentOutOfRangeException"/> under both Subject Syntax Types.
+    /// </summary>
+    /// <param name="subjectSyntaxType">The Subject Syntax Type the token is issued under.</param>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DataRow(JwkThumbprintSubject)]
+    [DataRow(DecentralizedIdentifierSubject)]
+    public async Task ASelfIssuedIdTokenLifetimeUnderOneSecondIsRefusedAsync(string subjectSyntaxType)
+    {
+        _ = await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(async () =>
+        {
+            _ = await IssueUnderSubjectSyntaxTypeAsync(
+                subjectSyntaxType, TimeProvider.GetUtcNow(), TimeSpan.FromMilliseconds(500)).ConfigureAwait(false);
+        }).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// The row value naming the JWK Thumbprint Subject Syntax Type. A constant because <see cref="DataRowAttribute"/>
+    /// takes compile-time constants only.
+    /// </summary>
+    private const string JwkThumbprintSubject = "jwk thumbprint";
+
+    /// <summary>
+    /// The row value naming the Decentralized Identifier Subject Syntax Type. A constant because
+    /// <see cref="DataRowAttribute"/> takes compile-time constants only.
+    /// </summary>
+    private const string DecentralizedIdentifierSubject = "decentralized identifier";
+
+
+    /// <summary>
+    /// Issues a Self-Issued ID Token under <paramref name="subjectSyntaxType"/> with a fresh P-256 key, for the request's
+    /// client and nonce.
+    /// </summary>
+    /// <param name="subjectSyntaxType">The Subject Syntax Type: <see cref="JwkThumbprintSubject"/> or <see cref="DecentralizedIdentifierSubject"/>.</param>
+    /// <param name="issuedAt">The <c>iat</c> instant.</param>
+    /// <param name="lifetime">The lifetime the token is issued with.</param>
+    /// <returns>The compact-serialised Self-Issued ID Token.</returns>
+    private async Task<string> IssueUnderSubjectSyntaxTypeAsync(string subjectSyntaxType, DateTimeOffset issuedAt, TimeSpan lifetime)
+    {
+        const string Did = "did:example:NzbLsXh8uDCcd6MNwXF4W7noWXFZAfHkxZsRGC9Xs";
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory subjectPublic = keys.PublicKey;
+        using PrivateKeyMemory subjectPrivate = keys.PrivateKey;
+
+        return subjectSyntaxType switch
+        {
+            JwkThumbprintSubject => await SelfIssuedIdTokenIssuance.IssueWithJwkThumbprintAsync(
+                subjectPrivate, subjectPublic, ClientId, RequestNonce, issuedAt, lifetime,
+                TestSetup.Base64UrlEncoder, HeaderSerializer, PayloadSerializer, Pool,
+                TestContext.CancellationToken).ConfigureAwait(false),
+            DecentralizedIdentifierSubject => await SelfIssuedIdTokenIssuance.IssueWithDecentralizedIdentifierAsync(
+                subjectPrivate, Did, Did + "#key-1", ClientId, RequestNonce, issuedAt, lifetime,
+                TestSetup.Base64UrlEncoder, HeaderSerializer, PayloadSerializer, Pool,
+                TestContext.CancellationToken).ConfigureAwait(false),
+            _ => throw new ArgumentOutOfRangeException(nameof(subjectSyntaxType), subjectSyntaxType, "Unknown Subject Syntax Type.")
+        };
+    }
+
+
     private static JsonDocument ParseSegment(string segment)
     {
         using IMemoryOwner<byte> bytes = TestSetup.Base64UrlDecoder(segment, Pool);

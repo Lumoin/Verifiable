@@ -265,6 +265,135 @@ internal sealed class IdJagGrantTests
 
 
     /// <summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.3.4">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.3.4</see>:
+    /// "expires_in:  RECOMMENDED - The lifetime in seconds of the authorization grant." A server whose
+    /// <see cref="TimingPolicy.IdJagLifetime"/> is two minutes, with no registration override, mints an ID-JAG over the
+    /// real wire whose <c>exp</c> is 120 seconds after its <c>iat</c>, and the response's <c>expires_in</c> is 120.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task MintedIdJagLivesTheServersTimingPolicyLifetimeAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
+        await WireMintSeamsAsync(app, ChatScope, resourceClientId: null).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.Timings = TimingPolicy.Default with { IdJagLifetime = TimeSpan.FromMinutes(2) };
+        }).ConfigureAwait(false);
+
+        (long lifetimeSeconds, long expiresIn) = await MintAndReadLifetimeAsync(app, material).ConfigureAwait(false);
+
+        Assert.AreEqual(120L, lifetimeSeconds, "The ID-JAG's exp less its iat must be the server's IdJagLifetime.");
+        Assert.AreEqual(120L, expiresIn, "The response's expires_in must state the same lifetime.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.3.4">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.3.4</see>:
+    /// "expires_in:  RECOMMENDED - The lifetime in seconds of the authorization grant." A registration whose own
+    /// ID-JAG lifetime is 90 seconds, on a server whose <see cref="TimingPolicy.IdJagLifetime"/> is two minutes, is
+    /// minted an ID-JAG over the real wire whose <c>exp</c> is 90 seconds after its <c>iat</c>, and the response's
+    /// <c>expires_in</c> is 90: the registration's override wins.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task MintedIdJagLivesTheRegistrationsLifetimeAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
+        await WireMintSeamsAsync(app, ChatScope, resourceClientId: null).ConfigureAwait(false);
+        await app.SetTokenLifetimeAsync(material, WellKnownTokenTypes.IdJag, TimeSpan.FromSeconds(90), TestContext.CancellationToken).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.Timings = TimingPolicy.Default with { IdJagLifetime = TimeSpan.FromMinutes(2) };
+        }).ConfigureAwait(false);
+
+        (long lifetimeSeconds, long expiresIn) = await MintAndReadLifetimeAsync(app, material).ConfigureAwait(false);
+
+        Assert.AreEqual(90L, lifetimeSeconds, "The ID-JAG's exp less its iat must be the registration's override.");
+        Assert.AreEqual(90L, expiresIn, "The response's expires_in must state the same lifetime.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.3.4">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.3.4</see>:
+    /// "expires_in:  RECOMMENDED - The lifetime in seconds of the authorization grant." With no registration override
+    /// and the default <see cref="TimingPolicy"/>, an ID-JAG minted over the real wire has an <c>exp</c> 300 seconds
+    /// after its <c>iat</c>, and the response's <c>expires_in</c> is 300.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task MintedIdJagUnderTheDefaultsLivesFiveMinutesAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
+        await WireMintSeamsAsync(app, ChatScope, resourceClientId: null).ConfigureAwait(false);
+
+        (long lifetimeSeconds, long expiresIn) = await MintAndReadLifetimeAsync(app, material).ConfigureAwait(false);
+
+        Assert.AreEqual(300L, lifetimeSeconds, "The ID-JAG's exp less its iat must be the five-minute default.");
+        Assert.AreEqual(300L, expiresIn, "The response's expires_in must state the same lifetime.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant-04#section-4.3.4">draft-ietf-oauth-identity-assertion-authz-grant-04 Section 4.3.4</see>:
+    /// "expires_in:  RECOMMENDED - The lifetime in seconds of the authorization grant." A registration's own ID-JAG
+    /// lifetime of zero states no lifetime a grant can be issued with; the library's rule for the application's own
+    /// argument refuses it where the registration is built, with <see cref="ArgumentOutOfRangeException"/>, so the host
+    /// keeps the registration it held, and the mint over the real wire is issued under the server's five minutes: an
+    /// <c>exp</c> 300 seconds after its <c>iat</c> and an <c>expires_in</c> of 300.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task AZeroRegistrationIdJagLifetimeIsRefusedAndTheMintKeepsTheServersLifetimeAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterIdJagClientAsync(app).ConfigureAwait(false);
+        await WireMintSeamsAsync(app, ChatScope, resourceClientId: null).ConfigureAwait(false);
+
+        _ = await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
+            () => app.SetTokenLifetimeAsync(material, WellKnownTokenTypes.IdJag, TimeSpan.Zero, TestContext.CancellationToken))
+            .ConfigureAwait(false);
+        (long lifetimeSeconds, long expiresIn) = await MintAndReadLifetimeAsync(app, material).ConfigureAwait(false);
+
+        Assert.AreEqual(300L, lifetimeSeconds, "The ID-JAG's exp less its iat must be the server's five minutes.");
+        Assert.AreEqual(300L, expiresIn, "The response's expires_in must state the same lifetime.");
+    }
+
+
+    /// <summary>
+    /// Starts the host, mints an ID-JAG for <see cref="ResourceAsIssuer"/> over the real wire, asserts the mint
+    /// succeeded and reads the lifetime the grant states (its <c>exp</c> less its <c>iat</c>) and the response's
+    /// <c>expires_in</c>.
+    /// </summary>
+    /// <param name="app">The test host whose mint seams the row has wired.</param>
+    /// <param name="material">The registered client.</param>
+    /// <returns>The grant's stated lifetime in seconds and the response's <c>expires_in</c>.</returns>
+    private async Task<(long LifetimeSeconds, long ExpiresIn)> MintAndReadLifetimeAsync(
+        TestHostShell app, VerifierKeyMaterial material)
+    {
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        using HttpResponseMessage response = await PostMintAsync(host.SharedHttpClient!, tokenUrl, ResourceAsIssuer)
+            .ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)response.StatusCode, body);
+
+        using JsonDocument doc = JsonDocument.Parse(body);
+        string jag = doc.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+        using JsonDocument payload = DecodePayload(jag);
+        long lifetimeSeconds = payload.RootElement.GetProperty(WellKnownJwtClaimNames.Exp).GetInt64()
+            - payload.RootElement.GetProperty(WellKnownJwtClaimNames.Iat).GetInt64();
+
+        return (lifetimeSeconds, doc.RootElement.GetProperty("expires_in").GetInt64());
+    }
+
+
+    /// <summary>
     /// §4.3: <c>audience</c> is REQUIRED for an id-jag exchange — it names the Resource Authorization
     /// Server. A request omitting it is malformed (<c>invalid_request</c>), not a grant failure.
     /// </summary>
@@ -10179,7 +10308,7 @@ internal sealed class IdJagGrantTests
 
         Assert.AreEqual(400, statusCode, body);
         Assert.AreEqual(
-            """{"error":"invalid_request","error_description":"This authorization server requires Pushed Authorization Requests; a direct authorization request is not accepted (FAPI 2.0 5.2.2)."}""",
+            """{"error":"invalid_request","error_description":"This authorization server requires Pushed Authorization Requests; a direct authorization request is not accepted (FAPI 2.0 Security Profile Section 5.3.2.2)."}""",
             body);
     }
 
@@ -10233,7 +10362,7 @@ internal sealed class IdJagGrantTests
 
         Assert.AreEqual(400, statusCode, body);
         Assert.AreEqual(
-            """{"error":"invalid_request","error_description":"This authorization server requires Pushed Authorization Requests; a direct authorization request is not accepted (FAPI 2.0 5.2.2)."}""",
+            """{"error":"invalid_request","error_description":"This authorization server requires Pushed Authorization Requests; a direct authorization request is not accepted (FAPI 2.0 Security Profile Section 5.3.2.2)."}""",
             body);
     }
 

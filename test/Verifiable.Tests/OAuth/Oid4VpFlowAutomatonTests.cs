@@ -481,4 +481,164 @@ internal sealed class Oid4VpFlowAutomatonTests
 
     private static PreparedDcqlQuery CreatePreparedQuery() =>
         DcqlFixtures.PidFamilyNamePrepared();
+
+
+    /// <summary>
+    /// The library's rule for the caller's own argument: the library writes a request object's <c>iat</c> and
+    /// <c>exp</c> as whole-second NumericDates, so a request object lifetime under one second would make <c>exp</c>
+    /// equal <c>iat</c>, and <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.4">RFC 7519 Section
+    /// 4.1.4</see> names <c>exp</c> the time "on or after which the JWT MUST NOT be accepted for processing".
+    /// <see cref="HaipProfile.BuildJarAsync"/> and <see cref="HaipProfile.BuildUnsignedJarAsync"/> refuse a lifetime of
+    /// 500 milliseconds with <see cref="ArgumentOutOfRangeException"/>.
+    /// </summary>
+    /// <param name="builder">The builder the row calls: <see cref="SignedBuilder"/> or <see cref="UnsignedBuilder"/>.</param>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DataRow(SignedBuilder)]
+    [DataRow(UnsignedBuilder)]
+    public async Task ARequestObjectBuilderRefusesASubSecondLifetimeAsync(string builder)
+    {
+        _ = await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
+            () => BuildRequestObjectWithAsync(builder, TimeSpan.FromMilliseconds(500))).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// The library's rule for the caller's own argument: the library writes a request object's <c>iat</c> and
+    /// <c>exp</c> as whole-second NumericDates, so one second is the shortest lifetime a request object is issued with:
+    /// <see cref="HaipProfile.BuildJarAsync"/> and <see cref="HaipProfile.BuildUnsignedJarAsync"/> stamp an <c>exp</c>
+    /// one second after the <c>iat</c>.
+    /// </summary>
+    /// <param name="builder">The builder the row calls: <see cref="SignedBuilder"/> or <see cref="UnsignedBuilder"/>.</param>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DataRow(SignedBuilder)]
+    [DataRow(UnsignedBuilder)]
+    public async Task ARequestObjectBuilderStampsALifetimeOfOneSecondAsync(string builder)
+    {
+        string compactJar = await BuildRequestObjectWithAsync(builder, TimeSpan.FromSeconds(1)).ConfigureAwait(false);
+
+        using JsonDocument payload = JwtPayloadReader.ParsePayloadJson(compactJar);
+        Assert.AreEqual(
+            1L,
+            payload.RootElement.GetProperty(WellKnownJwtClaimNames.Exp).GetInt64()
+                - payload.RootElement.GetProperty(WellKnownJwtClaimNames.Iat).GetInt64());
+    }
+
+
+    /// <summary>
+    /// The library's rule for the caller's own argument: the library writes a request object's <c>iat</c> and
+    /// <c>exp</c> as whole-second NumericDates, so it issues a request object for the whole seconds of its lifetime.
+    /// <see cref="HaipProfile.BuildJarAsync"/> and <see cref="HaipProfile.BuildUnsignedJarAsync"/> under a lifetime of
+    /// 90.7 seconds, the request object issued half a second past a whole second, stamp an <c>exp</c> 90 seconds after
+    /// the <c>iat</c>.
+    /// </summary>
+    /// <param name="builder">The builder the row calls: <see cref="SignedBuilder"/> or <see cref="UnsignedBuilder"/>.</param>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DataRow(SignedBuilder)]
+    [DataRow(UnsignedBuilder)]
+    public async Task ARequestObjectBuilderStampsTheWholeSecondsOfAFractionalLifetimeAsync(string builder)
+    {
+        TimeProvider.Advance(TimeSpan.FromTicks(TimeSpan.TicksPerSecond / 2));
+
+        string compactJar = await BuildRequestObjectWithAsync(builder, TimeSpan.FromTicks(907_000_000L)).ConfigureAwait(false);
+
+        using JsonDocument payload = JwtPayloadReader.ParsePayloadJson(compactJar);
+        Assert.AreEqual(
+            90L,
+            payload.RootElement.GetProperty(WellKnownJwtClaimNames.Exp).GetInt64()
+                - payload.RootElement.GetProperty(WellKnownJwtClaimNames.Iat).GetInt64(),
+            compactJar);
+    }
+
+
+    /// <summary>
+    /// The row value naming <see cref="HaipProfile.BuildJarAsync"/>. A constant because <see cref="DataRowAttribute"/>
+    /// takes compile-time constants only.
+    /// </summary>
+    private const string SignedBuilder = "signed";
+
+
+    /// <summary>
+    /// The row value naming <see cref="HaipProfile.BuildUnsignedJarAsync"/>. A constant because
+    /// <see cref="DataRowAttribute"/> takes compile-time constants only.
+    /// </summary>
+    private const string UnsignedBuilder = "unsigned";
+
+
+    /// <summary>
+    /// Builds a request object for the verifier fixture with <paramref name="requestObjectLifetime"/> through the
+    /// builder <paramref name="builder"/> names.
+    /// </summary>
+    /// <param name="builder"><see cref="SignedBuilder"/> or <see cref="UnsignedBuilder"/>.</param>
+    /// <param name="requestObjectLifetime">The lifetime passed to the builder.</param>
+    /// <returns>The compact request object.</returns>
+    private Task<string> BuildRequestObjectWithAsync(string builder, TimeSpan requestObjectLifetime) => builder switch
+    {
+        SignedBuilder => BuildSignedRequestObjectAsync(requestObjectLifetime),
+        UnsignedBuilder => BuildUnsignedRequestObjectAsync(requestObjectLifetime),
+        _ => throw new ArgumentOutOfRangeException(nameof(builder), builder, "Unknown builder.")
+    };
+
+
+    /// <summary>
+    /// Builds a signed request object for the verifier fixture with <paramref name="requestObjectLifetime"/> through
+    /// <see cref="HaipProfile.BuildJarAsync"/>, signed with fresh P-256 material.
+    /// </summary>
+    /// <param name="requestObjectLifetime">The lifetime passed to the builder.</param>
+    /// <returns>The compact request object.</returns>
+    private async Task<string> BuildSignedRequestObjectAsync(TimeSpan requestObjectLifetime)
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> signingKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory signingPublicKey = signingKeys.PublicKey;
+        using PrivateKeyMemory signingPrivateKey = signingKeys.PrivateKey;
+
+        (_, string compactJar) = await HaipProfile.BuildJarAsync(
+            now: TimeProvider.GetUtcNow(),
+            requestObjectLifetime: requestObjectLifetime,
+            state: "state-request-object-lifetime",
+            nonce: new TransactionNonce("nonce-request-object-lifetime"),
+            dcqlQuery: CreatePreparedQuery(),
+            clientId: VerifierClientId,
+            responseUri: new Uri(ResponseUriString),
+            clientMetadata: HaipProfile.CreateVerifierClientMetadata(VerifierClientId, BuildEmptyJwksJson()),
+            signingKey: signingPrivateKey,
+            headerSerializer: HeaderSerializer,
+            payloadSerializer: PayloadSerializer,
+            dcqlQuerySerializer: q => JsonSerializer.Serialize(q, TestSetup.DefaultSerializationOptions),
+            clientMetadataSerializer: m => JsonSerializer.Serialize(m, TestSetup.DefaultSerializationOptions),
+            encoder: TestSetup.Base64UrlEncoder,
+            pool: Pool,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        return compactJar;
+    }
+
+
+    /// <summary>
+    /// Builds an unsigned request object for the verifier fixture with <paramref name="requestObjectLifetime"/> through
+    /// <see cref="HaipProfile.BuildUnsignedJarAsync"/>.
+    /// </summary>
+    /// <param name="requestObjectLifetime">The lifetime passed to the builder.</param>
+    /// <returns>The compact request object.</returns>
+    private async Task<string> BuildUnsignedRequestObjectAsync(TimeSpan requestObjectLifetime)
+    {
+        return await HaipProfile.BuildUnsignedJarAsync(
+            now: TimeProvider.GetUtcNow(),
+            requestObjectLifetime: requestObjectLifetime,
+            state: "state-request-object-lifetime",
+            nonce: new TransactionNonce("nonce-request-object-lifetime"),
+            dcqlQuery: CreatePreparedQuery(),
+            clientId: VerifierClientId,
+            responseUri: new Uri(ResponseUriString),
+            clientMetadata: HaipProfile.CreateVerifierClientMetadata(VerifierClientId, BuildEmptyJwksJson()),
+            headerSerializer: HeaderSerializer,
+            payloadSerializer: PayloadSerializer,
+            dcqlQuerySerializer: q => JsonSerializer.Serialize(q, TestSetup.DefaultSerializationOptions),
+            clientMetadataSerializer: m => JsonSerializer.Serialize(m, TestSetup.DefaultSerializationOptions),
+            encoder: TestSetup.Base64UrlEncoder,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+    }
 }

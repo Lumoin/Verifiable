@@ -550,7 +550,7 @@ internal sealed class DiscoveryEndpointTests
     [TestMethod]
     public async Task DiscoveryAdvertisesRequireParAndIssParameterUnderFapi20()
     {
-        //FAPI 2.0 §5.2.2 mandates PAR and RFC 9207 iss; the advertisement is driven by
+        //FAPI 2.0 Security Profile Section 5.3.2.2 mandates PAR, and RFC 9207 iss; the advertisement is driven by
         //the resolved policy so it matches enforcement.
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
@@ -565,7 +565,7 @@ internal sealed class DiscoveryEndpointTests
         Assert.IsTrue(
             body.RootElement.GetProperty(
                 AuthorizationServerMetadataParameterNames.RequirePushedAuthorizationRequests).GetBoolean(),
-            "FAPI 2.0 §5.2.2 advertises require_pushed_authorization_requests=true.");
+            "FAPI 2.0 Security Profile Section 5.3.2.2 mandates PAR, advertised as require_pushed_authorization_requests=true.");
         Assert.IsTrue(
             body.RootElement.GetProperty(
                 AuthorizationServerMetadataParameterNames.AuthorizationResponseIssParameterSupported).GetBoolean(),
@@ -837,7 +837,7 @@ internal sealed class DiscoveryEndpointTests
         //claim_types.
         AssertFieldPresent(body, OpenIdProviderMetadataParameterNames.ClaimTypesSupported);
 
-        //FAPI 2.0 §5.2.2 / RFC 9207 — PAR-required and iss-parameter-supported flags.
+        //FAPI 2.0 Security Profile Section 5.3.2.2 / RFC 9207: PAR-required and iss-parameter-supported flags.
         AssertFieldPresent(body, AuthorizationServerMetadataParameterNames.RequirePushedAuthorizationRequests);
         AssertFieldPresent(body, AuthorizationServerMetadataParameterNames.AuthorizationResponseIssParameterSupported);
         //dpop_signing_alg_values_supported is advertised only when DPoP validation is

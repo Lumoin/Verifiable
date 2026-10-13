@@ -107,6 +107,12 @@ public sealed record TokenProducer
     /// from <see cref="KeyUsage"/>. The endpoint signs the result and applies
     /// claim contributors before signing.
     /// </summary>
+    /// <remarks>
+    /// The endpoints recognise a built-in producer by this delegate, the built-in's own
+    /// <c>BuildAsync</c>, and resolve its lifetime before the issuance walk signs anything. A
+    /// producer whose <c>BuildAsync</c> wraps a built-in's is the application's own producer and
+    /// owns its failure shape.
+    /// </remarks>
     public required TokenProducerBuildDelegate BuildAsync { get; init; }
 }
 

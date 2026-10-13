@@ -22,8 +22,8 @@ namespace Verifiable.OAuth.Jar;
 /// </para>
 /// <para>
 /// <strong>Timing-claim discipline.</strong> All three of <c>iat</c>,
-/// <c>nbf</c>, and <c>exp</c> are required. FAPI 2.0 §5.2.2 Clause 13
-/// mandates <c>exp</c>; <c>iat</c> and <c>nbf</c> are required here so
+/// <c>nbf</c>, and <c>exp</c> are required, by the library's own rule:
+/// <c>exp</c> bounds the request object's life; <c>iat</c> and <c>nbf</c> are required here so
 /// that the lifetime ceiling check (<c>exp - iat</c>) and the
 /// not-yet-valid check (<c>nbf</c> after now+skew) are unambiguous. The
 /// library applies one rule across both Authorization Code JAR and
@@ -243,7 +243,7 @@ public static class JarVerification
             }
 
             // Step 7 — validate the lifetime ceilings. exp - iat must not
-            // exceed maximumLifetime (FAPI 2.0 §5.2.2 Clause 13), and
+            // exceed maximumLifetime (the library's own ceiling), and
             // exp - nbf must not either (FAPI 2.0 Message Signing §5.3.1
             // phrases the window from nbf). Both run so neither anchor claim
             // can stretch the validity window past the ceiling.

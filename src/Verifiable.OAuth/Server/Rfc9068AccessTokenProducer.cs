@@ -1,6 +1,7 @@
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
+using Verifiable.OAuth.Client;
 
 namespace Verifiable.OAuth.Server;
 
@@ -154,6 +155,18 @@ internal static class Rfc9068AccessTokenProducer
     /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-2.2">RFC 9068 §2.2</see>:
     /// "The JWT access token MUST include the following claims."
     /// </summary>
+    /// <param name="context">The issuance context; the <c>RequestServer</c> of its exchange context is the serving server.</param>
+    /// <param name="signingKeyId">The identifier of the signing material, written as the header's <c>kid</c>.</param>
+    /// <param name="algorithm">The JWA algorithm the token is signed with, written as the header's <c>alg</c>.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The unsigned header and payload the token endpoint's walk merges contributions into and signs.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// The issuance context names no serving server, or <see cref="TokenLifetimes.TryResolve"/> resolves no access-token
+    /// lifetime: the resolved lifetime is not issuable (a value under one whole second or above
+    /// <see cref="int.MaxValue"/> seconds, or a policy value of another type), whoever supplied it. The authorization
+    /// server's endpoints resolve the lifetime before they call the producer and answer such a value 500
+    /// <c>server_error</c> themselves; the exception is for a direct caller.
+    /// </exception>
     private static async ValueTask<TokenProducerOutput> BuildAsync(
         IssuanceContext context,
         KeyId signingKeyId,
@@ -169,9 +182,15 @@ internal static class Rfc9068AccessTokenProducer
                 + nameof(Rfc9068AccessTokenProducer) + "." + nameof(BuildAsync) + ".");
         var oauth = server.OAuth();
 
-        TimeSpan lifetime =
-            context.Registration.GetTokenLifetime(WellKnownTokenTypes.AccessToken)
-                ?? TimeSpan.FromHours(1);
+        //The lifetime is the one resolution's: the registration's override, else the request's policy value, else the
+        //server's TimingPolicy. A false answer means the resolved lifetime is not issuable, whoever supplied it; it is
+        //thrown, as the missing request server above is, for a direct caller (the endpoints resolve it first).
+        if(!TokenLifetimes.TryResolve(context.Registration, TokenType.AccessToken, context.Context, out TimeSpan lifetime))
+        {
+            throw new InvalidOperationException(
+                nameof(TokenLifetimes) + "." + nameof(TokenLifetimes.TryResolve) + " resolved no access-token lifetime.");
+        }
+
         DateTimeOffset expiresAt = context.IssuedAt.Add(lifetime);
 
         string jti = await oauth.GenerateIdentifierAsync!(

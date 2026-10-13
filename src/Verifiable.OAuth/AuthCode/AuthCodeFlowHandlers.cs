@@ -375,8 +375,10 @@ public static class AuthCodeFlowHandlers
     /// <param name="requestLifetime">
     /// How long this pending authorization stays redeemable at
     /// <see cref="HandleCallbackAsync(IReadOnlyDictionary{string, string}, OAuthClientInfrastructure, ClientRegistration, ExchangeContext, CancellationToken)"/>
-    /// before it expires. RFC 6749 §4.1.1 defines no lifetime for this leg — unlike RFC 9126 §2.2's
-    /// PAR <c>expires_in</c> — so the caller decides.
+    /// before it expires. RFC 6749 Section 4.1.1 defines no lifetime for this leg, unlike RFC 9126 Section 2.2's
+    /// PAR <c>expires_in</c>, so the caller decides. It arrives as whole seconds, held by
+    /// <see cref="Verifiable.OAuth.Server.TokenLifetimes.RequireIssuable"/> at the public start, so the stored expiry and the stated
+    /// <see cref="ParResponse.ExpiresIn"/> agree.
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>
@@ -1270,7 +1272,7 @@ public static class AuthCodeFlowHandlers
 
     /// <summary>
     /// Handles a JAR-by-value direct authorization per
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-6.1">RFC 9101 §6.1</see>. The client
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-5.1">RFC 9101 Section 5.1</see>. The client
     /// signs a request object whose claims are <c>client_id</c>, <c>response_type</c>,
     /// <c>redirect_uri</c>, <c>scope</c> only when <see cref="AuthCodeStartJarAuthorizeOptions.Scope"/>
     /// names a value (RFC 6749 §3.1), <c>resource</c> only when

@@ -17,6 +17,7 @@ using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Introspection;
+using Verifiable.OAuth.Jarm;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
@@ -5232,6 +5233,79 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
 
 
     /// <summary>
+    /// The library's own rule for a lifetime the client holds a pending authorization for: the plain authorization
+    /// start (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.1">RFC 6749 Section 4.1.1</see>, which
+    /// defines no lifetime for this leg) holds the caller's lifetime as its whole seconds, the rule every lifetime the
+    /// library's client issues with follows, so the pending authorization it stores and the lifetime it states agree. The
+    /// start is a client-side operation: it resolves the authorization server's metadata, stores the pending flow in the
+    /// client's own flow store and returns the redirect, with no HTTP exchange. A start under a lifetime of 90.7 seconds,
+    /// made half a second past a whole second, stores a flow that expires 90 seconds after it was entered and states 90
+    /// seconds.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task APlainStartUnderAFractionalLifetimeHoldsItsWholeSecondsAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: Capabilities.Add(WellKnownCapabilityIdentifiers.OAuthDirectAuthorization)).ConfigureAwait(false);
+        (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
+            await host.CreateOAuthClientAndRegistrationAsync(
+                material.Registration,
+                RedirectUri.OriginalString,
+                profile: PolicyProfile.Rfc6749WithPkce,
+                TestContext.CancellationToken).ConfigureAwait(false);
+        TimeProvider.Advance(HalfSecond);
+
+        AuthCodeFlowEndpointResult startResult = await client.AuthCode.StartAsync(
+            registration, RedirectUri, OAuthFormEncodedFields.Empty, [], resource: null,
+            requestLifetime: NinetyPointSevenSeconds, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, startResult.Outcome,
+            $"ErrorCode={startResult.ErrorCode} ErrorDescription={startResult.ErrorDescription}");
+
+        ParCompletedState parState = (ParCompletedState)clientFlowStore[clientFlowStore.Keys.Single()];
+        Assert.AreEqual(TimeSpan.FromSeconds(90), parState.ExpiresAt - parState.EnteredAt);
+        Assert.AreEqual(90, parState.Par.ExpiresIn);
+    }
+
+
+    /// <summary>
+    /// The library's own rule for a lifetime the client holds a pending authorization for: the plain authorization
+    /// start (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.1">RFC 6749 Section 4.1.1</see>, which
+    /// defines no lifetime for this leg) holds the caller's lifetime as its whole seconds, so a lifetime under one second
+    /// would store a flow expired the second it is entered. The start is a client-side operation (it resolves the
+    /// authorization server's metadata and stores the pending flow in the client's own flow store, with no HTTP
+    /// exchange). The lifetime is the caller's own argument: 500 milliseconds is refused with
+    /// <see cref="ArgumentOutOfRangeException"/> and no flow is stored.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task APlainStartLifetimeUnderOneSecondIsRefusedAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: Capabilities.Add(WellKnownCapabilityIdentifiers.OAuthDirectAuthorization)).ConfigureAwait(false);
+        (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
+            await host.CreateOAuthClientAndRegistrationAsync(
+                material.Registration,
+                RedirectUri.OriginalString,
+                profile: PolicyProfile.Rfc6749WithPkce,
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(async () =>
+        {
+            _ = await client.AuthCode.StartAsync(
+                registration, RedirectUri, OAuthFormEncodedFields.Empty, [], resource: null,
+                requestLifetime: HalfSecond, TestContext.CancellationToken).ConfigureAwait(false);
+        }).ConfigureAwait(false);
+
+        Assert.IsEmpty(clientFlowStore);
+    }
+
+
+    /// <summary>
     /// The row value naming the pushed start
     /// (<see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.1">RFC 9126 §2.1</see>), whose
     /// authorization request parameters travel in the body of the pushed authorization request.
@@ -7871,7 +7945,7 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     /// endpoint that does not have a "request_uri" parameter with a value obtained from the PAR
     /// endpoint." A GET carrying a JAR-by-value <c>request</c> object and no <c>request_uri</c> under a
     /// policy requiring pushed authorization requests is claimed by the JAR-by-value endpoint itself
-    /// (RFC 9101 §6.1 governs its ownership of this request's shape) and refused by that endpoint's own
+    /// (RFC 9101 Section 5.1 passes a request object by value) and refused by that endpoint's own
     /// PAR-mandating message, never by the authorize endpoint's missing-<c>request_uri</c> fallback.
     /// </summary>
     [TestMethod]
@@ -8819,5 +8893,2158 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
             $"The jti of {tokenDescription} must not be empty.");
 
         return value;
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>: "invalid_grant The
+    /// provided authorization grant (e.g., authorization code, resource owner credentials) or refresh token is invalid,
+    /// expired, revoked, does not match the redirection URI used in the authorization request, or was issued to another
+    /// client." A registration whose own refresh-token lifetime is one hour, under a policy of 30 days, is issued a
+    /// refresh token at the code redemption that expires at the hour: presented over the real wire one hour and one
+    /// minute later, it is refused <c>invalid_grant</c>.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task ARefreshTokenIssuedAtTheCodeRedemptionExpiresAtTheRegistrationsLifetimeAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        await host.SetTokenLifetimeAsync(material, WellKnownTokenTypes.RefreshToken, TimeSpan.FromHours(1), TestContext.CancellationToken).ConfigureAwait(false);
+
+        (string refreshToken, _) = await IssueBearerPairAsync(host, segment).ConfigureAwait(false);
+        TimeProvider.Advance(TimeSpan.FromHours(1) + TimeSpan.FromMinutes(1));
+
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, refreshToken),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, StatusCode, Body);
+        Assert.Contains(OAuthErrors.InvalidGrant, Body, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-6">RFC 6749 Section 6</see>: "The authorization server
+    /// MAY issue a new refresh token, in which case the client MUST discard the old refresh token and replace it with the
+    /// new refresh token." A registration whose own refresh-token lifetime is one hour, under a policy of 30 days, is
+    /// issued a successor at a rotation half an hour in that expires one hour after the rotation: presented over the
+    /// real wire one hour and one minute after the rotation, the successor is refused <c>invalid_grant</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>: "or refresh token is
+    /// invalid, expired, revoked").
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task ARotatedRefreshTokenExpiresAtTheRegistrationsLifetimeAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        await host.SetTokenLifetimeAsync(material, WellKnownTokenTypes.RefreshToken, TimeSpan.FromHours(1), TestContext.CancellationToken).ConfigureAwait(false);
+
+        (string original, _) = await IssueBearerPairAsync(host, segment).ConfigureAwait(false);
+        TimeProvider.Advance(TimeSpan.FromMinutes(30));
+        (string successor, _) = await RotateBearerPairAsync(host, segment, original).ConfigureAwait(false);
+        TimeProvider.Advance(TimeSpan.FromHours(1) + TimeSpan.FromMinutes(1));
+
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, successor),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, StatusCode, Body);
+        Assert.Contains(OAuthErrors.InvalidGrant, Body, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>: "invalid_grant The
+    /// provided authorization grant (e.g., authorization code, resource owner credentials) or refresh token is invalid,
+    /// expired, revoked, does not match the redirection URI used in the authorization request, or was issued to another
+    /// client." A server whose <see cref="TimingPolicy.RefreshTokenLifetime"/> is 24 hours, with no registration override
+    /// and the built-in profile, issues a refresh token at the code redemption that expires at 24 hours: presented over
+    /// the real wire 24 hours and one minute later, it is refused <c>invalid_grant</c>.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task ARefreshTokenExpiresAtTheServersTimingPolicyLifetimeAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.Timings = TimingPolicy.Default with { RefreshTokenLifetime = TimeSpan.FromHours(24) };
+        }).ConfigureAwait(false);
+
+        (string refreshToken, _) = await IssueBearerPairAsync(host, segment).ConfigureAwait(false);
+        TimeProvider.Advance(TimeSpan.FromHours(24) + TimeSpan.FromMinutes(1));
+
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, refreshToken),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, StatusCode, Body);
+        Assert.Contains(OAuthErrors.InvalidGrant, Body, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-6">RFC 6749 Section 6</see>: "Because refresh tokens are
+    /// typically long-lasting credentials used to request additional access tokens, the refresh token is bound to the
+    /// client to which it was issued." With no registration override, no policy value and the default
+    /// <see cref="TimingPolicy"/>, the refresh token issued at a code redemption over the real wire is stored with an
+    /// expiry 30 days after its issuance.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task ARefreshTokenIssuedUnderTheDefaultsLivesThirtyDaysAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        _ = await IssueBearerPairAsync(host, segment).ConfigureAwait(false);
+
+        ServerRefreshTokenIssuedState stored = host.Host("default").FlowStates.Values
+            .Select(static entry => entry.State)
+            .OfType<ServerRefreshTokenIssuedState>()
+            .Single();
+        Assert.AreEqual(TimeSpan.FromDays(30), stored.ExpiresAt - stored.IssuedAt);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-2.2">RFC 9068 Section 2.2</see>: "exp REQUIRED - as
+    /// defined in Section 4.1.4 of [RFC7519]." and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 Section 5.1</see>: "expires_in
+    /// RECOMMENDED. The lifetime in seconds of the access token." An access-token lifetime of five minutes set through
+    /// the application's policy resolver or through the server's <see cref="TimingPolicy"/>, with no registration
+    /// override, takes effect on the access token a code redemption issues over the real wire: its <c>exp</c> is 300
+    /// seconds after its <c>iat</c>, and the response's <c>expires_in</c> is 300.
+    /// </summary>
+    /// <param name="source">Where the lifetime is set: <see cref="PolicyResolverSource"/> or <see cref="TimingPolicySource"/>.</param>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DataRow(PolicyResolverSource)]
+    [DataRow(TimingPolicySource)]
+    public async Task ATokenLifetimeSetThroughPolicyTakesEffectAsync(string source)
+    {
+        await AssertLifetimeSetThroughPolicyTakesEffectAsync(source, WellKnownTokenTypes.AccessToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#IDToken">OpenID Connect Core 1.0 Section 2</see>:
+    /// "exp REQUIRED. Expiration time on or after which the ID Token MUST NOT be accepted by the RP when performing
+    /// authentication with the OP." An ID Token lifetime of five minutes set through the application's policy resolver
+    /// or through the server's <see cref="TimingPolicy"/>, with no registration override, takes effect on the ID Token a
+    /// code redemption issues over the real wire: its <c>exp</c> is 300 seconds after its <c>iat</c>.
+    /// </summary>
+    /// <param name="source">Where the lifetime is set: <see cref="PolicyResolverSource"/> or <see cref="TimingPolicySource"/>.</param>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DataRow(PolicyResolverSource)]
+    [DataRow(TimingPolicySource)]
+    public async Task AnIdTokenLifetimeSetThroughPolicyTakesEffectAsync(string source)
+    {
+        await AssertLifetimeSetThroughPolicyTakesEffectAsync(source, WellKnownTokenTypes.IdToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Sets a five-minute lifetime for the token kind <paramref name="tokenField"/> names through
+    /// <paramref name="source"/>, redeems a fresh code over the real wire and asserts the token's <c>exp</c> less its
+    /// <c>iat</c> is 300 seconds, and for the access token that the response's <c>expires_in</c> is 300.
+    /// </summary>
+    /// <param name="source">Where the lifetime is set: <see cref="PolicyResolverSource"/> or <see cref="TimingPolicySource"/>.</param>
+    /// <param name="tokenField">The token response member whose token is read: <c>access_token</c> or <c>id_token</c>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    private async Task AssertLifetimeSetThroughPolicyTakesEffectAsync(string source, string tokenField)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: CapabilitiesWithOpenIdConnect)
+            .ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        TimeSpan fiveMinutes = TimeSpan.FromMinutes(5);
+        bool isAccessToken = WellKnownTokenTypes.IsAccessToken(tokenField);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            if(source == TimingPolicySource)
+            {
+                candidateIntegration.Timings = isAccessToken
+                    ? TimingPolicy.Default with { AccessTokenLifetime = fiveMinutes }
+                    : TimingPolicy.Default with { IdTokenLifetime = fiveMinutes };
+            }
+            else
+            {
+                candidateIntegration.ResolvePolicyAsync = async (registration, context, ct) =>
+                {
+                    await PolicyProfiles.DefaultResolvePolicyAsync((ClientRecord)registration, context, ct)
+                        .ConfigureAwait(false);
+                    if(isAccessToken)
+                    {
+                        context.SetAccessTokenLifetime(fiveMinutes);
+                    }
+                    else
+                    {
+                        context.SetIdTokenLifetime(fiveMinutes);
+                    }
+                };
+            }
+        }).ConfigureAwait(false);
+
+        (int StatusCode, string Body) = await RedeemFreshCodeAsync(host, segment).ConfigureAwait(false);
+
+        Assert.AreEqual(200, StatusCode, Body);
+        using JsonDocument response = JsonDocument.Parse(Body);
+        string token = response.RootElement.GetProperty(tokenField).GetString()!;
+        Assert.AreEqual(300L, ReadLifetimeSeconds(token), $"The {tokenField} lifetime must be the policy's. Body={Body}");
+        if(isAccessToken)
+        {
+            Assert.AreEqual(300L, response.RootElement.GetProperty("expires_in").GetInt64(), Body);
+        }
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-2.2">RFC 9068 Section 2.2</see>: "exp REQUIRED - as
+    /// defined in Section 4.1.4 of [RFC7519]." With no registration override, no policy value and the default
+    /// <see cref="TimingPolicy"/>, the access token a code redemption issues over the real wire carries an <c>exp</c>
+    /// one hour after its <c>iat</c>.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task ATokenIssuedUnderTheDefaultsLivesOneHourAsync()
+    {
+        await AssertIssuedUnderTheDefaultsLivesOneHourAsync(WellKnownTokenTypes.AccessToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#IDToken">OpenID Connect Core 1.0 Section 2</see>:
+    /// "exp REQUIRED. Expiration time on or after which the ID Token MUST NOT be accepted by the RP when performing
+    /// authentication with the OP." With no registration override, no policy value and the default
+    /// <see cref="TimingPolicy"/>, the ID Token a code redemption issues over the real wire carries an <c>exp</c> one
+    /// hour after its <c>iat</c>.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task AnIdTokenIssuedUnderTheDefaultsLivesOneHourAsync()
+    {
+        await AssertIssuedUnderTheDefaultsLivesOneHourAsync(WellKnownTokenTypes.IdToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Redeems a fresh code over the real wire with nothing set and asserts the token <paramref name="tokenField"/>
+    /// names carries an <c>exp</c> 3600 seconds after its <c>iat</c>.
+    /// </summary>
+    /// <param name="tokenField">The token response member whose token is read: <c>access_token</c> or <c>id_token</c>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    private async Task AssertIssuedUnderTheDefaultsLivesOneHourAsync(string tokenField)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: CapabilitiesWithOpenIdConnect)
+            .ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        (int StatusCode, string Body) = await RedeemFreshCodeAsync(host, segment).ConfigureAwait(false);
+
+        Assert.AreEqual(200, StatusCode, Body);
+        using JsonDocument response = JsonDocument.Parse(Body);
+        Assert.AreEqual(3600L, ReadLifetimeSeconds(response.RootElement.GetProperty(tokenField).GetString()!), Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-13.10">OID4VCI 1.0
+    /// Section 13.10</see>: "Long-lived Access Tokens giving access to Credentials MUST not be issued unless
+    /// sender-constrained. Access Tokens with lifetimes longer than 5 minutes are, in general, considered long lived."
+    /// A server whose <see cref="TimingPolicy.AccessTokenLifetime"/> is five minutes, with no registration override,
+    /// issues a plain bearer access token for an <c>openid_credential</c> grant at the code redemption over the real
+    /// wire, and that token's <c>exp</c> is 300 seconds after its <c>iat</c>: the guard reads the lifetime the token
+    /// is issued with.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task ABearerCredentialTokenUnderAFiveMinuteTimingPolicyIsIssuedAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.Timings = TimingPolicy.Default with { AccessTokenLifetime = TimeSpan.FromMinutes(5) };
+            _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
+            candidateIntegration.ResolveCredentialAuthorizationAsync =
+                (details, subject, registration, context, ct) => ValueTask.FromResult(GrantAllRequestedCredentials(details));
+        }).ConfigureAwait(false);
+
+        (int StatusCode, string Body) = await RedeemFreshCodeAsync(
+            host, segment, SingleAuthorizationDetail("UniversityDegree_dc_sd_jwt")).ConfigureAwait(false);
+
+        Assert.AreEqual(200, StatusCode, Body);
+        using JsonDocument response = JsonDocument.Parse(Body);
+        Assert.AreEqual(300L, ReadLifetimeSeconds(response.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!), Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2">RFC 6749 Section 4.1.2</see>: "The authorization
+    /// code MUST expire shortly after it is issued to mitigate the risk of leaks." A server whose
+    /// <see cref="TimingPolicy.AuthorizationCodeLifetime"/> is two minutes issues a code that expires at two minutes:
+    /// redeemed over the real wire two minutes and one second after the authorization, it is refused
+    /// <c>invalid_grant</c>.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task AnAuthorizationCodeExpiresAtTheServersTimingPolicyLifetimeAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.Timings = TimingPolicy.Default with { AuthorizationCodeLifetime = TimeSpan.FromMinutes(2) };
+        }).ConfigureAwait(false);
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string code = await DriveRawParAndAuthorizeAsync(
+            host, segment, pkce.EncodedChallenge, WellKnownCodeChallengeMethods.S256,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        TimeProvider.Advance(TimeSpan.FromMinutes(2) + TimeSpan.FromSeconds(1));
+
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment,
+            RawAuthCodeWirePushers.BuildTokenFields(ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, StatusCode, Body);
+        Assert.Contains(OAuthErrors.InvalidGrant, Body, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.2">RFC 9126 Section 2.2</see>: "expires_in A JSON
+    /// number that represents the lifetime of the request URI in seconds as a positive integer." A server whose
+    /// <see cref="TimingPolicy.AuthCodeParLifetime"/> is 30 seconds answers a pushed authorization request over the
+    /// real wire with <c>expires_in</c> 30.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task APushedRequestUriLivesTheServersTimingPolicyLifetimeAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.Timings = TimingPolicy.Default with { AuthCodeParLifetime = TimeSpan.FromSeconds(30) };
+        }).ConfigureAwait(false);
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        Dictionary<string, string> parFields = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
+            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
+        };
+
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, segment, parFields, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(201, StatusCode, Body);
+        using JsonDocument response = JsonDocument.Parse(Body);
+        Assert.AreEqual(30L, response.RootElement.GetProperty("expires_in").GetInt64(), Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-7">RFC 9101 Section 7</see>: "invalid_request_object
+    /// The request parameter contains an invalid Request Object." A server whose
+    /// <see cref="TimingPolicy.AuthCodeRequestObjectLifetime"/> is 20 seconds refuses, at the pushed authorization
+    /// request over the real wire, a signed request object whose <c>exp</c> is 30 seconds after its <c>iat</c>, with
+    /// <c>invalid_request_object</c>.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task ARequestObjectOutlivingTheServersTimingPolicyLifetimeIsRefusedAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: ResourceJourneyCapabilities)
+            .ConfigureAwait(false);
+        (OAuthClient client, ClientRegistration registration, _) =
+            await ComposeResourceJourneyClientAsync(host, material).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.Timings = TimingPolicy.Default with { AuthCodeRequestObjectLifetime = TimeSpan.FromSeconds(20) };
+        }).ConfigureAwait(false);
+
+        AuthCodeFlowEndpointResult startResult = await StartRequestObjectAsync(
+            PushedRequestObjectStart, host, client, registration, material, WellKnownScopes.OpenId, resource: null)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, startResult.Outcome,
+            $"ErrorCode={startResult.ErrorCode} ErrorDescription={startResult.ErrorDescription}");
+        Assert.AreEqual(OAuthErrors.InvalidRequestObject, startResult.ErrorCode);
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-13.10">OID4VCI 1.0
+    /// Section 13.10</see>: "Long-lived Access Tokens giving access to Credentials MUST not be issued unless
+    /// sender-constrained. Access Tokens with lifetimes longer than 5 minutes are, in general, considered long lived."
+    /// A policy value of 600 seconds set through the application's policy resolver, over a server
+    /// <see cref="TimingPolicy.AccessTokenLifetime"/> of 300 seconds, is the lifetime the access token is issued with,
+    /// so a plain bearer token for an <c>openid_credential</c> grant redeemed at the code grant over the real wire is
+    /// refused 400 <c>invalid_request</c>.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task ABearerCredentialTokenOutlivingThePolicyValueIsRefusedAtTheCodeGrantAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        await ConfigureCredentialIssuanceAsync(host, TimeSpan.FromSeconds(300), TimeSpan.FromSeconds(600)).ConfigureAwait(false);
+
+        (int StatusCode, string Body) = await RedeemFreshCodeAsync(
+            host, segment, SingleAuthorizationDetail("UniversityDegree_dc_sd_jwt")).ConfigureAwait(false);
+
+        Assert.AreEqual(400, StatusCode, Body);
+        Assert.Contains("\"error\":\"invalid_request\"", Body, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-13.10">OID4VCI 1.0
+    /// Section 13.10</see>: "Long-lived Access Tokens giving access to Credentials MUST not be issued unless
+    /// sender-constrained. Access Tokens with lifetimes longer than 5 minutes are, in general, considered long lived."
+    /// A policy value of 300 seconds set through the application's policy resolver, over a server
+    /// <see cref="TimingPolicy.AccessTokenLifetime"/> of 600 seconds, is the lifetime the access token is issued with:
+    /// a plain bearer token for an <c>openid_credential</c> grant is issued at the code grant over the real wire with an
+    /// <c>exp</c> 300 seconds after its <c>iat</c> and an <c>expires_in</c> of 300.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task ABearerCredentialTokenWithinThePolicyValueIsIssuedAtTheCodeGrantAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        await ConfigureCredentialIssuanceAsync(host, TimeSpan.FromSeconds(600), TimeSpan.FromSeconds(300)).ConfigureAwait(false);
+
+        (int StatusCode, string Body) = await RedeemFreshCodeAsync(
+            host, segment, SingleAuthorizationDetail("UniversityDegree_dc_sd_jwt")).ConfigureAwait(false);
+
+        Assert.AreEqual(200, StatusCode, Body);
+        using JsonDocument response = JsonDocument.Parse(Body);
+        Assert.AreEqual(300L, ReadLifetimeSeconds(response.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!), Body);
+        Assert.AreEqual(300L, response.RootElement.GetProperty("expires_in").GetInt64(), Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-13.10">OID4VCI 1.0
+    /// Section 13.10</see>: "Long-lived Access Tokens giving access to Credentials MUST not be issued unless
+    /// sender-constrained. Access Tokens with lifetimes longer than 5 minutes are, in general, considered long lived."
+    /// A registration's own access-token lifetime of 600 seconds, over a policy value of 300 seconds, is the lifetime the
+    /// access token is issued with, so a plain bearer token for an <c>openid_credential</c> grant redeemed at the code
+    /// grant over the real wire is refused 400 <c>invalid_request</c>.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task ABearerCredentialTokenOutlivingTheRegistrationsLifetimeIsRefusedAtTheCodeGrantAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        await ConfigureCredentialIssuanceAsync(host, TimeSpan.FromSeconds(300), TimeSpan.FromSeconds(300)).ConfigureAwait(false);
+        await host.SetTokenLifetimeAsync(
+            material, WellKnownTokenTypes.AccessToken, TimeSpan.FromSeconds(600), TestContext.CancellationToken).ConfigureAwait(false);
+
+        (int StatusCode, string Body) = await RedeemFreshCodeAsync(
+            host, segment, SingleAuthorizationDetail("UniversityDegree_dc_sd_jwt")).ConfigureAwait(false);
+
+        Assert.AreEqual(400, StatusCode, Body);
+        Assert.Contains("\"error\":\"invalid_request\"", Body, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-13.10">OID4VCI 1.0
+    /// Section 13.10</see>: "Long-lived Access Tokens giving access to Credentials MUST not be issued unless
+    /// sender-constrained. Access Tokens with lifetimes longer than 5 minutes are, in general, considered long lived."
+    /// A plain bearer pair for an <c>openid_credential</c> grant is issued at the code grant under a server
+    /// <see cref="TimingPolicy.AccessTokenLifetime"/> of 300 seconds; the refresh grant over the real wire, under a
+    /// policy value of 600 seconds set through the application's policy resolver (or a registration's own override of
+    /// 600 seconds over the policy value of 300 seconds), would issue a long-lived bearer token and is refused 400
+    /// <c>invalid_request</c>.
+    /// </summary>
+    /// <param name="source">Where the 600-second lifetime is set: <see cref="PolicyResolverSource"/> or <c>registration</c>.</param>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DataRow(PolicyResolverSource)]
+    [DataRow(RegistrationSource)]
+    public async Task ABearerCredentialTokenOutlivingItsLifetimeIsRefusedAtTheRefreshGrantAsync(string source)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        await ConfigureCredentialIssuanceAsync(host, TimeSpan.FromSeconds(300), policyAccessTokenLifetime: null).ConfigureAwait(false);
+        (int issueStatus, string issueBody) = await RedeemFreshCodeAsync(
+            host, segment, SingleAuthorizationDetail("UniversityDegree_dc_sd_jwt")).ConfigureAwait(false);
+        Assert.AreEqual(200, issueStatus, issueBody);
+        string refreshToken;
+        using(JsonDocument issued = JsonDocument.Parse(issueBody))
+        {
+            refreshToken = issued.RootElement.GetProperty(OAuthRequestParameterNames.RefreshToken).GetString()!;
+        }
+
+        if(string.Equals(source, PolicyResolverSource, StringComparison.Ordinal))
+        {
+            await ConfigureCredentialIssuanceAsync(host, TimeSpan.FromSeconds(300), TimeSpan.FromSeconds(600)).ConfigureAwait(false);
+        }
+        else
+        {
+            await host.SetTokenLifetimeAsync(
+                material, WellKnownTokenTypes.AccessToken, TimeSpan.FromSeconds(600), TestContext.CancellationToken).ConfigureAwait(false);
+        }
+
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, refreshToken),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, StatusCode, Body);
+        Assert.Contains("\"error\":\"invalid_request\"", Body, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/fapi-security-profile-2_0-final.html#section-5.3.2.1">FAPI 2.0 Security
+    /// Profile Section 5.3.2.1</see> item 11: "shall issue authorization codes with a maximum lifetime of 60 seconds;"
+    /// A <see cref="PolicyProfile.Fapi20"/> registration on a server whose <see cref="TimingPolicy.AuthorizationCodeLifetime"/>
+    /// is the default 600 seconds is issued a code that the DPoP-wired client redeems over the real token endpoint: 59
+    /// seconds after the authorization the code is served, 61 seconds after it the code is refused
+    /// <c>invalid_grant</c>. The server's <see cref="TimingPolicy.AuthCodeParLifetime"/> is 300 seconds, so the
+    /// client's own record of the pushed request outlives both instants and the server decides.
+    /// </summary>
+    /// <param name="delaySeconds">How long after the authorization the code is redeemed, in seconds.</param>
+    /// <param name="isServed">Whether the redemption is served.</param>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DataRow(59, true)]
+    [DataRow(61, false)]
+    public async Task AFapi20CodeIsRedeemableForAtMostSixtySecondsAsync(int delaySeconds, bool isServed)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Fapi20).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.Timings = TimingPolicy.Default with { AuthCodeParLifetime = TimeSpan.FromSeconds(300) };
+        }).ConfigureAwait(false);
+        using DpopClientFixture fixture = await CreateDpopFixtureAsync(host, material).ConfigureAwait(false);
+        string flowId = await DriveDpopAuthorizationAsync(host, material, fixture).ConfigureAwait(false);
+        TimeProvider.Advance(TimeSpan.FromSeconds(delaySeconds));
+
+        AuthCodeFlowEndpointResult result = await fixture.Client.AuthCode.ExchangeTokenAsync(
+            fixture.Registration, flowId, [], null, TestContext.CancellationToken).ConfigureAwait(false);
+
+        string answer = $"Outcome={result.Outcome} ErrorCode={result.ErrorCode} ErrorDescription={result.ErrorDescription}";
+        if(isServed)
+        {
+            Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, result.Outcome, answer);
+
+            return;
+        }
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, result.Outcome, answer);
+        Assert.AreEqual(OAuthErrors.InvalidGrant, result.ErrorCode, answer);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2">RFC 6749 Section 4.1.2</see>: "A maximum
+    /// authorization code lifetime of 10 minutes is RECOMMENDED." The RFC 6749 with PKCE profile holds no 60-second
+    /// ceiling: a <see cref="PolicyProfile.Rfc6749WithPkce"/> registration under <see cref="TimingPolicy.Default"/> is
+    /// issued a code of 600 seconds, redeemed over the real wire 61 seconds after the authorization.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task AnRfc6749CodeRedeemedAfterSixtySecondsIsAcceptedAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        (int StatusCode, string Body) = await RedeemCodeAfterAsync(host, segment, TimeSpan.FromSeconds(61)).ConfigureAwait(false);
+
+        Assert.AreEqual(200, StatusCode, Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/fapi-security-profile-2_0-final.html#section-5.3.2.2">FAPI 2.0 Security
+    /// Profile Section 5.3.2.2</see> item 12: "shall issue pushed authorization requests request_uri with expires_in
+    /// values of less than 600 seconds;" A <see cref="PolicyProfile.Fapi20"/> registration on a server whose
+    /// <see cref="TimingPolicy.AuthCodeParLifetime"/> is 900 seconds answers a pushed authorization request over the
+    /// real wire with <c>expires_in</c> 599, and the pushed request lives that long: the authorization request that
+    /// references it 598 seconds later is served with a code, and the one 600 seconds later is refused
+    /// <c>invalid_request_uri</c>.
+    /// </summary>
+    /// <param name="authorizeAfterSeconds">How long after the push the authorization request is sent, in seconds.</param>
+    /// <param name="isServed">Whether the authorization request is served with a code.</param>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DataRow(598, true)]
+    [DataRow(600, false)]
+    public async Task AFapi20PushedRequestUriUnderANineHundredSecondTimingPolicyLivesAtMost599SecondsAsync(
+        int authorizeAfterSeconds, bool isServed)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Fapi20, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        await SetAuthCodeParLifetimeAsync(host, TimeSpan.FromSeconds(900)).ConfigureAwait(false);
+
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, segment, BuildPlainParFields(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(201, StatusCode, Body);
+        using JsonDocument response = JsonDocument.Parse(Body);
+        Assert.AreEqual(599L, response.RootElement.GetProperty("expires_in").GetInt64(), Body);
+        string requestUri = response.RootElement.GetProperty("request_uri").GetString()!;
+        TimeProvider.Advance(TimeSpan.FromSeconds(authorizeAfterSeconds));
+
+        (int authorizeStatusCode, string authorizeBody, Uri? location) =
+            await AuthorizePushedRequestAsync(host, segment, requestUri).ConfigureAwait(false);
+
+        if(isServed)
+        {
+            Assert.AreEqual(302, authorizeStatusCode, authorizeBody);
+            Assert.IsNotNull(TestBrowser.ExtractQueryParam(location!.ToString(), OAuthRequestParameterNames.Code), location.ToString());
+
+            return;
+        }
+
+        Assert.AreEqual(400, authorizeStatusCode, authorizeBody);
+        Assert.Contains("\"error\":\"invalid_request_uri\"", authorizeBody, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.2">RFC 9126 Section 2.2</see>: "expires_in A JSON
+    /// number that represents the lifetime of the request URI in seconds as a positive integer." The RFC 6749 with PKCE
+    /// profile holds no FAPI 2.0 ceiling: a <see cref="PolicyProfile.Rfc6749WithPkce"/> registration on a server whose
+    /// <see cref="TimingPolicy.AuthCodeParLifetime"/> is 900 seconds answers a pushed authorization request over the
+    /// real wire with <c>expires_in</c> 900.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task AnRfc6749PushedRequestUriLivesTheServersNineHundredSecondsAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        await SetAuthCodeParLifetimeAsync(host, TimeSpan.FromSeconds(900)).ConfigureAwait(false);
+
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, segment, BuildPlainParFields(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(201, StatusCode, Body);
+        using JsonDocument response = JsonDocument.Parse(Body);
+        Assert.AreEqual(900L, response.RootElement.GetProperty("expires_in").GetInt64(), Body);
+    }
+
+
+    /// <summary>
+    /// The library's own ceiling of a pushed <c>request_uri</c> under the HAIP 1.0 profile is 60 seconds, a ceiling and
+    /// never a widening of a shorter value: <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.2">RFC 9126
+    /// Section 2.2</see>: "expires_in A JSON number that represents the lifetime of the request URI in seconds as a
+    /// positive integer." A <see cref="PolicyProfile.Haip10"/> registration on a server whose
+    /// <see cref="TimingPolicy.AuthCodeParLifetime"/> is 30 seconds answers a pushed authorization request over the
+    /// real wire with <c>expires_in</c> 30, and under 900 seconds with 60.
+    /// </summary>
+    /// <param name="configuredSeconds">The server's <see cref="TimingPolicy.AuthCodeParLifetime"/>, in seconds.</param>
+    /// <param name="expectedExpiresIn">The <c>expires_in</c> the pushed authorization response states.</param>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DataRow(30, 30L)]
+    [DataRow(900, 60L)]
+    public async Task AHaip10PushedRequestUriLivesAtMostTheLibrarysSixtySecondCeilingAsync(int configuredSeconds, long expectedExpiresIn)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Haip10, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        await SetAuthCodeParLifetimeAsync(host, TimeSpan.FromSeconds(configuredSeconds)).ConfigureAwait(false);
+
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, segment, BuildPlainParFields(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(201, StatusCode, Body);
+        using JsonDocument response = JsonDocument.Parse(Body);
+        Assert.AreEqual(expectedExpiresIn, response.RootElement.GetProperty("expires_in").GetInt64(), Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 Section 5.1</see>: "expires_in
+    /// RECOMMENDED. The lifetime in seconds of the access token." A refresh-token lifetime that is not positive, set
+    /// as a policy value of minus one minute through the application's policy resolver, states no lifetime a token can
+    /// be issued with. The library's own answer to a lifetime it cannot issue is 500 <c>server_error</c>: the code
+    /// redemption over the real wire is answered so and no token is issued.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task ARefreshTokenUnderANonPositiveLifetimeIsNotIssuedAtTheCodeGrantAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        await ResolvePolicyWithAsync(host, static context => context.SetRefreshTokenLifetime(TimeSpan.FromMinutes(-1)))
+            .ConfigureAwait(false);
+
+        (int StatusCode, string Body) = await RedeemFreshCodeAsync(host, segment).ConfigureAwait(false);
+
+        Assert.AreEqual(500, StatusCode, Body);
+        Assert.Contains("\"error\":\"server_error\"", Body, StringComparison.Ordinal);
+        Assert.DoesNotContain(OAuthRequestParameterNames.AccessToken, Body, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-6">RFC 6749 Section 6</see>: "The authorization server
+    /// MAY issue a new refresh token, in which case the client MUST discard the old refresh token and replace it with the
+    /// new refresh token." A refresh-token lifetime that is not positive, set after the pair is issued as a policy value
+    /// of minus one minute through the application's policy resolver, states no lifetime a successor can be issued
+    /// with. The library's own answer to a lifetime it cannot issue is 500 <c>server_error</c>: the refresh grant over
+    /// the real wire is answered so, no token is issued, the persisted records and the claimed steps are those before
+    /// the request, and the presented refresh token, never spent, is redeemed once the resolver sets no such value and
+    /// the profile's 30 days apply.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task ARefreshTokenUnderANonPositiveLifetimeIsNotIssuedAtTheRefreshGrantAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        HostedAuthorizationServer hosted = host.Host("default");
+        (string refreshToken, _) = await IssueBearerPairAsync(host, segment).ConfigureAwait(false);
+        await ResolvePolicyWithAsync(host, static context => context.SetRefreshTokenLifetime(TimeSpan.FromMinutes(-1)))
+            .ConfigureAwait(false);
+        Dictionary<string, string> refreshFields = RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, refreshToken);
+        (string FlowId, FlowState State, int StepCount)[] recordsBefore = SnapshotFlowStates(hosted);
+        (string FlowId, int StepCount)[] claimsBefore = SnapshotClaimedSteps(hosted);
+
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, refreshFields, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(500, StatusCode, Body);
+        Assert.AreEqual(ServerNotReadyBody, Body);
+        Assert.AreSequenceEqual(recordsBefore, SnapshotFlowStates(hosted),
+            "The refused rotation must leave every persisted record as it was.");
+        Assert.AreSequenceEqual(claimsBefore, SnapshotClaimedSteps(hosted),
+            "The refused rotation must leave the presented refresh token's step unclaimed.");
+
+        await ResolvePolicyWithAsync(host, setPolicyValue: null).ConfigureAwait(false);
+        (int redeemedStatusCode, string redeemedBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, refreshFields, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, redeemedStatusCode, redeemedBody);
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-13.10">OID4VCI 1.0
+    /// Section 13.10</see>: "Access Tokens with lifetimes longer than 5 minutes are, in general, considered long lived."
+    /// A policy resolver that stores the number 300 rather than a <see cref="TimeSpan"/> under the access-token
+    /// lifetime's policy name states no lifetime: the access token's lifetime is not read as absent and widened to the
+    /// server's one hour. The library's own answer to a lifetime it cannot issue is 500 <c>server_error</c>: the code
+    /// redemption over the real wire for an <c>openid_credential</c> grant is answered so and no token is issued.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task AMistypedPolicyLifetimeIssuesNoTokenAtTheCodeGrantAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        await ConfigureCredentialIssuanceAsync(host, TimeSpan.FromSeconds(300), policyAccessTokenLifetime: null).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolvePolicyAsync = async (registration, context, ct) =>
+            {
+                await PolicyProfiles.DefaultResolvePolicyAsync((ClientRecord)registration, context, ct).ConfigureAwait(false);
+                context[PolicyContextKeys.AccessTokenLifetime] = 300;
+            };
+        }).ConfigureAwait(false);
+
+        (int StatusCode, string Body) = await RedeemFreshCodeAsync(
+            host, segment, SingleAuthorizationDetail("UniversityDegree_dc_sd_jwt")).ConfigureAwait(false);
+
+        Assert.AreEqual(500, StatusCode, Body);
+        Assert.Contains("\"error\":\"server_error\"", Body, StringComparison.Ordinal);
+        Assert.DoesNotContain(OAuthRequestParameterNames.AccessToken, Body, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// The library's own rule for a lifetime it cannot issue, at the token endpoint of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 Section 5.1</see>: the library holds every
+    /// lifetime it issues as its whole seconds, so a refresh-token lifetime under one second holds no whole second a
+    /// refresh token can be issued with. A refresh-token policy value of 500 milliseconds, set by the application's policy resolver, is
+    /// answered at the code redemption over the real wire with the library's own 500 <c>server_error</c> body and no
+    /// token, and the code, never spent, is redeemed once the resolver sets no such value.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task ARefreshTokenUnderASubSecondLifetimeIsNotIssuedAtTheCodeGrantAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        await ResolvePolicyWithAsync(host, static context => context.SetRefreshTokenLifetime(HalfSecond)).ConfigureAwait(false);
+        Dictionary<string, string> tokenFields = await AuthorizeFreshCodeAsync(host, segment).ConfigureAwait(false);
+
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, tokenFields, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(500, StatusCode, Body);
+        Assert.AreEqual(ServerNotReadyBody, Body);
+
+        await ResolvePolicyWithAsync(host, setPolicyValue: null).ConfigureAwait(false);
+        (int redeemedStatusCode, string redeemedBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, tokenFields, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, redeemedStatusCode, redeemedBody);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-6">RFC 6749 Section 6</see>: "The authorization server
+    /// MAY issue a new refresh token, in which case the client MUST discard the old refresh token and replace it with the
+    /// new refresh token." A successor born under a lifetime of 500 milliseconds would be expired on arrival and the
+    /// grant would end with the presented token spent. The library's own rule for a lifetime it cannot issue: a
+    /// refresh-token policy value of 500 milliseconds, set by the application's policy resolver after the pair is
+    /// issued, is answered at the refresh grant over the real wire with the library's own 500 <c>server_error</c> body
+    /// and no token, and the presented refresh token, never spent, is redeemed once the resolver sets no such value.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task ARefreshTokenUnderASubSecondLifetimeIsNotIssuedAtTheRefreshGrantAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        (string refreshToken, _) = await IssueBearerPairAsync(host, segment).ConfigureAwait(false);
+        await ResolvePolicyWithAsync(host, static context => context.SetRefreshTokenLifetime(HalfSecond)).ConfigureAwait(false);
+        Dictionary<string, string> refreshFields = RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, refreshToken);
+
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, refreshFields, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(500, StatusCode, Body);
+        Assert.AreEqual(ServerNotReadyBody, Body);
+
+        await ResolvePolicyWithAsync(host, setPolicyValue: null).ConfigureAwait(false);
+        (int redeemedStatusCode, string redeemedBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, refreshFields, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, redeemedStatusCode, redeemedBody);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.2">RFC 9126 Section 2.2</see>: "expires_in A JSON
+    /// number that represents the lifetime of the request URI in seconds as a positive integer." A <c>request_uri</c>
+    /// lifetime of <see cref="TimeSpan.MaxValue"/>, set by the application's policy resolver on a
+    /// <see cref="PolicyProfile.Rfc6749WithPkce"/> registration, holds more whole seconds than the response's
+    /// <c>expires_in</c> states. The library's own answer to a lifetime it cannot issue is 500 <c>server_error</c>: the
+    /// pushed authorization request over the real wire is answered with that body, no pushed request is stored and the
+    /// host records no fault.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task APushedRequestUriBeyondTheWholeSecondBoundIsNotIssuedAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolvePolicyAsync = async (registration, context, ct) =>
+            {
+                await PolicyProfiles.DefaultResolvePolicyAsync((ClientRecord)registration, context, ct).ConfigureAwait(false);
+                context.SetRequestUriLifetime(TimeSpan.MaxValue);
+            };
+        }).ConfigureAwait(false);
+
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, segment, BuildPlainParFields(), TestContext.CancellationToken).ConfigureAwait(false);
+        Exception[] faults = host.Host("default").ConsumeHttpFaults();
+
+        Assert.AreEqual(500, StatusCode, Body);
+        Assert.AreEqual(ServerNotReadyBody, Body);
+        Assert.IsEmpty(faults, string.Join(" | ", faults.Select(static fault => fault.Message)));
+        Assert.DoesNotContain(static entry => entry.State is ParRequestReceivedState, host.Host("default").FlowStates.Values,
+            "No pushed request may be stored under a lifetime the server cannot issue.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2">RFC 6749 Section 4.1.2</see>: "The authorization
+    /// code MUST expire shortly after it is issued to mitigate the risk of leaks." An authorization code lifetime of
+    /// <see cref="TimeSpan.MaxValue"/>, set by the application's policy resolver on a
+    /// <see cref="PolicyProfile.Rfc6749WithPkce"/> registration, states no expiry a code can be stored with. The
+    /// library's own answer to a lifetime it cannot issue is 500 <c>server_error</c>: the authorization request over the
+    /// real wire that references a pushed request is answered with that body and no redirect, no code is stored and the
+    /// host records no fault.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task AnAuthorizationCodeBeyondTheWholeSecondBoundIsNotIssuedAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolvePolicyAsync = async (registration, context, ct) =>
+            {
+                await PolicyProfiles.DefaultResolvePolicyAsync((ClientRecord)registration, context, ct).ConfigureAwait(false);
+                context.SetAuthorizationCodeLifetime(TimeSpan.MaxValue);
+            };
+        }).ConfigureAwait(false);
+        (int parStatusCode, string parBody) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, segment, BuildPlainParFields(), TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(201, parStatusCode, parBody);
+        string requestUri;
+        using(JsonDocument pushed = JsonDocument.Parse(parBody))
+        {
+            requestUri = pushed.RootElement.GetProperty("request_uri").GetString()!;
+        }
+
+        (int StatusCode, string Body, Uri? location) = await AuthorizePushedRequestAsync(host, segment, requestUri).ConfigureAwait(false);
+        Exception[] faults = host.Host("default").ConsumeHttpFaults();
+
+        Assert.AreEqual(500, StatusCode, Body);
+        Assert.AreEqual(ServerNotReadyBody, Body);
+        Assert.IsNull(location);
+        Assert.IsEmpty(faults, string.Join(" | ", faults.Select(static fault => fault.Message)));
+        Assert.DoesNotContain(static entry => entry.State is ServerCodeIssuedState, host.Host("default").FlowStates.Values,
+            "No code may be stored under a lifetime the server cannot issue.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 Section 5.1</see>: "expires_in
+    /// RECOMMENDED. The lifetime in seconds of the access token." and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-2.2">RFC 9068 Section 2.2</see>: "exp REQUIRED - as
+    /// defined in Section 4.1.4 of [RFC7519]." A server whose <see cref="TimingPolicy.AccessTokenLifetime"/> is 90.7
+    /// seconds issues its access tokens with a lifetime of whole seconds, the fraction dropped: a code redeemed over the
+    /// real wire half a second past a whole second is answered with <c>expires_in</c> 90, and the access token's
+    /// <c>exp</c> is 90 seconds after its <c>iat</c>.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task AFractionalLifetimeIsIssuedInWholeSecondsAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.Timings = TimingPolicy.Default with
+            {
+                AccessTokenLifetime = TimeSpan.FromTicks(907 * TimeSpan.TicksPerSecond / 10)
+            };
+        }).ConfigureAwait(false);
+        Dictionary<string, string> tokenFields = await AuthorizeFreshCodeAsync(host, segment).ConfigureAwait(false);
+        TimeProvider.Advance(HalfSecond);
+
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, tokenFields, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(200, StatusCode, Body);
+        using JsonDocument response = JsonDocument.Parse(Body);
+        Assert.AreEqual(90L, response.RootElement.GetProperty("expires_in").GetInt64(), Body);
+        Assert.AreEqual(90L, ReadLifetimeSeconds(response.RootElement.GetProperty(OAuthRequestParameterNames.AccessToken).GetString()!), Body);
+    }
+
+
+    /// <summary>
+    /// The library's own rule for a lifetime it cannot issue, at the token endpoint of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 Section 5.1</see>, whose response states
+    /// the access token's lifetime in seconds: an access-token policy value of zero, set by the application's policy
+    /// resolver, states no lifetime an access token can be issued with, and the token endpoint answers it itself with
+    /// 500 <c>server_error</c>. A plain code redemption over the real wire is answered with that body, the host records
+    /// no fault, no token is issued, and the code, never spent, is redeemed once the resolver sets no such value.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task AnAccessTokenUnderAZeroPolicyLifetimeIsNotIssuedAtTheCodeGrantAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        await ResolvePolicyWithAsync(host, static context => context.SetAccessTokenLifetime(TimeSpan.Zero)).ConfigureAwait(false);
+        Dictionary<string, string> tokenFields = await AuthorizeFreshCodeAsync(host, segment).ConfigureAwait(false);
+
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, tokenFields, TestContext.CancellationToken).ConfigureAwait(false);
+        Exception[] faults = host.Host("default").ConsumeHttpFaults();
+
+        Assert.AreEqual(500, StatusCode, Body);
+        Assert.AreEqual(ServerNotReadyBody, Body);
+        Assert.IsEmpty(faults, string.Join(" | ", faults.Select(static fault => fault.Message)));
+
+        await ResolvePolicyWithAsync(host, setPolicyValue: null).ConfigureAwait(false);
+        (int redeemedStatusCode, string redeemedBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, tokenFields, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, redeemedStatusCode, redeemedBody);
+    }
+
+
+    /// <summary>
+    /// The library's own rule for a lifetime it cannot issue, at the token endpoint of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 Section 5.1</see>, whose response states
+    /// the access token's lifetime in seconds, on a request that presents a DPoP proof: an access-token policy value of
+    /// zero, set by the application's policy resolver for a <see cref="PolicyProfile.Fapi20"/> registration, states no
+    /// lifetime a DPoP-bound access token can be issued with, and the token endpoint answers it itself. The code
+    /// redemption the DPoP-wired client's authorization yields, presented over the real wire with a DPoP proof of the
+    /// client's own DPoP key, is answered with status 500 and exactly the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c>, the host
+    /// records no fault and no token is issued; the code, never spent, is redeemed by the client with a DPoP-bound token
+    /// once the resolver sets no such value.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task AnAccessTokenUnderAZeroPolicyLifetimeIsNotIssuedAtTheSenderConstrainedCodeGrantAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Fapi20).ConfigureAwait(false);
+        using DpopClientFixture fixture = await CreateDpopFixtureAsync(host, material).ConfigureAwait(false);
+        await ResolvePolicyWithAsync(host, static context => context.SetAccessTokenLifetime(TimeSpan.Zero)).ConfigureAwait(false);
+        string flowId = await DriveDpopAuthorizationAsync(host, material, fixture).ConfigureAwait(false);
+        AuthorizationCodeReceivedState callbackState = (AuthorizationCodeReceivedState)fixture.ClientFlowStore[flowId];
+        Dictionary<string, string> tokenFields = RawAuthCodeWirePushers.BuildTokenFields(
+            ClientId, callbackState.Code, callbackState.Pkce.EncodedVerifier, callbackState.RedirectUri.OriginalString);
+
+        HttpResponseData refused = await PushDpopTokenFieldsAsync(
+            host, material.Registration.TenantId.Value, fixture.DpopKey, tokenFields).ConfigureAwait(false);
+        Exception[] faults = host.Host("default").ConsumeHttpFaults();
+
+        Assert.AreEqual(500, refused.StatusCode, refused.Body);
+        Assert.AreEqual(ServerNotReadyBody, refused.Body);
+        Assert.IsEmpty(faults, string.Join(" | ", faults.Select(static fault => fault.Message)));
+
+        await ResolvePolicyWithAsync(host, setPolicyValue: null).ConfigureAwait(false);
+        AuthCodeFlowEndpointResult redeemed = await fixture.Client.AuthCode.ExchangeTokenAsync(
+            fixture.Registration, flowId, [], null, TestContext.CancellationToken).ConfigureAwait(false);
+        string redeemedAnswer = $"Outcome={redeemed.Outcome} ErrorCode={redeemed.ErrorCode} ErrorDescription={redeemed.ErrorDescription}";
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, redeemed.Outcome, redeemedAnswer);
+        Assert.AreEqual("DPoP", (string)redeemed.Body![OAuthRequestParameterNames.TokenType], redeemedAnswer);
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#IDToken">OpenID Connect Core 1.0 Section 2</see>:
+    /// "exp REQUIRED. Expiration time on or after which the ID Token MUST NOT be accepted by the RP when performing
+    /// authentication with the OP." A policy resolver that stores the number 300 rather than a <see cref="TimeSpan"/>
+    /// under the ID Token lifetime's policy name states no expiration an ID Token can be issued with. The library's own
+    /// answer to a lifetime it cannot issue is 500 <c>server_error</c>, given by the token endpoint itself: an
+    /// <c>openid</c> code redemption over the real wire is answered with that body, the host records no fault, no token
+    /// is issued, and the code, never spent, is redeemed with an ID Token once the resolver sets no such value.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task AnIdTokenUnderAMistypedPolicyLifetimeIsNotIssuedAtTheCodeGrantAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: CapabilitiesWithOpenIdConnect)
+            .ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolvePolicyAsync = async (registration, context, ct) =>
+            {
+                await PolicyProfiles.DefaultResolvePolicyAsync((ClientRecord)registration, context, ct).ConfigureAwait(false);
+                context[PolicyContextKeys.IdTokenLifetime] = 300;
+            };
+        }).ConfigureAwait(false);
+        Dictionary<string, string> tokenFields = await AuthorizeFreshCodeAsync(host, segment).ConfigureAwait(false);
+
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, tokenFields, TestContext.CancellationToken).ConfigureAwait(false);
+        Exception[] faults = host.Host("default").ConsumeHttpFaults();
+
+        Assert.AreEqual(500, StatusCode, Body);
+        Assert.AreEqual(ServerNotReadyBody, Body);
+        Assert.IsEmpty(faults, string.Join(" | ", faults.Select(static fault => fault.Message)));
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolvePolicyAsync = static (registration, context, ct) =>
+                PolicyProfiles.DefaultResolvePolicyAsync((ClientRecord)registration, context, ct);
+        }).ConfigureAwait(false);
+        (int redeemedStatusCode, string redeemedBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, tokenFields, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, redeemedStatusCode, redeemedBody);
+        Assert.Contains($"\"{OAuthRequestParameterNames.IdToken}\":", redeemedBody, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/fapi-security-profile-2_0-final.html#section-5.3.2.1">FAPI 2.0 Security
+    /// Profile Section 5.3.2.1</see> item 13: "to accommodate clock offsets, shall accept JWTs with an iat or nbf
+    /// timestamp between 0 and 10 seconds in the future but shall reject JWTs with an iat or nbf timestamp greater than
+    /// 60 seconds in the future. See Note 3 for further details and rationale; and" A
+    /// <see cref="PolicyProfile.Fapi20"/> registration pushes, over the real wire, a request object whose <c>iat</c> and
+    /// <c>nbf</c> lie ahead of the server's clock: under a <see cref="TimingPolicy.ClockSkewTolerance"/> of 120 seconds
+    /// one 90 seconds ahead is refused <c>invalid_request_object</c> and one 55 seconds ahead is accepted; under 5
+    /// seconds one 8 seconds ahead is accepted and one 12 seconds ahead is refused.
+    /// </summary>
+    /// <param name="configuredSkewSeconds">The server's <see cref="TimingPolicy.ClockSkewTolerance"/>, in seconds.</param>
+    /// <param name="aheadSeconds">How far the request object's <c>iat</c> and <c>nbf</c> lie ahead, in seconds.</param>
+    /// <param name="expectedStatusCode">The pushed authorization response's status code.</param>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DataRow(120, 90, 400)]
+    [DataRow(120, 55, 201)]
+    [DataRow(5, 8, 201)]
+    [DataRow(5, 12, 400)]
+    public async Task AFapi20RequestObjectAheadOfTheClockIsHeldToTheProfilesWindowAsync(
+        int configuredSkewSeconds, int aheadSeconds, int expectedStatusCode)
+    {
+        (int StatusCode, string Body) = await PushRequestObjectAheadAsync(
+            PolicyProfile.Fapi20, configuredSkewSeconds, aheadSeconds).ConfigureAwait(false);
+
+        Assert.AreEqual(expectedStatusCode, StatusCode, Body);
+        if(expectedStatusCode == 400)
+        {
+            Assert.Contains("\"error\":\"invalid_request_object\"", Body, StringComparison.Ordinal);
+        }
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.5">RFC 7519 Section 4.1.5</see>: "Implementers MAY
+    /// provide for some small leeway, usually no more than a few minutes, to account for clock skew." The RFC 6749 with
+    /// PKCE profile holds no FAPI 2.0 window: a <see cref="PolicyProfile.Rfc6749WithPkce"/> registration pushes, over the
+    /// real wire, a request object whose <c>iat</c> and <c>nbf</c> lie ahead of the server's clock, and the server's own
+    /// <see cref="TimingPolicy.ClockSkewTolerance"/> decides: under 120 seconds one 90 seconds ahead is accepted, under 5
+    /// seconds one 8 seconds ahead is refused <c>invalid_request_object</c>.
+    /// </summary>
+    /// <param name="configuredSkewSeconds">The server's <see cref="TimingPolicy.ClockSkewTolerance"/>, in seconds.</param>
+    /// <param name="aheadSeconds">How far the request object's <c>iat</c> and <c>nbf</c> lie ahead, in seconds.</param>
+    /// <param name="expectedStatusCode">The pushed authorization response's status code.</param>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DataRow(120, 90, 201)]
+    [DataRow(5, 8, 400)]
+    public async Task AnRfc6749RequestObjectAheadOfTheClockIsHeldToTheServersOwnSkewAsync(
+        int configuredSkewSeconds, int aheadSeconds, int expectedStatusCode)
+    {
+        (int StatusCode, string Body) = await PushRequestObjectAheadAsync(
+            PolicyProfile.Rfc6749WithPkce, configuredSkewSeconds, aheadSeconds).ConfigureAwait(false);
+
+        Assert.AreEqual(expectedStatusCode, StatusCode, Body);
+        if(expectedStatusCode == 400)
+        {
+            Assert.Contains("\"error\":\"invalid_request_object\"", Body, StringComparison.Ordinal);
+        }
+    }
+
+
+    /// <summary>
+    /// The library's own rule for a lifetime it cannot issue, at the token endpoint of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 Section 5.1</see>, whose response states
+    /// the access token's lifetime in seconds: the library's access-token producer, installed through
+    /// <see cref="AuthorizationServerIntegration.TokenProducers"/> as a copy under another name, issues with the lifetime
+    /// the one resolution answers, so the token endpoint resolves it before that copy runs. Under an access-token policy
+    /// value of zero set by the application's policy resolver, a code redemption over the real wire is answered with
+    /// status 500 and exactly the library's <c>server_error</c> body, the host records no fault and no token is issued,
+    /// and the code, never spent, is redeemed once the resolver sets no such value.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task AnAccessTokenOfACopiedBuiltInProducerUnderAZeroPolicyLifetimeIsNotIssuedAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.TokenProducers = new TokenProducerSet(
+            [
+                TokenProducer.Rfc9068AccessToken with { Name = "copied-access-token" },
+                TokenProducer.Oidc10IdToken
+            ]);
+        }).ConfigureAwait(false);
+        await ResolvePolicyWithAsync(host, static context => context.SetAccessTokenLifetime(TimeSpan.Zero)).ConfigureAwait(false);
+        Dictionary<string, string> tokenFields = await AuthorizeFreshCodeAsync(host, segment).ConfigureAwait(false);
+
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, tokenFields, TestContext.CancellationToken).ConfigureAwait(false);
+        Exception[] faults = host.Host("default").ConsumeHttpFaults();
+
+        Assert.AreEqual(500, StatusCode, Body);
+        Assert.AreEqual(ServerNotReadyBody, Body);
+        Assert.IsEmpty(faults, string.Join(" | ", faults.Select(static fault => fault.Message)));
+
+        await ResolvePolicyWithAsync(host, setPolicyValue: null).ConfigureAwait(false);
+        (int redeemedStatusCode, string redeemedBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, tokenFields, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, redeemedStatusCode, redeemedBody);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2">RFC 6749 Section 4.1.2</see>: "The authorization
+    /// code MUST expire shortly after it is issued to mitigate the risk of leaks." The library's rule for a request no
+    /// built-in profile ran on: the code lives the request server's <see cref="TimingPolicy.AuthorizationCodeLifetime"/>.
+    /// An application's policy resolver that applies no profile, on a server whose code lifetime is 30 seconds, issues a
+    /// code over the real wire that is redeemed 29 seconds later and refused <c>invalid_grant</c> 31 seconds later.
+    /// </summary>
+    /// <param name="redeemAfterSeconds">How long after the authorization the code is redeemed, in seconds.</param>
+    /// <param name="expectedStatusCode">The token endpoint's status code.</param>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DataRow(29, 200)]
+    [DataRow(31, 400)]
+    public async Task ACodeOfARequestNoProfileRanOnLivesTheServersTimingPolicyLifetimeAsync(
+        int redeemAfterSeconds, int expectedStatusCode)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.Timings = TimingPolicy.Default with { AuthorizationCodeLifetime = TimeSpan.FromSeconds(30) };
+            candidateIntegration.ResolvePolicyAsync = static (registration, context, ct) => ValueTask.CompletedTask;
+        }).ConfigureAwait(false);
+
+        (int StatusCode, string Body) = await RedeemCodeAfterAsync(
+            host, segment, TimeSpan.FromSeconds(redeemAfterSeconds)).ConfigureAwait(false);
+
+        Assert.AreEqual(expectedStatusCode, StatusCode, Body);
+        if(expectedStatusCode == 400)
+        {
+            Assert.Contains("\"error\":\"invalid_grant\"", Body, StringComparison.Ordinal);
+        }
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2">RFC 6749 Section 4.1.2</see>: "A maximum
+    /// authorization code lifetime of 10 minutes is RECOMMENDED." A <see cref="PolicyProfile.Rfc6749WithPkce"/>
+    /// registration on a server under <see cref="TimingPolicy.Default"/> is issued a code over the real wire that is
+    /// redeemed 599 seconds after the authorization and refused <c>invalid_grant</c> 601 seconds after it.
+    /// </summary>
+    /// <param name="redeemAfterSeconds">How long after the authorization the code is redeemed, in seconds.</param>
+    /// <param name="expectedStatusCode">The token endpoint's status code.</param>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DataRow(599, 200)]
+    [DataRow(601, 400)]
+    public async Task AnRfc6749CodeUnderTheDefaultTimingPolicyIsRedeemableForAtMostTenMinutesAsync(
+        int redeemAfterSeconds, int expectedStatusCode)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        (int StatusCode, string Body) = await RedeemCodeAfterAsync(
+            host, segment, TimeSpan.FromSeconds(redeemAfterSeconds)).ConfigureAwait(false);
+
+        Assert.AreEqual(expectedStatusCode, StatusCode, Body);
+        if(expectedStatusCode == 400)
+        {
+            Assert.Contains("\"error\":\"invalid_grant\"", Body, StringComparison.Ordinal);
+        }
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.2">RFC 9126 Section 2.2</see>: "expires_in A JSON
+    /// number that represents the lifetime of the request URI in seconds as a positive integer." A <c>request_uri</c>
+    /// lifetime of <see cref="TimeSpan.MaxValue"/> holds more whole seconds than the response states, and one of 500
+    /// milliseconds holds none. The library's own answer to a lifetime it cannot issue is 500 <c>server_error</c>: a
+    /// pushed authorization request carrying a signed request object, on a <see cref="PolicyProfile.Rfc6749WithPkce"/>
+    /// registration whose policy resolver sets that lifetime, is answered over the real wire with that body, no pushed
+    /// request is stored and the host records no fault.
+    /// </summary>
+    /// <param name="lifetimeTicks">The <c>request_uri</c> lifetime the resolver sets, in ticks.</param>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DataRow(long.MaxValue, DisplayName = "TimeSpan.MaxValue")]
+    [DataRow(5_000_000L, DisplayName = "500 milliseconds")]
+    public async Task APushedRequestObjectUnderAnUnissuableRequestUriLifetimeIsNotStoredAsync(long lifetimeTicks)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: Capabilities.Add(WellKnownCapabilityIdentifiers.OAuthJwtSecuredAuthorizationRequest))
+            .ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        await ListSigningKeyUnderAsync(host, material, KeyUsageContext.JarSigning).ConfigureAwait(false);
+        await ResolvePolicyWithAsync(host, context => context.SetRequestUriLifetime(TimeSpan.FromTicks(lifetimeTicks)))
+            .ConfigureAwait(false);
+        string compactJar = await BuildRequestObjectAsync(
+            material, TimeProvider.GetUtcNow(), lifetimeSeconds: 30, "jar-unissuable-request-uri").ConfigureAwait(false);
+
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, segment, BuildRequestObjectFields(compactJar), TestContext.CancellationToken).ConfigureAwait(false);
+        Exception[] faults = host.Host("default").ConsumeHttpFaults();
+
+        Assert.AreEqual(500, StatusCode, Body);
+        Assert.AreEqual(ServerNotReadyBody, Body);
+        Assert.IsEmpty(faults, string.Join(" | ", faults.Select(static fault => fault.Message)));
+        Assert.DoesNotContain(static entry => entry.State is ParRequestReceivedState, host.Host("default").FlowStates.Values,
+            "No pushed request may be stored under a lifetime the server cannot issue.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2">RFC 6749 Section 4.1.2</see>: "The authorization
+    /// code MUST expire shortly after it is issued to mitigate the risk of leaks." An authorization code lifetime of
+    /// <see cref="TimeSpan.MaxValue"/> states no expiry a code can be stored with, and one of 500 milliseconds a code born
+    /// expired. The library's own answer to a lifetime it cannot issue is 500 <c>server_error</c>: a direct
+    /// authorization request, on a <see cref="PolicyProfile.Rfc6749WithPkce"/> registration whose policy resolver sets
+    /// that lifetime, is answered over the real wire with that body and no redirect, no code is stored and the host
+    /// records no fault.
+    /// </summary>
+    /// <param name="lifetimeTicks">The authorization code lifetime the resolver sets, in ticks.</param>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DataRow(long.MaxValue, DisplayName = "TimeSpan.MaxValue")]
+    [DataRow(5_000_000L, DisplayName = "500 milliseconds")]
+    public async Task ADirectAuthorizationRequestUnderAnUnissuableCodeLifetimeIsNotServedAsync(long lifetimeTicks)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: Capabilities.Add(WellKnownCapabilityIdentifiers.OAuthDirectAuthorization))
+            .ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        HostedAuthorizationServer hosted = host.Host("default");
+        await ResolvePolicyWithAsync(host, context => context.SetAuthorizationCodeLifetime(TimeSpan.FromTicks(lifetimeTicks)))
+            .ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        Dictionary<string, string> fields = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
+            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
+        };
+
+        using HttpResponseMessage response = await SendAuthorizeGetAsync(host, hosted, segment, fields).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Exception[] faults = hosted.ConsumeHttpFaults();
+
+        Assert.AreEqual(500, (int)response.StatusCode, body);
+        Assert.AreEqual(ServerNotReadyBody, body);
+        Assert.IsNull(response.Headers.Location);
+        Assert.IsEmpty(faults, string.Join(" | ", faults.Select(static fault => fault.Message)));
+        Assert.DoesNotContain(static entry => entry.State is ServerCodeIssuedState, hosted.FlowStates.Values,
+            "No code may be stored under a lifetime the server cannot issue.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2">RFC 6749 Section 4.1.2</see>: "The authorization
+    /// code MUST expire shortly after it is issued to mitigate the risk of leaks." An authorization code lifetime of
+    /// <see cref="TimeSpan.MaxValue"/> states no expiry a code can be stored with, and one of 500 milliseconds a code born
+    /// expired. The library's own answer to a lifetime it cannot issue is 500 <c>server_error</c>: an authorization
+    /// request that passes a signed request object by value, on a <see cref="PolicyProfile.Rfc6749WithPkce"/>
+    /// registration whose policy resolver sets that lifetime, is answered over the real wire with that body and no
+    /// redirect, no code is stored and the host records no fault.
+    /// </summary>
+    /// <param name="lifetimeTicks">The authorization code lifetime the resolver sets, in ticks.</param>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DataRow(long.MaxValue, DisplayName = "TimeSpan.MaxValue")]
+    [DataRow(5_000_000L, DisplayName = "500 milliseconds")]
+    public async Task ARequestObjectByValueUnderAnUnissuableCodeLifetimeIsNotServedAsync(long lifetimeTicks)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: Capabilities
+                .Add(WellKnownCapabilityIdentifiers.OAuthDirectAuthorization)
+                .Add(WellKnownCapabilityIdentifiers.OAuthJwtSecuredAuthorizationRequest))
+            .ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        HostedAuthorizationServer hosted = host.Host("default");
+        await ListSigningKeyUnderAsync(host, material, KeyUsageContext.JarSigning).ConfigureAwait(false);
+        await ResolvePolicyWithAsync(host, context => context.SetAuthorizationCodeLifetime(TimeSpan.FromTicks(lifetimeTicks)))
+            .ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string compactJar = await BuildRequestObjectAsync(
+            material, TimeProvider.GetUtcNow(), lifetimeSeconds: 30, "jar-by-value-unissuable-code").ConfigureAwait(false);
+
+        using HttpResponseMessage response = await SendAuthorizeGetAsync(
+            host, hosted, segment, BuildRequestObjectFields(compactJar)).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Exception[] faults = hosted.ConsumeHttpFaults();
+
+        Assert.AreEqual(500, (int)response.StatusCode, body);
+        Assert.AreEqual(ServerNotReadyBody, body);
+        Assert.IsNull(response.Headers.Location);
+        Assert.IsEmpty(faults, string.Join(" | ", faults.Select(static fault => fault.Message)));
+        Assert.DoesNotContain(static entry => entry.State is ServerCodeIssuedState, hosted.FlowStates.Values,
+            "No code may be stored under a lifetime the server cannot issue.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/oauth-v2-jarm-final.html#section-2.1">JWT Secured Authorization Response
+    /// Mode Section 2.1</see> has the response JWT carry an <c>exp</c>. The library's rule: the response JWT expires with
+    /// the authorization code it would convey, whose lifetime is issued in whole seconds, so a code lifetime of 90.7
+    /// seconds, set by the application's policy resolver on a <see cref="PolicyProfile.Rfc6749WithPkce"/> registration
+    /// that lists signing material for authorization responses, gives a JWT-secured error response whose <c>exp</c> is
+    /// 90 seconds after the whole second of the instant it is issued at: the authorization request over the real wire,
+    /// half a second past a whole second, that the application denies and whose pushed request named
+    /// <c>response_mode=jwt</c>, is redirected with a response JWT so stamped.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task AJwtSecuredErrorResponseUnderAFractionalCodeLifetimeExpiresInWholeSecondsAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        await ListSigningKeyUnderAsync(host, material, KeyUsageContext.AuthorizationResponseSigning).ConfigureAwait(false);
+        await ResolvePolicyWithAsync(host, static context => context.SetAuthorizationCodeLifetime(NinetyPointSevenSeconds))
+            .ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.EvaluateAuthorizationRequestAsync = static (evaluation, registration, context, ct) =>
+                ValueTask.FromResult(AuthorizationRequestDecision.Deny(AuthorizationDenialReason.AccessDenied));
+        }).ConfigureAwait(false);
+        Dictionary<string, string> parFields = BuildPlainParFields();
+        parFields[OAuthRequestParameterNames.ResponseMode] = JarmResponseModes.Jwt;
+        (int parStatusCode, string parBody) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, segment, parFields, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(201, parStatusCode, parBody);
+        string requestUri;
+        using(JsonDocument pushed = JsonDocument.Parse(parBody))
+        {
+            requestUri = pushed.RootElement.GetProperty("request_uri").GetString()!;
+        }
+
+        TimeProvider.Advance(HalfSecond);
+        long issuedAtSecond = TimeProvider.GetUtcNow().ToUnixTimeSeconds();
+
+        (int StatusCode, string Body, Uri? location) = await AuthorizePushedRequestAsync(host, segment, requestUri).ConfigureAwait(false);
+
+        Assert.AreEqual(302, StatusCode, Body);
+        string responseJwt = TestBrowser.ExtractQueryParam(location!.ToString(), "response")
+            ?? throw new AssertFailedException($"The redirect carries no response parameter: {location}");
+        using JsonDocument payload = JwtPayloadReader.ParsePayloadJson(responseJwt);
+        Assert.AreEqual(OAuthErrors.AccessDenied, payload.RootElement.GetProperty("error").GetString(), location.ToString());
+        Assert.AreEqual(issuedAtSecond + 90L, payload.RootElement.GetProperty(WellKnownJwtClaimNames.Exp).GetInt64(), location.ToString());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.2">RFC 9126 Section 2.2</see>: "expires_in A JSON
+    /// number that represents the lifetime of the request URI in seconds as a positive integer." A <c>request_uri</c>
+    /// lifetime of 90.7 seconds, set by the application's policy resolver on a
+    /// <see cref="PolicyProfile.Rfc6749WithPkce"/> registration, is issued as its whole seconds: the pushed authorization
+    /// response over the real wire states <c>expires_in</c> 90, and the pushed request lives that long, the
+    /// authorization request that references it 89 seconds later served with a code and the one 90 seconds later
+    /// refused <c>invalid_request_uri</c>.
+    /// </summary>
+    /// <param name="authorizeAfterSeconds">How long after the push the authorization request is sent, in seconds.</param>
+    /// <param name="isServed">Whether the authorization request is served with a code.</param>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DataRow(89, true)]
+    [DataRow(90, false)]
+    public async Task APushedRequestUnderAFractionalLifetimeLivesItsWholeSecondsAsync(int authorizeAfterSeconds, bool isServed)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        await ResolvePolicyWithAsync(host, static context => context.SetRequestUriLifetime(NinetyPointSevenSeconds))
+            .ConfigureAwait(false);
+
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, segment, BuildPlainParFields(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(201, StatusCode, Body);
+        using JsonDocument response = JsonDocument.Parse(Body);
+        Assert.AreEqual(90L, response.RootElement.GetProperty("expires_in").GetInt64(), Body);
+        string requestUri = response.RootElement.GetProperty("request_uri").GetString()!;
+        TimeProvider.Advance(TimeSpan.FromSeconds(authorizeAfterSeconds));
+
+        (int authorizeStatusCode, string authorizeBody, Uri? location) =
+            await AuthorizePushedRequestAsync(host, segment, requestUri).ConfigureAwait(false);
+
+        if(isServed)
+        {
+            Assert.AreEqual(302, authorizeStatusCode, authorizeBody);
+            Assert.IsNotNull(TestBrowser.ExtractQueryParam(location!.ToString(), OAuthRequestParameterNames.Code), location.ToString());
+
+            return;
+        }
+
+        Assert.AreEqual(400, authorizeStatusCode, authorizeBody);
+        Assert.Contains("\"error\":\"invalid_request_uri\"", authorizeBody, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// The library's own rule for a lifetime it cannot issue, at the refresh grant of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-6">RFC 6749 Section 6</see>: an access-token policy
+    /// value of zero, set by the application's policy resolver after the pair is issued, states no lifetime the
+    /// refreshed access token can be issued with, and the token endpoint answers it itself. The refresh grant over the
+    /// real wire is answered with status 500 and exactly the library's <c>server_error</c> body, the host records no
+    /// fault and no token is issued; the presented refresh token, never spent, is redeemed once the resolver sets no
+    /// such value.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task AnAccessTokenUnderAZeroPolicyLifetimeIsNotIssuedAtTheRefreshGrantAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        (string refreshToken, _) = await IssueBearerPairAsync(host, segment).ConfigureAwait(false);
+        await ResolvePolicyWithAsync(host, static context => context.SetAccessTokenLifetime(TimeSpan.Zero)).ConfigureAwait(false);
+        Dictionary<string, string> refreshFields = RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, refreshToken);
+
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, refreshFields, TestContext.CancellationToken).ConfigureAwait(false);
+        Exception[] faults = host.Host("default").ConsumeHttpFaults();
+
+        Assert.AreEqual(500, StatusCode, Body);
+        Assert.AreEqual(ServerNotReadyBody, Body);
+        Assert.IsEmpty(faults, string.Join(" | ", faults.Select(static fault => fault.Message)));
+
+        await ResolvePolicyWithAsync(host, setPolicyValue: null).ConfigureAwait(false);
+        (int redeemedStatusCode, string redeemedBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, refreshFields, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, redeemedStatusCode, redeemedBody);
+    }
+
+
+    /// <summary>
+    /// The library's own ceiling of the request object lifetime under the HAIP 1.0 profile
+    /// (<see href="https://openid.net/specs/openid4vc-high-assurance-interoperability-profile-1_0-final.html#section-4">HAIP
+    /// 1.0 Section 4</see>: "MUST comply with the provisions of [FAPI2_Security_Profile] that are applicable to this
+    /// specification.") is 60 seconds, a ceiling and never a widening of a shorter value. A <see cref="PolicyProfile.Haip10"/>
+    /// registration on a server whose <see cref="TimingPolicy.AuthCodeRequestObjectLifetime"/> is 30 seconds pushes, over
+    /// the real wire, a request object whose <c>exp</c> lies 45 seconds after its <c>iat</c>: refused 400
+    /// <c>invalid_request_object</c>; one whose <c>exp</c> lies 25 seconds after it is accepted.
+    /// </summary>
+    /// <param name="lifetimeSeconds">How far the request object's <c>exp</c> lies after its <c>iat</c>, in seconds.</param>
+    /// <param name="expectedStatusCode">The pushed authorization response's status code.</param>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DataRow(45, 400)]
+    [DataRow(25, 201)]
+    public async Task AHaip10RequestObjectIsHeldToTheServersShorterLifetimeAsync(int lifetimeSeconds, int expectedStatusCode)
+    {
+        (int StatusCode, string Body) = await PushRequestObjectAsync(
+            PolicyProfile.Haip10,
+            TimingPolicy.Default with { AuthCodeRequestObjectLifetime = TimeSpan.FromSeconds(30) },
+            aheadSeconds: 0,
+            lifetimeSeconds).ConfigureAwait(false);
+
+        Assert.AreEqual(expectedStatusCode, StatusCode, Body);
+        if(expectedStatusCode == 400)
+        {
+            Assert.Contains("\"error\":\"invalid_request_object\"", Body, StringComparison.Ordinal);
+        }
+    }
+
+
+    /// <summary>
+    /// The library's own rule for a lifetime the deployment configures: <see cref="TimingPolicy"/> holds every lifetime
+    /// as its whole seconds, so an inbound judgment against one compares against those whole seconds. A request object's
+    /// <c>iat</c> and <c>exp</c> are NumericDates (<see href="https://www.rfc-editor.org/rfc/rfc7519#section-2">RFC 7519
+    /// Section 2</see>: "other than that non-integer values can be represented"), read here through a payload
+    /// deserializer that resolves each to the instant it names, its fraction kept. Under the RFC 6749 with PKCE profile,
+    /// on a server whose <see cref="TimingPolicy.AuthCodeRequestObjectLifetime"/> is 90.7 seconds, held as 90, a request
+    /// object pushed over the real wire whose <c>exp</c> lies 90 seconds after its <c>iat</c> is accepted 201, and one
+    /// whose <c>exp</c> lies 90.5 or 91 seconds after it is refused 400 <c>invalid_request_object</c>.
+    /// </summary>
+    /// <param name="lifetimeTicks">How far the request object's <c>exp</c> lies after its <c>iat</c>, in ticks.</param>
+    /// <param name="expectedStatusCode">The pushed authorization response's status code.</param>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DataRow(900_000_000L, 201)]
+    [DataRow(905_000_000L, 400)]
+    [DataRow(910_000_000L, 400)]
+    public async Task ARequestObjectIsHeldToTheWholeSecondsOfAFractionalCeilingAsync(long lifetimeTicks, int expectedStatusCode)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce,
+            capabilities: Capabilities.Add(WellKnownCapabilityIdentifiers.OAuthJwtSecuredAuthorizationRequest))
+            .ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.Timings = TimingPolicy.Default with { AuthCodeRequestObjectLifetime = NinetyPointSevenSeconds };
+            candidateIntegration.Codecs.JwtPayloadDeserializer = static bytes => DeserializeWithFractionalNumericDates(bytes);
+        }).ConfigureAwait(false);
+        await ListSigningKeyUnderAsync(host, material, KeyUsageContext.JarSigning).ConfigureAwait(false);
+        DateTimeOffset issuedAt = TimeProvider.GetUtcNow();
+        Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
+            material, issuedAt, ClientId, RedirectUri, "jar-state", "jar-nonce");
+        claims[WellKnownJwtClaimNames.Exp] = issuedAt.ToUnixTimeSeconds() + ((decimal)lifetimeTicks / TimeSpan.TicksPerSecond);
+        claims[WellKnownJwtClaimNames.Jti] = $"jar-fractional-ceiling-{lifetimeTicks}";
+        string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(material, claims, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        (int StatusCode, string Body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, segment, BuildRequestObjectFields(compactJar), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(expectedStatusCode, StatusCode, Body);
+        if(expectedStatusCode == 400)
+        {
+            Assert.Contains("\"error\":\"invalid_request_object\"", Body, StringComparison.Ordinal);
+        }
+    }
+
+
+    /// <summary>
+    /// Deserializes a request object payload with the test host's own options and resolves each NumericDate claim
+    /// (<c>iat</c>, <c>nbf</c>, <c>exp</c>) that the JSON states as a number with a fraction to the instant it names, the
+    /// fraction kept: the shape a payload deserializer that resolves NumericDates hands the request object verification.
+    /// A NumericDate stated as a whole number is left as the number it is.
+    /// </summary>
+    /// <param name="bytes">The payload's UTF-8 JSON.</param>
+    /// <returns>The payload's claims.</returns>
+    private static Dictionary<string, object> DeserializeWithFractionalNumericDates(ReadOnlySpan<byte> bytes)
+    {
+        Dictionary<string, object> claims = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+            bytes, TestSetup.DefaultSerializationOptions)
+            ?? throw new FormatException("Payload JSON parsed to null.");
+        foreach(string name in new[] { WellKnownJwtClaimNames.Iat, WellKnownJwtClaimNames.Nbf, WellKnownJwtClaimNames.Exp })
+        {
+            decimal? seconds = claims.TryGetValue(name, out object? value)
+                ? value switch
+                {
+                    decimal fractional => fractional,
+                    double fractional => (decimal)fractional,
+                    JsonElement { ValueKind: JsonValueKind.Number } element => element.GetDecimal(),
+                    _ => null
+                }
+                : null;
+            if(seconds is decimal stated)
+            {
+                claims[name] = DateTimeOffset.UnixEpoch.AddTicks((long)(stated * TimeSpan.TicksPerSecond));
+            }
+        }
+
+        return claims;
+    }
+
+
+    /// <summary>
+    /// Registers a client under <paramref name="profile"/> on a server whose <see cref="TimingPolicy.ClockSkewTolerance"/>
+    /// is <paramref name="configuredSkewSeconds"/>, lists the registration's own signing material for request objects,
+    /// and pushes over the real wire a signed request object whose <c>iat</c> and <c>nbf</c> lie
+    /// <paramref name="aheadSeconds"/> ahead of the server's clock, with an <c>exp</c> 30 seconds after them.
+    /// </summary>
+    /// <param name="profile">The registration's profile.</param>
+    /// <param name="configuredSkewSeconds">The server's clock skew tolerance, in seconds.</param>
+    /// <param name="aheadSeconds">How far the request object's <c>iat</c> and <c>nbf</c> lie ahead, in seconds.</param>
+    /// <returns>The pushed authorization response's status code and body.</returns>
+    private Task<(int StatusCode, string Body)> PushRequestObjectAheadAsync(
+        PolicyProfile profile, int configuredSkewSeconds, int aheadSeconds) =>
+        PushRequestObjectAsync(
+            profile,
+            TimingPolicy.Default with { ClockSkewTolerance = TimeSpan.FromSeconds(configuredSkewSeconds) },
+            aheadSeconds,
+            lifetimeSeconds: 30);
+
+
+    /// <summary>
+    /// Registers a client under <paramref name="profile"/> on a server whose <see cref="TimingPolicy"/> is
+    /// <paramref name="timings"/>, lists the registration's own signing material for request objects, and pushes over
+    /// the real wire a signed request object whose <c>iat</c> and <c>nbf</c> lie <paramref name="aheadSeconds"/> ahead
+    /// of the server's clock, with an <c>exp</c> <paramref name="lifetimeSeconds"/> after them.
+    /// </summary>
+    /// <param name="profile">The registration's profile.</param>
+    /// <param name="timings">The server's timing record.</param>
+    /// <param name="aheadSeconds">How far the request object's <c>iat</c> and <c>nbf</c> lie ahead, in seconds.</param>
+    /// <param name="lifetimeSeconds">How far the request object's <c>exp</c> lies after its <c>iat</c>, in seconds.</param>
+    /// <returns>The pushed authorization response's status code and body.</returns>
+    private async Task<(int StatusCode, string Body)> PushRequestObjectAsync(
+        PolicyProfile profile, TimingPolicy timings, int aheadSeconds, int lifetimeSeconds)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: profile,
+            capabilities: Capabilities.Add(WellKnownCapabilityIdentifiers.OAuthJwtSecuredAuthorizationRequest))
+            .ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.Timings = timings;
+        }).ConfigureAwait(false);
+        await ListSigningKeyUnderAsync(host, material, KeyUsageContext.JarSigning).ConfigureAwait(false);
+        string compactJar = await BuildRequestObjectAsync(
+            material, TimeProvider.GetUtcNow() + TimeSpan.FromSeconds(aheadSeconds), lifetimeSeconds,
+            $"jar-{aheadSeconds}-{lifetimeSeconds}").ConfigureAwait(false);
+
+        return await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, segment, BuildRequestObjectFields(compactJar), TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Lists the registration's own signing material under <paramref name="usage"/>, so the host's resolvers find it
+    /// for that usage by its identifier.
+    /// </summary>
+    /// <param name="host">The host holding the registration.</param>
+    /// <param name="material">The registered client.</param>
+    /// <param name="usage">The usage the signing material is listed under.</param>
+    /// <returns>A task that completes when the updated registration is live.</returns>
+    private async Task ListSigningKeyUnderAsync(TestHostShell host, VerifierKeyMaterial material, KeyUsageContext usage)
+    {
+        _ = await host.UpdateAsync(material, previous =>
+        {
+            Dictionary<KeyUsageContext, SigningKeySet> signingKeys = new(previous.SigningKeys)
+            {
+                [usage] = new SigningKeySet { Current = [material.SigningKeyId] }
+            };
+
+            return previous with { SigningKeys = signingKeys };
+        }, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Signs a request object with <paramref name="material"/>'s own signing material whose <c>iat</c> and <c>nbf</c>
+    /// are <paramref name="issuedAt"/>, whose <c>exp</c> is <paramref name="lifetimeSeconds"/> later and whose
+    /// <c>jti</c> is <paramref name="jti"/>.
+    /// </summary>
+    /// <param name="material">The registered client.</param>
+    /// <param name="issuedAt">The request object's <c>iat</c> and <c>nbf</c>.</param>
+    /// <param name="lifetimeSeconds">How far the <c>exp</c> lies after <paramref name="issuedAt"/>, in seconds.</param>
+    /// <param name="jti">The request object's <c>jti</c>.</param>
+    /// <returns>The compact request object.</returns>
+    private async Task<string> BuildRequestObjectAsync(
+        VerifierKeyMaterial material, DateTimeOffset issuedAt, int lifetimeSeconds, string jti)
+    {
+        Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
+            material, issuedAt, ClientId, RedirectUri, "jar-state", "jar-nonce");
+        claims[WellKnownJwtClaimNames.Exp] = (issuedAt + TimeSpan.FromSeconds(lifetimeSeconds)).ToUnixTimeSeconds();
+        claims[WellKnownJwtClaimNames.Jti] = jti;
+
+        return await OAuthJarFixtures.BuildSignedJarAsync(material, claims, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// The form fields of a request that carries <paramref name="compactJar"/> by value beside the client identifier.
+    /// </summary>
+    /// <param name="compactJar">The signed request object.</param>
+    /// <returns>The request's form fields.</returns>
+    private static Dictionary<string, string> BuildRequestObjectFields(string compactJar) =>
+        new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.Request] = compactJar
+        };
+
+
+    /// <summary>
+    /// The body the library answers a lifetime it cannot issue with: 500 <c>server_error</c> with the description
+    /// <see cref="WellKnownOAuthErrorDescriptions.ServerNotReady"/>, as the wire carries it.
+    /// </summary>
+    private static string ServerNotReadyBody { get; } =
+        "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}";
+
+
+    /// <summary>
+    /// Half a second: a lifetime under the one-second floor, and the clock offset that puts an issuance between two
+    /// whole seconds.
+    /// </summary>
+    private static TimeSpan HalfSecond { get; } = TimeSpan.FromTicks(TimeSpan.TicksPerSecond / 2);
+
+
+    /// <summary>
+    /// 90.7 seconds: a lifetime whose whole seconds, 90, are the lifetime issued.
+    /// </summary>
+    private static TimeSpan NinetyPointSevenSeconds { get; } = TimeSpan.FromTicks(907 * TimeSpan.TicksPerSecond / 10);
+
+
+    /// <summary>
+    /// Pushes a fresh S256 authorization through the shared PAR and authorize pushers and returns the token request's
+    /// fields for its code, so a row can present the same code more than once.
+    /// </summary>
+    /// <param name="host">The host serving the registration over the real wire.</param>
+    /// <param name="segment">The tenant path segment addressing the authorization server's endpoints.</param>
+    /// <returns>The token request's form fields.</returns>
+    private async Task<Dictionary<string, string>> AuthorizeFreshCodeAsync(TestHostShell host, string segment)
+    {
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string code = await DriveRawParAndAuthorizeAsync(
+            host, segment, pkce.EncodedChallenge, WellKnownCodeChallengeMethods.S256,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        return RawAuthCodeWirePushers.BuildTokenFields(ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString);
+    }
+
+
+    /// <summary>
+    /// The form fields of a plain pushed authorization request for an S256 challenge and the <c>openid</c> scope.
+    /// </summary>
+    /// <returns>The pushed authorization request's form fields.</returns>
+    private static Dictionary<string, string> BuildPlainParFields()
+    {
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+
+        return new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
+            [OAuthRequestParameterNames.ClientId] = ClientId,
+            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
+            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
+            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
+        };
+    }
+
+
+    /// <summary>
+    /// Sets the server's <see cref="TimingPolicy.AuthCodeParLifetime"/> to <paramref name="lifetime"/>.
+    /// </summary>
+    /// <param name="host">The host whose server is altered.</param>
+    /// <param name="lifetime">The pushed request's lifetime.</param>
+    /// <returns>A task that completes when the altered wiring is live.</returns>
+    private static async Task SetAuthCodeParLifetimeAsync(TestHostShell host, TimeSpan lifetime)
+    {
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.Timings = TimingPolicy.Default with { AuthCodeParLifetime = lifetime };
+        }).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Sends the browser's authorization request that references <paramref name="requestUri"/> over the real wire and
+    /// returns the answer unasserted.
+    /// </summary>
+    /// <param name="host">The host serving the registration over the real wire.</param>
+    /// <param name="segment">The tenant path segment addressing the authorization server's endpoints.</param>
+    /// <param name="requestUri">The <c>request_uri</c> the pushed authorization response returned.</param>
+    /// <returns>The authorization endpoint's status code, body and <c>Location</c>.</returns>
+    private async Task<(int StatusCode, string Body, Uri? Location)> AuthorizePushedRequestAsync(
+        TestHostShell host, string segment, string requestUri)
+    {
+        Uri authorizeUri = RawAuthCodeWirePushers.ComposeAuthorizeUri(host, segment,
+        [
+            new(OAuthRequestParameterNames.ClientId, ClientId),
+            new(OAuthRequestParameterNames.RequestUri, requestUri)
+        ]);
+        using HttpResponseMessage response = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, authorizeUri, SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        return ((int)response.StatusCode, body, response.Headers.Location);
+    }
+
+
+    /// <summary>
+    /// Seeds the End-User, enables DPoP on the host and creates the DPoP-wired client of <paramref name="material"/>'s
+    /// registration.
+    /// </summary>
+    /// <param name="host">The host holding the registration.</param>
+    /// <param name="material">The registration the client is wired to.</param>
+    /// <returns>The client fixture; the caller disposes it.</returns>
+    private async Task<DpopClientFixture> CreateDpopFixtureAsync(TestHostShell host, VerifierKeyMaterial material)
+    {
+        _ = host.SeedTestSubject(subject: SubjectId);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+
+        return await host.CreateDpopEnabledOAuthClientAsync(
+            material.Registration, RedirectUri.OriginalString, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Drives the DPoP-wired client's pushed authorization request, the browser's authorization request and the callback
+    /// over the real wire for the <c>openid</c> scope, and returns the flow identifier ready for the code redemption.
+    /// </summary>
+    /// <param name="host">The host serving the registration over the real wire.</param>
+    /// <param name="material">The registration the flow runs under.</param>
+    /// <param name="fixture">The DPoP-wired client.</param>
+    /// <returns>The client's flow identifier.</returns>
+    private async Task<string> DriveDpopAuthorizationAsync(TestHostShell host, VerifierKeyMaterial material, DpopClientFixture fixture)
+    {
+        using HttpClient browserClient = LoopbackTls.CreateSingleHopPinnedHttpClient(host.ServerCertificate);
+        (string flowId, _) = await AuthCodeFlowDriver.DriveParAuthorizeAndCallbackAsync(
+            host.Host("default"), fixture.Client, fixture.Registration, fixture.ClientFlowStore,
+            material.Registration.TenantId.Value, RedirectUri, SubjectId, browserClient,
+            scope: WellKnownScopes.OpenId, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        return flowId;
+    }
+
+
+    /// <summary>
+    /// Every record the host's flow store holds, ordered by flow identifier, so two readings compare entry by entry.
+    /// </summary>
+    /// <param name="hosted">The hosted server whose store is read.</param>
+    /// <returns>The records with their step counts.</returns>
+    private static (string FlowId, FlowState State, int StepCount)[] SnapshotFlowStates(HostedAuthorizationServer hosted) =>
+        [.. hosted.FlowStates
+            .OrderBy(static entry => entry.Key, StringComparer.Ordinal)
+            .Select(static entry => (entry.Key, entry.Value.State, entry.Value.StepCount))];
+
+
+    /// <summary>
+    /// Every step the host's store holds claimed, ordered, so two readings compare entry by entry.
+    /// </summary>
+    /// <param name="hosted">The hosted server whose claims are read.</param>
+    /// <returns>The claimed steps.</returns>
+    private static (string FlowId, int StepCount)[] SnapshotClaimedSteps(HostedAuthorizationServer hosted) =>
+        [.. hosted.ClaimedFlowSteps.Keys
+            .OrderBy(static key => key.FlowId, StringComparer.Ordinal)
+            .ThenBy(static key => key.StepCount)];
+
+
+    /// <summary>
+    /// Wires a policy resolver that applies the registration's built-in profile and then, when
+    /// <paramref name="setPolicyValue"/> is given, sets the request's policy value it names; with
+    /// <see langword="null"/> the resolver applies the built-in profile alone.
+    /// </summary>
+    /// <param name="host">The host whose server is altered.</param>
+    /// <param name="setPolicyValue">Sets a policy value on the request after the profile ran, or <see langword="null"/>.</param>
+    /// <returns>A task that completes when the altered wiring is live.</returns>
+    private static async Task ResolvePolicyWithAsync(TestHostShell host, Action<ExchangeContext>? setPolicyValue)
+    {
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolvePolicyAsync = async (registration, context, ct) =>
+            {
+                await PolicyProfiles.DefaultResolvePolicyAsync((ClientRecord)registration, context, ct).ConfigureAwait(false);
+                setPolicyValue?.Invoke(context);
+            };
+        }).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Presents <paramref name="tokenFields"/> at the token endpoint over the real wire with a DPoP proof of
+    /// <paramref name="dpopKey"/>: a first proof without a nonce draws the server's <c>use_dpop_nonce</c> challenge
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">RFC 9449 Section 8</see>), asserted here, and the
+    /// second proof carries the challenged nonce. Returns the second answer unasserted.
+    /// </summary>
+    /// <param name="host">The host serving the registration over the real wire.</param>
+    /// <param name="segment">The tenant path segment addressing the authorization server's endpoints.</param>
+    /// <param name="dpopKey">The client's DPoP key.</param>
+    /// <param name="tokenFields">The token request's form fields.</param>
+    /// <returns>The token endpoint's answer to the proof that carries the nonce.</returns>
+    private async Task<HttpResponseData> PushDpopTokenFieldsAsync(
+        TestHostShell host, string segment, DpopKey dpopKey, Dictionary<string, string> tokenFields)
+    {
+        HttpClient httpClient = host.Host("default").SharedHttpClient!;
+        Uri tokenEndpoint = RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment);
+        string challengeProof = await BuildTokenEndpointProofAsync(tokenEndpoint, dpopKey, nonce: null).ConfigureAwait(false);
+        HttpResponseData challenge = await HttpClientTransport.SendFormPostAsync(
+            httpClient, tokenEndpoint, tokenFields, OutgoingHeaders.Empty.WithDpop(challengeProof),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, challenge.StatusCode, challenge.Body);
+        Assert.Contains(OAuthErrors.UseDpopNonce, challenge.Body, StringComparison.Ordinal);
+        string nonce = challenge.Headers.TryGetSingle(WellKnownHttpHeaderNames.DPoPNonce)
+            ?? throw new AssertFailedException("RFC 9449, Section 8 requires a DPoP-Nonce header on the use_dpop_nonce challenge.");
+        string proof = await BuildTokenEndpointProofAsync(tokenEndpoint, dpopKey, nonce).ConfigureAwait(false);
+
+        return await HttpClientTransport.SendFormPostAsync(
+            httpClient, tokenEndpoint, tokenFields, OutgoingHeaders.Empty.WithDpop(proof),
+            TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Builds a DPoP proof of <paramref name="dpopKey"/> for a POST to <paramref name="tokenEndpoint"/> at the shared
+    /// clock's current instant, with a fresh <c>jti</c> and <paramref name="nonce"/> when one is given.
+    /// </summary>
+    /// <param name="tokenEndpoint">The token endpoint the proof's <c>htu</c> names.</param>
+    /// <param name="dpopKey">The DPoP key the proof is signed with.</param>
+    /// <param name="nonce">The server's nonce, or <see langword="null"/> for none.</param>
+    /// <returns>The compact proof.</returns>
+    private async Task<string> BuildTokenEndpointProofAsync(Uri tokenEndpoint, DpopKey dpopKey, string? nonce)
+    {
+        DpopProofClaims claims = new()
+        {
+            Htm = WellKnownHttpMethods.Post,
+            Htu = tokenEndpoint.OriginalString,
+            Iat = TimeProvider.GetUtcNow(),
+            Jti = Guid.NewGuid().ToString("N"),
+            Nonce = nonce
+        };
+
+        return await DpopProofConstruction.BuildAsync(
+            claims, dpopKey, TestHostShell.Base64UrlEncoder, DpopTestSupport.Serializer,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async, TestHostShell.MemoryPool,
+            TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Sets the server's <see cref="TimingPolicy.AccessTokenLifetime"/> to <paramref name="timingAccessTokenLifetime"/>,
+    /// wires the default <c>authorization_details</c> parsing and a credential decision that grants every requested
+    /// configuration, and, when <paramref name="policyAccessTokenLifetime"/> is given, a policy resolver that applies
+    /// the registration's built-in profile and then sets that access-token lifetime as the request's policy value.
+    /// </summary>
+    /// <param name="host">The host serving the registration over the real wire.</param>
+    /// <param name="timingAccessTokenLifetime">The server's access-token lifetime.</param>
+    /// <param name="policyAccessTokenLifetime">The request's policy value, or <see langword="null"/> for the profile's own.</param>
+    /// <returns>A task that completes when the altered wiring is live.</returns>
+    private static async Task ConfigureCredentialIssuanceAsync(
+        TestHostShell host, TimeSpan timingAccessTokenLifetime, TimeSpan? policyAccessTokenLifetime)
+    {
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.Timings = TimingPolicy.Default with { AccessTokenLifetime = timingAccessTokenLifetime };
+            _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
+            candidateIntegration.ResolveCredentialAuthorizationAsync =
+                (details, subject, registration, context, ct) => ValueTask.FromResult(GrantAllRequestedCredentials(details));
+            if(policyAccessTokenLifetime is TimeSpan requested)
+            {
+                candidateIntegration.ResolvePolicyAsync = async (registration, context, ct) =>
+                {
+                    await PolicyProfiles.DefaultResolvePolicyAsync((ClientRecord)registration, context, ct).ConfigureAwait(false);
+                    context.SetAccessTokenLifetime(requested);
+                };
+            }
+        }).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Pushes a fresh S256 authorization through the shared PAR and authorize pushers, advances the injected clock by
+    /// <paramref name="delay"/> and redeems the code over the listener without a proof of possession.
+    /// </summary>
+    /// <param name="host">The host serving the registration over the real wire.</param>
+    /// <param name="segment">The tenant path segment addressing the authorization server's endpoints.</param>
+    /// <param name="delay">How long after the authorization the code is redeemed.</param>
+    /// <returns>The token endpoint's status code and body.</returns>
+    private async Task<(int StatusCode, string Body)> RedeemCodeAfterAsync(TestHostShell host, string segment, TimeSpan delay)
+    {
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string code = await DriveRawParAndAuthorizeAsync(
+            host, segment, pkce.EncodedChallenge, WellKnownCodeChallengeMethods.S256,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        TimeProvider.Advance(delay);
+
+        return await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment,
+            RawAuthCodeWirePushers.BuildTokenFields(ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString),
+            TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// The row value naming the application's policy resolver as the place a token lifetime is set
+    /// (<see cref="PolicyExchangeContextExtensions"/>). A constant because <see cref="DataRowAttribute"/> takes
+    /// compile-time constants only.
+    /// </summary>
+    private const string PolicyResolverSource = "policy resolver";
+
+
+    /// <summary>
+    /// The row value naming the server's <see cref="TimingPolicy"/> as the place a token lifetime is set. A constant
+    /// because <see cref="DataRowAttribute"/> takes compile-time constants only.
+    /// </summary>
+    private const string TimingPolicySource = "timing policy";
+
+
+    /// <summary>
+    /// The row value naming a registration's own override (<see cref="ClientRecord.TokenLifetimes"/>) as the place a
+    /// token lifetime is set. A constant because <see cref="DataRowAttribute"/> takes compile-time constants only.
+    /// </summary>
+    private const string RegistrationSource = "registration";
+
+
+    /// <summary>
+    /// Pushes a fresh S256 authorization through the shared PAR and authorize pushers, naming
+    /// <paramref name="authorizationDetails"/> when it is given, and redeems the code over the listener without a
+    /// proof of possession. Returns the token endpoint's status code and body unasserted.
+    /// </summary>
+    /// <param name="host">The host serving the registration over the real wire.</param>
+    /// <param name="segment">The tenant path segment addressing the authorization server's endpoints.</param>
+    /// <param name="authorizationDetails">The RFC 9396 <c>authorization_details</c> the pushed request names, or <see langword="null"/> for none.</param>
+    /// <returns>The token endpoint's status code and body.</returns>
+    private async Task<(int StatusCode, string Body)> RedeemFreshCodeAsync(
+        TestHostShell host, string segment, string? authorizationDetails = null)
+    {
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        string code = await DriveRawParAndAuthorizeAsync(
+            host, segment, pkce.EncodedChallenge, WellKnownCodeChallengeMethods.S256,
+            TestContext.CancellationToken, authorizationDetails: authorizationDetails).ConfigureAwait(false);
+
+        return await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment,
+            RawAuthCodeWirePushers.BuildTokenFields(ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString),
+            TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Reads the lifetime a compact JWS states: its <c>exp</c> less its <c>iat</c>, in seconds, both read as the
+    /// JSON numbers <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.4">RFC 7519 Section 4.1.4</see>
+    /// and Section 4.1.6 make them.
+    /// </summary>
+    /// <param name="compactJws">The token whose payload is read.</param>
+    /// <returns>The number of seconds between the token's <c>iat</c> and its <c>exp</c>.</returns>
+    private static long ReadLifetimeSeconds(string compactJws)
+    {
+        using JsonDocument payload = JwtPayloadReader.ParsePayloadJson(compactJws);
+
+        return payload.RootElement.GetProperty(WellKnownJwtClaimNames.Exp).GetInt64()
+            - payload.RootElement.GetProperty(WellKnownJwtClaimNames.Iat).GetInt64();
     }
 }

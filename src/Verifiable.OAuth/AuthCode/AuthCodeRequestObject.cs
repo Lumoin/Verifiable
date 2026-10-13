@@ -97,8 +97,8 @@ public sealed class AuthCodeRequestObject: IEquatable<AuthCodeRequestObject>
     public required DateTimeOffset Nbf { get; init; }
 
     /// <summary>
-    /// The instant after which the JAR MUST NOT be accepted. REQUIRED per
-    /// FAPI 2.0 §5.2.2 Clause 13.
+    /// The instant after which the JAR MUST NOT be accepted. Required by the
+    /// library's own rule.
     /// </summary>
     public required DateTimeOffset Exp { get; init; }
 

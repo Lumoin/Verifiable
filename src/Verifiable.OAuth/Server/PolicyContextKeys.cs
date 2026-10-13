@@ -27,10 +27,13 @@ namespace Verifiable.OAuth.Server;
 /// originating the axis.
 /// </para>
 /// <para>
-/// Defaults exposed via <see cref="PolicyExchangeContextExtensions"/> match the
-/// strict (FAPI 2.0 / HAIP-aligned) reading. Tests that construct
-/// <see cref="ExchangeContext"/> directly without invoking
-/// <c>ResolvePolicyAsync</c> read defaults; that is the safe behaviour.
+/// When no profile ran on a request, the lifetimes (the authorization code, the
+/// <c>request_uri</c> and the request object ceiling, and the access token, ID Token and
+/// refresh token lifetimes) and the clock skew that
+/// <see cref="PolicyExchangeContextExtensions"/> exposes read the request server's
+/// <see cref="TimingPolicy"/>, or <see cref="TimingPolicy.Default"/>'s values when no server is
+/// on the context, unclamped: a profile's ceilings apply only where the profile ran. Every
+/// other absent value reads its strict default.
 /// </para>
 /// <para>
 /// A stable resolver may read application state that changes between requests. The application
@@ -64,8 +67,8 @@ public static class PolicyContextKeys
     public static ReadOnlySpan<byte> JarLifetimeCeilingUtf8 => "policy.jarLifetimeCeiling"u8;
 
     /// <summary>
-    /// The maximum allowed JAR lifetime (<c>exp - iat</c>) per FAPI 2.0 §5.2.2
-    /// Clause 13. Value type: <see cref="TimeSpan"/>. Audit row: "JAR
+    /// The maximum allowed JAR lifetime (<c>exp - iat</c>), the library's own
+    /// ceiling. Value type: <see cref="TimeSpan"/>. Audit row: "JAR
     /// lifetime ceiling".
     /// </summary>
     public static string JarLifetimeCeiling { get; } = Utf8Constants.ToInternedString(JarLifetimeCeilingUtf8);
@@ -195,7 +198,7 @@ public static class PolicyContextKeys
     /// <summary>
     /// Whether Pushed Authorization Requests are mandatory — when set, the AS refuses
     /// the direct-Authorize and JAR-by-value paths and requires the client to push the
-    /// request first (FAPI 2.0 §5.2.2). Value type: <see cref="bool"/>. Audit row:
+    /// request first (FAPI 2.0 Security Profile Section 5.3.2.2). Value type: <see cref="bool"/>. Audit row:
     /// "require_pushed_authorization_requests".
     /// </summary>
     public static string RequirePushedAuthorizationRequests { get; } = Utf8Constants.ToInternedString(RequirePushedAuthorizationRequestsUtf8);

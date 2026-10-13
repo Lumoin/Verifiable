@@ -1778,6 +1778,91 @@ internal sealed class SourceHygieneTests
     }
 
     /// <summary>
+    /// Matches an anchor that attributes a lifetime or the pushed authorization request mandate to Section 5.2.2 of
+    /// the FAPI 2.0 Security Profile, whose final text holds the rules for endpoints not used by web browsers there.
+    /// Three shapes: the section number followed by the word "Clause"; and, on a line that names a lifetime or the pushed
+    /// request (a lifetime, <c>exp</c>, <c>expires_in</c>, PAR, pushed, Clause), the profile's name in any of its
+    /// spellings ("FAPI", "FAPI2", "FAPI 2", "FAPI 2.0", with or without "Security Profile" or "SP" and a comma)
+    /// followed within three words by a section sign, the word "Section" or a bare number reading the section number,
+    /// or the profile's document name in a link, in any case, with the section's fragment, the spelling a
+    /// <c>&lt;see href&gt;</c> anchor takes. A line that cites the section for its transport rules names none of those
+    /// words and is not matched. The PAR mandate and the lifetimes the library holds are in Section 5.3.2.1 and Section
+    /// 5.3.2.2. Built with escaped punctuation so this pattern's own definition does not read as a live occurrence of
+    /// the shape it detects.
+    /// </summary>
+    private static Regex MisattributedFapiClausePattern { get; } = new(
+        @"\b5\.2\.2\s+Clause\b" +
+        "|" + @"^(?=.*\b(?:[Ll]ifetimes?|exp|expires_in|PAR|[Pp]ushed|Clause)\b)"
+            + @".*\bFAPI\s*(?:2(?:\.0)?)?(?:\s*(?:Security\s+Profile|SP))?\s*,?\s*(?:\S+\s+){0,3}?(?:\xA7\s*|Section\s+)?5\.2\.2\b" +
+        "|" + @"^(?=.*\b(?:[Ll]ifetimes?|exp|expires_in|PAR|[Pp]ushed|Clause)\b)"
+            + @".*(?i:fapi-security-profile-2_0[^""#\s]*#section-5\.2\.2)\b",
+        RegexOptions.Compiled);
+
+    /// <summary>
+    /// The library's rule for its own citations: an anchor names the clause that holds the rule it cites. A rule the
+    /// library sets for itself is stated as the library's own, and a FAPI 2.0 rule is anchored to the clause of the
+    /// final text that holds it. <see cref="MisattributedFapiClausePattern"/>'s three shapes, the section number of the
+    /// profile's rules for endpoints not used by web browsers followed by the word "Clause", and the profile named in
+    /// any spelling, or linked by its document name with the section's fragment, with that section number on a line
+    /// that names a lifetime or the pushed request, attribute a lifetime or the PAR mandate to that section, so they are
+    /// banned outright under <c>src</c> and <c>test</c>, with no allowlist; a citation of the section for its transport
+    /// rules is not banned.
+    /// </summary>
+    [TestMethod]
+    public void SourceNeverAttributesALifetimeOrThePushedRequestMandateToTheFapi20TransportSection()
+    {
+        string repositoryRoot = SourceHygieneScanner.FindRepositoryRoot();
+        List<string> failures = [];
+
+        foreach(string topLevelDirectory in new[] { "src", "test" })
+        {
+            IReadOnlyList<string> files = SourceHygieneScanner.EnumerateSourceFilesUnder(repositoryRoot, topLevelDirectory);
+
+            foreach(string filePath in files)
+            {
+                string relativePath = Path.GetRelativePath(repositoryRoot, filePath).Replace(Path.DirectorySeparatorChar, '/');
+                string[] lines = File.ReadAllLines(filePath);
+                IReadOnlyList<SourceHygieneViolation> violations = SourceHygieneScanner.ScanAllLinesForPattern(
+                    relativePath, lines, MisattributedFapiClausePattern, SourceHygieneViolationKind.MisattributedFapiClause);
+
+                failures.AddRange(violations.Select(static v => v.ToString()));
+            }
+        }
+
+        Assert.IsEmpty(failures, string.Join(Environment.NewLine, failures));
+    }
+
+    /// <summary>
+    /// The library's rule for its own citations, applied to <see cref="MisattributedFapiClausePattern"/> itself: the
+    /// pattern matches a line that names the FAPI 2.0 Security Profile in any of its spellings ("FAPI", "FAPI2",
+    /// "FAPI 2", "FAPI 2.0", with or without "Security Profile" or "SP" and a comma), then within a few words a section
+    /// sign, the word "Section" or a bare number reading 5.2.2, when the same line names a lifetime or the pushed
+    /// request (a lifetime, <c>exp</c>, <c>expires_in</c>, PAR, pushed, Clause); it matches, on such a line, a
+    /// <c>&lt;see href&gt;</c> anchor whose link names the profile's document and the section's fragment; and it matches
+    /// the section number followed by the word "Clause". A line that cites Section 5.2.2 for the transport rules it
+    /// holds, in prose or by such a link, names no such word and is not matched. The row lines are built by
+    /// concatenation so the source of this row does not itself read as an occurrence of the shape.
+    /// </summary>
+    /// <param name="line">The line the pattern is applied to.</param>
+    /// <param name="isMatchExpected">Whether the pattern matches the line.</param>
+    [TestMethod]
+    [DataRow("FAPI 2.0 Security Profile Section 5" + ".2.2 mandates PAR", true)]
+    [DataRow("FAPI 2.0 Security Profile \x00A7" + "5" + ".2.2 sets the request_uri lifetime", true)]
+    [DataRow("FAPI 2.0 Section 5" + ".2.2 holds the authorization code lifetime", true)]
+    [DataRow("FAPI2 \x00A7" + "5" + ".2.2 bounds expires_in", true)]
+    [DataRow("FAPI 2.0, \x00A7" + "5" + ".2.2 requires pushed authorization requests", true)]
+    [DataRow("FAPI 2.0 SP 5" + ".2.2 Clause 13", true)]
+    [DataRow("the exp ceiling of 5" + ".2.2 Clause 13", true)]
+    [DataRow("FAPI 2.0 \x00A7" + "5" + ".2.2: endpoints not used by web browsers shall use TLS 1.2", false)]
+    [DataRow("FAPI 2.0 Security Profile Section 5" + ".2.2 requires TLS for every endpoint", false)]
+    [DataRow("/// The PAR mandate (<see href=\"https://openid.net/specs/fapi-security-profile-2_0-final.html#section-5" + ".2.2\">the profile</see>).", true)]
+    [DataRow("/// Endpoints not used by web browsers use TLS (<see href=\"https://openid.net/specs/fapi-security-profile-2_0-final.html#section-5" + ".2.2\">the profile</see>).", false)]
+    public void TheMisattributedFapiClausePatternMatchesTheClassAndNotATransportCitation(string line, bool isMatchExpected)
+    {
+        Assert.AreEqual(isMatchExpected, MisattributedFapiClausePattern.IsMatch(line), line);
+    }
+
+    /// <summary>
     /// Matches a bundled TPM 2.0 reference-implementation source or header file name — an identifier
     /// followed by a dot and a bare "c" or "h" extension, which also covers the function-prototype header
     /// form (whose name ends in an underscore, "fp", dot, "h" — already covered by the general header
@@ -2975,6 +3060,9 @@ internal enum SourceHygieneViolationKind
 
     /// <summary>A TPM 2.0 Library clause anchor spelled in its retired pre-v184 numbering rather than the current v185 clause number.</summary>
     RetiredClauseNumbering,
+
+    /// <summary>An anchor attributing a rule to the FAPI 2.0 Security Profile's transport section, where the final text holds no lifetime and no pushed-request mandate.</summary>
+    MisattributedFapiClause,
 
     /// <summary>A <c>readonly</c> FIELD declaration in <c>src/**</c> or <c>test/**</c> where a get-only property (or, for a compile-time-literal value type nothing addresses, a <c>const</c>) would serve — the language forces a true field only for a validating <c>init</c> accessor's backing store, a by-ref/by-address use, or a similar structural reason named on the site.</summary>
     NakedReadonlyField,

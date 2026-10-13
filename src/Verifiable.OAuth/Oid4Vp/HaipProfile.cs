@@ -6,6 +6,7 @@ using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
 using Verifiable.JCose;
 using Verifiable.OAuth.Oid4Vp.Formats;
+using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.Oid4Vp;
 
@@ -165,15 +166,15 @@ public static class HaipProfile
     /// <see cref="Verifiable.OAuth.Server.TimingPolicy.Oid4VpRequestObjectLifetime"/> from the
     /// <see cref="Verifiable.Server.EndpointServer"/> and passes it here. The
     /// <c>iat</c> and <c>nbf</c> claims are stamped at <paramref name="now"/>;
-    /// <c>exp</c> is stamped at <c>now + requestObjectLifetime</c>. The
-    /// resulting <c>exp - nbf</c> window satisfies
-    /// <see href="https://openid.net/specs/fapi-2_0-security-profile.html">FAPI 2.0 §5.2.2</see>
-    /// Clause 13.
+    /// <c>exp</c> is stamped at <c>now</c> plus the whole seconds of
+    /// <paramref name="requestObjectLifetime"/>. The resulting <c>exp - nbf</c>
+    /// window is the library's own ceiling, 60 seconds by default.
     /// </para>
     /// </remarks>
     /// <param name="now">The current UTC instant from the active TimeProvider.</param>
     /// <param name="requestObjectLifetime">
-    /// The window <c>exp - nbf</c> applied to the JAR.
+    /// The window <c>exp - nbf</c> applied to the JAR: at least one and at most
+    /// <see cref="int.MaxValue"/> whole seconds, issued as its whole seconds.
     /// </param>
     /// <param name="state">
     /// The opaque CSRF state value, equal to the per-flow <c>request_uri</c>
@@ -207,6 +208,9 @@ public static class HaipProfile
     /// <returns>
     /// A tuple of the <see cref="JarSigned"/> PDA input and the compact JWS string.
     /// </returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The whole seconds of <paramref name="requestObjectLifetime"/> are under one or above <see cref="int.MaxValue"/>.
+    /// </exception>
     public static async ValueTask<(JarSigned Input, string CompactJar)> BuildJarAsync(
         DateTimeOffset now,
         TimeSpan requestObjectLifetime,
@@ -243,13 +247,15 @@ public static class HaipProfile
         ArgumentNullException.ThrowIfNull(encoder);
         ArgumentNullException.ThrowIfNull(pool);
 
-        if(requestObjectLifetime <= TimeSpan.Zero)
+        //The library's own rule for a lifetime: the library writes iat and exp as whole-second NumericDates, so a
+        //lifetime is issued as its whole seconds, at least one (a lifetime under one second would make exp equal iat)
+        //and at most int.MaxValue.
+        if(!TokenLifetimes.IsIssuable(requestObjectLifetime, out TimeSpan issuedLifetime))
         {
             throw new ArgumentOutOfRangeException(
                 nameof(requestObjectLifetime),
                 requestObjectLifetime,
-                "Request-object lifetime must be positive. " +
-                "FAPI 2.0 §5.2.2 Clause 13 requires the JAR to carry a positive exp window.");
+                "A request-object lifetime is at least one and at most int.MaxValue whole seconds.");
         }
 
         AuthorizationRequestObject requestObject = CreateAuthorizationRequestObject(
@@ -261,7 +267,7 @@ public static class HaipProfile
             state: state,
             iat: now,
             nbf: now,
-            exp: now + requestObjectLifetime,
+            exp: now + issuedLifetime,
             transactionData: transactionData,
             walletNonce: walletNonce,
             responseMode: responseMode);
@@ -303,6 +309,9 @@ public static class HaipProfile
     /// such check on its own.
     /// </para>
     /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The whole seconds of <c>requestObjectLifetime</c> are under one or above <see cref="int.MaxValue"/>.
+    /// </exception>
     public static ValueTask<string> BuildUnsignedJarAsync(
         DateTimeOffset now,
         TimeSpan requestObjectLifetime,
@@ -337,12 +346,13 @@ public static class HaipProfile
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        if(requestObjectLifetime <= TimeSpan.Zero)
+        //The library's own rule for a lifetime, as BuildJarAsync applies it.
+        if(!TokenLifetimes.IsIssuable(requestObjectLifetime, out TimeSpan issuedLifetime))
         {
             throw new ArgumentOutOfRangeException(
                 nameof(requestObjectLifetime),
                 requestObjectLifetime,
-                "Request-object lifetime must be positive.");
+                "A request-object lifetime is at least one and at most int.MaxValue whole seconds.");
         }
 
         AuthorizationRequestObject requestObject = CreateAuthorizationRequestObject(
@@ -354,7 +364,7 @@ public static class HaipProfile
             state: state,
             iat: now,
             nbf: now,
-            exp: now + requestObjectLifetime,
+            exp: now + issuedLifetime,
             transactionData: transactionData,
             walletNonce: walletNonce,
             responseMode: responseMode);

@@ -6,6 +6,7 @@ using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
+using Verifiable.OAuth.IdJag;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -203,4 +204,171 @@ internal sealed class ClientAssertionSigningTests
             StringComparison.Ordinal, "The refusal must name the unset audience member.");
         Assert.AreEqual(0, form.Count, "A refused assertion must add no parameter to the form.");
     }
+
+
+    /// <summary>
+    /// The library's own rule for a lifetime it issues: the client writes a client assertion's <c>iat</c> and
+    /// <c>exp</c> as whole-second NumericDates, so it issues the assertion for the whole seconds of its lifetime.
+    /// <see cref="ClientTokenEndpointAuthentication.AttachClientAssertionAsync"/> under a lifetime of 90.7 seconds, the
+    /// assertion issued half a second past a whole second, attaches a <c>client_assertion</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7523#section-2.2">RFC 7523 Section 2.2</see>) whose <c>exp</c> is
+    /// 90 seconds after its <c>iat</c>.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task AClientAssertionUnderAFractionalLifetimeLivesItsWholeSecondsAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        (OAuthClient client, ClientRegistration registration, _) = app.CreateInProcessOAuthClientAndRegistration(
+            material.Registration,
+            "https://client.example.com/callback",
+            material.Registration.IssuerUri!.ToString());
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyMaterial =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory publicKey = keyMaterial.PublicKey;
+        using PrivateKeyMemory privateKey = keyMaterial.PrivateKey;
+        OutgoingFormFields form = new();
+        TimeProvider.Advance(TimeSpan.FromTicks(TimeSpan.TicksPerSecond / 2));
+
+        await ClientTokenEndpointAuthentication.AttachClientAssertionAsync(
+            form,
+            registration,
+            new Uri(TokenEndpoint),
+            privateKey,
+            SigningKeyId,
+            HeaderSerializer,
+            PayloadSerializer,
+            TimeSpan.FromTicks(907_000_000L),
+            client.Infrastructure,
+            TimeProvider.GetUtcNow(),
+            [],
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        string assertion = form.First(static field =>
+            string.Equals(field.Key, OAuthRequestParameterNames.ClientAssertion, StringComparison.Ordinal)).Value;
+        using JsonDocument payload = JwtPayloadReader.ParsePayloadJson(assertion);
+        Assert.AreEqual(
+            90L,
+            payload.RootElement.GetProperty(WellKnownJwtClaimNames.Exp).GetInt64()
+                - payload.RootElement.GetProperty(WellKnownJwtClaimNames.Iat).GetInt64(),
+            assertion);
+    }
+
+
+    /// <summary>
+    /// The library's rule for the caller's own argument: a client assertion lifetime is at least one and at most
+    /// <see cref="int.MaxValue"/> whole seconds, because the client writes <c>iat</c> and <c>exp</c> as whole-second
+    /// NumericDates and a lifetime under one second would make <c>exp</c> equal <c>iat</c>.
+    /// <see cref="ClientTokenEndpointAuthentication.AttachClientAssertionAsync"/> refuses 500 milliseconds with
+    /// <see cref="ArgumentOutOfRangeException"/> and adds nothing to the form.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task AClientAssertionLifetimeUnderOneSecondIsRefusedAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        (OAuthClient client, ClientRegistration registration, _) = app.CreateInProcessOAuthClientAndRegistration(
+            material.Registration,
+            "https://client.example.com/callback",
+            material.Registration.IssuerUri!.ToString());
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyMaterial =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory publicKey = keyMaterial.PublicKey;
+        using PrivateKeyMemory privateKey = keyMaterial.PrivateKey;
+        OutgoingFormFields form = new();
+
+        _ = await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
+            async () => await ClientTokenEndpointAuthentication.AttachClientAssertionAsync(
+                form,
+                registration,
+                new Uri(TokenEndpoint),
+                privateKey,
+                SigningKeyId,
+                HeaderSerializer,
+                PayloadSerializer,
+                TimeSpan.FromMilliseconds(500),
+                client.Infrastructure,
+                TimeProvider.GetUtcNow(),
+                [],
+                TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+
+        Assert.AreEqual(0, form.Count, "A refused assertion must add no parameter to the form.");
+    }
+
+
+    /// <summary>
+    /// The library's rule for the caller's own argument: a client assertion lifetime is at least one and at most
+    /// <see cref="int.MaxValue"/> whole seconds. The <c>init</c> accessor of
+    /// <see cref="ClientAssertionOptions.ClientAssertionLifetime"/>, of
+    /// <see cref="IdJagMintOptions.ClientAssertionLifetime"/> and of
+    /// <see cref="IdJagRedeemOptions.ClientAssertionLifetime"/> refuses 500 milliseconds with
+    /// <see cref="ArgumentOutOfRangeException"/>.
+    /// </summary>
+    /// <param name="options">The options record the row sets the lifetime on.</param>
+    [TestMethod]
+    [DataRow(TokenEndpointAssertionOptions)]
+    [DataRow(MintOptions)]
+    [DataRow(RedeemOptions)]
+    public void AClientAssertionLifetimeUnderOneSecondIsRefusedAtItsOptions(string options)
+    {
+        TimeSpan lifetime = TimeSpan.FromMilliseconds(500);
+        Action set = options switch
+        {
+            TokenEndpointAssertionOptions => () => _ = new ClientAssertionOptions
+            {
+                SigningKeyId = SigningKeyId,
+                HeaderSerializer = HeaderSerializer,
+                PayloadSerializer = PayloadSerializer,
+                ClientAssertionLifetime = lifetime
+            },
+            MintOptions => () => _ = new IdJagMintOptions
+            {
+                Audience = TokenEndpoint,
+                SubjectToken = "subject-token",
+                SubjectTokenType = TokenType.IdToken,
+                SigningKey = null!,
+                SigningKeyId = SigningKeyId,
+                HeaderSerializer = HeaderSerializer,
+                PayloadSerializer = PayloadSerializer,
+                ClientAssertionLifetime = lifetime
+            },
+            RedeemOptions => () => _ = new IdJagRedeemOptions
+            {
+                Assertion = "identity-assertion-grant",
+                SigningKey = null!,
+                SigningKeyId = SigningKeyId,
+                HeaderSerializer = HeaderSerializer,
+                PayloadSerializer = PayloadSerializer,
+                ClientAssertionLifetime = lifetime
+            },
+            _ => throw new ArgumentOutOfRangeException(nameof(options), options, "Unknown options record.")
+        };
+
+        _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(set);
+    }
+
+
+    /// <summary>
+    /// The row value naming <see cref="ClientAssertionOptions"/>. A constant because <see cref="DataRowAttribute"/>
+    /// takes compile-time constants only.
+    /// </summary>
+    private const string TokenEndpointAssertionOptions = "token endpoint";
+
+
+    /// <summary>
+    /// The row value naming <see cref="IdJagMintOptions"/>. A constant because <see cref="DataRowAttribute"/> takes
+    /// compile-time constants only.
+    /// </summary>
+    private const string MintOptions = "mint";
+
+
+    /// <summary>
+    /// The row value naming <see cref="IdJagRedeemOptions"/>. A constant because <see cref="DataRowAttribute"/> takes
+    /// compile-time constants only.
+    /// </summary>
+    private const string RedeemOptions = "redeem";
 }

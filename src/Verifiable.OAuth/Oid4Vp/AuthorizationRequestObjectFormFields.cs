@@ -1,5 +1,6 @@
 using Verifiable.Core.Model.Dcql;
 using Verifiable.JCose;
+using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.Oid4Vp;
 
@@ -59,8 +60,8 @@ public static class AuthorizationRequestObjectFormFields
     /// </param>
     /// <param name="now">UTC instant used to stamp the timing claims when absent.</param>
     /// <param name="requestObjectLifetime">
-    /// Window applied as <c>exp = now + requestObjectLifetime</c> when the
-    /// <c>exp</c> claim is absent from the inline parameters.
+    /// Window applied as <c>exp = now</c> plus its whole seconds when the <c>exp</c> claim is absent from the inline
+    /// parameters: at least one and at most <see cref="int.MaxValue"/> whole seconds, the library's own rule.
     /// </param>
     /// <param name="statePolicy">Governs whether a missing or empty <c>state</c> value is accepted or refused.</param>
     /// <param name="transactionDataEntries">
@@ -70,6 +71,9 @@ public static class AuthorizationRequestObjectFormFields
     /// binding parse the descriptors out of their deployment-specific shape
     /// and pass them here. <see langword="null"/> omits the claim.
     /// </param>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The whole seconds of <paramref name="requestObjectLifetime"/> are under one or above <see cref="int.MaxValue"/>.
+    /// </exception>
     public static AuthorizationRequestObject Parse(
         IReadOnlyDictionary<string, string> fields,
         JarClaimDeserializer<DcqlQuery> dcqlQueryDeserializer,
@@ -83,13 +87,9 @@ public static class AuthorizationRequestObjectFormFields
         ArgumentNullException.ThrowIfNull(dcqlQueryDeserializer);
         ArgumentNullException.ThrowIfNull(clientMetadataDeserializer);
 
-        if(requestObjectLifetime <= TimeSpan.Zero)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(requestObjectLifetime),
-                requestObjectLifetime,
-                "Inline-parameter request-object lifetime must be positive.");
-        }
+        //The library's own rule for a lifetime: the library writes iat and exp as whole-second NumericDates, so the
+        //request object is stamped for the whole seconds of its lifetime, at least one.
+        TimeSpan issuedLifetime = TokenLifetimes.RequireIssuable(requestObjectLifetime, nameof(requestObjectLifetime));
 
         string clientId = Require(fields, OAuthRequestParameterNames.ClientId);
         string responseType = Require(fields, OAuthRequestParameterNames.ResponseType);
@@ -139,7 +139,7 @@ public static class AuthorizationRequestObjectFormFields
             State = state,
             Iat = now,
             Nbf = now,
-            Exp = now + requestObjectLifetime,
+            Exp = now + issuedLifetime,
             DcqlQuery = dcqlQuery,
             ClientMetadata = clientMetadata,
             TransactionData = transactionDataEntries

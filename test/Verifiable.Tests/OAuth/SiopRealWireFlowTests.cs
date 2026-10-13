@@ -194,6 +194,96 @@ internal sealed class SiopRealWireFlowTests
 
 
     /// <summary>
+    /// The library's own rule for a lifetime it issues: the library writes a Request Object's <c>iat</c> and
+    /// <c>exp</c> as whole-second NumericDates, and every lifetime the server's <see cref="TimingPolicy"/> holds is its
+    /// whole seconds, so a <see cref="TimingPolicy.Oid4VpRequestObjectLifetime"/> of 90.7 seconds issues a Request
+    /// Object (<see href="https://openid.net/specs/openid-connect-self-issued-v2-1_0.html#section-9">Self-Issued
+    /// OpenID Provider v2 Section 9</see>), fetched over the real wire half a second past a whole second, whose
+    /// <c>exp</c> is 90 seconds after its <c>iat</c>.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task ARequestObjectUnderAFractionalLifetimeLivesItsWholeSecondsAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        await host.StartHttpHostAsync(cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        using VerifierKeyMaterial rpKeys = await host.RegisterClientAsync(
+            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities).ConfigureAwait(false);
+        rpKeys.Registration = host.AlignRegistrationToHostHttpBase("default", rpKeys.Registration);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.Timings = TimingPolicy.Default with
+            {
+                Oid4VpRequestObjectLifetime = TimeSpan.FromTicks(907_000_000L)
+            };
+        }).ConfigureAwait(false);
+        (_, Uri requestUri) = await host.HandleSiopRequestPreparationAsync(
+            rpKeys, "n-siop-fractional-request-object", RelyingPartyClientId, AllowedSiopAlgorithms,
+            useStaticDiscoveryAudience: false, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer hosted = host.Host("default");
+        TimeProvider.Advance(TimeSpan.FromTicks(TimeSpan.TicksPerSecond / 2));
+
+        using HttpResponseMessage requestObjectResponse = await hosted.SharedHttpClient!
+            .GetAsync(requestUri, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        string requestObjectJws = await requestObjectResponse.Content
+            .ReadAsStringAsync(cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual((int)HttpStatusCode.OK, (int)requestObjectResponse.StatusCode, requestObjectJws);
+
+        using JsonDocument payload = JwtPayloadReader.ParsePayloadJson(requestObjectJws);
+        Assert.AreEqual(
+            90L,
+            payload.RootElement.GetProperty(WellKnownJwtClaimNames.Exp).GetInt64()
+                - payload.RootElement.GetProperty(WellKnownJwtClaimNames.Iat).GetInt64(),
+            requestObjectJws);
+    }
+
+
+    /// <summary>
+    /// The library's own rule for a lifetime it issues: every lifetime the server's <see cref="TimingPolicy"/> holds is
+    /// its whole seconds, and a request the server receives is judged against the expiry the server stored from it. A
+    /// <c>request_uri</c> prepared half a second past a whole second under a
+    /// <see cref="TimingPolicy.Oid4VpRequestUriLifetime"/> of 90.7 seconds is stored for 90 seconds: the Request Object
+    /// (<see href="https://openid.net/specs/openid-connect-self-issued-v2-1_0.html#section-9">Self-Issued OpenID
+    /// Provider v2 Section 9</see>) is served over the real wire 89 seconds after the preparation and refused with 400
+    /// 90 seconds after it.
+    /// </summary>
+    /// <param name="elapsedSeconds">The seconds between the preparation and the fetch.</param>
+    /// <param name="expectedStatus">The status the fetch is answered with.</param>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DataRow(89, 200)]
+    [DataRow(90, 400)]
+    public async Task ARequestUriUnderAFractionalLifetimeIsServedForItsWholeSecondsAsync(int elapsedSeconds, int expectedStatus)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        await host.StartHttpHostAsync(cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        using VerifierKeyMaterial rpKeys = await host.RegisterClientAsync(
+            RelyingPartyClientId, RelyingPartyBaseUri, SiopCapabilities).ConfigureAwait(false);
+        rpKeys.Registration = host.AlignRegistrationToHostHttpBase("default", rpKeys.Registration);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.Timings = TimingPolicy.Default with
+            {
+                Oid4VpRequestUriLifetime = TimeSpan.FromTicks(907_000_000L)
+            };
+        }).ConfigureAwait(false);
+        TimeProvider.Advance(TimeSpan.FromTicks(TimeSpan.TicksPerSecond / 2));
+        (_, Uri requestUri) = await host.HandleSiopRequestPreparationAsync(
+            rpKeys, "n-siop-fractional-request-uri", RelyingPartyClientId, AllowedSiopAlgorithms,
+            useStaticDiscoveryAudience: false, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer hosted = host.Host("default");
+        TimeProvider.Advance(TimeSpan.FromSeconds(elapsedSeconds));
+
+        using HttpResponseMessage requestObjectResponse = await hosted.SharedHttpClient!
+            .GetAsync(requestUri, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await requestObjectResponse.Content
+            .ReadAsStringAsync(cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(expectedStatus, (int)requestObjectResponse.StatusCode, body);
+    }
+
+
+    /// <summary>
     /// Direct (same-device) flow: the RP prepares a transaction in-process, the Wallet mints a
     /// JWK-Thumbprint Self-Issued ID Token, and POSTs <c>id_token</c> + <c>state</c> to the SIOP
     /// Response endpoint over a real socket. Mirrors

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Collections.Immutable;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Verifiable.Cryptography;
@@ -139,6 +140,54 @@ internal sealed class FederationRegistrationEndpointTests
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(verified,
             "The Explicit Registration Response must verify under the OP's federation signing key.");
+    }
+
+
+    /// <summary>
+    /// The library's own rule for a lifetime it issues: the library writes an Explicit Registration Response's
+    /// <c>iat</c> and <c>exp</c> (<see href="https://openid.net/specs/openid-federation-1_0.html#section-12.2.3">OpenID
+    /// Federation 1.0 Section 12.2.3</see>) as whole-second NumericDates, and every lifetime the server's
+    /// <see cref="TimingPolicy"/> holds is its whole seconds, so a
+    /// <see cref="TimingPolicy.FederationEntityConfigurationLifetime"/> of 90.7 seconds issues an Explicit
+    /// Registration Response, answered over the real wire half a second past a whole second, whose <c>exp</c> is 90
+    /// seconds after its <c>iat</c>.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task AnExplicitRegistrationResponseUnderAFractionalLifetimeLivesItsWholeSecondsAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> opFederationKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using VerifierKeyMaterial opKeys = await RegisterOpAsync(app, opFederationKeys).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveExplicitRegistrationAsync = static (_, _, _, _) =>
+                ValueTask.FromResult<ExplicitRegistrationContribution?>(new ExplicitRegistrationContribution
+                {
+                    Subject = new Uri(RpEntityId),
+                    Metadata = new Dictionary<string, object>(StringComparer.Ordinal),
+                    TrustAnchor = new Uri(AnchorEntityId),
+                    AuthorityHint = new Uri(OpEntityId)
+                });
+            candidateIntegration.Timings = TimingPolicy.Default with
+            {
+                FederationEntityConfigurationLifetime = TimeSpan.FromTicks(907_000_000L)
+            };
+        }).ConfigureAwait(false);
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        TimeProvider.Advance(TimeSpan.FromTicks(TimeSpan.TicksPerSecond / 2));
+
+        string compactResponse = await PostRegistrationAsync(
+            host, opKeys.Registration.TenantId.Value, "eyJrp.entity.configuration").ConfigureAwait(false);
+        Dictionary<string, object> payload = DecodeSegment(compactResponse, 1);
+
+        Assert.AreEqual(
+            90L,
+            Convert.ToInt64(payload["exp"], CultureInfo.InvariantCulture)
+                - Convert.ToInt64(payload["iat"], CultureInfo.InvariantCulture),
+            compactResponse);
     }
 
 

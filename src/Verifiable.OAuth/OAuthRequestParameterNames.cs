@@ -381,7 +381,7 @@ public static class OAuthRequestParameterNames
     /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-5">RFC 9101 §5</see>
     /// either in the body of a Pushed Authorization Request per
     /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-3">RFC 9126 §3</see>
-    /// or in the query of a direct authorization request per RFC 9101 §6.1.
+    /// or in the query of a direct authorization request per RFC 9101 Section 5.1.
     /// </summary>
     public static string Request { get; } = Utf8Constants.ToInternedString(RequestUtf8);
 

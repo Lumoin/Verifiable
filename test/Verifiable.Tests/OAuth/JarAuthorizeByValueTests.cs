@@ -933,7 +933,7 @@ internal sealed class JarAuthorizeByValueTests
     [TestMethod]
     public async Task RejectsDirectAuthorizeWhenProfileRequiresPushedAuthorizationRequests()
     {
-        //FAPI 2.0 §5.2.2 — under a PAR-mandating profile (the default Haip10/Fapi20),
+        //FAPI 2.0 Security Profile Section 5.3.2.2: under a PAR-mandating profile (the default Haip10/Fapi20),
         //the direct Authorize path is refused with invalid_request.
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = await host.RegisterClientAsync(
@@ -976,8 +976,8 @@ internal sealed class JarAuthorizeByValueTests
 
 
     /// <summary>
-    /// FAPI 2.0 §5.2.2: under a PAR-mandating profile, a GET carrying <c>request</c> and no
-    /// <c>request_uri</c> is claimed by the JAR-by-value matcher (RFC 9101 §6.1 — it is the endpoint
+    /// FAPI 2.0 Security Profile Section 5.3.2.2: under a PAR-mandating profile, a GET carrying <c>request</c> and no
+    /// <c>request_uri</c> is claimed by the JAR-by-value matcher (RFC 9101 Section 5.1: it is the endpoint
     /// that owns this request's shape) and refused by JAR-by-value's own acceptance test, never by
     /// <c>BuildAuthorize</c>'s missing-<c>request_uri</c> fallback, which claims a request only when no
     /// other chained endpoint would already accept it.

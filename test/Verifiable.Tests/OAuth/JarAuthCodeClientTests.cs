@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
+using System.Text.Json;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
@@ -116,7 +117,7 @@ internal sealed class JarAuthCodeClientTests
         Assert.Contains(OAuthRequestParameterNames.Request, result.RedirectUri.Query, StringComparison.Ordinal,
             "Authorize redirect URI must carry the signed JAR as the 'request' query parameter.");
         Assert.Contains(OAuthRequestParameterNames.ClientId, result.RedirectUri.Query, StringComparison.Ordinal,
-            "Authorize redirect URI must carry the outer 'client_id' per RFC 9101 §6.1.");
+            "Authorize redirect URI must carry the outer 'client_id' per RFC 9101 Section 5.");
     }
 
 
@@ -179,6 +180,195 @@ internal sealed class JarAuthCodeClientTests
                 },
                 cts.Token).ConfigureAwait(false);
         }).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// The library's own rule for a lifetime it issues: the client writes a request object's <c>iat</c> and
+    /// <c>exp</c> as whole-second NumericDates, so it issues the request object for the whole seconds of its
+    /// configured lifetime. A <see cref="AuthCodeStartJarAuthorizeOptions.JarLifetime"/> of 90.7 seconds, the request
+    /// object issued half a second past a whole second, gives a request object whose <c>exp</c> is 90 seconds after its
+    /// <c>iat</c>. <see href="https://www.rfc-editor.org/rfc/rfc9101#section-5.1">RFC 9101 Section 5.1</see> passes the
+    /// request object by value: "The client sends the authorization request as a Request Object to the authorization
+    /// endpoint as the "request" parameter value."
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task ARequestObjectByValueUnderAFractionalLifetimeLivesItsWholeSecondsAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarAuthorizeCapabilities).ConfigureAwait(false);
+        (OAuthClient client, ClientRegistration registration) = BuildAuthCodeClient(host, material);
+        TimeProvider.Advance(TimeSpan.FromTicks(TimeSpan.TicksPerSecond / 2));
+
+        AuthCodeFlowEndpointResult result = await client.AuthCode.StartJarAuthorizeAsync(
+            registration,
+            new AuthCodeStartJarAuthorizeOptions
+            {
+                Scope = WellKnownScopes.OpenId,
+                SigningKey = material.SigningPrivateKey,
+                SigningKeyId = material.SigningKeyId.Value,
+                RedirectUri = RedirectUri,
+                HeaderSerializer = HeaderSerializer,
+                PayloadSerializer = PayloadSerializer,
+                MemoryPool = BaseMemoryPool.Shared,
+                JarLifetime = TimeSpan.FromTicks(907_000_000L)
+            },
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsNotNull(result.RedirectUri, $"ErrorCode={result.ErrorCode} ErrorDescription={result.ErrorDescription}");
+        string requestObject = ReadQueryParameter(result.RedirectUri, OAuthRequestParameterNames.Request);
+        Assert.AreEqual(90L, ReadLifetimeSeconds(requestObject), requestObject);
+    }
+
+
+    /// <summary>
+    /// The library's own rule for a lifetime it issues: the client writes a request object's <c>iat</c> and
+    /// <c>exp</c> as whole-second NumericDates, so it issues the request object for the whole seconds of its
+    /// configured lifetime. A <see cref="AuthCodeStartJarParOptions.JarLifetime"/> of 90.7 seconds, the request object
+    /// issued half a second past a whole second, gives a pushed request object
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9126#section-3">RFC 9126 Section 3</see>) whose <c>exp</c>, as the
+    /// pushed authorization endpoint receives it, is 90 seconds after its <c>iat</c>.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task APushedRequestObjectUnderAFractionalLifetimeLivesItsWholeSecondsAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, JarParCapabilities).ConfigureAwait(false);
+        string? pushedRequestObject = null;
+        (OAuthClient client, ClientRegistration registration, _) = host.CreateInProcessOAuthClientAndRegistration(
+            material.Registration,
+            "https://client.example.com/callback",
+            material.Registration.IssuerUri!.ToString(),
+            decorateSendFormPostAsync: send => (endpoint, fields, headers, context, ct) =>
+            {
+                foreach(KeyValuePair<string, string> field in fields)
+                {
+                    if(string.Equals(field.Key, OAuthRequestParameterNames.Request, StringComparison.Ordinal))
+                    {
+                        pushedRequestObject = field.Value;
+                    }
+                }
+
+                return send(endpoint, fields, headers, context, ct);
+            });
+        TimeProvider.Advance(TimeSpan.FromTicks(TimeSpan.TicksPerSecond / 2));
+
+        _ = await client.AuthCode.StartJarParAsync(
+            registration,
+            new AuthCodeStartJarParOptions
+            {
+                Scope = WellKnownScopes.OpenId,
+                SigningKey = material.SigningPrivateKey,
+                SigningKeyId = material.SigningKeyId.Value,
+                RedirectUri = RedirectUri,
+                HeaderSerializer = HeaderSerializer,
+                PayloadSerializer = PayloadSerializer,
+                MemoryPool = BaseMemoryPool.Shared,
+                JarLifetime = TimeSpan.FromTicks(907_000_000L)
+            },
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsNotNull(pushedRequestObject, "The pushed authorization request must carry the request object.");
+        Assert.AreEqual(90L, ReadLifetimeSeconds(pushedRequestObject), pushedRequestObject);
+    }
+
+
+    /// <summary>
+    /// The library's rule for the caller's own argument: a request object lifetime is at least one and at most
+    /// <see cref="int.MaxValue"/> whole seconds, because the client writes <c>iat</c> and <c>exp</c> as whole-second
+    /// NumericDates and a lifetime under one second would make <c>exp</c> equal <c>iat</c>. The <c>init</c> accessor
+    /// of <see cref="AuthCodeStartJarParOptions.JarLifetime"/> and of
+    /// <see cref="AuthCodeStartJarAuthorizeOptions.JarLifetime"/> refuses 500 milliseconds with
+    /// <see cref="ArgumentOutOfRangeException"/>.
+    /// </summary>
+    /// <param name="options">The options record the row sets the lifetime on.</param>
+    [TestMethod]
+    [DataRow(PushedOptions)]
+    [DataRow(ByValueOptions)]
+    public void ARequestObjectLifetimeUnderOneSecondIsRefusedAtItsOptions(string options)
+    {
+        TimeSpan lifetime = TimeSpan.FromMilliseconds(500);
+        Action set = options switch
+        {
+            PushedOptions => () => _ = new AuthCodeStartJarParOptions
+            {
+                Scope = WellKnownScopes.OpenId,
+                SigningKey = null!,
+                SigningKeyId = "request-object-lifetime-key",
+                RedirectUri = RedirectUri,
+                HeaderSerializer = HeaderSerializer,
+                PayloadSerializer = PayloadSerializer,
+                MemoryPool = BaseMemoryPool.Shared,
+                JarLifetime = lifetime
+            },
+            ByValueOptions => () => _ = new AuthCodeStartJarAuthorizeOptions
+            {
+                Scope = WellKnownScopes.OpenId,
+                SigningKey = null!,
+                SigningKeyId = "request-object-lifetime-key",
+                RedirectUri = RedirectUri,
+                HeaderSerializer = HeaderSerializer,
+                PayloadSerializer = PayloadSerializer,
+                MemoryPool = BaseMemoryPool.Shared,
+                JarLifetime = lifetime
+            },
+            _ => throw new ArgumentOutOfRangeException(nameof(options), options, "Unknown options record.")
+        };
+
+        _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(set);
+    }
+
+
+    /// <summary>
+    /// The row value naming <see cref="AuthCodeStartJarParOptions"/>. A constant because <see cref="DataRowAttribute"/>
+    /// takes compile-time constants only.
+    /// </summary>
+    private const string PushedOptions = "pushed";
+
+
+    /// <summary>
+    /// The row value naming <see cref="AuthCodeStartJarAuthorizeOptions"/>. A constant because
+    /// <see cref="DataRowAttribute"/> takes compile-time constants only.
+    /// </summary>
+    private const string ByValueOptions = "by value";
+
+
+    /// <summary>
+    /// Reads one query parameter of <paramref name="uri"/>, unescaped.
+    /// </summary>
+    /// <param name="uri">The URI whose query is read.</param>
+    /// <param name="name">The parameter's name.</param>
+    /// <returns>The parameter's value.</returns>
+    private static string ReadQueryParameter(Uri uri, string name)
+    {
+        foreach(string pair in uri.Query.TrimStart('?').Split('&'))
+        {
+            int separator = pair.IndexOf('=', StringComparison.Ordinal);
+            if(separator > 0 && string.Equals(Uri.UnescapeDataString(pair[..separator]), name, StringComparison.Ordinal))
+            {
+                return Uri.UnescapeDataString(pair[(separator + 1)..]);
+            }
+        }
+
+        throw new InvalidOperationException($"The URI carries no '{name}' parameter.");
+    }
+
+
+    /// <summary>
+    /// Reads a compact JWT's <c>exp</c> less its <c>iat</c>, in seconds.
+    /// </summary>
+    /// <param name="compactJwt">The compact JWT.</param>
+    /// <returns>The JWT's lifetime in seconds as its NumericDates state it.</returns>
+    private static long ReadLifetimeSeconds(string compactJwt)
+    {
+        using JsonDocument payload = JwtPayloadReader.ParsePayloadJson(compactJwt);
+
+        return payload.RootElement.GetProperty(WellKnownJwtClaimNames.Exp).GetInt64()
+            - payload.RootElement.GetProperty(WellKnownJwtClaimNames.Iat).GetInt64();
     }
 
 

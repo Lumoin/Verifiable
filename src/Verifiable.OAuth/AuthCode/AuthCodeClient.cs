@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core;
 using Verifiable.OAuth.Client;
+using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.AuthCode;
 
@@ -177,9 +178,14 @@ public readonly struct AuthCodeClient
     /// <param name="requestLifetime">
     /// How long this pending authorization stays redeemable at
     /// <see cref="HandleCallbackAsync(ClientRegistration, OAuthFormEncodedFields, CancellationToken)"/>
-    /// before it expires. RFC 6749 §4.1.1 defines no lifetime for this leg, so the caller decides.
+    /// before it expires. RFC 6749 Section 4.1.1 defines no lifetime for this leg, so the caller decides. It is held as its whole
+    /// seconds, at least one and at most <see cref="int.MaxValue"/>, the rule every lifetime the library's client issues
+    /// with follows, so the stored flow and the lifetime it states agree.
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The whole seconds of <paramref name="requestLifetime"/> are under one or above <see cref="int.MaxValue"/>.
+    /// </exception>
     public ValueTask<AuthCodeFlowEndpointResult> StartAsync(
         ClientRegistration registration,
         Uri redirectUri,
@@ -192,9 +198,10 @@ public readonly struct AuthCodeClient
         ArgumentNullException.ThrowIfNull(registration);
         ArgumentNullException.ThrowIfNull(redirectUri);
         ArgumentNullException.ThrowIfNull(context);
+        TimeSpan heldLifetime = TokenLifetimes.RequireIssuable(requestLifetime, nameof(requestLifetime));
 
         return AuthCodeFlowHandlers.HandleDirectAuthorizeStartAsync(
-            additionalFields.Fields, redirectUri, Infrastructure, registration, context, resource, requestLifetime, cancellationToken);
+            additionalFields.Fields, redirectUri, Infrastructure, registration, context, resource, heldLifetime, cancellationToken);
     }
 
 
@@ -530,7 +537,7 @@ public readonly struct AuthCodeClient
 
 
     /// <summary>
-    /// Starts a JAR-by-value direct authorization per RFC 9101 §6.1: signs an
+    /// Starts a JAR-by-value direct authorization per RFC 9101 Section 5.1: signs an
     /// AuthCode JAR and returns a redirect URL whose query carries
     /// <c>request=&lt;compact-jws&gt;</c> alongside the outer <c>client_id</c>. A
     /// <see cref="AuthCodeStartJarAuthorizeOptions.Resource"/> entry holding any white-space

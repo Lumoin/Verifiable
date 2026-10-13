@@ -356,8 +356,9 @@ public static class AuthCodeEndpoints
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
-                //Disjointness vs JAR-PAR per RFC 9101 §6.1. RFC 6749 §3.1 treats an empty request
-                //the same as an omitted one, so a blank value here does not divert this request to
+                //Disjointness vs JAR-PAR, the endpoint that takes the request parameter, a request object passed by
+                //value (RFC 9101 Section 5.1). RFC 6749 Section 3.1 treats an empty request the same as an omitted
+                //one, so a blank value here does not divert this request to
                 //the JAR-PAR endpoint's own acceptance test — but a REPEATED request, even an
                 //all-empty repeat, is still a request per §3.1's separate repetition rule, so it
                 //is left to that endpoint's own acceptance test rather than silently matched here.
@@ -587,15 +588,23 @@ public static class AuthCodeEndpoints
 
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
 
+                //RFC 9126 Section 2.2 leaves the request_uri lifetime implementation-defined and states it as
+                //"the lifetime of the request URI in seconds as a positive integer". The request's policy value
+                //is read through the one rule of an issuable lifetime: whole seconds, at least one and at most
+                //int.MaxValue. A value outside it is answered server_error before anything is stored, and the
+                //expires_in answered is the stored lifetime itself.
+                if(!TokenLifetimes.IsIssuable(context.RequestUriLifetime, out TimeSpan parLifetime))
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady));
+                }
+
                 string flowId = context.FlowId!;
                 string requestUriToken = await oauth.GenerateIdentifierAsync!(
                     WellKnownIdentifierPurposes.OAuthRequestUriToken, context, ct)
                     .ConfigureAwait(false);
                 Uri requestUri = new($"urn:ietf:params:oauth:request_uri:{requestUriToken}");
 
-                //RFC 9126 §2.2 leaves the request_uri lifetime implementation-defined.
-                //Library policy lives in policy.RequestUriLifetime (default 60s).
-                TimeSpan parLifetime = context.RequestUriLifetime;
                 DateTimeOffset expiresAt = now + parLifetime;
                 int expiresIn = (int)parLifetime.TotalSeconds;
 
@@ -970,10 +979,17 @@ public static class AuthCodeEndpoints
                 grantedScope = effectiveScope;
 
                 //RFC 6749 §4.1.2 recommends a maximum of 10 minutes for authorization codes.
-                //Library policy lives in policy.AuthorizationCodeLifetime (default 600s) — the
-                //code's own lifetime, independent of parState.ExpiresAt (the request_uri's RFC
-                //9126 §4 lifetime, which may be shorter and already close to elapsed by now).
-                DateTimeOffset expiresAt = now + context.AuthorizationCodeLifetime;
+                //The request's policy value is the code's own lifetime, independent of
+                //parState.ExpiresAt (the request_uri's RFC 9126 Section 4 lifetime, which may be shorter and
+                //already close to elapsed at this instant). It is read through the one rule of an issuable
+                //lifetime; a value outside it is answered server_error before any code is minted.
+                if(!TokenLifetimes.IsIssuable(context.AuthorizationCodeLifetime, out TimeSpan codeLifetime))
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady));
+                }
+
+                DateTimeOffset expiresAt = now + codeLifetime;
 
                 string rawCode = await oauth.GenerateIdentifierAsync!(
                     WellKnownIdentifierPurposes.OAuthAuthorizationCode, context, ct)
@@ -1198,14 +1214,14 @@ public static class AuthCodeEndpoints
                         "only the S256 code challenge method is supported", requestState, context));
                 }
 
-                //FAPI 2.0 §5.2.2 — when the profile mandates PAR, the direct Authorize
+                //FAPI 2.0 Security Profile Section 5.3.2.2: when the profile mandates PAR, the direct Authorize
                 //path is refused; the client must push the request first.
                 if(context.RequirePushedAuthorizationRequests)
                 {
                     return (null, ServerHttpResponse.BadRequest(
                         OAuthErrors.InvalidRequest,
                         "This authorization server requires Pushed Authorization Requests; a direct "
-                        + "authorization request is not accepted (FAPI 2.0 §5.2.2)."));
+                        + "authorization request is not accepted (FAPI 2.0 Security Profile Section 5.3.2.2)."));
                 }
 
                 //RFC 6749 §3.1: the authorization server MUST first authenticate the resource
@@ -1355,10 +1371,16 @@ public static class AuthCodeEndpoints
 
                 string flowId = context.FlowId!;
 
-                //RFC 6749 §4.1.2 recommends a maximum of 10 minutes for
-                //authorization codes. Library policy lives in
-                //policy.AuthorizationCodeLifetime (default 600s).
-                DateTimeOffset expiresAt = now + context.AuthorizationCodeLifetime;
+                //RFC 6749 Section 4.1.2 recommends a maximum of 10 minutes for authorization codes. The
+                //request's policy value is read through the one rule of an issuable lifetime; a
+                //value outside it is answered server_error before any code is minted.
+                if(!TokenLifetimes.IsIssuable(context.AuthorizationCodeLifetime, out TimeSpan codeLifetime))
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady));
+                }
+
+                DateTimeOffset expiresAt = now + codeLifetime;
 
                 string rawCode = await oauth.GenerateIdentifierAsync!(
                     WellKnownIdentifierPurposes.OAuthAuthorizationCode, context, ct)
@@ -1772,15 +1794,21 @@ public static class AuthCodeEndpoints
 
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
 
+                //RFC 9126 Section 2.2: the request_uri lifetime is read through the one rule of an issuable lifetime, as
+                //the bare pushed request reads it; a value outside it is answered server_error before anything is
+                //stored, and the expires_in answered is the stored lifetime itself.
+                if(!TokenLifetimes.IsIssuable(context.RequestUriLifetime, out TimeSpan parLifetime))
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady));
+                }
+
                 string flowId = context.FlowId!;
                 string requestUriToken = await oauth.GenerateIdentifierAsync!(
                     WellKnownIdentifierPurposes.OAuthRequestUriToken, context, ct)
                     .ConfigureAwait(false);
                 Uri requestUri = new($"urn:ietf:params:oauth:request_uri:{requestUriToken}");
 
-                //RFC 9126 §2.2 leaves the request_uri lifetime implementation-defined.
-                //Library policy lives in policy.RequestUriLifetime (default 60s).
-                TimeSpan parLifetime = context.RequestUriLifetime;
                 DateTimeOffset expiresAt = now + parLifetime;
                 int expiresIn = (int)parLifetime.TotalSeconds;
 
@@ -1830,7 +1858,7 @@ public static class AuthCodeEndpoints
 
     /// <summary>
     /// Builds the JAR-by-value direct Authorize endpoint per
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-6.1">RFC 9101 §6.1</see>:
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-5.1">RFC 9101 Section 5.1</see>:
     /// the authorize endpoint accepts a signed Request Object directly via the
     /// <c>request</c> query parameter without a prior PAR.
     /// </summary>
@@ -1855,7 +1883,7 @@ public static class AuthCodeEndpoints
 
             //Acceptance test: GET to /authorize with the JAR Request parameter
             //in the query and no request_uri (which would route to the
-            //PAR-completed Authorize per RFC 9101 §6.1). Disjointness vs the
+            //PAR-completed Authorize per RFC 9126 Section 4). Disjointness vs the
             //direct PKCE matcher is enforced by the Request presence
             //requirement here.
             MatchesRequest = static (fields, context, endpoint, ct) =>
@@ -1870,8 +1898,8 @@ public static class AuthCodeEndpoints
                 {
                     return ValueTask.FromResult<MatchPayload?>(null);
                 }
-                //RFC 9101 §5/§6.1 — request and request_uri MUST NOT both be present. RFC 6749
-                //§3.1 treats an empty value the same as an omitted one for both parameters.
+                //RFC 9101 Section 5: request and request_uri MUST NOT both be present. RFC 6749
+                //Section 3.1 treats an empty value the same as an omitted one for both parameters.
                 //This JAR-by-value matcher declines when request_uri is also present; the
                 //both-present case is matched by the PAR-completed BuildAuthorize, whose
                 //BuildInputAsync rejects it with an explicit invalid_request.
@@ -1943,7 +1971,7 @@ public static class AuthCodeEndpoints
                         ro.State, ro.ResponseMode, ro.ClientId, ct).ConfigureAwait(false));
                 }
 
-                //FAPI 2.0 §5.2.2 — when the profile mandates PAR, the JAR-by-value path
+                //FAPI 2.0 Security Profile Section 5.3.2.2: when the profile mandates PAR, the JAR-by-value path
                 //is refused; the client must push the request first.
                 if(context.RequirePushedAuthorizationRequests)
                 {
@@ -1951,7 +1979,7 @@ public static class AuthCodeEndpoints
                         ServerHttpResponse.BadRequest(
                             OAuthErrors.InvalidRequest,
                             "This authorization server requires Pushed Authorization Requests; a JAR-by-value "
-                            + "authorization request is not accepted (FAPI 2.0 §5.2.2)."));
+                            + "authorization request is not accepted (FAPI 2.0 Security Profile Section 5.3.2.2)."));
                 }
 
                 //RFC 6749 §3.1: the authorization server MUST first authenticate the resource
@@ -2004,10 +2032,16 @@ public static class AuthCodeEndpoints
 
                 string flowId = context.FlowId!;
 
-                //RFC 6749 §4.1.2 recommends a maximum of 10 minutes for
-                //authorization codes. Library policy lives in
-                //policy.AuthorizationCodeLifetime (default 600s).
-                DateTimeOffset expiresAt = now + context.AuthorizationCodeLifetime;
+                //RFC 6749 Section 4.1.2 recommends a maximum of 10 minutes for authorization codes. The
+                //request's policy value is read through the one rule of an issuable lifetime; a
+                //value outside it is answered server_error before any code is minted.
+                if(!TokenLifetimes.IsIssuable(context.AuthorizationCodeLifetime, out TimeSpan codeLifetime))
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady));
+                }
+
+                DateTimeOffset expiresAt = now + codeLifetime;
 
                 string rawCode = await oauth.GenerateIdentifierAsync!(
                     WellKnownIdentifierPurposes.OAuthAuthorizationCode, context, ct)
@@ -2252,8 +2286,9 @@ public static class AuthCodeEndpoints
         DateTimeOffset now = server.TimeProvider.GetUtcNow();
 
         //Clock skew and JAR lifetime ceiling come from per-request policy
-        //(populated by ResolvePolicyAsync at dispatch entry). Defaults match
-        //the historical TimingPolicy values for the strict reading.
+        //(populated by ResolvePolicyAsync at dispatch entry). When no profile
+        //ran, both read the request server's TimingPolicy (TimingPolicy.Default's
+        //values when no server is on the context), unclamped.
         JarVerificationResult verification = await JarVerification.VerifyAsync(
             compactJar,
             signingPublicKey,
@@ -2619,6 +2654,26 @@ public static class AuthCodeEndpoints
 
 
     /// <summary>
+    /// The token kind whose lifetime <paramref name="producer"/> issues with through
+    /// <see cref="TokenLifetimes.TryResolve"/>: the access token for a producer whose builder is the library's RFC 9068
+    /// access-token builder, the ID Token for one whose builder is its OpenID Connect ID Token builder, and none for
+    /// any other producer, the application's own, which owns its lifetime and its failure shape. A producer is known by
+    /// its <see cref="TokenProducer.BuildAsync"/> delegate, equal by its method and target, never by the record's
+    /// identity: a copy of a built-in producer under another name (a <c>with</c> expression on the public record)
+    /// keeps the built-in builder, and the lifetime that builder issues with. A producer whose builder wraps a
+    /// built-in's is the application's own producer.
+    /// </summary>
+    /// <param name="producer">The producer about to run.</param>
+    /// <returns>The kind the producer resolves its lifetime as, or <see langword="null"/>.</returns>
+    private static TokenType? LifetimeKindOf(TokenProducer producer) => producer.BuildAsync switch
+    {
+        TokenProducerBuildDelegate build when build.Equals(Rfc9068AccessTokenProducer.Instance.BuildAsync) => TokenType.AccessToken,
+        TokenProducerBuildDelegate build when build.Equals(Oidc10IdTokenProducer.Instance.BuildAsync) => TokenType.IdToken,
+        _ => null
+    };
+
+
+    /// <summary>
     /// The result of a successful <see cref="IssueTokensAsync"/> walk: every token minted for
     /// the request, keyed by <see cref="TokenProducer.ResponseField"/>, alongside the matching
     /// per-token audit record and the latest <c>exp</c> across all issued tokens.
@@ -2651,7 +2706,10 @@ public static class AuthCodeEndpoints
     /// </summary>
     /// <returns>
     /// The <see cref="TokenIssuanceResult"/> on success; a <see cref="ServerHttpResponse"/>
-    /// <c>server_error</c> failure when a producer's signing key could not be resolved, or when a payload's
+    /// <c>server_error</c> failure when a producer's signing key could not be resolved, when the lifetime the library's
+    /// access-token or ID Token producer would issue with is not issuable (<see cref="TokenLifetimes.TryResolve"/>
+    /// answers <see langword="false"/>; with <see cref="WellKnownOAuthErrorDescriptions.ServerNotReady"/>, before that
+    /// producer runs and with no token of the walk returned), or when a payload's
     /// <c>sub</c> after the claim-contributor merge names no subject (with
     /// <see cref="WellKnownOAuthErrorDescriptions.ServerNotReady"/>; no token of the walk is returned): for the
     /// producer whose <see cref="TokenProducer.ResponseField"/> is <see cref="WellKnownTokenTypes.IdToken"/> or
@@ -2710,6 +2768,18 @@ public static class AuthCodeEndpoints
             if(!await producer.IsApplicable(issuance, cancellationToken).ConfigureAwait(false))
             {
                 continue;
+            }
+
+            //The library's own access-token and ID Token producers issue with the lifetime the one resolution
+            //answers. It is resolved here, before the producer that issues with it runs, so a lifetime that is not
+            //issuable is answered with the library's own server_error and no token of the walk, and the caller's
+            //window gives the presented code or refresh token back unspent. The producers keep their
+            //InvalidOperationException for a direct caller.
+            if(LifetimeKindOf(producer) is TokenType lifetimeKind
+                && !TokenLifetimes.TryResolve(issuance.Registration, lifetimeKind, issuance.Context, out _))
+            {
+                return (null, ServerHttpResponse.ServerError(
+                    OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady));
             }
 
             KeyId signingKeyId = await SigningKeySelection.ResolveSigningKeyIdAsync(
@@ -4185,7 +4255,7 @@ public static class AuthCodeEndpoints
                     //NOT be issued unless sender-constrained; the DPoP enforcement above set the
                     //confirmation when it bound the token.
                     ServerHttpResponse? protectionFailure = GuardCredentialAccessTokenProtection(
-                        server, registration, isSenderConstrained: confirmation is { IsEmpty: false });
+                        server, registration, context, isSenderConstrained: confirmation is { IsEmpty: false });
                     if(protectionFailure is not null)
                     {
                         return (null, protectionFailure);
@@ -4310,7 +4380,17 @@ public static class AuthCodeEndpoints
                     string refreshToken = await oauth.GenerateIdentifierAsync!(
                         WellKnownIdentifierPurposes.OAuthRefreshToken, context, ct)
                         .ConfigureAwait(false);
-                    DateTimeOffset refreshExpiresAt = now + context.RefreshTokenLifetime;
+
+                    //A false answer means the resolved refresh-token lifetime is not issuable (a value under one whole
+                    //second or above int.MaxValue seconds, or a policy value of another type), whoever supplied it:
+                    //answered server_error before the step's first store write, so the code is given back unspent.
+                    if(!TokenLifetimes.TryResolve(registration, TokenType.RefreshToken, context, out TimeSpan refreshLifetime))
+                    {
+                        return (null, ServerHttpResponse.ServerError(
+                            OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady));
+                    }
+
+                    DateTimeOffset refreshExpiresAt = now + refreshLifetime;
 
                     string refreshFlowId = await oauth.GenerateIdentifierAsync!(
                         WellKnownIdentifierPurposes.OAuthRefreshFlowId, context, ct)
@@ -5621,16 +5701,6 @@ public static class AuthCodeEndpoints
 
 
     /// <summary>
-    /// Default lifetime of an Identity Assertion JWT Authorization Grant when the registration sets no
-    /// <see cref="WellKnownTokenTypes.IdJag"/> entry in <see cref="ClientRecord.TokenLifetimes"/>. A
-    /// JAG is short-lived — it is presented once at the Resource Authorization Server and not stored —
-    /// matching the 5-minute example in draft-ietf-oauth-identity-assertion-authz-grant-04
-    /// (21 May 2026) §4.3.4.
-    /// </summary>
-    private static TimeSpan DefaultIdJagLifetime { get; } = TimeSpan.FromMinutes(5);
-
-
-    /// <summary>
     /// The ID-JAG claim names the mint controls (the §3.1 core set plus the grant-shaped claims). A
     /// <see cref="TokenExchange.TokenExchangeAuthorization.AdditionalClaims"/> entry whose key is one of
     /// these is ignored, so application-supplied identity claims can never override the grant semantics.
@@ -5828,11 +5898,21 @@ public static class AuthCodeEndpoints
 
         var oauth = server.OAuth();
 
+        //The stored expiry and the expires_in answered below read this one value. A false answer means the resolved
+        //refresh-token lifetime is not issuable (a value under one whole second or above int.MaxValue seconds, or a
+        //policy value of another type), whoever supplied it: answered server_error before anything is obtained or
+        //saved.
+        if(!TokenLifetimes.TryResolve(registration, TokenType.RefreshToken, context, out TimeSpan refreshLifetime))
+        {
+            return (null, ServerHttpResponse.ServerError(
+                OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady));
+        }
+
         //§4.5: a Refresh Token is an opaque random string (not a JWT), minted through the identifier seam
         //(the application owns the entropy + provenance) and stored as ServerRefreshTokenIssuedState.
         string refreshToken = await oauth.GenerateIdentifierAsync!(
             WellKnownIdentifierPurposes.OAuthRefreshToken, context, cancellationToken).ConfigureAwait(false);
-        DateTimeOffset refreshExpiresAt = now + context.RefreshTokenLifetime;
+        DateTimeOffset refreshExpiresAt = now + refreshLifetime;
 
         string refreshFlowId = await oauth.GenerateIdentifierAsync!(
             WellKnownIdentifierPurposes.OAuthRefreshFlowId, context, cancellationToken).ConfigureAwait(false);
@@ -5884,7 +5964,7 @@ public static class AuthCodeEndpoints
         await oauth.SaveFlowStateAsync!(
             registration.TenantId, refreshFlowId, refreshState, stepCount: 0, context, cancellationToken).ConfigureAwait(false);
 
-        int expiresIn = (int)context.RefreshTokenLifetime.TotalSeconds;
+        int expiresIn = (int)refreshLifetime.TotalSeconds;
 
         //§4.5: issued_token_type = the refresh_token URN; access_token carries the Refresh Token (Token
         //Exchange always returns the issued token in access_token); token_type = N_A; expires_in; scope.
@@ -6114,7 +6194,15 @@ public static class AuthCodeEndpoints
         string jti = await oauth.GenerateIdentifierAsync!(
             WellKnownIdentifierPurposes.OAuthJti, context, cancellationToken).ConfigureAwait(false);
 
-        TimeSpan lifetime = registration.GetTokenLifetime(WellKnownTokenTypes.IdJag) ?? DefaultIdJagLifetime;
+        //The grant's exp and the expires_in answered below read this one value. A false answer means the resolved
+        //ID-JAG lifetime is not issuable (a value under one whole second or above int.MaxValue seconds), whoever
+        //supplied it: answered server_error before anything is signed.
+        if(!TokenLifetimes.TryResolve(registration, TokenType.IdJag, context, out TimeSpan lifetime))
+        {
+            return (null, ServerHttpResponse.ServerError(
+                OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady));
+        }
+
         DateTimeOffset expiresAt = now.Add(lifetime);
 
         //§3.1 iss: the IdP Authorization Server issuer identifier. RFC 8414 §3 requires exact-string
@@ -7435,6 +7523,30 @@ public static class AuthCodeEndpoints
 
                 ConfirmationMethod? confirmation = dpopOutcome.Confirmation;
 
+                //The access-token lifetime this grant issues with is resolved before the code-validation seam below
+                //runs, for the reason the DPoP check above runs first: the pre-authorized_code is single-use and the
+                //seam may consume it, so a lifetime that is not issuable is answered with the library's own
+                //server_error before the code reaches the seam. The issuance walk below resolves it again by the
+                //same rule.
+                if(!TokenLifetimes.TryResolve(registration, TokenType.AccessToken, context, out _))
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady));
+                }
+
+                //OID4VCI 1.0 Section 13.10: the Pre-Authorized Code grant always mints an Access Token giving access
+                //to Credentials, and a long-lived bearer Credential token MUST NOT be issued unless sender-constrained.
+                //The guard reads the registration, the request's policy values and the confirmation the DPoP check
+                //above set, so it runs before the code-validation seam: its invalid_request asks the Wallet to retry
+                //with a DPoP-bound token, and that retry finds the single-use code unspent. The application's seams
+                //below may set the lifetime again, so the guard runs once more right before issuance.
+                ServerHttpResponse? protectionFailure = GuardCredentialAccessTokenProtection(
+                    server, registration, context, isSenderConstrained: confirmation is { IsEmpty: false });
+                if(protectionFailure is not null)
+                {
+                    return (null, protectionFailure);
+                }
+
                 //The application owns the pre-authorized code store; the builder guarantees
                 //the seam is wired. It resolves the subject and tells the library which §6.3
                 //error a refusal maps to.
@@ -7483,17 +7595,6 @@ public static class AuthCodeEndpoints
                     context.SetGrantedAuthorizationDetailsClaim(grantedDetailsClaim);
                 }
 
-                //OID4VCI 1.0 §13.10 — the Pre-Authorized Code grant always mints an Access Token
-                //giving access to Credentials. A long-lived bearer Credential token MUST NOT be
-                //issued unless sender-constrained; the DPoP enforcement above set the
-                //confirmation when it bound the token.
-                ServerHttpResponse? protectionFailure = GuardCredentialAccessTokenProtection(
-                    server, registration, isSenderConstrained: confirmation is { IsEmpty: false });
-                if(protectionFailure is not null)
-                {
-                    return (null, protectionFailure);
-                }
-
                 //§6.2: the token is bound to the End-User the Credential is about (the
                 //seam-resolved subject), not to the Wallet. An absent scope is the
                 //authorization_details path (§6.1.1); the granted scope, when present,
@@ -7525,6 +7626,18 @@ public static class AuthCodeEndpoints
 
                 OidcClaims? preResolvedOidcClaims = await PreResolveOidcClaimsAsync(
                     server, issuance, ct).ConfigureAwait(false);
+
+                //OID4VCI 1.0 Section 13.10, judged again on the lifetime the token is issued with: the application's
+                //code-validation seam and the authorization-details resolution above receive the request's context and
+                //may set its access-token lifetime, so the guard runs once more, failing closed, right before issuance.
+                //The early guard judged the same registration, policy values and confirmation, so a refusal here spends
+                //the code only when the application's own seams changed the lifetime after it.
+                ServerHttpResponse? issuanceProtectionFailure = GuardCredentialAccessTokenProtection(
+                    server, registration, context, isSenderConstrained: confirmation is { IsEmpty: false });
+                if(issuanceProtectionFailure is not null)
+                {
+                    return (null, issuanceProtectionFailure);
+                }
 
                 (TokenIssuanceResult? issuanceResult, ServerHttpResponse? issuanceFailure) =
                     await IssueTokensAsync(
@@ -8465,15 +8578,21 @@ public static class AuthCodeEndpoints
     /// considered long lived." A token outliving
     /// <see cref="TimingPolicy.CredentialAccessTokenSenderConstraintThreshold"/> that is not
     /// sender-constrained (DPoP / <c>cnf.jkt</c>) is refused fail-closed rather than minted; a
-    /// short-lived bearer token or any sender-constrained token is permitted.
+    /// short-lived bearer token or any sender-constrained token is permitted. The lifetime judged is
+    /// the one the access token is issued with, read through <see cref="TokenLifetimes.TryResolve"/>.
     /// </remarks>
+    /// <param name="server">The serving server, whose <see cref="TimingPolicy"/> holds the threshold.</param>
+    /// <param name="registration">The client registration the access token is issued under.</param>
+    /// <param name="context">The request's exchange context, carrying its policy values.</param>
+    /// <param name="isSenderConstrained">Whether the access token is bound to a proof of possession.</param>
     /// <returns>
     /// <see langword="null"/> when the token may be issued; the <c>invalid_request</c> failure
-    /// response otherwise.
+    /// response otherwise, or <c>server_error</c> when no access-token lifetime resolves.
     /// </returns>
     private static ServerHttpResponse? GuardCredentialAccessTokenProtection(
         EndpointServer server,
         ClientRecord registration,
+        ExchangeContext context,
         bool isSenderConstrained)
     {
         var oauth = server.OAuth();
@@ -8482,10 +8601,14 @@ public static class AuthCodeEndpoints
             return null;
         }
 
-        //Mirror the access-token lifetime the Rfc9068AccessTokenProducer will apply: the
-        //per-registration override when set, else the one-hour producer default.
-        TimeSpan lifetime =
-            registration.GetTokenLifetime(WellKnownTokenTypes.AccessToken) ?? TimeSpan.FromHours(1);
+        //The access-token lifetime the Rfc9068AccessTokenProducer applies, from the same one resolution. A false
+        //answer means the resolved lifetime is not issuable (a value under one whole second or above int.MaxValue
+        //seconds, or a policy value of another type), whoever supplied it: answered server_error.
+        if(!TokenLifetimes.TryResolve(registration, TokenType.AccessToken, context, out TimeSpan lifetime))
+        {
+            return ServerHttpResponse.ServerError(
+                OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady);
+        }
 
         if(lifetime <= oauth.Timings.CredentialAccessTokenSenderConstraintThreshold)
         {
@@ -9008,7 +9131,7 @@ public static class AuthCodeEndpoints
                     //constrained; the refresh exchange inherits the binding from the original
                     //issuance (confirmation above).
                     ServerHttpResponse? protectionFailure = GuardCredentialAccessTokenProtection(
-                        server, registration, isSenderConstrained: confirmation is { IsEmpty: false });
+                        server, registration, context, isSenderConstrained: confirmation is { IsEmpty: false });
                     if(protectionFailure is not null)
                     {
                         return (null, protectionFailure);
@@ -9142,7 +9265,18 @@ public static class AuthCodeEndpoints
                     string newRefreshToken = await oauth.GenerateIdentifierAsync!(
                         WellKnownIdentifierPurposes.OAuthRefreshToken, context, ct)
                         .ConfigureAwait(false);
-                    DateTimeOffset newRefreshExpiresAt = now + context.RefreshTokenLifetime;
+
+                    //A false answer means the resolved refresh-token lifetime is not issuable (a value under one whole
+                    //second or above int.MaxValue seconds, or a policy value of another type), whoever supplied it:
+                    //answered server_error before the step's first store write, so the presented refresh token is
+                    //given back unspent.
+                    if(!TokenLifetimes.TryResolve(registration, TokenType.RefreshToken, context, out TimeSpan newRefreshLifetime))
+                    {
+                        return (null, ServerHttpResponse.ServerError(
+                            OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady));
+                    }
+
+                    DateTimeOffset newRefreshExpiresAt = now + newRefreshLifetime;
 
                     //The retired record this transition produces must outlive every token a later
                     //reuse of THIS presentation could be asked to revoke, in particular the freshly
@@ -9888,8 +10022,10 @@ public static class AuthCodeEndpoints
     /// context by the same <c>BuildInputAsync</c> call that produced <paramref name="code"/>
     /// (<c>ExchangeContextServerExtensions.SetRawAuthorizationCode(string)</c>); the state itself
     /// is hash-only per the class's own contract (see <see cref="ServerCodeIssuedState"/>). Also
-    /// appends the RFC 9207 / FAPI 2.0 §5.3.1.2 <c>iss</c> response parameter under
-    /// <c>policy.EmitIssOnRedirect</c>.
+    /// appends the <c>iss</c> response parameter of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9207#section-2">RFC 9207 Section 2</see>, which
+    /// <see href="https://openid.net/specs/fapi-security-profile-2_0-final.html#section-5.3.2.2">FAPI 2.0 Security
+    /// Profile Section 5.3.2.2</see> item 7 requires, under <c>policy.EmitIssOnRedirect</c>.
     /// </summary>
     /// <remarks>
     /// Reads <c>ExchangeContextServerExtensions.ResolvedIssuer</c>, populated by
@@ -10122,9 +10258,12 @@ public static class AuthCodeEndpoints
     /// <c>(null, null)</c> when the request did not ask for a JWT-secured response.
     /// </summary>
     /// <remarks>
-    /// The response JWT expires with the authorization code it conveys
-    /// (<c>policy.AuthorizationCodeLifetime</c>, default 600 seconds) — within the ten
-    /// minutes JARM §2.1 recommends as the maximum JWT lifetime. The RFC 9207 <c>iss</c>
+    /// The response JWT expires with the authorization code it conveys: the request's
+    /// <c>AuthorizationCodeLifetime</c> policy value, read through the one rule of an issuable
+    /// lifetime as the code site reads it and issued as its whole seconds; a value outside it is
+    /// answered <c>server_error</c>. JARM Section 2.1 recommends a maximum JWT lifetime of ten
+    /// minutes; the configured duration governs, so a deployment that configures a longer code
+    /// lifetime issues a response JWT that lives as long. The RFC 9207 <c>iss</c>
     /// response parameter needs no separate emission: the JWT's <c>iss</c> claim carries
     /// the same issuer URL, the placement FAPI 2.0 Message Signing §5.4.1 prescribes.
     /// </remarks>
@@ -10140,6 +10279,14 @@ public static class AuthCodeEndpoints
         if(responseMode is null || !JarmResponseModes.IsJwtSecuredResponseMode(responseMode))
         {
             return (null, null);
+        }
+
+        //The response JWT's lifetime is the code's, read through the one rule of an issuable lifetime before any
+        //signing material is resolved.
+        if(!TokenLifetimes.IsIssuable(context.AuthorizationCodeLifetime, out TimeSpan codeLifetime))
+        {
+            return (null, ServerHttpResponse.ServerError(
+                OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady));
         }
 
         ClientRecord? registration = context.ClientRegistration;
@@ -10184,7 +10331,7 @@ public static class AuthCodeEndpoints
                 $"Could not resolve issuer for the JWT-secured authorization response: {ex.Message}"));
         }
 
-        DateTimeOffset expiresAt = server.TimeProvider.GetUtcNow() + context.AuthorizationCodeLifetime;
+        DateTimeOffset expiresAt = server.TimeProvider.GetUtcNow() + codeLifetime;
 
         string responseJwt = await JarmResponseIssuance.IssueAsync(
             signingKey,

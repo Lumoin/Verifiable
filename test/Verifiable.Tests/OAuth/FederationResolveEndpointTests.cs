@@ -172,6 +172,126 @@ internal sealed class FederationResolveEndpointTests
 
 
     /// <summary>
+    /// The library's own rule for a lifetime it issues: the library writes a Resolve Response's <c>iat</c> and
+    /// <c>exp</c> (<see href="https://openid.net/specs/openid-federation-1_0.html#section-8.3.2">OpenID Federation 1.0
+    /// Section 8.3.2</see>) as whole-second NumericDates, and every lifetime the server's <see cref="TimingPolicy"/>
+    /// holds is its whole seconds, so a <see cref="TimingPolicy.FederationEntityConfigurationLifetime"/> of 90.7
+    /// seconds, with a resolution that states no expiry of its own, issues a Resolve Response, fetched over the real
+    /// wire half a second past a whole second, whose <c>exp</c> is 90 seconds after its <c>iat</c>.
+    /// </summary>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    public async Task AResolveResponseUnderAFractionalLifetimeLivesItsWholeSecondsAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> federationKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using VerifierKeyMaterial resolverKeys = await RegisterResolverAsync(
+            app, new Uri("https://resolver.example.com"), federationKeys).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveSubjectTrustChainAsync =
+                static (sub, trustAnchor, entityTypeFilter, _, _, _) =>
+                    ValueTask.FromResult<FederationResolveOutcome?>(
+                        FederationResolveOutcome.Resolved(new ResolveResponseContribution
+                        {
+                            Metadata = RelyingPartyMetadata(),
+                            TrustChain = ["eyJleaf.statement.jws", "eyJanchor.statement.jws"]
+                        }));
+            candidateIntegration.Timings = TimingPolicy.Default with
+            {
+                FederationEntityConfigurationLifetime = TimeSpan.FromTicks(907_000_000L)
+            };
+        }).ConfigureAwait(false);
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        TimeProvider.Advance(TimeSpan.FromTicks(TimeSpan.TicksPerSecond / 2));
+        string query =
+            $"?sub={Uri.EscapeDataString("https://leaf.example.com")}"
+            + $"&trust_anchor={Uri.EscapeDataString("https://anchor.example.com")}";
+
+        string compactResponse = await GetResolveAsync(
+            host, $"/connect/{resolverKeys.Registration.TenantId.Value}/federation_resolve{query}").ConfigureAwait(false);
+        Dictionary<string, object> payload = DecodeSegment(compactResponse, 1);
+
+        Assert.AreEqual(
+            90L,
+            Convert.ToInt64(payload["exp"], CultureInfo.InvariantCulture)
+                - Convert.ToInt64(payload["iat"], CultureInfo.InvariantCulture),
+            compactResponse);
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.3.2">OpenID Federation 1.0 Section
+    /// 8.3.2</see>: the Resolve Response's <c>exp</c> "MUST be the minimum of the exp value of the Trust Chain from which
+    /// the resolve response was derived, as well as any Trust Mark included in the response." The library's own rule for
+    /// a lifetime it issues holds the time that minimum leaves after the response's issuance to at least one whole
+    /// second, and never extends it. A resolution whose stated expiry lies half a second after a request fetched over
+    /// the real wire half a second past a whole second leaves no such lifetime, so the request is refused 400
+    /// <c>invalid_trust_chain</c> (<see href="https://openid.net/specs/openid-federation-1_0.html#section-8.9">Section
+    /// 8.9</see>: "The Trust Chain cannot be validated."); one whose stated expiry lies 90.2 or 90.7 seconds after it is
+    /// served 200 with that expiry, in whole seconds (<see href="https://www.rfc-editor.org/rfc/rfc7519#section-2">RFC
+    /// 7519 Section 2</see> NumericDate, floored), as its <c>exp</c>. At the half-second instant the 90.7-second
+    /// remainder floors to a different whole second than the same instant plus 90 whole seconds does, so the row
+    /// distinguishes the preserved expiry from a truncated remainder.
+    /// </summary>
+    /// <param name="remainingTicks">How far the resolution's stated expiry lies after the request, in ticks.</param>
+    /// <param name="expectedStatusCode">The resolve endpoint's status code.</param>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DataRow(5_000_000L, 400)]
+    [DataRow(902_000_000L, 200)]
+    [DataRow(907_000_000L, 200)]
+    public async Task AResolveResponseIsHeldToTheLifetimeItsResolutionLeavesAsync(long remainingTicks, int expectedStatusCode)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> federationKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using VerifierKeyMaterial resolverKeys = await RegisterResolverAsync(
+            app, new Uri("https://resolver.example.com"), federationKeys).ConfigureAwait(false);
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        TimeProvider.Advance(TimeSpan.FromTicks(TimeSpan.TicksPerSecond / 2));
+        DateTimeOffset resolutionExpiry = TimeProvider.GetUtcNow() + TimeSpan.FromTicks(remainingTicks);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveSubjectTrustChainAsync =
+                (sub, trustAnchor, entityTypeFilter, _, _, _) =>
+                    ValueTask.FromResult<FederationResolveOutcome?>(
+                        FederationResolveOutcome.Resolved(new ResolveResponseContribution
+                        {
+                            Metadata = RelyingPartyMetadata(),
+                            TrustChain = ["eyJleaf.statement.jws", "eyJanchor.statement.jws"],
+                            ExpiresAt = resolutionExpiry
+                        }));
+        }).ConfigureAwait(false);
+        Uri url = new(host.HttpBaseAddress!,
+            $"/connect/{resolverKeys.Registration.TenantId.Value}/federation_resolve"
+            + $"?sub={Uri.EscapeDataString("https://leaf.example.com")}"
+            + $"&trust_anchor={Uri.EscapeDataString("https://anchor.example.com")}");
+
+        using System.Net.Http.HttpResponseMessage response = await host.SharedHttpClient!
+            .GetAsync(url, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(expectedStatusCode, (int)response.StatusCode, body);
+        if(expectedStatusCode == 400)
+        {
+            Assert.Contains($"\"error\":\"{OAuthErrors.InvalidTrustChain}\"", body, StringComparison.Ordinal);
+
+            return;
+        }
+
+        Dictionary<string, object> payload = DecodeSegment(body, 1);
+        Assert.AreEqual(
+            resolutionExpiry.ToUnixTimeSeconds(),
+            Convert.ToInt64(payload["exp"], CultureInfo.InvariantCulture),
+            body);
+    }
+
+
+    /// <summary>
     /// Returns invalid_subject when the application cannot resolve the requested entity.
     /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-8.9">Federation §8.9</see>.
     /// </summary>

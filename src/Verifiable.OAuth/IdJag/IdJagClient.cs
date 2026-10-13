@@ -5,6 +5,7 @@ using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.Client;
+using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.IdJag;
 
@@ -60,8 +61,24 @@ public sealed record IdJagMintOptions
     /// <summary>The requested RFC 9396 <c>authorization_details</c> as a JSON array string (§4.3.3), or <see langword="null"/>.</summary>
     public string? AuthorizationDetails { get; init; }
 
-    /// <summary>The validity window of the signed client assertion (RFC 7523 §3). Defaults to one minute.</summary>
-    public TimeSpan ClientAssertionLifetime { get; init; } = TimeSpan.FromMinutes(1);
+    /// <summary>
+    /// The validity window of the signed client assertion (RFC 7523 Section 3): its <c>exp</c> less its <c>iat</c>. Defaults
+    /// to one minute, the library's own value.
+    /// </summary>
+    /// <remarks>
+    /// The library writes the assertion's <c>iat</c> and <c>exp</c> as whole-second NumericDates, so the value is at
+    /// least one and at most <see cref="int.MaxValue"/> whole seconds, the library's own rule: the <c>init</c> accessor
+    /// refuses any other value with <see cref="ArgumentOutOfRangeException"/> and holds an issuable value as its whole
+    /// seconds.
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The value's whole seconds are under one or above <see cref="int.MaxValue"/>.
+    /// </exception>
+    public TimeSpan ClientAssertionLifetime
+    {
+        get;
+        init => field = TokenLifetimes.RequireIssuable(value, nameof(ClientAssertionLifetime));
+    } = TimeSpan.FromMinutes(1);
 
 
     /// <summary>
@@ -101,8 +118,24 @@ public sealed record IdJagRedeemOptions
     /// <summary>Serialises the client-assertion payload claims to UTF-8 JSON bytes.</summary>
     public required JwtPayloadSerializer PayloadSerializer { get; init; }
 
-    /// <summary>The validity window of the signed client assertion (RFC 7523 §3). Defaults to one minute.</summary>
-    public TimeSpan ClientAssertionLifetime { get; init; } = TimeSpan.FromMinutes(1);
+    /// <summary>
+    /// The validity window of the signed client assertion (RFC 7523 Section 3): its <c>exp</c> less its <c>iat</c>. Defaults
+    /// to one minute, the library's own value.
+    /// </summary>
+    /// <remarks>
+    /// The library writes the assertion's <c>iat</c> and <c>exp</c> as whole-second NumericDates, so the value is at
+    /// least one and at most <see cref="int.MaxValue"/> whole seconds, the library's own rule: the <c>init</c> accessor
+    /// refuses any other value with <see cref="ArgumentOutOfRangeException"/> and holds an issuable value as its whole
+    /// seconds.
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The value's whole seconds are under one or above <see cref="int.MaxValue"/>.
+    /// </exception>
+    public TimeSpan ClientAssertionLifetime
+    {
+        get;
+        init => field = TokenLifetimes.RequireIssuable(value, nameof(ClientAssertionLifetime));
+    } = TimeSpan.FromMinutes(1);
 
 
     /// <summary>

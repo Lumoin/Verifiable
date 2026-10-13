@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth.Dpop;
+using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.Siop.Wallet;
 
@@ -43,13 +44,20 @@ public static class SelfIssuedIdTokenIssuance
     /// <param name="audience">The <c>aud</c> claim value — the RP's Client ID from the Authorization Request.</param>
     /// <param name="nonce">The <c>nonce</c> from the Authorization Request, echoed per §11.1.</param>
     /// <param name="issuedAt">The <c>iat</c> instant.</param>
-    /// <param name="lifetime">The validity period; <c>exp</c> is <paramref name="issuedAt"/> plus this.</param>
+    /// <param name="lifetime">
+    /// The validity period, at least one and at most <see cref="int.MaxValue"/> whole seconds, the library's own rule:
+    /// <c>iat</c> and <c>exp</c> are written as whole-second NumericDates, so <c>exp</c> is <paramref name="issuedAt"/>
+    /// plus the whole seconds of this.
+    /// </param>
     /// <param name="base64UrlEncoder">Base64url encoder, used for the thumbprint and compact JWS serialisation.</param>
     /// <param name="headerSerializer">Serialises the protected header to UTF-8 JSON bytes.</param>
     /// <param name="payloadSerializer">Serialises the payload claims to UTF-8 JSON bytes.</param>
     /// <param name="memoryPool">Memory pool for transient signing buffers.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The compact-serialised Self-Issued ID Token.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The whole seconds of <paramref name="lifetime"/> are under one or above <see cref="int.MaxValue"/>.
+    /// </exception>
     public static async ValueTask<string> IssueWithJwkThumbprintAsync(
         PrivateKeyMemory subjectPrivateKey,
         PublicKeyMemory subjectPublicKey,
@@ -110,13 +118,20 @@ public static class SelfIssuedIdTokenIssuance
     /// <param name="audience">The <c>aud</c> claim value — the RP's Client ID from the Authorization Request.</param>
     /// <param name="nonce">The <c>nonce</c> from the Authorization Request, echoed per §11.1.</param>
     /// <param name="issuedAt">The <c>iat</c> instant.</param>
-    /// <param name="lifetime">The validity period; <c>exp</c> is <paramref name="issuedAt"/> plus this.</param>
+    /// <param name="lifetime">
+    /// The validity period, at least one and at most <see cref="int.MaxValue"/> whole seconds, the library's own rule:
+    /// <c>iat</c> and <c>exp</c> are written as whole-second NumericDates, so <c>exp</c> is <paramref name="issuedAt"/>
+    /// plus the whole seconds of this.
+    /// </param>
     /// <param name="base64UrlEncoder">Base64url encoder for compact JWS serialisation.</param>
     /// <param name="headerSerializer">Serialises the protected header to UTF-8 JSON bytes.</param>
     /// <param name="payloadSerializer">Serialises the payload claims to UTF-8 JSON bytes.</param>
     /// <param name="memoryPool">Memory pool for transient signing buffers.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The compact-serialised Self-Issued ID Token.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The whole seconds of <paramref name="lifetime"/> are under one or above <see cref="int.MaxValue"/>.
+    /// </exception>
     public static async ValueTask<string> IssueWithDecentralizedIdentifierAsync(
         PrivateKeyMemory subjectPrivateKey,
         string did,
@@ -157,6 +172,29 @@ public static class SelfIssuedIdTokenIssuance
     }
 
 
+    /// <summary>
+    /// Issues the Self-Issued ID Token both Subject Syntax Types share: holds <paramref name="lifetime"/> to the one rule
+    /// of an issuable lifetime, the library's own (<see cref="TokenLifetimes.RequireIssuable"/>: at least one and
+    /// at most <see cref="int.MaxValue"/> whole seconds, since <c>iat</c> and <c>exp</c> are written as whole-second
+    /// NumericDates), composes <c>iss</c> equal to <c>sub</c>, and signs.
+    /// </summary>
+    /// <param name="subjectPrivateKey">The End-User's signing key.</param>
+    /// <param name="header">The protected header the caller composed for its Subject Syntax Type.</param>
+    /// <param name="subject">The <c>iss</c> and <c>sub</c> claim value.</param>
+    /// <param name="subJwk">The <c>sub_jwk</c> claim value, or <see langword="null"/> when the Subject Syntax Type omits it.</param>
+    /// <param name="audience">The <c>aud</c> claim value.</param>
+    /// <param name="nonce">The <c>nonce</c> claim value.</param>
+    /// <param name="issuedAt">The <c>iat</c> instant.</param>
+    /// <param name="lifetime">The validity period; <c>exp</c> is <paramref name="issuedAt"/> plus its whole seconds.</param>
+    /// <param name="base64UrlEncoder">Base64url encoder for compact JWS serialisation.</param>
+    /// <param name="headerSerializer">Serialises the protected header to UTF-8 JSON bytes.</param>
+    /// <param name="payloadSerializer">Serialises the payload claims to UTF-8 JSON bytes.</param>
+    /// <param name="memoryPool">Memory pool for transient signing buffers.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The compact-serialised Self-Issued ID Token.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The whole seconds of <paramref name="lifetime"/> are under one or above <see cref="int.MaxValue"/>.
+    /// </exception>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "JwsMessage is disposed via the using statement before the method returns; the returned string is independent of the message.")]
     private static async ValueTask<string> IssueAsync(
         PrivateKeyMemory subjectPrivateKey,
@@ -173,6 +211,7 @@ public static class SelfIssuedIdTokenIssuance
         BaseMemoryPool memoryPool,
         CancellationToken cancellationToken)
     {
+        TimeSpan issuedLifetime = TokenLifetimes.RequireIssuable(lifetime, nameof(lifetime));
         ArgumentException.ThrowIfNullOrWhiteSpace(audience);
         ArgumentException.ThrowIfNullOrWhiteSpace(nonce);
         ArgumentNullException.ThrowIfNull(headerSerializer);
@@ -190,7 +229,7 @@ public static class SelfIssuedIdTokenIssuance
             [WellKnownJwtClaimNames.Aud] = audience,
             [WellKnownJwtClaimNames.Nonce] = nonce,
             [WellKnownJwtClaimNames.Iat] = issuedAt.ToUnixTimeSeconds(),
-            [WellKnownJwtClaimNames.Exp] = issuedAt.Add(lifetime).ToUnixTimeSeconds()
+            [WellKnownJwtClaimNames.Exp] = issuedAt.ToUnixTimeSeconds() + (long)issuedLifetime.TotalSeconds
         };
 
         if(subJwk is not null)

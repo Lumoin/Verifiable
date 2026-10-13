@@ -3768,6 +3768,54 @@ internal sealed class TestHostShell: IAsyncDisposable
 
 
     /// <summary>
+    /// Re-registers <paramref name="material"/>'s client with <paramref name="lifetime"/> as the
+    /// <see cref="ClientRecord.TokenLifetimes"/> entry under <paramref name="tokenType"/>, one of the
+    /// <see cref="WellKnownTokenTypes"/> names: the registration's own override of that token kind's
+    /// lifetime. Reads the live record from the per-host table, as <see cref="SetAccessTokenLifetimeAsync"/>
+    /// does, and replaces it through the host's conditional update.
+    /// </summary>
+    /// <param name="material">The client whose registration carries the override.</param>
+    /// <param name="tokenType">The <see cref="WellKnownTokenTypes"/> name the override is keyed by.</param>
+    /// <param name="lifetime">The lifetime the registration sets for that token kind.</param>
+    /// <param name="cancellationToken">The token the host's conditional update observes.</param>
+    /// <param name="hostName">The host the client is registered on.</param>
+    /// <returns>A task that completes when the updated registration is live.</returns>
+    public async Task SetTokenLifetimeAsync(
+        VerifierKeyMaterial material,
+        string tokenType,
+        TimeSpan lifetime,
+        CancellationToken cancellationToken,
+        string hostName = "default")
+    {
+        ArgumentNullException.ThrowIfNull(material);
+        ArgumentException.ThrowIfNullOrWhiteSpace(tokenType);
+        ArgumentException.ThrowIfNullOrWhiteSpace(hostName);
+
+        HostedAuthorizationServer host = Host(hostName);
+
+        string segment = material.Registration.TenantId.Value;
+        if(!host.Registrations.TryGetValue(segment, out ClientRecord? previous))
+        {
+            throw new InvalidOperationException(
+                $"No registration found for segment '{segment}'.");
+        }
+
+        ImmutableDictionary<string, TimeSpan> lifetimes = previous.TokenLifetimes
+            .ToImmutableDictionary(StringComparer.Ordinal)
+            .SetItem(tokenType, lifetime);
+
+        ClientRecord updated = previous with
+        {
+            TokenLifetimes = lifetimes
+        };
+
+        updated = await host.UpdateClientAsync(previous, updated, [], cancellationToken).ConfigureAwait(false);
+
+        material.Registration = updated;
+    }
+
+
+    /// <summary>
     /// Re-registers <paramref name="material"/>'s client with the RFC 9396 §10
     /// <c>authorization_details_types</c> allowlist set to
     /// <paramref name="allowedTypes"/> on <see cref="ClientRecord.AllowedAuthorizationDetailsTypes"/>.

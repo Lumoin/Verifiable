@@ -62,12 +62,14 @@ public static class PolicyExchangeContextExtensions
 
 
         /// <summary>
-        /// Gets the maximum allowed JAR lifetime. Defaults to 60 seconds (FAPI
-        /// 2.0 §5.2.2 Clause 13).
+        /// Gets the maximum allowed JAR lifetime: the policy value when set, else the request server's
+        /// <see cref="TimingPolicy.AuthCodeRequestObjectLifetime"/>, else <see cref="TimingPolicy.Default"/>'s (60
+        /// seconds, the library's own ceiling) when no server is on the context. A request no built-in profile ran on
+        /// is held to the deployment's own value, the one the profiles derive theirs from.
         /// </summary>
         public TimeSpan JarLifetimeCeiling =>
             context.TryGetValue(PolicyContextKeys.JarLifetimeCeiling, out object? v)
-                && v is TimeSpan t ? t : TimeSpan.FromSeconds(60);
+                && v is TimeSpan t ? t : (context.RequestServer?.OAuth().Timings ?? TimingPolicy.Default).AuthCodeRequestObjectLifetime;
 
         /// <summary>Sets the maximum allowed JAR lifetime.</summary>
         public void SetJarLifetimeCeiling(TimeSpan value)
@@ -77,12 +79,16 @@ public static class PolicyExchangeContextExtensions
 
 
         /// <summary>
-        /// Gets the authorization-code lifetime. Defaults to 600 seconds
-        /// (RFC 6749 §4.1.2 recommended ceiling).
+        /// Gets the authorization-code lifetime: the policy value when set, else the request server's
+        /// <see cref="TimingPolicy.AuthorizationCodeLifetime"/>, else <see cref="TimingPolicy.Default"/>'s (600
+        /// seconds, the maximum <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2">RFC 6749 Section
+        /// 4.1.2</see> recommends) when no server is on the context. A request no built-in profile ran on is held to
+        /// the deployment's own value, the one the profiles derive theirs from. The getter answers the configured
+        /// duration; the endpoints issue its whole seconds.
         /// </summary>
         public TimeSpan AuthorizationCodeLifetime =>
             context.TryGetValue(PolicyContextKeys.AuthorizationCodeLifetime, out object? v)
-                && v is TimeSpan t ? t : TimeSpan.FromSeconds(600);
+                && v is TimeSpan t ? t : (context.RequestServer?.OAuth().Timings ?? TimingPolicy.Default).AuthorizationCodeLifetime;
 
         /// <summary>Sets the authorization-code lifetime.</summary>
         public void SetAuthorizationCodeLifetime(TimeSpan value)
@@ -92,13 +98,20 @@ public static class PolicyExchangeContextExtensions
 
 
         /// <summary>
-        /// Gets the default access-token lifetime. Defaults to one hour.
+        /// Gets the request's access-token lifetime: the policy value when set, else the request server's
+        /// <see cref="TimingPolicy.AccessTokenLifetime"/>, else <see cref="TimingPolicy.Default"/>'s when no server
+        /// is on the context. The getter answers the configured duration. When the policy value is absent or is an
+        /// issuable <see cref="TimeSpan"/> and the registration sets no override, <see cref="TokenLifetimes.TryResolve"/>
+        /// issues the token with this duration's whole seconds; a present value of another type, or one that is not
+        /// issuable, is read here as it is (the server's value for another type) while
+        /// <see cref="TokenLifetimes.TryResolve"/> refuses it and no token is issued.
         /// </summary>
         public TimeSpan AccessTokenLifetime =>
             context.TryGetValue(PolicyContextKeys.AccessTokenLifetime, out object? v)
-                && v is TimeSpan t ? t : TimeSpan.FromHours(1);
+                && v is TimeSpan t ? t : (context.RequestServer?.OAuth().Timings ?? TimingPolicy.Default).AccessTokenLifetime;
 
-        /// <summary>Sets the default access-token lifetime.</summary>
+        /// <summary>Sets the request's access-token lifetime.</summary>
+        /// <param name="value">The access-token lifetime the request's policy holds.</param>
         public void SetAccessTokenLifetime(TimeSpan value)
         {
             context[PolicyContextKeys.AccessTokenLifetime] = value;
@@ -106,13 +119,20 @@ public static class PolicyExchangeContextExtensions
 
 
         /// <summary>
-        /// Gets the default ID-token lifetime. Defaults to one hour.
+        /// Gets the request's ID-token lifetime: the policy value when set, else the request server's
+        /// <see cref="TimingPolicy.IdTokenLifetime"/>, else <see cref="TimingPolicy.Default"/>'s when no server is
+        /// on the context. The getter answers the configured duration. When the policy value is absent or is an
+        /// issuable <see cref="TimeSpan"/> and the registration sets no override, <see cref="TokenLifetimes.TryResolve"/>
+        /// issues the token with this duration's whole seconds; a present value of another type, or one that is not
+        /// issuable, is read here as it is (the server's value for another type) while
+        /// <see cref="TokenLifetimes.TryResolve"/> refuses it and no token is issued.
         /// </summary>
         public TimeSpan IdTokenLifetime =>
             context.TryGetValue(PolicyContextKeys.IdTokenLifetime, out object? v)
-                && v is TimeSpan t ? t : TimeSpan.FromHours(1);
+                && v is TimeSpan t ? t : (context.RequestServer?.OAuth().Timings ?? TimingPolicy.Default).IdTokenLifetime;
 
-        /// <summary>Sets the default ID-token lifetime.</summary>
+        /// <summary>Sets the request's ID-token lifetime.</summary>
+        /// <param name="value">The ID Token lifetime the request's policy holds.</param>
         public void SetIdTokenLifetime(TimeSpan value)
         {
             context[PolicyContextKeys.IdTokenLifetime] = value;
@@ -120,16 +140,24 @@ public static class PolicyExchangeContextExtensions
 
 
         /// <summary>
-        /// Gets the default refresh-token lifetime per RFC 6749 §6. Defaults
-        /// to 30 days. Deployments range from 24 hours (high-security) to
-        /// 90 days (long-lived sessions); per-deployment override via the
-        /// policy resolver.
+        /// Gets the request's refresh-token lifetime per
+        /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-6">RFC 6749 Section 6</see>: the policy value
+        /// when set, else the request server's <see cref="TimingPolicy.RefreshTokenLifetime"/>, else
+        /// <see cref="TimingPolicy.Default"/>'s when no server is on the context. The getter answers the configured
+        /// duration. When the policy value is absent or is an issuable <see cref="TimeSpan"/> and the registration sets
+        /// no override, <see cref="TokenLifetimes.TryResolve"/> issues the refresh token with this duration's whole
+        /// seconds; a present value of another type, or one that is not issuable, is read here as it is (the server's
+        /// value for another type) while <see cref="TokenLifetimes.TryResolve"/> refuses it and no token is issued.
+        /// Deployments range from 24 hours
+        /// (high-security) to 90 days (long-lived sessions), set through the <see cref="TimingPolicy"/> or the policy
+        /// resolver.
         /// </summary>
         public TimeSpan RefreshTokenLifetime =>
             context.TryGetValue(PolicyContextKeys.RefreshTokenLifetime, out object? v)
-                && v is TimeSpan t ? t : TimeSpan.FromDays(30);
+                && v is TimeSpan t ? t : (context.RequestServer?.OAuth().Timings ?? TimingPolicy.Default).RefreshTokenLifetime;
 
-        /// <summary>Sets the default refresh-token lifetime.</summary>
+        /// <summary>Sets the request's refresh-token lifetime.</summary>
+        /// <param name="value">The refresh-token lifetime the request's policy holds.</param>
         public void SetRefreshTokenLifetime(TimeSpan value)
         {
             context[PolicyContextKeys.RefreshTokenLifetime] = value;
@@ -137,12 +165,15 @@ public static class PolicyExchangeContextExtensions
 
 
         /// <summary>
-        /// Gets the <c>request_uri</c> handle lifetime issued by PAR. Defaults
-        /// to 60 seconds (HAIP / FAPI 2.0 alignment).
+        /// Gets the <c>request_uri</c> handle lifetime issued by PAR: the policy value when set, else the request
+        /// server's <see cref="TimingPolicy.AuthCodeParLifetime"/>, else <see cref="TimingPolicy.Default"/>'s (60
+        /// seconds) when no server is on the context. A request no built-in profile ran on is held to the
+        /// deployment's own value, the one the profiles derive theirs from. The getter answers the configured
+        /// duration; the pushed authorization endpoint issues its whole seconds.
         /// </summary>
         public TimeSpan RequestUriLifetime =>
             context.TryGetValue(PolicyContextKeys.RequestUriLifetime, out object? v)
-                && v is TimeSpan t ? t : TimeSpan.FromSeconds(60);
+                && v is TimeSpan t ? t : (context.RequestServer?.OAuth().Timings ?? TimingPolicy.Default).AuthCodeParLifetime;
 
         /// <summary>Sets the <c>request_uri</c> handle lifetime.</summary>
         public void SetRequestUriLifetime(TimeSpan value)
@@ -152,12 +183,17 @@ public static class PolicyExchangeContextExtensions
 
 
         /// <summary>
-        /// Gets the clock-skew tolerance. Defaults to 60 seconds (RFC 7519
-        /// §4.1.4 leeway guidance).
+        /// Gets the clock-skew tolerance: the policy value when set, else the request server's
+        /// <see cref="TimingPolicy.ClockSkewTolerance"/>, else <see cref="TimingPolicy.Default"/>'s when no server is on
+        /// the context: 60 seconds, the library's own default, within the leeway
+        /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.4">RFC 7519 Sections 4.1.4</see> and
+        /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.5">4.1.5</see> allow ("some small leeway, usually
+        /// no more than a few minutes, to account for clock skew"), which names no number. A request no built-in profile
+        /// ran on is held to the deployment's own value, the one the profiles derive theirs from.
         /// </summary>
         public TimeSpan ClockSkewTolerance =>
             context.TryGetValue(PolicyContextKeys.ClockSkewTolerance, out object? v)
-                && v is TimeSpan t ? t : TimeSpan.FromSeconds(60);
+                && v is TimeSpan t ? t : (context.RequestServer?.OAuth().Timings ?? TimingPolicy.Default).ClockSkewTolerance;
 
         /// <summary>Sets the clock-skew tolerance.</summary>
         public void SetClockSkewTolerance(TimeSpan value)
@@ -173,7 +209,7 @@ public static class PolicyExchangeContextExtensions
         /// "policy override, else <see cref="Verifiable.OAuth.Validation.ValidationContext.ClockSkew"/> field"
         /// pattern — mirrors <c>KbJwtMaxAgeWindow</c>. Validators that want
         /// the per-flow value with a ValidationContext fallback read this; callers
-        /// wanting the unconditional 60-second default read
+        /// wanting the request server's own value when no policy value is set read
         /// <c>ClockSkewTolerance</c>.
         /// </summary>
         public TimeSpan? ClockSkewToleranceOverride =>
@@ -233,7 +269,9 @@ public static class PolicyExchangeContextExtensions
         /// <summary>
         /// Gets whether the Authorize-completed redirect emits the RFC 9207
         /// <c>iss</c> response parameter. Defaults to <see langword="true"/>
-        /// (FAPI 2.0 §5.3.1.2).
+        /// (<see href="https://openid.net/specs/fapi-security-profile-2_0-final.html#section-5.3.2.2">FAPI 2.0
+        /// Security Profile Section 5.3.2.2</see> item 7: "shall return an iss parameter in the authorization
+        /// response according to [RFC9207]").
         /// </summary>
         /// <remarks>
         /// A ternary rather than the De Morgan-equivalent boolean expression, here and on the two
@@ -272,7 +310,7 @@ public static class PolicyExchangeContextExtensions
         /// Gets whether Pushed Authorization Requests are mandatory — when
         /// <see langword="true"/>, the AS refuses the direct-Authorize and JAR-by-value
         /// paths and requires the client to push the request first. Defaults to
-        /// <see langword="true"/> (FAPI 2.0 §5.2.2 mandates PAR).
+        /// <see langword="true"/> (FAPI 2.0 Security Profile Section 5.3.2.2 mandates PAR).
         /// </summary>
         /// <remarks>A ternary for the reason stated on <c>EmitIssOnRedirect</c>.</remarks>
         public bool RequirePushedAuthorizationRequests =>

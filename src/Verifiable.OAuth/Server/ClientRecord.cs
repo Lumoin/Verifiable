@@ -189,7 +189,25 @@ public sealed record ClientRecord: IRegistrationRecord
     /// Per-token-type lifetimes keyed by token type name.
     /// Keys are typically <c>"access_token"</c>, <c>"refresh_token"</c>, <c>"id_token"</c>.
     /// </summary>
-    public required IReadOnlyDictionary<string, TimeSpan> TokenLifetimes { get; init; }
+    /// <remarks>
+    /// Each value is a lifetime a token is issued with, so it is held to the one rule of
+    /// <see cref="Server.TokenLifetimes.IsIssuable"/>: at least one and at most <see cref="int.MaxValue"/> whole
+    /// seconds, the library's own bound. The values are the application's own argument, so the <c>init</c> accessor
+    /// refuses any other value with <see cref="ArgumentOutOfRangeException"/>, naming the token type. The record holds
+    /// a frozen snapshot of the map it was given under that map's own comparer: the comparer a
+    /// <see cref="Dictionary{TKey, TValue}"/>, a <see cref="FrozenDictionary{TKey, TValue}"/> or an
+    /// <see cref="ImmutableDictionary{TKey, TValue}"/> exposes, and ordinal comparison, as the
+    /// <see cref="WellKnownTokenTypes"/> names are compared, for a map of any other kind. A lookup answers as the
+    /// application's own map answered it, a map holding two keys equal under its comparer is refused with
+    /// <see cref="ArgumentException"/>, a change the application makes afterwards to that map never reaches the record,
+    /// and a registration never holds a lifetime the server cannot issue.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">The value set is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// A lifetime's whole seconds are under one or above <see cref="int.MaxValue"/>.
+    /// </exception>
+    /// <exception cref="ArgumentException">Two keys of the map are equal under its comparer.</exception>
+    public required IReadOnlyDictionary<string, TimeSpan> TokenLifetimes { get; init => field = RequireIssuableLifetimes(value); }
 
     /// <summary>
     /// The tenant's signing-key inventory indexed by protocol usage context.
@@ -390,6 +408,61 @@ public sealed record ClientRecord: IRegistrationRecord
         return TokenLifetimes.TryGetValue(tokenType, out TimeSpan lifetime)
             ? lifetime
             : null;
+    }
+
+
+    /// <summary>
+    /// Takes a snapshot of a token lifetime map and refuses it when it holds a lifetime the server cannot issue, by the
+    /// one rule of <see cref="Server.TokenLifetimes.IsIssuable"/>, or two keys equal under its comparer. The map is the
+    /// application's own argument, so each refusal throws. The record keeps the snapshot under the comparer of the map
+    /// the application passed in, the one a <see cref="Dictionary{TKey, TValue}"/>, a
+    /// <see cref="FrozenDictionary{TKey, TValue}"/> or an <see cref="ImmutableDictionary{TKey, TValue}"/> exposes, and
+    /// under ordinal comparison, as the token type names are compared, for a map of any other kind; so a lookup answers
+    /// as the application's own map answered it, and a change the application makes afterwards to that map never
+    /// reaches the record.
+    /// </summary>
+    /// <param name="lifetimes">The map the <c>init</c> accessor of <see cref="TokenLifetimes"/> receives.</param>
+    /// <returns>
+    /// A frozen snapshot of <paramref name="lifetimes"/> under its own comparer when every lifetime it holds is issuable
+    /// and no two of its keys are equal under that comparer.
+    /// </returns>
+    /// <exception cref="ArgumentNullException"><paramref name="lifetimes"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// A lifetime's whole seconds are under one or above <see cref="int.MaxValue"/>.
+    /// </exception>
+    /// <exception cref="ArgumentException">Two keys of <paramref name="lifetimes"/> are equal under its comparer.</exception>
+    private static FrozenDictionary<string, TimeSpan> RequireIssuableLifetimes(IReadOnlyDictionary<string, TimeSpan> lifetimes)
+    {
+        ArgumentNullException.ThrowIfNull(lifetimes);
+
+        IEqualityComparer<string> comparer = lifetimes switch
+        {
+            Dictionary<string, TimeSpan> dictionary => dictionary.Comparer,
+            FrozenDictionary<string, TimeSpan> frozen => frozen.Comparer,
+            ImmutableDictionary<string, TimeSpan> immutable => immutable.KeyComparer,
+            _ => StringComparer.Ordinal
+        };
+
+        Dictionary<string, TimeSpan> copy = new(comparer);
+        foreach(KeyValuePair<string, TimeSpan> entry in lifetimes)
+        {
+            if(!Server.TokenLifetimes.IsIssuable(entry.Value, out _))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(lifetimes),
+                    entry.Value,
+                    $"The '{entry.Key}' lifetime is at least one and at most int.MaxValue whole seconds.");
+            }
+
+            if(!copy.TryAdd(entry.Key, entry.Value))
+            {
+                throw new ArgumentException(
+                    $"The {nameof(TokenLifetimes)} map holds the key '{entry.Key}' and another key equal to it under the map's own comparer.",
+                    nameof(lifetimes));
+            }
+        }
+
+        return copy.ToFrozenDictionary(comparer);
     }
 
 

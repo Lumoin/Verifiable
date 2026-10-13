@@ -493,8 +493,8 @@ public static class HaipOid4VpVerifierExecutor
             //Stamp JAR timing claims using the dispatcher's per-request VerifiedAt
             //when available so all effectful work in this request shares one
             //instant; fall back to the active TimeProvider otherwise. The window
-            //size is policy, sourced from oauth.Timings per FAPI 2.0 §5.2.2
-            //Clause 13.
+            //size is policy, sourced from oauth.Timings, whose 60-second default is
+            //the library's own ceiling.
             DateTimeOffset now = context.VerifiedAt ?? server.TimeProvider.GetUtcNow();
             TimeSpan requestObjectLifetime = oauth.Timings.Oid4VpRequestObjectLifetime;
 

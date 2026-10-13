@@ -436,6 +436,118 @@ internal sealed class AuthCodeClientAuthenticationTests
 
 
     /// <summary>
+    /// <see href="https://openid.net/specs/fapi-security-profile-2_0-final.html#section-5.3.2.1">FAPI 2.0 Security
+    /// Profile Section 5.3.2.1</see> item 13: "to accommodate clock offsets, shall accept JWTs with an iat or nbf
+    /// timestamp between 0 and 10 seconds in the future but shall reject JWTs with an iat or nbf timestamp greater than
+    /// 60 seconds in the future. See Note 3 for further details and rationale; and" A
+    /// <see cref="PolicyProfile.Fapi20"/> registration authenticates a pushed authorization request over the real wire
+    /// with a <c>private_key_jwt</c> client assertion whose <c>iat</c> lies ahead of the server's clock: under a
+    /// <see cref="TimingPolicy.ClockSkewTolerance"/> of 120 seconds one 90 seconds ahead is refused
+    /// <c>invalid_client</c>; under 5 seconds one 8 seconds ahead is accepted.
+    /// </summary>
+    /// <param name="configuredSkewSeconds">The server's <see cref="TimingPolicy.ClockSkewTolerance"/>, in seconds.</param>
+    /// <param name="aheadSeconds">How far the assertion's <c>iat</c> lies ahead, in seconds.</param>
+    /// <param name="isAccepted">Whether the push is accepted.</param>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DataRow(120, 90, false)]
+    [DataRow(5, 8, true)]
+    public async Task AFapi20ClientAssertionAheadOfTheClockIsHeldToTheProfilesWindowAsync(
+        int configuredSkewSeconds, int aheadSeconds, bool isAccepted)
+    {
+        (int StatusCode, string Body)[] pushes = await PushAssertionAheadAtParAsync(
+            PolicyProfile.Fapi20, configuredSkewSeconds, aheadSeconds).ConfigureAwait(false);
+
+        AssertAcceptedOrRefusedAsInvalidClient(
+            pushes[0].StatusCode, pushes[0].Body, isAccepted, $"skew {configuredSkewSeconds} s, iat {aheadSeconds} s ahead");
+    }
+
+
+    /// <summary>
+    /// The library's own rule: outside FAPI 2.0 the server's <see cref="TimingPolicy.ClockSkewTolerance"/> bounds how
+    /// far ahead of the server's clock a client assertion's <c>iat</c> may lie.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see> lets the assertion carry an
+    /// <c>iat</c> claim and states no bound for one that lies ahead of the clock, so the bound is the library's. A
+    /// <see cref="PolicyProfile.Rfc6749WithPkce"/> registration authenticates a pushed authorization request over the
+    /// real wire with a <c>private_key_jwt</c> client assertion whose <c>iat</c> lies ahead of the server's clock: under
+    /// 120 seconds one 90 seconds ahead is accepted; under 5 seconds one 8 seconds ahead is refused
+    /// <c>invalid_client</c>.
+    /// </summary>
+    /// <param name="configuredSkewSeconds">The server's <see cref="TimingPolicy.ClockSkewTolerance"/>, in seconds.</param>
+    /// <param name="aheadSeconds">How far the assertion's <c>iat</c> lies ahead, in seconds.</param>
+    /// <param name="isAccepted">Whether the push is accepted.</param>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DataRow(120, 90, true)]
+    [DataRow(5, 8, false)]
+    public async Task AnRfc6749ClientAssertionAheadOfTheClockIsHeldToTheServersOwnSkewAsync(
+        int configuredSkewSeconds, int aheadSeconds, bool isAccepted)
+    {
+        (int StatusCode, string Body)[] pushes = await PushAssertionAheadAtParAsync(
+            PolicyProfile.Rfc6749WithPkce, configuredSkewSeconds, aheadSeconds).ConfigureAwait(false);
+
+        AssertAcceptedOrRefusedAsInvalidClient(
+            pushes[0].StatusCode, pushes[0].Body, isAccepted, $"skew {configuredSkewSeconds} s, iat {aheadSeconds} s ahead");
+    }
+
+
+    /// <summary>
+    /// Pushes one authorization request over the real wire for a registration under <paramref name="profile"/> on a
+    /// server whose <see cref="TimingPolicy.ClockSkewTolerance"/> is <paramref name="configuredSkewSeconds"/>, carrying
+    /// the <c>openid</c> scope and a client assertion whose <c>iat</c> lies <paramref name="aheadSeconds"/> ahead of
+    /// the server's clock and whose <c>exp</c> lies one minute after that <c>iat</c>.
+    /// </summary>
+    /// <param name="profile">The registration's profile.</param>
+    /// <param name="configuredSkewSeconds">The server's clock skew tolerance, in seconds.</param>
+    /// <param name="aheadSeconds">How far the assertion's <c>iat</c> lies ahead, in seconds.</param>
+    /// <returns>The push's HTTP status code and body.</returns>
+    private Task<(int StatusCode, string Body)[]> PushAssertionAheadAtParAsync(
+        PolicyProfile profile, int configuredSkewSeconds, int aheadSeconds)
+    {
+        Func<AssertionSigningContext, Task<string>>[] signers =
+        [
+            signing => SignRawClaimsAsync(
+                signing.SigningKey,
+                signing.Algorithm,
+                SerializeClaims(
+                    BuildDefaultClaims(signing),
+                    (WellKnownJwtClaimNames.Iat, signing.IssuedAt.AddSeconds(aheadSeconds).ToUnixTimeSeconds()),
+                    (WellKnownJwtClaimNames.Exp, signing.IssuedAt.AddSeconds(aheadSeconds + 60).ToUnixTimeSeconds())))
+        ];
+
+        return PushAtParAsync(
+            PrivateKeyJwtClientAuthentication.BuildValidator(),
+            "fapi-item-13-skew-key-1",
+            signers,
+            observe: null,
+            profile,
+            TimingPolicy.Default with { ClockSkewTolerance = TimeSpan.FromSeconds(configuredSkewSeconds) },
+            WellKnownScopes.OpenId);
+    }
+
+
+    /// <summary>
+    /// Asserts that a push was accepted with HTTP 201 when <paramref name="isAccepted"/> holds, else that it was
+    /// refused as a failed client authentication (<see cref="AssertRefusedAsInvalidClient"/>).
+    /// </summary>
+    /// <param name="statusCode">The push's HTTP status code.</param>
+    /// <param name="body">The push's response body.</param>
+    /// <param name="isAccepted">Whether the push is expected to be accepted.</param>
+    /// <param name="label">Names the case in each failure message.</param>
+    private static void AssertAcceptedOrRefusedAsInvalidClient(int statusCode, string body, bool isAccepted, string label)
+    {
+        if(isAccepted)
+        {
+            Assert.AreEqual(201, statusCode, $"{label} Body={body}");
+
+            return;
+        }
+
+        AssertRefusedAsInvalidClient(statusCode, body, label);
+    }
+
+
+    /// <summary>
     /// A client assertion that breaks one claim rule is refused at the pushed authorization endpoint
     /// over the real wire under the default audience policy: HTTP 400 <c>invalid_client</c> with an
     /// <c>error_description</c> string
@@ -796,13 +908,22 @@ internal sealed class AuthCodeClientAuthenticationTests
     /// Called once after every push, while the server is running, with the host and the signed
     /// assertions in push order; <see langword="null"/> to observe nothing.
     /// </param>
+    /// <param name="profile">
+    /// The registration's profile; <see langword="null"/> for <see cref="PolicyProfile.Rfc6749WithPkce"/>.
+    /// </param>
+    /// <param name="timings">The server's timing record; <see langword="null"/> to keep the host's own.</param>
+    /// <param name="scope">The <c>scope</c> each push carries; <see langword="null"/> for none.</param>
     /// <returns>Each push's HTTP status code and body, in the order of <paramref name="signers"/>.</returns>
     private async Task<(int StatusCode, string Body)[]> PushAtParAsync(
         ValidateClientCredentialsDelegate validator,
         string signingKeyId,
         IReadOnlyList<Func<AssertionSigningContext, Task<string>>> signers,
-        Action<TestHostShell, IReadOnlyList<string>>? observe)
+        Action<TestHostShell, IReadOnlyList<string>>? observe,
+        PolicyProfile? profile = null,
+        TimingPolicy? timings = null,
+        string? scope = null)
     {
+        PolicyProfile registrationProfile = profile ?? PolicyProfile.Rfc6749WithPkce;
         var signingKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         try
         {
@@ -813,7 +934,7 @@ internal sealed class AuthCodeClientAuthenticationTests
 
             await using TestHostShell host = new(TimeProvider);
             using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
-                ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+                ClientId, ClientBaseUri, profile: registrationProfile).ConfigureAwait(false);
 
             await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
             HostedAuthorizationServer hosted = host.Host("default");
@@ -826,6 +947,10 @@ internal sealed class AuthCodeClientAuthenticationTests
             await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
             {
                 candidateIntegration.ValidateClientCredentialsAsync = validator;
+                if(timings is not null)
+                {
+                    candidateIntegration.Timings = timings;
+                }
             }).ConfigureAwait(false);
 
             await DeclareServerSideAuthMethodAsync(
@@ -834,7 +959,7 @@ internal sealed class AuthCodeClientAuthenticationTests
 
             (_, ClientRegistration registration, _) = await host.CreateOAuthClientAndRegistrationAsync(
                 material.Registration, RedirectUri.OriginalString,
-                profile: PolicyProfile.Rfc6749WithPkce, TestContext.CancellationToken).ConfigureAwait(false);
+                profile: registrationProfile, TestContext.CancellationToken).ConfigureAwait(false);
             string issuer = registration.AuthorizationServerIssuer.OriginalString;
 
             (int StatusCode, string Body)[] pushes = new (int StatusCode, string Body)[signers.Count];
@@ -858,6 +983,10 @@ internal sealed class AuthCodeClientAuthenticationTests
                     [OAuthRequestParameterNames.ClientAssertionType] = WellKnownClientAssertionTypes.JwtBearer,
                     [OAuthRequestParameterNames.ClientAssertion] = assertion
                 };
+                if(scope is not null)
+                {
+                    parFields[OAuthRequestParameterNames.Scope] = scope;
+                }
 
                 pushes[index] = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
                     host, segment, parFields, TestContext.CancellationToken).ConfigureAwait(false);

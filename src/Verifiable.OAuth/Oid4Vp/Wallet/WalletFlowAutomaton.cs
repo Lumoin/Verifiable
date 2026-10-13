@@ -47,11 +47,7 @@ public static class WalletFlowAutomaton
     /// <param name="timeProvider">Time provider for expiry computation.</param>
     /// <param name="maxFlowDuration">
     /// Maximum duration the Wallet waits before treating the flow as expired.
-    /// Defaults to five minutes when not supplied. Application code that owns
-    /// both wallet and authorization-server PDAs should pass
-    /// <c>oauth.Timings.MaximumFlowLifetime</c> here so the two sides agree
-    /// on the lifetime ceiling. See
-    /// <see cref="Verifiable.OAuth.Server.TimingPolicy.MaximumFlowLifetime"/>.
+    /// Defaults to five minutes when not supplied.
     /// </param>
     public static PushdownAutomaton<FlowState, FlowInput, WalletFlowStackSymbol> Create(
         string runId,

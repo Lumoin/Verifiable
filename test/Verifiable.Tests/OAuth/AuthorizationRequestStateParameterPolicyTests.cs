@@ -77,6 +77,49 @@ internal sealed class AuthorizationRequestStateParameterPolicyTests
         Assert.AreEqual("state-xyz", optional.State);
         Assert.AreEqual("state-xyz", required.State);
     }
+
+
+    /// <summary>
+    /// The library's rule for the caller's own argument: a request object lifetime is at least one and at most
+    /// <see cref="int.MaxValue"/> whole seconds, because the library writes <c>iat</c> and <c>exp</c> as whole-second
+    /// NumericDates and a lifetime under one second would make <c>exp</c> equal <c>iat</c>. The inline-parameter
+    /// parser of an unsigned Authorization Request
+    /// (<see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-5.9.3">OpenID for
+    /// Verifiable Presentations 1.0 Section 5.9.3</see>) refuses 500 milliseconds with
+    /// <see cref="ArgumentOutOfRangeException"/>.
+    /// </summary>
+    [TestMethod]
+    public void AnInlineRequestObjectLifetimeUnderOneSecondIsRefused()
+    {
+        _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(
+            () => AuthorizationRequestObjectFormFields.Parse(
+                BaseFields(includeState: true),
+                DcqlDeserializer, ClientMetadataDeserializer,
+                Now, TimeSpan.FromMilliseconds(500), StateParameterPolicy.Optional));
+    }
+
+
+    /// <summary>
+    /// The library's rule for the caller's own argument: the inline-parameter parser of an unsigned Authorization
+    /// Request (<see href="https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-5.9.3">OpenID
+    /// for Verifiable Presentations 1.0 Section 5.9.3</see>) stamps an absent <c>exp</c> at the whole seconds of the
+    /// request object lifetime after <c>iat</c>: one second is accepted and stamped as one second, and 90.7 seconds is
+    /// stamped as 90 seconds.
+    /// </summary>
+    /// <param name="ticks">The request object lifetime, in ticks.</param>
+    /// <param name="expectedSeconds">The stamped <c>exp</c> less <c>iat</c>, in seconds.</param>
+    [TestMethod]
+    [DataRow(10_000_000L, 1L, DisplayName = "one second")]
+    [DataRow(907_000_000L, 90L, DisplayName = "90.7 seconds")]
+    public void AnInlineRequestObjectIsStampedForTheWholeSecondsOfItsLifetime(long ticks, long expectedSeconds)
+    {
+        AuthorizationRequestObject request = AuthorizationRequestObjectFormFields.Parse(
+            BaseFields(includeState: true),
+            DcqlDeserializer, ClientMetadataDeserializer,
+            Now, TimeSpan.FromTicks(ticks), StateParameterPolicy.Optional);
+
+        Assert.AreEqual(TimeSpan.FromSeconds(expectedSeconds), request.Exp - request.Iat);
+    }
 }
 
 

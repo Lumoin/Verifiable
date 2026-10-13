@@ -99,8 +99,8 @@ public static class JarExtensions
         /// <see cref="AuthorizationRequestObject.Exp"/> as JWT NumericDate values
         /// (seconds since the Unix epoch) per
         /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-2">RFC 7519 §2</see>.
-        /// FAPI 2.0 §5.2.2 Clause 13 mandates <c>exp</c>; the library always writes
-        /// all three to align with the most demanding profile.
+        /// The library's own rule requires <c>exp</c>; the library always writes
+        /// all three, so a verifier that requires any of them finds it.
         /// </para>
         /// <para>
         /// The <c>state</c> claim is always written. RFC 6749 §4.1.1 and RFC 9700

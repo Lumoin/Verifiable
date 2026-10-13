@@ -8,8 +8,8 @@ namespace Verifiable.OAuth.Server;
 /// </summary>
 /// <remarks>
 /// <para>
-/// RFC 7519 §4.1 marks all three as OPTIONAL. FAPI 2.0 §5.2.2 Clause 13
-/// mandates <c>exp</c>. The library applies the strictest profile by default
+/// RFC 7519 Section 4.1 marks all three as OPTIONAL. The library's own rule requires
+/// <c>exp</c>, and the library applies the strictest set by default
 /// (<see cref="All"/>) so the lifetime ceiling check (<c>exp - iat</c>) and
 /// not-yet-valid check (<c>nbf</c> after now+skew) are unambiguous.
 /// </para>
@@ -34,7 +34,7 @@ public enum TimingClaimSet
     /// <summary>The <c>exp</c> claim is required.</summary>
     Exp = 4,
 
-    /// <summary>Only <c>exp</c> required (FAPI 2.0 §5.2.2 baseline).</summary>
+    /// <summary>Only <c>exp</c> required (the library's own baseline).</summary>
     ExpOnly = Exp,
 
     /// <summary>All three timing claims required (library default).</summary>

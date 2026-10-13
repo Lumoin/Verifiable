@@ -585,8 +585,10 @@ distinct role from the OAuth/issuance (token-endpoint) registrations:
   Authorization Request, verify the returned `vp_token`, expose no
   token/authorize endpoint). It does **not** layer `Fapi20`; it sets only the
   two presentation axes the verification pipeline actually consumes
-  (`ClockSkewTolerance`, `KbJwtMaxAgeWindow`, both 60s — RFC 7519 §4.1.4 leeway
-  and HAIP §3 ceilings). The FAPI token-endpoint axes have no meaning for a
+  (`ClockSkewTolerance`, `KbJwtMaxAgeWindow`), both the library's own
+  60-second defaults: RFC 7519 Sections 4.1.4 and 4.1.5 allow "some small leeway" and
+  name no number, and HAIP's 60-second values are ceilings over the
+  deployment's own. The FAPI token-endpoint axes have no meaning for a
   presentation flow and are not applied. JAR/request-object lifetimes for the
   verifier come from `TimingPolicy` (`Oid4VpRequestObjectLifetime` /
   `Oid4VpRequestUriLifetime`), not the policy bag.
