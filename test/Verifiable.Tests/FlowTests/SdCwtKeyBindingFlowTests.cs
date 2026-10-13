@@ -255,8 +255,45 @@ internal sealed class SdCwtKeyBindingFlowTests
     [TestMethod]
     public async Task VerifierRefusesAKbtRepeatingAClaim()
     {
-        await AssertKbtRefusedAsync<CborContentException>(
+        await AssertKbtRefusedAsync<FormatException>(
             SdKbtIssuance.BuildProtectedHeader, SdCwtVpFixture.BuildPayloadWithAudTwice).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// An SD-CWT carrying no <c>sd_claims</c>, whose genuinely issuer-signed protected bucket carries <c>alg</c> twice
+    /// while its unprotected bucket is empty, is refused by the issuer-signature verification with the COSE parser's
+    /// own failure. <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "Labels in
+    /// each of the maps MUST be unique. When processing messages, if a label appears multiple times, the message MUST
+    /// be rejected as malformed."
+    /// </summary>
+    [TestMethod]
+    public async Task IssuerSignatureVerificationRefusesAnSdCwtRepeatingAProtectedLabel()
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> issuerKeys =
+            TestKeyMaterialProvider.CreateP256KeyMaterial();
+        using PublicKeyMemory issuerPublic = issuerKeys.PublicKey;
+        using PrivateKeyMemory issuerPrivate = issuerKeys.PrivateKey;
+
+        byte[] repeatedAlgorithmHeader = [0xA2, 0x01, 0x26, 0x01, 0x26];
+        byte[] payload = SdCwtWireFixtures.SerializeCwtClaimMap(new Dictionary<int, object> { [WellKnownCwtClaimNames.Iss] = IssuerId }).ToArray();
+
+        using CoseSign1Message signed = await Verifiable.JCose.Cose.SignAsync(
+            EncodedCoseProtectedHeader.FromBytes(repeatedAlgorithmHeader, Pool),
+            null,
+            payload,
+            CoseSerialization.BuildSigStructure,
+            issuerPrivate,
+            Pool,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        byte[] sdCwt = CoseWireFixtures.ComposeCoseSign1(repeatedAlgorithmHeader, [0xA0], payload, signed.Signature.AsReadOnlySpan());
+        using SdToken<ReadOnlyMemory<byte>> token = new(sdCwt, []);
+
+        _ = await Assert.ThrowsExactlyAsync<CborContentException>(
+            async () => await token.VerifyIssuerSignatureAsync(
+                issuerPublic, Pool, CoseSerialization.ParseCoseSign1, CoseSerialization.BuildSigStructure, TestContext.CancellationToken).ConfigureAwait(false),
+            "RFC 9052 Section 3: an SD-CWT whose protected bucket repeats a label is rejected as malformed.").ConfigureAwait(false);
     }
 
 
@@ -282,9 +319,10 @@ internal sealed class SdCwtKeyBindingFlowTests
         using PublicKeyMemory holderPublic = holderKeys.PublicKey;
         using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
 
+        //The library's serializer refuses to write a protected bucket repeating a label, so the wire form is assembled as given.
         using EncodedCoseSign1 kbt = await IssueKbtAsync(
             issuerPrivate, holderPublic, holderPrivate, Cnonce, TimeProvider.GetUtcNow(),
-            buildProtectedHeader, buildPayload).ConfigureAwait(false);
+            buildProtectedHeader, buildPayload, CoseWireFixtures.SerializeCoseSign1AsGiven).ConfigureAwait(false);
 
         _ = await Assert.ThrowsExactlyAsync<TException>(
             async () => await VerifyAsync(kbt.AsReadOnlyMemory(), issuerPublic).ConfigureAwait(false),
@@ -292,8 +330,17 @@ internal sealed class SdCwtKeyBindingFlowTests
     }
 
 
-    //Issuer issues an SD-CWT (cnf = holder COSE_Key + selectively disclosable claims),
-    //then the wallet selects given_name + family_name and signs the KBT with its private key.
+    /// <summary>
+    /// The issuer issues an SD-CWT (the holder's COSE_Key in <c>cnf</c> and selectively disclosable claims), then the
+    /// wallet selects given_name and family_name and signs the Key Binding Token with the holder's private key, its
+    /// header, payload and wire form written by the library's own builders and serializer.
+    /// </summary>
+    /// <param name="issuerPrivate">The issuer's signing key.</param>
+    /// <param name="holderPublic">The holder's public key, embedded in the <c>cnf</c> claim.</param>
+    /// <param name="holderPrivate">The holder's private key the Key Binding Token is signed with.</param>
+    /// <param name="cnonce">The verifier nonce bound into the Key Binding Token.</param>
+    /// <param name="iat">The instant the Key Binding Token is issued at.</param>
+    /// <returns>The Key Binding Token wire bytes.</returns>
     private ValueTask<EncodedCoseSign1> IssueKbtAsync(
         PrivateKeyMemory issuerPrivate,
         PublicKeyMemory holderPublic,
@@ -302,20 +349,21 @@ internal sealed class SdCwtKeyBindingFlowTests
         DateTimeOffset iat) =>
         IssueKbtAsync(
             issuerPrivate, holderPublic, holderPrivate, cnonce, iat,
-            SdKbtIssuance.BuildProtectedHeader, SdKbtIssuance.BuildPayload);
+            SdKbtIssuance.BuildProtectedHeader, SdKbtIssuance.BuildPayload, CoseSerialization.SerializeCoseSign1);
 
 
     /// <summary>
     /// Issues an SD-CWT and signs the Key Binding Token over the given_name and family_name Disclosures with the
-    /// supplied header and payload builders.
+    /// supplied header and payload builders, its wire form written by the supplied serializer.
     /// </summary>
     /// <param name="issuerPrivate">The issuer's signing key.</param>
     /// <param name="holderPublic">The holder's public key, embedded in the <c>cnf</c> claim.</param>
-    /// <param name="holderPrivate">The key the Key Binding Token is signed with.</param>
+    /// <param name="holderPrivate">The holder's private key the Key Binding Token is signed with.</param>
     /// <param name="cnonce">The verifier nonce bound into the Key Binding Token.</param>
     /// <param name="iat">The instant the Key Binding Token is issued at.</param>
     /// <param name="buildProtectedHeader">Builds the Key Binding Token's protected header.</param>
     /// <param name="buildPayload">Builds the Key Binding Token's payload.</param>
+    /// <param name="serializeCoseSign1">Writes the signed Key Binding Token's wire form.</param>
     /// <returns>The Key Binding Token wire bytes.</returns>
     private async ValueTask<EncodedCoseSign1> IssueKbtAsync(
         PrivateKeyMemory issuerPrivate,
@@ -324,7 +372,8 @@ internal sealed class SdCwtKeyBindingFlowTests
         string cnonce,
         DateTimeOffset iat,
         BuildKbtProtectedHeaderDelegate buildProtectedHeader,
-        BuildKbtPayloadDelegate buildPayload)
+        BuildKbtPayloadDelegate buildPayload,
+        SerializeCoseSign1Delegate serializeCoseSign1)
     {
         using SdToken<ReadOnlyMemory<byte>> issuedToken = await IssueSdCwtTokenAsync(
             issuerPrivate, holderPublic, TestContext.CancellationToken).ConfigureAwait(false);
@@ -340,7 +389,7 @@ internal sealed class SdCwtKeyBindingFlowTests
             buildProtectedHeader: buildProtectedHeader,
             buildPayload: buildPayload,
             buildSigStructure: CoseSerialization.BuildSigStructure,
-            serializeCoseSign1: CoseSerialization.SerializeCoseSign1,
+            serializeCoseSign1: serializeCoseSign1,
             memoryPool: Pool,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
     }

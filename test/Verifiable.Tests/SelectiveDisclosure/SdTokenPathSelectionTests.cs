@@ -780,7 +780,7 @@ internal sealed class SdTokenPathSelectionTests
     {
         using SdToken<ReadOnlyMemory<byte>> token = new(ComposeUnsignedCoseSign1(Convert.FromHexString(claimsMapHex)), []);
 
-        _ = Assert.ThrowsExactly<CborContentException>(
+        _ = Assert.ThrowsExactly<FormatException>(
             () => SdCwtVpParsing.ExtractIssuer(token),
             "RFC 9052 Section 9: a claims map carrying iss twice is neither parsed nor processed.");
     }
@@ -800,7 +800,7 @@ internal sealed class SdTokenPathSelectionTests
     {
         using SdToken<ReadOnlyMemory<byte>> token = new(ComposeUnsignedCoseSign1(Convert.FromHexString(claimsMapHex)), []);
 
-        _ = Assert.ThrowsExactly<CborContentException>(
+        _ = Assert.ThrowsExactly<FormatException>(
             () => SdCwtVpParsing.ExtractCredentialType(token),
             "RFC 9052 Section 9: a claims map carrying vct twice is neither parsed nor processed.");
     }
@@ -808,8 +808,7 @@ internal sealed class SdTokenPathSelectionTests
 
     /// <summary>
     /// The SD-CWT <c>status</c> reader refuses an issuer-signed claims map that carries the <c>status</c>
-    /// claim (65535) twice, also when the second label is written in a wider encoding of the same value, and
-    /// a Status structure that names the <c>status_list</c> mechanism twice.
+    /// claim (65535) twice, also when the second label is written in a wider encoding of the same value.
     /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052, Section 9</see>: "Applications
     /// MUST NOT parse and process messages with the same label used twice as a key in a single map."
     /// </summary>
@@ -825,12 +824,6 @@ internal sealed class SdTokenPathSelectionTests
         + "19FFFF" + "A16B7374617475735F6C697374A26369647800637572697568747470733A2F2F6578616D706C652E636F6D2F73"
         + "1A0000FFFF" + "A16B7374617475735F6C697374A26369647800637572697568747470733A2F2F6578616D706C652E636F6D2F73",
         DisplayName = "status twice, second label in two widths")]
-    [DataRow(
-        "A1"
-        + "19FFFF" + "A2"
-        + "6B7374617475735F6C697374" + "A26369647800637572697568747470733A2F2F6578616D706C652E636F6D2F73"
-        + "6B7374617475735F6C697374" + "A26369647800637572697568747470733A2F2F6578616D706C652E636F6D2F73",
-        DisplayName = "status_list twice inside the Status structure")]
     public void SdCwtStatusReaderRefusesARepeatedLabel(string claimsMapHex)
     {
         using SdToken<ReadOnlyMemory<byte>> token = new(ComposeUnsignedCoseSign1(Convert.FromHexString(claimsMapHex)), []);
@@ -838,6 +831,28 @@ internal sealed class SdTokenPathSelectionTests
         _ = Assert.ThrowsExactly<FormatException>(
             () => SdCwtVpParsing.ExtractStatus(token),
             "RFC 9052 Section 9: a map carrying one label twice is neither parsed nor processed.");
+    }
+
+
+    /// <summary>
+    /// The SD-CWT <c>status</c> reader refuses a Status structure that names the <c>status_list</c> mechanism twice.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-3.1">RFC 8949 Section 3.1</see>: "A map that has
+    /// duplicate keys may be well-formed, but it is not valid, and thus it causes indeterminate decoding; see also
+    /// Section 5.6."
+    /// </summary>
+    [TestMethod]
+    public void SdCwtStatusReaderRefusesAStatusStructureNamingAMechanismTwice()
+    {
+        string claimsMapHex =
+            "A1"
+            + "19FFFF" + "A2"
+            + "6B7374617475735F6C697374" + "A26369647800637572697568747470733A2F2F6578616D706C652E636F6D2F73"
+            + "6B7374617475735F6C697374" + "A26369647800637572697568747470733A2F2F6578616D706C652E636F6D2F73";
+        using SdToken<ReadOnlyMemory<byte>> token = new(ComposeUnsignedCoseSign1(Convert.FromHexString(claimsMapHex)), []);
+
+        _ = Assert.ThrowsExactly<FormatException>(
+            () => SdCwtVpParsing.ExtractStatus(token),
+            "RFC 8949 Section 3.1: a Status structure naming status_list twice is not valid and is refused.");
     }
 
 
@@ -876,9 +891,125 @@ internal sealed class SdTokenPathSelectionTests
     {
         using SdToken<ReadOnlyMemory<byte>> token = new(ComposeUnsignedCoseSign1(Convert.FromHexString(claimsMapHex)), []);
 
-        _ = Assert.ThrowsExactly<CborContentException>(
+        _ = Assert.ThrowsExactly<FormatException>(
             () => SdCwtVpParsing.ExtractHolderKey(token, Pool),
             "RFC 9052 Section 9: a map carrying one label twice is neither parsed nor processed.");
+    }
+
+
+    /// <summary>
+    /// Each SD-CWT claim reader refuses an issuer-signed claims map carrying one byte-string map key twice: the
+    /// judgment covers every map key, not only the integer, text-string and simple-value claim keys.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-3.1">RFC 8949 Section 3.1</see>: "A map that has
+    /// duplicate keys may be well-formed, but it is not valid, and thus it causes indeterminate decoding; see also
+    /// Section 5.6."
+    /// </summary>
+    /// <param name="claimReader">The claim reader the row drives: <c>iss</c>, <c>vct</c>, <c>status</c> or <c>cnf</c>.</param>
+    [TestMethod]
+    [DataRow("iss", DisplayName = "iss reader")]
+    [DataRow("vct", DisplayName = "vct reader")]
+    [DataRow("status", DisplayName = "status reader")]
+    [DataRow("cnf", DisplayName = "cnf reader")]
+    public void SdCwtClaimReadersRefuseARepeatedByteStringMapKey(string claimReader)
+    {
+        using SdToken<ReadOnlyMemory<byte>> token = new(ComposeUnsignedCoseSign1(Convert.FromHexString("A3016161410100410101")), []);
+
+        Func<object?> read = claimReader switch
+        {
+            "iss" => () => SdCwtVpParsing.ExtractIssuer(token),
+            "vct" => () => SdCwtVpParsing.ExtractCredentialType(token),
+            "status" => () => SdCwtVpParsing.ExtractStatus(token),
+            _ => () => SdCwtVpParsing.ExtractHolderKey(token, Pool)
+        };
+
+        _ = Assert.ThrowsExactly<FormatException>(
+            read, "RFC 8949 Section 3.1: a claims map carrying h'01' twice is not valid and is refused.");
+    }
+
+
+    /// <summary>
+    /// The Key Binding Token claims reader refuses a claims map carrying one byte-string map key twice.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-3.1">RFC 8949 Section 3.1</see>: "A map that has
+    /// duplicate keys may be well-formed, but it is not valid, and thus it causes indeterminate decoding; see also
+    /// Section 5.6."
+    /// </summary>
+    [TestMethod]
+    public void KbtClaimsReaderRefusesARepeatedByteStringMapKey()
+    {
+        byte[] claimsMap = Convert.FromHexString("A3036161410100410101");
+
+        _ = Assert.ThrowsExactly<FormatException>(
+            () => SdCwtVpParsing.ReadKbtClaims(claimsMap),
+            "RFC 8949 Section 3.1: a claims map carrying h'01' twice is not valid and is refused.");
+    }
+
+
+    /// <summary>
+    /// The <c>kcwt</c> reader reads the whole Key Binding Token protected header and answers <c>kcwt</c> when an
+    /// integer label beyond 32 bits follows it: the label is well-formed and passed over.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-1.5">RFC 9052 Section 1.5</see>: "label = int / tstr".
+    /// </summary>
+    [TestMethod]
+    public void KcwtReaderPassesOverALabelBeyondThirtyTwoBits()
+    {
+        byte[] protectedHeader = [0xA2, 0x0D, 0x41, 0x01, 0x1A, 0x80, 0x00, 0x00, 0x00, 0x01];
+
+        ReadOnlyMemory<byte> kcwt = SdCwtVpParsing.ExtractKcwt(protectedHeader);
+
+        Assert.IsTrue(kcwt.Span.SequenceEqual(new byte[] { 0x41, 0x01 }), "RFC 9052 Section 1.5: the label 2147483648 is passed over and kcwt is answered.");
+    }
+
+
+    /// <summary>
+    /// The SD-CWT claims walker refuses a claims map carrying the redacted-claim-keys map key <c>simple(59)</c>, the
+    /// <c>sd_claims</c> label 17 or the <c>sd_alg</c> label 18 twice at one map level, at the top level and at a
+    /// nested level, and never merges two digest arrays.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-3.1">RFC 8949 Section 3.1</see>: "A map that has
+    /// duplicate keys may be well-formed, but it is not valid, and thus it causes indeterminate decoding; see also
+    /// Section 5.6."
+    /// </summary>
+    /// <param name="claimsMapHex">The issuer-signed claims map, as hexadecimal.</param>
+    [TestMethod]
+    [DataRow("A3016161F83B80F83B80", DisplayName = "simple(59) twice at the top level")]
+    [DataRow("A301616111801180", DisplayName = "17 twice at the top level")]
+    [DataRow("A301616112011201", DisplayName = "18 twice at the top level")]
+    [DataRow("A20161611864A2F83B80F83B80", DisplayName = "simple(59) twice at a nested level")]
+    [DataRow("A20161611864A211801180", DisplayName = "17 twice at a nested level")]
+    [DataRow("A20161611864A212011201", DisplayName = "18 twice at a nested level")]
+    public void SdCwtClaimsWalkerRefusesARepeatedMechanismMapKey(string claimsMapHex)
+    {
+        byte[] wireBytes = ComposeUnsignedCoseSign1(Convert.FromHexString(claimsMapHex));
+
+        _ = Assert.ThrowsExactly<FormatException>(
+            () => SdCwtSerializer.ParseToken(wireBytes, TestSalts.TestSaltTag, Pool, TestSetup.Base64UrlEncoder),
+            "RFC 8949 Section 3.1: a claims map level carrying one mechanism map key twice is not valid and is refused.");
+    }
+
+
+    /// <summary>
+    /// The SD-CWT <c>status</c> reader refuses a <c>status_list</c> reference that carries its <c>idx</c> or its
+    /// <c>uri</c> member twice. <see href="https://www.rfc-editor.org/rfc/rfc8949#section-3.1">RFC 8949
+    /// Section 3.1</see>: "A map that has duplicate keys may be well-formed, but it is not valid, and thus it causes
+    /// indeterminate decoding; see also Section 5.6."
+    /// </summary>
+    /// <param name="claimsMapHex">The issuer-signed claims map, as hexadecimal.</param>
+    [TestMethod]
+    [DataRow(
+        "A1" + "19FFFF" + "A1" + "6B7374617475735F6C697374"
+        + "A3" + "6369647800" + "6369647801" + "637572697568747470733A2F2F6578616D706C652E636F6D2F73",
+        DisplayName = "idx twice")]
+    [DataRow(
+        "A1" + "19FFFF" + "A1" + "6B7374617475735F6C697374"
+        + "A3" + "6369647800" + "637572697568747470733A2F2F6578616D706C652E636F6D2F73"
+        + "637572697568747470733A2F2F6578616D706C652E636F6D2F73",
+        DisplayName = "uri twice")]
+    public void SdCwtStatusReaderRefusesARepeatedStatusListMember(string claimsMapHex)
+    {
+        using SdToken<ReadOnlyMemory<byte>> token = new(ComposeUnsignedCoseSign1(Convert.FromHexString(claimsMapHex)), []);
+
+        _ = Assert.ThrowsExactly<FormatException>(
+            () => SdCwtVpParsing.ExtractStatus(token),
+            "RFC 8949 Section 3.1: a status_list reference carrying one member twice is not valid and is refused.");
     }
 
 

@@ -6,6 +6,7 @@ using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Tests.DataIntegrity;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Cose;
 
@@ -228,7 +229,7 @@ internal sealed class CoseCredentialSecuringTests
             privateKey,
             CredentialSecuringMaterial.VerificationMethodId,
             CredentialToCborBytes,
-            CoseProtectedHeaderWithKidTwiceToCborBytes,
+            CoseWireFixtures.CoseProtectedHeaderWithKidTwiceToCborBytes,
             CoseSerialization.BuildSigStructure,
             BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -265,7 +266,7 @@ internal sealed class CoseCredentialSecuringTests
             privateKey,
             CredentialSecuringMaterial.VerificationMethodId,
             CredentialToCborBytes,
-            CoseProtectedHeaderWithKidTwiceToCborBytes,
+            CoseWireFixtures.CoseProtectedHeaderWithKidTwiceToCborBytes,
             CoseSerialization.BuildSigStructure,
             BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -305,24 +306,4 @@ internal sealed class CoseCredentialSecuringTests
 
     private static VerifiableCredential CredentialFromJsonBytes(ReadOnlySpan<byte> bytes) =>
         JsonSerializerExtensions.Deserialize<VerifiableCredential>(bytes, CredentialSecuringMaterial.JsonOptions)!;
-
-
-    /// <summary>
-    /// Serializes <paramref name="header"/> and appends a second <c>kid</c> (the text <c>"x"</c>) to the map,
-    /// raising the map's entry count by one, so the protected bucket carries <c>kid</c> twice.
-    /// </summary>
-    /// <param name="header">The protected header map; fewer than 23 entries, so the count is in the initial byte.</param>
-    /// <returns>The serialized protected bucket with <c>kid</c> twice.</returns>
-    private static ReadOnlySpan<byte> CoseProtectedHeaderWithKidTwiceToCborBytes(IReadOnlyDictionary<int, object> header)
-    {
-        byte[] serialized = CoseSerialization.SerializeProtectedHeader(header);
-        byte[] repeated = new byte[serialized.Length + 3];
-        serialized.CopyTo(repeated, 0);
-        repeated[0] = (byte)(serialized[0] + 1);
-        repeated[^3] = CoseHeaderParameters.Kid;
-        repeated[^2] = 0x61;
-        repeated[^1] = (byte)'x';
-
-        return repeated;
-    }
 }

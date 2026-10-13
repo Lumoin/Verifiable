@@ -348,24 +348,56 @@ internal sealed class CoseSignTests
 
 
     /// <summary>
-    /// A COSE_Sign whose body or signer unprotected bucket carries one label twice, or whose body or
-    /// signer layer holds one label in both buckets, fails closed to an unsuccessful result.
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "Labels in
-    /// each of the maps MUST be unique. When processing messages, if a label appears multiple times, the
-    /// message MUST be rejected as malformed. Applications SHOULD verify that the same label does not occur
-    /// in both the protected and unprotected header parameters."
+    /// A COSE_Sign whose body or signer unprotected bucket carries one label twice, or whose body or signer
+    /// protected bucket carries one label twice while that layer's unprotected bucket is empty, fails closed to an
+    /// unsuccessful result. <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>:
+    /// "Labels in each of the maps MUST be unique. When processing messages, if a label appears multiple times,
+    /// the message MUST be rejected as malformed."
     /// </summary>
     /// <param name="wireBytes">The untagged COSE_Sign wire bytes.</param>
     [TestMethod]
     [DataRow(new byte[] { 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA2, 0x04, 0x41, 0x01, 0x04, 0x41, 0x02, 0x41, 0x00, 0x81, 0x83, 0x43, 0xA1, 0x01, 0x26, 0xA0, 0x41, 0x00 }, DisplayName = "body unprotected kid twice")]
     [DataRow(new byte[] { 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA0, 0x41, 0x00, 0x81, 0x83, 0x43, 0xA1, 0x01, 0x26, 0xA2, 0x04, 0x41, 0x01, 0x04, 0x41, 0x02, 0x41, 0x00 }, DisplayName = "signer unprotected kid twice")]
-    [DataRow(new byte[] { 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA1, 0x01, 0x26, 0x41, 0x00, 0x81, 0x83, 0x43, 0xA1, 0x01, 0x26, 0xA0, 0x41, 0x00 }, DisplayName = "body alg in both buckets")]
-    [DataRow(new byte[] { 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA0, 0x41, 0x00, 0x81, 0x83, 0x43, 0xA1, 0x01, 0x26, 0xA1, 0x01, 0x26, 0x41, 0x00 }, DisplayName = "signer alg in both buckets")]
-    public void ParseFailsClosedOnARepeatedOrSharedLabel(byte[] wireBytes)
+    [DataRow(new byte[] { 0x84, 0x45, 0xA2, 0x01, 0x26, 0x01, 0x26, 0xA0, 0x41, 0x00, 0x81, 0x83, 0x43, 0xA1, 0x01, 0x26, 0xA0, 0x41, 0x00 }, DisplayName = "body protected alg twice, unprotected empty")]
+    [DataRow(new byte[] { 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA0, 0x41, 0x00, 0x81, 0x83, 0x45, 0xA2, 0x01, 0x26, 0x01, 0x26, 0xA0, 0x41, 0x00 }, DisplayName = "signer protected alg twice, unprotected empty")]
+    public void ParseFailsClosedOnARepeatedLabel(byte[] wireBytes)
     {
         using CoseSignParseResult parseResult = CoseSerialization.ParseCoseSign(wireBytes, BaseMemoryPool.Shared);
 
-        Assert.IsFalse(parseResult.IsSuccess, "A repeated or shared COSE header label makes the message malformed; the parse must fail closed.");
+        Assert.IsFalse(parseResult.IsSuccess, "A repeated COSE header label makes the message malformed; the parse must fail closed.");
+    }
+
+
+    /// <summary>
+    /// A COSE_Sign whose body or signer layer holds one label in both buckets fails closed to an unsuccessful
+    /// result. <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "Applications
+    /// SHOULD verify that the same label does not occur in both the protected and unprotected header parameters."
+    /// </summary>
+    /// <param name="wireBytes">The untagged COSE_Sign wire bytes.</param>
+    [TestMethod]
+    [DataRow(new byte[] { 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA1, 0x01, 0x26, 0x41, 0x00, 0x81, 0x83, 0x43, 0xA1, 0x01, 0x26, 0xA0, 0x41, 0x00 }, DisplayName = "body alg in both buckets")]
+    [DataRow(new byte[] { 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA0, 0x41, 0x00, 0x81, 0x83, 0x43, 0xA1, 0x01, 0x26, 0xA1, 0x01, 0x26, 0x41, 0x00 }, DisplayName = "signer alg in both buckets")]
+    public void ParseFailsClosedOnALabelInBothBuckets(byte[] wireBytes)
+    {
+        using CoseSignParseResult parseResult = CoseSerialization.ParseCoseSign(wireBytes, BaseMemoryPool.Shared);
+
+        Assert.IsFalse(parseResult.IsSuccess, "A label in both buckets of one layer makes the message malformed; the parse must fail closed.");
+    }
+
+
+    /// <summary>
+    /// A COSE_Sign whose body protected bucket carries a text-string label beside <c>alg</c>, and whose body
+    /// unprotected bucket carries <c>kid</c>, is parsed: the text-string label is well-formed and passed over.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-1.5">RFC 9052 Section 1.5</see>: "label = int / tstr".
+    /// </summary>
+    [TestMethod]
+    public void ParsePassesOverATextLabelInTheProtectedBucket()
+    {
+        byte[] wireBytes = [0x84, 0x46, 0xA2, 0x01, 0x26, 0x61, 0x78, 0x01, 0xA1, 0x04, 0x41, 0x01, 0x41, 0x00, 0x81, 0x83, 0x43, 0xA1, 0x01, 0x26, 0xA0, 0x41, 0x00];
+
+        using CoseSignParseResult parseResult = CoseSerialization.ParseCoseSign(wireBytes, BaseMemoryPool.Shared);
+
+        Assert.IsTrue(parseResult.IsSuccess, "RFC 9052 Section 1.5: a text-string label is well-formed, so the message is parsed.");
     }
 
 

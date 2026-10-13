@@ -280,13 +280,14 @@ internal static class SdCwtVpFixture
         CancellationToken cancellationToken) =>
         ProduceVpTokenValueAsync(
             storedCredential, holderKey, verifierAud, verifierCnonce, iat,
-            SdKbtIssuance.BuildProtectedHeader, SdKbtIssuance.BuildPayload, cancellationToken);
+            SdKbtIssuance.BuildProtectedHeader, SdKbtIssuance.BuildPayload, CoseSerialization.SerializeCoseSign1, cancellationToken);
 
 
     /// <summary>
     /// <see cref="ProduceVpTokenValueAsync(SdToken{ReadOnlyMemory{byte}}, PrivateKeyMemory, string, string, DateTimeOffset, CancellationToken)"/>
-    /// with the Key Binding Token's protected header and payload built by the supplied builders, so a caller can
-    /// put an exact wire shape of either in front of the Verifier while the holder signature over it stays genuine.
+    /// with the Key Binding Token's protected header and payload built by the supplied builders and its wire form
+    /// written by the supplied serializer, so a caller can put an exact wire shape of either in front of the Verifier
+    /// while the holder signature over it stays genuine.
     /// </summary>
     /// <param name="storedCredential">The issued SD-CWT the wallet holds.</param>
     /// <param name="holderKey">The holder's signing key, matching the credential's <c>cnf</c> COSE_Key.</param>
@@ -295,6 +296,7 @@ internal static class SdCwtVpFixture
     /// <param name="iat">The instant the Key Binding Token is issued at.</param>
     /// <param name="buildProtectedHeader">Builds the Key Binding Token's protected header.</param>
     /// <param name="buildPayload">Builds the Key Binding Token's payload.</param>
+    /// <param name="serializeCoseSign1">Writes the signed Key Binding Token's wire form.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The base64url <c>vp_token</c> value.</returns>
     public static async ValueTask<string> ProduceVpTokenValueAsync(
@@ -305,6 +307,7 @@ internal static class SdCwtVpFixture
         DateTimeOffset iat,
         BuildKbtProtectedHeaderDelegate buildProtectedHeader,
         BuildKbtPayloadDelegate buildPayload,
+        SerializeCoseSign1Delegate serializeCoseSign1,
         CancellationToken cancellationToken)
     {
         var selectedPaths = new HashSet<CredentialPath>
@@ -324,7 +327,7 @@ internal static class SdCwtVpFixture
             buildProtectedHeader,
             buildPayload,
             CoseSerialization.BuildSigStructure,
-            CoseSerialization.SerializeCoseSign1,
+            serializeCoseSign1,
             Pool,
             cancellationToken).ConfigureAwait(false);
 
@@ -505,6 +508,152 @@ internal static class SdCwtVpFixture
         writer.WriteEncodedValue(reader.ReadEncodedValue().Span);
         writer.WriteEncodedValue(reader.ReadEncodedValue().Span);
         reader.ReadEndArray();
+        writer.WriteEndArray();
+
+        return buffer.WrittenSpan.ToArray();
+    }
+
+
+    /// <summary>
+    /// Prepares a <see cref="BuildKbtProtectedHeaderDelegate"/> whose embedded SD-CWT carries the redacted-claim-keys
+    /// map key <c>simple(59)</c> twice at the top level of its issuer-signed claims map: the one digest array of
+    /// <paramref name="issued"/> is split over two such entries, the issuer signs the rewritten claims map over the
+    /// same protected bucket, and the header builder puts that claims map and signature in place of the embedded
+    /// SD-CWT's own. Every signature stays genuine and every Disclosure still travels, so only the repeated map key
+    /// differs from an accepted presentation.
+    /// </summary>
+    /// <param name="issued">The issued SD-CWT, whose top-level claims map carries one digest array of at least two digests.</param>
+    /// <param name="issuerKey">The issuer's signing key.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The header builder.</returns>
+    public static async ValueTask<BuildKbtProtectedHeaderDelegate> PrepareProtectedHeaderWithRedactedClaimKeysTwiceAsync(
+        SdToken<ReadOnlyMemory<byte>> issued, PrivateKeyMemory issuerKey, CancellationToken cancellationToken)
+    {
+        var reader = new CborReader(issued.IssuerSigned, CborOptions.Lax);
+        _ = reader.ReadTag();
+        _ = reader.ReadStartArray();
+        byte[] protectedHeader = reader.ReadByteString();
+        reader.SkipValue();
+        byte[] payload = reader.ReadByteString();
+
+        byte[] rewrittenPayload = SplitRedactedClaimKeys(payload);
+        using CoseSign1Message signed = await Verifiable.JCose.Cose.SignAsync(
+            EncodedCoseProtectedHeader.FromBytes(protectedHeader, Pool),
+            null,
+            rewrittenPayload,
+            CoseSerialization.BuildSigStructure,
+            issuerKey,
+            Pool,
+            cancellationToken).ConfigureAwait(false);
+        byte[] signature = signed.Signature.AsReadOnlySpan().ToArray();
+
+        return (coseAlgorithm, presentationToken, pool) =>
+        {
+            using EncodedCoseProtectedHeader validHeader = SdKbtIssuance.BuildProtectedHeader(coseAlgorithm, presentationToken, pool);
+
+            var headerReader = new CborReader(validHeader.AsReadOnlyMemory(), CborOptions.Lax);
+            var buffer = new ArrayBufferWriter<byte>();
+            var writer = new CborWriter(buffer, CborOptions.Lax);
+
+            int count = headerReader.ReadStartMap() ?? throw new InvalidOperationException("The genuine protected header is a definite-length map.");
+            writer.WriteStartMap(count);
+            for(int i = 0; i < count; i++)
+            {
+                int label = headerReader.ReadInt32();
+                ReadOnlyMemory<byte> value = headerReader.ReadEncodedValue();
+                writer.WriteInt32(label);
+                writer.WriteEncodedValue(label == CoseHeaderParameters.Kcwt ? ReplacePayloadAndSignature(value, rewrittenPayload, signature) : value.Span);
+            }
+
+            writer.WriteEndMap();
+
+            return EncodedCoseProtectedHeader.FromBytes(buffer.WrittenSpan, pool);
+        };
+    }
+
+
+    /// <summary>
+    /// Rewrites a CWT claims map so its one top-level <c>simple(59)</c> digest array is split over two
+    /// <c>simple(59)</c> entries: the first digest under the first, the rest under the second, every other entry
+    /// copied as encoded.
+    /// </summary>
+    /// <param name="payload">The claims map, carrying one top-level <c>simple(59)</c> entry with at least two digests.</param>
+    /// <returns>The rewritten claims map bytes.</returns>
+    private static byte[] SplitRedactedClaimKeys(byte[] payload)
+    {
+        byte[] redactedClaimKeysMapKey = [0xF8, SdCwtConstants.RedactedClaimKeysSimpleValue];
+        var reader = new CborReader(payload, CborOptions.Lax);
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Lax);
+
+        int count = reader.ReadStartMap() ?? throw new InvalidOperationException("The claims map is a definite-length map.");
+        writer.WriteStartMap(count + 1);
+        for(int i = 0; i < count; i++)
+        {
+            ReadOnlyMemory<byte> mapKey = reader.ReadEncodedValue();
+            if(!mapKey.Span.SequenceEqual(redactedClaimKeysMapKey))
+            {
+                writer.WriteEncodedValue(mapKey.Span);
+                writer.WriteEncodedValue(reader.ReadEncodedValue().Span);
+
+                continue;
+            }
+
+            var digests = new List<ReadOnlyMemory<byte>>();
+            _ = reader.ReadStartArray();
+            while(reader.PeekState() != CborReaderState.EndArray)
+            {
+                digests.Add(reader.ReadEncodedValue());
+            }
+
+            reader.ReadEndArray();
+
+            writer.WriteEncodedValue(redactedClaimKeysMapKey);
+            writer.WriteStartArray(1);
+            writer.WriteEncodedValue(digests[0].Span);
+            writer.WriteEndArray();
+
+            writer.WriteEncodedValue(redactedClaimKeysMapKey);
+            writer.WriteStartArray(digests.Count - 1);
+            foreach(ReadOnlyMemory<byte> digest in digests.Skip(1))
+            {
+                writer.WriteEncodedValue(digest.Span);
+            }
+
+            writer.WriteEndArray();
+        }
+
+        reader.ReadEndMap();
+        writer.WriteEndMap();
+
+        return buffer.WrittenSpan.ToArray();
+    }
+
+
+    /// <summary>
+    /// Rewrites an SD-CWT COSE_Sign1 with <paramref name="payload"/> and <paramref name="signature"/> in place of its
+    /// own, its protected and unprotected buckets copied as encoded.
+    /// </summary>
+    /// <param name="sdCwt">The tagged SD-CWT COSE_Sign1.</param>
+    /// <param name="payload">The claims map bytes to carry.</param>
+    /// <param name="signature">The issuer signature over <paramref name="payload"/>.</param>
+    /// <returns>The rewritten COSE_Sign1 bytes.</returns>
+    private static byte[] ReplacePayloadAndSignature(ReadOnlyMemory<byte> sdCwt, byte[] payload, byte[] signature)
+    {
+        var reader = new CborReader(sdCwt, CborOptions.Lax);
+        _ = reader.ReadTag();
+        _ = reader.ReadStartArray();
+        ReadOnlyMemory<byte> protectedHeader = reader.ReadEncodedValue();
+        ReadOnlyMemory<byte> unprotectedHeader = reader.ReadEncodedValue();
+
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Lax);
+        writer.WriteTag(new CborTag(CoseTags.Sign1));
+        writer.WriteStartArray(4);
+        writer.WriteEncodedValue(protectedHeader.Span);
+        writer.WriteEncodedValue(unprotectedHeader.Span);
+        writer.WriteByteString(payload);
+        writer.WriteByteString(signature);
         writer.WriteEndArray();
 
         return buffer.WrittenSpan.ToArray();

@@ -482,6 +482,72 @@ internal sealed class MdocIacaTrustEndToEndTests
     }
 
 
+    /// <summary>
+    /// The <c>x5chain</c> reader refuses a COSE_Sign1 whose unprotected bucket carries label 33 twice, in one width
+    /// and with the second label in a two-byte width, each time with a genuine certificate, and returns every
+    /// certificate it rented before the refusal. <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052
+    /// Section 3</see>: "Labels in each of the maps MUST be unique. When processing messages, if a label appears
+    /// multiple times, the message MUST be rejected as malformed."
+    /// </summary>
+    /// <param name="secondLabel">The encoding of the second label 33.</param>
+    [TestMethod]
+    [DataRow(new byte[] { 0x18, 0x21 }, DisplayName = "x5chain twice")]
+    [DataRow(new byte[] { 0x19, 0x00, 0x21 }, DisplayName = "x5chain twice, second label in two widths")]
+    public void ExtractorRefusesARepeatedX5ChainAndReturnsWhatItRented(byte[] secondLabel)
+    {
+        //Cert-factory carve-out (see class remarks): CertificateRequest needs a framework ECDsa key to mint the chain.
+        using ECDsa rootKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using ECDsa leafKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using X509Certificate2 rootCert = CreateSelfSignedCa("CN=Root", rootKey);
+        using X509Certificate2 leafCert = CreateLeafCertificate("CN=Leaf", leafKey, rootCert);
+
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Lax);
+        writer.WriteStartMap(2);
+        writer.WriteInt32(MdocCoseHeaderLabels.X5Chain);
+        writer.WriteByteString(leafCert.RawData);
+        writer.WriteEncodedValue(secondLabel);
+        writer.WriteByteString(rootCert.RawData);
+        writer.WriteEndMap();
+        byte[] coseSign1 = CoseWireFixtures.ComposeCoseSign1([0xA0], buffer.WrittenSpan, [], []);
+
+        using MeteredHousePool metered = new();
+
+        _ = Assert.ThrowsExactly<FormatException>(
+            () => CoseSign1X5ChainExtractor.Extract(coseSign1, metered.Pool),
+            "RFC 9052 Section 3: an unprotected bucket carrying label 33 twice is rejected as malformed.");
+        Assert.AreEqual(0L, metered.OutstandingCount, "Every certificate the reader rented before the refusal is returned.");
+    }
+
+
+    /// <summary>
+    /// The <c>x5chain</c> reader reads label 33 and label 4294967329, which share their low 32 bits, as two labels and
+    /// answers the one chain under 33. <see href="https://www.rfc-editor.org/rfc/rfc9052#section-1.5">RFC 9052
+    /// Section 1.5</see>: "label = int / tstr".
+    /// </summary>
+    [TestMethod]
+    public void ExtractorReadsALabelBeyondThirtyTwoBitsAsItsOwn()
+    {
+        byte[] unprotectedHeader = [0xA2, 0x18, 0x21, 0x41, 0x07, 0x1B, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x21, 0x41, 0x08];
+        byte[] coseSign1 = CoseWireFixtures.ComposeCoseSign1([0xA0], unprotectedHeader, [], []);
+
+        IReadOnlyList<PkiCertificateMemory> chain = CoseSign1X5ChainExtractor.Extract(coseSign1, BaseMemoryPool.Shared);
+
+        try
+        {
+            Assert.HasCount(1, chain, "RFC 9052 Section 1.5: label 4294967329 is its own label, never a second x5chain.");
+            Assert.IsTrue(chain[0].AsReadOnlySpan().SequenceEqual(new byte[] { 0x07 }), "The chain is the value under label 33.");
+        }
+        finally
+        {
+            foreach(PkiCertificateMemory cert in chain)
+            {
+                cert.Dispose();
+            }
+        }
+    }
+
+
     private static MdocValidityInfo SampleValidity() =>
         new(
             signed: SampleValiditySigned,

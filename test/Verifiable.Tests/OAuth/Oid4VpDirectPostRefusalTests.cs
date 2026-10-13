@@ -592,6 +592,60 @@ truncateProtectedHeader,
 
 
     /// <summary>
+    /// A <c>dc+sd-cwt</c> Key Binding Token whose genuinely signed claims map carries the <c>aud</c> (3) claim twice
+    /// is refused over the wire with the answer every other malformed Key Binding Token gets: HTTP 400,
+    /// <c>invalid_request</c>, the Malformed refusal class's sentence.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052 Section 9</see>: "Applications MUST NOT
+    /// parse and process messages with the same label used twice as a key in a single map."
+    /// </summary>
+    [TestMethod]
+    public async Task AnSdCwtKeyBindingTokenRepeatingAClaimIsRefusedAsMalformed()
+    {
+        await AssertSdCwtPresentationRefusedAsMalformedAsync(
+            SdKbtIssuance.BuildProtectedHeader,
+            SdCwtVpFixture.BuildPayloadWithAudTwice,
+            "nonce-sdcwt-kbt-claim-twice").ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// A <c>dc+sd-cwt</c> presentation whose embedded SD-CWT carries the redacted-claim-keys map key <c>simple(59)</c>
+    /// twice at the top level of its genuinely issuer-signed claims map is refused over the wire with the answer every
+    /// other malformed embedded SD-CWT gets: HTTP 400, <c>invalid_request</c>, the Malformed refusal class's sentence.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-3.1">RFC 8949 Section 3.1</see>: "A map that has
+    /// duplicate keys may be well-formed, but it is not valid, and thus it causes indeterminate decoding; see also
+    /// Section 5.6."
+    /// </summary>
+    [TestMethod]
+    public async Task AnSdCwtPresentationRepeatingRedactedClaimKeysIsRefusedAsMalformed()
+    {
+        await AssertSdCwtPresentationRefusedAsMalformedAsync(
+            SdCwtVpFixture.PrepareProtectedHeaderWithRedactedClaimKeysTwiceAsync,
+            SdKbtIssuance.BuildPayload,
+            "nonce-sdcwt-redacted-claim-keys-twice",
+            isTrustEvidenceWired: false).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// A <c>dc+sd-cwt</c> presentation whose embedded SD-CWT carries <c>sd_claims</c> twice in its unprotected bucket
+    /// is refused over the wire with the Malformed answer also when the Verifier resolves trust evidence, so the
+    /// <c>x5chain</c> reader reads that bucket first: HTTP 400, <c>invalid_request</c>, the Malformed refusal class's
+    /// sentence. <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "When
+    /// processing messages, if a label appears multiple times, the message MUST be rejected as malformed."
+    /// </summary>
+    [TestMethod]
+    public async Task AnSdCwtPresentationRepeatingSdClaimsIsRefusedAsMalformedWithTrustEvidenceWired()
+    {
+        await AssertSdCwtPresentationRefusedAsMalformedAsync(
+            (_, _, _) => ValueTask.FromResult<BuildKbtProtectedHeaderDelegate>(SdCwtVpFixture.BuildProtectedHeaderWithSdClaimsTwice),
+            SdKbtIssuance.BuildPayload,
+            "nonce-sdcwt-sd-claims-twice-trust-evidence",
+            isTrustEvidenceWired: true).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
     /// An <c>mso_mdoc</c> presentation whose IssuerAuth COSE_Sign1 carries label 33 (<c>x5chain</c>) twice in its
     /// unprotected bucket is refused over the encrypted <c>direct_post.jwt</c> wire with the answer every other
     /// malformed DeviceResponse gets: HTTP 400, <c>invalid_request</c>, the Malformed refusal class's sentence.
@@ -685,8 +739,28 @@ truncateProtectedHeader,
     /// <param name="buildPayload">Builds the Key Binding Token's payload.</param>
     /// <param name="nonce">The transaction nonce, bound into the Key Binding Token's <c>cnonce</c>.</param>
     /// <returns>A task that completes when the answer has been asserted.</returns>
+    private Task AssertSdCwtPresentationRefusedAsMalformedAsync(
+        BuildKbtProtectedHeaderDelegate buildProtectedHeader, BuildKbtPayloadDelegate buildPayload, string nonce) =>
+        AssertSdCwtPresentationRefusedAsMalformedAsync(
+            (_, _, _) => ValueTask.FromResult(buildProtectedHeader), buildPayload, nonce, isTrustEvidenceWired: false);
+
+
+    /// <summary>
+    /// <see cref="AssertSdCwtPresentationRefusedAsMalformedAsync(BuildKbtProtectedHeaderDelegate, BuildKbtPayloadDelegate, string)"/>
+    /// with the Key Binding Token's header builder prepared from the issued SD-CWT and the issuer's signing key, and
+    /// with the Verifier's trust-evidence resolution wired or not: when wired, the embedded SD-CWT's <c>x5chain</c>
+    /// is read by <see cref="CoseSign1X5ChainExtractor.Extract"/> before the Key Binding Token is verified.
+    /// </summary>
+    /// <param name="prepareProtectedHeader">Prepares the Key Binding Token's header builder from the issued SD-CWT and the issuer's signing key.</param>
+    /// <param name="buildPayload">Builds the Key Binding Token's payload.</param>
+    /// <param name="nonce">The transaction nonce, bound into the Key Binding Token's <c>cnonce</c>.</param>
+    /// <param name="isTrustEvidenceWired">Whether the Verifier resolves trust evidence from the embedded SD-CWT's <c>x5chain</c>.</param>
+    /// <returns>A task that completes when the answer has been asserted.</returns>
     private async Task AssertSdCwtPresentationRefusedAsMalformedAsync(
-        BuildKbtProtectedHeaderDelegate buildProtectedHeader, BuildKbtPayloadDelegate buildPayload, string nonce)
+        Func<SdToken<ReadOnlyMemory<byte>>, PrivateKeyMemory, CancellationToken, ValueTask<BuildKbtProtectedHeaderDelegate>> prepareProtectedHeader,
+        BuildKbtPayloadDelegate buildPayload,
+        string nonce,
+        bool isTrustEvidenceWired)
     {
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> issuerKeys =
             TestKeyMaterialProvider.CreateP256KeyMaterial();
@@ -699,6 +773,10 @@ truncateProtectedHeader,
                 TimeProvider, issuerKeys.PrivateKey, holderKeys.PublicKey, TestContext.CancellationToken)
                 .ConfigureAwait(false);
 
+            BuildKbtProtectedHeaderDelegate buildProtectedHeader = await prepareProtectedHeader(
+                issued, issuerKeys.PrivateKey, TestContext.CancellationToken).ConfigureAwait(false);
+
+            //The library's serializer refuses to write a protected bucket repeating a label, so the wire form is assembled as given.
             string vpTokenValue = await SdCwtVpFixture.ProduceVpTokenValueAsync(
                 issued,
                 holderKeys.PrivateKey,
@@ -707,9 +785,18 @@ truncateProtectedHeader,
                 TimeProvider.GetUtcNow(),
                 buildProtectedHeader,
                 buildPayload,
+                CoseWireFixtures.SerializeCoseSign1AsGiven,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
-            SdCwtVpVerificationSeams seams = SdCwtVpFixture.BuildSeams(issuerKeys.PublicKey);
+            SdCwtVpVerificationSeams seams = isTrustEvidenceWired switch
+            {
+                true => SdCwtVpFixture.BuildSeams(issuerKeys.PublicKey) with
+                {
+                    ExtractCoseSign1X5Chain = CoseSign1X5ChainExtractor.Extract,
+                    ResolveTrustedAuthorityEvidence = (_, _, _, _) => ValueTask.FromResult<TrustedAuthorityEvidence?>(null)
+                },
+                false => SdCwtVpFixture.BuildSeams(issuerKeys.PublicKey)
+            };
 
             await using TestHostShell app = new(TimeProvider, sdCwtSeams: seams);
             using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(

@@ -618,6 +618,24 @@ internal sealed class CoseCounterSignatureTests
 
 
     /// <summary>
+    /// A full countersignature whose protected and unprotected buckets hold the same label (<c>alg</c> in both)
+    /// fails closed to an unsuccessful result.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "Applications SHOULD
+    /// verify that the same label does not occur in both the protected and unprotected header parameters."
+    /// </summary>
+    [TestMethod]
+    public void ParseCounterSignatureHeaderValueFailsClosedOnALabelInBothBuckets()
+    {
+        byte[] valueBytes = [0x83, 0x43, 0xA1, 0x01, 0x26, 0xA1, 0x01, 0x26, 0x41, 0x00];
+
+        using CoseCounterSignatureParseResult result = CoseSerialization.ParseCounterSignatureHeaderValue(
+            CoseHeaderParameters.CounterSignatureVersion2, valueBytes, BaseMemoryPool.Shared);
+
+        Assert.IsFalse(result.IsSuccess, "RFC 9052 Section 3: a countersignature holding one label in both buckets is refused as malformed.");
+    }
+
+
+    /// <summary>
     /// The unknown-label switch arm inside <see cref="CoseSerialization.ParseCounterSignatureHeaderValue"/>
     /// guards a caller bug, not wire data -- every label the delegate's own contract admits (7, 9, 11, 12) is
     /// already enumerated, so ANY other value (including <see cref="CoseHeaderParameters.Alg"/>, 1, used here,

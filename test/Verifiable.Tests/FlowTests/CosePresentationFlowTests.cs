@@ -189,12 +189,13 @@ internal sealed class CosePresentationFlowTests
             privateKey,
             IssuerDidWeb + "#key-1",
             CredentialToCborBytes,
-            CoseProtectedHeaderWithKidTwiceToCborBytes,
+            CoseWireFixtures.CoseProtectedHeaderWithKidTwiceToCborBytes,
             CoseSerialization.BuildSigStructure,
             BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        using EncodedCoseSign1 coseBytes = CoseSerialization.SerializeCoseSign1(message, BaseMemoryPool.Shared);
+        //The library's serializer refuses to write a protected bucket repeating a label, so the wire form is assembled as given.
+        using EncodedCoseSign1 coseBytes = CoseWireFixtures.SerializeCoseSign1AsGiven(message, BaseMemoryPool.Shared);
 
         var presentation = new VerifiablePresentation
         {
@@ -228,26 +229,6 @@ internal sealed class CosePresentationFlowTests
 
         Assert.IsFalse(result.IsValid, "RFC 9052 Section 3: a credential whose protected bucket repeats kid is malformed and is not verified.");
         Assert.IsNull(result.Credential, "A refused credential yields no verified credential.");
-    }
-
-
-    /// <summary>
-    /// Serializes <paramref name="header"/> and appends a second <c>kid</c> (the text <c>"x"</c>) to the map,
-    /// raising the map's entry count by one, so the protected bucket carries <c>kid</c> twice.
-    /// </summary>
-    /// <param name="header">The protected header map; fewer than 23 entries, so the count is in the initial byte.</param>
-    /// <returns>The serialized protected bucket with <c>kid</c> twice.</returns>
-    private static ReadOnlySpan<byte> CoseProtectedHeaderWithKidTwiceToCborBytes(IReadOnlyDictionary<int, object> header)
-    {
-        byte[] serialized = CoseSerialization.SerializeProtectedHeader(header);
-        byte[] repeated = new byte[serialized.Length + 3];
-        serialized.CopyTo(repeated, 0);
-        repeated[0] = (byte)(serialized[0] + 1);
-        repeated[^3] = CoseHeaderParameters.Kid;
-        repeated[^2] = 0x61;
-        repeated[^1] = (byte)'x';
-
-        return repeated;
     }
 
 

@@ -2,6 +2,7 @@ using Lumoin.Veritas.Cbor;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cbor;
+using Verifiable.Cbor.Mdoc;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
@@ -419,15 +420,17 @@ internal sealed class CoseTests
     /// <summary>
     /// A protected bucket whose map carries one label twice is refused as malformed, judged on the decoded
     /// label: <c>alg</c> twice in minimal form, <c>alg</c> twice with the second label in a two-byte width,
-    /// and <c>alg</c> twice with the same value. <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052
-    /// Section 3</see>: "Labels in each of the maps MUST be unique. When processing messages, if a label
-    /// appears multiple times, the message MUST be rejected as malformed."
+    /// <c>alg</c> twice with the same value, and one text-string label twice.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "Labels in each of
+    /// the maps MUST be unique. When processing messages, if a label appears multiple times, the message MUST be
+    /// rejected as malformed."
     /// </summary>
     /// <param name="protectedHeader">The serialized protected bucket.</param>
     [TestMethod]
     [DataRow(new byte[] { 0xA2, 0x01, 0x26, 0x01, 0x38, 0x22 }, DisplayName = "alg twice, minimal form")]
     [DataRow(new byte[] { 0xA2, 0x01, 0x26, 0x18, 0x01, 0x38, 0x22 }, DisplayName = "alg twice, second label in two widths")]
     [DataRow(new byte[] { 0xA2, 0x01, 0x26, 0x01, 0x26 }, DisplayName = "alg twice, same value")]
+    [DataRow(new byte[] { 0xA2, 0x61, 0x78, 0x01, 0x61, 0x78, 0x02 }, DisplayName = "text label twice")]
     public void ParseProtectedHeaderRefusesARepeatedLabel(byte[] protectedHeader)
     {
         _ = Assert.ThrowsExactly<CborContentException>(() => CoseSerialization.ParseProtectedHeader(protectedHeader));
@@ -462,7 +465,8 @@ internal sealed class CoseTests
             BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        using EncodedCoseSign1 coseBytes = CoseSerialization.SerializeCoseSign1(message, BaseMemoryPool.Shared);
+        //The library's serializer refuses to write a protected bucket repeating a label, so the wire form is assembled as given.
+        using EncodedCoseSign1 coseBytes = CoseWireFixtures.SerializeCoseSign1AsGiven(message, BaseMemoryPool.Shared);
 
         CoseVerificationResult result = await CoseVerification.VerifyAndDecodeAsync(
             coseBytes.AsReadOnlyMemory(),
@@ -476,31 +480,359 @@ internal sealed class CoseTests
 
 
     /// <summary>
-    /// A COSE_Sign1 whose unprotected bucket carries one label twice (in one width, or in two widths), or
-    /// whose two buckets share a label, is refused as malformed by both COSE_Sign1 parsers.
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "Labels in
-    /// each of the maps MUST be unique. When processing messages, if a label appears multiple times, the
-    /// message MUST be rejected as malformed. Applications SHOULD verify that the same label does not occur
-    /// in both the protected and unprotected header parameters."
+    /// A COSE_Sign1 whose unprotected bucket carries one label twice (in one width, or in two widths), or whose
+    /// protected bucket carries one label twice while the unprotected bucket is empty, is refused as malformed by
+    /// both COSE_Sign1 parsers. <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>:
+    /// "Labels in each of the maps MUST be unique. When processing messages, if a label appears multiple times,
+    /// the message MUST be rejected as malformed."
     /// </summary>
     /// <param name="wireBytes">The tagged COSE_Sign1 wire bytes.</param>
     /// <param name="isNilPayloadParser">Whether the row drives <see cref="CoseSerialization.ParseCoseSign1AllowingNilPayload"/> rather than <see cref="CoseSerialization.ParseCoseSign1"/>.</param>
     [TestMethod]
     [DataRow(new byte[] { 0xD2, 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA2, 0x04, 0x41, 0x01, 0x04, 0x41, 0x02, 0x41, 0x00, 0x41, 0x00 }, false, DisplayName = "ParseCoseSign1: unprotected kid twice")]
     [DataRow(new byte[] { 0xD2, 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA2, 0x04, 0x41, 0x01, 0x18, 0x04, 0x41, 0x02, 0x41, 0x00, 0x41, 0x00 }, false, DisplayName = "ParseCoseSign1: unprotected kid twice, two widths")]
-    [DataRow(new byte[] { 0xD2, 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA1, 0x01, 0x26, 0x41, 0x00, 0x41, 0x00 }, false, DisplayName = "ParseCoseSign1: alg in both buckets")]
+    [DataRow(new byte[] { 0xD2, 0x84, 0x45, 0xA2, 0x01, 0x26, 0x01, 0x26, 0xA0, 0x41, 0x00, 0x41, 0x00 }, false, DisplayName = "ParseCoseSign1: protected alg twice, unprotected empty")]
+    [DataRow(new byte[] { 0xD2, 0x84, 0x47, 0xA2, 0x61, 0x78, 0x01, 0x61, 0x78, 0x02, 0xA0, 0x41, 0x00, 0x41, 0x00 }, false, DisplayName = "ParseCoseSign1: protected text label twice")]
     [DataRow(new byte[] { 0xD2, 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA2, 0x04, 0x41, 0x01, 0x04, 0x41, 0x02, 0x41, 0x00, 0x41, 0x00 }, true, DisplayName = "AllowingNilPayload: unprotected kid twice")]
     [DataRow(new byte[] { 0xD2, 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA2, 0x04, 0x41, 0x01, 0x18, 0x04, 0x41, 0x02, 0x41, 0x00, 0x41, 0x00 }, true, DisplayName = "AllowingNilPayload: unprotected kid twice, two widths")]
-    [DataRow(new byte[] { 0xD2, 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA1, 0x01, 0x26, 0x41, 0x00, 0x41, 0x00 }, true, DisplayName = "AllowingNilPayload: alg in both buckets")]
-    public void ParseCoseSign1RefusesARepeatedOrSharedLabel(byte[] wireBytes, bool isNilPayloadParser)
+    [DataRow(new byte[] { 0xD2, 0x84, 0x45, 0xA2, 0x01, 0x26, 0x01, 0x26, 0xA0, 0xF6, 0x41, 0x00 }, true, DisplayName = "AllowingNilPayload: protected alg twice, unprotected empty")]
+    [DataRow(new byte[] { 0xD2, 0x84, 0x47, 0xA2, 0x61, 0x78, 0x01, 0x61, 0x78, 0x02, 0xA0, 0xF6, 0x41, 0x00 }, true, DisplayName = "AllowingNilPayload: protected text label twice")]
+    public void ParseCoseSign1RefusesARepeatedLabel(byte[] wireBytes, bool isNilPayloadParser)
     {
-        ParseCoseSign1Delegate parse = isNilPayloadParser switch
+        ParseCoseSign1Delegate parse = SelectCoseSign1Parser(isNilPayloadParser);
+
+        _ = Assert.ThrowsExactly<CborContentException>(() => parse(wireBytes, BaseMemoryPool.Shared));
+    }
+
+
+    /// <summary>
+    /// A COSE_Sign1 whose protected and unprotected buckets hold the same label is refused as malformed by both
+    /// COSE_Sign1 parsers. <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>:
+    /// "Applications SHOULD verify that the same label does not occur in both the protected and unprotected
+    /// header parameters."
+    /// </summary>
+    /// <param name="wireBytes">The tagged COSE_Sign1 wire bytes.</param>
+    /// <param name="isNilPayloadParser">Whether the row drives <see cref="CoseSerialization.ParseCoseSign1AllowingNilPayload"/> rather than <see cref="CoseSerialization.ParseCoseSign1"/>.</param>
+    [TestMethod]
+    [DataRow(new byte[] { 0xD2, 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA1, 0x01, 0x26, 0x41, 0x00, 0x41, 0x00 }, false, DisplayName = "ParseCoseSign1: alg in both buckets")]
+    [DataRow(new byte[] { 0xD2, 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA1, 0x01, 0x26, 0x41, 0x00, 0x41, 0x00 }, true, DisplayName = "AllowingNilPayload: alg in both buckets")]
+    public void ParseCoseSign1RefusesALabelInBothBuckets(byte[] wireBytes, bool isNilPayloadParser)
+    {
+        ParseCoseSign1Delegate parse = SelectCoseSign1Parser(isNilPayloadParser);
+
+        _ = Assert.ThrowsExactly<CborContentException>(() => parse(wireBytes, BaseMemoryPool.Shared));
+    }
+
+
+    /// <summary>
+    /// A well-formed label the parsed header dictionary does not carry (a text string, or an integer beyond the
+    /// 32 bits of the dictionary's own label) is read as a label of its own and passed over with its value: the
+    /// message is accepted and the integer label beside it is carried.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-1.5">RFC 9052 Section 1.5</see>: "label = int / tstr".
+    /// </summary>
+    /// <param name="wireBytes">The tagged COSE_Sign1 wire bytes.</param>
+    /// <param name="isNilPayloadParser">Whether the row drives <see cref="CoseSerialization.ParseCoseSign1AllowingNilPayload"/> rather than <see cref="CoseSerialization.ParseCoseSign1"/>.</param>
+    /// <param name="carriedLabel">The one integer label the unprotected bucket carries in the parsed message.</param>
+    [TestMethod]
+    [DataRow(new byte[] { 0xD2, 0x84, 0x46, 0xA2, 0x01, 0x26, 0x61, 0x78, 0x01, 0xA1, 0x04, 0x41, 0x01, 0x41, 0x00, 0x41, 0x00 }, false, 4, DisplayName = "ParseCoseSign1: text label in the protected bucket")]
+    [DataRow(new byte[] { 0xD2, 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA2, 0x04, 0x41, 0x01, 0x61, 0x78, 0x01, 0x41, 0x00, 0x41, 0x00 }, false, 4, DisplayName = "ParseCoseSign1: text label in the unprotected bucket")]
+    [DataRow(new byte[] { 0xD2, 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA2, 0x18, 0x21, 0x41, 0x00, 0x1B, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x21, 0x41, 0x01, 0x41, 0x00, 0x41, 0x00 }, false, 33, DisplayName = "ParseCoseSign1: label 33 and label 4294967329")]
+    [DataRow(new byte[] { 0xD2, 0x84, 0x46, 0xA2, 0x01, 0x26, 0x61, 0x78, 0x01, 0xA1, 0x04, 0x41, 0x01, 0xF6, 0x41, 0x00 }, true, 4, DisplayName = "AllowingNilPayload: text label in the protected bucket")]
+    [DataRow(new byte[] { 0xD2, 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA2, 0x04, 0x41, 0x01, 0x61, 0x78, 0x01, 0xF6, 0x41, 0x00 }, true, 4, DisplayName = "AllowingNilPayload: text label in the unprotected bucket")]
+    [DataRow(new byte[] { 0xD2, 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA2, 0x18, 0x21, 0x41, 0x00, 0x1B, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x21, 0x41, 0x01, 0xF6, 0x41, 0x00 }, true, 33, DisplayName = "AllowingNilPayload: label 33 and label 4294967329")]
+    public void ParseCoseSign1PassesOverAWellFormedLabelItDoesNotCarry(byte[] wireBytes, bool isNilPayloadParser, int carriedLabel)
+    {
+        ParseCoseSign1Delegate parse = SelectCoseSign1Parser(isNilPayloadParser);
+
+        using CoseSign1Message message = parse(wireBytes, BaseMemoryPool.Shared);
+
+        Assert.IsNotNull(message.UnprotectedHeader, "The unprotected bucket carries one integer label the dictionary holds.");
+        Assert.HasCount(1, message.UnprotectedHeader, "RFC 9052 Section 1.5: the label the dictionary does not carry is passed over, never read as another label.");
+        Assert.IsTrue(message.UnprotectedHeader.ContainsKey(carriedLabel), "The integer label beside the passed-over label is carried.");
+    }
+
+
+    /// <summary>
+    /// A COSE_Sign1 whose unprotected bucket is keyed by a byte string is refused by both COSE_Sign1 parsers with
+    /// the CBOR reader's own failure. <see href="https://www.rfc-editor.org/rfc/rfc9052#section-1.5">RFC 9052
+    /// Section 1.5</see>: "In a CBOR map defined by this specification, the presence a label that is neither a text
+    /// string nor an integer is an error."
+    /// </summary>
+    /// <param name="isNilPayloadParser">Whether the row drives <see cref="CoseSerialization.ParseCoseSign1AllowingNilPayload"/> rather than <see cref="CoseSerialization.ParseCoseSign1"/>.</param>
+    [TestMethod]
+    [DataRow(false, DisplayName = "ParseCoseSign1")]
+    [DataRow(true, DisplayName = "AllowingNilPayload")]
+    public void ParseCoseSign1RefusesAByteStringLabel(bool isNilPayloadParser)
+    {
+        byte[] wireBytes = [0xD2, 0x84, 0x43, 0xA1, 0x01, 0x26, 0xA1, 0x41, 0x01, 0x01, 0x41, 0x00, 0x41, 0x00];
+        ParseCoseSign1Delegate parse = SelectCoseSign1Parser(isNilPayloadParser);
+
+        _ = Assert.ThrowsExactly<CborContentException>(() => parse(wireBytes, BaseMemoryPool.Shared));
+    }
+
+
+    /// <summary>
+    /// A correctly signed COSE_Sign1 whose protected bucket carries <c>alg</c> and a text-string label verifies, and
+    /// its algorithm is read: the text-string label is well-formed and passed over.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-1.5">RFC 9052 Section 1.5</see>: "label = int / tstr".
+    /// </summary>
+    [TestMethod]
+    public async Task VerifyAndDecodeReadsTheAlgorithmBesideATextLabel()
+    {
+        CoseVerificationResult result = await SignAndVerifyOverProtectedBucketAsync(
+            [0xA2, 0x01, 0x26, 0x61, 0x78, 0x01]).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsValid, "RFC 9052 Section 1.5: a text-string label is well-formed, so the correctly signed message verifies.");
+        Assert.AreEqual(WellKnownCoseAlgorithms.Es256, result.Algorithm, "The algorithm is read from the protected bucket beside the text-string label.");
+    }
+
+
+    /// <summary>
+    /// A correctly signed COSE_Sign1 whose protected bucket carries a map value keyed by CBOR null fails the
+    /// verification and answers a result, never an exception: the decoded dictionary cannot carry a null map
+    /// key, so the bucket is refused as one the reader cannot represent.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-5.6">RFC 8949 Section 5.6</see>: "The encoding and
+    /// decoding applications need to agree on what types of keys are going to be used in maps."
+    /// </summary>
+    [TestMethod]
+    public async Task VerifyAndDecodeRefusesANullMapKeyInTheProtectedBucket()
+    {
+        CoseVerificationResult result = await SignAndVerifyOverProtectedBucketAsync(
+            [0xA1, 0x01, 0xA1, 0xF6, 0x00]).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsValid, "A protected bucket the reader refuses fails the verification.");
+    }
+
+
+    /// <summary>
+    /// The COSE_Key labels -2 (<c>x</c>) and 4294967294 share their low 32 bits and are two labels: the COSE_Key
+    /// carrying both is read, and <c>x</c> is the value under -2.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-1.5">RFC 9052 Section 1.5</see>: "label = int / tstr".
+    /// </summary>
+    [TestMethod]
+    public void CoseKeyReaderReadsTwoLabelsOfOneLowWordAsTwo()
+    {
+        byte[] x = [.. Enumerable.Repeat((byte)0x11, 32)];
+        byte[] coseKey = [0xA3, 0x01, 0x02, 0x21, 0x58, 0x20, .. x, 0x1A, 0xFF, 0xFF, 0xFF, 0xFE, 0x41, 0x00];
+
+        CoseKey read = MdocCborCoseKeyReader.Read(coseKey);
+
+        Assert.IsNotNull(read.X, "The x coordinate rides label -2.");
+        Assert.IsTrue(read.X.Value.Span.SequenceEqual(x), "x is the value under -2, never the value under 4294967294.");
+    }
+
+
+    /// <summary>
+    /// A COSE_Key carrying 32 bytes under label 4294967294 and nothing under -2 has no <c>x</c> coordinate: a label
+    /// beyond 32 bits is its own label and is never read as the label of its low 32 bits.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-1.5">RFC 9052 Section 1.5</see>: "label = int / tstr".
+    /// </summary>
+    [TestMethod]
+    public void CoseKeyReaderNeverReadsALabelBeyondThirtyTwoBitsAsX()
+    {
+        byte[] coseKey = [0xA2, 0x01, 0x02, 0x1A, 0xFF, 0xFF, 0xFF, 0xFE, 0x58, 0x20, .. Enumerable.Repeat((byte)0x11, 32)];
+
+        CoseKey read = MdocCborCoseKeyReader.Read(coseKey);
+
+        Assert.IsNull(read.X, "The value under 4294967294 is not the x coordinate.");
+    }
+
+
+    /// <summary>
+    /// The COSE_Sign1 and COSE_Sign serializers refuse a protected bucket whose bytes carry one label twice, in
+    /// the COSE_Sign1 layer, the COSE_Sign body layer and a COSE_Sign signer layer, with the caller's own
+    /// <see cref="ArgumentException"/>. <see href="https://www.rfc-editor.org/rfc/rfc9052#section-9">RFC 9052
+    /// Section 9</see>: "Applications MUST NOT generate messages with the same label used twice as a key in a
+    /// single map."
+    /// </summary>
+    /// <param name="layer">The layer the protected bucket belongs to.</param>
+    [TestMethod]
+    [DataRow(SerializedLayer.CoseSign1, DisplayName = "COSE_Sign1")]
+    [DataRow(SerializedLayer.CoseSignBody, DisplayName = "COSE_Sign body")]
+    [DataRow(SerializedLayer.CoseSignSigner, DisplayName = "COSE_Sign signer")]
+    public async Task SerializersRefuseAProtectedBucketRepeatingALabel(SerializedLayer layer)
+    {
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(
+            () => WriteThroughSerializerAsync(layer, [0xA2, 0x01, 0x26, 0x01, 0x26], unprotectedHeader: null)).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// The COSE_Sign1 and COSE_Sign serializers refuse a protected bucket keyed by a byte string, in every layer,
+    /// with the caller's own <see cref="ArgumentException"/>. <see href="https://www.rfc-editor.org/rfc/rfc9052#section-1.5">RFC 9052
+    /// Section 1.5</see>: "Applications can either fail processing or process messages by ignoring incorrect labels;
+    /// however, they MUST NOT create messages with incorrect labels."
+    /// </summary>
+    /// <param name="layer">The layer the protected bucket belongs to.</param>
+    [TestMethod]
+    [DataRow(SerializedLayer.CoseSign1, DisplayName = "COSE_Sign1")]
+    [DataRow(SerializedLayer.CoseSignBody, DisplayName = "COSE_Sign body")]
+    [DataRow(SerializedLayer.CoseSignSigner, DisplayName = "COSE_Sign signer")]
+    public async Task SerializersRefuseAProtectedLabelOfAnotherKind(SerializedLayer layer)
+    {
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(
+            () => WriteThroughSerializerAsync(layer, [0xA1, 0x41, 0x01, 0x26], unprotectedHeader: null)).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// The COSE_Sign1 and COSE_Sign serializers refuse a layer whose protected and unprotected buckets hold the
+    /// same label, with the caller's own <see cref="ArgumentException"/>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>: "Applications SHOULD
+    /// verify that the same label does not occur in both the protected and unprotected header parameters."
+    /// </summary>
+    /// <param name="layer">The layer whose buckets share the label.</param>
+    [TestMethod]
+    [DataRow(SerializedLayer.CoseSign1, DisplayName = "COSE_Sign1")]
+    [DataRow(SerializedLayer.CoseSignBody, DisplayName = "COSE_Sign body")]
+    [DataRow(SerializedLayer.CoseSignSigner, DisplayName = "COSE_Sign signer")]
+    public async Task SerializersRefuseALabelInBothBuckets(SerializedLayer layer)
+    {
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(() => WriteThroughSerializerAsync(
+            layer, [0xA1, 0x01, 0x26], new Dictionary<int, object> { [CoseHeaderParameters.Alg] = WellKnownCoseAlgorithms.Es256 })).ConfigureAwait(false);
+    }
+
+
+    /// <summary>The COSE layer a serializer row writes its buckets into.</summary>
+    internal enum SerializedLayer
+    {
+        /// <summary>The one layer of a COSE_Sign1.</summary>
+        CoseSign1,
+
+        /// <summary>The body layer of a COSE_Sign.</summary>
+        CoseSignBody,
+
+        /// <summary>The layer of a COSE_Sign's one signer.</summary>
+        CoseSignSigner
+    }
+
+
+    /// <summary>Selects one of the two COSE_Sign1 parsers.</summary>
+    /// <param name="isNilPayloadParser">Whether the parser that admits a nil payload is selected.</param>
+    /// <returns>The selected parser.</returns>
+    private static ParseCoseSign1Delegate SelectCoseSign1Parser(bool isNilPayloadParser)
+    {
+        return isNilPayloadParser switch
         {
             true => CoseSerialization.ParseCoseSign1AllowingNilPayload,
             false => CoseSerialization.ParseCoseSign1
         };
+    }
 
-        _ = Assert.ThrowsExactly<CborContentException>(() => parse(wireBytes, BaseMemoryPool.Shared));
+
+    /// <summary>
+    /// Signs a P-256 COSE_Sign1 over <paramref name="protectedHeader"/> as given, assembles its wire form as given and
+    /// runs <see cref="CoseVerification.VerifyAndDecodeAsync"/> over it with the signing key's public half.
+    /// </summary>
+    /// <param name="protectedHeader">The serialized protected bucket the signature covers.</param>
+    /// <returns>The verification result.</returns>
+    private async Task<CoseVerificationResult> SignAndVerifyOverProtectedBucketAsync(byte[] protectedHeader)
+    {
+        EncodedCoseProtectedHeader protectedHeaderCarrier = EncodedCoseProtectedHeader.FromBytes(protectedHeader, BaseMemoryPool.Shared);
+        byte[] payload = BuildTestPayload();
+
+        var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
+        using var publicKey = keyPair.PublicKey;
+        using var privateKey = keyPair.PrivateKey;
+
+        using CoseSign1Message message = await Verifiable.JCose.Cose.SignAsync(
+            protectedHeaderCarrier,
+            unprotectedHeader: null,
+            payload,
+            CoseSerialization.BuildSigStructure,
+            privateKey,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
+            BaseMemoryPool.Shared,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        using EncodedCoseSign1 coseBytes = CoseWireFixtures.SerializeCoseSign1AsGiven(message, BaseMemoryPool.Shared);
+
+        return await CoseVerification.VerifyAndDecodeAsync(
+            coseBytes.AsReadOnlyMemory(),
+            publicKey,
+            BaseMemoryPool.Shared,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Signs a message with a P-256 key and writes it through <see cref="CoseSerialization.SerializeCoseSign1"/> or
+    /// <see cref="CoseSerialization.SerializeCoseSign"/> with <paramref name="protectedHeader"/> and
+    /// <paramref name="unprotectedHeader"/> in <paramref name="layer"/>; every other bucket is well-formed.
+    /// </summary>
+    /// <param name="layer">The layer the two buckets belong to.</param>
+    /// <param name="protectedHeader">The serialized protected bucket.</param>
+    /// <param name="unprotectedHeader">The unprotected bucket, or <see langword="null"/> for an empty one.</param>
+    /// <returns>A task that completes when the message has been written.</returns>
+    private async Task WriteThroughSerializerAsync(SerializedLayer layer, byte[] protectedHeader, Dictionary<int, object>? unprotectedHeader)
+    {
+        byte[] wellFormedHeader = [0xA1, 0x01, 0x26];
+        Task write = layer switch
+        {
+            SerializedLayer.CoseSign1 => WriteCoseSign1Async(protectedHeader, unprotectedHeader),
+            SerializedLayer.CoseSignBody => WriteCoseSignAsync(protectedHeader, unprotectedHeader, wellFormedHeader, signerUnprotectedHeader: null),
+            _ => WriteCoseSignAsync(wellFormedHeader, bodyUnprotectedHeader: null, protectedHeader, unprotectedHeader)
+        };
+
+        await write.ConfigureAwait(false);
+    }
+
+
+    /// <summary>Signs a COSE_Sign1 with the given buckets and writes it through <see cref="CoseSerialization.SerializeCoseSign1"/>.</summary>
+    /// <param name="protectedHeader">The serialized protected bucket.</param>
+    /// <param name="unprotectedHeader">The unprotected bucket, or <see langword="null"/>.</param>
+    /// <returns>A task that completes when the message has been written.</returns>
+    private async Task WriteCoseSign1Async(byte[] protectedHeader, Dictionary<int, object>? unprotectedHeader)
+    {
+        var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
+        using var publicKey = keyPair.PublicKey;
+        using var privateKey = keyPair.PrivateKey;
+
+        using CoseSign1Message message = await Verifiable.JCose.Cose.SignAsync(
+            EncodedCoseProtectedHeader.FromBytes(protectedHeader, BaseMemoryPool.Shared),
+            unprotectedHeader,
+            new byte[] { 0x00 },
+            CoseSerialization.BuildSigStructure,
+            privateKey,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
+            BaseMemoryPool.Shared,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        using EncodedCoseSign1 written = CoseSerialization.SerializeCoseSign1(message, BaseMemoryPool.Shared);
+    }
+
+
+    /// <summary>Signs a COSE_Sign with one signer and the given buckets and writes it through <see cref="CoseSerialization.SerializeCoseSign"/>.</summary>
+    /// <param name="bodyProtectedHeader">The body layer's serialized protected bucket.</param>
+    /// <param name="bodyUnprotectedHeader">The body layer's unprotected bucket, or <see langword="null"/>.</param>
+    /// <param name="signerProtectedHeader">The signer layer's serialized protected bucket.</param>
+    /// <param name="signerUnprotectedHeader">The signer layer's unprotected bucket, or <see langword="null"/>.</param>
+    /// <returns>A task that completes when the message has been written.</returns>
+    private async Task WriteCoseSignAsync(
+        byte[] bodyProtectedHeader,
+        Dictionary<int, object>? bodyUnprotectedHeader,
+        byte[] signerProtectedHeader,
+        Dictionary<int, object>? signerUnprotectedHeader)
+    {
+        var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
+        using var publicKey = keyPair.PublicKey;
+        using var privateKey = keyPair.PrivateKey;
+
+        CoseSignerInput[] signers =
+        [
+            new CoseSignerInput(EncodedCoseProtectedHeader.FromBytes(signerProtectedHeader, BaseMemoryPool.Shared), signerUnprotectedHeader, privateKey)
+        ];
+
+        using CoseSignMessage message = await CoseSign.SignAsync(
+            EncodedCoseProtectedHeader.FromBytes(bodyProtectedHeader, BaseMemoryPool.Shared),
+            bodyUnprotectedHeader,
+            new byte[] { 0x00 },
+            signers,
+            CoseSerialization.BuildCoseSignatureSigStructure,
+            BaseMemoryPool.Shared,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        using EncodedCoseSign written = CoseSerialization.SerializeCoseSign(message, BaseMemoryPool.Shared);
     }
 
 

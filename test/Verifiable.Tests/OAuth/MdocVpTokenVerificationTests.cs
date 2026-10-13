@@ -215,6 +215,129 @@ internal sealed class MdocVpTokenVerificationTests
 
 
     /// <summary>
+    /// A presentation whose DeviceSignature is signed by the device key over a protected bucket carrying <c>alg</c>
+    /// twice, its unprotected bucket empty as the device signer writes it, is refused as malformed with the COSE
+    /// parser's own failure. <see href="https://www.rfc-editor.org/rfc/rfc9052#section-3">RFC 9052 Section 3</see>:
+    /// "Labels in each of the maps MUST be unique. When processing messages, if a label appears multiple times, the
+    /// message MUST be rejected as malformed."
+    /// </summary>
+    [TestMethod]
+    public async Task DeviceSignatureWithARepeatedProtectedLabelIsRefusedAsMalformed()
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> issuerKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> deviceKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+
+        try
+        {
+            (string vpTokenValue, string transmittedNonce) =
+                await ProduceVpTokenAsync(issuerKeys, deviceKeys).ConfigureAwait(false);
+
+            using IMemoryOwner<byte> nonceOwner = Oid4VpMdocPresentation.DecodeMdocGeneratedNonceForTransmissionRoundTrip(
+                transmittedNonce, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared);
+
+            string malformedVpTokenValue = await ResignDeviceSignatureAsync(
+                vpTokenValue, nonceOwner.Memory, deviceKeys.PrivateKey, [0xA2, 0x01, 0x26, 0x01, 0x26]).ConfigureAwait(false);
+
+            _ = await Assert.ThrowsExactlyAsync<CborContentException>(
+                async () => await VerifyAsync(
+                    malformedVpTokenValue, MdocVpFixture.TrustAnchorFor(issuerKeys.PublicKey), nonceOwner.Memory).ConfigureAwait(false),
+                "RFC 9052 Section 3: a DeviceSignature whose protected bucket repeats a label is rejected as malformed.").ConfigureAwait(false);
+        }
+        finally
+        {
+            DisposeKeyMaterial(issuerKeys);
+            DisposeKeyMaterial(deviceKeys);
+        }
+    }
+
+
+    /// <summary>
+    /// A DeviceSignature signed again by the device key over a well-formed protected bucket verifies over the
+    /// verifier-reconstructed SessionTranscript, so a presentation signed again over a malformed bucket differs
+    /// from an accepted one by that bucket alone.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9052#section-4.4">RFC 9052 Section 4.4</see>: "In order to create
+    /// a signature, a well-defined byte string is needed. The Sig_structure is used to create the canonical form."
+    /// </summary>
+    [TestMethod]
+    public async Task DeviceSignatureSignedAgainOverAWellFormedProtectedBucketVerifies()
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> issuerKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> deviceKeys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+
+        try
+        {
+            (string vpTokenValue, string transmittedNonce) =
+                await ProduceVpTokenAsync(issuerKeys, deviceKeys).ConfigureAwait(false);
+
+            using IMemoryOwner<byte> nonceOwner = Oid4VpMdocPresentation.DecodeMdocGeneratedNonceForTransmissionRoundTrip(
+                transmittedNonce, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared);
+
+            string resignedVpTokenValue = await ResignDeviceSignatureAsync(
+                vpTokenValue, nonceOwner.Memory, deviceKeys.PrivateKey, [0xA1, 0x01, 0x26]).ConfigureAwait(false);
+
+            using MdocVpVerificationResult verification = await VerifyAsync(
+                resignedVpTokenValue, MdocVpFixture.TrustAnchorFor(issuerKeys.PublicKey), nonceOwner.Memory).ConfigureAwait(false);
+
+            Assert.IsTrue(verification.Parsed.SessionTranscriptValid,
+                "The DeviceSignature signed again over a well-formed protected bucket verifies over the SessionTranscript.");
+        }
+        finally
+        {
+            DisposeKeyMaterial(issuerKeys);
+            DisposeKeyMaterial(deviceKeys);
+        }
+    }
+
+
+    /// <summary>
+    /// Wallet side: signs the DeviceAuthenticationBytes again with the device key over <paramref name="protectedHeader"/>
+    /// as given and puts the detached COSE_Sign1 (unprotected bucket empty, payload nil) in place of the presentation's
+    /// DeviceSignature, every other byte copied as the wallet produced it.
+    /// </summary>
+    /// <param name="vpTokenValue">The base64url DeviceResponse.</param>
+    /// <param name="mdocGeneratedNonce">The <c>mdoc_generated_nonce</c> the presentation was signed under.</param>
+    /// <param name="deviceKey">The device's signing key.</param>
+    /// <param name="protectedHeader">The serialized protected bucket the new signature covers.</param>
+    /// <returns>The base64url rewritten DeviceResponse.</returns>
+    private async ValueTask<string> ResignDeviceSignatureAsync(
+        string vpTokenValue, ReadOnlyMemory<byte> mdocGeneratedNonce, PrivateKeyMemory deviceKey, byte[] protectedHeader)
+    {
+        ReadOnlyMemory<byte> sessionTranscript = Oid4VpMdocSessionTranscriptEncoder.Encode(
+            VerifierClientId, VerifierResponseUri, AuthorizationRequestNonce, mdocGeneratedNonce.Span, BaseMemoryPool.Shared);
+        ReadOnlyMemory<byte> deviceAuthenticationBytes = MdocCborDeviceAuthenticationEncoder.EncodeAuthenticationBytes(
+            sessionTranscript, EudiPid.AttestationType, MdocCborDeviceNameSpacesEncoder.EncodeWrapped(MdocDeviceNameSpaces.Empty));
+
+        using CoseSign1Message signed = await Verifiable.JCose.Cose.SignAsync(
+            EncodedCoseProtectedHeader.FromBytes(protectedHeader, BaseMemoryPool.Shared),
+            null,
+            deviceAuthenticationBytes,
+            CoseSerialization.BuildSigStructure,
+            deviceKey,
+            BaseMemoryPool.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        var buffer = new ArrayBufferWriter<byte>();
+        var writer = new CborWriter(buffer, CborOptions.Lax);
+        writer.WriteTag(new CborTag(CoseTags.Sign1));
+        writer.WriteStartArray(4);
+        writer.WriteByteString(protectedHeader);
+        writer.WriteStartMap(0);
+        writer.WriteEndMap();
+        writer.WriteNull();
+        writer.WriteByteString(signed.Signature.AsReadOnlySpan());
+        writer.WriteEndArray();
+        byte[] deviceSignature = buffer.WrittenSpan.ToArray();
+
+        return RewriteVpToken(
+            vpTokenValue, ["documents", 0, "deviceSigned", "deviceAuth", "deviceSignature"], _ => deviceSignature);
+    }
+
+
+    /// <summary>
     /// A presentation whose Mobile Security Object commits a <c>deviceKey</c> COSE_Key carrying its <c>x</c>
     /// coordinate (label -2) twice is refused as malformed at the DeviceResponse parse, even with a genuine
     /// issuer signature over that Mobile Security Object.

@@ -288,15 +288,20 @@ internal sealed class CborRoundTripTests
     /// <summary>
     /// A nested map read through <see cref="CborValueConverter.ReadValue(CborReader)"/> whose map key appears
     /// twice by the equivalence of map keys is refused: one floating-point value written in two widths,
-    /// -0.0 and 0.0, two arrays equal element by element, and two maps holding the same pairs in another order.
+    /// -0.0 and 0.0, two arrays equal element by element, two maps holding the same pairs in another order, one
+    /// tagged value twice, the simple value <c>true</c> twice, and two NaN values whose significands are equal
+    /// after zero-extension, written in two widths.
     /// </summary>
     /// <remarks>
     /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-5.6.1">RFC 8949 Section 5.6.1</see>: "Within
     /// each of these groups, numeric values are distinct unless they are numerically equal (specifically, -0.0
-    /// is equal to 0.0)" and "Both byte strings and text strings are compared byte by byte, arrays are compared
-    /// element by element, and are equal if they have the same number of bytes/elements and the same values at
-    /// the same positions. Two maps are equal if they have the same set of pairs regardless of their order;
-    /// pairs are equal if both the key and value are equal."
+    /// is equal to 0.0); for the purpose of map key equivalence, NaN values are equivalent if they have the same
+    /// significand after zero-extending both significands at the right to 64 bits." and "Both byte strings and
+    /// text strings are compared byte by byte, arrays are compared element by element, and are equal if they have
+    /// the same number of bytes/elements and the same values at the same positions. Two maps are equal if they have
+    /// the same set of pairs regardless of their order; pairs are equal if both the key and value are equal." and
+    /// "Tagged values are equal if both the tag number and the tag content are equal." and "Simple values are equal
+    /// if they simply have the same value."
     /// </remarks>
     /// <param name="encodedMap">The encoded map.</param>
     [TestMethod]
@@ -304,11 +309,95 @@ internal sealed class CborRoundTripTests
     [DataRow(new byte[] { 0xA2, 0xF9, 0x80, 0x00, 0x00, 0xFA, 0x00, 0x00, 0x00, 0x00, 0x01 }, DisplayName = "-0.0 and 0.0 as map keys")]
     [DataRow(new byte[] { 0xA2, 0x82, 0x01, 0x02, 0x00, 0x82, 0x01, 0x02, 0x01 }, DisplayName = "array map key twice")]
     [DataRow(new byte[] { 0xA2, 0xA2, 0x01, 0x02, 0x03, 0x04, 0x00, 0xA2, 0x03, 0x04, 0x01, 0x02, 0x01 }, DisplayName = "map as map key twice, pairs in another order")]
+    [DataRow(new byte[] { 0xA2, 0xC1, 0x05, 0x00, 0xC1, 0x05, 0x01 }, DisplayName = "tagged map key 1(5) twice")]
+    [DataRow(new byte[] { 0xA2, 0xF5, 0x00, 0xF5, 0x01 }, DisplayName = "true twice")]
+    [DataRow(new byte[] { 0xA2, 0xF9, 0x7E, 0x00, 0x00, 0xFA, 0x7F, 0xC0, 0x00, 0x00, 0x01 }, DisplayName = "NaN twice, equal significands, half and single width")]
     public void ValueConverterRefusesAnEquivalentMapKey(byte[] encodedMap)
     {
         var reader = new CborReader(encodedMap, CborOptions.Lax);
 
         _ = Assert.ThrowsExactly<CborContentException>(() => CborValueConverter.ReadValue(reader));
+    }
+
+
+    /// <summary>
+    /// Map keys of distinct groups are two map keys, so a map carrying one of each is read with both entries: a text
+    /// string and a byte string of the same bytes, a tagged and an untagged value of the same content, one content
+    /// under two tag numbers, and an integer and a Tag 2 big number of the same value.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-5.6.1">RFC 8949 Section 5.6.1</see>: "At the generic
+    /// data model level, numerically equivalent integer and floating-point values are distinct from each other, as
+    /// they are from the various big numbers (Tags 2 to 5). Similarly, text strings are distinct from byte strings,
+    /// even if composed of the same bytes. A tagged value is distinct from an untagged value or from a value tagged
+    /// with a different tag number."
+    /// </remarks>
+    /// <param name="encodedMap">The encoded map.</param>
+    [TestMethod]
+    [DataRow(new byte[] { 0xA2, 0x61, 0x61, 0x00, 0x41, 0x61, 0x01 }, DisplayName = "text string and byte string of the same bytes")]
+    [DataRow(new byte[] { 0xA2, 0xC1, 0x05, 0x00, 0x05, 0x01 }, DisplayName = "tagged and untagged value of the same content")]
+    [DataRow(new byte[] { 0xA2, 0xC1, 0x05, 0x00, 0xD8, 0x64, 0x05, 0x01 }, DisplayName = "one content under two tag numbers")]
+    [DataRow(new byte[] { 0xA2, 0x01, 0x00, 0xC2, 0x41, 0x01, 0x01 }, DisplayName = "integer and Tag 2 big number of the same value")]
+    public void ValueConverterReadsMapKeysOfDistinctGroupsAsTwo(byte[] encodedMap)
+    {
+        var reader = new CborReader(encodedMap, CborOptions.Lax);
+
+        Dictionary<object, object?> map = Assert.IsInstanceOfType<Dictionary<object, object?>>(CborValueConverter.ReadValue(reader));
+
+        Assert.HasCount(2, map, "Section 5.6.1: map keys of distinct groups are two map keys.");
+    }
+
+
+    /// <summary>
+    /// A map whose map key is CBOR null is refused with the converter's own <see cref="CborContentException"/>: the
+    /// decoded dictionary carries no null map key, one null map key or two.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-5.6">RFC 8949 Section 5.6</see>: "The encoding and
+    /// decoding applications need to agree on what types of keys are going to be used in maps."
+    /// </remarks>
+    /// <param name="encodedMap">The encoded map.</param>
+    [TestMethod]
+    [DataRow(new byte[] { 0xA1, 0xF6, 0x00 }, DisplayName = "one null map key")]
+    [DataRow(new byte[] { 0xA2, 0xF6, 0x00, 0xF6, 0x01 }, DisplayName = "null map key twice")]
+    public void ValueConverterRefusesANullMapKey(byte[] encodedMap)
+    {
+        var reader = new CborReader(encodedMap, CborOptions.Lax);
+
+        _ = Assert.ThrowsExactly<CborContentException>(() => CborValueConverter.ReadValue(reader));
+    }
+
+
+    /// <summary>
+    /// A map key nested <paramref name="depth"/> maps deep (each map keyed by the one inside it) is decoded and judged
+    /// within the reader's container-nesting bound, and refused by that bound past it, without exhausting the stack.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8949#section-5.6.1">RFC 8949 Section 5.6.1</see>: "Two maps are
+    /// equal if they have the same set of pairs regardless of their order; pairs are equal if both the key and value
+    /// are equal."
+    /// </remarks>
+    /// <param name="depth">How many maps the outermost map nests, itself included.</param>
+    /// <param name="isWithinBound">Whether the nesting stays within the reader's bound.</param>
+    [TestMethod]
+    [DataRow(64, true, DisplayName = "64 maps deep")]
+    [DataRow(65, false, DisplayName = "65 maps deep")]
+    public void ValueConverterJudgesAMapKeyNestedToTheDepthBound(int depth, bool isWithinBound)
+    {
+        byte[] encodedMap = [.. Enumerable.Repeat((byte)0xA1, depth), 0x00, .. Enumerable.Repeat((byte)0x00, depth)];
+        var reader = new CborReader(encodedMap, CborOptions.Lax);
+
+        object outcome = isWithinBound switch
+        {
+            true => Assert.IsInstanceOfType<Dictionary<object, object?>>(read()),
+            false => Assert.Throws<CborException>(read)
+        };
+
+        Assert.IsNotNull(outcome, "The nested map key is decoded, or the reader's own bound refuses it.");
+
+
+        //Decodes the nested map key.
+        object? read() => CborValueConverter.ReadValue(reader);
     }
 
 
