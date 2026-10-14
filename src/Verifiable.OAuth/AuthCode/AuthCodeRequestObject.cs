@@ -176,6 +176,24 @@ public sealed class AuthCodeRequestObject: IEquatable<AuthCodeRequestObject>
     /// </summary>
     public string? Resource { get; init; }
 
+    /// <summary>
+    /// The text of the <c>dpop_jkt</c> claim of the Request Object, which names the JWK SHA-256
+    /// Thumbprint of the DPoP public key the authorization code is to be bound to, or
+    /// <see langword="null"/> when absent or the empty string.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10">RFC 9449 Section 10</see>:
+    /// "The value of the dpop_jkt authorization request parameter is the JWK Thumbprint [RFC7638]
+    /// of the proof-of-possession public key using the SHA-256 hash function". A pushed Request
+    /// Object carries it as a claim,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-3">RFC 9126 Section 3</see>: "All
+    /// other request parameters, i.e., those pertaining to the authorization request itself, MUST
+    /// appear as claims of the JWT representing the authorization request." Carried as given;
+    /// judged where the server verifies DPoP proofs: the endpoint refuses a value not spelled as a
+    /// JWK SHA-256 Thumbprint as an invalid request, and a server that verifies no DPoP proof
+    /// ignores the claim as an unrecognized parameter
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 Section 3.1</see>).
+    /// </summary>
+    public string? DpopJkt { get; init; }
+
 
     /// <inheritdoc/>
     public bool Equals(AuthCodeRequestObject? other)
@@ -210,7 +228,8 @@ public sealed class AuthCodeRequestObject: IEquatable<AuthCodeRequestObject>
             && string.Equals(AuthorizationDetails, other.AuthorizationDetails, StringComparison.Ordinal)
             && string.Equals(ResponseMode, other.ResponseMode, StringComparison.Ordinal)
             && string.Equals(IssuerState, other.IssuerState, StringComparison.Ordinal)
-            && string.Equals(Resource, other.Resource, StringComparison.Ordinal);
+            && string.Equals(Resource, other.Resource, StringComparison.Ordinal)
+            && string.Equals(DpopJkt, other.DpopJkt, StringComparison.Ordinal);
     }
 
 

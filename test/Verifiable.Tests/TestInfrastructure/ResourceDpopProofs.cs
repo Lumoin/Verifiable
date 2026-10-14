@@ -135,6 +135,49 @@ internal static class ResourceDpopProofs
 
 
     /// <summary>
+    /// Computes the JWK SHA-256 Thumbprint of the public key of the EC DPoP key <paramref name="key"/> from its
+    /// definition in <see href="https://www.rfc-editor.org/rfc/rfc7638#section-3">RFC 7638 Section 3</see>: "Construct
+    /// a JSON object [RFC7159] containing only the required members of a JWK representing the key and with no whitespace
+    /// or line breaks before or after any syntactic elements and with the required members ordered lexicographically by
+    /// the Unicode [UNICODE] code points of the member names." and "Hash the octets of the UTF-8 representation of this
+    /// JSON object with a cryptographic hash function H." The required members of an EC public key are, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7638#section-3.2">Section 3.2</see>, "crv" "kty" "x" "y"; their
+    /// values are read from the public JWK the proof header carries. The UTF-8 octets, written into a buffer rented
+    /// from the test pool, are hashed by the project's own SHA-256 provider
+    /// (<see cref="MicrosoftCryptographicFunctions.ComputeDigestAsync"/>, called directly and not through the
+    /// library's thumbprint computation), and the digest is written in base64url without padding
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7515#section-2">RFC 7515 Section 2</see>), the value
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10">RFC 9449 Section 10</see> gives
+    /// <c>dpop_jkt</c>.
+    /// </summary>
+    /// <param name="key">The EC DPoP key whose public key is hashed.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The base64url JWK SHA-256 Thumbprint.</returns>
+    public static async Task<string> ComputeJwkThumbprintAsync(DpopKey key, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+
+        IReadOnlyDictionary<string, string> jwk = DpopJwkUtilities.ToJwk(
+            key.Material.PublicKey, key.Alg, TestHostShell.Base64UrlEncoder);
+        string canonical = $"{{\"crv\":\"{jwk["crv"]}\",\"kty\":\"{jwk["kty"]}\",\"x\":\"{jwk["x"]}\",\"y\":\"{jwk["y"]}\"}}";
+
+        using IMemoryOwner<byte> utf8Owner = TestHostShell.MemoryPool.Rent(Encoding.UTF8.GetByteCount(canonical));
+        int written = Encoding.UTF8.GetBytes(canonical, utf8Owner.Memory.Span);
+        (DigestValue digest, _) = await MicrosoftCryptographicFunctions.ComputeDigestAsync(
+            new ReadOnlySequence<byte>(utf8Owner.Memory[..written]),
+            Sha256DigestByteLength,
+            CryptoTags.Sha256Digest,
+            TestHostShell.MemoryPool,
+            DigestClock,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        using(digest)
+        {
+            return TestHostShell.Base64UrlEncoder(digest.AsReadOnlySpan());
+        }
+    }
+
+
+    /// <summary>
     /// The key identifier of a DPoP nonce key whose nonces end in a partial base64url group: the library's nonce is a
     /// one-octet length, this identifier, an 8-octet issue time, a 16-octet audience hash, 16 random octets and a
     /// 32-octet tag, 85 octets for a 12-octet identifier, whose final quantum of 8 bits base64url writes as "two

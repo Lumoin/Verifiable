@@ -81,7 +81,18 @@ public sealed record ServerParValidated(
     string? AuthorizationDetails = null,
     string? ResponseMode = null,
     string? IssuerState = null,
-    string? Resource = null): AuthCodeServerFlowInput;
+    string? Resource = null): AuthCodeServerFlowInput
+{
+    /// <summary>
+    /// The DPoP binding the pushed authorization request asks for the authorization code, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10.1">RFC 9449 Section 10.1</see>:
+    /// the thumbprint <c>dpop_jkt</c> named, or the thumbprint of the public key of the DPoP proof
+    /// checked at the pushed request; <see langword="null"/> when the request carried neither.
+    /// Recorded onto <see cref="ParRequestReceivedState.Confirmation"/> in the transition that
+    /// consumes this input.
+    /// </summary>
+    public ConfirmationMethod? Confirmation { get; init; }
+}
 
 
 /// <summary>
@@ -358,4 +369,14 @@ public sealed record ServerDirectAuthorizeCompleted(
     string? AuthorizationDetails = null,
     string? ResponseMode = null,
     string? IssuerState = null,
-    string? Resource = null): AuthCodeServerFlowInput;
+    string? Resource = null): AuthCodeServerFlowInput
+{
+    /// <summary>
+    /// The DPoP binding the direct authorization request asks for the authorization code, the
+    /// thumbprint its <c>dpop_jkt</c> named per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10">RFC 9449 Section 10</see>, or
+    /// <see langword="null"/> when it named none. Recorded onto
+    /// <see cref="ServerCodeIssuedState.Confirmation"/> in the transition that consumes this input.
+    /// </summary>
+    public ConfirmationMethod? Confirmation { get; init; }
+}

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.AuthCode.Server.States;
 
@@ -163,4 +164,20 @@ public sealed record ServerCodeIssuedState: FlowState
     /// refresh token stays bound to the full original grant (§2.2).
     /// </summary>
     public string? Resource { get; init; }
+
+    /// <summary>
+    /// The DPoP binding of the authorization code: the JWK SHA-256 Thumbprint the authorization
+    /// request named with <c>dpop_jkt</c>, or the thumbprint of the DPoP proof checked at the
+    /// pushed request, or <see langword="null"/> when the code is bound to no DPoP public key.
+    /// The token endpoint redeems a bound code only under a DPoP proof whose public key has this
+    /// thumbprint, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10">RFC 9449 Section 10</see>:
+    /// "When a token request is received, the authorization server computes the JWK Thumbprint
+    /// of the proof-of-possession public key in the DPoP proof and verifies that it matches the
+    /// dpop_jkt parameter value in the authorization request. If they do not match, it MUST
+    /// reject the request." and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10.1">Section 10.1</see>:
+    /// "reject the subsequent token request unless a DPoP proof for the same key is provided."
+    /// </summary>
+    public ConfirmationMethod? Confirmation { get; init; }
 }

@@ -240,11 +240,13 @@ public static class DefaultDpopNonceValidation
     /// data, unless the specification referring to this document explicitly states otherwise"; RFC 7515 Section 2 states
     /// no such exception. This check holds that rule before any decoder runs. A decoder that reads <c>+</c> and
     /// <c>/</c> as the values of <c>-</c> and <c>_</c> is outside Section 3.3, and for such a decoder this check is what
-    /// holds RFC 9449's exact match against that spelling of the supplied octets.
+    /// holds RFC 9449's exact match against that spelling of the supplied octets. It is the one base64url alphabet rule
+    /// of the DPoP code, read also for the spelling of a JWK SHA-256 Thumbprint by
+    /// <see cref="DpopJwkUtilities.IsJwkSha256ThumbprintSpelling(string)"/>.
     /// </summary>
-    /// <param name="text">The presented nonce.</param>
+    /// <param name="text">The presented nonce, or the presented thumbprint.</param>
     /// <returns><see langword="true"/> when the text is base64url characters alone.</returns>
-    private static bool IsBase64UrlText(string text)
+    internal static bool IsBase64UrlText(string text)
     {
         foreach(char c in text)
         {
@@ -273,11 +275,13 @@ public static class DefaultDpopNonceValidation
     /// conforming decoder does not reach it, since an alphabet-only text of the decoded length's octets has the canonical
     /// length. The pad-bit comparison is the one enforcement of the canonical spelling for a decoder that reads a set
     /// pad bit (Section 3.5: "decoders MAY chose to reject an encoding if the pad bits have not been set to zero").
+    /// It is the one canonical-spelling rule of the DPoP code, read also for the 32 octets of a JWK SHA-256 Thumbprint
+    /// by <see cref="DpopJwkUtilities.IsJwkSha256ThumbprintSpelling(string)"/>.
     /// </summary>
-    /// <param name="text">The presented nonce.</param>
-    /// <param name="octetCount">The number of octets the nonce decodes to.</param>
+    /// <param name="text">The presented nonce, or the presented thumbprint.</param>
+    /// <param name="octetCount">The number of octets the text decodes to.</param>
     /// <returns><see langword="true"/> when the text is the canonical base64url of its octets.</returns>
-    private static bool IsCanonicalBase64UrlOf(string text, int octetCount)
+    internal static bool IsCanonicalBase64UrlOf(string text, int octetCount)
     {
         int canonicalLength = ((octetCount * 4) + 2) / 3;
         if(text.Length != canonicalLength)
@@ -296,10 +300,13 @@ public static class DefaultDpopNonceValidation
     }
 
 
-    /// <summary>The value of <paramref name="c"/> in the base64url alphabet of RFC 4648 Section 5, Table 2.</summary>
+    /// <summary>
+    /// The value of <paramref name="c"/> in the base64url alphabet of RFC 4648 Section 5, Table 2, the one table the
+    /// base64url spelling checks of the DPoP code read.
+    /// </summary>
     /// <param name="c">The character.</param>
     /// <returns>The value, 0 to 63, or -1 for a character outside the alphabet.</returns>
-    private static int Base64UrlValue(char c) => c switch
+    internal static int Base64UrlValue(char c) => c switch
     {
         >= 'A' and <= 'Z' => c - 'A',
         >= 'a' and <= 'z' => c - 'a' + 26,

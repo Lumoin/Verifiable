@@ -38,8 +38,13 @@ namespace Verifiable.OAuth.AuthCode.Server;
 /// <see cref="ValidatePresentedProofAsync"/> once, before any record is loaded, and its handler
 /// calls <see cref="BindValidatedProofAsync"/> once the record's binding is known. Every other
 /// call site (client credentials, token exchange, the JWT-bearer grant, the pre-authorized code
-/// grant) has no pre-correlation step and keeps calling <see cref="ValidateAsync"/> exactly as
-/// before — those grants create no prior record for a request-only decision to run ahead of.
+/// grant, and the pushed authorization request) has no pre-correlation step and calls
+/// <see cref="ValidateAsync"/>: those requests create no prior record for a request-only decision
+/// to run ahead of. At the pushed authorization request the proof is checked as
+/// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10.1">RFC 9449 Section 10.1</see>
+/// requires ("the authorization server MUST check the provided DPoP proof JWT as defined in Section
+/// 4.3"), its <c>htu</c> being the pushed request's own target, and the thumbprint it carries
+/// becomes the binding of the code the request leads to.
 /// <c>ValidateDpopProofAsync</c>, <c>ValidateDpopNonceAsync</c> and the <c>jti</c> guard each run
 /// AT MOST once per request: a proof-absent or early-rejected request reaches none of them; a
 /// nonce challenge or an invalid proof registers no <c>jti</c>; only a request whose proof
@@ -88,7 +93,16 @@ internal static class DpopTokenEndpointValidation
     /// <paramref name="proofRequiredByRegistration"/> is <see langword="false"/>) the outcome is
     /// stored on <paramref name="context"/> via <c>SetDpopStepOutcome</c> for
     /// <see cref="BindValidatedProofAsync"/> to read once the endpoint's handler has loaded the
-    /// stored record. A challenge or refusal registers no <c>jti</c>.
+    /// stored record. A challenge or refusal registers no <c>jti</c>. A validated proof always
+    /// carries the base64url JWK SHA-256 Thumbprint of its public key
+    /// (<see cref="DpopProofValidationResult.JwkThumbprint"/>; the <c>jkt</c> member of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.1">RFC 9449 Section 6.1</see>,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7638#section-3">RFC 7638 Section 3</see>); an
+    /// application's validator answering success with no value, the empty string or text of another
+    /// spelling is answered <c>server_error</c>, so a validated proof is never carried as no proof at
+    /// all and never binds text that is not spelled as a JWK SHA-256 Thumbprint. A correctly spelled
+    /// thumbprint that is not the proof key's own stays the validator's contract: the result carries
+    /// no JWK, so the server cannot recompute it.
     /// </para>
     /// </remarks>
     /// <param name="server">The authorization server holding codecs, cryptography, and integration delegates.</param>
@@ -181,6 +195,18 @@ internal static class DpopTokenEndpointValidation
                 $"DPoP proof validation failed: {proofResult.FailureReason}.");
         }
 
+        //A validation that answers success names the base64url JWK SHA-256 Thumbprint of the
+        //proof's public key (DpopProofValidationResult.JwkThumbprint; RFC 9449 Section 6.1, the jkt
+        //member; RFC 7638 Section 3). An application's validator answering success with no value,
+        //the empty string or text of another spelling leaves no thumbprint to bind the code or the
+        //tokens to, so the request fails closed as a server error before any nonce or jti work,
+        //never an unbound or a misbound issuance; the spelling rule is the one dpop_jkt is held to.
+        if(proofResult.JwkThumbprint is not string proofThumbprint
+            || !DpopJwkUtilities.IsJwkSha256ThumbprintSpelling(proofThumbprint))
+        {
+            return ServerHttpResponse.ServerError(OAuthErrors.ServerError, ValidatedProofWithoutThumbprintDescription);
+        }
+
         if(proofResult.Claims!.Nonce is not null)
         {
             DpopNonceValidationResult nonceResult = await oauth.ValidateDpopNonceAsync(
@@ -239,11 +265,7 @@ internal static class DpopTokenEndpointValidation
             return jtiFailure;
         }
 
-        ConfirmationMethod? confirmation = proofResult.JwkThumbprint is not null
-            ? new ConfirmationMethod { JwkThumbprint = proofResult.JwkThumbprint }
-            : null;
-
-        context.SetDpopStepOutcome(DpopValidationOutcome.Success(confirmation));
+        context.SetDpopStepOutcome(DpopValidationOutcome.Success(new ConfirmationMethod { JwkThumbprint = proofThumbprint }));
 
         return null;
     }
@@ -257,15 +279,31 @@ internal static class DpopTokenEndpointValidation
     /// <para>
     /// Reads the outcome <see cref="ValidatePresentedProofAsync"/> carried on the request
     /// context and performs ONLY the checks that need the stored record: (a) no proof was
-    /// presented at the step — when <paramref name="proofRequiredByRecord"/> (a DPoP-bound
-    /// refresh token, the record's own <c>Confirmation</c>), the refresh endpoint's own
-    /// not-found constant (<see cref="Verifiable.OAuth.AuthCode.AuthCodeEndpoints.RefreshTokenNotFoundDescription"/>)
-    /// under <c>invalid_grant</c>, never a nonce challenge that would itself prove the record's
-    /// binding exists; otherwise no binding; (b) a proof was validated at the step —
-    /// <paramref name="expectedThumbprint"/> non-null and different from the carried
-    /// confirmation's answers the same constant, never <c>invalid_dpop_proof</c>; otherwise the
-    /// carried confirmation succeeds. Never re-runs proof parsing, signature verification, the
-    /// nonce decision, or the <c>jti</c> replay guard — those ran exactly once, in the step.
+    /// presented at the step: when <paramref name="proofRequiredByRecord"/> (a record bound to a
+    /// DPoP public key), the endpoint's own not-found constant
+    /// (<paramref name="notFoundDescription"/>) under <c>invalid_grant</c>, never a nonce challenge
+    /// that would itself prove the record's binding exists; otherwise no binding; (b) a proof was
+    /// validated at the step: <paramref name="expectedThumbprint"/> non-null and different from
+    /// the carried confirmation's answers the same constant, never <c>invalid_dpop_proof</c>;
+    /// otherwise the carried confirmation succeeds. Never re-runs proof parsing, signature
+    /// verification, the nonce decision, or the <c>jti</c> replay guard; those ran exactly once,
+    /// in the step.
+    /// </para>
+    /// <para>
+    /// The refresh grant passes the refresh token's stored binding and
+    /// <see cref="Verifiable.OAuth.AuthCode.AuthCodeEndpoints.RefreshTokenNotFoundDescription"/>,
+    /// verifying the binding the refresh token was issued under
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>: "The
+    /// binding MUST be validated when the refresh token is later presented to get new access
+    /// tokens."). The code redemption passes the code's binding, the thumbprint the authorization
+    /// request named with <c>dpop_jkt</c> or the pushed request's proof carried, and
+    /// <see cref="Verifiable.OAuth.AuthCode.AuthCodeEndpoints.CodeGrantNotFoundDescription"/>:
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10">RFC 9449 Section 10</see>, "the
+    /// authorization server computes the JWK Thumbprint of the proof-of-possession public key in the
+    /// DPoP proof and verifies that it matches the dpop_jkt parameter value in the authorization
+    /// request. If they do not match, it MUST reject the request." A code bound to no DPoP public key
+    /// passes no expected thumbprint, and a validated proof establishes the binding of the issued
+    /// tokens.
     /// </para>
     /// </remarks>
     /// <param name="server">The authorization server holding codecs, cryptography, and integration delegates.</param>
@@ -274,13 +312,18 @@ internal static class DpopTokenEndpointValidation
     /// <param name="issuerUri">The authorization server's issuer URI; combined with the request path to form the expected DPoP <c>htu</c> claim and to key the JTI replay record.</param>
     /// <param name="carriedOutcome">The outcome <see cref="ValidatePresentedProofAsync"/> recorded on the context earlier in this same request.</param>
     /// <param name="expectedThumbprint">
-    /// When non-null, the carried proof's JWK thumbprint MUST match this value; used on
-    /// refresh-grant where the binding is being VERIFIED. When null, the carried
-    /// <see cref="DpopValidationOutcome.Confirmation"/> is accepted as-is; used on code-grant
-    /// where the binding is being ESTABLISHED.
+    /// When non-null, the carried proof's JWK thumbprint MUST match this value: the binding of a
+    /// DPoP-bound refresh token or of a DPoP-bound authorization code, being VERIFIED. When null,
+    /// the carried <see cref="DpopValidationOutcome.Confirmation"/> is accepted as-is: the record
+    /// carries no binding, and a validated proof ESTABLISHES one.
     /// </param>
     /// <param name="proofRequiredByRecord">Whether the STORED record (not the registration's profile) requires a bound DPoP proof.</param>
+    /// <param name="notFoundDescription">
+    /// The endpoint's own description for an unknown grant, answered under <c>invalid_grant</c> by
+    /// both refusals so a refusal that reads the record never tells whether the record exists.
+    /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The carried confirmation, no binding, or the refusal to answer with.</returns>
     public static ValueTask<DpopValidationOutcome> BindValidatedProofAsync(
         EndpointServer server,
         ExchangeContext context,
@@ -289,6 +332,7 @@ internal static class DpopTokenEndpointValidation
         DpopValidationOutcome carriedOutcome,
         string? expectedThumbprint,
         bool proofRequiredByRecord,
+        string notFoundDescription,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(server);
@@ -296,6 +340,7 @@ internal static class DpopTokenEndpointValidation
         ArgumentNullException.ThrowIfNull(registration);
         ArgumentNullException.ThrowIfNull(issuerUri);
         ArgumentNullException.ThrowIfNull(carriedOutcome);
+        ArgumentException.ThrowIfNullOrEmpty(notFoundDescription);
 
         if(carriedOutcome.Confirmation is null)
         {
@@ -304,32 +349,29 @@ internal static class DpopTokenEndpointValidation
                 return ValueTask.FromResult(DpopValidationOutcome.NoBinding);
             }
 
-            //A DPoP-bound refresh token presented without a proof, under a profile that does not
-            //itself require DPoP: RFC 9449 §8 governs a PROOF presented without the server's
-            //nonce, not a request presenting no proof at all, and §5 (the binding "MUST be
-            //validated when the refresh token is later presented") names no error for a missing
-            //proof. A refusal that reads the record answers the endpoint's constant — never a
-            //nonce challenge, which would itself prove the record's binding exists — so the
-            //answer never tells whether the record exists. Only the refresh grant ever passes
-            //proofRequiredByRecord: true (the code grant always passes false, establishing rather
-            //than verifying a binding), so this exit is refresh-only.
+            //A DPoP-bound record (a refresh token, or an authorization code its request bound to a
+            //DPoP public key) presented without a proof, under a profile that does not itself
+            //require DPoP: RFC 9449 Section 8 governs a PROOF presented without the server's nonce,
+            //not a request presenting no proof at all; Section 5 (the binding "MUST be validated
+            //when the refresh token is later presented") and Section 10 ("If they do not match, it
+            //MUST reject the request.") name no error for a missing proof. A refusal that reads the
+            //record answers the endpoint's constant, never a nonce challenge, which would itself
+            //prove the record's binding exists, so the answer never tells whether the record exists.
             return ValueTask.FromResult(DpopValidationOutcome.Failure(ServerHttpResponse.BadRequest(
-                OAuthErrors.InvalidGrant, Verifiable.OAuth.AuthCode.AuthCodeEndpoints.RefreshTokenNotFoundDescription)));
+                OAuthErrors.InvalidGrant, notFoundDescription)));
         }
 
         if(expectedThumbprint is not null
             && !string.Equals(carriedOutcome.Confirmation.JwkThumbprint, expectedThumbprint, StringComparison.Ordinal))
         {
-            //A valid proof bound to a key other than the one the record names: RFC 9449 §5
-            //prescribes invalid_dpop_proof for an INVALID proof — already answered before
-            //correlation, in ValidatePresentedProofAsync — and prescribes nothing for a valid
-            //proof bound to the wrong key. A refusal that reads
-            //the record answers the endpoint's constant so the answer never tells whether the
-            //record exists. Only the refresh grant ever passes a non-null expectedThumbprint (the
-            //code grant always passes null, establishing rather than verifying a binding), so
-            //this exit is refresh-only.
+            //A valid proof bound to a DPoP public key other than the one the record names: RFC 9449
+            //Section 5 prescribes invalid_dpop_proof for an INVALID proof, already answered before
+            //correlation in ValidatePresentedProofAsync, and prescribes nothing for a valid proof
+            //bound to another DPoP public key; Section 10 says only that the server "MUST reject the
+            //request". A refusal that reads the record answers the endpoint's constant so the
+            //answer never tells whether the record exists.
             return ValueTask.FromResult(DpopValidationOutcome.Failure(ServerHttpResponse.BadRequest(
-                OAuthErrors.InvalidGrant, Verifiable.OAuth.AuthCode.AuthCodeEndpoints.RefreshTokenNotFoundDescription)));
+                OAuthErrors.InvalidGrant, notFoundDescription)));
         }
 
         return ValueTask.FromResult(DpopValidationOutcome.Success(carriedOutcome.Confirmation));
@@ -337,14 +379,18 @@ internal static class DpopTokenEndpointValidation
 
 
     /// <summary>
-    /// Validates a DPoP proof presented at the token endpoint and persists the JTI marker for
-    /// replay defense. Its four remaining callers are the grants with no pre-correlation step —
-    /// <c>BuildClientCredentials</c>, <c>BuildTokenExchange</c>, the JWT-bearer grant's candidate,
-    /// and the pre-authorized code grant's candidate — each establishing a binding rather than
-    /// verifying one against a stored record, so each passes <paramref name="expectedThumbprint"/>
-    /// as <see langword="null"/>. The two step endpoints (code redemption, refresh) never call
-    /// this method: their pre-correlation step calls <see cref="ValidatePresentedProofAsync"/> and
-    /// their handler calls <see cref="BindValidatedProofAsync"/>.
+    /// Validates a DPoP proof presented at the token endpoint or at the pushed authorization
+    /// request and persists the JTI marker for replay defense. Its callers are the requests with no
+    /// pre-correlation step: <c>BuildClientCredentials</c>, <c>BuildTokenExchange</c>, the
+    /// JWT-bearer grant's candidate, the pre-authorized code grant's candidate, and the pushed
+    /// authorization request (<c>BuildPar</c> and <c>BuildJarPar</c>, which pass
+    /// <paramref name="dpopRequired"/> as <see langword="false"/> and read the returned
+    /// confirmation as the binding the code is to carry, RFC 9449 Section 10.1), each
+    /// establishing a binding rather than verifying one against a stored record, so each passes
+    /// <paramref name="expectedThumbprint"/> as <see langword="null"/>. The two step endpoints (code
+    /// redemption, refresh) never call this method: their pre-correlation step calls
+    /// <see cref="ValidatePresentedProofAsync"/> and their handler calls
+    /// <see cref="BindValidatedProofAsync"/>.
     /// </summary>
     /// <param name="server">The authorization server holding codecs, cryptography, and integration delegates.</param>
     /// <param name="context">The per-request context bag.</param>
@@ -352,13 +398,23 @@ internal static class DpopTokenEndpointValidation
     /// <param name="issuerUri">The authorization server's issuer URI; combined with the request path to form the expected DPoP <c>htu</c> claim and to key the JTI replay record.</param>
     /// <param name="now">The current instant the DPoP proof's freshness window is evaluated against.</param>
     /// <param name="expectedThumbprint">
-    /// When non-null, the proof's JWK thumbprint MUST match this value — no remaining caller
-    /// passes a non-null value, since none of the four verifies a binding already on record. When
+    /// When non-null, the proof's JWK thumbprint MUST match this value; no caller passes a
+    /// non-null value, since none verifies a binding already on record. When
     /// null, any well-formed proof's thumbprint is captured into the returned
     /// <see cref="DpopValidationOutcome.Confirmation"/>.
     /// </param>
     /// <param name="dpopRequired">Whether presenting a DPoP proof is mandatory for this request; when <see langword="false"/> and none is presented, the token issues as Bearer.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>
+    /// The confirmation of the validated proof's public key; no binding when no proof was presented
+    /// and none is required; or the refusal to answer with, a <c>server_error</c> among them when
+    /// the application's validator answers a proof valid without the base64url JWK SHA-256
+    /// Thumbprint <see cref="DpopProofValidationResult.JwkThumbprint"/> promises on success (the
+    /// <c>jkt</c> member of <see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.1">RFC 9449
+    /// Section 6.1</see>, <see href="https://www.rfc-editor.org/rfc/rfc7638#section-3">RFC 7638
+    /// Section 3</see>): no value, the empty string or text of another spelling, never an unbound or a
+    /// misbound issuance.
+    /// </returns>
     public static async ValueTask<DpopValidationOutcome> ValidateAsync(
         EndpointServer server,
         ExchangeContext context,
@@ -434,11 +490,27 @@ internal static class DpopTokenEndpointValidation
                 $"DPoP proof validation failed: {proofResult.FailureReason}."));
         }
 
-        //Refresh-grant verifies the bound thumbprint before nonce/JTI work.
-        //Cheap string compare; fail-fast keeps storage out of the wrong-key
-        //attack surface.
+        //A validation that answers success names the base64url JWK SHA-256 Thumbprint of the
+        //proof's public key (DpopProofValidationResult.JwkThumbprint; RFC 9449 Section 6.1, the jkt
+        //member; RFC 7638 Section 3). RFC 9449 Section 10.1 has the pushed request "behave as if the
+        //contained public key's thumbprint was provided using dpop_jkt" and Section 5 has the token
+        //endpoint associate the issued token "with the public key from the DPoP proof"; an
+        //application's validator answering success with no value, the empty string or text of
+        //another spelling leaves neither possible, so the request fails closed as a server error,
+        //never an unbound or a misbound issuance, before any nonce or jti work. The spelling rule
+        //is the one dpop_jkt is held to.
+        if(proofResult.JwkThumbprint is not string proofThumbprint
+            || !DpopJwkUtilities.IsJwkSha256ThumbprintSpelling(proofThumbprint))
+        {
+            return DpopValidationOutcome.Failure(ServerHttpResponse.ServerError(
+                OAuthErrors.ServerError, ValidatedProofWithoutThumbprintDescription));
+        }
+
+        //A caller that verifies a binding already on record passes the expected thumbprint; no
+        //caller does so today. The ordinal compare runs before any nonce or jti work, so a proof
+        //by the wrong key never reaches storage.
         if(expectedThumbprint is not null
-            && !string.Equals(proofResult.JwkThumbprint, expectedThumbprint, StringComparison.Ordinal))
+            && !string.Equals(proofThumbprint, expectedThumbprint, StringComparison.Ordinal))
         {
             return DpopValidationOutcome.Failure(ServerHttpResponse.BadRequest(
                 OAuthErrors.InvalidDpopProof,
@@ -503,12 +575,28 @@ internal static class DpopTokenEndpointValidation
             return DpopValidationOutcome.Failure(jtiFailure);
         }
 
-        ConfirmationMethod? confirmation = proofResult.JwkThumbprint is not null
-            ? new ConfirmationMethod { JwkThumbprint = proofResult.JwkThumbprint }
-            : null;
-
-        return DpopValidationOutcome.Success(confirmation);
+        return DpopValidationOutcome.Success(new ConfirmationMethod { JwkThumbprint = proofThumbprint });
     }
+
+
+    /// <summary>
+    /// The description a request is answered with under <c>server_error</c> when the application's
+    /// <see cref="AuthorizationServerIntegration.ValidateDpopProofAsync"/> answers a proof valid
+    /// without the JWK SHA-256 Thumbprint of its public key that
+    /// <see cref="DpopProofValidationResult.JwkThumbprint"/> promises on every success, in the
+    /// spelling <see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.1">RFC 9449 Section
+    /// 6.1</see> gives the <c>jkt</c> member ("the base64url encoding (as defined in [RFC7515]) of
+    /// the JWK SHA-256 Thumbprint (according to [RFC7638]) of the DPoP public key"): no value, the
+    /// empty string and text of another spelling alike. The pushed request cannot then "behave as if
+    /// the contained public key's thumbprint was provided using dpop_jkt"
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-10.1">RFC 9449 Section 10.1</see>)
+    /// and the token endpoint cannot associate the issued token "with the public key from the DPoP
+    /// proof" (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">Section 5</see>), so the
+    /// request fails closed rather than binding nothing or binding text that is not spelled as a
+    /// thumbprint.
+    /// </summary>
+    private static string ValidatedProofWithoutThumbprintDescription { get; } =
+        "The DPoP proof validator answered no JWK SHA-256 Thumbprint for a valid proof.";
 }
 
 

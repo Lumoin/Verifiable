@@ -2052,6 +2052,41 @@ internal sealed class ClientCredentialsGrantTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>: "To sender-constrain the
+    /// access token after checking the validity of the DPoP proof, the authorization server associates the issued
+    /// access token with the public key from the DPoP proof", the association being
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.1">Section 6.1</see>) a <c>jkt</c> whose value
+    /// "MUST be the base64url encoding (as defined in [RFC7515]) of the JWK SHA-256 Thumbprint (according to [RFC7638])
+    /// of the DPoP public key". An authorization server whose DPoP proof validation answers a valid proof with no such
+    /// thumbprint cannot associate the token with it, whether it answers no value, the empty string, or the
+    /// 64-character lowercase hexadecimal spelling of a SHA-256 digest: a <c>client_credentials</c> request sent to the
+    /// token endpoint over the wire with such a proof, carrying the supplied nonce, is answered 500
+    /// <c>server_error</c> and no access token is issued.
+    /// </summary>
+    /// <param name="answeredJwkThumbprint">The JWK thumbprint the validation answers for the valid proof.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(null, DisplayName = "no thumbprint")]
+    [DataRow("", DisplayName = "the empty string")]
+    [DataRow(DpopCodeBindingWire.HexadecimalSha256Digest, DisplayName = "a hex thumbprint")]
+    public async Task TokenEndpointProofWhoseValidatorAnswersNoJwkThumbprintIsAServerErrorAsync(string? answeredJwkThumbprint)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterMachineClientAsync(app).ConfigureAwait(false);
+        Uri tokenUrl = await StartDpopTokenEndpointAsync(app, material).ConfigureAwait(false);
+        using FreshDpopKey dpopKey = new();
+
+        string nonce = await ObtainTokenEndpointNonceAsync(app, tokenUrl, dpopKey.Key).ConfigureAwait(false);
+        await app.AnswerValidatedDpopProofsWithJwkThumbprintAsync(answeredJwkThumbprint).ConfigureAwait(false);
+        string proof = await BuildTokenProofAsync(dpopKey.Key, tokenUrl, nonce).ConfigureAwait(false);
+        (int statusCode, string body, _) = await PostMachineTokenRequestAsync(app, tokenUrl, proof).ConfigureAwait(false);
+
+        DpopCodeBindingWire.AssertError(statusCode, body, 500, "server_error", "The DPoP proof validator answered no JWK SHA-256 Thumbprint for a valid proof.");
+        Assert.DoesNotContain(WellKnownTokenTypes.AccessToken, body, "A proof validated without a JWK SHA-256 Thumbprint never mints an access token.");
+    }
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-2">RFC 9449 Section 2</see>: "DPoP is not, however, a
     /// substitute for a secure transport and MUST always be used in conjunction with HTTPS." A client wired with a
     /// DPoP key and the secure default outbound policy, asked for a <c>client_credentials</c> token at an endpoint

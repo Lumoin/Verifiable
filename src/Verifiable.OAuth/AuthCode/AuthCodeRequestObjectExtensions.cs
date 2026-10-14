@@ -24,6 +24,12 @@ namespace Verifiable.OAuth.AuthCode;
 /// required claim is the bug being surfaced; the exception path is the right
 /// shape for that.
 /// </para>
+/// <para>
+/// The optional <c>dpop_jkt</c> claim (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-10">RFC 9449
+/// Section 10</see>) is projected onto <see cref="AuthCodeRequestObject.DpopJkt"/>: a JSON string is carried as
+/// given, its spelling judged by the endpoint where the server verifies DPoP proofs and the claim ignored where it
+/// does not; a claim of another JSON type raises <see cref="FormatException"/> as any other malformed claim does.
+/// </para>
 /// </remarks>
 [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "C# 13 extension blocks are surfaced as nested types by the analyzer but are not nested types in the language sense.")]
 public static class AuthCodeRequestObjectExtensions
@@ -46,8 +52,8 @@ public static class AuthCodeRequestObjectExtensions
         /// <returns>The typed projection.</returns>
         /// <exception cref="FormatException">
         /// Thrown when an RFC 9101 §4 required claim is missing or has the
-        /// wrong runtime type, or when <c>redirect_uri</c> is not an absolute
-        /// <see cref="Uri"/>.
+        /// wrong runtime type, when <c>redirect_uri</c> is not an absolute
+        /// <see cref="Uri"/>, or when a <c>dpop_jkt</c> claim is not a JSON string.
         /// </exception>
         public AuthCodeRequestObject ProjectAuthCode(string? rawAuthorizationDetails = null)
         {
@@ -89,6 +95,7 @@ public static class AuthCodeRequestObjectExtensions
             //originated here — so the projection neither validates nor interprets it.
             string? issuerState = JwtClaimReaders.OptionalClaim(claims, OAuthRequestParameterNames.IssuerState);
             string? resource = ReadResourceClaim(claims);
+            string? dpopJkt = ReadDpopJktClaim(claims);
             int? maxAge = null;
             if(claims.TryGetValue(OAuthRequestParameterNames.MaxAge, out object? maxAgeClaim))
             {
@@ -124,9 +131,52 @@ public static class AuthCodeRequestObjectExtensions
                 AuthorizationDetails = rawAuthorizationDetails,
                 ResponseMode = responseMode,
                 IssuerState = issuerState,
-                Resource = resource
+                Resource = resource,
+                DpopJkt = dpopJkt
             };
         }
+    }
+
+
+    /// <summary>
+    /// Reads the <c>dpop_jkt</c> claim of a Request Object, the JWK SHA-256 Thumbprint the
+    /// authorization code is to be bound to per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10">RFC 9449 Section 10</see>:
+    /// "The value of the dpop_jkt authorization request parameter is the JWK Thumbprint [RFC7638]
+    /// of the proof-of-possession public key using the SHA-256 hash function". An absent claim and
+    /// the empty string read as no binding, the reading
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 Section 3.1</see>
+    /// gives the form parameter: "Parameters sent without a value MUST be treated as if they were
+    /// omitted from the request." Any other JSON string is carried as given, its spelling unjudged:
+    /// the claim is an authorization request parameter
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9101#section-6.3">RFC 9101 Section 6.3</see>:
+    /// "The authorization server MUST extract the set of authorization request parameters from the
+    /// Request Object value."), which an authorization server that verifies no DPoP proof MUST
+    /// ignore as unrecognized (RFC 6749 Section 3.1) and one that does judges where it validates the
+    /// request. A claim of any other JSON type is a malformed Request Object whatever the server
+    /// supports, as a <c>max_age</c> claim that is no integer is, since
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-4">RFC 9101 Section 4</see> fixes
+    /// how a Request Object carries a parameter whatever the parameter is: "Parameter names and
+    /// string values MUST be included as JSON strings." A non-string is not read as absent, since
+    /// that would drop a binding the client asked for.
+    /// </summary>
+    /// <param name="claims">The verified Request Object's claims.</param>
+    /// <returns>The claim's text, or <see langword="null"/> when the claim is absent or empty.</returns>
+    /// <exception cref="FormatException">Thrown when the claim is present and not a JSON string.</exception>
+    private static string? ReadDpopJktClaim(IReadOnlyDictionary<string, object> claims)
+    {
+        if(!claims.TryGetValue(OAuthRequestParameterNames.DpopJkt, out object? raw))
+        {
+            return null;
+        }
+
+        return raw switch
+        {
+            string { Length: 0 } => null,
+            string value => value,
+            _ => throw new FormatException(
+                $"JAR '{OAuthRequestParameterNames.DpopJkt}' claim is not a string.")
+        };
     }
 
 

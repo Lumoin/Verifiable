@@ -6,6 +6,7 @@ using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
+using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.OAuth;
 
@@ -256,20 +257,132 @@ internal static class RawAuthCodeWirePushers
             return (parStatusCode, parBody, null, 0);
         }
 
+        (Uri? authorizeLocation, int authorizeStatusCode) = await AuthorizePushedRequestAsync(
+            host, segment, clientId, subjectId, parBody, [], cancellationToken).ConfigureAwait(false);
+
+        return (parStatusCode, parBody, authorizeLocation, authorizeStatusCode);
+    }
+
+
+    /// <summary>
+    /// Sends the browser's authorize GET for a pushed request over the real wire: reads the
+    /// <c>request_uri</c> out of <paramref name="parBody"/>, the <c>201</c> body of the pushed
+    /// request, and sends the pinned no-redirect GET carrying <c>client_id</c>, that
+    /// <c>request_uri</c> and then every pair of <paramref name="extraQuery"/> as given, as
+    /// <paramref name="subjectId"/>. Asserts nothing itself.
+    /// </summary>
+    /// <param name="host">The fixture owning the listener.</param>
+    /// <param name="segment">The tenant route segment.</param>
+    /// <param name="clientId">The <c>client_id</c> presented at the authorize GET.</param>
+    /// <param name="subjectId">The authenticated-session stand-in header value for the authorize GET.</param>
+    /// <param name="parBody">The <c>201</c> body of the pushed authorization request.</param>
+    /// <param name="extraQuery">Further query parameters sent beside <c>request_uri</c>, in order.</param>
+    /// <param name="cancellationToken">Cancellation of the wire exchange.</param>
+    /// <returns>The authorize response's <c>Location</c> and status code.</returns>
+    public static async Task<(Uri? AuthorizeLocation, int AuthorizeStatusCode)> AuthorizePushedRequestAsync(
+        TestHostShell host, string segment, string clientId, string subjectId, string parBody,
+        IReadOnlyCollection<KeyValuePair<string, string>> extraQuery, CancellationToken cancellationToken)
+    {
         using JsonDocument parDocument = JsonDocument.Parse(parBody);
         string requestUri = parDocument.RootElement.GetProperty("request_uri").GetString()!;
 
-        Uri authorizeUri = ComposeAuthorizeUri(host, segment,
+        List<KeyValuePair<string, string>> query =
         [
             new(OAuthRequestParameterNames.ClientId, clientId),
-            new(OAuthRequestParameterNames.RequestUri, requestUri)
-        ]);
+            new(OAuthRequestParameterNames.RequestUri, requestUri),
+            .. extraQuery
+        ];
+        Uri authorizeUri = ComposeAuthorizeUri(host, segment, query);
 
         using HttpResponseMessage authorizeResponse = await SendPinnedNoRedirectGetAsync(
             host, authorizeUri, subjectId, cancellationToken).ConfigureAwait(false);
 
-        return (parStatusCode, parBody, authorizeResponse.Headers.Location, (int)authorizeResponse.StatusCode);
+        return (authorizeResponse.Headers.Location, (int)authorizeResponse.StatusCode);
     }
+
+
+    /// <summary>
+    /// Resolves the pushed authorization request endpoint's absolute URI for <paramref name="segment"/>, the
+    /// <c>htu</c> value a DPoP proof sent with a pushed request carries
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.2">RFC 9449 Section 4.2</see>: "The HTTP
+    /// target URI ... of the request to which the JWT is attached, without query and fragment parts").
+    /// </summary>
+    /// <param name="host">The fixture owning the listener.</param>
+    /// <param name="segment">The tenant route segment.</param>
+    /// <returns>The pushed authorization request endpoint's absolute URI.</returns>
+    public static Uri ResolveParEndpointUri(TestHostShell host, string segment)
+    {
+        HostedAuthorizationServer hosted = host.Host("default");
+
+        return new Uri(hosted.HttpBaseAddress!, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodePar, segment));
+    }
+
+
+    /// <summary>
+    /// Obtains a <c>DPoP-Nonce</c> the authorization server supplies, read off its token endpoint's challenge over the
+    /// real wire: a code redemption of a code that was never issued, with a code verifier of the
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.1">RFC 7636 Section 4.1</see> syntax (43 to 128
+    /// unreserved characters), carrying a proof by <paramref name="key"/> with no <c>nonce</c>, is answered 400 <c>use_dpop_nonce</c> with the nonce in its <c>DPoP-Nonce</c> field
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">RFC 9449 Section 8</see>: "the authorization
+    /// server responds to requests that do not include a nonce with an HTTP 400 (Bad Request) error response ... The
+    /// authorization server includes a DPoP-Nonce HTTP header in the response supplying a nonce value"). Asserts the
+    /// challenge.
+    /// </summary>
+    /// <param name="host">The fixture owning the listener.</param>
+    /// <param name="segment">The tenant route segment.</param>
+    /// <param name="clientId">The <c>client_id</c> of the redemption.</param>
+    /// <param name="key">The DPoP key that signs the nonce-less proof.</param>
+    /// <param name="issuedAt">The <c>iat</c> of the proof.</param>
+    /// <param name="cancellationToken">Cancellation of the wire exchange.</param>
+    /// <returns>The supplied nonce.</returns>
+    public static async Task<string> ObtainTokenEndpointDpopNonceAsync(
+        TestHostShell host, string segment, string clientId, DpopKey key, DateTimeOffset issuedAt,
+        CancellationToken cancellationToken)
+    {
+        HostedAuthorizationServer hosted = host.Host("default");
+        Uri tokenUri = ResolveTokenEndpointUri(host, segment);
+        string proof = await ResourceDpopProofs.BuildAsync(
+            key, WellKnownHttpMethods.Post, tokenUri.OriginalString, accessToken: null, nonce: null, issuedAt,
+            cancellationToken).ConfigureAwait(false);
+
+        HttpResponseData challenge = await HttpClientTransport.SendFormPostAsync(
+            hosted.SharedHttpClient!, tokenUri,
+            BuildTokenFields(clientId, "never-issued-authorization-code", "never-issued-code-verifier-of-forty-three-or-more", null),
+            OutgoingHeaders.Empty.WithDpop(proof), cancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, challenge.StatusCode, challenge.Body);
+        Assert.Contains($"\"error\":\"{OAuthErrors.UseDpopNonce}\"", challenge.Body, StringComparison.Ordinal, challenge.Body);
+
+        return challenge.Headers.TryGetSingle(WellKnownHttpHeaderNames.DPoPNonce)
+            ?? throw new AssertFailedException("The use_dpop_nonce challenge must carry a DPoP-Nonce header.");
+    }
+
+
+    /// <summary>
+    /// Redeems <paramref name="code"/> at the token endpoint over the real wire with its PKCE
+    /// <paramref name="codeVerifier"/> and <paramref name="redirectUri"/>, carrying
+    /// <paramref name="dpopProof"/> in the <c>DPoP</c> field or no such field when it is
+    /// <see langword="null"/>.
+    /// </summary>
+    /// <param name="host">The fixture owning the listener.</param>
+    /// <param name="segment">The tenant route segment.</param>
+    /// <param name="clientId">The <c>client_id</c> of the redemption.</param>
+    /// <param name="code">The authorization code.</param>
+    /// <param name="codeVerifier">The PKCE code verifier.</param>
+    /// <param name="redirectUri">The redirect URI the code was issued to.</param>
+    /// <param name="dpopProof">The DPoP proof, or <see langword="null"/> to send none.</param>
+    /// <param name="cancellationToken">Cancellation of the wire exchange.</param>
+    /// <returns>The response's status code and body.</returns>
+    public static Task<(int StatusCode, string Body)> RedeemCodeAsync(
+        TestHostShell host, string segment, string clientId, string code, string codeVerifier, string redirectUri,
+        string? dpopProof, CancellationToken cancellationToken) =>
+        PushRawTokenFieldsAsync(
+            host, segment, BuildTokenFields(clientId, code, codeVerifier, redirectUri),
+            dpopProof switch
+            {
+                null => OutgoingHeaders.Empty,
+                _ => OutgoingHeaders.Empty.WithDpop(dpopProof)
+            },
+            cancellationToken);
 
 
     /// <summary>

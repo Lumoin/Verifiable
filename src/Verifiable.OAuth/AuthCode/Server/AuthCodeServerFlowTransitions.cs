@@ -102,7 +102,8 @@ public static class AuthCodeServerFlowTransitions
                                 AuthorizationDetails = par.AuthorizationDetails,
                                 ResponseMode = par.ResponseMode,
                                 IssuerState = par.IssuerState,
-                                Resource = par.Resource
+                                Resource = par.Resource,
+                                Confirmation = par.Confirmation
                             },
                             StackAction<AuthCodeServerStackSymbol>.None,
                             "ParRequestReceived"),
@@ -133,7 +134,8 @@ public static class AuthCodeServerFlowTransitions
                                 State = direct.State,
                                 AuthorizationDetails = direct.AuthorizationDetails,
                                 ResponseMode = direct.ResponseMode,
-                                Resource = direct.Resource
+                                Resource = direct.Resource,
+                                Confirmation = direct.Confirmation
                             },
                             StackAction<AuthCodeServerStackSymbol>.None,
                             "ServerCodeIssued"),
@@ -166,9 +168,12 @@ public static class AuthCodeServerFlowTransitions
                                 //The pushed authorization_details, response_mode, and resource are
                                 //authoritative by construction — copied from the PAR state,
                                 //never from the front channel (RFC 9101 §6.3 via RFC 9126 §4).
+                                //The DPoP binding of the pushed request is copied the same way,
+                                //so a front-channel dpop_jkt never rebinds the code.
                                 AuthorizationDetails = received.AuthorizationDetails,
                                 ResponseMode = received.ResponseMode,
-                                Resource = received.Resource
+                                Resource = received.Resource,
+                                Confirmation = received.Confirmation
                             },
                             StackAction<AuthCodeServerStackSymbol>.None,
                             "ServerCodeIssued"),

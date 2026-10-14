@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.AuthCode.Server.States;
 
@@ -12,7 +13,8 @@ namespace Verifiable.OAuth.AuthCode.Server.States;
 /// This is the first persistence point for the server-side flow. Everything needed
 /// to validate the subsequent authorize and token requests is stored here:
 /// the PKCE code challenge for downgrade defense, the redirect URI for exact-match
-/// validation, and the scope for grant validation.
+/// validation, the scope for grant validation, and the DPoP binding the code is
+/// to carry (<see cref="Confirmation"/>).
 /// </para>
 /// <para>
 /// The <see cref="RequestUri"/> is used as a secondary lookup key when the
@@ -173,4 +175,18 @@ public sealed record ParRequestReceivedState: FlowState
     /// §5.1.2 RECOMMENDS its use to let the Authorization Server differentiate Credential Issuers.
     /// </summary>
     public string? Resource { get; init; }
+
+    /// <summary>
+    /// The DPoP binding the pushed authorization request asks for the authorization code, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10">RFC 9449 Section 10</see>: the
+    /// JWK SHA-256 Thumbprint the <c>dpop_jkt</c> parameter named, or the thumbprint of the public
+    /// key of the DPoP proof checked at the pushed request, since under
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10.1">RFC 9449 Section 10.1</see>
+    /// the server "MUST further behave as if the contained public key's thumbprint was provided
+    /// using dpop_jkt". <see langword="null"/> when the request carried neither. The pushed value
+    /// is authoritative: the authorization endpoint carries it to the code and never reads a
+    /// front-channel <c>dpop_jkt</c> beside a <c>request_uri</c> (RFC 9101 Section 6.3 via
+    /// RFC 9126 Section 4).
+    /// </summary>
+    public ConfirmationMethod? Confirmation { get; init; }
 }

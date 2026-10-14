@@ -181,6 +181,40 @@ public static class DpopJwkUtilities
 
 
     /// <summary>
+    /// Whether <paramref name="value"/> is spelled as a JWK SHA-256 Thumbprint: base64url characters alone and the
+    /// canonical unpadded spelling of 32 octets (43 characters, the two pad bits of the last character zero).
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.1">RFC 9449 Section 6.1</see>: "The value of the jkt
+    /// member MUST be the base64url encoding (as defined in [RFC7515]) of the JWK SHA-256 Thumbprint (according to
+    /// [RFC7638]) of the DPoP public key", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10">RFC 9449 Section 10</see> gives the
+    /// <c>dpop_jkt</c> parameter that same value. A SHA-256 hash value is 32 octets
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7638#section-3">RFC 7638 Section 3</see> hashes the canonical
+    /// JSON with the chosen hash function). The thumbprint is not recomputed here: a presented value is compared as
+    /// given against the thumbprint <see cref="ComputeThumbprintFromJwk(IReadOnlyDictionary{string, string}, EncodeDelegate, BaseMemoryPool)"/>
+    /// gives a proof's public key, so only its spelling is checked, by the base64url rules of
+    /// <see cref="DefaultDpopNonceValidation.IsBase64UrlText(string)"/> and
+    /// <see cref="DefaultDpopNonceValidation.IsCanonicalBase64UrlOf(string, int)"/>.
+    /// </summary>
+    /// <param name="value">The presented thumbprint.</param>
+    /// <returns><see langword="true"/> when the value is the canonical base64url spelling of 32 octets.</returns>
+    internal static bool IsJwkSha256ThumbprintSpelling(string value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        return DefaultDpopNonceValidation.IsBase64UrlText(value)
+            && DefaultDpopNonceValidation.IsCanonicalBase64UrlOf(value, Sha256ThumbprintOctetCount);
+    }
+
+
+    /// <summary>
+    /// The number of octets of a SHA-256 hash value, the length of a JWK SHA-256 Thumbprint before its base64url
+    /// encoding (<see href="https://www.rfc-editor.org/rfc/rfc6234">RFC 6234</see>: SHA-256 produces a 256-bit
+    /// message digest).
+    /// </summary>
+    private static int Sha256ThumbprintOctetCount => 32;
+
+
+    /// <summary>
     /// Copies the members the thumbprint rule of <paramref name="jwk"/>'s <c>kty</c> requires (RFC 7638
     /// §3.2 for EC and RSA, RFC 8037 §2 for OKP, draft-ietf-cose-dilithium-11 §6 for AKP) into a fresh
     /// dictionary (the form <see cref="JwkThumbprintUtilities.ComputeGenericThumbprint(BaseMemoryPool, IDictionary{string, string})"/>

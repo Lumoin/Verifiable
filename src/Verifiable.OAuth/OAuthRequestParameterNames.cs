@@ -486,6 +486,23 @@ public static class OAuthRequestParameterNames
     /// </summary>
     public static string Resource { get; } = Utf8Constants.ToInternedString(ResourceUtf8);
 
+    /// <summary>The UTF-8 source literal of <see cref="DpopJkt"/>.</summary>
+    public static ReadOnlySpan<byte> DpopJktUtf8 => "dpop_jkt"u8;
+
+    /// <summary>
+    /// The <c>dpop_jkt</c> authorization request parameter that binds the issued authorization
+    /// code to a DPoP public key, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10">RFC 9449 Section 10</see>:
+    /// "The value of the dpop_jkt authorization request parameter is the JWK Thumbprint
+    /// [RFC7638] of the proof-of-possession public key using the SHA-256 hash function, which is
+    /// the same value as used for the jkt confirmation method defined in Section 6.1." The
+    /// registry entry of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-12.3">RFC 9449 Section 12.3</see>
+    /// names its "Parameter Usage Location: authorization request", so it is read at the
+    /// authorization endpoint, at the pushed authorization request and as a request object claim.
+    /// </summary>
+    public static string DpopJkt { get; } = Utf8Constants.ToInternedString(DpopJktUtf8);
+
     //Token Exchange parameters — RFC 8693 §2.1 (request) / §2.2.1 (response).
 
     /// <summary>The UTF-8 source literal of <see cref="Audience"/>.</summary>

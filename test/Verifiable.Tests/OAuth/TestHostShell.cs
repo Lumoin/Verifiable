@@ -4046,6 +4046,34 @@ internal sealed class TestHostShell: IAsyncDisposable
 
 
     /// <summary>
+    /// Wraps the server's DPoP proof validation so a proof it validates is answered as a success whose
+    /// <see cref="DpopProofValidationResult.JwkThumbprint"/> is <paramref name="answeredJwkThumbprint"/> in place of the
+    /// thumbprint of the proof's public key: the answer of an application's validator that names no JWK SHA-256
+    /// Thumbprint where that member promises one on success (no value, the empty string, or text of another spelling).
+    /// A refused proof is answered as the wrapped validation answers it. <see cref="EnableDpopAsync"/> must have been
+    /// called first.
+    /// </summary>
+    /// <param name="answeredJwkThumbprint">The value every successful validation answers as the JWK thumbprint.</param>
+    /// <returns>A task that completes when the server is re-wired.</returns>
+    public Task AnswerValidatedDpopProofsWithJwkThumbprintAsync(string? answeredJwkThumbprint) =>
+        AlterAsync(Server, integration =>
+        {
+            ValidateDpopProofDelegate validate = integration.ValidateDpopProofAsync
+                ?? throw new InvalidOperationException("EnableDpop must be called before AnswerValidatedDpopProofsWithJwkThumbprintAsync.");
+            integration.ValidateDpopProofAsync = async (request, ct) =>
+            {
+                DpopProofValidationResult result = await validate(request, ct).ConfigureAwait(false);
+
+                return result.IsSuccess switch
+                {
+                    true => result with { JwkThumbprint = answeredJwkThumbprint },
+                    false => result
+                };
+            };
+        });
+
+
+    /// <summary>
     /// Re-wires the server's DPoP nonce validation to <see cref="DefaultDpopNonceValidation.ValidateAsync"/> reading the
     /// presented nonce with <paramref name="base64UrlDecoder"/> in place of <see cref="Base64UrlDecoder"/>; the keyset,
     /// the clock and the validity window <see cref="EnableDpopAsync"/> wires are kept, so a row shows what the validator

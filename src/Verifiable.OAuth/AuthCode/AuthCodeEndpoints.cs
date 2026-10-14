@@ -9,6 +9,7 @@ using Verifiable.JCose;
 using Verifiable.OAuth.AuthCode.Server;
 using Verifiable.OAuth.AuthCode.Server.States;
 using Verifiable.OAuth.Client;
+using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.IdJag;
 using Verifiable.OAuth.Introspection;
 using Verifiable.OAuth.Jar;
@@ -567,6 +568,21 @@ public static class AuthCodeEndpoints
 
                 string? resource = ReadResource(fields);
 
+                //RFC 9449 Section 10.1: "dpop_jkt MUST be included alongside other authorization
+                //request parameters in the POST body of the PAR request." Read only when the server
+                //verifies DPoP proofs; otherwise dpop_jkt is an unrecognized parameter, which RFC
+                //6749 Section 3.1 says the authorization server MUST ignore.
+                bool isDpopVerified = oauth.ValidateDpopProofAsync is not null;
+                (ConfirmationMethod? dpopBinding, string? dpopJktFailure) = isDpopVerified switch
+                {
+                    true => ReadDpopJkt(fields),
+                    false => (null, null)
+                };
+                if(dpopJktFailure is not null)
+                {
+                    return (null, ServerHttpResponse.BadRequest(OAuthErrors.InvalidRequest, dpopJktFailure));
+                }
+
                 //Resolved once here and stamped onto ExpectedIssuer so a later redemption
                 //(BuildInputAsync of BuildAuthCodeToken) can compare the issuer it resolves for
                 //the PRESENTING request against the issuer resolved when the grant was issued —
@@ -587,6 +603,21 @@ public static class AuthCodeEndpoints
                 }
 
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
+
+                //RFC 9449 Section 10.1: a DPoP proof on the pushed request is checked as defined in
+                //Section 4.3, and its public key's thumbprint binds the code as dpop_jkt would; a
+                //dpop_jkt naming another DPoP public key is refused. Checked after the client is
+                //authenticated and the request validated (RFC 9126 Section 2.1) and before any
+                //request_uri is generated.
+                if(isDpopVerified)
+                {
+                    (dpopBinding, ServerHttpResponse? pushedProofFailure) = await CheckPushedProofAsync(
+                        server, context, registration, issuerUri, now, dpopBinding, ct).ConfigureAwait(false);
+                    if(pushedProofFailure is not null)
+                    {
+                        return (null, pushedProofFailure);
+                    }
+                }
 
                 //RFC 9126 Section 2.2 leaves the request_uri lifetime implementation-defined and states it as
                 //"the lifetime of the request URI in seconds as a positive integer". The request's policy value
@@ -628,7 +659,10 @@ public static class AuthCodeEndpoints
                     AuthorizationDetails: authorizationDetails,
                     ResponseMode: responseMode,
                     IssuerState: issuerState,
-                    Resource: resource), null);
+                    Resource: resource)
+                {
+                    Confirmation = dpopBinding
+                }, null);
             },
             BuildResponse = static (state, _, _) =>
             {
@@ -1328,6 +1362,24 @@ public static class AuthCodeEndpoints
 
                 string? resource = ReadResource(fields);
 
+                //RFC 9449 Section 10: dpop_jkt on the authorization request binds the code to a
+                //DPoP public key. Read only when the server verifies DPoP proofs (RFC 6749 Section
+                //3.1 otherwise ignores it as unrecognized). redirect_uri is registration-matched
+                //above, so a repeated or malformed dpop_jkt is reported as an Authorization Error
+                //Response redirect, RFC 6749 Section 4.1.2.1, invalid_request: "includes an invalid
+                //parameter value, includes a parameter more than once, or is otherwise malformed."
+                (ConfirmationMethod? dpopBinding, string? dpopJktFailure) = oauth.ValidateDpopProofAsync switch
+                {
+                    null => (null, null),
+                    _ => ReadDpopJkt(fields)
+                };
+                if(dpopJktFailure is not null)
+                {
+                    return (null, await BuildAuthorizeErrorResponseAsync(
+                        server, context, redirectUri, OAuthErrors.InvalidRequest, dpopJktFailure,
+                        requestState, responseMode, clientId, ct).ConfigureAwait(false));
+                }
+
                 //Resolved once here and stamped onto ExpectedIssuer so a later redemption can
                 //compare the issuer it resolves for the PRESENTING request against the issuer
                 //resolved when the grant was issued — OpenID Connect Core 1.0 §12.2 / RFC 9700
@@ -1436,7 +1488,10 @@ public static class AuthCodeEndpoints
                     AuthorizationDetails: authorizationDetails,
                     ResponseMode: responseMode,
                     IssuerState: issuerState,
-                    Resource: resource), null);
+                    Resource: resource)
+                {
+                    Confirmation = dpopBinding
+                }, null);
             },
 
             BuildResponse = static (state, _, context) =>
@@ -1794,6 +1849,31 @@ public static class AuthCodeEndpoints
 
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
 
+                //RFC 9449 Section 10.1 at a pushed Request Object: the binding is the Request Object's
+                //dpop_jkt claim, never a dpop_jkt of the outer body (RFC 9126 Section 3, RFC 9101
+                //Section 6.3: "The authorization server MUST only use the parameters in the Request
+                //Object"), and a DPoP proof on the pushed request is checked and combined with it as
+                //at the bare pushed request. Read only when the server verifies DPoP proofs; otherwise
+                //the claim is an unrecognized parameter RFC 6749 Section 3.1 says to ignore. A claim
+                //not spelled as a JWK SHA-256 Thumbprint fails the request's validation, answered in
+                //place as RFC 9101 Section 6.3 says: "as specified in Section 5.2 of [RFC6749]".
+                ConfirmationMethod? dpopBinding = null;
+                if(oauth.ValidateDpopProofAsync is not null)
+                {
+                    (ConfirmationMethod? requestedBinding, string? dpopJktFailure) = ReadDpopJktValue(ro.DpopJkt);
+                    if(dpopJktFailure is not null)
+                    {
+                        return (null, ServerHttpResponse.BadRequest(OAuthErrors.InvalidRequest, dpopJktFailure));
+                    }
+
+                    (dpopBinding, ServerHttpResponse? pushedProofFailure) = await CheckPushedProofAsync(
+                        server, context, registration, issuerUri, now, requestedBinding, ct).ConfigureAwait(false);
+                    if(pushedProofFailure is not null)
+                    {
+                        return (null, pushedProofFailure);
+                    }
+                }
+
                 //RFC 9126 Section 2.2: the request_uri lifetime is read through the one rule of an issuable lifetime, as
                 //the bare pushed request reads it; a value outside it is answered server_error before anything is
                 //stored, and the expires_in answered is the stored lifetime itself.
@@ -1835,7 +1915,10 @@ public static class AuthCodeEndpoints
                     AuthorizationDetails: ro.AuthorizationDetails,
                     ResponseMode: ro.ResponseMode,
                     IssuerState: ro.IssuerState,
-                    Resource: ro.Resource), null);
+                    Resource: ro.Resource)
+                {
+                    Confirmation = dpopBinding
+                }, null);
             },
 
             BuildResponse = static (state, _, _) =>
@@ -1971,6 +2054,23 @@ public static class AuthCodeEndpoints
                         ro.State, ro.ResponseMode, ro.ClientId, ct).ConfigureAwait(false));
                 }
 
+                //RFC 9449 Section 10 with RFC 9101 Section 5: the Request Object passed by value carries
+                //dpop_jkt as a claim, the binding of the code when the server verifies DPoP proofs; a
+                //server that verifies none ignores it as an unrecognized parameter (RFC 6749 Section
+                //3.1). A claim not spelled as a JWK SHA-256 Thumbprint fails the request's validation,
+                //answered in place rather than by redirect, RFC 9101 Section 6.3: "the authorization
+                //server MUST return an error to the client in response to the authorization request,
+                //as specified in Section 5.2 of [RFC6749]".
+                (ConfirmationMethod? dpopBinding, string? dpopJktFailure) = oauth.ValidateDpopProofAsync switch
+                {
+                    null => (null, null),
+                    _ => ReadDpopJktValue(ro.DpopJkt)
+                };
+                if(dpopJktFailure is not null)
+                {
+                    return (null, ServerHttpResponse.BadRequest(OAuthErrors.InvalidRequest, dpopJktFailure));
+                }
+
                 //FAPI 2.0 Security Profile Section 5.3.2.2: when the profile mandates PAR, the JAR-by-value path
                 //is refused; the client must push the request first.
                 if(context.RequirePushedAuthorizationRequests)
@@ -2097,7 +2197,10 @@ public static class AuthCodeEndpoints
                     AuthorizationDetails: ro.AuthorizationDetails,
                     ResponseMode: ro.ResponseMode,
                     IssuerState: ro.IssuerState,
-                    Resource: ro.Resource), null);
+                    Resource: ro.Resource)
+                {
+                    Confirmation = dpopBinding
+                }, null);
             },
 
             BuildResponse = static (state, _, context) =>
@@ -3853,7 +3956,8 @@ public static class AuthCodeEndpoints
         DpopValidationOutcome dpopOutcome = await DpopTokenEndpointValidation.BindValidatedProofAsync(
             server, context, registration, issuerUri, carriedDpopOutcome,
             expectedThumbprint: boundConfirmation?.JwkThumbprint,
-            proofRequiredByRecord: boundConfirmation is { IsEmpty: false }, ct).ConfigureAwait(false);
+            proofRequiredByRecord: boundConfirmation is { IsEmpty: false },
+            notFoundDescription: RefreshTokenNotFoundDescription, ct).ConfigureAwait(false);
         if(!dpopOutcome.IsSuccess)
         {
             //An INVALID presentation: revoke nothing. Collapsed onto the constant body rather
@@ -4196,12 +4300,15 @@ public static class AuthCodeEndpoints
 
                 //RFC 9449 DPoP enforcement at the token endpoint. The request-only decision ran
                 //once already, in BeforeCodeRedemptionCorrelationAsync; this reads the outcome it
-                //carried and applies the record-dependent remainder. Code-grant passes
-                //expectedThumbprint: null and proofRequiredByRecord: false because the binding is
-                //being ESTABLISHED here, never verified against a prior record — refresh-grant
-                //verifies against the stored thumbprint in BuildRefreshToken. A missing carry means
-                //the step did not run as the dispatcher requires, and is a server fault rather than
-                //a silent Bearer fallback.
+                //carried and applies the record-dependent remainder. A code whose authorization
+                //request named a DPoP public key (dpop_jkt, or the proof of the pushed request) is
+                //redeemed only under a proof by that DPoP key, RFC 9449 Section 10: "If they do not
+                //match, it MUST reject the request."; the refusal answers the code's own not-found
+                //constant before the code is claimed, so the code stays unspent. A code bound to no
+                //DPoP public key passes no expected thumbprint and the binding of the issued tokens
+                //is ESTABLISHED here by a validated proof. A missing carry means the step did not
+                //run as the dispatcher requires, and is a server fault rather than a silent Bearer
+                //fallback.
                 if(context.DpopStepOutcome is not DpopValidationOutcome carriedDpopOutcome)
                 {
                     return (null, ServerHttpResponse.ServerError(OAuthErrors.ServerError,
@@ -4210,7 +4317,9 @@ public static class AuthCodeEndpoints
 
                 DpopValidationOutcome dpopOutcome = await DpopTokenEndpointValidation.BindValidatedProofAsync(
                     server, context, registration, issuerUri, carriedDpopOutcome,
-                    expectedThumbprint: null, proofRequiredByRecord: false, ct).ConfigureAwait(false);
+                    expectedThumbprint: codeState.Confirmation?.JwkThumbprint,
+                    proofRequiredByRecord: codeState.Confirmation is { IsEmpty: false },
+                    notFoundDescription: CodeGrantNotFoundDescription, ct).ConfigureAwait(false);
 
                 if(!dpopOutcome.IsSuccess)
                 {
@@ -6913,8 +7022,16 @@ public static class AuthCodeEndpoints
     /// <see cref="AuthorizationServerIntegration.ResolveCredentialAuthorizationAsync"/> denial —
     /// tells the caller nothing about the code's existence that it did not already know, so it
     /// keeps its own body instead of this one.
+    /// The two DPoP binding refusals of
+    /// <see cref="Verifiable.OAuth.AuthCode.Server.DpopTokenEndpointValidation.BindValidatedProofAsync"/>
+    /// at the code redemption answer it too: a code its authorization request bound to a DPoP
+    /// public key, presented with no proof or under a proof by another DPoP key
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-10">RFC 9449 Section 10</see>: "If
+    /// they do not match, it MUST reject the request."). Internal rather than private so the code
+    /// redemption hands that helper, a different class in the same assembly, the one constant, as
+    /// the refresh grant hands it <see cref="RefreshTokenNotFoundDescription"/>.
     /// </remarks>
-    private const string CodeGrantNotFoundDescription = "The authorization code is unknown, expired, or already used.";
+    internal const string CodeGrantNotFoundDescription = "The authorization code is unknown, expired, or already used.";
 
 
     /// <summary>
@@ -6944,8 +7061,8 @@ public static class AuthCodeEndpoints
     /// before correlation — and prescribes nothing for a valid proof with the wrong key). A caller
     /// who reaches a distinguishable answer at any of these sites has proven the refresh token
     /// exists; this constant, referenced rather than copied, is why none of them can. Internal
-    /// rather than private so the DPoP helper above — a different class in the same assembly —
-    /// references the one constant instead of copying its text. A refusal reachable only after a
+    /// rather than private so the DPoP helper above, a different class in the same assembly, names
+    /// the one constant its refresh callers hand it instead of copying its text. A refusal reachable only after a
     /// caller has already proven possession of the grant's secrets — the bound client's identity
     /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-6">RFC 6749 §6</see>) — such as
     /// the <see cref="ResolveEffectiveResource"/> granted-set subset refusal
@@ -9077,7 +9194,8 @@ public static class AuthCodeEndpoints
                 DpopValidationOutcome dpopOutcome = await DpopTokenEndpointValidation.BindValidatedProofAsync(
                     server, context, registration, issuerUri, carriedDpopOutcome,
                     expectedThumbprint: boundConfirmation?.JwkThumbprint,
-                    proofRequiredByRecord: boundConfirmation is { IsEmpty: false }, ct).ConfigureAwait(false);
+                    proofRequiredByRecord: boundConfirmation is { IsEmpty: false },
+                    notFoundDescription: RefreshTokenNotFoundDescription, ct).ConfigureAwait(false);
 
                 if(!dpopOutcome.IsSuccess)
                 {
@@ -10187,6 +10305,152 @@ public static class AuthCodeEndpoints
         }
 
         return BuildAuthorizeRedirect(code, context);
+    }
+
+
+    /// <summary>
+    /// The description a pushed or direct authorization request carrying <c>dpop_jkt</c> more than
+    /// once is refused with under <c>invalid_request</c>,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 Section 3.1</see>:
+    /// "Request and response parameters MUST NOT be included more than once."
+    /// </summary>
+    private static string DpopJktRepeatedDescription { get; } = "dpop_jkt must not be repeated.";
+
+
+    /// <summary>
+    /// The description an authorization request whose <c>dpop_jkt</c> is not spelled as a JWK
+    /// SHA-256 Thumbprint is refused with under <c>invalid_request</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-10">RFC 9449 Section 10</see>,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.1">Section 6.1</see>): the
+    /// parameter of a pushed or direct request, and the claim of a Request Object pushed or passed
+    /// by value.
+    /// </summary>
+    private static string DpopJktMalformedDescription { get; } = "dpop_jkt is not a JWK SHA-256 Thumbprint.";
+
+
+    /// <summary>
+    /// The description a pushed authorization request whose <c>dpop_jkt</c> and <c>DPoP</c> proof
+    /// name different DPoP public keys is refused with under <c>invalid_request</c>,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10.1">RFC 9449 Section 10.1</see>:
+    /// "If both mechanisms are used at the same time, the authorization server MUST reject the
+    /// request if the JWK Thumbprint in dpop_jkt does not match the public key in the DPoP header."
+    /// </summary>
+    private static string DpopJktProofMismatchDescription { get; } = "dpop_jkt does not match the DPoP proof's public key.";
+
+
+    /// <summary>
+    /// Reads the <c>dpop_jkt</c> authorization request parameter of a pushed or direct authorization
+    /// request, the JWK SHA-256 Thumbprint of the DPoP public key the authorization code is to be
+    /// bound to, <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10">RFC 9449 Section
+    /// 10</see>: "The value of the dpop_jkt authorization request parameter is the JWK Thumbprint
+    /// [RFC7638] of the proof-of-possession public key using the SHA-256 hash function, which is the
+    /// same value as used for the jkt confirmation method defined in Section 6.1." The occurrences
+    /// are read by the rules of <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC
+    /// 6749 Section 3.1</see>: a repeated parameter, its empty repeats counted, is refused
+    /// ("Request and response parameters MUST NOT be included more than once."); one empty value is
+    /// the omitted parameter ("Parameters sent without a value MUST be treated as if they were
+    /// omitted from the request."); any other value is read by <see cref="ReadDpopJktValue"/>. The
+    /// value is the client's request, carried as the binding the code is redeemed under, never a
+    /// verified fact about a DPoP public key.
+    /// </summary>
+    /// <param name="fields">The authorization request parameters.</param>
+    /// <returns>The binding, or <see langword="null"/> when none was asked for, and the refusal's description, or <see langword="null"/>.</returns>
+    private static (ConfirmationMethod? Binding, string? Failure) ReadDpopJkt(RequestFields fields)
+    {
+        bool isRepeated = fields.HasRepeatedOccurrence(OAuthRequestParameterNames.DpopJkt);
+        _ = fields.TryGetValue(OAuthRequestParameterNames.DpopJkt, out string? dpopJkt);
+
+        return isRepeated switch
+        {
+            true => (null, DpopJktRepeatedDescription),
+            false => ReadDpopJktValue(dpopJkt)
+        };
+    }
+
+
+    /// <summary>
+    /// Reads one <c>dpop_jkt</c> value, the form parameter of a pushed or direct authorization
+    /// request or the claim text of a Request Object (<see cref="AuthCodeRequestObject.DpopJkt"/>),
+    /// at an authorization server that verifies DPoP proofs. Absent or empty, it asks for no binding
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 Section 3.1</see>:
+    /// "Parameters sent without a value MUST be treated as if they were omitted from the
+    /// request."); spelled as a JWK SHA-256 Thumbprint
+    /// (<see cref="DpopJwkUtilities.IsJwkSha256ThumbprintSpelling(string)"/>:
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10">RFC 9449 Section 10</see>,
+    /// "the JWK Thumbprint [RFC7638] of the proof-of-possession public key using the SHA-256 hash
+    /// function, which is the same value as used for the jkt confirmation method defined in Section
+    /// 6.1") it is the binding; any other value is refused under <c>invalid_request</c> with
+    /// <see cref="DpopJktMalformedDescription"/>.
+    /// </summary>
+    /// <param name="dpopJkt">The value read, or <see langword="null"/> when absent.</param>
+    /// <returns>The binding, or <see langword="null"/> when none was asked for, and the refusal's description, or <see langword="null"/>.</returns>
+    private static (ConfirmationMethod? Binding, string? Failure) ReadDpopJktValue(string? dpopJkt) => dpopJkt switch
+    {
+        null or "" => (null, null),
+        string thumbprint when DpopJwkUtilities.IsJwkSha256ThumbprintSpelling(thumbprint) =>
+            (new ConfirmationMethod { JwkThumbprint = thumbprint }, null),
+        _ => (null, DpopJktMalformedDescription)
+    };
+
+
+    /// <summary>
+    /// Checks the <c>DPoP</c> proof a pushed authorization request carries and combines it with the
+    /// binding its <c>dpop_jkt</c> asked for,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10.1">RFC 9449 Section 10.1</see>:
+    /// "the DPoP header can be added to the PAR request. In this case, the authorization server MUST
+    /// check the provided DPoP proof JWT as defined in Section 4.3. It MUST further behave as if the
+    /// contained public key's thumbprint was provided using dpop_jkt", and "If both mechanisms are
+    /// used at the same time, the authorization server MUST reject the request if the JWK Thumbprint
+    /// in dpop_jkt does not match the public key in the DPoP header." The proof is checked by
+    /// <see cref="DpopTokenEndpointValidation.ValidateAsync"/> exactly as at the token endpoint:
+    /// <c>htm</c> <c>POST</c>, <c>htu</c> the pushed request's own target, the server's nonce
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">Section 8</see>), the
+    /// <c>jti</c> replay guard, and no <c>ath</c>; its refusal (400 <c>invalid_dpop_proof</c>, or 400
+    /// <c>use_dpop_nonce</c> with a <c>DPoP-Nonce</c>) is answered with the token endpoint's error
+    /// format, which <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.3">RFC 9126 Section
+    /// 2.3</see> makes the pushed request's ("Error codes defined by the OAuth extension can also be
+    /// used when such an extension is involved in the initial processing of the authorization
+    /// request that was pushed"). A proof whose thumbprint differs from the <c>dpop_jkt</c> binding
+    /// is refused 400 <c>invalid_request</c>, the malformed request of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>
+    /// ("or is otherwise malformed") in the error format RFC 9126 Section 2.3 gives the pushed
+    /// request. With no proof the <c>dpop_jkt</c> binding stands as it is.
+    /// </summary>
+    /// <param name="server">The authorization server holding the DPoP delegates.</param>
+    /// <param name="context">The per-request context bag.</param>
+    /// <param name="registration">The client the pushed request belongs to.</param>
+    /// <param name="issuerUri">The resolved issuer; its authority and the request path form the expected <c>htu</c>.</param>
+    /// <param name="now">The instant the proof's freshness and replay window are judged at.</param>
+    /// <param name="binding">The binding <c>dpop_jkt</c> asked for, or <see langword="null"/>.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The binding the code is to carry, and the refusal to answer with, or <see langword="null"/>.</returns>
+    private static async ValueTask<(ConfirmationMethod? Binding, ServerHttpResponse? Failure)> CheckPushedProofAsync(
+        EndpointServer server,
+        ExchangeContext context,
+        ClientRecord registration,
+        Uri issuerUri,
+        DateTimeOffset now,
+        ConfirmationMethod? binding,
+        CancellationToken cancellationToken)
+    {
+        DpopValidationOutcome outcome = await DpopTokenEndpointValidation.ValidateAsync(
+            server, context, registration, issuerUri, now,
+            expectedThumbprint: null, dpopRequired: false, cancellationToken).ConfigureAwait(false);
+        if(!outcome.IsSuccess)
+        {
+            return (null, outcome.FailureResponse);
+        }
+
+        ConfirmationMethod? proofBinding = outcome.Confirmation;
+
+        return (binding, proofBinding) switch
+        {
+            (_, null) => (binding, null),
+            (null, _) => (proofBinding, null),
+            ({ } requested, { } proven) when string.Equals(requested.JwkThumbprint, proven.JwkThumbprint, StringComparison.Ordinal) =>
+                (requested, null),
+            _ => (null, ServerHttpResponse.BadRequest(OAuthErrors.InvalidRequest, DpopJktProofMismatchDescription))
+        };
     }
 
 
