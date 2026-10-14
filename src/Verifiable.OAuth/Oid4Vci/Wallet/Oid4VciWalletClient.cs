@@ -914,9 +914,9 @@ public sealed class Oid4VciWalletClient
     /// Sends the §6 Token Request once when <see cref="Oid4VciWalletConfiguration.ConstructDpopProofAsync"/>
     /// carries no DPoP key, or through <see cref="DpopNonceRetry.SendWithNonceRetryAsync"/> — the
     /// helper shared with the AuthCode token endpoint's own retry — when it does, embedding a fresh
-    /// proof on every attempt and retrying exactly once on an RFC 9449 §8.1 <c>use_dpop_nonce</c>
-    /// challenge (HTTP 400 + <c>error=use_dpop_nonce</c> in the JSON body + a <c>DPoP-Nonce</c>
-    /// response header).
+    /// proof on every attempt and retrying exactly once on an RFC 9449 Section 8 <c>use_dpop_nonce</c>
+    /// challenge (HTTP 400 + <c>use_dpop_nonce</c> as the JSON object's own <c>error</c> member + a
+    /// <c>DPoP-Nonce</c> response header), read by <see cref="DpopNonceRetry.IsErrorBodyNonceChallenge"/>.
     /// </summary>
     private async ValueTask<HttpResponseData> SendTokenRequestAsync(
         IReadOnlyDictionary<string, string> formFields,
@@ -934,8 +934,7 @@ public sealed class Oid4VciWalletClient
 
         return await DpopNonceRetry.SendWithNonceRetryAsync(
             (nonce, ct) => SendFormPostWithDpopAsync(formFields, tokenEndpoint, nonce, context, ct),
-            static candidate => candidate.StatusCode == 400
-                && candidate.Body.Contains(OAuthErrors.UseDpopNonce, StringComparison.Ordinal),
+            candidate => DpopNonceRetry.IsErrorBodyNonceChallenge(candidate, Configuration.MemoryPool),
             authority,
             Configuration.LookupDpopNonce,
             Configuration.StoreDpopNonce,
@@ -1731,7 +1730,7 @@ public sealed class Oid4VciWalletClient
 
         return await DpopNonceRetry.SendWithNonceRetryAsync(
             (nonce, ct) => SendJsonPostWithDpopAsync(endpoint, jsonBody, accessToken, ath, nonce, context, ct),
-            static candidate => IsUseDpopNonceChallenge(candidate),
+            candidate => IsUseDpopNonceChallenge(candidate, Configuration.MemoryPool),
             authority,
             Configuration.LookupDpopNonce,
             Configuration.StoreDpopNonce,
@@ -1740,16 +1739,23 @@ public sealed class Oid4VciWalletClient
 
 
     /// <summary>
-    /// Recognises a resource-request <c>use_dpop_nonce</c> challenge in either wire form: an
-    /// OID4VCI §8.3.1-shaped HTTP 400 with <c>error=use_dpop_nonce</c> in the JSON body, or the
-    /// RFC 9449 §9 generic resource-server form — HTTP 401 with a <c>WWW-Authenticate: DPoP</c>
-    /// value carrying <c>error="use_dpop_nonce"</c>.
+    /// Recognises a resource-request <c>use_dpop_nonce</c> challenge in either wire form: an HTTP 400 shaped as the
+    /// OpenID4VCI 1.0 Section 8.3.1.2 Credential Error Response whose JSON object carries <c>use_dpop_nonce</c>, the
+    /// RFC 9449 Section 8 error code, as its own <c>error</c> member
+    /// (<see cref="DpopNonceRetry.IsErrorBodyNonceChallenge"/>; reading a resource's 400 form as a nonce challenge is
+    /// the library's own rule), or the RFC 9449 Section 9 resource-server form, HTTP 401 with a
+    /// <c>WWW-Authenticate: DPoP</c> challenge whose <c>error</c> auth-param is <c>use_dpop_nonce</c>
+    /// (<see cref="DpopNonceRetry.IsWwwAuthenticateNonceChallenge"/>). The text <c>use_dpop_nonce</c>
+    /// anywhere else in the answer, such as the value of an auth-param the wallet does not know,
+    /// is no challenge: RFC 9449 Section 7.1, "unknown parameters MUST be ignored by recipients."
     /// </summary>
-    private static bool IsUseDpopNonceChallenge(HttpResponseData response) => response.StatusCode switch
+    /// <param name="response">The answer to read.</param>
+    /// <param name="memoryPool">The pool the 400 body's UTF-8 copy is rented from.</param>
+    /// <returns><see langword="true"/> when the answer is a nonce challenge.</returns>
+    private static bool IsUseDpopNonceChallenge(HttpResponseData response, BaseMemoryPool memoryPool) => response.StatusCode switch
     {
-        400 => response.Body.Contains(OAuthErrors.UseDpopNonce, StringComparison.Ordinal),
-        401 => response.Headers.TryGetSingle(WellKnownHttpHeaderNames.WwwAuthenticate)
-            ?.Contains(OAuthErrors.UseDpopNonce, StringComparison.Ordinal) ?? false,
+        400 => DpopNonceRetry.IsErrorBodyNonceChallenge(response, memoryPool),
+        401 => DpopNonceRetry.IsWwwAuthenticateNonceChallenge(response),
         _ => false
     };
 

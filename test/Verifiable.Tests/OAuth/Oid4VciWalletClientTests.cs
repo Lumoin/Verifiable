@@ -1380,6 +1380,1297 @@ internal sealed class Oid4VciWalletClientTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-2">RFC 9449 Section 2</see>: "DPoP is not, however, a
+    /// substitute for a secure transport and MUST always be used in conjunction with HTTPS." A wallet wired with a
+    /// DPoP key under the secure default outbound policy, holding a DPoP-bound access token, is asked for a
+    /// Credential at an Issuer whose Nonce and Credential Endpoint URLs are <c>http</c>: it dials neither, so no
+    /// proof leaves the wallet outside HTTPS, and the request answers the outbound policy's refusal.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task WalletNeverSendsAProofToAResourceOutsideHttpsAsync()
+    {
+        List<Uri> dialed = [];
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        var walletDpopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory walletDpopPublic = walletDpopKeys.PublicKey;
+        using PrivateKeyMemory walletDpopPrivate = walletDpopKeys.PrivateKey;
+
+        Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
+            sendJsonPost: (endpoint, _, _, _, _) =>
+            {
+                dialed.Add(endpoint);
+
+                return ValueTask.FromResult(JsonResponse(400, "{\"error\":\"invalid_request\"}"));
+            },
+            constructDpopProofAsync: BuildWalletDpopProofAsync,
+            dpopKey: new DpopKey(walletDpopKeys, WellKnownJwaValues.Es256));
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await walletClient.IssueWithAccessTokenDetailedAsync(
+            "access-token",
+            WellKnownAuthenticationSchemes.DPoP,
+            accessTokenExpiresAt: null,
+            new Uri("https://issuer.example.com"),
+            CredentialRequestTarget.ForConfiguration(ConfigurationId),
+            holderPrivate,
+            holderPublic,
+            new Oid4VciIssuanceEndpoints
+            {
+                TokenEndpoint = new Uri("http://issuer.example.com/token"),
+                NonceEndpoint = new Uri("http://issuer.example.com/nonce"),
+                CredentialEndpoint = new Uri("http://issuer.example.com/credential")
+            },
+            responseEncryption: null,
+            new ExchangeContext(),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(dialed, "No request, and so no DPoP proof, is sent to an http endpoint.");
+        Assert.IsFalse(outcome.IsSuccess, "The request is refused before any dial.");
+        Assert.AreEqual(Oid4VciRequestFailureKind.OutboundPolicyDenied, outcome.Error.Kind);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.2">RFC 9449 Section 4.2</see>, <c>jti</c>: "The
+    /// value MUST be assigned such that there is a negligible probability that the same value will be assigned to any
+    /// other DPoP proof used in the same context during the time window of validity." A wallet wired with a DPoP key
+    /// and the library's identifier generator drives a Pre-Authorized Code issuance over the wire against an Issuer
+    /// that challenges its first Token Request for a nonce: every proof the Issuer receives carries a <c>jti</c> the
+    /// generator handed out for that proof, no two of the proofs carry the same one, and the Credential is issued.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task WalletAssignsEveryProofItsOwnGeneratedJtiAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Haip10, IssuerCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        _ = await WireIssuerSeamsAsync(host).ConfigureAwait(false);
+        List<(string HttpUrl, string Proof)> receivedProofs = await host.RecordReceivedDpopProofsAsync().ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        var walletDpopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory walletDpopPublic = walletDpopKeys.PublicKey;
+        using PrivateKeyMemory walletDpopPrivate = walletDpopKeys.PrivateKey;
+
+        List<string> generated = [];
+        GenerateIdentifierDelegate defaultGenerator = DpopJtiGenerator;
+        Oid4VciWalletClient walletClient = BuildWalletClient(
+            host,
+            constructDpopProofAsync: BuildWalletDpopProofAsync,
+            dpopKey: new DpopKey(walletDpopKeys, WellKnownJwaValues.Es256),
+            generateIdentifierAsync: async (purpose, context, ct) =>
+            {
+                string identifier = await defaultGenerator(purpose, context, ct).ConfigureAwait(false);
+                generated.Add(identifier);
+
+                return identifier;
+            });
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await IssueOverTheWireAsync(walletClient, host, material, holderPrivate, holderPublic).ConfigureAwait(false);
+
+        Assert.IsTrue(outcome.IsSuccess, "The issuance succeeds over the wire.");
+        Assert.IsGreaterThanOrEqualTo(3, receivedProofs.Count, "The Issuer received the challenged Token Request's proof, its retry's and the Credential Request's.");
+        List<string?> jtis = [.. receivedProofs.Select(received => DpopWireReading.ReadPayloadClaim(received.Proof, "jti", Pool))];
+        Assert.HasCount(receivedProofs.Count, jtis.Distinct(StringComparer.Ordinal), $"No two proofs carry the same jti: {string.Join(" ", jtis)}");
+        foreach(string? jti in jtis)
+        {
+            Assert.Contains(jti, generated, "Each jti is a value the identifier generator handed out.");
+        }
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>, of the <c>DPoP</c>
+    /// challenge: "Additional authentication parameters MAY be used, and unknown parameters MUST be ignored by
+    /// recipients." The Credential Endpoint answers the wallet's first Credential Request with its 401 nonce
+    /// challenge, to which an auth-param the wallet does not know is added after the challenge crossed the wire.
+    /// The wallet ignores it: it reads the challenge's <c>use_dpop_nonce</c>, retries exactly once with the nonce the
+    /// <c>DPoP-Nonce</c> field supplied, and the Credential is issued.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task WalletAnswersANonceChallengeCarryingAnUnknownParameterAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Haip10, IssuerCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        List<string> credentialProofs = await ArrangeCredentialEndpointNonceChallengeAsync(host, material).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        var walletDpopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory walletDpopPublic = walletDpopKeys.PublicKey;
+        using PrivateKeyMemory walletDpopPrivate = walletDpopKeys.PrivateKey;
+
+        int rewrittenChallenges = 0;
+        Oid4VciWalletClient walletClient = BuildWalletClient(
+            host,
+            constructDpopProofAsync: BuildWalletDpopProofAsync,
+            dpopKey: new DpopKey(walletDpopKeys, WellKnownJwaValues.Es256),
+            rewriteResourceAnswer: answer =>
+            {
+                if(answer.StatusCode != 401 || !answer.Headers.Headers.TryGetValue(WellKnownHttpHeaderNames.WwwAuthenticate, out string? challenge))
+                {
+                    return answer;
+                }
+
+                rewrittenChallenges++;
+
+                return WithChallenge(answer, challenge + ", x_unrecognized=\"an extension parameter\"");
+            });
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await IssueOverTheWireAsync(walletClient, host, material, holderPrivate, holderPublic).ConfigureAwait(false);
+
+        Assert.AreEqual(1, rewrittenChallenges, "The Credential Endpoint's nonce challenge carried the unknown parameter.");
+        Assert.IsTrue(outcome.IsSuccess,
+            $"The wallet answers the nonce challenge whatever unknown parameter it carries; got {(outcome.IsSuccess ? string.Empty : outcome.Error.Kind + " " + outcome.Error.StatusCode + " " + outcome.Error.ErrorCode)}.");
+        Assert.HasCount(2, credentialProofs, "The challenged Credential Request and its one retry.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>, of the <c>DPoP</c>
+    /// challenge: "Additional authentication parameters MAY be used, and unknown parameters MUST be ignored by
+    /// recipients." The Credential Endpoint's 401 answer to the wallet's first Credential Request is rewritten after
+    /// it crossed the wire into a challenge whose <c>error</c> is <c>invalid_token</c> and which carries an auth-param
+    /// the wallet does not know whose value is the text <c>use_dpop_nonce</c>, the <c>DPoP-Nonce</c> field kept. A
+    /// wallet that ignores the unknown parameter reads an <c>invalid_token</c> refusal, sends no retry, and answers the
+    /// 401 error response.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task WalletDoesNotReadAnUnknownParameterAsANonceChallengeAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Haip10, IssuerCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        List<string> credentialProofs = await ArrangeCredentialEndpointNonceChallengeAsync(host, material).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        var walletDpopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory walletDpopPublic = walletDpopKeys.PublicKey;
+        using PrivateKeyMemory walletDpopPrivate = walletDpopKeys.PrivateKey;
+
+        Oid4VciWalletClient walletClient = BuildWalletClient(
+            host,
+            constructDpopProofAsync: BuildWalletDpopProofAsync,
+            dpopKey: new DpopKey(walletDpopKeys, WellKnownJwaValues.Es256),
+            rewriteResourceAnswer: answer => answer.StatusCode == 401
+                ? WithChallenge(answer, $"DPoP error=\"invalid_token\", x_unrecognized=\"use_dpop_nonce\", algs=\"{ResourceDpopProofs.AcceptedProofAlgorithms}\"")
+                : answer);
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await IssueOverTheWireAsync(walletClient, host, material, holderPrivate, holderPublic).ConfigureAwait(false);
+
+        Assert.IsFalse(outcome.IsSuccess, "An invalid_token refusal is no nonce challenge, whatever an unknown parameter's value reads.");
+        Assert.AreEqual(401, outcome.Error.StatusCode);
+        Assert.HasCount(1, credentialProofs, "The wallet sends no retry for an invalid_token refusal.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.2">RFC 9110 Section 11.2</see>: "Authentication
+    /// parameters are name/value pairs, where the name token is matched case-insensitively". The Credential
+    /// Endpoint's 401 nonce challenge is rewritten after it crossed the wire so that its parameter names are spelled
+    /// <c>ERROR</c> and <c>ALGS</c>, the <c>DPoP-Nonce</c> field kept. The wallet reads <c>ERROR</c> as the
+    /// <c>error</c> parameter: it retries exactly once with the supplied nonce and the Credential is issued.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task WalletMatchesTheChallengeErrorParameterNameCaseInsensitivelyAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Haip10, IssuerCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        List<string> credentialProofs = await ArrangeCredentialEndpointNonceChallengeAsync(host, material).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        var walletDpopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory walletDpopPublic = walletDpopKeys.PublicKey;
+        using PrivateKeyMemory walletDpopPrivate = walletDpopKeys.PrivateKey;
+
+        Oid4VciWalletClient walletClient = BuildWalletClient(
+            host,
+            constructDpopProofAsync: BuildWalletDpopProofAsync,
+            dpopKey: new DpopKey(walletDpopKeys, WellKnownJwaValues.Es256),
+            rewriteResourceAnswer: answer => answer.StatusCode == 401
+                ? WithChallenge(answer, $"DPoP ERROR=\"use_dpop_nonce\", ALGS=\"{ResourceDpopProofs.AcceptedProofAlgorithms}\"")
+                : answer);
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await IssueOverTheWireAsync(walletClient, host, material, holderPrivate, holderPublic).ConfigureAwait(false);
+
+        Assert.IsTrue(outcome.IsSuccess,
+            $"The wallet reads ERROR as the challenge's error parameter; got {(outcome.IsSuccess ? string.Empty : outcome.Error.Kind + " " + outcome.Error.StatusCode + " " + outcome.Error.ErrorCode)}.");
+        Assert.HasCount(2, credentialProofs, "The challenged Credential Request and its one retry.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.2">RFC 9110 Section 11.2</see>: "Parameter values
+    /// can be expressed either as "token" or as "quoted-string" (Section 5.6). Authentication scheme definitions need
+    /// to accept both notations, both for senders and recipients". The Credential Endpoint's 401 nonce challenge is
+    /// rewritten after it crossed the wire so that its <c>error</c> value is the token <c>use_dpop_nonce</c>, not a
+    /// quoted-string, the <c>DPoP-Nonce</c> field kept. The wallet reads the challenge: it retries exactly once with
+    /// the supplied nonce and the Credential is issued.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task WalletReadsTheChallengeErrorValueWrittenAsATokenAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Haip10, IssuerCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        List<string> credentialProofs = await ArrangeCredentialEndpointNonceChallengeAsync(host, material).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        var walletDpopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory walletDpopPublic = walletDpopKeys.PublicKey;
+        using PrivateKeyMemory walletDpopPrivate = walletDpopKeys.PrivateKey;
+
+        Oid4VciWalletClient walletClient = BuildWalletClient(
+            host,
+            constructDpopProofAsync: BuildWalletDpopProofAsync,
+            dpopKey: new DpopKey(walletDpopKeys, WellKnownJwaValues.Es256),
+            rewriteResourceAnswer: answer => answer.StatusCode == 401
+                ? WithChallenge(answer, $"DPoP error=use_dpop_nonce, algs=\"{ResourceDpopProofs.AcceptedProofAlgorithms}\"")
+                : answer);
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await IssueOverTheWireAsync(walletClient, host, material, holderPrivate, holderPublic).ConfigureAwait(false);
+
+        Assert.IsTrue(outcome.IsSuccess,
+            $"The wallet reads the token use_dpop_nonce as the challenge's error; got {(outcome.IsSuccess ? string.Empty : outcome.Error.Kind + " " + outcome.Error.StatusCode + " " + outcome.Error.ErrorCode)}.");
+        Assert.HasCount(2, credentialProofs, "The challenged Credential Request and its one retry.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-8.3.1.2">OpenID4VCI
+    /// 1.0 Section 8.3.1.2</see>, the Credential Error Response: "the HTTP response MUST use the HTTP status code 400 (Bad
+    /// Request) and set the content type to application/json with the following parameters in the JSON-encoded response
+    /// body: error: REQUIRED." The code that body carries is its <c>error</c> member alone; the code <c>use_dpop_nonce</c>
+    /// is the one <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">RFC 9449 Section 8</see> names ("using
+    /// use_dpop_nonce as the error code value"). That a Credential Endpoint signals a nonce in this 400 form, beside the
+    /// 401 form <see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">RFC 9449 Section 9</see> gives a resource
+    /// server, is the library's own rule. The Credential Endpoint's 401 answer to the wallet's first Credential Request
+    /// is rewritten after it crossed the wire into a 400 error response whose <c>error</c> is
+    /// <c>invalid_credential_request</c> and whose <c>error_description</c> is the text <c>use_dpop_nonce</c>, the
+    /// <c>DPoP-Nonce</c> field kept. The error code is <c>invalid_credential_request</c>: the wallet sends no retry and
+    /// answers the 400 error response with that code.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task WalletDoesNotReadAnErrorDescriptionAsACredentialEndpointNonceChallengeAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Haip10, IssuerCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        List<string> credentialProofs = await ArrangeCredentialEndpointNonceChallengeAsync(host, material).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        var walletDpopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory walletDpopPublic = walletDpopKeys.PublicKey;
+        using PrivateKeyMemory walletDpopPrivate = walletDpopKeys.PrivateKey;
+
+        Oid4VciWalletClient walletClient = BuildWalletClient(
+            host,
+            constructDpopProofAsync: BuildWalletDpopProofAsync,
+            dpopKey: new DpopKey(walletDpopKeys, WellKnownJwaValues.Es256),
+            rewriteResourceAnswer: answer => answer.StatusCode == 401
+                ? AsErrorResponse(answer, "{\"error\":\"invalid_credential_request\",\"error_description\":\"use_dpop_nonce\"}")
+                : answer);
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await IssueOverTheWireAsync(walletClient, host, material, holderPrivate, holderPublic).ConfigureAwait(false);
+
+        Assert.IsFalse(outcome.IsSuccess, "An error response whose error is not use_dpop_nonce is no nonce challenge, whatever its description reads.");
+        Assert.AreEqual(400, outcome.Error.StatusCode);
+        Assert.AreEqual(Oid4VciCredentialErrors.InvalidCredentialRequest, outcome.Error.ErrorCode);
+        Assert.HasCount(1, credentialProofs, "The wallet sends no retry for an invalid_credential_request refusal.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-8.3.1.2">OpenID4VCI
+    /// 1.0 Section 8.3.1.2</see>, the Credential Error Response: "the HTTP response MUST use the HTTP status code 400 (Bad
+    /// Request) and set the content type to application/json with the following parameters in the JSON-encoded response
+    /// body: error: REQUIRED." When that <c>error</c> member is the code
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">RFC 9449 Section 8</see> names, "The client will
+    /// typically retry the request with the new nonce value supplied upon receiving a use_dpop_nonce error with an
+    /// accompanying nonce value." Reading a Credential Endpoint's 400 form as a nonce challenge, beside the 401 form
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">RFC 9449 Section 9</see> gives a resource server, is
+    /// the library's own rule. The Credential Endpoint's 401 nonce challenge is rewritten after it crossed the wire into
+    /// that 400 form, its <c>error</c> member <c>use_dpop_nonce</c>, the <c>DPoP-Nonce</c> field kept. The wallet reads
+    /// the error code: it retries exactly once with the supplied nonce and the Credential is issued.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task WalletRetriesACredentialEndpointNonceChallengeInTheErrorResponseFormAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Haip10, IssuerCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        List<string> credentialProofs = await ArrangeCredentialEndpointNonceChallengeAsync(host, material).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        var walletDpopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory walletDpopPublic = walletDpopKeys.PublicKey;
+        using PrivateKeyMemory walletDpopPrivate = walletDpopKeys.PrivateKey;
+
+        Oid4VciWalletClient walletClient = BuildWalletClient(
+            host,
+            constructDpopProofAsync: BuildWalletDpopProofAsync,
+            dpopKey: new DpopKey(walletDpopKeys, WellKnownJwaValues.Es256),
+            rewriteResourceAnswer: answer => answer.StatusCode == 401
+                ? AsErrorResponse(answer, "{\"error\":\"use_dpop_nonce\",\"error_description\":\"Resource server requires nonce in DPoP proof\"}")
+                : answer);
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await IssueOverTheWireAsync(walletClient, host, material, holderPrivate, holderPublic).ConfigureAwait(false);
+
+        Assert.IsTrue(outcome.IsSuccess,
+            $"The wallet answers the use_dpop_nonce error response; got {(outcome.IsSuccess ? string.Empty : outcome.Error.Kind + " " + outcome.Error.StatusCode + " " + outcome.Error.ErrorCode)}.");
+        Assert.HasCount(2, credentialProofs, "The challenged Credential Request and its one retry.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">RFC 9449 Section 8</see>: the nonce challenge is
+    /// "an HTTP 400 (Bad Request) error response per Section 5.2 of [RFC6749] using use_dpop_nonce as the error code
+    /// value." The Token Endpoint's 400 nonce challenge to the wallet's first Token Request is rewritten after it
+    /// crossed the wire into an error response whose <c>error</c> is <c>invalid_grant</c> and whose
+    /// <c>error_description</c> is the text <c>use_dpop_nonce</c>, the <c>DPoP-Nonce</c> field kept. The error code is
+    /// <c>invalid_grant</c>: the wallet sends no second Token Request and answers the 400 error response with that
+    /// code.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task WalletDoesNotReadAnErrorDescriptionAsATokenEndpointNonceChallengeAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Haip10, IssuerCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        _ = await WireIssuerSeamsAsync(host).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        var walletDpopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory walletDpopPublic = walletDpopKeys.PublicKey;
+        using PrivateKeyMemory walletDpopPrivate = walletDpopKeys.PrivateKey;
+
+        int tokenAnswers = 0;
+        Oid4VciWalletClient walletClient = BuildWalletClient(
+            host,
+            constructDpopProofAsync: BuildWalletDpopProofAsync,
+            dpopKey: new DpopKey(walletDpopKeys, WellKnownJwaValues.Es256),
+            rewriteTokenAnswer: answer =>
+            {
+                tokenAnswers++;
+
+                return answer.StatusCode == 400
+                    ? answer with { Body = "{\"error\":\"invalid_grant\",\"error_description\":\"use_dpop_nonce\"}" }
+                    : answer;
+            });
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await IssueOverTheWireAsync(walletClient, host, material, holderPrivate, holderPublic).ConfigureAwait(false);
+
+        Assert.IsFalse(outcome.IsSuccess, "An error response whose error is not use_dpop_nonce is no nonce challenge, whatever its description reads.");
+        Assert.AreEqual(400, outcome.Error.StatusCode);
+        Assert.AreEqual(OAuthErrors.InvalidGrant, outcome.Error.ErrorCode);
+        Assert.AreEqual(1, tokenAnswers, "The wallet sends no second Token Request for an invalid_grant refusal.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "This authentication
+    /// scheme is for origin-server authentication only. Therefore, this authentication scheme MUST NOT be used with
+    /// the Proxy-Authenticate or Proxy-Authorization header fields." A wallet wired with a DPoP key drives a
+    /// Pre-Authorized Code issuance over the wire: every resource request it sends with a <c>DPoP</c> field carries
+    /// its access token in <c>Authorization: DPoP</c>, none carries a <c>Proxy-Authorization</c> field, and the
+    /// Credential is issued.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task WalletPresentsItsAccessTokenUnderAuthorizationNeverProxyAuthorizationAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Haip10, IssuerCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        _ = await WireIssuerSeamsAsync(host).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        var walletDpopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory walletDpopPublic = walletDpopKeys.PublicKey;
+        using PrivateKeyMemory walletDpopPrivate = walletDpopKeys.PrivateKey;
+
+        List<OutgoingHeaders> dpopRequests = [];
+        Oid4VciWalletClient walletClient = BuildWalletClient(
+            host,
+            constructDpopProofAsync: BuildWalletDpopProofAsync,
+            dpopKey: new DpopKey(walletDpopKeys, WellKnownJwaValues.Es256),
+            observeResourceRequest: (_, headers) =>
+            {
+                if(headers.Values.ContainsKey(WellKnownHttpHeaderNames.DPoP))
+                {
+                    dpopRequests.Add(headers);
+                }
+            });
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await IssueOverTheWireAsync(walletClient, host, material, holderPrivate, holderPublic).ConfigureAwait(false);
+
+        Assert.IsTrue(outcome.IsSuccess, "The issuance succeeds over the wire.");
+        Assert.IsNotEmpty(dpopRequests, "The wallet sent its Credential Request with a DPoP proof.");
+        foreach(OutgoingHeaders headers in dpopRequests)
+        {
+            Assert.IsTrue(headers.Values.TryGetValue(WellKnownHttpHeaderNames.Authorization, out string? authorization),
+                "The access token rides the Authorization field.");
+            Assert.StartsWith("DPoP ", authorization);
+            Assert.IsFalse(headers.Values.ContainsKey("Proxy-Authorization"), "No Proxy-Authorization field is sent.");
+        }
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.3">RFC 9449 Section 7.3</see>: "It is RECOMMENDED
+    /// that clients generate a unique DPoP proof, even when retrying idempotent requests in response to HTTP errors
+    /// generally understood as transient." A wallet wired with a DPoP key drives a Pre-Authorized Code issuance over
+    /// the wire, and the Credential Endpoint's first answer to its Credential Request, a POST and so no idempotent
+    /// request (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2">RFC 9110 Section 9.2.2</see>), is
+    /// rewritten after it crossed the wire into 503 (Service
+    /// Unavailable), an error generally understood as transient: the wallet answers that error to the application.
+    /// The application asks again with the access token the first Credential Request presented, through
+    /// <see cref="Oid4VciWalletClient.IssueWithAccessTokenDetailedAsync"/>: every proof the Credential Endpoint
+    /// received carries a <c>jti</c> of its own, and the Credential is issued.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task WalletSendsAFreshProofWhenTheApplicationRetriesAfterATransientErrorAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Haip10, IssuerCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        _ = await WireIssuerSeamsAsync(host).ConfigureAwait(false);
+        List<(string HttpUrl, string Proof)> receivedProofs = await host.RecordReceivedDpopProofsAsync().ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        var walletDpopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory walletDpopPublic = walletDpopKeys.PublicKey;
+        using PrivateKeyMemory walletDpopPrivate = walletDpopKeys.PrivateKey;
+
+        Oid4VciIssuanceEndpoints endpoints = ResolveEndpoints(host, material);
+        Uri? lastResourceEndpoint = null;
+        string? presentedAccessToken = null;
+        bool isTransientErrorAnswered = false;
+        Oid4VciWalletClient walletClient = BuildWalletClient(
+            host,
+            constructDpopProofAsync: BuildWalletDpopProofAsync,
+            dpopKey: new DpopKey(walletDpopKeys, WellKnownJwaValues.Es256),
+            observeResourceRequest: (endpoint, headers) =>
+            {
+                lastResourceEndpoint = endpoint;
+                if(endpoint == endpoints.CredentialEndpoint
+                    && headers.Values.TryGetValue(WellKnownHttpHeaderNames.Authorization, out string? authorization))
+                {
+                    presentedAccessToken = authorization[(WellKnownAuthenticationSchemes.DPoP.Length + 1)..];
+                }
+            },
+            rewriteResourceAnswer: answer =>
+            {
+                if(isTransientErrorAnswered || lastResourceEndpoint != endpoints.CredentialEndpoint)
+                {
+                    return answer;
+                }
+
+                isTransientErrorAnswered = true;
+
+                return answer with { StatusCode = 503, Body = string.Empty, Headers = ResponseHeaders.Empty };
+            });
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> first = await IssueOverTheWireAsync(walletClient, host, material, holderPrivate, holderPublic).ConfigureAwait(false);
+        Assert.IsFalse(first.IsSuccess, "The Credential Endpoint's first answer is the transient error.");
+        Assert.AreEqual(503, first.Error.StatusCode);
+        Assert.IsNotNull(presentedAccessToken, "The first Credential Request presented a DPoP-bound access token.");
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> second = await walletClient.IssueWithAccessTokenDetailedAsync(
+            presentedAccessToken,
+            WellKnownAuthenticationSchemes.DPoP,
+            accessTokenExpiresAt: null,
+            material.Registration.IssuerUri!,
+            CredentialRequestTarget.ForConfiguration(ConfigurationId),
+            holderPrivate,
+            holderPublic,
+            endpoints,
+            responseEncryption: null,
+            TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        string credentialPath = TestHostShell.ComposeEndpointPath(
+            WellKnownEndpointNames.Oid4VciCredential, material.Registration.TenantId.Value);
+        List<string?> credentialJtis = [.. receivedProofs
+            .Where(received => received.HttpUrl.EndsWith(credentialPath, StringComparison.Ordinal))
+            .Select(received => DpopWireReading.ReadPayloadClaim(received.Proof, "jti", Pool))];
+        Assert.IsGreaterThanOrEqualTo(2, credentialJtis.Count, "The Credential Endpoint received the request answered 503 and the application's retry.");
+        Assert.HasCount(credentialJtis.Count, credentialJtis.Distinct(StringComparer.Ordinal),
+            $"Every proof the Credential Endpoint received carries a jti of its own: {string.Join(" ", credentialJtis)}");
+        Assert.IsTrue(second.IsSuccess, $"The application's retry is answered with the Credential; got {DescribeOutcome(second)}.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.2">RFC 9449 Section 4.2</see>, <c>ath</c>: "Hash of
+    /// the access token. The value MUST be the result of a base64url encoding (as defined in Section 2 of [RFC7515])
+    /// the SHA-256 [SHS] hash of the ASCII encoding of the associated access token's value." A wallet wired with a DPoP
+    /// key drives a Pre-Authorized Code issuance over the wire: every proof the Credential Endpoint receives carries an
+    /// <c>ath</c> equal to the base64url, without padding, of the SHA-256 of the ASCII bytes of the access token the
+    /// request presented in its <c>Authorization</c> field, computed here from that definition, and the Credential is
+    /// issued.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task WalletBindsEveryResourceProofToTheAccessTokenItPresentsAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Haip10, IssuerCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        List<string> credentialProofs = await ArrangeCredentialEndpointNonceChallengeAsync(host, material).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        var walletDpopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory walletDpopPublic = walletDpopKeys.PublicKey;
+        using PrivateKeyMemory walletDpopPrivate = walletDpopKeys.PrivateKey;
+
+        Oid4VciIssuanceEndpoints endpoints = ResolveEndpoints(host, material);
+        List<string> presentedAccessTokens = [];
+        Oid4VciWalletClient walletClient = BuildWalletClient(
+            host,
+            constructDpopProofAsync: BuildWalletDpopProofAsync,
+            dpopKey: new DpopKey(walletDpopKeys, WellKnownJwaValues.Es256),
+            observeResourceRequest: (endpoint, headers) =>
+            {
+                if(endpoint == endpoints.CredentialEndpoint
+                    && headers.Values.TryGetValue(WellKnownHttpHeaderNames.Authorization, out string? authorization))
+                {
+                    presentedAccessTokens.Add(authorization[(WellKnownAuthenticationSchemes.DPoP.Length + 1)..]);
+                }
+            });
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await IssueOverTheWireAsync(walletClient, host, material, holderPrivate, holderPublic).ConfigureAwait(false);
+
+        Assert.IsTrue(outcome.IsSuccess, $"The issuance succeeds over the wire; got {DescribeOutcome(outcome)}.");
+        Assert.HasCount(credentialProofs.Count, presentedAccessTokens, "Every Credential Request the endpoint received presented its access token.");
+        Assert.IsNotEmpty(credentialProofs, "The Credential Endpoint received the wallet's proofs.");
+        for(int request = 0; request < credentialProofs.Count; request++)
+        {
+            string expectedAth = await ResourceDpopProofs.ComputeAthAsync(presentedAccessTokens[request], TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.AreEqual(expectedAth, DpopWireReading.ReadPayloadClaim(credentialProofs[request], "ath", Pool),
+                $"The ath of Credential Request {request} hashes the access token it presented.");
+        }
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.6.1">RFC 9110 Section 11.6.1</see>:
+    /// "WWW-Authenticate = #challenge" and "User agents are advised to take special care in parsing the field value, as
+    /// it might contain more than one challenge, and each challenge can contain a comma-separated list of authentication
+    /// parameters. Furthermore, the header field itself can occur multiple times." The Credential Endpoint's 401 nonce
+    /// challenge is rewritten after it crossed the wire into a challenge list holding a <c>Bearer</c> challenge beside
+    /// the <c>DPoP</c> nonce challenge, the <c>DPoP-Nonce</c> field kept. The wallet finds the <c>DPoP</c> challenge
+    /// wherever the list places it: it retries exactly once with the supplied nonce and the Credential is issued. The
+    /// rows: Bearer then DPoP on one field line; DPoP then Bearer on one field line; Bearer and DPoP on two field lines
+    /// in each order; and a Bearer <c>realm</c> holding a comma inside its quoted-string before the DPoP challenge.
+    /// </summary>
+    /// <param name="row">How the challenge list places the DPoP challenge.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(BearerThenDpopRow)]
+    [DataRow(DpopThenBearerRow)]
+    [DataRow(BearerLineThenDpopLineRow)]
+    [DataRow(DpopLineThenBearerLineRow)]
+    [DataRow(CommaInsideQuotedStringRow)]
+    public async Task WalletFindsTheDpopNonceChallengeAnywhereInTheChallengeListAsync(string row)
+    {
+        string[] challengeLines = row switch
+        {
+            BearerThenDpopRow => [$"Bearer realm=\"x\", {DpopNonceChallenge}"],
+            DpopThenBearerRow => [$"{DpopNonceChallenge}, Bearer realm=\"x\""],
+            BearerLineThenDpopLineRow => ["Bearer realm=\"x\"", DpopNonceChallenge],
+            DpopLineThenBearerLineRow => [DpopNonceChallenge, "Bearer realm=\"x\""],
+            CommaInsideQuotedStringRow => [$"Bearer realm=\"a, b\", {DpopNonceChallenge}"],
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown challenge list row.")
+        };
+
+        (Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome, List<string> credentialProofs) =
+            await IssueUnderARewrittenNonceChallengeAsync(answer => WithChallengeLines(answer, challengeLines)).ConfigureAwait(false);
+
+        Assert.IsTrue(outcome.IsSuccess, $"The wallet answers the DPoP nonce challenge the list holds; got {DescribeOutcome(outcome)}.");
+        Assert.HasCount(2, credentialProofs, "The challenged Credential Request and its one retry.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.6.1.2">RFC 9110 Section 5.6.1.2</see>: "A recipient
+    /// MUST parse and ignore a reasonable number of empty list elements", the <c>#challenge</c> list of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.6.1">Section 11.6.1</see> included. The Credential
+    /// Endpoint's 401 nonce challenge is rewritten after it crossed the wire so that an empty list element precedes the
+    /// <c>DPoP</c> challenge (<c>, DPoP error="use_dpop_nonce", algs="ES256"</c>), the <c>DPoP-Nonce</c> field kept.
+    /// The wallet ignores the empty element: it retries exactly once with the supplied nonce and the Credential is
+    /// issued.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task WalletIgnoresAnEmptyElementOfTheChallengeListAsync()
+    {
+        (Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome, List<string> credentialProofs) =
+            await IssueUnderARewrittenNonceChallengeAsync(answer => WithChallengeLines(answer, $", {DpopNonceChallenge}")).ConfigureAwait(false);
+
+        Assert.IsTrue(outcome.IsSuccess, $"The wallet answers the DPoP nonce challenge after the empty element; got {DescribeOutcome(outcome)}.");
+        Assert.HasCount(2, credentialProofs, "The challenged Credential Request and its one retry.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.3">RFC 9110 Section 5.3</see>: "A recipient MAY
+    /// combine multiple field lines within a field section that have the same field name into one field line, without
+    /// changing the semantics of the message, by appending each subsequent field line value to the initial field line
+    /// value in order, separated by a comma (",") and optional whitespace". <c>WWW-Authenticate</c> is a list-based
+    /// field (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.6.1">Section 11.6.1</see>, "WWW-Authenticate =
+    /// #challenge"), so its field lines are one field value and the auth-params of a challenge may continue on the next
+    /// field line. The Credential Endpoint's 401 nonce challenge is rewritten after it crossed the wire into the rows'
+    /// field lines, the <c>DPoP-Nonce</c> field kept: the wallet reads the one <c>DPoP</c> challenge of the combined
+    /// value, retries exactly once with the supplied nonce and the Credential is issued. The rows:
+    /// <c>DPoP error="use_dpop_nonce"</c> on one field line and <c>algs="ES256"</c> on the next;
+    /// <c>DPoP algs="ES256"</c> on one field line and <c>error="use_dpop_nonce"</c> on the next; and the combined value
+    /// <c>DPoP error="use_dpop_nonce", algs="ES256"</c> on one field line, which the two-line rows are equivalent to.
+    /// </summary>
+    /// <param name="row">How the challenge is spread over the field lines.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(AlgsOnTheNextFieldLineRow)]
+    [DataRow(ErrorOnTheNextFieldLineRow)]
+    [DataRow(CombinedOnOneFieldLineRow)]
+    public async Task WalletReadsTheFieldLinesOfTheChallengeFieldAsOneValueAsync(string row)
+    {
+        string[] challengeLines = row switch
+        {
+            AlgsOnTheNextFieldLineRow => ["DPoP error=\"use_dpop_nonce\"", "algs=\"ES256\""],
+            ErrorOnTheNextFieldLineRow => ["DPoP algs=\"ES256\"", "error=\"use_dpop_nonce\""],
+            CombinedOnOneFieldLineRow => [DpopNonceChallenge],
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown field line row.")
+        };
+
+        (Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome, List<string> credentialProofs) =
+            await IssueUnderARewrittenNonceChallengeAsync(answer => WithChallengeLines(answer, challengeLines)).ConfigureAwait(false);
+
+        Assert.IsTrue(outcome.IsSuccess, $"The wallet answers the DPoP nonce challenge the combined field value holds; got {DescribeOutcome(outcome)}.");
+        Assert.HasCount(2, credentialProofs, "The challenged Credential Request and its one retry.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.6.1.2">RFC 9110 Section 5.6.1.2</see>: "a recipient
+    /// MUST accept lists that satisfy the following syntax: #element => [ element ] *( OWS "," OWS [ element ] )", with
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.6.3">Section 5.6.3</see> "OWS = *( SP / HTAB )". In
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.3">Section 11.3</see>, "challenge = auth-scheme [
+    /// 1*SP ( token68 / #auth-param ) ]", the content of a challenge is optional and only SP opens it, so a horizontal
+    /// tab after a scheme and before a comma is the list's whitespace and the challenge ends at the scheme. The
+    /// Credential Endpoint's 401 nonce challenge is rewritten after it crossed the wire into
+    /// <c>Basic</c>, a horizontal tab, then <c>, DPoP error="use_dpop_nonce", algs="ES256"</c>, the <c>DPoP-Nonce</c>
+    /// field kept: the value holds a <c>Basic</c> challenge with no content and the <c>DPoP</c> nonce challenge, the
+    /// wallet retries exactly once with the supplied nonce and the Credential is issued.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task WalletReadsWhitespaceBeforeAListCommaAsTheEndOfAChallengeAsync()
+    {
+        (Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome, List<string> credentialProofs) =
+            await IssueUnderARewrittenNonceChallengeAsync(answer => WithChallengeLines(answer, $"Basic\t, {DpopNonceChallenge}")).ConfigureAwait(false);
+
+        Assert.IsTrue(outcome.IsSuccess, $"The wallet answers the DPoP nonce challenge after the Basic challenge; got {DescribeOutcome(outcome)}.");
+        Assert.HasCount(2, credentialProofs, "The challenged Credential Request and its one retry.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.3">RFC 9110 Section 11.3</see>: "challenge =
+    /// auth-scheme [ 1*SP ( token68 / #auth-param ) ]", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.6.1.2">Section 5.6.1.2</see>: "Empty elements do not
+    /// contribute to the count of elements present. A recipient MUST parse and ignore a reasonable number of empty list
+    /// elements", so the <c>#auth-param</c> list after the scheme's SP may open with an empty element. The Credential
+    /// Endpoint's 401 nonce challenge is rewritten after it crossed the wire into
+    /// <c>DPoP , error="use_dpop_nonce", algs="ES256"</c>, the <c>DPoP-Nonce</c> field kept: the value is one
+    /// <c>DPoP</c> challenge whose auth-params follow an empty element, the wallet retries exactly once with the supplied
+    /// nonce and the Credential is issued.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task WalletSkipsAnEmptyElementBeforeTheFirstAuthParamAsync()
+    {
+        (Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome, List<string> credentialProofs) =
+            await IssueUnderARewrittenNonceChallengeAsync(answer => WithChallengeLines(
+                answer, "DPoP , error=\"use_dpop_nonce\", algs=\"ES256\"")).ConfigureAwait(false);
+
+        Assert.IsTrue(outcome.IsSuccess, $"The wallet reads the auth-params after the empty element as the DPoP challenge's; got {DescribeOutcome(outcome)}.");
+        Assert.HasCount(2, credentialProofs, "The challenged Credential Request and its one retry.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.6.1.2">RFC 9110 Section 5.6.1.2</see>: "A recipient
+    /// MUST parse and ignore a reasonable number of empty list elements", a recipient accepting "#element => [ element ]
+    /// *( OWS "," OWS [ element ] )", and the content of a challenge is such a list,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.3">Section 11.3</see>: "challenge = auth-scheme [
+    /// 1*SP ( token68 / #auth-param ) ]", so an empty element may stand between two auth-params of one challenge. The
+    /// Credential Endpoint's 401 nonce challenge is rewritten after it crossed the wire into the row's value, the
+    /// <c>DPoP-Nonce</c> field kept: the value is one <c>DPoP</c> challenge whose <c>error</c> and <c>algs</c>
+    /// auth-params have an empty element between them, the wallet retries exactly once with the supplied nonce and the
+    /// Credential is issued. The rows: <c>DPoP error="use_dpop_nonce",, algs="ES256"</c> and
+    /// <c>DPoP error="use_dpop_nonce", , algs="ES256"</c>.
+    /// </summary>
+    /// <param name="row">How the empty element between the two auth-params is written.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(EmptyElementWithoutWhitespaceRow)]
+    [DataRow(EmptyElementHoldingASpaceRow)]
+    public async Task WalletSkipsAnEmptyElementBetweenTwoAuthParamsAsync(string row)
+    {
+        string challenge = row switch
+        {
+            EmptyElementWithoutWhitespaceRow => "DPoP error=\"use_dpop_nonce\",, algs=\"ES256\"",
+            EmptyElementHoldingASpaceRow => "DPoP error=\"use_dpop_nonce\", , algs=\"ES256\"",
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown empty element row.")
+        };
+
+        (Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome, List<string> credentialProofs) =
+            await IssueUnderARewrittenNonceChallengeAsync(answer => WithChallengeLines(answer, challenge)).ConfigureAwait(false);
+
+        Assert.IsTrue(outcome.IsSuccess, $"The wallet reads the auth-params on both sides of the empty element as the DPoP challenge's; got {DescribeOutcome(outcome)}.");
+        Assert.HasCount(2, credentialProofs, "The challenged Credential Request and its one retry.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.5">RFC 9110 Section 11.5</see>: "Note that a
+    /// response can have multiple challenges with the same auth-scheme but with different realms." Which of two
+    /// <c>DPoP</c> challenges carries the answer's nonce error is not stated by either, so the library's own rule reads
+    /// two <c>DPoP</c> challenges as no nonce challenge. The Credential Endpoint's 401 answer is rewritten after it
+    /// crossed the wire into two <c>DPoP</c> challenges, the first carrying <c>error="use_dpop_nonce"</c> and the second
+    /// <c>error="invalid_token"</c>, the <c>DPoP-Nonce</c> field kept: the wallet sends no retry and answers the 401
+    /// error response.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task WalletDoesNotReadTwoDpopChallengesAsANonceChallengeAsync()
+    {
+        (Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome, List<string> credentialProofs) =
+            await IssueUnderARewrittenNonceChallengeAsync(answer => WithChallengeLines(
+                answer, $"{DpopNonceChallenge}, DPoP error=\"invalid_token\", algs=\"ES256\"")).ConfigureAwait(false);
+
+        Assert.IsFalse(outcome.IsSuccess, "Two DPoP challenges are no nonce challenge.");
+        Assert.HasCount(1, credentialProofs, "The wallet sends no retry.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.3">RFC 9110 Section 11.3</see>: "challenge =
+    /// auth-scheme [ 1*SP ( token68 / #auth-param ) ]": the scheme is a token, and a space separates it from what
+    /// follows. The Credential Endpoint's 401 answer is rewritten after it crossed the wire into a value whose scheme is
+    /// not followed by a space, the <c>DPoP-Nonce</c> field kept: no <c>DPoP</c> challenge is read, the wallet sends no
+    /// retry and answers the 401 error response. The rows: <c>DPoPerror="use_dpop_nonce"</c>, where the scheme and the
+    /// parameter name run together into one token; and <c>DPoP</c>, a horizontal tab, then
+    /// <c>error="use_dpop_nonce"</c>.
+    /// </summary>
+    /// <param name="row">What follows the scheme in place of the space.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(NoSeparatorAfterSchemeRow)]
+    [DataRow(TabAfterSchemeRow)]
+    public async Task WalletDoesNotReadASchemeWithoutItsSpaceSeparatorAsANonceChallengeAsync(string row)
+    {
+        string challenge = row switch
+        {
+            NoSeparatorAfterSchemeRow => "DPoPerror=\"use_dpop_nonce\"",
+            TabAfterSchemeRow => "DPoP\terror=\"use_dpop_nonce\"",
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown separator row.")
+        };
+
+        (Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome, List<string> credentialProofs) =
+            await IssueUnderARewrittenNonceChallengeAsync(answer => WithChallengeLines(answer, challenge)).ConfigureAwait(false);
+
+        Assert.IsFalse(outcome.IsSuccess, "A scheme not followed by a space starts no DPoP challenge.");
+        Assert.HasCount(1, credentialProofs, "The wallet sends no retry.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.6.4">RFC 9110 Section 5.6.4</see>: "quoted-string =
+    /// DQUOTE *( qdtext / quoted-pair ) DQUOTE" with "qdtext = HTAB / SP / %x21 / %x23-5B / %x5D-7E / obs-text". The
+    /// Credential Endpoint's 401 answer is rewritten after it crossed the wire into a <c>DPoP</c> challenge carrying a
+    /// value outside that grammar, the <c>DPoP-Nonce</c> field kept: the challenge is malformed and read as no nonce
+    /// challenge, the wallet sends no retry and answers the 401 error response. The rows: an <c>error</c> value whose
+    /// closing DQUOTE is missing; and an <c>error_description</c> value holding the control character U+0001 beside an
+    /// <c>error</c> of <c>use_dpop_nonce</c>.
+    /// </summary>
+    /// <param name="row">How the quoted-string leaves its grammar.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(UnterminatedQuotedStringRow)]
+    [DataRow(ControlCharacterInQuotedStringRow)]
+    public async Task WalletDoesNotReadAMalformedQuotedStringAsANonceChallengeAsync(string row)
+    {
+        string challenge = row switch
+        {
+            UnterminatedQuotedStringRow => "DPoP error=\"use_dpop_nonce",
+            ControlCharacterInQuotedStringRow => "DPoP error=\"use_dpop_nonce\", error_description=\"a" + (char)0x01 + "b\"",
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown quoted-string row.")
+        };
+
+        (Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome, List<string> credentialProofs) =
+            await IssueUnderARewrittenNonceChallengeAsync(answer => WithChallengeLines(answer, challenge)).ConfigureAwait(false);
+
+        Assert.IsFalse(outcome.IsSuccess, "A challenge holding a malformed quoted-string is no nonce challenge.");
+        Assert.HasCount(1, credentialProofs, "The wallet sends no retry.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.2">RFC 9110 Section 11.2</see>: "Authentication
+    /// parameters are name/value pairs, where the name token is matched case-insensitively and each parameter name MUST
+    /// only occur once per challenge." The Credential Endpoint's 401 answer is rewritten after it crossed the wire into
+    /// a <c>DPoP</c> challenge naming <c>error</c> twice, first <c>invalid_token</c> and then <c>use_dpop_nonce</c>, the
+    /// <c>DPoP-Nonce</c> field kept: the challenge is malformed and read as no nonce challenge, the wallet sends no
+    /// retry and answers the 401 error response. The rows: the second name spelled <c>error</c>; and the second name
+    /// spelled <c>ERROR</c>, the same name in another case.
+    /// </summary>
+    /// <param name="row">How the repeated name is spelled.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(RepeatedParameterRow)]
+    [DataRow(RepeatedParameterInAnotherCaseRow)]
+    public async Task WalletDoesNotReadAChallengeNamingAParameterTwiceAsANonceChallengeAsync(string row)
+    {
+        string challenge = row switch
+        {
+            RepeatedParameterRow => "DPoP error=\"invalid_token\", error=\"use_dpop_nonce\", algs=\"ES256\"",
+            RepeatedParameterInAnotherCaseRow => "DPoP error=\"invalid_token\", ERROR=\"use_dpop_nonce\", algs=\"ES256\"",
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown repeated parameter row.")
+        };
+
+        (Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome, List<string> credentialProofs) =
+            await IssueUnderARewrittenNonceChallengeAsync(answer => WithChallengeLines(answer, challenge)).ConfigureAwait(false);
+
+        Assert.IsFalse(outcome.IsSuccess, "A challenge naming a parameter twice is no nonce challenge.");
+        Assert.HasCount(1, credentialProofs, "The wallet sends no retry.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.6.4">RFC 9110 Section 5.6.4</see>: "Recipients that
+    /// process the value of a quoted-string MUST handle a quoted-pair as if it were replaced by the octet following the
+    /// backslash." The Credential Endpoint's 401 nonce challenge is rewritten after it crossed the wire so that its
+    /// <c>error</c> value is <c>"use\_dpop_nonce"</c>, the underscore written as a quoted-pair, the <c>DPoP-Nonce</c>
+    /// field kept. The value is <c>use_dpop_nonce</c>: the wallet retries exactly once with the supplied nonce and the
+    /// Credential is issued.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task WalletReadsAQuotedPairAsTheOctetItQuotesAsync()
+    {
+        (Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome, List<string> credentialProofs) =
+            await IssueUnderARewrittenNonceChallengeAsync(answer => WithChallengeLines(
+                answer, "DPoP error=\"use\\_dpop_nonce\", algs=\"ES256\"")).ConfigureAwait(false);
+
+        Assert.IsTrue(outcome.IsSuccess, $"The quoted-pair stands for the octet it quotes; got {DescribeOutcome(outcome)}.");
+        Assert.HasCount(2, credentialProofs, "The challenged Credential Request and its one retry.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.6.4">RFC 9110 Section 5.6.4</see>: "Recipients that
+    /// process the value of a quoted-string MUST handle a quoted-pair as if it were replaced by the octet following the
+    /// backslash." The Credential Endpoint's 401 answer is rewritten after it crossed the wire into a <c>DPoP</c>
+    /// challenge whose <c>error</c> value is <c>"use\"_dpop_nonce"</c>, the <c>DPoP-Nonce</c> field kept. The value is
+    /// <c>use"_dpop_nonce</c>, the quoted DQUOTE kept in it, which is not <c>use_dpop_nonce</c>: the wallet sends no
+    /// retry and answers the 401 error response.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task WalletKeepsTheOctetAQuotedPairQuotesInTheValueAsync()
+    {
+        (Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome, List<string> credentialProofs) =
+            await IssueUnderARewrittenNonceChallengeAsync(answer => WithChallengeLines(
+                answer, "DPoP error=\"use\\\"_dpop_nonce\", algs=\"ES256\"")).ConfigureAwait(false);
+
+        Assert.IsFalse(outcome.IsSuccess, "The value carries the quoted DQUOTE and is no use_dpop_nonce.");
+        Assert.HasCount(1, credentialProofs, "The wallet sends no retry.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">RFC 9449 Section 9</see>: "Resource servers use an
+    /// HTTP 401 (Unauthorized) error code with an accompanying WWW-Authenticate: DPoP value and DPoP-Nonce value to
+    /// accomplish this." The Credential Endpoint's 401 answer is rewritten after it crossed the wire into the challenge
+    /// <c>Bearer error="use_dpop_nonce"</c>, a <c>Bearer</c> challenge and no <c>DPoP</c> one, the <c>DPoP-Nonce</c>
+    /// field kept: the wallet reads no DPoP nonce challenge, sends no retry and answers the 401 error response.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task WalletDoesNotReadABearerChallengeAsADpopNonceChallengeAsync()
+    {
+        (Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome, List<string> credentialProofs) =
+            await IssueUnderARewrittenNonceChallengeAsync(answer => WithChallengeLines(
+                answer, "Bearer error=\"use_dpop_nonce\"")).ConfigureAwait(false);
+
+        Assert.IsFalse(outcome.IsSuccess, "A Bearer challenge is no DPoP nonce challenge.");
+        Assert.HasCount(1, credentialProofs, "The wallet sends no retry.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">RFC 9449 Section 8</see>: "there MUST NOT be more
+    /// than one DPoP-Nonce header", which <see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">Section 9</see>
+    /// extends to resource servers ("They provide the nonce using the DPoP-Nonce header in the same way that
+    /// authorization servers do"). The clause binds the server; the library's own rule reads an answer carrying two
+    /// <c>DPoP-Nonce</c> field lines as no nonce challenge, since it names no one nonce. The Credential Endpoint's 401
+    /// nonce challenge is rewritten after it crossed the wire so that it carries its nonce on two <c>DPoP-Nonce</c>
+    /// field lines: the wallet sends no retry and answers the 401 error response.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task WalletDoesNotRetryOnAChallengeCarryingTwoDpopNonceFieldsAsync()
+    {
+        (Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome, List<string> credentialProofs) =
+            await IssueUnderARewrittenNonceChallengeAsync(answer =>
+            {
+                string nonce = answer.Headers.TryGetSingle(WellKnownHttpHeaderNames.DPoPNonce)!;
+
+                return WithNonceLines(answer, nonce, nonce);
+            }).ConfigureAwait(false);
+
+        Assert.IsFalse(outcome.IsSuccess, "An answer carrying two DPoP-Nonce field lines is no nonce challenge.");
+        Assert.HasCount(1, credentialProofs, "The wallet sends no retry.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8.2">RFC 9449 Section 8.2</see>: "The DPoP-Nonce HTTP
+    /// header field uses the nonce syntax defined in Section 8.1."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8.1">Section 8.1</see>, Figure 22: <c>nonce =
+    /// 1*NQCHAR</c>. The Credential Endpoint's 401 nonce challenge is rewritten after it crossed the wire so that a
+    /// space, which is no NQCHAR, stands in the middle of its <c>DPoP-Nonce</c> value: the value is no nonce, the
+    /// wallet neither stores nor embeds it, sends no retry and answers the 401 error response.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task WalletDoesNotRetryOnADpopNonceOutsideTheNonceSyntaxAsync()
+    {
+        (Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome, List<string> credentialProofs) =
+            await IssueUnderARewrittenNonceChallengeAsync(answer =>
+            {
+                string nonce = answer.Headers.TryGetSingle(WellKnownHttpHeaderNames.DPoPNonce)!;
+
+                return WithNonceLines(answer, nonce.Insert(nonce.Length / 2, " "));
+            }).ConfigureAwait(false);
+
+        Assert.IsFalse(outcome.IsSuccess, "A DPoP-Nonce value outside 1*NQCHAR is no nonce.");
+        Assert.HasCount(1, credentialProofs, "The wallet sends no retry.");
+    }
+
+
+    /// <summary>The row whose single field line holds a Bearer challenge and then the DPoP nonce challenge.</summary>
+    private const string BearerThenDpopRow = "bearer-then-dpop";
+
+    /// <summary>The row whose single field line holds the DPoP nonce challenge and then a Bearer challenge.</summary>
+    private const string DpopThenBearerRow = "dpop-then-bearer";
+
+    /// <summary>The row whose first field line holds a Bearer challenge and whose second holds the DPoP nonce challenge.</summary>
+    private const string BearerLineThenDpopLineRow = "bearer-line-then-dpop-line";
+
+    /// <summary>The row whose first field line holds the DPoP nonce challenge and whose second holds a Bearer challenge.</summary>
+    private const string DpopLineThenBearerLineRow = "dpop-line-then-bearer-line";
+
+    /// <summary>The row whose Bearer challenge carries a realm holding a comma inside its quoted-string.</summary>
+    private const string CommaInsideQuotedStringRow = "comma-inside-quoted-string";
+
+    /// <summary>The row whose first field line holds the DPoP challenge's error and whose second holds its algs auth-param.</summary>
+    private const string AlgsOnTheNextFieldLineRow = "algs-on-the-next-field-line";
+
+    /// <summary>The row whose first field line holds the DPoP challenge's algs and whose second holds its error auth-param.</summary>
+    private const string ErrorOnTheNextFieldLineRow = "error-on-the-next-field-line";
+
+    /// <summary>The row whose one field line holds the combined value of the two field line rows.</summary>
+    private const string CombinedOnOneFieldLineRow = "combined-on-one-field-line";
+
+    /// <summary>The row whose scheme runs into its parameter name with no separator.</summary>
+    private const string NoSeparatorAfterSchemeRow = "no-separator-after-scheme";
+
+    /// <summary>The row whose scheme is followed by a horizontal tab.</summary>
+    private const string TabAfterSchemeRow = "tab-after-scheme";
+
+    /// <summary>The row whose error value lacks its closing DQUOTE.</summary>
+    private const string UnterminatedQuotedStringRow = "unterminated-quoted-string";
+
+    /// <summary>The row whose error_description value holds a control character.</summary>
+    private const string ControlCharacterInQuotedStringRow = "control-character-in-quoted-string";
+
+    /// <summary>The row naming the error parameter twice in one spelling.</summary>
+    private const string RepeatedParameterRow = "repeated-parameter";
+
+    /// <summary>The row naming the error parameter twice, the second time in another case.</summary>
+    private const string RepeatedParameterInAnotherCaseRow = "repeated-parameter-in-another-case";
+
+    /// <summary>The row whose two auth-params have an empty element between them written as two commas.</summary>
+    private const string EmptyElementWithoutWhitespaceRow = "empty-element-without-whitespace";
+
+    /// <summary>The row whose two auth-params have an empty element between them written as a comma, a space and a comma.</summary>
+    private const string EmptyElementHoldingASpaceRow = "empty-element-holding-a-space";
+
+    /// <summary>The DPoP nonce challenge the challenge list rows place: RFC 9449 Section 9's form with an <c>algs</c> parameter.</summary>
+    private static string DpopNonceChallenge { get; } = "DPoP error=\"use_dpop_nonce\", algs=\"ES256\"";
+
+
+    /// <summary>
+    /// Drives the Pre-Authorized Code issuance of <see cref="ComposeOffer"/> over the host's listener against an Issuer
+    /// whose Credential Endpoint answers the wallet's first Credential Request with its 401 nonce challenge
+    /// (<see cref="ArrangeCredentialEndpointNonceChallengeAsync"/>), every 401 answer rewritten by
+    /// <paramref name="rewriteChallenge"/> after it crossed the wire and before the wallet reads it.
+    /// </summary>
+    /// <param name="rewriteChallenge">The rewrite of each 401 answer of the Credential Endpoint.</param>
+    /// <returns>The issuance outcome and every proof the Credential Endpoint received, in arrival order.</returns>
+    private async Task<(Result<CredentialIssuanceResult, Oid4VciRequestFailure> Outcome, List<string> CredentialProofs)> IssueUnderARewrittenNonceChallengeAsync(
+        Func<HttpResponseData, HttpResponseData> rewriteChallenge)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Haip10, IssuerCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        List<string> credentialProofs = await ArrangeCredentialEndpointNonceChallengeAsync(host, material).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        var walletDpopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory walletDpopPublic = walletDpopKeys.PublicKey;
+        using PrivateKeyMemory walletDpopPrivate = walletDpopKeys.PrivateKey;
+
+        Oid4VciWalletClient walletClient = BuildWalletClient(
+            host,
+            constructDpopProofAsync: BuildWalletDpopProofAsync,
+            dpopKey: new DpopKey(walletDpopKeys, WellKnownJwaValues.Es256),
+            rewriteResourceAnswer: answer => answer.StatusCode == 401 ? rewriteChallenge(answer) : answer);
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await IssueOverTheWireAsync(walletClient, host, material, holderPrivate, holderPublic).ConfigureAwait(false);
+
+        return (outcome, credentialProofs);
+    }
+
+
+    /// <summary>States an issuance outcome for an assertion message: the Credential, or the failure's kind, status and code.</summary>
+    /// <param name="outcome">The issuance outcome.</param>
+    /// <returns>The statement.</returns>
+    private static string DescribeOutcome(Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome) =>
+        outcome.IsSuccess ? "the Credential" : $"{outcome.Error.Kind} {outcome.Error.StatusCode} {outcome.Error.ErrorCode}";
+
+
+    /// <summary>
+    /// Wires the Issuer, rotates the server's DPoP nonce key when the wallet asks for its <c>c_nonce</c>, archiving
+    /// the HMAC key the Token Endpoint's nonce was made under, so the nonce the wallet carries into its first Credential
+    /// Request is not one the Credential Endpoint accepts and that request meets the 401 nonce challenge, and records
+    /// every proof the Credential Endpoint receives. <see cref="TestHostShell.EnableDpopAsync"/> must have been called.
+    /// </summary>
+    /// <param name="host">The host serving the Issuer.</param>
+    /// <param name="material">The wallet's registration.</param>
+    /// <returns>The proofs the Credential Endpoint receives, in arrival order.</returns>
+    private static async Task<List<string>> ArrangeCredentialEndpointNonceChallengeAsync(TestHostShell host, VerifierKeyMaterial material)
+    {
+        _ = await WireIssuerSeamsAsync(host).ConfigureAwait(false);
+
+        string credentialPath = TestHostShell.ComposeEndpointPath(
+            WellKnownEndpointNames.Oid4VciCredential, material.Registration.TenantId.Value);
+        List<string> credentialProofs = [];
+        bool isNonceKeyRotated = false;
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            ValidateDpopProofDelegate validateProof = candidateIntegration.ValidateDpopProofAsync!;
+            candidateIntegration.ValidateDpopProofAsync = (request, ct) =>
+            {
+                if(request.HttpUrl.EndsWith(credentialPath, StringComparison.Ordinal))
+                {
+                    credentialProofs.Add(request.Proof);
+                }
+
+                return validateProof(request, ct);
+            };
+
+            IssueCredentialNonceDelegate issueCredentialNonce = candidateIntegration.IssueCredentialNonceAsync!;
+            candidateIntegration.IssueCredentialNonceAsync = (context, ct) =>
+            {
+                if(!isNonceKeyRotated)
+                {
+                    isNonceKeyRotated = true;
+                    _ = host.RotateDpopHmacKey("test-hmac-2");
+                    host.ArchiveRetiringDpopHmacKey(new KeyId("test-hmac-1"));
+                }
+
+                return issueCredentialNonce(context, ct);
+            };
+        }).ConfigureAwait(false);
+
+        return credentialProofs;
+    }
+
+
+    /// <summary>
+    /// Drives the Pre-Authorized Code issuance of <see cref="ComposeOffer"/> over the host's listener under the
+    /// loopback outbound policy.
+    /// </summary>
+    /// <param name="walletClient">The wallet.</param>
+    /// <param name="host">The host serving the Issuer.</param>
+    /// <param name="material">The wallet's registration.</param>
+    /// <param name="holderPrivate">The private key the wallet proves possession of for the Credential.</param>
+    /// <param name="holderPublic">The public key the Credential is bound to.</param>
+    /// <returns>The issuance outcome.</returns>
+    private async Task<Result<CredentialIssuanceResult, Oid4VciRequestFailure>> IssueOverTheWireAsync(
+        Oid4VciWalletClient walletClient,
+        TestHostShell host,
+        VerifierKeyMaterial material,
+        PrivateKeyMemory holderPrivate,
+        PublicKeyMemory holderPublic) =>
+        await walletClient.IssuePreAuthorizedDetailedAsync(
+            ComposeOffer(material),
+            ConfigurationId,
+            holderPrivate,
+            holderPublic,
+            ResolveEndpoints(host, material),
+            transactionCode: null,
+            responseEncryption: null,
+            TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+
+    /// <summary>The wallet's proof construction: the library's DPoP proof builder over the test serializer and P-256 signing.</summary>
+    /// <param name="claims">The proof's claims.</param>
+    /// <param name="key">The DPoP key that signs the proof.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The compact proof.</returns>
+    private static ValueTask<string> BuildWalletDpopProofAsync(DpopProofClaims claims, DpopKey key, CancellationToken cancellationToken) =>
+        DpopProofConstruction.BuildAsync(
+            claims, key, TestSetup.Base64UrlEncoder, DpopTestSupport.Serializer,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async, Pool, cancellationToken);
+
+
+    /// <summary>Returns <paramref name="answer"/> with its <c>WWW-Authenticate</c> field set to <paramref name="challenge"/>, every other field kept.</summary>
+    /// <param name="answer">The answer that crossed the wire.</param>
+    /// <param name="challenge">The challenge the wallet reads instead.</param>
+    /// <returns>The rewritten answer.</returns>
+    private static HttpResponseData WithChallenge(HttpResponseData answer, string challenge) =>
+        answer with
+        {
+            Headers = new ResponseHeaders { Headers = answer.Headers.Headers.With(WellKnownHttpHeaderNames.WwwAuthenticate, challenge) }
+        };
+
+
+    /// <summary>
+    /// Returns <paramref name="answer"/> with its <c>WWW-Authenticate</c> field lines set to
+    /// <paramref name="challengeLines"/>, one field line each, in order, every other field kept.
+    /// </summary>
+    /// <param name="answer">The answer that crossed the wire.</param>
+    /// <param name="challengeLines">The field lines the wallet reads instead.</param>
+    /// <returns>The rewritten answer.</returns>
+    private static HttpResponseData WithChallengeLines(HttpResponseData answer, params string[] challengeLines) =>
+        answer with
+        {
+            Headers = new ResponseHeaders { Headers = answer.Headers.Headers.WithValues(WellKnownHttpHeaderNames.WwwAuthenticate, challengeLines) }
+        };
+
+
+    /// <summary>
+    /// Returns <paramref name="answer"/> with its <c>DPoP-Nonce</c> field lines set to <paramref name="nonceLines"/>, one
+    /// field line each, in order, every other field kept.
+    /// </summary>
+    /// <param name="answer">The answer that crossed the wire.</param>
+    /// <param name="nonceLines">The field lines the wallet reads instead.</param>
+    /// <returns>The rewritten answer.</returns>
+    private static HttpResponseData WithNonceLines(HttpResponseData answer, params string[] nonceLines) =>
+        answer with
+        {
+            Headers = new ResponseHeaders { Headers = answer.Headers.Headers.WithValues(WellKnownHttpHeaderNames.DPoPNonce, nonceLines) }
+        };
+
+
+    /// <summary>
+    /// Returns <paramref name="answer"/> as an HTTP 400 error response whose body is <paramref name="body"/> and whose
+    /// one field is the <c>DPoP-Nonce</c> the answer carried, so the wallet reads the error response form of a refusal.
+    /// </summary>
+    /// <param name="answer">The answer that crossed the wire, carrying a <c>DPoP-Nonce</c> field.</param>
+    /// <param name="body">The JSON error object the wallet reads instead.</param>
+    /// <returns>The rewritten answer.</returns>
+    private static HttpResponseData AsErrorResponse(HttpResponseData answer, string body) =>
+        answer with
+        {
+            StatusCode = 400,
+            Body = body,
+            Headers = new ResponseHeaders
+            {
+                Headers = HttpHeaderSet.FromPairs((WellKnownHttpHeaderNames.DPoPNonce, answer.Headers.TryGetSingle(WellKnownHttpHeaderNames.DPoPNonce)!))
+            }
+        };
+
+
+    /// <summary>
     /// Pre-Authorized Code → §10 ECDH-ES encrypted response: the wallet asks for response
     /// encryption, the issuer seam composes the JWE with real ECDH-ES + AES-GCM, and the wallet's
     /// DecryptResponse drop-out opens it and reads the credential.
@@ -3576,6 +4867,19 @@ internal sealed class Oid4VciWalletClientTests
     /// The rewrite of every form-post answer (the section 6 Token Response) after it crossed the wire and
     /// before the wallet reads it, or <see langword="null"/> to hand each answer over as it arrived.
     /// </param>
+    /// <param name="rewriteResourceAnswer">
+    /// The rewrite of every JSON-post answer (the Nonce, Credential, Deferred and Notification responses) after it
+    /// crossed the wire and before the wallet reads it, or <see langword="null"/> to hand each answer over as it
+    /// arrived.
+    /// </param>
+    /// <param name="observeResourceRequest">
+    /// Sees the endpoint and the headers of every JSON post the wallet sends, before it crosses the wire, or
+    /// <see langword="null"/> to observe none.
+    /// </param>
+    /// <param name="generateIdentifierAsync">
+    /// The identifier generator the wallet draws its proofs' <c>jti</c> values from, or <see langword="null"/>
+    /// for the library's default generator when a DPoP key is given.
+    /// </param>
     /// <returns>The wallet client.</returns>
     private Oid4VciWalletClient BuildWalletClient(
         TestHostShell host,
@@ -3585,7 +4889,10 @@ internal sealed class Oid4VciWalletClientTests
         ConstructDpopProofDelegate? constructDpopProofAsync = null,
         DpopKey? dpopKey = null,
         string? tokenRequestAuthorizationDetails = null,
-        Func<HttpResponseData, HttpResponseData>? rewriteTokenAnswer = null)
+        Func<HttpResponseData, HttpResponseData>? rewriteTokenAnswer = null,
+        Func<HttpResponseData, HttpResponseData>? rewriteResourceAnswer = null,
+        Action<Uri, OutgoingHeaders>? observeResourceRequest = null,
+        GenerateIdentifierDelegate? generateIdentifierAsync = null)
     {
         HttpClient httpClient = host.Host("default").SharedHttpClient!;
 
@@ -3607,8 +4914,14 @@ internal sealed class Oid4VciWalletClientTests
 
                 return rewriteTokenAnswer is null ? answer : rewriteTokenAnswer(answer);
             },
-            SendJsonPost = (endpoint, body, headers, _, ct) =>
-                HttpClientTransport.SendJsonPostAsync(httpClient, endpoint, body, headers, ct),
+            SendJsonPost = async (endpoint, body, headers, _, ct) =>
+            {
+                observeResourceRequest?.Invoke(endpoint, headers);
+                HttpResponseData answer = await HttpClientTransport.SendJsonPostAsync(
+                    httpClient, endpoint, body, headers, ct).ConfigureAwait(false);
+
+                return rewriteResourceAnswer is null ? answer : rewriteResourceAnswer(answer);
+            },
             FetchCredentialOffer = fetchCredentialOffer,
             JwtHeaderSerializer = HeaderSerializer,
             JwtPayloadSerializer = PayloadSerializer,
@@ -3620,7 +4933,7 @@ internal sealed class Oid4VciWalletClientTests
             OutboundFetchPolicy = TestHostShell.LoopbackOutboundFetchPolicy,
             ConstructDpopProofAsync = constructDpopProofAsync,
             DpopKey = dpopKey,
-            GenerateIdentifierAsync = dpopKey is null ? null : DpopJtiGenerator
+            GenerateIdentifierAsync = dpopKey is null ? null : generateIdentifierAsync ?? DpopJtiGenerator
         };
 
         return new Oid4VciWalletClient(configuration);

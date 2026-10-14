@@ -406,6 +406,156 @@ internal sealed class ProtectedResourceMetadataTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-2">RFC 9728 Section 2</see>,
+    /// <c>bearer_methods_supported</c>: "If this entry is omitted, no default bearer methods supported are implied,
+    /// nor does its absence indicate that they are not supported." A resource whose contribution names no bearer
+    /// method serves, over the wire, a document without the member, and the consumer's reading of the document
+    /// holds no list for it: neither a default method nor an empty list standing for none.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ConsumerReadsAnOmittedBearerMethodsSupportedAsNoListAtAllAsync()
+    {
+        (string body, ProtectedResourceMetadata? metadata) = await FetchContributedDocumentAsync(new ProtectedResourceMetadataContribution
+        {
+            ScopesSupported = [WellKnownScopes.SsfRead]
+        }).ConfigureAwait(false);
+
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.IsFalse(document.RootElement.TryGetProperty(ProtectedResourceMetadataParameterNames.BearerMethodsSupported, out _),
+            "The served document omits bearer_methods_supported.");
+        Assert.IsNotNull(metadata);
+        Assert.IsNull(metadata.BearerMethodsSupported, "An omitted bearer_methods_supported implies no default and no empty list.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-2">RFC 9728 Section 2</see>:
+    /// "dpop_signing_alg_values_supported OPTIONAL. JSON array containing a list of the JWS alg values (from the
+    /// "JSON Web Signature and Encryption Algorithms" registry [IANA.JOSE]) supported by the resource server for
+    /// validating Demonstrating Proof of Possession (DPoP) proof JWTs [RFC9449]." A resource contributing
+    /// <c>ES256</c> and <c>EdDSA</c> serves, over the wire, a document whose
+    /// <c>dpop_signing_alg_values_supported</c> is the JSON array <c>["ES256","EdDSA"]</c>, and the consumer reads
+    /// the same two values in the same order.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task DocumentPublishesTheDpopSigningAlgorithmsTheResourceSupportsAsync()
+    {
+        (string body, ProtectedResourceMetadata? metadata) = await FetchContributedDocumentAsync(new ProtectedResourceMetadataContribution
+        {
+            DpopSigningAlgValuesSupported = ContributedDpopAlgorithms
+        }).ConfigureAwait(false);
+
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.IsTrue(document.RootElement.TryGetProperty(
+            ProtectedResourceMetadataParameterNames.DpopSigningAlgValuesSupported, out JsonElement algorithms),
+            "The served document carries dpop_signing_alg_values_supported.");
+        Assert.AreEqual(JsonValueKind.Array, algorithms.ValueKind, "The member is a JSON array.");
+        Assert.AreSequenceEqual(ContributedDpopAlgorithms, algorithms.EnumerateArray().Select(static value => value.GetString()).ToArray());
+        Assert.IsNotNull(metadata);
+        Assert.IsNotNull(metadata.DpopSigningAlgValuesSupported);
+        Assert.AreSequenceEqual(ContributedDpopAlgorithms, metadata.DpopSigningAlgValuesSupported.ToArray());
+    }
+
+
+    /// <summary>The JWS algorithms the resource of <see cref="DocumentPublishesTheDpopSigningAlgorithmsTheResourceSupportsAsync"/> contributes, in order.</summary>
+    private static string[] ContributedDpopAlgorithms { get; } = ["ES256", "EdDSA"];
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-2">RFC 9728 Section 2</see>,
+    /// <c>dpop_bound_access_tokens_required</c>: "Boolean value specifying whether the protected resource always
+    /// requires the use of DPoP-bound access tokens [RFC9449]. If omitted, the default value is false." A resource
+    /// whose contribution states nothing for the member serves, over the wire, a document without it, so a consumer
+    /// applies the default false. The library's consumer side reads the document and substitutes no value for the
+    /// omitted member: its reading holds no stated value, never a <see langword="true"/>, and no operation of the
+    /// library applies the default itself, so the consumer half is that reading.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ConsumerReadsAnOmittedDpopBoundAccessTokensRequiredAsNoStatedValueAsync()
+    {
+        (string body, ProtectedResourceMetadata? metadata) = await FetchContributedDocumentAsync(new ProtectedResourceMetadataContribution
+        {
+            ScopesSupported = [WellKnownScopes.SsfRead]
+        }).ConfigureAwait(false);
+
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.IsFalse(document.RootElement.TryGetProperty(ProtectedResourceMetadataParameterNames.DpopBoundAccessTokensRequired, out _),
+            "The served document omits dpop_bound_access_tokens_required.");
+        Assert.IsNotNull(metadata);
+        Assert.IsNull(metadata.DpopBoundAccessTokensRequired, "The consumer reads no stated value and substitutes none.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.2">RFC 9728 Section 3.2</see>: "Parameters with
+    /// multiple values are represented as JSON arrays. Parameters with zero values MUST be omitted from the
+    /// response." A resource contributing an empty list for <c>authorization_servers</c>, <c>scopes_supported</c>,
+    /// <c>resource_signing_alg_values_supported</c>, <c>authorization_details_types_supported</c> and
+    /// <c>dpop_signing_alg_values_supported</c> serves, over the wire, a document that carries none of the five.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task DocumentOmitsEveryParameterWithZeroValuesAsync()
+    {
+        (string body, ProtectedResourceMetadata? metadata) = await FetchContributedDocumentAsync(new ProtectedResourceMetadataContribution
+        {
+            AuthorizationServers = [],
+            ScopesSupported = [],
+            ResourceSigningAlgValuesSupported = [],
+            AuthorizationDetailsTypesSupported = [],
+            DpopSigningAlgValuesSupported = []
+        }).ConfigureAwait(false);
+
+        Assert.IsNotNull(metadata);
+        using JsonDocument document = JsonDocument.Parse(body);
+        foreach(string name in (string[])[
+            ProtectedResourceMetadataParameterNames.AuthorizationServers,
+            ProtectedResourceMetadataParameterNames.ScopesSupported,
+            ProtectedResourceMetadataParameterNames.ResourceSigningAlgValuesSupported,
+            ProtectedResourceMetadataParameterNames.AuthorizationDetailsTypesSupported,
+            ProtectedResourceMetadataParameterNames.DpopSigningAlgValuesSupported])
+        {
+            Assert.IsFalse(document.RootElement.TryGetProperty(name, out _), $"The parameter '{name}' with zero values is omitted.");
+        }
+    }
+
+
+    /// <summary>
+    /// Registers a protected resource, wires <paramref name="contribution"/> as its metadata contribution, starts the
+    /// listener, and fetches the document over the wire at the location
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3">RFC 9728 Section 3</see> derives from the
+    /// resource identifier, asserting 200.
+    /// </summary>
+    /// <param name="contribution">The resource's contribution to its document.</param>
+    /// <returns>The served body as received and the consumer's reading of it.</returns>
+    private async Task<(string Body, ProtectedResourceMetadata? Metadata)> FetchContributedDocumentAsync(
+        ProtectedResourceMetadataContribution contribution)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial resource = await RegisterProtectedResourceAsync(app).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeProtectedResourceMetadataAsync = (_, _, _) => ValueTask.FromResult(contribution);
+        }).ConfigureAwait(false);
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+
+        string issuer = await FetchIssuerAsync(host, resource.Registration.TenantId.Value).ConfigureAwait(false);
+        Uri metadataUrl = WellKnownPaths.OAuthProtectedResource.ComputeUri(issuer);
+        using HttpResponseMessage response = await host.SharedHttpClient!
+            .GetAsync(new Uri(host.HttpBaseAddress!, metadataUrl.AbsolutePath), TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)response.StatusCode, body);
+
+        return (body, ProtectedResourceMetadataJsonParsing.ParseProtectedResourceMetadata(body));
+    }
+
+
+    /// <summary>
     /// Registers a protected resource co-located with the server: the RFC 9728
     /// metadata capability plus discovery and JWKS so the consumer can learn
     /// the resource identifier and the document can advertise <c>jwks_uri</c>.

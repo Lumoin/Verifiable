@@ -21,7 +21,10 @@ public delegate string EncodeDelegate(ReadOnlySpan<byte> data);
 /// </summary>
 /// <param name="source">The encoded character data to decode.</param>
 /// <param name="pool">The memory pool to use for allocating the result buffer.</param>
-/// <returns>An owned memory buffer containing the decoded bytes.</returns>
+/// <returns>
+/// An owned memory buffer whose memory holds exactly the decoded bytes, no more: its length is the decoded length,
+/// and every consumer of a decoded owner reads the decoded octets as the whole of that memory.
+/// </returns>
 /// <remarks>
 /// <para>
 /// This delegate requires implementations to handle buffer size calculation and allocation

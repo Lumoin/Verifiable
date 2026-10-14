@@ -8,6 +8,7 @@ using System.Text;
 using System.Text.Json;
 using Verifiable.Core.Outbound;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
@@ -1460,6 +1461,1370 @@ internal sealed class ClientCredentialsGrantTests
             clientKeys.PublicKey.Dispose();
             clientKeys.PrivateKey.Dispose();
         }
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.1">RFC 9449 Section 4.1</see>: "Note that per
+    /// [RFC9110], header field names are case insensitive; thus, DPoP, DPOP, dpop, etc., are all valid and
+    /// equivalent header field names." A <c>client_credentials</c> request sent to the token endpoint over a raw
+    /// TLS connection with a valid proof, carrying the nonce the endpoint supplied, in a field whose name is
+    /// spelled <c>dpop</c> or <c>DPOP</c>, is answered 200 with <c>token_type</c> <c>DPoP</c>: the proof was read
+    /// and bound the access token.
+    /// </summary>
+    /// <param name="fieldName">The spelling of the field name the proof is sent under.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("dpop")]
+    [DataRow("DPOP")]
+    public async Task TokenEndpointReadsTheProofUnderAnySpellingOfTheDpopFieldNameAsync(string fieldName)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterMachineClientAsync(app).ConfigureAwait(false);
+        Uri tokenUrl = await StartDpopTokenEndpointAsync(app, material).ConfigureAwait(false);
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+
+        string nonce = await ObtainTokenEndpointNonceAsync(app, tokenUrl, dpopKey).ConfigureAwait(false);
+        string proof = await BuildTokenProofAsync(dpopKey, tokenUrl, nonce).ConfigureAwait(false);
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            app, WellKnownHttpMethods.Post, tokenUrl,
+            [
+                new(WellKnownHttpHeaderNames.ContentType, WellKnownMediaTypes.Application.FormUrlEncoded),
+                new(fieldName, proof)
+            ],
+            Encoding.ASCII.GetBytes(MachineTokenRequestForm()), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+        using JsonDocument document = JsonDocument.Parse(response.Body);
+        Assert.AreEqual(WellKnownAuthenticationSchemes.DPoP, document.RootElement.GetProperty("token_type").GetString(),
+            "The proof sent under this spelling of the field name binds the access token.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">RFC 9449 Section 8</see>: "Nonce values MUST be
+    /// unpredictable." Four <c>client_credentials</c> requests sent to the token endpoint over the wire at one
+    /// instant, each with a proof carrying no nonce, are each answered 400 <c>use_dpop_nonce</c> with a
+    /// <c>DPoP-Nonce</c>, and the four nonces differ from one another. The row shows distinctness at one instant, a
+    /// condition of unpredictability and not the whole of it; that each nonce carries the random bytes its issuer drew
+    /// is the row <see cref="TokenEndpointNonceCarriesTheRandomBytesItsIssuerDrewAsync"/>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task TokenEndpointSuppliesADistinctNonceInEveryChallengeAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterMachineClientAsync(app).ConfigureAwait(false);
+        Uri tokenUrl = await StartDpopTokenEndpointAsync(app, material).ConfigureAwait(false);
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+
+        List<string> nonces = [];
+        for(int challenge = 0; challenge < 4; challenge++)
+        {
+            nonces.Add(await ObtainTokenEndpointNonceAsync(app, tokenUrl, dpopKey).ConfigureAwait(false));
+        }
+
+        Assert.HasCount(4, nonces.Distinct(StringComparer.Ordinal), $"Every challenge supplies another nonce: {string.Join(" ", nonces)}");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">RFC 9449 Section 8</see>: "This same error
+    /// code is used when supplying a new nonce value when there was a nonce mismatch." A <c>client_credentials</c>
+    /// request sent to the token endpoint over the wire with a proof whose <c>nonce</c> does not match what the
+    /// server supplied is answered 400 with <c>error</c> <c>use_dpop_nonce</c> and one <c>DPoP-Nonce</c> carrying a
+    /// new nonce, not the one presented. The rows: the supplied nonce with one character changed; and the supplied
+    /// nonce presented after the server's window for it has passed.
+    /// </summary>
+    /// <param name="row">How the presented nonce fails to match.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(NonceCharacterChangedRow)]
+    [DataRow(NonceWindowPassedRow)]
+    public async Task TokenEndpointAnswersANonceMismatchWithUseDpopNonceAndANewNonceAsync(string row)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterMachineClientAsync(app).ConfigureAwait(false);
+        Uri tokenUrl = await StartDpopTokenEndpointAsync(app, material).ConfigureAwait(false);
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+
+        string supplied = await ObtainTokenEndpointNonceAsync(app, tokenUrl, dpopKey).ConfigureAwait(false);
+        string presented = row switch
+        {
+            NonceCharacterChangedRow => ChangeMiddleCharacter(supplied),
+            NonceWindowPassedRow => supplied,
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown nonce row.")
+        };
+        if(row == NonceWindowPassedRow)
+        {
+            TimeProvider.Advance(WellKnownDpopValues.DefaultNonceValidityWindow + TimeSpan.FromMinutes(1));
+        }
+
+        string proof = await BuildTokenProofAsync(dpopKey, tokenUrl, presented).ConfigureAwait(false);
+        (int statusCode, string body, IReadOnlyList<string> nonces) = await PostMachineTokenRequestAsync(app, tokenUrl, proof).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual(OAuthErrors.UseDpopNonce, document.RootElement.GetProperty("error").GetString());
+        string newNonce = Assert.ContainsSingle(nonces);
+        Assert.AreNotEqual(presented, newNonce, "The rejection supplies a new nonce.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">RFC 9449 Section 8</see>: "If the nonce claim
+    /// in the DPoP proof does not exactly match a nonce recently supplied by the authorization server to the
+    /// client, the authorization server MUST reject the request." A <c>client_credentials</c> request sent to the
+    /// token endpoint over the wire with a valid proof whose <c>nonce</c> is the supplied nonce with one character
+    /// added, or with the case of its first letter changed, is rejected: 400 and no access token in the body. The
+    /// check is item 10 of <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">Section 4.3</see> at the
+    /// token endpoint as well: "If the server provided a nonce value to the client, the nonce claim matches the
+    /// server-provided nonce value."
+    /// </summary>
+    /// <param name="row">How the presented nonce differs from the supplied one.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(NonceCharacterAddedRow)]
+    [DataRow(NonceCaseChangedRow)]
+    public async Task TokenEndpointRejectsAProofWhoseNonceIsNotExactlyOneItSuppliedAsync(string row)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterMachineClientAsync(app).ConfigureAwait(false);
+        Uri tokenUrl = await StartDpopTokenEndpointAsync(app, material).ConfigureAwait(false);
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+
+        string supplied = await ObtainTokenEndpointNonceAsync(app, tokenUrl, dpopKey).ConfigureAwait(false);
+        string presented = row switch
+        {
+            NonceCharacterAddedRow => supplied + "A",
+            NonceCaseChangedRow => ChangeCaseOfFirstLetter(supplied),
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown nonce row.")
+        };
+        Assert.AreNotEqual(supplied, presented);
+
+        string proof = await BuildTokenProofAsync(dpopKey, tokenUrl, presented).ConfigureAwait(false);
+        (int statusCode, string body, _) = await PostMachineTokenRequestAsync(app, tokenUrl, proof).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        Assert.DoesNotContain(WellKnownTokenTypes.AccessToken, body, "A proof whose nonce the server did not supply never mints an access token.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">RFC 9449 Section 8</see>: "If the nonce claim in the
+    /// DPoP proof does not exactly match a nonce recently supplied by the authorization server to the client, the
+    /// authorization server MUST reject the request." A <c>client_credentials</c> request sent to the token endpoint over
+    /// the wire with a valid proof whose <c>nonce</c> decodes to the octets the endpoint supplied, or begins with them,
+    /// but is not the text it supplied, is rejected: 400 with <c>error</c> <c>use_dpop_nonce</c> and no access token in
+    /// the body. The endpoint's nonce key is <see cref="ResourceDpopProofs.PartialGroupNonceKeyId"/>, so its nonces end
+    /// in a partial base64url group. The rows: the supplied octets and one more octet, written canonically; the supplied
+    /// nonce with a space inside it; the supplied nonce with its <c>=</c> padding; and the supplied nonce with a pad bit
+    /// of its last character set. The space and the <c>=</c> are characters outside the base64url alphabet
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc4648#section-5">RFC 4648 Section 5</see>, Table 2, written without
+    /// padding by <see href="https://www.rfc-editor.org/rfc/rfc7515#section-2">RFC 7515 Section 2</see>), and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc4648#section-3.3">RFC 4648 Section 3.3</see> reads: "Implementations
+    /// MUST reject the encoded data if it contains characters outside the base alphabet when interpreting base-encoded
+    /// data, unless the specification referring to this document explicitly states otherwise".
+    /// </summary>
+    /// <param name="row">How the presented nonce spells or extends the supplied one.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(NonceExtendedByAnOctetRow)]
+    [DataRow(NonceWithASpaceInsideRow)]
+    [DataRow(NoncePaddedRow)]
+    [DataRow(NonceWithAPadBitSetRow)]
+    public async Task TokenEndpointRejectsANonceThatIsNotTheTextItSuppliedAsync(string row)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterMachineClientAsync(app).ConfigureAwait(false);
+        _ = await app.EnableDpopAsync(ResourceDpopProofs.PartialGroupNonceKeyId).ConfigureAwait(false);
+        Uri tokenUrl = await StartDpopTokenEndpointAsync(app, material).ConfigureAwait(false);
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+
+        string supplied = await ObtainTokenEndpointNonceAsync(app, tokenUrl, dpopKey).ConfigureAwait(false);
+        string presented = row switch
+        {
+            NonceExtendedByAnOctetRow => ResourceDpopProofs.ExtendNonceByAnOctet(supplied),
+            NonceWithASpaceInsideRow => supplied.Insert(supplied.Length / 2, " "),
+            NoncePaddedRow => ResourceDpopProofs.PadNonce(supplied),
+            NonceWithAPadBitSetRow => ResourceDpopProofs.SetUnusedBitsOfNonce(supplied),
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown nonce row.")
+        };
+        Assert.AreNotEqual(supplied, presented);
+
+        string proof = await BuildTokenProofAsync(dpopKey, tokenUrl, presented).ConfigureAwait(false);
+        (int statusCode, string body, _) = await PostMachineTokenRequestAsync(app, tokenUrl, proof).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, $"A nonce that is not the text the endpoint supplied is rejected: {body}");
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual(OAuthErrors.UseDpopNonce, document.RootElement.GetProperty("error").GetString());
+        Assert.DoesNotContain(WellKnownTokenTypes.AccessToken, body, "A proof whose nonce the server did not supply never mints an access token.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">RFC 9449 Section 8</see>: "Upon receiving the nonce,
+    /// the client is expected to retry its token request using a DPoP proof including the supplied nonce value in the
+    /// nonce claim of the DPoP proof." The token endpoint's nonce key is
+    /// <see cref="ResourceDpopProofs.PartialGroupNonceKeyId"/>, so the nonce it supplies ends in a partial base64url
+    /// group; a <c>client_credentials</c> request sent over the wire with a proof carrying that nonce exactly as supplied
+    /// is answered 200 with <c>token_type</c> <c>DPoP</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task TokenEndpointAcceptsTheNonceItSuppliedEndingInAPartialGroupAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterMachineClientAsync(app).ConfigureAwait(false);
+        _ = await app.EnableDpopAsync(ResourceDpopProofs.PartialGroupNonceKeyId).ConfigureAwait(false);
+        Uri tokenUrl = await StartDpopTokenEndpointAsync(app, material).ConfigureAwait(false);
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+
+        string supplied = await ObtainTokenEndpointNonceAsync(app, tokenUrl, dpopKey).ConfigureAwait(false);
+        Assert.AreNotEqual(0, supplied.Length % 4, $"The supplied nonce ends in a partial group: '{supplied}'.");
+        string proof = await BuildTokenProofAsync(dpopKey, tokenUrl, supplied).ConfigureAwait(false);
+        (int statusCode, string body, _) = await PostMachineTokenRequestAsync(app, tokenUrl, proof).ConfigureAwait(false);
+
+        Assert.AreEqual(200, statusCode, $"The nonce as supplied is accepted: {body}");
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual(WellKnownAuthenticationSchemes.DPoP, document.RootElement.GetProperty("token_type").GetString());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">RFC 9449 Section 8</see>: "If the nonce claim in the
+    /// DPoP proof does not exactly match a nonce recently supplied by the authorization server to the client, the
+    /// authorization server MUST reject the request." A decoder may read another spelling as the supplied octets.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc4648#section-3.5">RFC 4648 Section 3.5</see>: "decoders MAY chose to
+    /// reject an encoding if the pad bits have not been set to zero", so a conforming decoder may read a set pad bit.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc4648#section-3.3">RFC 4648 Section 3.3</see>: "Implementations MUST
+    /// reject the encoded data if it contains characters outside the base alphabet when interpreting base-encoded data,
+    /// unless the specification referring to this document explicitly states otherwise", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7515#section-2">RFC 7515 Section 2</see> states no such exception
+    /// for base64url, whose alphabet is <see href="https://www.rfc-editor.org/rfc/rfc4648#section-5">Section 5</see>'s
+    /// Table 2: a decoder that reads the base64 characters <c>+</c> and <c>/</c> as the base64url <c>-</c> and <c>_</c>
+    /// is outside Section 3.3, and for such a decoder the validator's own check of the base64url alphabet is what holds
+    /// the exact match. The token endpoint's nonce validation is wired with
+    /// <see cref="ResourceDpopProofs.PermissiveBase64UrlDecoder"/>, which reads both, and its issuance with
+    /// <see cref="ResourceDpopProofs.RandomFieldOfOnes"/>, so the supplied text holds a <c>_</c>. A
+    /// <c>client_credentials</c> request sent over the wire with a proof whose <c>nonce</c> that decoder reads as the
+    /// supplied octets, but which is not the supplied text, is rejected: 400 with <c>error</c> <c>use_dpop_nonce</c>,
+    /// the refusal answered with a <c>DPoP-Nonce</c> field, and no access token. The rows: the supplied text with the
+    /// lowest pad bit of its last character set, with the highest pad bit of its last character set, and with its first
+    /// <c>-</c> or <c>_</c> written <c>+</c> or <c>/</c>; each under a nonce HMAC key whose identifier is 12 octets (an
+    /// 85-octet nonce, four pad bits) and 13 octets (86 octets, two pad bits).
+    /// </summary>
+    /// <param name="keyIdRow">The nonce HMAC key, by the length of its identifier.</param>
+    /// <param name="spellingRow">How the presented nonce spells the supplied octets.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(TwelveOctetKeyIdRow, PadBitSetSpellingRow)]
+    [DataRow(TwelveOctetKeyIdRow, HighestPadBitSetSpellingRow)]
+    [DataRow(TwelveOctetKeyIdRow, Base64CharacterSpellingRow)]
+    [DataRow(ThirteenOctetKeyIdRow, PadBitSetSpellingRow)]
+    [DataRow(ThirteenOctetKeyIdRow, HighestPadBitSetSpellingRow)]
+    [DataRow(ThirteenOctetKeyIdRow, Base64CharacterSpellingRow)]
+    public async Task TokenEndpointRejectsAnotherSpellingOfTheSuppliedNonceItsDecoderReadsAsync(string keyIdRow, string spellingRow)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterMachineClientAsync(app).ConfigureAwait(false);
+        Uri tokenUrl = await StartDpopTokenEndpointUnderThePermissiveDecoderAsync(app, material, keyIdRow).ConfigureAwait(false);
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+
+        string supplied = await ObtainTokenEndpointNonceAsync(app, tokenUrl, dpopKey).ConfigureAwait(false);
+        string presented = spellingRow switch
+        {
+            PadBitSetSpellingRow => ResourceDpopProofs.SetUnusedBitsOfNonce(supplied),
+            HighestPadBitSetSpellingRow => ResourceDpopProofs.SetHighestUnusedBitOfNonce(supplied),
+            Base64CharacterSpellingRow => ResourceDpopProofs.SpellNonceInTheBase64Alphabet(supplied),
+            _ => throw new ArgumentOutOfRangeException(nameof(spellingRow), spellingRow, "Unknown spelling row.")
+        };
+        Assert.AreNotEqual(supplied, presented);
+        Assert.IsTrue(ResourceDpopProofs.IsReadAsTheSuppliedOctetsByThePermissiveDecoder(presented, supplied),
+            "The wired decoder reads the presented spelling as the supplied octets.");
+
+        string proof = await BuildTokenProofAsync(dpopKey, tokenUrl, presented).ConfigureAwait(false);
+        (int statusCode, string body, IReadOnlyList<string> nonces) = await PostMachineTokenRequestAsync(app, tokenUrl, proof).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, $"A spelling of the supplied octets that is not the supplied text is rejected: {body}");
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual(OAuthErrors.UseDpopNonce, document.RootElement.GetProperty("error").GetString());
+        string answeredNonce = Assert.ContainsSingle(nonces, "The refusal is answered with one DPoP-Nonce field.");
+        Assert.AreNotEqual(presented, answeredNonce, "The DPoP-Nonce the refusal is answered with is not the refused spelling.");
+        Assert.DoesNotContain(WellKnownTokenTypes.AccessToken, body, "A proof whose nonce the server did not supply never mints an access token.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">RFC 9449 Section 8</see>: "Upon receiving the nonce,
+    /// the client is expected to retry its token request using a DPoP proof including the supplied nonce value in the
+    /// nonce claim of the DPoP proof." Under the wiring of
+    /// <see cref="TokenEndpointRejectsAnotherSpellingOfTheSuppliedNonceItsDecoderReadsAsync"/> (the nonce validation reading
+    /// through <see cref="ResourceDpopProofs.PermissiveBase64UrlDecoder"/>), a <c>client_credentials</c> request sent over
+    /// the wire with a proof carrying the nonce exactly as supplied is answered 200 with <c>token_type</c> <c>DPoP</c>,
+    /// under a nonce key of 12 octets and of 13 octets: the decoder reads the supplied text, so the refusals of the other
+    /// spellings are the validator's.
+    /// </summary>
+    /// <param name="keyIdRow">The nonce key, by the length of its identifier.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(TwelveOctetKeyIdRow)]
+    [DataRow(ThirteenOctetKeyIdRow)]
+    public async Task TokenEndpointAcceptsTheSuppliedNonceUnderAPermissiveDecoderAsync(string keyIdRow)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterMachineClientAsync(app).ConfigureAwait(false);
+        Uri tokenUrl = await StartDpopTokenEndpointUnderThePermissiveDecoderAsync(app, material, keyIdRow).ConfigureAwait(false);
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+
+        string supplied = await ObtainTokenEndpointNonceAsync(app, tokenUrl, dpopKey).ConfigureAwait(false);
+        string proof = await BuildTokenProofAsync(dpopKey, tokenUrl, supplied).ConfigureAwait(false);
+        (int statusCode, string body, _) = await PostMachineTokenRequestAsync(app, tokenUrl, proof).ConfigureAwait(false);
+
+        Assert.AreEqual(200, statusCode, $"The nonce as supplied is accepted: {body}");
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual(WellKnownAuthenticationSchemes.DPoP, document.RootElement.GetProperty("token_type").GetString());
+    }
+
+
+    /// <summary>
+    /// Wires DPoP on the host under the nonce key <paramref name="keyIdRow"/> names, its nonce validation reading through
+    /// <see cref="ResourceDpopProofs.PermissiveBase64UrlDecoder"/> and its issuance filling the random field from
+    /// <see cref="ResourceDpopProofs.RandomFieldOfOnes"/>, then starts the token endpoint
+    /// (<see cref="StartDpopTokenEndpointAsync"/>).
+    /// </summary>
+    /// <param name="app">The host.</param>
+    /// <param name="material">The machine registration.</param>
+    /// <param name="keyIdRow">The nonce key, by the length of its identifier.</param>
+    /// <returns>The absolute token endpoint URL on the listener.</returns>
+    private async Task<Uri> StartDpopTokenEndpointUnderThePermissiveDecoderAsync(TestHostShell app, VerifierKeyMaterial material, string keyIdRow)
+    {
+        string keyId = keyIdRow switch
+        {
+            TwelveOctetKeyIdRow => ResourceDpopProofs.PartialGroupNonceKeyId,
+            ThirteenOctetKeyIdRow => ResourceDpopProofs.TwoOctetFinalQuantumNonceKeyId,
+            _ => throw new ArgumentOutOfRangeException(nameof(keyIdRow), keyIdRow, "Unknown key identifier row.")
+        };
+        _ = await app.EnableDpopAsync(keyId).ConfigureAwait(false);
+        await app.ValidateDpopNoncesWithDecoderAsync(ResourceDpopProofs.PermissiveBase64UrlDecoder).ConfigureAwait(false);
+        await app.IssueDpopNoncesFromEntropyAsync(ResourceDpopProofs.RandomFieldOfOnes).ConfigureAwait(false);
+
+        return await StartDpopTokenEndpointAsync(app, material).ConfigureAwait(false);
+    }
+
+
+    /// <summary>The row of a permissive-decoder test whose nonce key identifier is 12 octets, its nonces 85 octets.</summary>
+    private const string TwelveOctetKeyIdRow = "twelve-octet-key-identifier";
+
+    /// <summary>The row of a permissive-decoder test whose nonce key identifier is 13 octets, its nonces 86 octets.</summary>
+    private const string ThirteenOctetKeyIdRow = "thirteen-octet-key-identifier";
+
+    /// <summary>The row of a permissive-decoder test whose presented nonce is the supplied one with the lowest pad bit of its last character set.</summary>
+    private const string PadBitSetSpellingRow = "pad-bit-set";
+
+    /// <summary>The row of a permissive-decoder test whose presented nonce is the supplied one with the highest pad bit of its last character set.</summary>
+    private const string HighestPadBitSetSpellingRow = "highest-pad-bit-set";
+
+    /// <summary>The row of a permissive-decoder test whose presented nonce writes the supplied one's first <c>-</c> or <c>_</c> as <c>+</c> or <c>/</c>.</summary>
+    private const string Base64CharacterSpellingRow = "base64-character";
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">RFC 9449 Section 8</see>: "The rejection
+    /// response MAY include a DPoP-Nonce HTTP header providing a new nonce value to use for subsequent requests."
+    /// The server takes the option: a <c>client_credentials</c> request sent to the token endpoint over the wire
+    /// with a proof whose <c>nonce</c> is the supplied nonce with one character changed is rejected with 400 and one
+    /// <c>DPoP-Nonce</c>, and the next request, whose proof carries that nonce, is answered 200 with
+    /// <c>token_type</c> <c>DPoP</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task TokenEndpointRejectionOfAMismatchedNonceSuppliesTheNonceOfTheNextRequestAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterMachineClientAsync(app).ConfigureAwait(false);
+        Uri tokenUrl = await StartDpopTokenEndpointAsync(app, material).ConfigureAwait(false);
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+
+        string supplied = await ObtainTokenEndpointNonceAsync(app, tokenUrl, dpopKey).ConfigureAwait(false);
+        string mismatched = await BuildTokenProofAsync(dpopKey, tokenUrl, ChangeMiddleCharacter(supplied)).ConfigureAwait(false);
+        (int rejectedStatus, string rejectedBody, IReadOnlyList<string> rejectionNonces) =
+            await PostMachineTokenRequestAsync(app, tokenUrl, mismatched).ConfigureAwait(false);
+        Assert.AreEqual(400, rejectedStatus, rejectedBody);
+        string newNonce = Assert.ContainsSingle(rejectionNonces, "The rejection provides a new nonce.");
+
+        string proof = await BuildTokenProofAsync(dpopKey, tokenUrl, newNonce).ConfigureAwait(false);
+        (int statusCode, string body, _) = await PostMachineTokenRequestAsync(app, tokenUrl, proof).ConfigureAwait(false);
+
+        Assert.AreEqual(200, statusCode, body);
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual(WellKnownAuthenticationSchemes.DPoP, document.RootElement.GetProperty("token_type").GetString());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">RFC 9449 Section 8</see>: "Other HTTP headers
+    /// and JSON fields MAY also be included in the error response, but there MUST NOT be more than one DPoP-Nonce
+    /// header." A <c>client_credentials</c> request sent to the token endpoint over a raw TLS connection with a proof
+    /// carrying no nonce is answered 400 <c>use_dpop_nonce</c>, and the response head carries exactly one
+    /// <c>DPoP-Nonce</c> field line.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task TokenEndpointNonceChallengeCarriesOneDpopNonceFieldAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterMachineClientAsync(app).ConfigureAwait(false);
+        Uri tokenUrl = await StartDpopTokenEndpointAsync(app, material).ConfigureAwait(false);
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+
+        HttpResponseData response = await PostNonceLessProofOverARawConnectionAsync(app, tokenUrl, dpopKey).ConfigureAwait(false);
+
+        Assert.AreEqual(400, response.StatusCode, response.Body);
+        Assert.Contains(OAuthErrors.UseDpopNonce, response.Body);
+        string nonce = Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.DPoPNonce),
+            "The challenge carries exactly one DPoP-Nonce field line.");
+        Assert.IsFalse(string.IsNullOrEmpty(nonce), "The one DPoP-Nonce field carries a nonce.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8.2">RFC 9449 Section 8.2</see>: "The DPoP-Nonce
+    /// HTTP header field uses the nonce syntax defined in Section 8.1.", Figure 22: <c>nonce = 1*NQCHAR</c>. A
+    /// <c>client_credentials</c> request sent to the token endpoint over a raw TLS connection with a proof carrying
+    /// no nonce is answered 400 <c>use_dpop_nonce</c>, and the <c>DPoP-Nonce</c> field value, read as received, is
+    /// one or more NQCHAR.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task TokenEndpointWritesTheNonceInTheNonceSyntaxAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterMachineClientAsync(app).ConfigureAwait(false);
+        Uri tokenUrl = await StartDpopTokenEndpointAsync(app, material).ConfigureAwait(false);
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+
+        HttpResponseData response = await PostNonceLessProofOverARawConnectionAsync(app, tokenUrl, dpopKey).ConfigureAwait(false);
+
+        Assert.AreEqual(400, response.StatusCode, response.Body);
+        string nonce = Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.DPoPNonce));
+        Assert.IsTrue(DpopWireReading.IsNonceSyntax(nonce), $"The DPoP-Nonce value is 1*NQCHAR: '{nonce}'.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8.2">RFC 9449 Section 8.2</see>: "Responses that
+    /// include the DPoP-Nonce HTTP header should be uncacheable (e.g., using Cache-Control: no-store in response to
+    /// a GET request) to prevent the response from being used to serve a subsequent request and a stale nonce
+    /// value from being used as a result." A <c>client_credentials</c> request sent to the token endpoint over a raw
+    /// TLS connection with a proof carrying no nonce is answered 400 with a <c>DPoP-Nonce</c>, and no cache may
+    /// store the response (<see href="https://www.rfc-editor.org/rfc/rfc9111#section-3">RFC 9111 Section 3</see>): the
+    /// response to a POST is cacheable only with explicit freshness and a <c>Content-Location</c> naming the POST's
+    /// target URI (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-9.3.3">RFC 9110 Section 9.3.3</see>), and
+    /// the response carries neither.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task TokenEndpointNonceChallengeIsNotStorableByACacheAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterMachineClientAsync(app).ConfigureAwait(false);
+        Uri tokenUrl = await StartDpopTokenEndpointAsync(app, material).ConfigureAwait(false);
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+
+        HttpResponseData response = await PostNonceLessProofOverARawConnectionAsync(app, tokenUrl, dpopKey).ConfigureAwait(false);
+
+        Assert.AreEqual(400, response.StatusCode, response.Body);
+        Assert.IsNotEmpty(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.DPoPNonce), "The challenge carries a DPoP-Nonce.");
+        Assert.IsFalse(DpopWireReading.IsStorableByACache(WellKnownHttpMethods.Post, tokenUrl, response.StatusCode, response.Headers.Headers),
+            "A response carrying a DPoP-Nonce is not storable by a cache.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449 Section 11.1</see>: "Unlike
+    /// cryptographic nonces, it is acceptable for clients to use the same nonce multiple times and for the server
+    /// to accept the same nonce multiple times." Two <c>client_credentials</c> requests sent to the token endpoint
+    /// over the wire one after the other, their proofs distinct in <c>jti</c> and both carrying the one nonce the
+    /// endpoint supplied, are both answered 200 with <c>token_type</c> <c>DPoP</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task TokenEndpointAcceptsTheNonceItSuppliedInSeveralProofsAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterMachineClientAsync(app).ConfigureAwait(false);
+        Uri tokenUrl = await StartDpopTokenEndpointAsync(app, material).ConfigureAwait(false);
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+
+        string nonce = await ObtainTokenEndpointNonceAsync(app, tokenUrl, dpopKey).ConfigureAwait(false);
+        foreach(string jti in (string[])["first-proof-of-the-nonce", "second-proof-of-the-nonce"])
+        {
+            string proof = await BuildTokenProofAsync(dpopKey, tokenUrl, nonce, jti).ConfigureAwait(false);
+            (int statusCode, string body, _) = await PostMachineTokenRequestAsync(app, tokenUrl, proof).ConfigureAwait(false);
+
+            Assert.AreEqual(200, statusCode, $"The proof '{jti}' carrying the supplied nonce is accepted: {body}");
+            using JsonDocument document = JsonDocument.Parse(body);
+            Assert.AreEqual(WellKnownAuthenticationSchemes.DPoP, document.RootElement.GetProperty("token_type").GetString());
+        }
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.6">RFC 9449 Section 11.6</see>: "In particular,
+    /// the algorithm none MUST NOT be allowed." A <c>client_credentials</c> request sent to the token endpoint over
+    /// the wire with a proof carrying the supplied nonce whose protected header declares <c>alg</c> <c>none</c>, its
+    /// signature made by the P-256 private key whose public half the <c>jwk</c> carries, is refused: 400
+    /// <c>invalid_dpop_proof</c> and no access token in the body.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task TokenEndpointRefusesAProofWhoseAlgIsNoneAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterMachineClientAsync(app).ConfigureAwait(false);
+        Uri tokenUrl = await StartDpopTokenEndpointAsync(app, material).ConfigureAwait(false);
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+
+        string nonce = await ObtainTokenEndpointNonceAsync(app, tokenUrl, dpopKey).ConfigureAwait(false);
+        string proof = await BuildTokenProofAsync(dpopKey, tokenUrl, nonce, alterHeader: header => header["alg"] = "none").ConfigureAwait(false);
+        (int statusCode, string body, _) = await PostMachineTokenRequestAsync(app, tokenUrl, proof).ConfigureAwait(false);
+
+        Assert.AreEqual(400, statusCode, body);
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual(OAuthErrors.InvalidDpopProof, document.RootElement.GetProperty("error").GetString());
+        Assert.DoesNotContain(WellKnownTokenTypes.AccessToken, body, "A proof declaring alg none never mints an access token.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-2">RFC 9449 Section 2</see>: "DPoP is not, however, a
+    /// substitute for a secure transport and MUST always be used in conjunction with HTTPS." A client wired with a
+    /// DPoP key and the secure default outbound policy, asked for a <c>client_credentials</c> token at an endpoint
+    /// whose URL is <c>http</c>, never dials it: the transport sees no request, so no proof leaves the client
+    /// outside HTTPS, and the request answers the client's internal error.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ClientNeverSendsAProofToATokenEndpointOutsideHttpsAsync()
+    {
+        Uri issuer = new("https://as.example.com");
+        Uri plainHttpTokenEndpoint = new("http://as.example.com/token");
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+
+        List<OutgoingHeaders> dialed = [];
+        OAuthClient client = BuildDpopMachineClient(
+            issuer, plainHttpTokenEndpoint, dpopKey, new InMemoryDpopNonceCache(), OutboundFetchPolicy.SecureDefault,
+            (endpoint, fields, headers, ct) =>
+            {
+                dialed.Add(headers);
+
+                return ValueTask.FromResult(new HttpResponseData
+                {
+                    StatusCode = 400,
+                    Body = "{\"error\":\"invalid_request\"}",
+                    Headers = ResponseHeaders.Empty
+                });
+            });
+
+        AuthCodeFlowEndpointResult result = await client.ClientCredentials.RequestTokenAsync(
+            MachineClientRegistration(issuer), scope: MachineScope, resource: null, [], clientAssertionOptions: null,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(dialed, "No request, and so no DPoP proof, is sent to an http endpoint.");
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.InternalError, result.Outcome,
+            $"ErrorCode={result.ErrorCode} ErrorDescription={result.ErrorDescription}");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4">RFC 9449 Section 4</see>: "Each HTTP request
+    /// requires a unique DPoP proof." A DPoP-wired client asks the token endpoint for a <c>client_credentials</c>
+    /// token twice over the wire: the first request is challenged for a nonce and retried, the second carries the
+    /// supplied nonce. Every proof the endpoint receives, read from the <c>DPoP</c> field as it arrived, differs
+    /// from every other in its <c>jti</c>, and both requests are answered with a DPoP-bound access token under the
+    /// endpoint's replay check of the <c>jti</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ClientSendsADistinctProofInEveryTokenRequestAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterMachineClientAsync(app).ConfigureAwait(false);
+        Uri tokenUrl = await StartDpopTokenEndpointAsync(app, material).ConfigureAwait(false);
+        List<(string HttpUrl, string Proof)> receivedProofs = await app.RecordReceivedDpopProofsAsync().ConfigureAwait(false);
+        await AdmitTheMachineClientByItsIdentifierAsync(app).ConfigureAwait(false);
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+
+        OAuthClient client = BuildDpopMachineClientOverWire(app, material, tokenUrl, dpopKey, new InMemoryDpopNonceCache());
+        for(int request = 0; request < 2; request++)
+        {
+            AuthCodeFlowEndpointResult result = await client.ClientCredentials.RequestTokenAsync(
+                MachineClientRegistration(material.Registration.IssuerUri!), scope: MachineScope, resource: null, [],
+                clientAssertionOptions: null, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, result.Outcome,
+                $"Request {request}: ErrorCode={result.ErrorCode} ErrorDescription={result.ErrorDescription}");
+            Assert.AreEqual(WellKnownAuthenticationSchemes.DPoP, (string)result.Body![OAuthRequestParameterNames.TokenType]);
+        }
+
+        Assert.IsGreaterThanOrEqualTo(3, receivedProofs.Count, "The endpoint received the challenged proof, its retry and the second request's proof.");
+        List<string?> jtis = [.. receivedProofs.Select(received => DpopWireReading.ReadPayloadClaim(received.Proof, "jti", Pool))];
+        Assert.HasCount(receivedProofs.Count, jtis.Distinct(StringComparer.Ordinal), $"Every proof carries its own jti: {string.Join(" ", jtis)}");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.1">RFC 9449 Section 4.1</see>: "The DPoP HTTP
+    /// header field value uses the token68 syntax defined in Section 11.2 of [RFC9110]", Figure 3:
+    /// <c>token68 = 1*( ALPHA / DIGIT / "-" / "." / "_" / "~" / "+" / "/" ) *"="</c>. A DPoP-wired client asks the
+    /// token endpoint for a <c>client_credentials</c> token over the wire and is answered with a DPoP-bound access
+    /// token, and every <c>DPoP</c> field value the endpoint received, read as it arrived, is one token68.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ClientSendsItsProofInTheToken68SyntaxAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterMachineClientAsync(app).ConfigureAwait(false);
+        Uri tokenUrl = await StartDpopTokenEndpointAsync(app, material).ConfigureAwait(false);
+        List<(string HttpUrl, string Proof)> receivedProofs = await app.RecordReceivedDpopProofsAsync().ConfigureAwait(false);
+        await AdmitTheMachineClientByItsIdentifierAsync(app).ConfigureAwait(false);
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+
+        OAuthClient client = BuildDpopMachineClientOverWire(app, material, tokenUrl, dpopKey, new InMemoryDpopNonceCache());
+        AuthCodeFlowEndpointResult result = await client.ClientCredentials.RequestTokenAsync(
+            MachineClientRegistration(material.Registration.IssuerUri!), scope: MachineScope, resource: null, [],
+            clientAssertionOptions: null, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, result.Outcome, $"ErrorCode={result.ErrorCode} ErrorDescription={result.ErrorDescription}");
+        Assert.IsNotEmpty(receivedProofs, "The endpoint received the client's proofs.");
+        foreach((_, string proof) in receivedProofs)
+        {
+            Assert.IsTrue(DpopWireReading.IsToken68(proof), $"The DPoP field value is one token68: '{proof}'.");
+        }
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">RFC 9449 Section 8</see>: "The nonce is opaque
+    /// to the client." The token endpoint here supplies nonces that carry NQCHAR outside the base64url alphabet
+    /// (<c>~</c>, <c>.</c>, <c>!</c>, <c>*</c>, <c>(</c>) before the server's own nonce, and reads them back the
+    /// same way. A DPoP-wired client asks for a <c>client_credentials</c> token over the wire, is challenged once and
+    /// retries: the nonce its retry's proof carries is the supplied nonce exactly, character for character, and the
+    /// request is answered with a DPoP-bound access token.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ClientEchoesTheSuppliedNonceExactlyAsItArrivedAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterMachineClientAsync(app).ConfigureAwait(false);
+        Uri tokenUrl = await StartDpopTokenEndpointAsync(app, material).ConfigureAwait(false);
+
+        await AdmitTheMachineClientByItsIdentifierAsync(app).ConfigureAwait(false);
+
+        const string OpaquePrefix = "~opaque.nonce!*(";
+        List<string> supplied = [];
+        List<string> presented = [];
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            IssueDpopNonceDelegate issue = candidateIntegration.IssueDpopNonceAsync!;
+            ValidateDpopNonceDelegate validate = candidateIntegration.ValidateDpopNonceAsync!;
+            candidateIntegration.IssueDpopNonceAsync = async (audience, tenantId, context, ct) =>
+            {
+                string nonce = OpaquePrefix + await issue(audience, tenantId, context, ct).ConfigureAwait(false);
+                supplied.Add(nonce);
+
+                return nonce;
+            };
+            candidateIntegration.ValidateDpopNonceAsync = (nonce, audience, tenantId, context, ct) =>
+            {
+                presented.Add(nonce);
+
+                return nonce.StartsWith(OpaquePrefix, StringComparison.Ordinal)
+                    ? validate(nonce[OpaquePrefix.Length..], audience, tenantId, context, ct)
+                    : ValueTask.FromResult(DpopNonceValidationResult.Failure(DpopNonceValidationFailureReason.Malformed));
+            };
+        }).ConfigureAwait(false);
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+
+        OAuthClient client = BuildDpopMachineClientOverWire(app, material, tokenUrl, dpopKey, new InMemoryDpopNonceCache());
+        AuthCodeFlowEndpointResult result = await client.ClientCredentials.RequestTokenAsync(
+            MachineClientRegistration(material.Registration.IssuerUri!), scope: MachineScope, resource: null, [],
+            clientAssertionOptions: null, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, result.Outcome, $"ErrorCode={result.ErrorCode} ErrorDescription={result.ErrorDescription}");
+        string suppliedNonce = Assert.ContainsSingle(supplied);
+        Assert.AreEqual(suppliedNonce, Assert.ContainsSingle(presented), "The client echoes the nonce exactly as it was supplied.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8.2">RFC 9449 Section 8.2</see>: "The client is
+    /// expected to use the existing supplied nonce in DPoP proofs until the server supplies a new nonce value." A
+    /// DPoP-wired client asks the token endpoint for a <c>client_credentials</c> token twice over the wire: the
+    /// first request is challenged once and retried with the supplied nonce, and the second request's one proof
+    /// carries that same nonce, so the endpoint supplies no other nonce and both requests are answered with a
+    /// DPoP-bound access token.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ClientUsesTheSuppliedNonceInItsNextTokenRequestAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterMachineClientAsync(app).ConfigureAwait(false);
+        Uri tokenUrl = await StartDpopTokenEndpointAsync(app, material).ConfigureAwait(false);
+        List<(string HttpUrl, string Proof)> receivedProofs = await app.RecordReceivedDpopProofsAsync().ConfigureAwait(false);
+        await AdmitTheMachineClientByItsIdentifierAsync(app).ConfigureAwait(false);
+        List<string> supplied = [];
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            IssueDpopNonceDelegate issue = candidateIntegration.IssueDpopNonceAsync!;
+            candidateIntegration.IssueDpopNonceAsync = async (audience, tenantId, context, ct) =>
+            {
+                string nonce = await issue(audience, tenantId, context, ct).ConfigureAwait(false);
+                supplied.Add(nonce);
+
+                return nonce;
+            };
+        }).ConfigureAwait(false);
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+
+        OAuthClient client = BuildDpopMachineClientOverWire(app, material, tokenUrl, dpopKey, new InMemoryDpopNonceCache());
+        for(int request = 0; request < 2; request++)
+        {
+            AuthCodeFlowEndpointResult result = await client.ClientCredentials.RequestTokenAsync(
+                MachineClientRegistration(material.Registration.IssuerUri!), scope: MachineScope, resource: null, [],
+                clientAssertionOptions: null, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, result.Outcome,
+                $"Request {request}: ErrorCode={result.ErrorCode} ErrorDescription={result.ErrorDescription}");
+        }
+
+        string suppliedNonce = Assert.ContainsSingle(supplied, "The endpoint supplied one nonce for both requests.");
+        Assert.HasCount(3, receivedProofs, "The challenged proof, its retry, and the second request's one proof.");
+        Assert.AreEqual(suppliedNonce, DpopWireReading.ReadPayloadClaim(receivedProofs[2].Proof, "nonce", Pool),
+            "The second request's proof carries the nonce supplied to the first.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">RFC 9449 Section 8</see>: the nonce challenge is
+    /// "an HTTP 400 (Bad Request) error response per Section 5.2 of [RFC6749] using use_dpop_nonce as the error code
+    /// value." A DPoP-wired client asks for a <c>client_credentials</c> token over the wire; the token endpoint's 400
+    /// nonce challenge is rewritten after it crossed the wire into an error response whose <c>error</c> is
+    /// <c>invalid_grant</c> and whose <c>error_description</c> is the text <c>use_dpop_nonce</c>, the
+    /// <c>DPoP-Nonce</c> field kept. The error code is <c>invalid_grant</c>: the client sends no second request and
+    /// answers the refusal with that code.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ClientDoesNotReadAnErrorDescriptionAsANonceChallengeAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterMachineClientAsync(app).ConfigureAwait(false);
+        Uri tokenUrl = await StartDpopTokenEndpointAsync(app, material).ConfigureAwait(false);
+        List<(string HttpUrl, string Proof)> receivedProofs = await app.RecordReceivedDpopProofsAsync().ConfigureAwait(false);
+        await AdmitTheMachineClientByItsIdentifierAsync(app).ConfigureAwait(false);
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+
+        HttpClient httpClient = app.Host("default").SharedHttpClient!;
+        int tokenRequests = 0;
+        OAuthClient client = BuildDpopMachineClient(
+            material.Registration.IssuerUri!, tokenUrl, dpopKey, new InMemoryDpopNonceCache(), TestHostShell.LoopbackOutboundFetchPolicy,
+            async (endpoint, fields, headers, ct) =>
+            {
+                tokenRequests++;
+                HttpResponseData answer = await HttpClientTransport.SendFormPostAsync(httpClient, endpoint, fields, headers, ct).ConfigureAwait(false);
+
+                return answer.StatusCode == 400
+                    ? answer with { Body = "{\"error\":\"invalid_grant\",\"error_description\":\"use_dpop_nonce\"}" }
+                    : answer;
+            });
+        AuthCodeFlowEndpointResult result = await client.ClientCredentials.RequestTokenAsync(
+            MachineClientRegistration(material.Registration.IssuerUri!), scope: MachineScope, resource: null, [],
+            clientAssertionOptions: null, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, result.Outcome, $"ErrorCode={result.ErrorCode} ErrorDescription={result.ErrorDescription}");
+        Assert.AreEqual(OAuthErrors.InvalidGrant, result.ErrorCode);
+        Assert.AreEqual(1, tokenRequests, "The client sends no second request for an invalid_grant refusal.");
+        Assert.HasCount(1, receivedProofs, "The endpoint received the one proof of the one request.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-4">RFC 8259 Section 4</see>: "The names within an
+    /// object SHOULD be unique." and "When the names within an object are not unique, the behavior of software that
+    /// receives such an object is unpredictable." The library's own rule reads an error object naming <c>error</c>
+    /// twice as no error object, so no two readers of one body can read two codes from it. A DPoP-wired client asks
+    /// for a <c>client_credentials</c> token over the wire; the token endpoint's 400 nonce challenge is rewritten after
+    /// it crossed the wire into <c>{"error":"use_dpop_nonce","error":"invalid_grant"}</c>, the <c>DPoP-Nonce</c> field
+    /// kept: the client reads no nonce challenge and sends no second request.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ClientDoesNotReadAnErrorBodyNamingItsErrorMemberTwiceAsANonceChallengeAsync()
+    {
+        (AuthCodeFlowEndpointResult result, int tokenRequests, int receivedProofs) =
+            await RequestTokenUnderARewrittenChallengeBodyAsync("{\"error\":\"use_dpop_nonce\",\"error\":\"invalid_grant\"}").ConfigureAwait(false);
+
+        Assert.AreEqual(1, tokenRequests, $"The client sends no second request; it answered {result.Outcome} {result.ErrorCode}.");
+        Assert.AreEqual(1, receivedProofs, "The endpoint received the one proof of the one request.");
+        Assert.AreNotEqual(AuthCodeFlowEndpointOutcome.Ok, result.Outcome);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>: "The parameters are
+    /// serialized into a JSON structure by adding each parameter at the highest structure level." An <c>error</c>
+    /// member inside a nested object is no parameter of the error response. A DPoP-wired client asks for a
+    /// <c>client_credentials</c> token over the wire; the token endpoint's 400 nonce challenge is rewritten after it
+    /// crossed the wire into <c>{"x":{"error":"use_dpop_nonce"},"error":"invalid_grant"}</c>, the <c>DPoP-Nonce</c>
+    /// field kept: the error code is <c>invalid_grant</c>, the client sends no second request and answers the refusal
+    /// with that code.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ClientDoesNotReadANestedErrorMemberAsANonceChallengeAsync()
+    {
+        (AuthCodeFlowEndpointResult result, int tokenRequests, int receivedProofs) =
+            await RequestTokenUnderARewrittenChallengeBodyAsync("{\"x\":{\"error\":\"use_dpop_nonce\"},\"error\":\"invalid_grant\"}").ConfigureAwait(false);
+
+        Assert.AreEqual(1, tokenRequests, $"The client sends no second request; it answered {result.Outcome} {result.ErrorCode}.");
+        Assert.AreEqual(1, receivedProofs, "The endpoint received the one proof of the one request.");
+        Assert.AreEqual(OAuthErrors.InvalidGrant, result.ErrorCode);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-7">RFC 8259 Section 7</see>: "Any character may be
+    /// escaped." and <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.3">Section 8.3</see>: "implementations
+    /// that compare strings with escaped characters unconverted may incorrectly find that "a\\b" and "a\u005Cb" are not
+    /// equal." A DPoP-wired client asks for a <c>client_credentials</c> token over the wire; the token endpoint's 400
+    /// nonce challenge is rewritten after it crossed the wire into an error object whose <c>error</c> string writes the
+    /// underscore of <c>use_dpop_nonce</c> as the escape <c>\u005f</c>, the <c>DPoP-Nonce</c> field kept. The string is
+    /// <c>use_dpop_nonce</c>: the client retries exactly once with the supplied nonce and is answered with a DPoP-bound
+    /// access token.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ClientReadsAnErrorCodeWrittenWithAJsonEscapeAsTheCodeItSpellsAsync()
+    {
+        string escapedBody = "{\"error\":\"use" + '\\' + "u005fdpop_nonce\"}";
+
+        (AuthCodeFlowEndpointResult result, int tokenRequests, int receivedProofs) =
+            await RequestTokenUnderARewrittenChallengeBodyAsync(escapedBody).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, result.Outcome, $"ErrorCode={result.ErrorCode} ErrorDescription={result.ErrorDescription}");
+        Assert.AreEqual(2, tokenRequests, "The challenged request and its one retry.");
+        Assert.AreEqual(2, receivedProofs, "The endpoint received the challenged proof and the retry's.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>: "error REQUIRED. A
+    /// single ASCII [USASCII] error code". A JSON array is no error code. A DPoP-wired client asks for a
+    /// <c>client_credentials</c> token over the wire; the token endpoint's 400 nonce challenge is rewritten after it
+    /// crossed the wire into <c>{"error":["use_dpop_nonce"]}</c>, the <c>DPoP-Nonce</c> field kept: the client reads
+    /// no nonce challenge and sends no second request.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ClientDoesNotReadANonStringErrorMemberAsANonceChallengeAsync()
+    {
+        (AuthCodeFlowEndpointResult result, int tokenRequests, int receivedProofs) =
+            await RequestTokenUnderARewrittenChallengeBodyAsync("{\"error\":[\"use_dpop_nonce\"]}").ConfigureAwait(false);
+
+        Assert.AreEqual(1, tokenRequests, $"The client sends no second request; it answered {result.Outcome} {result.ErrorCode}.");
+        Assert.AreEqual(1, receivedProofs, "The endpoint received the one proof of the one request.");
+        Assert.AreNotEqual(AuthCodeFlowEndpointOutcome.Ok, result.Outcome);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">RFC 9449 Section 8</see>: "Nonce values MUST be
+    /// unpredictable." The library's nonce issuance writes into each nonce a random field filled from the entropy
+    /// source the application wires, so a nonce is as unpredictable as that source. The host's issuance is wired here
+    /// to the project's CSPRNG through a source that records every draw. Four <c>client_credentials</c> requests sent
+    /// to the token endpoint over the wire at one instant, each with a proof carrying no nonce, are each answered 400
+    /// <c>use_dpop_nonce</c> with a <c>DPoP-Nonce</c>; the issuer drew 16 bytes (128 bits) for each nonce, and each
+    /// nonce, decoded from base64url, carries at its random field exactly the bytes drawn for it.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task TokenEndpointNonceCarriesTheRandomBytesItsIssuerDrewAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterMachineClientAsync(app).ConfigureAwait(false);
+        Uri tokenUrl = await StartDpopTokenEndpointAsync(app, material).ConfigureAwait(false);
+        List<string> draws = [];
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.IssueDpopNonceAsync = (audience, tenantId, context, ct) =>
+                DefaultDpopNonceIssuance.IssueAsync(
+                    audience,
+                    tenantId,
+                    context,
+                    context.RequestServer!.OAuth().GetHmacKeySetAsync!,
+                    context.RequestServer!.OAuth().SelectHmacKeyAsync,
+                    context.RequestServer!.OAuth().ResolveServerHmacKeyAsync!,
+                    TimeProvider,
+                    TestHostShell.Base64UrlEncoder,
+                    destination =>
+                    {
+                        (Nonce drawn, _) = MicrosoftEntropyFunctionsAdapter.GenerateNonce(
+                            destination.Length, Tag.Create(Purpose.Nonce).With(EntropySource.Csprng), Pool);
+                        using(drawn)
+                        {
+                            drawn.UseNonce().CopyTo(destination);
+                        }
+
+                        draws.Add(TestHostShell.Base64UrlEncoder(destination));
+                    },
+                    Pool,
+                    ct);
+        }).ConfigureAwait(false);
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+
+        List<string> nonces = [];
+        for(int challenge = 0; challenge < 4; challenge++)
+        {
+            nonces.Add(await ObtainTokenEndpointNonceAsync(app, tokenUrl, dpopKey).ConfigureAwait(false));
+        }
+
+        Assert.HasCount(nonces.Count, draws, "The issuer drew from its entropy source once for every nonce it issued.");
+        for(int index = 0; index < nonces.Count; index++)
+        {
+            Assert.AreEqual(draws[index], ReadNonceRandomField(nonces[index]), $"Nonce {index} carries the bytes its issuer drew.");
+        }
+    }
+
+
+    /// <summary>
+    /// RFC 9449 Section 4.2, of the proof's <c>alg</c>: "It MUST NOT be none" and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.6">Section 11.6</see>: "In particular, the algorithm
+    /// none MUST NOT be allowed." A client is wired for a <c>client_credentials</c> request over the wire with a DPoP
+    /// key declaring <c>none</c>: the wiring is refused with an <see cref="ArgumentException"/> naming <c>alg</c>, and
+    /// the token endpoint receives no proof.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ClientDeclaringTheAlgorithmNoneNeverSendsAProofAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterMachineClientAsync(app).ConfigureAwait(false);
+        Uri tokenUrl = await StartDpopTokenEndpointAsync(app, material).ConfigureAwait(false);
+        List<(string HttpUrl, string Proof)> receivedProofs = await app.RecordReceivedDpopProofsAsync().ConfigureAwait(false);
+        await AdmitTheMachineClientByItsIdentifierAsync(app).ConfigureAwait(false);
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+
+        ArgumentException? refusal = null;
+        AuthCodeFlowEndpointResult? result = null;
+        try
+        {
+            DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.None);
+            OAuthClient client = BuildDpopMachineClientOverWire(app, material, tokenUrl, dpopKey, new InMemoryDpopNonceCache());
+            result = await client.ClientCredentials.RequestTokenAsync(
+                MachineClientRegistration(material.Registration.IssuerUri!), scope: MachineScope, resource: null, [],
+                clientAssertionOptions: null, TestContext.CancellationToken).ConfigureAwait(false);
+        }
+        catch(ArgumentException exception)
+        {
+            refusal = exception;
+        }
+
+        Assert.IsEmpty(receivedProofs, $"No proof reaches the token endpoint; the request was answered {result?.Outcome} {result?.ErrorCode}.");
+        Assert.IsNotNull(refusal, "The DPoP key declaring none is refused when the client is wired.");
+        Assert.AreEqual("alg", refusal.ParamName);
+    }
+
+
+    /// <summary>
+    /// Asks the token endpoint over the wire for a <c>client_credentials</c> token with a DPoP-wired client whose
+    /// transport rewrites the body of every 400 answer into <paramref name="challengeBody"/> after it crossed the wire,
+    /// the answer's <c>DPoP-Nonce</c> field kept.
+    /// </summary>
+    /// <param name="challengeBody">The JSON body the client reads in place of each 400 answer's.</param>
+    /// <returns>The client's answer, the number of token requests it sent and the number of proofs the endpoint received.</returns>
+    private async Task<(AuthCodeFlowEndpointResult Result, int TokenRequests, int ReceivedProofs)> RequestTokenUnderARewrittenChallengeBodyAsync(string challengeBody)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterMachineClientAsync(app).ConfigureAwait(false);
+        Uri tokenUrl = await StartDpopTokenEndpointAsync(app, material).ConfigureAwait(false);
+        List<(string HttpUrl, string Proof)> receivedProofs = await app.RecordReceivedDpopProofsAsync().ConfigureAwait(false);
+        await AdmitTheMachineClientByItsIdentifierAsync(app).ConfigureAwait(false);
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+
+        HttpClient httpClient = app.Host("default").SharedHttpClient!;
+        int tokenRequests = 0;
+        OAuthClient client = BuildDpopMachineClient(
+            material.Registration.IssuerUri!, tokenUrl, dpopKey, new InMemoryDpopNonceCache(), TestHostShell.LoopbackOutboundFetchPolicy,
+            async (endpoint, fields, headers, ct) =>
+            {
+                tokenRequests++;
+                HttpResponseData answer = await HttpClientTransport.SendFormPostAsync(httpClient, endpoint, fields, headers, ct).ConfigureAwait(false);
+
+                return answer.StatusCode == 400 ? answer with { Body = challengeBody } : answer;
+            });
+        AuthCodeFlowEndpointResult result = await client.ClientCredentials.RequestTokenAsync(
+            MachineClientRegistration(material.Registration.IssuerUri!), scope: MachineScope, resource: null, [],
+            clientAssertionOptions: null, TestContext.CancellationToken).ConfigureAwait(false);
+
+        return (result, tokenRequests, receivedProofs.Count);
+    }
+
+
+    /// <summary>
+    /// Reads the random field of a nonce the library's issuance wrote: the nonce decoded from base64url is a one-octet
+    /// length of the key identifier, the identifier, the issue time, the audience hash, then the random field, whose
+    /// lengths <see cref="WellKnownDpopValues"/> names.
+    /// </summary>
+    /// <param name="nonce">The nonce as the <c>DPoP-Nonce</c> field carried it.</param>
+    /// <returns>The random field written in base64url.</returns>
+    private static string ReadNonceRandomField(string nonce)
+    {
+        using IMemoryOwner<byte> packed = TestSetup.Base64UrlDecoder(nonce, Pool);
+        ReadOnlySpan<byte> bytes = packed.Memory.Span;
+        int randomStart = 1 + bytes[0] + WellKnownDpopValues.NonceIssuedAtByteLength + WellKnownDpopValues.NonceAudienceHashByteLength;
+
+        return TestHostShell.Base64UrlEncoder(bytes.Slice(randomStart, WellKnownDpopValues.NonceRandomByteLength));
+    }
+
+
+    /// <summary>The row of the nonce-mismatch test whose presented nonce is the supplied one with one character changed.</summary>
+    private const string NonceCharacterChangedRow = "nonce-character-changed";
+
+    /// <summary>The row of the nonce-mismatch test whose presented nonce is the supplied one after its window has passed.</summary>
+    private const string NonceWindowPassedRow = "nonce-window-passed";
+
+    /// <summary>The row of the exact-match test whose presented nonce is the supplied one with a character added.</summary>
+    private const string NonceCharacterAddedRow = "nonce-character-added";
+
+    /// <summary>The row of the exact-match test whose presented nonce is the supplied one with its first letter in the other case.</summary>
+    private const string NonceCaseChangedRow = "nonce-case-changed";
+
+    /// <summary>The row of the exact-text test whose presented nonce is the supplied octets and one more, written canonically.</summary>
+    private const string NonceExtendedByAnOctetRow = "nonce-extended-by-an-octet";
+
+    /// <summary>The row of the exact-text test whose presented nonce is the supplied one with a space inside it.</summary>
+    private const string NonceWithASpaceInsideRow = "nonce-with-a-space-inside";
+
+    /// <summary>The row of the exact-text test whose presented nonce is the supplied one with its padding.</summary>
+    private const string NoncePaddedRow = "nonce-padded";
+
+    /// <summary>The row of the exact-text test whose presented nonce is the supplied one with a pad bit of its last character set.</summary>
+    private const string NonceWithAPadBitSetRow = "nonce-with-a-pad-bit-set";
+
+
+    /// <summary>
+    /// Wires DPoP on the host, starts its listener, aligns the registration's issuer to the listener's address so a
+    /// proof's <c>htu</c> names the token endpoint URL the listener serves, and returns that URL.
+    /// </summary>
+    /// <param name="app">The host.</param>
+    /// <param name="material">The machine registration.</param>
+    /// <returns>The absolute token endpoint URL on the listener.</returns>
+    private async Task<Uri> StartDpopTokenEndpointAsync(TestHostShell app, VerifierKeyMaterial material)
+    {
+        _ = await app.EnableDpopAsync().ConfigureAwait(false);
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = app.AlignRegistrationToHostHttpBase("default", material.Registration);
+
+        return new Uri(app.Host("default").HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+    }
+
+
+    /// <summary>The form fields of the machine client's <c>client_credentials</c> request under <c>client_secret_post</c>.</summary>
+    /// <returns>The fields.</returns>
+    private static Dictionary<string, string> MachineTokenRequestFields() => new(StringComparer.Ordinal)
+    {
+        [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.ClientCredentials,
+        [OAuthRequestParameterNames.ClientId] = ClientId,
+        ["client_secret"] = ClientSecret,
+        [OAuthRequestParameterNames.Scope] = MachineScope
+    };
+
+
+    /// <summary>The fields of <see cref="MachineTokenRequestFields"/> written as an <c>application/x-www-form-urlencoded</c> body.</summary>
+    /// <returns>The body text.</returns>
+    private static string MachineTokenRequestForm() =>
+        string.Join('&', MachineTokenRequestFields().Select(static pair => Uri.EscapeDataString(pair.Key) + "=" + Uri.EscapeDataString(pair.Value)));
+
+
+    /// <summary>Builds a token request proof naming POST and <paramref name="tokenUrl"/>, signed by <paramref name="dpopKey"/> at the current instant.</summary>
+    /// <param name="dpopKey">The DPoP key that signs the proof.</param>
+    /// <param name="tokenUrl">The <c>htu</c>.</param>
+    /// <param name="nonce">The <c>nonce</c>, or <see langword="null"/> to carry none.</param>
+    /// <param name="jti">The <c>jti</c>, or <see langword="null"/> for a fresh one.</param>
+    /// <param name="alterHeader">Rewrites the serialized protected header before signing, or <see langword="null"/> to keep it.</param>
+    /// <returns>The compact proof.</returns>
+    private Task<string> BuildTokenProofAsync(
+        DpopKey dpopKey, Uri tokenUrl, string? nonce, string? jti = null, Action<Dictionary<string, object>>? alterHeader = null) =>
+        ResourceDpopProofs.BuildAsync(
+            dpopKey, WellKnownHttpMethods.Post, tokenUrl.OriginalString, accessToken: null, nonce, TimeProvider.GetUtcNow(),
+            TestContext.CancellationToken, jti, alterHeader);
+
+
+    /// <summary>
+    /// Sends the machine client's <c>client_credentials</c> request with <paramref name="proof"/> in the <c>DPoP</c>
+    /// field over the host's client and returns the answer.
+    /// </summary>
+    /// <param name="app">The host.</param>
+    /// <param name="tokenUrl">The token endpoint URL.</param>
+    /// <param name="proof">The proof sent.</param>
+    /// <returns>The status, the body and every <c>DPoP-Nonce</c> value the answer carries.</returns>
+    private async Task<(int StatusCode, string Body, IReadOnlyList<string> Nonces)> PostMachineTokenRequestAsync(
+        TestHostShell app, Uri tokenUrl, string proof)
+    {
+        using HttpResponseMessage response = await OAuthTestTransport.PostFormAsync(
+            app.Host("default").SharedHttpClient!, tokenUrl, MachineTokenRequestFields(),
+            OutgoingHeaders.Empty.WithDpop(proof), TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        IReadOnlyList<string> nonces = response.Headers.TryGetValues(WellKnownHttpHeaderNames.DPoPNonce, out IEnumerable<string>? values)
+            ? [.. values]
+            : [];
+
+        return ((int)response.StatusCode, body, nonces);
+    }
+
+
+    /// <summary>
+    /// Sends the machine client's request with a proof carrying no nonce, asserts the 400 <c>use_dpop_nonce</c>
+    /// challenge, and returns the one nonce its <c>DPoP-Nonce</c> supplies.
+    /// </summary>
+    /// <param name="app">The host.</param>
+    /// <param name="tokenUrl">The token endpoint URL.</param>
+    /// <param name="dpopKey">The DPoP key that signs the proof.</param>
+    /// <returns>The supplied nonce.</returns>
+    private async Task<string> ObtainTokenEndpointNonceAsync(TestHostShell app, Uri tokenUrl, DpopKey dpopKey)
+    {
+        string proof = await BuildTokenProofAsync(dpopKey, tokenUrl, nonce: null).ConfigureAwait(false);
+        (int statusCode, string body, IReadOnlyList<string> nonces) = await PostMachineTokenRequestAsync(app, tokenUrl, proof).ConfigureAwait(false);
+        Assert.AreEqual(400, statusCode, body);
+        Assert.Contains(OAuthErrors.UseDpopNonce, body);
+
+        return Assert.ContainsSingle(nonces, "The nonce challenge supplies a nonce.");
+    }
+
+
+    /// <summary>
+    /// Sends the machine client's request over a raw TLS connection with a proof carrying no nonce, so every field
+    /// line of the answer is read as received.
+    /// </summary>
+    /// <param name="app">The host.</param>
+    /// <param name="tokenUrl">The token endpoint URL.</param>
+    /// <param name="dpopKey">The DPoP key that signs the proof.</param>
+    /// <returns>The wire response.</returns>
+    private async Task<HttpResponseData> PostNonceLessProofOverARawConnectionAsync(TestHostShell app, Uri tokenUrl, DpopKey dpopKey)
+    {
+        string proof = await BuildTokenProofAsync(dpopKey, tokenUrl, nonce: null).ConfigureAwait(false);
+
+        return await RawHttpsRequest.SendAsync(
+            app, WellKnownHttpMethods.Post, tokenUrl,
+            [
+                new(WellKnownHttpHeaderNames.ContentType, WellKnownMediaTypes.Application.FormUrlEncoded),
+                new(WellKnownHttpHeaderNames.DPoP, proof)
+            ],
+            Encoding.ASCII.GetBytes(MachineTokenRequestForm()), TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Admits the machine client at the token endpoint by its identifier alone, the client side
+    /// <see cref="MachineClientRegistration"/> carrying <see cref="ClientAuthenticationMethod.None"/>.
+    /// </summary>
+    /// <param name="app">The host.</param>
+    /// <returns>A task that completes when the host is altered.</returns>
+    private static Task AdmitTheMachineClientByItsIdentifierAsync(TestHostShell app) =>
+        TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) => ValueTask.FromResult(true);
+        });
+
+
+    /// <summary>The client side of the machine registration: no client authentication, the HAIP 1.0 profile.</summary>
+    /// <param name="issuer">The authorization server's issuer.</param>
+    /// <returns>The client registration.</returns>
+    private static ClientRegistration MachineClientRegistration(Uri issuer) => new()
+    {
+        ClientId = new ClientId(ClientId),
+        AuthorizationServerIssuer = issuer,
+        RedirectUris = [new Uri(ClientId)],
+        AuthenticationMethod = ClientAuthenticationMethod.None,
+        Profile = PolicyProfile.Haip10
+    };
+
+
+    /// <summary>Builds the DPoP-wired client of <see cref="BuildDpopMachineClient"/> over the host's client and loopback policy.</summary>
+    /// <param name="app">The host whose listener serves the token endpoint.</param>
+    /// <param name="material">The machine registration.</param>
+    /// <param name="tokenUrl">The token endpoint URL.</param>
+    /// <param name="dpopKey">The client's DPoP key.</param>
+    /// <param name="nonceCache">The client's nonce cache.</param>
+    /// <returns>The client.</returns>
+    private OAuthClient BuildDpopMachineClientOverWire(
+        TestHostShell app, VerifierKeyMaterial material, Uri tokenUrl, DpopKey dpopKey, InMemoryDpopNonceCache nonceCache)
+    {
+        HttpClient httpClient = app.Host("default").SharedHttpClient!;
+
+        return BuildDpopMachineClient(
+            material.Registration.IssuerUri!, tokenUrl, dpopKey, nonceCache, TestHostShell.LoopbackOutboundFetchPolicy,
+            (endpoint, fields, headers, ct) => HttpClientTransport.SendFormPostAsync(httpClient, endpoint, fields, headers, ct));
+    }
+
+
+    /// <summary>
+    /// Builds an <see cref="OAuthClient"/> whose infrastructure carries a DPoP key, the library's proof construction,
+    /// the identifier generator, a nonce cache and the given outbound policy and transport, resolving metadata that
+    /// names <paramref name="tokenEndpoint"/>.
+    /// </summary>
+    /// <param name="issuer">The authorization server's issuer.</param>
+    /// <param name="tokenEndpoint">The token endpoint the metadata names.</param>
+    /// <param name="dpopKey">The client's DPoP key.</param>
+    /// <param name="nonceCache">The client's nonce cache.</param>
+    /// <param name="outboundFetchPolicy">The outbound policy every dial is evaluated against.</param>
+    /// <param name="sendFormPostAsync">The transport of each form post: the endpoint, fields and headers.</param>
+    /// <returns>The client.</returns>
+    private OAuthClient BuildDpopMachineClient(
+        Uri issuer,
+        Uri tokenEndpoint,
+        DpopKey dpopKey,
+        InMemoryDpopNonceCache nonceCache,
+        OutboundFetchPolicy outboundFetchPolicy,
+        Func<Uri, IReadOnlyCollection<KeyValuePair<string, string>>, OutgoingHeaders, CancellationToken, ValueTask<HttpResponseData>> sendFormPostAsync)
+    {
+        AuthorizationServerMetadata metadata = new()
+        {
+            Issuer = issuer,
+            TokenEndpoint = tokenEndpoint
+        };
+
+        OAuthClientInfrastructure infrastructure = OAuthClientInfrastructure.Create(
+            sendFormPostAsync: (endpoint, fields, headers, _, ct) => sendFormPostAsync(endpoint, fields, headers, ct),
+            saveStateAsync: (_, _, _) => ValueTask.CompletedTask,
+            loadStateAsync: (_, _, _) => ValueTask.FromResult<FlowState?>(null),
+            loadStateByRequestUriAsync: (_, _, _) => ValueTask.FromResult<FlowState?>(null),
+            parseParResponseAsync: OAuthResponseParsers.ParseParResponse,
+            parseTokenResponseAsync: OAuthResponseParsers.ParseTokenResponse,
+            parseRegistrationResponseAsync: (body, ct) =>
+                throw new NotImplementedException("Test does not exercise dynamic registration."),
+            resolveAuthorizationServerMetadataAsync: (_, _, _) =>
+                ValueTask.FromResult<AuthorizationServerMetadataResolution>(new AuthorizationServerMetadataResolved
+                {
+                    MetadataLocation = WellKnownPaths.OAuthAuthorizationServer.ComputeUri(metadata.Issuer.OriginalString),
+                    Metadata = metadata
+                }),
+            resolveCallbackValidator: ClientPolicyProfiles.DefaultResolveCallbackValidator,
+            base64UrlEncoder: TestSetup.Base64UrlEncoder,
+            memoryPool: Pool,
+            timeProvider: TimeProvider,
+            fillEntropy: TestEntropy.NewCounterStream(),
+            generateIdentifierAsync: DefaultIdentifierGenerator.For(TimeProvider, TestEntropy.NewCounterStream(), Pool),
+            outboundFetchPolicy: outboundFetchPolicy,
+            constructDpopProofAsync: (claims, key, ct) => DpopProofConstruction.BuildAsync(
+                claims, key, TestSetup.Base64UrlEncoder, DpopTestSupport.Serializer,
+                MicrosoftCryptographicFunctionsAdapter.SignP256Async, Pool, ct),
+            dpopKey: dpopKey,
+            lookupDpopNonce: nonceCache.Lookup,
+            storeDpopNonce: nonceCache.Store);
+
+        return new OAuthClient(infrastructure);
+    }
+
+
+    /// <summary>Changes the middle character of a base64url value to another base64url character.</summary>
+    /// <param name="value">The value.</param>
+    /// <returns>The value with one character changed.</returns>
+    private static string ChangeMiddleCharacter(string value)
+    {
+        int middle = value.Length / 2;
+        char changed = value[middle] == 'A' ? 'B' : 'A';
+
+        return string.Concat(value.AsSpan(0, middle), changed.ToString(), value.AsSpan(middle + 1));
+    }
+
+
+    /// <summary>Changes the case of the first ASCII letter of a value.</summary>
+    /// <param name="value">The value, carrying at least one ASCII letter.</param>
+    /// <returns>The value with its first letter in the other case.</returns>
+    private static string ChangeCaseOfFirstLetter(string value)
+    {
+        int index = 0;
+        while(!char.IsAsciiLetter(value[index]))
+        {
+            index++;
+        }
+
+        char c = value[index];
+        char changed = char.IsUpper(c) ? char.ToLowerInvariant(c) : char.ToUpperInvariant(c);
+
+        return string.Concat(value.AsSpan(0, index), changed.ToString(), value.AsSpan(index + 1));
     }
 
 

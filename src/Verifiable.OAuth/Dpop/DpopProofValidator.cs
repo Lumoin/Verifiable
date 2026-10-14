@@ -277,7 +277,15 @@ public static class DpopProofValidator
     /// RSA-PSS, or EdDSA. Symmetric algorithms and <c>none</c> are
     /// rejected per the spec's exclusion clause.
     /// </summary>
-    private static bool IsDpopProofAlg(string alg) =>
+    /// <remarks>
+    /// Each identifier is compared exactly, as a JWS <c>alg</c> value is case-sensitive
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7515#section-4.1.1">RFC 7515 Section 4.1.1</see>). The servers
+    /// hold a received proof to it and <see cref="DpopKey"/> holds the client's declared identifier to it, so one
+    /// predicate states the identifiers a proof may be signed under.
+    /// </remarks>
+    /// <param name="alg">The <c>alg</c> identifier.</param>
+    /// <returns><see langword="true"/> when the identifier is one a DPoP proof may be signed under.</returns>
+    internal static bool IsDpopProofAlg(string alg) =>
         WellKnownJwaValues.IsEcdsa(alg)
         || WellKnownJwaValues.IsRs256(alg)
         || WellKnownJwaValues.IsRs384(alg)

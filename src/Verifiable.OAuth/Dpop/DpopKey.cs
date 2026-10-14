@@ -39,12 +39,38 @@ public sealed class DpopKey
     /// Constructs a DPoP key wrapper. The caller is responsible for
     /// matching <paramref name="alg"/> to the underlying key curve.
     /// </summary>
+    /// <remarks>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.2">RFC 9449 Section 4.2</see>, of the proof's
+    /// <c>alg</c>: "An identifier for a JWS asymmetric digital signature algorithm from [IANA.JOSE.ALGS]. It MUST NOT be
+    /// none or an identifier for a symmetric algorithm (Message Authentication Code (MAC))." and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.6">Section 11.6</see>: "Implementers MUST ensure
+    /// that only asymmetric digital signature algorithms (such as ES256) that are deemed secure can be used for signing
+    /// DPoP proofs. In particular, the algorithm none MUST NOT be allowed." Every proof is built under the
+    /// <see cref="Alg"/> this DPoP key carries, so the identifier is held here to the asymmetric JWS signature
+    /// algorithms the library's servers accept for a proof (<see cref="DpopProofValidator.IsDpopProofAlg"/>), and a
+    /// DPoP key declaring any other identifier, <c>none</c>, a MAC, a JWE identifier or an unregistered name, is
+    /// refused and no proof is ever built under it. The comparison is exact, as a JWS <c>alg</c> value is
+    /// case-sensitive (<see href="https://www.rfc-editor.org/rfc/rfc7515#section-4.1.1">RFC 7515 Section
+    /// 4.1.1</see>), so a spelling in another case or with surrounding whitespace is refused.
+    /// </remarks>
+    /// <param name="material">The non-owning key material the application created and manages.</param>
+    /// <param name="alg">The JWS algorithm identifier every proof built with this DPoP key declares.</param>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="alg"/> is empty or is not, exactly, an asymmetric JWS signature algorithm identifier the
+    /// library's servers accept for a DPoP proof.
+    /// </exception>
     public DpopKey(
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> material,
         string alg)
     {
         ArgumentNullException.ThrowIfNull(material);
         ArgumentException.ThrowIfNullOrEmpty(alg);
+
+        if(!DpopProofValidator.IsDpopProofAlg(alg))
+        {
+            throw new ArgumentException(
+                "A DPoP proof's alg MUST be an identifier for a JWS asymmetric digital signature algorithm, never none or a MAC (RFC 9449 Sections 4.2 and 11.6).", nameof(alg));
+        }
 
         Material = material;
         Alg = alg;

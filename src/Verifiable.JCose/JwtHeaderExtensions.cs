@@ -271,19 +271,45 @@ public static class JwtHeaderExtensions
         /// <see href="https://www.rfc-editor.org/rfc/rfc9449">RFC 9449</see>,
         /// populated with <c>typ</c>, <c>alg</c>, and <c>jwk</c>.
         /// </summary>
+        /// <remarks>
+        /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.2">RFC 9449 Section 4.2</see>, of the header's
+        /// <c>alg</c>: "An identifier for a JWS asymmetric digital signature algorithm from [IANA.JOSE.ALGS]. It MUST
+        /// NOT be none or an identifier for a symmetric algorithm (Message Authentication Code (MAC))." The factory
+        /// writes <c>dpop+jwt</c> only under such an identifier (<see cref="IsAsymmetricSignatureAlgorithm"/>), compared
+        /// exactly as a JWS <c>alg</c> value is case-sensitive
+        /// (<see href="https://www.rfc-editor.org/rfc/rfc7515#section-4.1.1">RFC 7515 Section 4.1.1</see>).
+        /// The set is the JOSE catalogue's asymmetric signature identifiers, <c>ESB*</c>, <c>Ed25519</c> and the ML-DSA
+        /// identifiers among them. It is wider than the set this library's DPoP servers and its <c>DpopKey</c> hold
+        /// (<c>DpopProofValidator.IsDpopProofAlg</c> in <c>Verifiable.OAuth</c>: the ECDSA, RSA PKCS#1 v1.5, RSA-PSS
+        /// and <c>EdDSA</c> identifiers), so a header this factory writes under an identifier outside that set is a proof
+        /// this library's own servers refuse.
+        /// </remarks>
         /// <param name="algorithm">The JWA algorithm identifier.</param>
         /// <param name="publicKeyJwk">
         /// The sender's public key as a JWK object embedded as the <c>jwk</c> header value.
         /// The private key must not be present.
         /// </param>
         /// <returns>A <see cref="JwtHeader"/> for a DPoP proof JWT.</returns>
-        public static JwtHeader ForDpop(string algorithm, object publicKeyJwk) =>
-            new(capacity: 3)
+        /// <exception cref="ArgumentException">
+        /// <paramref name="algorithm"/> is not an asymmetric JWS signature algorithm the well-known JWA values name.
+        /// </exception>
+        public static JwtHeader ForDpop(string algorithm, object publicKeyJwk)
+        {
+            ArgumentNullException.ThrowIfNull(algorithm);
+
+            if(!IsAsymmetricSignatureAlgorithm(algorithm))
+            {
+                throw new ArgumentException(
+                    "A DPoP proof's alg MUST be an identifier for a JWS asymmetric digital signature algorithm, never none or a MAC (RFC 9449 Section 4.2).", nameof(algorithm));
+            }
+
+            return new(capacity: 3)
             {
                 [WellKnownJoseHeaderNames.Typ] = WellKnownMediaTypes.Jwt.DpopJwt,
                 [WellKnownJwkMemberNames.Alg] = algorithm,
                 [WellKnownJoseHeaderNames.Jwk] = publicKeyJwk
             };
+        }
 
 
         /// <summary>
@@ -347,4 +373,29 @@ public static class JwtHeaderExtensions
                 [WellKnownJoseHeaderNames.Jwt] = attestationCompactJwt
             };
     }
+
+
+    /// <summary>
+    /// Whether <paramref name="algorithm"/> is an asymmetric JWS digital signature algorithm the well-known JWA values
+    /// name: the ECDSA identifiers (<see cref="WellKnownJwaValues.IsEcdsa"/>, <see cref="WellKnownJwaValues.IsEsb"/>),
+    /// the RSA PKCS#1 v1.5 and RSA-PSS identifiers, <c>EdDSA</c> and <c>Ed25519</c>, and the ML-DSA identifiers
+    /// (<see cref="WellKnownJwaValues.IsMlDsa"/>). The catalogue groups no identifier as asymmetric, so the set is
+    /// its JWS signature identifiers less <c>none</c> and the MAC identifiers <c>HS256</c>, <c>HS384</c> and
+    /// <c>HS512</c>; <c>ECDH-ES</c>, a JWE key agreement identifier, is no signature algorithm. Each comparison is
+    /// exact (<see cref="WellKnownJwaValues.Equals(string, string)"/>).
+    /// </summary>
+    /// <param name="algorithm">The <c>alg</c> identifier.</param>
+    /// <returns><see langword="true"/> when the identifier names an asymmetric JWS signature algorithm.</returns>
+    private static bool IsAsymmetricSignatureAlgorithm(string algorithm) =>
+        WellKnownJwaValues.IsEcdsa(algorithm)
+        || WellKnownJwaValues.IsEsb(algorithm)
+        || WellKnownJwaValues.IsRs256(algorithm)
+        || WellKnownJwaValues.IsRs384(algorithm)
+        || WellKnownJwaValues.IsRs512(algorithm)
+        || WellKnownJwaValues.IsPs256(algorithm)
+        || WellKnownJwaValues.IsPs384(algorithm)
+        || WellKnownJwaValues.IsPs512(algorithm)
+        || WellKnownJwaValues.IsEdDsa(algorithm)
+        || WellKnownJwaValues.IsEd25519(algorithm)
+        || WellKnownJwaValues.IsMlDsa(algorithm);
 }

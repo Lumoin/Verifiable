@@ -248,7 +248,7 @@ internal static class TokenEndpointClientOperations
     /// <summary>
     /// Sends a token-endpoint request with a DPoP proof attached when
     /// <paramref name="infrastructure"/> has DPoP wired, retrying once on a
-    /// <c>use_dpop_nonce</c> challenge per RFC 9449 §8.1. Evaluates the outbound-fetch policy via
+    /// <c>use_dpop_nonce</c> challenge per RFC 9449 Section 8. Evaluates the outbound-fetch policy via
     /// <see cref="EvaluateOutboundPolicy"/> before the first send, and refuses a 3xx answer via
     /// <see cref="RefuseRedirection"/> after it, sending nothing further.
     /// </summary>
@@ -306,7 +306,7 @@ internal static class TokenEndpointClientOperations
     /// <summary>
     /// Sends a token-endpoint request with a DPoP proof attached when
     /// <paramref name="infrastructure"/> has DPoP wired, retrying once on a
-    /// <c>use_dpop_nonce</c> challenge per RFC 9449 §8.1. Performs no outbound-fetch policy
+    /// <c>use_dpop_nonce</c> challenge per RFC 9449 Section 8. Performs no outbound-fetch policy
     /// check of its own — every caller evaluates the policy against <paramref name="tokenEndpoint"/>
     /// first, since a denial maps to a different failure type per caller
     /// (<see cref="SendTokenRequestWithDpopRetryAsync"/> for <see cref="AuthCodeFlowEndpointResult"/>
@@ -324,8 +324,10 @@ internal static class TokenEndpointClientOperations
     /// The retry-once mechanics (nonce lookup, challenge detection, storing the fresh nonce,
     /// resending) are <see cref="DpopNonceRetry.SendWithNonceRetryAsync"/> — the same helper the
     /// OID4VCI Wallet client's token and resource requests use, so the rule lives in one place.
-    /// Here the retry applies only when the AS responds with HTTP 400 + <c>error=use_dpop_nonce</c>
-    /// in the body and a fresh nonce in the <c>DPoP-Nonce</c> response header. There is no
+    /// Here the retry applies only when the AS responds with HTTP 400 whose JSON object carries
+    /// <c>use_dpop_nonce</c> as its own <c>error</c> member
+    /// (<see cref="DpopNonceRetry.IsErrorBodyNonceChallenge"/>) and a fresh nonce in the
+    /// <c>DPoP-Nonce</c> response header. There is no
     /// exponential backoff and no second retry — applications wanting elaborate retry policies
     /// wrap this call.
     /// </para>
@@ -362,12 +364,13 @@ internal static class TokenEndpointClientOperations
 
         string authority = InMemoryDpopNonceCache.AuthorityFor(tokenEndpoint);
 
-        //RFC 9449 §8.1: 400 + error=use_dpop_nonce in the JSON body + a DPoP-Nonce header is the
-        //token endpoint's challenge form; DpopNonceRetry owns the retry-once mechanics shared with
-        //the OID4VCI Wallet client's token and resource requests.
+        //RFC 9449 Section 8: 400 + use_dpop_nonce as the JSON object's own error member + a DPoP-Nonce
+        //header is the token endpoint's challenge form; DpopNonceRetry owns the retry-once mechanics
+        //and the reading of the error code, shared with the OID4VCI Wallet client's token and resource
+        //requests.
         return await DpopNonceRetry.SendWithNonceRetryAsync(
             (nonce, ct) => SendOnceWithDpopAsync(infrastructure, tokenEndpoint, tokenFields, attachClientAuthenticationAsync, nonce, context, ct),
-            static candidate => candidate.StatusCode == 400 && candidate.Body.Contains(OAuthErrors.UseDpopNonce, StringComparison.Ordinal),
+            candidate => DpopNonceRetry.IsErrorBodyNonceChallenge(candidate, infrastructure.MemoryPool),
             authority,
             infrastructure.LookupDpopNonce,
             infrastructure.StoreDpopNonce,
@@ -393,7 +396,7 @@ internal static class TokenEndpointClientOperations
     {
         DateTimeOffset now = infrastructure.TimeProvider.GetUtcNow();
 
-        //RFC 9449 §8.1's retry re-sends the SAME request; re-attaching here rather than once before
+        //RFC 9449 Section 8's retry re-sends the SAME request; re-attaching here rather than once before
         //the first attempt is what gives a private_key_jwt assertion a fresh jti/iat on the retry
         //(see SendWithDpopRetryAsync's remarks) instead of the assertion the challenged attempt
         //already presented.

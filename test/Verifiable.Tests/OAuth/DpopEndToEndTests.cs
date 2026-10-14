@@ -372,6 +372,48 @@ internal sealed class DpopEndToEndTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10">RFC 9449 Section 10</see>: "Use of the
+    /// dpop_jkt authorization request parameter is OPTIONAL." The client takes the option not: the DPoP-wired
+    /// client pushes its authorization request over the wire with a body that carries no <c>dpop_jkt</c> field
+    /// and a request that carries no <c>DPoP</c> field (the other way
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10.1">Section 10.1</see> names to communicate
+    /// the DPoP public key at the pushed request), the server answers with its <c>request_uri</c>, and the
+    /// authorization request URL the client is redirected to carries no <c>dpop_jkt</c> parameter.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ClientPushesItsAuthorizationRequestWithoutDpopJktAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+
+        List<(Uri Endpoint, IReadOnlyCollection<KeyValuePair<string, string>> Fields, OutgoingHeaders Headers)> posts = [];
+        using DpopClientFixture fixture = await host.CreateDpopEnabledOAuthClientAsync(
+            material.Registration,
+            RedirectUri.OriginalString,
+            (endpoint, fields, headers) => posts.Add((endpoint, [.. fields], headers)),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        AuthCodeFlowEndpointResult parResult = await fixture.Client.AuthCode.StartParAsync(
+            fixture.Registration,
+            RedirectUri,
+            OAuthFormEncodedFieldsFixtures.OpenIdScope,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, parResult.Outcome, parResult.ErrorDescription);
+        (Uri endpoint, IReadOnlyCollection<KeyValuePair<string, string>> fields, OutgoingHeaders headers) = Assert.ContainsSingle(posts);
+        Assert.EndsWith(
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodePar, material.Registration.TenantId.Value),
+            endpoint.AbsolutePath, "The one form post is the pushed authorization request.");
+        Assert.DoesNotContain(static field => string.Equals(field.Key, "dpop_jkt", StringComparison.Ordinal), fields,
+            "The pushed authorization request body carries no dpop_jkt.");
+        Assert.IsFalse(headers.Values.ContainsKey(WellKnownHttpHeaderNames.DPoP), "The pushed authorization request carries no DPoP field.");
+        Assert.DoesNotContain("dpop_jkt", parResult.RedirectUri!.ToString(), "The authorization request URL carries no dpop_jkt.");
+    }
+
+
+    /// <summary>
     /// Rewires the host's replay store so it saves normally but never resolves anything under
     /// <c>FlowKind.JtiReplay</c>, while every other correlation kind still resolves through the host's
     /// real resolver. This is the half-wired store the guard's post-save self-check must catch.

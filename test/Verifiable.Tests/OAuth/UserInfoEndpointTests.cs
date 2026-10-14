@@ -1420,7 +1420,7 @@ internal sealed class UserInfoEndpointTests
             presentation.DpopKey, "POST", presentation.UserInfoUrl, presentation.AccessToken, presentedNonce,
             TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
 
-        await AssertProofRefusedAsync(presentation, proof, "use_dpop_nonce", isFreshNonceExpected: true).ConfigureAwait(false);
+        await AssertProofRefusedAsync(presentation, proof, "use_dpop_nonce", isDpopNonceExpected: true).ConfigureAwait(false);
     }
 
 
@@ -1829,6 +1829,653 @@ internal sealed class UserInfoEndpointTests
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertRefused(response, body, status, challenge, error);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.1">RFC 9449 Section 4.1</see>: "Note that per
+    /// [RFC9110], header field names are case insensitive; thus, DPoP, DPOP, dpop, etc., are all valid and
+    /// equivalent header field names." A DPoP-bound access token presented at UserInfo over a raw TLS connection
+    /// under the <c>DPoP</c> scheme, with a valid proof sent in a field whose name is spelled <c>dpop</c> or
+    /// <c>DPOP</c>, is served: 200 with the End-User's <c>sub</c>.
+    /// </summary>
+    /// <param name="fieldName">The spelling of the field name the proof is sent under.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("dpop")]
+    [DataRow("DPOP")]
+    public async Task UserInfoReadsTheProofUnderAnySpellingOfTheDpopFieldNameAsync(string fieldName)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        using DpopClientFixture fixture = await CreateDpopFixtureAsync(host, material).ConfigureAwait(false);
+        DpopPresentationContext presentation = await PrepareDpopPresentationAsync(host, material, fixture).ConfigureAwait(false);
+
+        string proof = await ResourceDpopProofs.BuildAsync(
+            presentation.DpopKey, "POST", presentation.UserInfoUrl, presentation.AccessToken, presentation.Nonce,
+            TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Post, new Uri(presentation.UserInfoUrl),
+            [
+                new(WellKnownHttpHeaderNames.Authorization, $"DPoP {presentation.AccessToken}"),
+                new(fieldName, proof)
+            ],
+            ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+        using JsonDocument document = JsonDocument.Parse(response.Body);
+        Assert.AreEqual(SubjectId, document.RootElement.GetProperty("sub").GetString());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.1">RFC 9449 Section 4.1</see>: "However, case
+    /// is significant in the header field value." Two proofs for one UserInfo request are presented over the wire
+    /// with the DPoP-bound token they were built for: the one whose first segment is sent with the case of every
+    /// letter swapped is another field value and is refused with 401 and the one challenge
+    /// <c>DPoP error="invalid_dpop_proof", algs="..."</c>; the one sent exactly as it was signed is served, 200 with
+    /// the End-User's <c>sub</c>. The refusal half is held by the JWS integrity of the proof: a base64url segment with
+    /// its letters in the other case decodes to other bytes, so the signature does not verify; no reading of the
+    /// field value refuses it on its own. The half a reader of the field value can break is the acceptance: a resource
+    /// that folds the value's case would refuse the proof sent exactly as it was signed.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task UserInfoReadsTheDpopFieldValueWithItsCaseSignificantAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        using DpopClientFixture fixture = await CreateDpopFixtureAsync(host, material).ConfigureAwait(false);
+        DpopPresentationContext presentation = await PrepareDpopPresentationAsync(host, material, fixture).ConfigureAwait(false);
+
+        string caseSwappedProof = DpopWireReading.SwapLetterCaseOfFirstSegment(await ResourceDpopProofs.BuildAsync(
+            presentation.DpopKey, "POST", presentation.UserInfoUrl, presentation.AccessToken, presentation.Nonce,
+            TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false));
+        await AssertProofRefusedAsync(presentation, caseSwappedProof, "invalid_dpop_proof").ConfigureAwait(false);
+
+        string proof = await ResourceDpopProofs.BuildAsync(
+            presentation.DpopKey, "POST", presentation.UserInfoUrl, presentation.AccessToken, presentation.Nonce,
+            TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+        using HttpResponseMessage response = await SendUserInfoOverWireAsync(
+            host, material, presentation.AccessToken, scheme: "DPoP", dpopProof: proof).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode, body);
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual(SubjectId, document.RootElement.GetProperty("sub").GetString());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.1">RFC 9449 Section 4.1</see>: "The DPoP HTTP
+    /// header field value uses the token68 syntax defined in Section 11.2 of [RFC9110]", Figure 3:
+    /// <c>token68 = 1*( ALPHA / DIGIT / "-" / "." / "_" / "~" / "+" / "/" ) *"="</c>. A proof signed for the
+    /// request, sent with a <c>!</c> placed inside its first segment, is a field value outside that syntax:
+    /// presented at UserInfo over the wire with the DPoP-bound token it was built for, it is refused with 401 and
+    /// the one challenge <c>DPoP error="invalid_dpop_proof", algs="..."</c>, never served.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task UserInfoRefusesAProofValueOutsideTheToken68SyntaxAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        using DpopClientFixture fixture = await CreateDpopFixtureAsync(host, material).ConfigureAwait(false);
+        DpopPresentationContext presentation = await PrepareDpopPresentationAsync(host, material, fixture).ConfigureAwait(false);
+
+        string proof = await ResourceDpopProofs.BuildAsync(
+            presentation.DpopKey, "POST", presentation.UserInfoUrl, presentation.AccessToken, presentation.Nonce,
+            TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+        int firstDot = proof.IndexOf('.', StringComparison.Ordinal);
+        string outsideToken68 = proof.Insert(firstDot / 2, "!");
+        Assert.IsFalse(DpopWireReading.IsToken68(outsideToken68), "The value sent is outside the token68 syntax.");
+
+        await AssertProofRefusedAsync(presentation, outsideToken68, "invalid_dpop_proof").ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>, of the
+    /// <c>DPoP</c> challenge: "The authentication parameter realm MAY be included to indicate the scope of
+    /// protection in the manner described in [RFC9110], Section 11.5." The resource takes the option not: a proof
+    /// naming another target, presented with its DPoP-bound token at UserInfo over the wire, is refused with 401
+    /// and a <c>DPoP</c> challenge whose auth-params are read from the field as sent and carry no <c>realm</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task UserInfoDpopChallengeCarriesNoRealmParameterAsync()
+    {
+        IReadOnlyDictionary<string, string> parameters = await ReadRefusedDpopChallengeParametersAsync().ConfigureAwait(false);
+
+        Assert.AreEqual("invalid_dpop_proof", parameters["error"]);
+        Assert.IsFalse(parameters.ContainsKey("realm"), "The DPoP challenge carries no realm parameter.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>, of the
+    /// <c>DPoP</c> challenge: "A scope authentication parameter MAY be included as defined in [RFC6750], Section
+    /// 3.", where <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 Section 3</see> reads "The
+    /// "scope" attribute is a space-delimited list of case-sensitive scope values indicating the required scope of
+    /// the access token for accessing the requested resource." A DPoP-bound token whose <c>scope</c> names
+    /// <c>profile</c> but not <c>openid</c>, presented at UserInfo over the wire with a valid proof, is refused with
+    /// 403 and a <c>DPoP</c> challenge whose <c>error</c> is <c>insufficient_scope</c> and whose <c>scope</c> names
+    /// the scope UserInfo requires, <c>openid</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task UserInfoInsufficientScopeDpopChallengeNamesTheRequiredScopeAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        using DpopClientFixture fixture = await CreateDpopFixtureAsync(host, material).ConfigureAwait(false);
+
+        string boundAccessToken = await IssueDpopBoundAccessTokenAsync(host, material, fixture).ConfigureAwait(false);
+        string profileOnlyToken = await CompactJwsResigning.ResignWithAlteredPayloadAsync(
+            host, boundAccessToken, material.SigningKeyId, payload => payload["scope"] = WellKnownScopes.Profile).ConfigureAwait(false);
+        Uri userInfoUrl = await UserInfoUrlAsync(host, material).ConfigureAwait(false);
+        string nonce = await ObtainResourceNonceAsync(host, material, profileOnlyToken).ConfigureAwait(false);
+        string proof = await ResourceDpopProofs.BuildAsync(
+            fixture.DpopKey, "POST", userInfoUrl.ToString(), profileOnlyToken, nonce, TimeProvider.GetUtcNow(),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        using HttpResponseMessage response = await SendUserInfoOverWireAsync(
+            host, material, profileOnlyToken, scheme: "DPoP", dpopProof: proof).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.Forbidden, response.StatusCode, body);
+        IReadOnlyDictionary<string, string> parameters = DpopWireReading.ReadChallengeParameters(
+            Assert.ContainsSingle(RawAuthCodeWirePushers.ChallengesOf(response)), "DPoP");
+        Assert.AreEqual("insufficient_scope", parameters["error"]);
+        Assert.IsTrue(parameters.TryGetValue("scope", out string? scope), "The insufficient_scope challenge names the required scope.");
+        Assert.AreEqual("openid", scope);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>, of the
+    /// <c>DPoP</c> challenge: "An error_description parameter ([RFC6750], Section 3) MAY be included along with
+    /// the error parameter to provide developers a human-readable explanation that is not meant to be displayed to
+    /// end-users." The resource takes the option in the response body, not in the challenge: a proof naming
+    /// another target, presented with its DPoP-bound token at UserInfo over the wire, is refused with 401, a
+    /// <c>DPoP</c> challenge carrying <c>error</c> and no <c>error_description</c>, and a body carrying both.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task UserInfoDpopChallengeCarriesNoErrorDescriptionParameterAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        using DpopClientFixture fixture = await CreateDpopFixtureAsync(host, material).ConfigureAwait(false);
+        DpopPresentationContext presentation = await PrepareDpopPresentationAsync(host, material, fixture).ConfigureAwait(false);
+
+        (HttpStatusCode status, string challenge, string body) = await PresentProofNamingAnotherTargetAsync(presentation).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.Unauthorized, status, body);
+        IReadOnlyDictionary<string, string> parameters = DpopWireReading.ReadChallengeParameters(challenge, "DPoP");
+        Assert.AreEqual("invalid_dpop_proof", parameters["error"]);
+        Assert.IsFalse(parameters.ContainsKey("error_description"), "The DPoP challenge carries no error_description parameter.");
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.IsFalse(string.IsNullOrEmpty(document.RootElement.GetProperty("error_description").GetString()),
+            "The refusal's body carries the error_description.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "This
+    /// authentication scheme is for origin-server authentication only. Therefore, this authentication scheme MUST
+    /// NOT be used with the Proxy-Authenticate or Proxy-Authorization header fields." A DPoP-bound access token
+    /// sent at UserInfo over a raw TLS connection in <c>Proxy-Authorization: DPoP</c>, with a valid proof in the
+    /// <c>DPoP</c> field and no <c>Authorization</c> field, is no credential of the scheme: the request is refused
+    /// with 401, an empty body and the challenge <c>Bearer scope="openid", DPoP algs="..."</c> a request without
+    /// credentials is answered with, and the response carries no <c>Proxy-Authenticate</c> field.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task UserInfoReadsNoDpopCredentialFromProxyAuthorizationAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        using DpopClientFixture fixture = await CreateDpopFixtureAsync(host, material).ConfigureAwait(false);
+        DpopPresentationContext presentation = await PrepareDpopPresentationAsync(host, material, fixture).ConfigureAwait(false);
+
+        string proof = await ResourceDpopProofs.BuildAsync(
+            presentation.DpopKey, "POST", presentation.UserInfoUrl, presentation.AccessToken, presentation.Nonce,
+            TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Post, new Uri(presentation.UserInfoUrl),
+            [
+                new("Proxy-Authorization", $"DPoP {presentation.AccessToken}"),
+                new(WellKnownHttpHeaderNames.DPoP, proof)
+            ],
+            ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(401, response.StatusCode, response.Body);
+        Assert.AreEqual(string.Empty, response.Body, "A request without credentials is answered with no error information.");
+        Assert.AreEqual(
+            $"Bearer scope=\"openid\", DPoP algs=\"{ResourceDpopProofs.AcceptedProofAlgorithms}\"",
+            Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
+        Assert.IsEmpty(response.Headers.Headers.GetValues("Proxy-Authenticate"), "No Proxy-Authenticate field is sent.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">RFC 9449 Section 8</see>: "Other HTTP headers
+    /// and JSON fields MAY also be included in the error response, but there MUST NOT be more than one DPoP-Nonce
+    /// header.", which <see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">Section 9</see> applies to a
+    /// resource server ("They provide the nonce using the DPoP-Nonce header in the same way that authorization
+    /// servers do"). A DPoP-bound access token presented at UserInfo over a raw TLS connection under the
+    /// <c>DPoP</c> scheme with no proof is answered with the 401 nonce challenge, whose head carries exactly one
+    /// <c>DPoP-Nonce</c> field line, its value not empty.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task UserInfoNonceChallengeCarriesOneDpopNonceFieldAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        using DpopClientFixture fixture = await CreateDpopFixtureAsync(host, material).ConfigureAwait(false);
+
+        string boundAccessToken = await IssueDpopBoundAccessTokenAsync(host, material, fixture).ConfigureAwait(false);
+        Uri userInfoUrl = await UserInfoUrlAsync(host, material).ConfigureAwait(false);
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Post, userInfoUrl,
+            [new(WellKnownHttpHeaderNames.Authorization, $"DPoP {boundAccessToken}")],
+            ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(401, response.StatusCode, response.Body);
+        string nonce = Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.DPoPNonce));
+        Assert.IsFalse(string.IsNullOrEmpty(nonce), "The one DPoP-Nonce field carries a nonce.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8.2">RFC 9449 Section 8.2</see>: "Responses that
+    /// include the DPoP-Nonce HTTP header should be uncacheable (e.g., using Cache-Control: no-store in response to
+    /// a GET request) to prevent the response from being used to serve a subsequent request and a stale nonce
+    /// value from being used as a result." A DPoP-bound access token presented at UserInfo in a GET over a raw TLS
+    /// connection with no proof is answered with a 401 nonce challenge carrying a <c>DPoP-Nonce</c> that no cache
+    /// may store (<see href="https://www.rfc-editor.org/rfc/rfc9111#section-3">RFC 9111 Section 3</see>): GET is a
+    /// method whose caching is defined, 401 is no status code defined as heuristically cacheable, and the response
+    /// carries no <c>public</c>, <c>private</c>, <c>max-age</c> or <c>s-maxage</c> directive and no <c>Expires</c>
+    /// field.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task UserInfoNonceChallengeToAGetIsNotStorableByACacheAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        using DpopClientFixture fixture = await CreateDpopFixtureAsync(host, material).ConfigureAwait(false);
+
+        string boundAccessToken = await IssueDpopBoundAccessTokenAsync(host, material, fixture).ConfigureAwait(false);
+        Uri userInfoUrl = await UserInfoUrlAsync(host, material).ConfigureAwait(false);
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Get, userInfoUrl,
+            [new(WellKnownHttpHeaderNames.Authorization, $"DPoP {boundAccessToken}")],
+            ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(401, response.StatusCode, response.Body);
+        Assert.IsNotEmpty(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.DPoPNonce), "The challenge carries a DPoP-Nonce.");
+        Assert.IsFalse(DpopWireReading.IsStorableByACache(WellKnownHttpMethods.Get, userInfoUrl, response.StatusCode, response.Headers.Headers),
+            "A response carrying a DPoP-Nonce is not storable by a cache.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449 Section 11.1</see>: "Unlike
+    /// cryptographic nonces, it is acceptable for clients to use the same nonce multiple times and for the server
+    /// to accept the same nonce multiple times." Two proofs with distinct <c>jti</c> values, both carrying the one
+    /// nonce UserInfo provided, are presented one after the other with their DPoP-bound token at UserInfo over the
+    /// wire: both are served, 200 with the End-User's <c>sub</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task UserInfoAcceptsTheNonceItProvidedInSeveralProofsAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        using DpopClientFixture fixture = await CreateDpopFixtureAsync(host, material).ConfigureAwait(false);
+        DpopPresentationContext presentation = await PrepareDpopPresentationAsync(host, material, fixture).ConfigureAwait(false);
+
+        foreach(string jti in (string[])["first-proof-of-the-nonce", "second-proof-of-the-nonce"])
+        {
+            string proof = await ResourceDpopProofs.BuildAsync(
+                presentation.DpopKey, "POST", presentation.UserInfoUrl, presentation.AccessToken, presentation.Nonce,
+                TimeProvider.GetUtcNow(), TestContext.CancellationToken, jti: jti).ConfigureAwait(false);
+            using HttpResponseMessage response = await SendUserInfoOverWireAsync(
+                host, material, presentation.AccessToken, scheme: "DPoP", dpopProof: proof).ConfigureAwait(false);
+            string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.AreEqual(HttpStatusCode.OK, response.StatusCode, $"The proof '{jti}' carrying the provided nonce is served: {body}");
+            using JsonDocument document = JsonDocument.Parse(body);
+            Assert.AreEqual(SubjectId, document.RootElement.GetProperty("sub").GetString());
+        }
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "a resource server MUST
+    /// ... check the DPoP proof according to the rules in Section 4.3" and "The resource server MUST NOT grant access to
+    /// the resource unless all checks are successful", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">Section 4.3</see>, check 10: "If the server
+    /// provided a nonce value to the client, the nonce claim matches the server-provided nonce value." A proof whose
+    /// <c>nonce</c> decodes to the octets UserInfo provided, or begins with them, but is not the text it provided,
+    /// presented with its DPoP-bound token at UserInfo over the wire, is refused: 401, the one challenge
+    /// <c>DPoP error="use_dpop_nonce", algs="..."</c> and a <c>DPoP-Nonce</c> field, the signalling of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">Section 9</see> ("Resource servers use an HTTP 401
+    /// (Unauthorized) error code with an accompanying WWW-Authenticate: DPoP value and DPoP-Nonce value"). The host's nonce key is
+    /// <see cref="ResourceDpopProofs.PartialGroupNonceKeyId"/>, so its nonces end in a partial base64url group. The rows:
+    /// the provided octets and one more octet, written canonically; the provided nonce with a space inside it; the
+    /// provided nonce with its <c>=</c> padding; and the provided nonce with a pad bit of its last character set. The
+    /// space and the <c>=</c> are characters outside the base64url alphabet
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc4648#section-5">RFC 4648 Section 5</see>, Table 2, written without
+    /// padding by <see href="https://www.rfc-editor.org/rfc/rfc7515#section-2">RFC 7515 Section 2</see>), and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc4648#section-3.3">RFC 4648 Section 3.3</see> reads: "Implementations
+    /// MUST reject the encoded data if it contains characters outside the base alphabet when interpreting base-encoded
+    /// data, unless the specification referring to this document explicitly states otherwise".
+    /// </summary>
+    /// <param name="row">How the presented nonce spells or extends the provided one.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(NonceExtendedByAnOctetRow)]
+    [DataRow(NonceWithASpaceInsideRow)]
+    [DataRow(NoncePaddedRow)]
+    [DataRow(NonceWithAPadBitSetRow)]
+    public async Task UserInfoRefusesANonceThatIsNotTheTextItProvidedAsync(string row)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync(ResourceDpopProofs.PartialGroupNonceKeyId).ConfigureAwait(false);
+        using DpopClientFixture fixture = await CreateDpopFixtureAsync(host, material).ConfigureAwait(false);
+        DpopPresentationContext presentation = await PrepareDpopPresentationAsync(host, material, fixture).ConfigureAwait(false);
+
+        string provided = presentation.Nonce;
+        string presented = row switch
+        {
+            NonceExtendedByAnOctetRow => ResourceDpopProofs.ExtendNonceByAnOctet(provided),
+            NonceWithASpaceInsideRow => provided.Insert(provided.Length / 2, " "),
+            NoncePaddedRow => ResourceDpopProofs.PadNonce(provided),
+            NonceWithAPadBitSetRow => ResourceDpopProofs.SetUnusedBitsOfNonce(provided),
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown nonce row.")
+        };
+        Assert.AreNotEqual(provided, presented);
+        string proof = await ResourceDpopProofs.BuildAsync(
+            presentation.DpopKey, "POST", presentation.UserInfoUrl, presentation.AccessToken, presented,
+            TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        await AssertProofRefusedAsync(presentation, proof, "use_dpop_nonce", isDpopNonceExpected: true).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "a resource server MUST
+    /// ... check the DPoP proof according to the rules in Section 4.3", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">Section 4.3</see>, check 10: "If the server
+    /// provided a nonce value to the client, the nonce claim matches the server-provided nonce value." The nonce is the
+    /// one UserInfo provided by its <c>DPoP-Nonce</c> (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">Section
+    /// 9</see>: "Resource servers can also choose to provide a nonce value to be included in DPoP proofs sent to them").
+    /// The host's nonce key is <see cref="ResourceDpopProofs.PartialGroupNonceKeyId"/>, so the nonce UserInfo provides ends
+    /// in a partial base64url group; a proof carrying that nonce exactly as provided, presented with its DPoP-bound token
+    /// at UserInfo over the wire, is served: 200 with the End-User's <c>sub</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task UserInfoAcceptsTheNonceItProvidedEndingInAPartialGroupAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync(ResourceDpopProofs.PartialGroupNonceKeyId).ConfigureAwait(false);
+        using DpopClientFixture fixture = await CreateDpopFixtureAsync(host, material).ConfigureAwait(false);
+        DpopPresentationContext presentation = await PrepareDpopPresentationAsync(host, material, fixture).ConfigureAwait(false);
+
+        Assert.AreNotEqual(0, presentation.Nonce.Length % 4, $"The provided nonce ends in a partial group: '{presentation.Nonce}'.");
+        string proof = await ResourceDpopProofs.BuildAsync(
+            presentation.DpopKey, "POST", presentation.UserInfoUrl, presentation.AccessToken, presentation.Nonce,
+            TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+        using HttpResponseMessage response = await SendUserInfoOverWireAsync(
+            host, material, presentation.AccessToken, scheme: "DPoP", dpopProof: proof).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode, $"The nonce as provided is accepted: {body}");
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual(SubjectId, document.RootElement.GetProperty("sub").GetString());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "a resource server MUST
+    /// ... check the DPoP proof according to the rules in Section 4.3" and "MUST NOT grant access to the resource unless
+    /// all checks are successful", and <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">Section 4.3</see>,
+    /// check 10: "If the server provided a nonce value to the client, the nonce claim matches the server-provided nonce
+    /// value." A decoder may read another spelling as the provided octets.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc4648#section-3.5">RFC 4648 Section 3.5</see>: "decoders MAY chose to
+    /// reject an encoding if the pad bits have not been set to zero", so a conforming decoder may read a set pad bit.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc4648#section-3.3">RFC 4648 Section 3.3</see>: "Implementations MUST
+    /// reject the encoded data if it contains characters outside the base alphabet when interpreting base-encoded data,
+    /// unless the specification referring to this document explicitly states otherwise", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7515#section-2">RFC 7515 Section 2</see> states no such exception
+    /// for base64url, whose alphabet is <see href="https://www.rfc-editor.org/rfc/rfc4648#section-5">Section 5</see>'s
+    /// Table 2: a decoder that reads the base64 characters <c>+</c> and <c>/</c> as the base64url <c>-</c> and <c>_</c>
+    /// is outside Section 3.3, and for such a decoder the validator's own check of the base64url alphabet is what holds
+    /// the match. The host's nonce validation is wired with
+    /// <see cref="ResourceDpopProofs.PermissiveBase64UrlDecoder"/>, which reads both, and its issuance with
+    /// <see cref="ResourceDpopProofs.RandomFieldOfOnes"/>, so the provided text holds a <c>_</c>. A proof whose
+    /// <c>nonce</c> that decoder reads as the provided octets, but which is not the provided text, presented with its
+    /// DPoP-bound token at UserInfo over the wire, is refused: 401, the one challenge
+    /// <c>DPoP error="use_dpop_nonce", algs="..."</c> and a <c>DPoP-Nonce</c> field, the signalling of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">Section 9</see>. The rows: the provided text with
+    /// the lowest pad bit of its last character set, with the highest pad bit of its last character set, and with its
+    /// first <c>-</c> or <c>_</c> written <c>+</c> or <c>/</c>; each under a nonce HMAC key whose identifier is 12
+    /// octets (an 85-octet nonce, four pad bits) and 13 octets (86 octets, two pad bits).
+    /// </summary>
+    /// <param name="keyIdRow">The nonce HMAC key, by the length of its identifier.</param>
+    /// <param name="spellingRow">How the presented nonce spells the provided octets.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(TwelveOctetKeyIdRow, PadBitSetSpellingRow)]
+    [DataRow(TwelveOctetKeyIdRow, HighestPadBitSetSpellingRow)]
+    [DataRow(TwelveOctetKeyIdRow, Base64CharacterSpellingRow)]
+    [DataRow(ThirteenOctetKeyIdRow, PadBitSetSpellingRow)]
+    [DataRow(ThirteenOctetKeyIdRow, HighestPadBitSetSpellingRow)]
+    [DataRow(ThirteenOctetKeyIdRow, Base64CharacterSpellingRow)]
+    public async Task UserInfoRefusesAnotherSpellingOfTheProvidedNonceItsDecoderReadsAsync(string keyIdRow, string spellingRow)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        await EnableDpopUnderThePermissiveDecoderAsync(host, keyIdRow).ConfigureAwait(false);
+        using DpopClientFixture fixture = await CreateDpopFixtureAsync(host, material).ConfigureAwait(false);
+        DpopPresentationContext presentation = await PrepareDpopPresentationAsync(host, material, fixture).ConfigureAwait(false);
+
+        string provided = presentation.Nonce;
+        string presented = spellingRow switch
+        {
+            PadBitSetSpellingRow => ResourceDpopProofs.SetUnusedBitsOfNonce(provided),
+            HighestPadBitSetSpellingRow => ResourceDpopProofs.SetHighestUnusedBitOfNonce(provided),
+            Base64CharacterSpellingRow => ResourceDpopProofs.SpellNonceInTheBase64Alphabet(provided),
+            _ => throw new ArgumentOutOfRangeException(nameof(spellingRow), spellingRow, "Unknown spelling row.")
+        };
+        Assert.AreNotEqual(provided, presented);
+        Assert.IsTrue(ResourceDpopProofs.IsReadAsTheSuppliedOctetsByThePermissiveDecoder(presented, provided),
+            "The wired decoder reads the presented spelling as the provided octets.");
+        string proof = await ResourceDpopProofs.BuildAsync(
+            presentation.DpopKey, "POST", presentation.UserInfoUrl, presentation.AccessToken, presented,
+            TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        await AssertProofRefusedAsync(presentation, proof, "use_dpop_nonce", isDpopNonceExpected: true).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "a resource server MUST
+    /// ... check the DPoP proof according to the rules in Section 4.3", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">Section 4.3</see>, check 10: "the nonce claim
+    /// matches the server-provided nonce value." Under the wiring of
+    /// <see cref="UserInfoRefusesAnotherSpellingOfTheProvidedNonceItsDecoderReadsAsync"/> (the nonce validation reading
+    /// through <see cref="ResourceDpopProofs.PermissiveBase64UrlDecoder"/>), a proof carrying the nonce exactly as
+    /// provided, presented with its DPoP-bound token at UserInfo over the wire, is served, 200 with the End-User's
+    /// <c>sub</c>, under a nonce key of 12 octets and of 13 octets: the decoder reads the provided text, so the refusals
+    /// of the other spellings are the validator's.
+    /// </summary>
+    /// <param name="keyIdRow">The nonce key, by the length of its identifier.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(TwelveOctetKeyIdRow)]
+    [DataRow(ThirteenOctetKeyIdRow)]
+    public async Task UserInfoAcceptsTheProvidedNonceUnderAPermissiveDecoderAsync(string keyIdRow)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        await EnableDpopUnderThePermissiveDecoderAsync(host, keyIdRow).ConfigureAwait(false);
+        using DpopClientFixture fixture = await CreateDpopFixtureAsync(host, material).ConfigureAwait(false);
+        DpopPresentationContext presentation = await PrepareDpopPresentationAsync(host, material, fixture).ConfigureAwait(false);
+
+        string proof = await ResourceDpopProofs.BuildAsync(
+            presentation.DpopKey, "POST", presentation.UserInfoUrl, presentation.AccessToken, presentation.Nonce,
+            TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+        using HttpResponseMessage response = await SendUserInfoOverWireAsync(
+            host, material, presentation.AccessToken, scheme: "DPoP", dpopProof: proof).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode, $"The nonce as provided is accepted: {body}");
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual(SubjectId, document.RootElement.GetProperty("sub").GetString());
+    }
+
+
+    /// <summary>
+    /// Enables DPoP on the host under the nonce key <paramref name="keyIdRow"/> names, its nonce validation reading
+    /// through <see cref="ResourceDpopProofs.PermissiveBase64UrlDecoder"/> and its issuance filling the random field from
+    /// <see cref="ResourceDpopProofs.RandomFieldOfOnes"/>.
+    /// </summary>
+    /// <param name="host">The host.</param>
+    /// <param name="keyIdRow">The nonce key, by the length of its identifier.</param>
+    /// <returns>A task that completes when the host is wired.</returns>
+    private static async Task EnableDpopUnderThePermissiveDecoderAsync(TestHostShell host, string keyIdRow)
+    {
+        string keyId = keyIdRow switch
+        {
+            TwelveOctetKeyIdRow => ResourceDpopProofs.PartialGroupNonceKeyId,
+            ThirteenOctetKeyIdRow => ResourceDpopProofs.TwoOctetFinalQuantumNonceKeyId,
+            _ => throw new ArgumentOutOfRangeException(nameof(keyIdRow), keyIdRow, "Unknown key identifier row.")
+        };
+        _ = await host.EnableDpopAsync(keyId).ConfigureAwait(false);
+        await host.ValidateDpopNoncesWithDecoderAsync(ResourceDpopProofs.PermissiveBase64UrlDecoder).ConfigureAwait(false);
+        await host.IssueDpopNoncesFromEntropyAsync(ResourceDpopProofs.RandomFieldOfOnes).ConfigureAwait(false);
+    }
+
+
+    /// <summary>The row of a permissive-decoder test whose nonce key identifier is 12 octets, its nonces 85 octets.</summary>
+    private const string TwelveOctetKeyIdRow = "twelve-octet-key-identifier";
+
+    /// <summary>The row of a permissive-decoder test whose nonce key identifier is 13 octets, its nonces 86 octets.</summary>
+    private const string ThirteenOctetKeyIdRow = "thirteen-octet-key-identifier";
+
+    /// <summary>The row of a permissive-decoder test whose presented nonce is the provided one with the lowest pad bit of its last character set.</summary>
+    private const string PadBitSetSpellingRow = "pad-bit-set";
+
+    /// <summary>The row of a permissive-decoder test whose presented nonce is the provided one with the highest pad bit of its last character set.</summary>
+    private const string HighestPadBitSetSpellingRow = "highest-pad-bit-set";
+
+    /// <summary>The row of a permissive-decoder test whose presented nonce writes the provided one's first <c>-</c> or <c>_</c> as <c>+</c> or <c>/</c>.</summary>
+    private const string Base64CharacterSpellingRow = "base64-character";
+
+
+    /// <summary>The row of the exact-text test whose presented nonce is the provided octets and one more, written canonically.</summary>
+    private const string NonceExtendedByAnOctetRow = "nonce-extended-by-an-octet";
+
+    /// <summary>The row of the exact-text test whose presented nonce is the provided one with a space inside it.</summary>
+    private const string NonceWithASpaceInsideRow = "nonce-with-a-space-inside";
+
+    /// <summary>The row of the exact-text test whose presented nonce is the provided one with its padding.</summary>
+    private const string NoncePaddedRow = "nonce-padded";
+
+    /// <summary>The row of the exact-text test whose presented nonce is the provided one with a pad bit of its last character set.</summary>
+    private const string NonceWithAPadBitSetRow = "nonce-with-a-pad-bit-set";
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.6">RFC 9449 Section 11.6</see>: "In
+    /// particular, the algorithm none MUST NOT be allowed." A proof whose protected header declares <c>alg</c>
+    /// <c>none</c>, its signature made by the P-256 key its <c>jwk</c> carries so the signature itself verifies
+    /// under that public key, presented with its DPoP-bound token at UserInfo over the wire, is refused with 401 and the
+    /// one challenge <c>DPoP error="invalid_dpop_proof", algs="..."</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task UserInfoRefusesAProofWhoseAlgIsNoneAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        using DpopClientFixture fixture = await CreateDpopFixtureAsync(host, material).ConfigureAwait(false);
+        DpopPresentationContext presentation = await PrepareDpopPresentationAsync(host, material, fixture).ConfigureAwait(false);
+
+        string proof = await ResourceDpopProofs.BuildAsync(
+            presentation.DpopKey, "POST", presentation.UserInfoUrl, presentation.AccessToken, presentation.Nonce,
+            TimeProvider.GetUtcNow(), TestContext.CancellationToken,
+            alterHeader: header => header["alg"] = "none").ConfigureAwait(false);
+
+        await AssertProofRefusedAsync(presentation, proof, "invalid_dpop_proof").ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-5.1">RFC 9728 Section 5.1</see>: "This parameter
+    /// MAY also be used in WWW-Authenticate responses using authorization schemes other than "Bearer" [RFC6750],
+    /// such as the DPoP scheme defined by [RFC9449]." The resource takes the option not for the <c>DPoP</c>
+    /// scheme: a proof naming another target, presented with its DPoP-bound token at UserInfo over the wire, is
+    /// refused with 401 and a <c>DPoP</c> challenge whose auth-params carry no <c>resource_metadata</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task UserInfoDpopChallengeCarriesNoResourceMetadataParameterAsync()
+    {
+        IReadOnlyDictionary<string, string> parameters = await ReadRefusedDpopChallengeParametersAsync().ConfigureAwait(false);
+
+        Assert.AreEqual("invalid_dpop_proof", parameters["error"]);
+        Assert.IsFalse(parameters.ContainsKey("resource_metadata"), "The DPoP challenge carries no resource_metadata parameter.");
+    }
+
+
+    /// <summary>
+    /// Issues a DPoP-bound token over the wire, presents it at UserInfo with a proof naming another target, asserts
+    /// the 401 refusal, and reads the auth-params of the <c>DPoP</c> challenge of its one <c>WWW-Authenticate</c>
+    /// field.
+    /// </summary>
+    /// <returns>The <c>DPoP</c> challenge's auth-params.</returns>
+    private async Task<IReadOnlyDictionary<string, string>> ReadRefusedDpopChallengeParametersAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        using DpopClientFixture fixture = await CreateDpopFixtureAsync(host, material).ConfigureAwait(false);
+        DpopPresentationContext presentation = await PrepareDpopPresentationAsync(host, material, fixture).ConfigureAwait(false);
+
+        (HttpStatusCode status, string challenge, string body) = await PresentProofNamingAnotherTargetAsync(presentation).ConfigureAwait(false);
+        Assert.AreEqual(HttpStatusCode.Unauthorized, status, body);
+
+        return DpopWireReading.ReadChallengeParameters(challenge, "DPoP");
+    }
+
+
+    /// <summary>
+    /// Presents the presentation's token at UserInfo over the wire with a proof whose <c>htu</c> names a path below
+    /// the UserInfo path, correct in every other claim, and returns the answer.
+    /// </summary>
+    /// <param name="presentation">The presentation state.</param>
+    /// <returns>The status, the one <c>WWW-Authenticate</c> field value and the body.</returns>
+    private async Task<(HttpStatusCode Status, string Challenge, string Body)> PresentProofNamingAnotherTargetAsync(
+        DpopPresentationContext presentation)
+    {
+        string proof = await ResourceDpopProofs.BuildAsync(
+            presentation.DpopKey, "POST", presentation.UserInfoUrl + "/other", presentation.AccessToken, presentation.Nonce,
+            TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+        using HttpResponseMessage response = await SendUserInfoOverWireAsync(
+            presentation.Host, presentation.Material, presentation.AccessToken, scheme: "DPoP", dpopProof: proof).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        return (response.StatusCode, Assert.ContainsSingle(RawAuthCodeWirePushers.ChallengesOf(response)), body);
     }
 
 
@@ -2693,14 +3340,14 @@ internal sealed class UserInfoEndpointTests
     /// Presents <paramref name="proof"/> with the presentation's token under the <c>DPoP</c> scheme at
     /// UserInfo over the wire and asserts the refusal: 401, the one challenge
     /// <c>DPoP error="<paramref name="error"/>", algs="…"</c>, the error in the body, no subject, and,
-    /// when <paramref name="isFreshNonceExpected"/>, a <c>DPoP-Nonce</c> header.
+    /// when <paramref name="isDpopNonceExpected"/>, a <c>DPoP-Nonce</c> header.
     /// </summary>
     /// <param name="presentation">The presentation state.</param>
     /// <param name="proof">The DPoP proof sent.</param>
     /// <param name="error">The expected error.</param>
-    /// <param name="isFreshNonceExpected">Whether the refusal provides a fresh nonce.</param>
+    /// <param name="isDpopNonceExpected">Whether the refusal is answered with a <c>DPoP-Nonce</c> field.</param>
     private async Task AssertProofRefusedAsync(
-        DpopPresentationContext presentation, string proof, string error, bool isFreshNonceExpected = false)
+        DpopPresentationContext presentation, string proof, string error, bool isDpopNonceExpected = false)
     {
         using HttpResponseMessage response = await SendUserInfoOverWireAsync(
             presentation.Host, presentation.Material, presentation.AccessToken, scheme: "DPoP", dpopProof: proof)
@@ -2708,9 +3355,9 @@ internal sealed class UserInfoEndpointTests
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertRefused(response, body, HttpStatusCode.Unauthorized, ResourceDpopProofs.DpopChallenge(error), error);
-        if(isFreshNonceExpected)
+        if(isDpopNonceExpected)
         {
-            Assert.IsFalse(string.IsNullOrEmpty(ResourceDpopProofs.ReadNonce(response)), "The challenge provides a fresh nonce.");
+            Assert.IsFalse(string.IsNullOrEmpty(ResourceDpopProofs.ReadNonce(response)), "The refusal is answered with a DPoP-Nonce field.");
         }
     }
 

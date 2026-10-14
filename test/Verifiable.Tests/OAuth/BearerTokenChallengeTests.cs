@@ -347,6 +347,86 @@ internal sealed class BearerTokenChallengeTests
     }
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.6.1">RFC 9110 Section 11.6.1</see>:
+    /// "WWW-Authenticate = #challenge", and the field value "might contain more than one challenge";
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 Section 7.2</see> names a resource
+    /// indicating "support for multiple authentication schemes (i.e., Bearer and DPoP)" in it. The value
+    /// <c>Bearer realm="x", DPoP algs="ES256"</c> holds one <c>Bearer</c> challenge, which the parser reads: its
+    /// <c>realm</c> is <c>x</c>.
+    /// </summary>
+    [TestMethod]
+    public void TheBearerChallengeOfAChallengeListIsParsed()
+    {
+        Assert.IsTrue(BearerTokenChallenge.TryParse(
+            "Bearer realm=\"x\", DPoP algs=\"ES256\"", out BearerTokenChallengeParameters parameters),
+            "The one Bearer challenge of the list is read.");
+        Assert.AreEqual("x", parameters.Realm);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.5">RFC 9110 Section 11.5</see>: "a response can have
+    /// multiple challenges with the same auth-scheme but with different realms", and neither challenge states which of
+    /// them a client is to act on, so the parser's own rule reads a list holding two <c>Bearer</c> challenges as no one
+    /// Bearer challenge: <c>Bearer realm="x", Bearer realm="y"</c> is refused.
+    /// </summary>
+    [TestMethod]
+    public void AListHoldingTwoBearerChallengesIsRejected()
+    {
+        Assert.IsFalse(BearerTokenChallenge.TryParse("Bearer realm=\"x\", Bearer realm=\"y\"", out _));
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 Section 3</see>: "All challenges defined by
+    /// this specification MUST use the auth-scheme value "Bearer"." A challenge list holding no <c>Bearer</c>
+    /// challenge, <c>DPoP algs="ES256", Basic realm="y"</c>, is refused.
+    /// </summary>
+    [TestMethod]
+    public void AListHoldingNoBearerChallengeIsRejected()
+    {
+        Assert.IsFalse(BearerTokenChallenge.TryParse("DPoP algs=\"ES256\", Basic realm=\"y\"", out _));
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.6.1">RFC 9110 Section 11.6.1</see>: the field value
+    /// "might contain more than one challenge, and each challenge can contain a comma-separated list of authentication
+    /// parameters", and <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.2">Section 11.2</see>: "each
+    /// parameter name MUST only occur once per challenge". A value whose unrelated <c>Basic</c> challenge carries five
+    /// thousand distinct auth-params, followed by <c>Bearer realm="x", error="invalid_token"</c>, holds one
+    /// <c>Bearer</c> challenge, which the parser reads with its attributes.
+    /// </summary>
+    [TestMethod]
+    public void TheBearerChallengeAfterAChallengeOfThousandsOfDistinctParametersIsParsed()
+    {
+        string unrelated = "Basic " + string.Join(", ", Enumerable.Range(0, 5000).Select(index => $"p{index}=v"));
+
+        Assert.IsTrue(BearerTokenChallenge.TryParse(
+            unrelated + ", Bearer realm=\"x\", error=\"invalid_token\"", out BearerTokenChallengeParameters parameters),
+            "The Bearer challenge after the thousands of distinct names is read.");
+        Assert.AreEqual("x", parameters.Realm);
+        Assert.AreEqual(OAuthErrors.InvalidToken, parameters.Error);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.2">RFC 9110 Section 11.2</see>: "the name token is
+    /// matched case-insensitively and each parameter name MUST only occur once per challenge". A <c>Basic</c> challenge
+    /// of five thousand distinct auth-params that names its first parameter again as <c>P0</c> is outside the grammar,
+    /// and the value holding it beside <c>Bearer realm="x"</c> is refused as a whole.
+    /// </summary>
+    [TestMethod]
+    public void AChallengeRepeatingANameAmongThousandsOfParametersIsRejected()
+    {
+        string unrelated = "Basic " + string.Join(", ", Enumerable.Range(0, 5000).Select(index => $"p{index}=v")) + ", P0=v";
+
+        Assert.IsFalse(BearerTokenChallenge.TryParse(unrelated + ", Bearer realm=\"x\"", out _),
+            "A challenge naming a parameter twice among thousands is outside the grammar.");
+    }
+
+
     /// <summary>§3: the scheme MUST be followed by one or more auth-param values.</summary>
     [TestMethod]
     public void BareSchemeWithoutParametersIsRejected()

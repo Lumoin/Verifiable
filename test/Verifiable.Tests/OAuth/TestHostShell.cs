@@ -4021,6 +4021,101 @@ internal sealed class TestHostShell: IAsyncDisposable
 
 
     /// <summary>
+    /// Wraps the server's DPoP proof validation so every proof an endpoint receives is recorded as it arrived over
+    /// the wire, with the URL the endpoint holds its <c>htu</c> to, before it is validated.
+    /// <see cref="EnableDpopAsync"/> must have been called first.
+    /// </summary>
+    /// <returns>The recorded proofs, in arrival order.</returns>
+    public async Task<List<(string HttpUrl, string Proof)>> RecordReceivedDpopProofsAsync()
+    {
+        List<(string HttpUrl, string Proof)> receivedProofs = [];
+        await AlterAsync(Server, integration =>
+        {
+            ValidateDpopProofDelegate validate = integration.ValidateDpopProofAsync
+                ?? throw new InvalidOperationException("EnableDpop must be called before RecordReceivedDpopProofsAsync.");
+            integration.ValidateDpopProofAsync = (request, ct) =>
+            {
+                receivedProofs.Add((request.HttpUrl, request.Proof));
+
+                return validate(request, ct);
+            };
+        }).ConfigureAwait(false);
+
+        return receivedProofs;
+    }
+
+
+    /// <summary>
+    /// Re-wires the server's DPoP nonce validation to <see cref="DefaultDpopNonceValidation.ValidateAsync"/> reading the
+    /// presented nonce with <paramref name="base64UrlDecoder"/> in place of <see cref="Base64UrlDecoder"/>; the keyset,
+    /// the clock and the validity window <see cref="EnableDpopAsync"/> wires are kept, so a row shows what the validator
+    /// holds under a decoder an application may wire. <see cref="EnableDpopAsync"/> must have been called first.
+    /// </summary>
+    /// <param name="base64UrlDecoder">The decoder the validation reads every presented nonce with.</param>
+    /// <returns>A task that completes when the server is re-wired.</returns>
+    public Task ValidateDpopNoncesWithDecoderAsync(DecodeDelegate base64UrlDecoder)
+    {
+        ArgumentNullException.ThrowIfNull(base64UrlDecoder);
+        if(DpopHmacKeySet is null)
+        {
+            throw new InvalidOperationException("EnableDpop must be called before ValidateDpopNoncesWithDecoderAsync.");
+        }
+
+        return AlterAsync(Server, integration =>
+        {
+            integration.ValidateDpopNonceAsync = (presented, audience, tenantId, ctx, ct) =>
+                DefaultDpopNonceValidation.ValidateAsync(
+                    presented,
+                    audience,
+                    tenantId,
+                    ctx,
+                    ctx.RequestServer!.OAuth().GetHmacKeySetAsync!,
+                    ctx.RequestServer!.OAuth().ResolveServerHmacKeyAsync!,
+                    Time,
+                    WellKnownDpopValues.DefaultNonceValidityWindow,
+                    base64UrlDecoder,
+                    MemoryPool,
+                    ct);
+        });
+    }
+
+
+    /// <summary>
+    /// Re-wires the server's DPoP nonce issuance to <see cref="DefaultDpopNonceIssuance.IssueAsync"/> filling each
+    /// nonce's random field through <paramref name="fillEntropy"/>; the keyset, the clock and the encoder
+    /// <see cref="EnableDpopAsync"/> wires are kept, so a row can arrange the octets the issued text spells.
+    /// <see cref="EnableDpopAsync"/> must have been called first.
+    /// </summary>
+    /// <param name="fillEntropy">The source of every nonce's random field.</param>
+    /// <returns>A task that completes when the server is re-wired.</returns>
+    public Task IssueDpopNoncesFromEntropyAsync(FillEntropyDelegate fillEntropy)
+    {
+        ArgumentNullException.ThrowIfNull(fillEntropy);
+        if(DpopHmacKeySet is null)
+        {
+            throw new InvalidOperationException("EnableDpop must be called before IssueDpopNoncesFromEntropyAsync.");
+        }
+
+        return AlterAsync(Server, integration =>
+        {
+            integration.IssueDpopNonceAsync = (audience, tenantId, ctx, ct) =>
+                DefaultDpopNonceIssuance.IssueAsync(
+                    audience,
+                    tenantId,
+                    ctx,
+                    ctx.RequestServer!.OAuth().GetHmacKeySetAsync!,
+                    ctx.RequestServer!.OAuth().SelectHmacKeyAsync,
+                    ctx.RequestServer!.OAuth().ResolveServerHmacKeyAsync!,
+                    Time,
+                    Base64UrlEncoder,
+                    fillEntropy,
+                    MemoryPool,
+                    ct);
+        });
+    }
+
+
+    /// <summary>
     /// Convenience for tests: rotate the DPoP HMAC key by adding a new
     /// Incoming key, promoting it to Current, and retiring the previous
     /// Current keys. Returns the new key's kid. <see cref="EnableDpopAsync"/>
@@ -4244,9 +4339,34 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// and wires the <see cref="OAuthClient"/> with
     /// <see cref="HttpClientTransport"/>.
     /// </summary>
+    /// <param name="record">The server registration the client is built for.</param>
+    /// <param name="redirectUri">The client's redirection URI.</param>
+    /// <param name="cancellationToken">Cancellation of the listener start.</param>
+    /// <returns>The client fixture; the caller disposes it.</returns>
+    public ValueTask<DpopClientFixture> CreateDpopEnabledOAuthClientAsync(
+        ClientRecord record,
+        string redirectUri,
+        CancellationToken cancellationToken = default) =>
+        CreateDpopEnabledOAuthClientAsync(record, redirectUri, observeFormPost: null, cancellationToken);
+
+
+    /// <summary>
+    /// The HTTP-backed DPoP-enabled client of
+    /// <see cref="CreateDpopEnabledOAuthClientAsync(ClientRecord, string, CancellationToken)"/>, whose transport
+    /// first hands each form post to <paramref name="observeFormPost"/>.
+    /// </summary>
+    /// <param name="record">The server registration the client is built for.</param>
+    /// <param name="redirectUri">The client's redirection URI.</param>
+    /// <param name="observeFormPost">
+    /// Sees each form post the client sends, its endpoint, fields and headers, before the post crosses the wire,
+    /// or <see langword="null"/> to observe none.
+    /// </param>
+    /// <param name="cancellationToken">Cancellation of the listener start.</param>
+    /// <returns>The client fixture; the caller disposes it.</returns>
     public async ValueTask<DpopClientFixture> CreateDpopEnabledOAuthClientAsync(
         ClientRecord record,
         string redirectUri,
+        Action<Uri, IReadOnlyCollection<KeyValuePair<string, string>>, OutgoingHeaders>? observeFormPost,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(record);
@@ -4282,7 +4402,11 @@ internal sealed class TestHostShell: IAsyncDisposable
 
         OAuthClientInfrastructure infrastructure = OAuthClientInfrastructure.Create(
             sendFormPostAsync: (endpoint, fields, headers, _, ct) =>
-                HttpClientTransport.SendFormPostAsync(httpClient, endpoint, fields, headers, ct),
+            {
+                observeFormPost?.Invoke(endpoint, fields, headers);
+
+                return HttpClientTransport.SendFormPostAsync(httpClient, endpoint, fields, headers, ct);
+            },
             saveStateAsync: (state, _, ct) =>
             {
                 clientFlowStore[state.FlowId] = state;
@@ -4386,7 +4510,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// <remarks>
     /// Invoked automatically by the HTTP-backed
     /// <see cref="CreateOAuthClientAndRegistrationAsync"/> /
-    /// <see cref="CreateDpopEnabledOAuthClientAsync"/> factories the first
+    /// <see cref="CreateDpopEnabledOAuthClientAsync(ClientRecord, string, CancellationToken)"/> factories the first
     /// time they're called. Tests that hold a <see cref="TestHostShell"/>
     /// across multiple HTTP-backed flow drives reuse the same listener.
     /// </remarks>
