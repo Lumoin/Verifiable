@@ -3944,11 +3944,16 @@ internal sealed class TestHostShell: IAsyncDisposable
 
     /// <summary>
     /// Wires up the AS-side DPoP delegates on the server's integration:
-    /// HMAC-key byte-loader, HMAC keyset accessor, nonce issuance, nonce
-    /// validation, and proof validation. Returns the in-process HMAC
+    /// HMAC-key byte-loader, HMAC keyset accessor, nonce issuance and nonce
+    /// validation, and the codecs' <see cref="AuthorizationServerCodecs.DpopProofParser"/>. The proof-validation slot
+    /// <see cref="AuthorizationServerIntegration.ValidateDpopProofAsync"/> is left unassigned, so the server validates
+    /// every proof through <see cref="DefaultDpopProofValidation.ValidateAsync"/>, the provider the test setup's registry
+    /// serves for the family of the proof's public key verifying it. Returns the in-process HMAC
     /// keyset so tests can drive slot transitions. Idempotent — repeat
     /// calls reuse the existing keyset.
     /// </summary>
+    /// <param name="initialKid">The key identifier of the first HMAC key.</param>
+    /// <returns>The in-process HMAC keyset.</returns>
     public async Task<InProcessKeySet> EnableDpopAsync(string initialKid = "test-hmac-1")
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(initialKid);
@@ -3969,17 +3974,7 @@ internal sealed class TestHostShell: IAsyncDisposable
                 ValueTask.FromResult(DpopHmacKeySet!.ResolveMaterial(kid));
             integration.GetHmacKeySetAsync = (tenantId, ctx, ct) =>
                 ValueTask.FromResult(DpopHmacKeySet!.Snapshot());
-            integration.ValidateDpopProofAsync = (request, ct) =>
-                DpopProofValidator.ValidateAsync(
-                    request,
-                    MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
-                    DpopTestSupport.Parser,
-                    Base64UrlEncoder,
-                    Base64UrlDecoder,
-                    Time,
-                    MemoryPool,
-                    iatSkew: WellKnownDpopValues.DefaultIatSkew,
-                    cancellationToken: ct);
+            integration.Codecs.DpopProofParser = DpopJwsPartParserJson.Default;
             integration.IssueDpopNonceAsync = (audience, tenantId, ctx, ct) =>
                 DefaultDpopNonceIssuance.IssueAsync(
                     audience,
@@ -4028,11 +4023,15 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// <returns>The recorded proofs, in arrival order.</returns>
     public async Task<List<(string HttpUrl, string Proof)>> RecordReceivedDpopProofsAsync()
     {
+        if(DpopHmacKeySet is null)
+        {
+            throw new InvalidOperationException("EnableDpop must be called before RecordReceivedDpopProofsAsync.");
+        }
+
         List<(string HttpUrl, string Proof)> receivedProofs = [];
         await AlterAsync(Server, integration =>
         {
-            ValidateDpopProofDelegate validate = integration.ValidateDpopProofAsync
-                ?? throw new InvalidOperationException("EnableDpop must be called before RecordReceivedDpopProofsAsync.");
+            ValidateDpopProofDelegate validate = CurrentDpopProofValidation(integration);
             integration.ValidateDpopProofAsync = (request, ct) =>
             {
                 receivedProofs.Add((request.HttpUrl, request.Proof));
@@ -4055,11 +4054,16 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// </summary>
     /// <param name="answeredJwkThumbprint">The value every successful validation answers as the JWK thumbprint.</param>
     /// <returns>A task that completes when the server is re-wired.</returns>
-    public Task AnswerValidatedDpopProofsWithJwkThumbprintAsync(string? answeredJwkThumbprint) =>
-        AlterAsync(Server, integration =>
+    public Task AnswerValidatedDpopProofsWithJwkThumbprintAsync(string? answeredJwkThumbprint)
+    {
+        if(DpopHmacKeySet is null)
         {
-            ValidateDpopProofDelegate validate = integration.ValidateDpopProofAsync
-                ?? throw new InvalidOperationException("EnableDpop must be called before AnswerValidatedDpopProofsWithJwkThumbprintAsync.");
+            throw new InvalidOperationException("EnableDpop must be called before AnswerValidatedDpopProofsWithJwkThumbprintAsync.");
+        }
+
+        return AlterAsync(Server, integration =>
+        {
+            ValidateDpopProofDelegate validate = CurrentDpopProofValidation(integration);
             integration.ValidateDpopProofAsync = async (request, ct) =>
             {
                 DpopProofValidationResult result = await validate(request, ct).ConfigureAwait(false);
@@ -4071,6 +4075,167 @@ internal sealed class TestHostShell: IAsyncDisposable
                 };
             };
         });
+    }
+
+
+    /// <summary>
+    /// Wraps the server's DPoP proof validation so a proof it validates is answered as a success whose
+    /// <see cref="DpopProofValidationResult.Claims"/> is <see langword="null"/>, the thumbprint of the proof's public key
+    /// kept: the answer of an application's validator that names no claims where a success carries them. A refused
+    /// proof is answered as the wrapped validation answers it. <see cref="EnableDpopAsync"/> must have been called
+    /// first.
+    /// </summary>
+    /// <returns>A task that completes when the server is re-wired.</returns>
+    public Task AnswerValidatedDpopProofsWithoutClaimsAsync()
+    {
+        if(DpopHmacKeySet is null)
+        {
+            throw new InvalidOperationException("EnableDpop must be called before AnswerValidatedDpopProofsWithoutClaimsAsync.");
+        }
+
+        return AlterAsync(Server, integration =>
+        {
+            ValidateDpopProofDelegate validate = CurrentDpopProofValidation(integration);
+            integration.ValidateDpopProofAsync = async (request, ct) =>
+            {
+                DpopProofValidationResult result = await validate(request, ct).ConfigureAwait(false);
+
+                return result.IsSuccess switch
+                {
+                    true => result with { Claims = null },
+                    false => result
+                };
+            };
+        });
+    }
+
+
+    /// <summary>
+    /// The proof validation <paramref name="integration"/> runs: its assigned
+    /// <see cref="AuthorizationServerIntegration.ValidateDpopProofAsync"/>, or, where the slot is unassigned, the
+    /// library default <see cref="DefaultDpopProofValidation.ValidateAsync"/> over its codecs, this host's clock and
+    /// pool, the validation the server runs then. A wrapper assigns the slot around it, so the wrapped validation is
+    /// the one the server ran before.
+    /// </summary>
+    /// <param name="integration">The integration, or an alteration candidate of it.</param>
+    /// <returns>The proof validation the integration runs.</returns>
+    public ValidateDpopProofDelegate CurrentDpopProofValidation(AuthorizationServerIntegration integration)
+    {
+        ArgumentNullException.ThrowIfNull(integration);
+
+        AuthorizationServerCodecs codecs = integration.Codecs;
+
+        return integration.ValidateDpopProofAsync switch
+        {
+            ValidateDpopProofDelegate assigned => assigned,
+            null => (request, ct) => DefaultDpopProofValidation.ValidateAsync(request, codecs, Time, MemoryPool, ct)
+        };
+    }
+
+
+    /// <summary>
+    /// Leaves the server's <see cref="AuthorizationServerIntegration.ValidateDpopProofAsync"/> unassigned and sets the
+    /// codecs' <see cref="AuthorizationServerCodecs.DpopProofParser"/> to <paramref name="parser"/>: with a parser the
+    /// server validates proofs through the library default <see cref="DefaultDpopProofValidation.ValidateAsync"/>, and
+    /// with none it validates no proof. The nonce and HMAC delegates <see cref="EnableDpopAsync"/> wires are kept.
+    /// <see cref="EnableDpopAsync"/> must have been called first.
+    /// </summary>
+    /// <param name="parser">The parser the default reads proofs with, or <see langword="null"/> for none.</param>
+    /// <returns>A task that completes when the server is re-wired.</returns>
+    public Task LeaveDpopProofValidationToTheLibraryDefaultAsync(DpopJwsPartParser? parser)
+    {
+        if(DpopHmacKeySet is null)
+        {
+            throw new InvalidOperationException("EnableDpop must be called before LeaveDpopProofValidationToTheLibraryDefaultAsync.");
+        }
+
+        return AlterAsync(Server, integration =>
+        {
+            integration.ValidateDpopProofAsync = null;
+            integration.Codecs.DpopProofParser = parser;
+        });
+    }
+
+
+    /// <summary>
+    /// Has the server answer <paramref name="acceptedAlgorithms"/> as the DPoP proof algorithms it supports, the
+    /// <see cref="AuthorizationServerCryptography.ResolveSupportedSigningAlgorithmsAsync"/> answer for
+    /// <see cref="KeyUsageContext.DpopProof"/>, and the library's default
+    /// (<see cref="Verifiable.OAuth.Server.Metadata.DefaultSupportedSigningAlgorithms.ResolveAsync"/>) for every other
+    /// usage.
+    /// </summary>
+    /// <param name="acceptedAlgorithms">The DPoP proof algorithms the server supports.</param>
+    /// <returns>A task that completes when the server is re-wired.</returns>
+    public Task AcceptDpopProofsUnderAsync(IReadOnlyList<string> acceptedAlgorithms)
+    {
+        ArgumentNullException.ThrowIfNull(acceptedAlgorithms);
+
+        return AlterAsync(Server, integration =>
+        {
+            integration.Cryptography.ResolveSupportedSigningAlgorithmsAsync = (registration, usage, context, ct) =>
+                (usage == KeyUsageContext.DpopProof) switch
+                {
+                    true => ValueTask.FromResult(acceptedAlgorithms),
+                    false => Verifiable.OAuth.Server.Metadata.DefaultSupportedSigningAlgorithms.ResolveAsync(
+                        context.RequestServer!.OAuth(), registration, usage, context, ct)
+                };
+        });
+    }
+
+
+    /// <summary>
+    /// Has the server's <see cref="AuthorizationServerCryptography.ResolveSupportedSigningAlgorithmsAsync"/> answer no
+    /// list at all for <see cref="KeyUsageContext.DpopProof"/>, against that delegate's contract of a list on every
+    /// answer, the answer of a host resolver that breaks it; every other usage keeps the library's default
+    /// (<see cref="Verifiable.OAuth.Server.Metadata.DefaultSupportedSigningAlgorithms.ResolveAsync"/>).
+    /// </summary>
+    /// <returns>A task that completes when the server is re-wired.</returns>
+    public Task AnswerNoDpopProofAlgorithmListAsync() =>
+        AlterAsync(Server, integration =>
+        {
+            integration.Cryptography.ResolveSupportedSigningAlgorithmsAsync = (registration, usage, context, ct) =>
+                (usage == KeyUsageContext.DpopProof) switch
+                {
+                    true => ValueTask.FromResult<IReadOnlyList<string>>(null!),
+                    false => Verifiable.OAuth.Server.Metadata.DefaultSupportedSigningAlgorithms.ResolveAsync(
+                        context.RequestServer!.OAuth(), registration, usage, context, ct)
+                };
+        });
+
+
+    /// <summary>
+    /// Assigns the server's <see cref="AuthorizationServerIntegration.ValidateDpopProofAsync"/> with the overload of
+    /// <see cref="DpopProofValidator"/> that takes a <see cref="VerificationDelegate"/>, verifying every proof's
+    /// signature with <paramref name="verificationDelegate"/>: the form of a host that binds its own primitive, in place
+    /// of the registry form <see cref="EnableDpopAsync"/> leaves to the library default. The parser, the codecs, the
+    /// clock, the pool and the <c>iat</c> skew are the default's. <see cref="EnableDpopAsync"/> must have been called
+    /// first.
+    /// </summary>
+    /// <param name="verificationDelegate">The signature verification every proof is checked with.</param>
+    /// <returns>A task that completes when the server is re-wired.</returns>
+    public Task VerifyDpopProofsWithAsync(VerificationDelegate verificationDelegate)
+    {
+        ArgumentNullException.ThrowIfNull(verificationDelegate);
+        if(DpopHmacKeySet is null)
+        {
+            throw new InvalidOperationException("EnableDpop must be called before VerifyDpopProofsWithAsync.");
+        }
+
+        return AlterAsync(Server, integration =>
+        {
+            integration.ValidateDpopProofAsync = (request, ct) =>
+                DpopProofValidator.ValidateAsync(
+                    request,
+                    verificationDelegate,
+                    DpopTestSupport.Parser,
+                    Base64UrlEncoder,
+                    Base64UrlDecoder,
+                    Time,
+                    MemoryPool,
+                    iatSkew: WellKnownDpopValues.DefaultIatSkew,
+                    cancellationToken: ct);
+        });
+    }
 
 
     /// <summary>

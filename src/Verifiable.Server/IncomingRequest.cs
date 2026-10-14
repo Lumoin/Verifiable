@@ -49,6 +49,11 @@ namespace Verifiable.Server;
 /// optional. Skins that did template parsing populate this; skins that
 /// pass the raw path use <see cref="Verifiable.Server.RouteValues.Empty"/>.
 /// </description></item>
+/// <item><description>
+/// <see cref="ListenerAuthority"/>: the scheme and authority of the listener
+/// that received the request, as the host's own configuration names it,
+/// optional. Set by the skin from its listener, never from a request field.
+/// </description></item>
 /// </list>
 /// <para>
 /// Immutable. The dispatcher reads it once and threads it through the
@@ -69,4 +74,34 @@ public sealed record IncomingRequest(
     /// is already in <see cref="Fields"/>).
     /// </summary>
     public RequestBody Body { get; init; } = RequestBody.None;
+
+    /// <summary>
+    /// The scheme and authority of the listener that received the request, as the host's own
+    /// configuration names it, or <see langword="null"/> when the host names none. The host sets it
+    /// when it builds the request from the listener that accepted the connection; it is never read
+    /// from a request field (<c>Host</c>, <c>Forwarded</c> or any other), since a value a client
+    /// chooses would let the client choose the target a request is judged against.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-7.1">RFC 9110 Section 7.1</see>:
+    /// "Upon receipt of a client's request, a server reconstructs the target URI from the received
+    /// components in accordance with their local configuration and incoming connection context." A
+    /// host behind a proxy or a load balancer serves clients that address an authority other than the
+    /// issuer's; this value is that authority. When it is set, the DPoP checks hold a proof's
+    /// <c>htu</c> to this authority and the request <see cref="Path"/>, and otherwise to the issuer's
+    /// authority and the path (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">RFC
+    /// 9449 Section 4.3</see>, check 9: "The htu claim matches the HTTP URI value for the HTTP request
+    /// in which the JWT was received, ignoring any query and fragment parts.").
+    /// </para>
+    /// <para>
+    /// The value is an absolute URI. Only its scheme and authority are read
+    /// (<see cref="Uri.GetLeftPart(UriPartial)"/> with <see cref="UriPartial.Authority"/>); a path,
+    /// query or fragment the value carries takes no part, and a relative URI, which has no authority
+    /// to read, fails every DPoP-checked request it is stamped on. A host that fills it from a request
+    /// field lets a client choose it; the value is the host's configuration, and so is its failure,
+    /// a relative value among them.
+    /// </para>
+    /// </remarks>
+    public Uri? ListenerAuthority { get; init; }
 }

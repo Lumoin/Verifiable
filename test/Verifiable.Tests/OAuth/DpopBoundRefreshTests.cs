@@ -961,7 +961,8 @@ internal sealed class DpopBoundRefreshTests
     /// <see cref="Verifiable.OAuth.AuthCode.Server.DpopTokenEndpointValidation.ValidateAsync"/>
     /// checks before issuing a nonce challenge. A partially wired DPoP configuration
     /// (<see cref="AuthorizationServerIntegration.IssueDpopNonceAsync"/> present,
-    /// <see cref="AuthorizationServerIntegration.ValidateDpopProofAsync"/> absent) therefore never
+    /// <see cref="AuthorizationServerIntegration.ValidateDpopProofAsync"/> and
+    /// <see cref="AuthorizationServerCodecs.DpopProofParser"/> absent) therefore never
     /// surfaces here: the collapse onto the endpoint's constant
     /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">RFC 9449 §8</see>: the
     /// nonce requirement is the server's, and this exit issues none) makes the wiring gap
@@ -1040,13 +1041,14 @@ internal sealed class DpopBoundRefreshTests
                 "The voluntary proof at redemption must bind the issuance even though the profile does not mandate it.");
             string boundRefreshToken = doc.RootElement.GetProperty(OAuthRequestParameterNames.RefreshToken).GetString()!;
 
-            //Unwire ONLY ValidateDpopProofAsync, after the bound token was minted: a proof-absent
-            //presentation never reaches this or any other DPoP delegate, so the wiring gap has no
-            //way to surface for THIS exit — proving the collapse, not merely that some delegate
-            //happens to still be wired.
+            //Unwire ONLY proof validation (the slot unassigned and no parser for the library default), after
+            //the bound token was minted: a proof-absent presentation never reaches this or any other DPoP
+            //delegate, so the wiring gap has no way to surface for THIS exit, proving the collapse, not
+            //merely that some delegate happens to still be wired.
             await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
             {
                 candidateIntegration.ValidateDpopProofAsync = null;
+                candidateIntegration.Codecs.DpopProofParser = null;
             }).ConfigureAwait(false);
 
             (int NoProofStatusCode, string NoProofBody) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(

@@ -60,7 +60,7 @@ public static class DpopJwsPartSerializerJson
     {
         return new Dictionary<string, object>(StringComparer.Ordinal)
         {
-            [WellKnownJwkMemberNames.Alg] = header.Alg,
+            [WellKnownJoseHeaderNames.Alg] = header.Alg,
             [WellKnownJoseHeaderNames.Typ] = header.Typ,
             [WellKnownJoseHeaderNames.Jwk] = ToObjectDictionary(header.Jwk)
         };

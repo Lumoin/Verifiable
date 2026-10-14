@@ -42,24 +42,75 @@ public static class WellKnownDpopValues
     public static string ProofTypeHeader { get; } = WellKnownMediaTypes.Jwt.DpopJwt;
 
     /// <summary>
-    /// The asymmetric JWS signature algorithms a DPoP proof may use, per RFC 9449 §4.2 —
-    /// ECDSA, RSA-SHA2 PKCS#1, RSA-PSS, and EdDSA (symmetric and <c>none</c> excluded).
-    /// This is the set <see cref="DpopProofValidator"/> accepts and the value an
-    /// authorization server advertises as <c>dpop_signing_alg_values_supported</c>
-    /// (RFC 9449 §5.1). Kept in sync with <c>DpopProofValidator.IsDpopProofAlg</c>.
+    /// The default policy of the DPoP proof algorithm slot: the JWS <c>alg</c> values the library's authorization
+    /// server accepts for a DPoP proof, and publishes as <c>dpop_signing_alg_values_supported</c>, when the host names
+    /// no list of its own (<see cref="Server.AuthorizationServerCryptography.ResolveSupportedSigningAlgorithmsAsync"/>
+    /// for <see cref="Verifiable.Cryptography.Context.KeyUsageContext.DpopProof"/>, defaulting through
+    /// <see cref="Server.Metadata.DefaultSupportedSigningAlgorithms.ResolveAsync"/>), and the <c>algs</c> the library's
+    /// protected resources name in a <c>DPoP</c> challenge. In this order: the ECDSA identifiers <c>ES256</c>,
+    /// <c>ES384</c>, <c>ES512</c> and <c>ES256K</c>, the RSA PKCS#1 v1.5 identifiers <c>RS256</c>, <c>RS384</c> and
+    /// <c>RS512</c>, the RSA-PSS identifiers <c>PS256</c>, <c>PS384</c> and <c>PS512</c>, <c>EdDSA</c>, and the
+    /// fully-specified <c>Ed25519</c>.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5.1">RFC 9449 Section 5.1</see>:
+    /// "dpop_signing_alg_values_supported: A JSON array containing a list of the JWS alg values (from the
+    /// [IANA.JOSE.ALGS] registry) supported by the authorization server for DPoP proof JWTs." The list is the acceptance
+    /// policy the library's servers apply and publish. Each is an identifier a DPoP proof may be signed under
+    /// (<see cref="WellKnownJwaValues.IsAsymmetricSignatureAlgorithm(string)"/>,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.2">RFC 9449 Section 4.2</see>) and one the library's
+    /// validator binds to the family of a proof's public key: <c>ES256K</c>, registered by
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8812#section-4.3">RFC 8812 Section 4.3</see> ("Algorithm Name:
+    /// ES256K Algorithm Description: ECDSA using secp256k1 curve and SHA-256"), to a secp256k1 public key, and
+    /// <c>Ed25519</c>, registered by <see href="https://www.rfc-editor.org/rfc/rfc9864#section-4.1.1">RFC 9864 Section
+    /// 4.1.1</see> ("Algorithm Name: Ed25519 Algorithm Description: EdDSA using the Ed25519 parameter set in Section 5.1
+    /// of [RFC8032]"), to an Ed25519 public key, as <c>EdDSA</c> is. The Brainpool ECDSA and the ML-DSA identifiers a
+    /// proof may also be signed under are left out, since the validator binds no public key family to them.
+    /// </para>
+    /// <para>
+    /// The list names what the library's servers accept and publish; it verifies nothing. A host verifies a proof's
+    /// signature through the providers it registered in the cryptographic function registry, the overload of
+    /// <see cref="DpopProofValidator"/> without a <see cref="Verifiable.Cryptography.VerificationDelegate"/> (which
+    /// <see cref="DefaultDpopProofValidation"/> runs when the host assigns no proof validator), where the tag of the
+    /// proof's public key selects the provider; or through the primitive it bound, the overload that takes a
+    /// <see cref="Verifiable.Cryptography.VerificationDelegate"/>. Either way the host's registry or its delegate must
+    /// serve every family the host accepts: a proof under an accepted identifier of a family it does not serve is
+    /// refused <see cref="DpopProofValidationFailureReason.SignatureFailed"/>. An RSA public key reconstructed from a
+    /// proof's <c>jwk</c> is tagged by the proof's <c>alg</c>: under <c>RS256</c> with its size tag, which the registry
+    /// serves as RSASSA-PKCS1-v1_5 with SHA-256, and under each other RSA identifier with the tag of the scheme it names,
+    /// so the registry serves the scheme the proof names. A host whose registry serves fewer RSA schemes narrows its
+    /// list to them.
+    /// </para>
+    /// <para>
+    /// <c>EdDSA</c> is Deprecated in JOSE by <see href="https://www.rfc-editor.org/rfc/rfc9864#section-4.1.2">RFC 9864
+    /// Section 4.1.2</see> ("IANA has updated the status to "Deprecated" for the following registration. Algorithm Name:
+    /// EdDSA ... JOSE Implementation Requirements: Deprecated"), Section 4.4 defining the term: "There is a preferred
+    /// mechanism to achieve functionality similar to that referenced by the identifier; this replacement functionality
+    /// SHOULD be utilized in new deployments in preference to the deprecated identifier". It is kept beside its
+    /// replacement <c>Ed25519</c> for interoperability with clients that sign under it.
+    /// </para>
+    /// <para>
+    /// A host narrows or widens what its authorization server accepts by answering its own list from the slot; the list
+    /// it answers is both what its metadata publishes and what its token endpoint and pushed authorization request
+    /// accept (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">RFC 9449 Section 4.3</see>, check 5: "is
+    /// supported by the application, and is acceptable per local policy").
+    /// </para>
+    /// </remarks>
     public static IReadOnlyList<string> SupportedSigningAlgorithms { get; } =
     [
         WellKnownJwaValues.Es256,
         WellKnownJwaValues.Es384,
         WellKnownJwaValues.Es512,
+        WellKnownJwaValues.Es256K,
         WellKnownJwaValues.Rs256,
         WellKnownJwaValues.Rs384,
         WellKnownJwaValues.Rs512,
         WellKnownJwaValues.Ps256,
         WellKnownJwaValues.Ps384,
         WellKnownJwaValues.Ps512,
-        WellKnownJwaValues.EdDsa
+        WellKnownJwaValues.EdDsa,
+        WellKnownJwaValues.Ed25519
     ];
 
     /// <summary>

@@ -29,7 +29,7 @@ internal static class ResourceDpopProofs
     /// out: RFC 9449 §7.1 "The value of the parameter is a space-delimited list of JWS alg (Algorithm)
     /// header values".
     /// </summary>
-    public static string AcceptedProofAlgorithms { get; } = "ES256 ES384 ES512 RS256 RS384 RS512 PS256 PS384 PS512 EdDSA";
+    public static string AcceptedProofAlgorithms { get; } = "ES256 ES384 ES512 ES256K RS256 RS384 RS512 PS256 PS384 PS512 EdDSA Ed25519";
 
 
     /// <summary>The literal <c>DPoP</c> challenge carrying <paramref name="error"/> and the <c>algs</c> parameter.</summary>
@@ -54,6 +54,10 @@ internal static class ResourceDpopProofs
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <param name="jti">The <c>jti</c> value, or <see langword="null"/> for a fresh unique one.</param>
     /// <param name="alterHeader">Rewrites the serialized protected header before signing, or <see langword="null"/> to keep it.</param>
+    /// <param name="alterPayload">
+    /// Rewrites the serialized payload before signing, or <see langword="null"/> to keep it, so a proof that still
+    /// verifies under its own DPoP key carries a claim set the test names, a required claim removed among them.
+    /// </param>
     /// <returns>The compact DPoP proof.</returns>
     public static async Task<string> BuildAsync(
         DpopKey key,
@@ -64,7 +68,8 @@ internal static class ResourceDpopProofs
         DateTimeOffset issuedAt,
         CancellationToken cancellationToken,
         string? jti = null,
-        Action<Dictionary<string, object>>? alterHeader = null)
+        Action<Dictionary<string, object>>? alterHeader = null,
+        Action<Dictionary<string, object>>? alterPayload = null)
     {
         ArgumentNullException.ThrowIfNull(key);
 
@@ -82,9 +87,10 @@ internal static class ResourceDpopProofs
             Ath = ath
         };
 
-        DpopJwsPartSerializer serializer = alterHeader is null
-            ? DpopTestSupport.Serializer
-            : DpopTestSupport.Serializer with
+        DpopJwsPartSerializer serializer = DpopTestSupport.Serializer;
+        if(alterHeader is not null)
+        {
+            serializer = serializer with
             {
                 SerializeHeader = header =>
                 {
@@ -94,6 +100,21 @@ internal static class ResourceDpopProofs
                     return altered;
                 }
             };
+        }
+
+        if(alterPayload is not null)
+        {
+            serializer = serializer with
+            {
+                SerializePayload = payload =>
+                {
+                    Dictionary<string, object> altered = new(DpopTestSupport.Serializer.SerializePayload(payload), StringComparer.Ordinal);
+                    alterPayload(altered);
+
+                    return altered;
+                }
+            };
+        }
 
         return await DpopProofConstruction.BuildAsync(
             claims, key, TestHostShell.Base64UrlEncoder, serializer,

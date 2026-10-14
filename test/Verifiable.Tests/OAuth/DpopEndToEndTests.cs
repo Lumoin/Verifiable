@@ -758,6 +758,7 @@ internal sealed class DpopEndToEndTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = await RegisterCodeBindingClientAsync(host, isDpopWired: true).ConfigureAwait(false);
+        await host.VerifyDpopProofsWithAsync(MicrosoftCryptographicFunctionsAdapter.VerifyP256Async).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
         using FreshDpopKey key = new();
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
@@ -797,6 +798,7 @@ internal sealed class DpopEndToEndTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = await RegisterCodeBindingClientAsync(host, isDpopWired: true).ConfigureAwait(false);
+        await host.VerifyDpopProofsWithAsync(MicrosoftCryptographicFunctionsAdapter.VerifyP256Async).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
         using FreshDpopKey key = new();
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
@@ -809,6 +811,293 @@ internal sealed class DpopEndToEndTests
 
         DpopCodeBindingWire.AssertError(statusCode, body, 500, "server_error", "The DPoP proof validator answered no JWK SHA-256 Thumbprint for a valid proof.");
         Assert.DoesNotContain("\"access_token\":", body, StringComparison.Ordinal, body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>: "To sender-constrain the
+    /// access token after checking the validity of the DPoP proof, the authorization server associates the issued access
+    /// token with the public key from the DPoP proof", the proof carrying the <c>nonce</c> claim the server's challenge
+    /// asked for (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">Section 8</see>). An authorization server
+    /// whose DPoP proof validation answers a valid proof with no claims cannot check that nonce or record the proof's
+    /// <c>jti</c>: a redemption of a code bound to no DPoP key carrying such a proof, with the supplied nonce, is answered
+    /// 500 <c>server_error</c> "The DPoP proof validator answered no claims for a valid proof." and no access token is
+    /// issued.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task CodeRedemptionProofWhoseValidatorAnswersNoClaimsIsAServerErrorAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterCodeBindingClientAsync(host, isDpopWired: true).ConfigureAwait(false);
+        await host.VerifyDpopProofsWithAsync(MicrosoftCryptographicFunctionsAdapter.VerifyP256Async).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        using FreshDpopKey key = new();
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+
+        string code = await PushAndAuthorizeAsync(host, segment, pkce, dpopJkt: string.Empty).ConfigureAwait(false);
+        string nonce = await RawAuthCodeWirePushers.ObtainTokenEndpointDpopNonceAsync(
+            host, segment, ClientId, key.Key, TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+        await host.AnswerValidatedDpopProofsWithoutClaimsAsync().ConfigureAwait(false);
+        (int statusCode, string body) = await RedeemAsync(host, segment, code, pkce, key.Key, nonce).ConfigureAwait(false);
+
+        DpopCodeBindingWire.AssertCarriesJsonErrorBody(body);
+        DpopCodeBindingWire.AssertError(statusCode, body, 500, "server_error", "The DPoP proof validator answered no claims for a valid proof.");
+        Assert.DoesNotContain("\"access_token\":", body, StringComparison.Ordinal, body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">RFC 9449 Section 4.3</see>: "To validate a DPoP
+    /// proof, the receiving server MUST ensure the following: 1. There is not more than one DPoP HTTP request header
+    /// field." A redemption sent to the token endpoint over a raw TLS connection with two <c>DPoP</c> field lines, each a
+    /// valid proof carrying the supplied nonce, is refused 400 <c>invalid_dpop_proof</c> "More than one DPoP header field
+    /// was presented." before any code is looked up; the same redemption with one proof carrying no nonce is answered 400
+    /// <c>use_dpop_nonce</c> "DPoP nonce required.", the field read as the one proof it is.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task CodeRedemptionRefusesTwoDpopFieldsAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterCodeBindingClientAsync(host, isDpopWired: true).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        using FreshDpopKey key = new();
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        string nonce = await RawAuthCodeWirePushers.ObtainTokenEndpointDpopNonceAsync(
+            host, segment, ClientId, key.Key, now, TestContext.CancellationToken).ConfigureAwait(false);
+        Uri tokenUri = RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment);
+        byte[] redemption = RawHttpsRequest.FormBody(RawAuthCodeWirePushers.BuildTokenFields(
+            ClientId, "never-issued-authorization-code", "never-issued-code-verifier-of-forty-three-or-more", RedirectUri.OriginalString));
+
+        string firstProof = await DpopCodeBindingWire.BuildTokenProofAsync(
+            host, segment, key.Key, nonce, now, TestContext.CancellationToken).ConfigureAwait(false);
+        string secondProof = await DpopCodeBindingWire.BuildTokenProofAsync(
+            host, segment, key.Key, nonce, now, TestContext.CancellationToken).ConfigureAwait(false);
+        HttpResponseData twoFields = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Post, tokenUri,
+            [
+                new(WellKnownHttpHeaderNames.ContentType, WellKnownMediaTypes.Application.FormUrlEncoded),
+                new(WellKnownHttpHeaderNames.DPoP, firstProof),
+                new(WellKnownHttpHeaderNames.DPoP, secondProof)
+            ],
+            redemption, TestContext.CancellationToken).ConfigureAwait(false);
+        DpopCodeBindingWire.AssertError(twoFields.StatusCode, twoFields.Body, 400, "invalid_dpop_proof", "More than one DPoP header field was presented.");
+
+        string nonceLessProof = await DpopCodeBindingWire.BuildTokenProofAsync(
+            host, segment, key.Key, nonce: null, now, TestContext.CancellationToken).ConfigureAwait(false);
+        HttpResponseData oneField = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Post, tokenUri,
+            [
+                new(WellKnownHttpHeaderNames.ContentType, WellKnownMediaTypes.Application.FormUrlEncoded),
+                new(WellKnownHttpHeaderNames.DPoP, nonceLessProof)
+            ],
+            redemption, TestContext.CancellationToken).ConfigureAwait(false);
+        DpopCodeBindingWire.AssertError(oneField.StatusCode, oneField.Body, 400, "use_dpop_nonce", "DPoP nonce required.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">RFC 9449 Section 4.3</see>: "To validate a DPoP
+    /// proof, the receiving server MUST ensure the following: ... 5. The alg JOSE Header Parameter indicates a registered
+    /// asymmetric digital signature algorithm [IANA.JOSE.ALGS], is not none, is supported by the application, and is
+    /// acceptable per local policy." A host whose supported DPoP proof algorithms are <c>ES384</c> alone refuses the
+    /// redemption of a code bound to no DPoP key carrying a valid ES256 proof with the supplied nonce, 400
+    /// <c>invalid_dpop_proof</c> "DPoP proof validation failed: InvalidAlg."; once the host's list names <c>ES256</c> as
+    /// well, the same code redeemed with a fresh ES256 proof by that DPoP key is answered 200 with <c>token_type</c>
+    /// <c>DPoP</c> and the access token's <c>cnf.jkt</c> the JWK SHA-256 Thumbprint of that DPoP key.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task CodeRedemptionRefusesAProofOutsideTheAcceptedAlgorithmsAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterCodeBindingClientAsync(host, isDpopWired: true).ConfigureAwait(false);
+        await host.VerifyDpopProofsWithAsync(MicrosoftCryptographicFunctionsAdapter.VerifyP256Async).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        using FreshDpopKey key = new();
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+
+        string code = await PushAndAuthorizeAsync(host, segment, pkce, dpopJkt: string.Empty).ConfigureAwait(false);
+        string nonce = await RawAuthCodeWirePushers.ObtainTokenEndpointDpopNonceAsync(
+            host, segment, ClientId, key.Key, TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+        await host.AcceptDpopProofsUnderAsync([WellKnownJwaValues.Es384]).ConfigureAwait(false);
+        (int refusedStatusCode, string refusedBody) = await RedeemAsync(host, segment, code, pkce, key.Key, nonce).ConfigureAwait(false);
+
+        DpopCodeBindingWire.AssertError(refusedStatusCode, refusedBody, 400, "invalid_dpop_proof", "DPoP proof validation failed: InvalidAlg.");
+
+        await host.AcceptDpopProofsUnderAsync([WellKnownJwaValues.Es384, WellKnownJwaValues.Es256]).ConfigureAwait(false);
+        (int statusCode, string body) = await RedeemAsync(host, segment, code, pkce, key.Key, nonce).ConfigureAwait(false);
+
+        DpopCodeBindingWire.AssertIssued(statusCode, body, "DPoP", key.Key.GetThumbprint(TestHostShell.Base64UrlEncoder, TestHostShell.MemoryPool));
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">RFC 9449 Section 4.3</see>: "To validate a DPoP
+    /// proof, the receiving server MUST ensure the following: ... 5. The alg JOSE Header Parameter indicates a registered
+    /// asymmetric digital signature algorithm [IANA.JOSE.ALGS], is not none, is supported by the application, and is
+    /// acceptable per local policy." A server whose policy names no list of algorithms cannot ensure the proof's
+    /// <c>alg</c> is acceptable per that policy: the redemption of a code bound to no DPoP key carrying a valid ES256
+    /// proof with the supplied nonce, at a host whose signing-algorithm resolver answers no list for DPoP proofs, is
+    /// answered 500 <c>server_error</c> "The signing-algorithm resolver answered no list for DPoP proofs." and no access
+    /// token is issued; once the host's resolver answers the default list
+    /// <see cref="WellKnownDpopValues.SupportedSigningAlgorithms"/>, the same code redeemed with a fresh ES256 proof by
+    /// that DPoP key is answered 200 with <c>token_type</c> <c>DPoP</c> and the access token's <c>cnf.jkt</c> the JWK
+    /// SHA-256 Thumbprint of that DPoP key.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task CodeRedemptionProofWhoseAlgorithmResolverAnswersNoListIsAServerErrorAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterCodeBindingClientAsync(host, isDpopWired: true).ConfigureAwait(false);
+        await host.VerifyDpopProofsWithAsync(MicrosoftCryptographicFunctionsAdapter.VerifyP256Async).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        using FreshDpopKey key = new();
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+
+        string code = await PushAndAuthorizeAsync(host, segment, pkce, dpopJkt: string.Empty).ConfigureAwait(false);
+        string nonce = await RawAuthCodeWirePushers.ObtainTokenEndpointDpopNonceAsync(
+            host, segment, ClientId, key.Key, TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+        await host.AnswerNoDpopProofAlgorithmListAsync().ConfigureAwait(false);
+        (int refusedStatusCode, string refusedBody) = await RedeemAsync(host, segment, code, pkce, key.Key, nonce).ConfigureAwait(false);
+
+        DpopCodeBindingWire.AssertError(refusedStatusCode, refusedBody, 500, "server_error", "The signing-algorithm resolver answered no list for DPoP proofs.");
+        Assert.DoesNotContain("\"access_token\":", refusedBody, StringComparison.Ordinal, refusedBody);
+
+        await host.AcceptDpopProofsUnderAsync(WellKnownDpopValues.SupportedSigningAlgorithms).ConfigureAwait(false);
+        (int statusCode, string body) = await RedeemAsync(host, segment, code, pkce, key.Key, nonce).ConfigureAwait(false);
+
+        DpopCodeBindingWire.AssertIssued(statusCode, body, "DPoP", key.Key.GetThumbprint(TestHostShell.Base64UrlEncoder, TestHostShell.MemoryPool));
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">RFC 9449 Section 4.3</see>, check 9: "The htu claim
+    /// matches the HTTP URI value for the HTTP request in which the JWT was received, ignoring any query and fragment
+    /// parts.", with <see href="https://www.rfc-editor.org/rfc/rfc9110#section-7.1">RFC 9110 Section 7.1</see>: "Upon
+    /// receipt of a client's request, a server reconstructs the target URI from the received components in accordance
+    /// with their local configuration and incoming connection context." A host whose configuration names its listener's
+    /// authority <c>https://as-alias.test</c>, unlike its issuer's, judges a code redemption's proof against that
+    /// authority: the redemption of a code bound to no DPoP key carrying a proof with the supplied nonce whose
+    /// <c>htu</c> is the token endpoint's path at the listener's authority is answered 200 with <c>token_type</c>
+    /// <c>DPoP</c> and the access token's <c>cnf.jkt</c> the JWK SHA-256 Thumbprint of the proof's DPoP key, and one
+    /// whose <c>htu</c> is the token endpoint at the issuer's authority is refused 400 <c>invalid_dpop_proof</c> "DPoP
+    /// proof validation failed: HtuMismatch.".
+    /// </summary>
+    /// <param name="isHtuAtTheListenerAuthority">Whether the proof's <c>htu</c> names the listener's authority rather than the issuer's.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(true, DisplayName = "htu at the listener authority")]
+    [DataRow(false, DisplayName = "htu at the issuer authority")]
+    public async Task CodeRedemptionHoldsHtuToTheListenerAuthorityAsync(bool isHtuAtTheListenerAuthority)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterCodeBindingClientAsync(host, isDpopWired: true).ConfigureAwait(false);
+        await host.VerifyDpopProofsWithAsync(MicrosoftCryptographicFunctionsAdapter.VerifyP256Async).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        using FreshDpopKey key = new();
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+
+        string code = await PushAndAuthorizeAsync(host, segment, pkce, dpopJkt: string.Empty).ConfigureAwait(false);
+        string nonce = await RawAuthCodeWirePushers.ObtainTokenEndpointDpopNonceAsync(
+            host, segment, ClientId, key.Key, TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        host.Host("default").TrustedListenerAuthority = ListenerAliasAuthority;
+        Uri tokenUri = RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment);
+        string htu = isHtuAtTheListenerAuthority switch
+        {
+            true => new Uri(ListenerAliasAuthority, tokenUri.AbsolutePath).OriginalString,
+            false => tokenUri.OriginalString
+        };
+        string proof = await ResourceDpopProofs.BuildAsync(
+            key.Key, WellKnownHttpMethods.Post, htu, accessToken: null, nonce, TimeProvider.GetUtcNow(),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        (int statusCode, string body) = await RawAuthCodeWirePushers.RedeemCodeAsync(
+            host, segment, ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString, proof,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        if(isHtuAtTheListenerAuthority)
+        {
+            DpopCodeBindingWire.AssertIssued(statusCode, body, "DPoP", key.Key.GetThumbprint(TestHostShell.Base64UrlEncoder, TestHostShell.MemoryPool));
+
+            return;
+        }
+
+        DpopCodeBindingWire.AssertError(statusCode, body, 400, "invalid_dpop_proof", "DPoP proof validation failed: HtuMismatch.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10.1">RFC 9449 Section 10.1</see>: "the authorization
+    /// server MUST check the provided DPoP proof JWT as defined in Section 4.3", whose first check
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">Section 4.3</see>) is "1. There is not more than
+    /// one DPoP HTTP request header field." A pushed authorization request sent over a raw TLS connection with two
+    /// <c>DPoP</c> field lines, each a valid proof for it carrying the supplied nonce, is refused 400
+    /// <c>invalid_dpop_proof</c> "More than one DPoP header field was presented." and no <c>request_uri</c> is issued.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task PushedRequestRefusesTwoDpopFieldsAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterCodeBindingClientAsync(host, isDpopWired: true).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        using FreshDpopKey key = new();
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        string nonce = await RawAuthCodeWirePushers.ObtainTokenEndpointDpopNonceAsync(
+            host, segment, ClientId, key.Key, now, TestContext.CancellationToken).ConfigureAwait(false);
+
+        string firstProof = await DpopCodeBindingWire.BuildPushedRequestProofAsync(
+            host, segment, key.Key, nonce, now, TestContext.CancellationToken).ConfigureAwait(false);
+        string secondProof = await DpopCodeBindingWire.BuildPushedRequestProofAsync(
+            host, segment, key.Key, nonce, now, TestContext.CancellationToken).ConfigureAwait(false);
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Post, RawAuthCodeWirePushers.ResolveParEndpointUri(host, segment),
+            [
+                new(WellKnownHttpHeaderNames.ContentType, WellKnownMediaTypes.Application.FormUrlEncoded),
+                new(WellKnownHttpHeaderNames.DPoP, firstProof),
+                new(WellKnownHttpHeaderNames.DPoP, secondProof)
+            ],
+            RawHttpsRequest.FormBody(BuildAuthorizationRequestFields(pkce)), TestContext.CancellationToken).ConfigureAwait(false);
+
+        DpopCodeBindingWire.AssertError(response.StatusCode, response.Body, 400, "invalid_dpop_proof", "More than one DPoP header field was presented.");
+        Assert.DoesNotContain("\"request_uri\":", response.Body, StringComparison.Ordinal, response.Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10.1">RFC 9449 Section 10.1</see>: "the authorization
+    /// server MUST check the provided DPoP proof JWT as defined in Section 4.3", whose fifth check
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">Section 4.3</see>) is "5. The alg JOSE Header
+    /// Parameter indicates a registered asymmetric digital signature algorithm [IANA.JOSE.ALGS], is not none, is supported
+    /// by the application, and is acceptable per local policy." A host whose supported DPoP proof algorithms are
+    /// <c>ES384</c> alone refuses a pushed authorization request carrying a valid ES256 proof with the supplied nonce, 400
+    /// <c>invalid_dpop_proof</c> "DPoP proof validation failed: InvalidAlg.", and no <c>request_uri</c> is issued.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task PushedRequestRefusesAProofOutsideTheAcceptedAlgorithmsAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterCodeBindingClientAsync(host, isDpopWired: true).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        using FreshDpopKey key = new();
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        DateTimeOffset now = TimeProvider.GetUtcNow();
+        string nonce = await RawAuthCodeWirePushers.ObtainTokenEndpointDpopNonceAsync(
+            host, segment, ClientId, key.Key, now, TestContext.CancellationToken).ConfigureAwait(false);
+        await host.AcceptDpopProofsUnderAsync([WellKnownJwaValues.Es384]).ConfigureAwait(false);
+
+        string proof = await DpopCodeBindingWire.BuildPushedRequestProofAsync(
+            host, segment, key.Key, nonce, now, TestContext.CancellationToken).ConfigureAwait(false);
+        HttpResponseData response = await DpopCodeBindingWire.PushAsync(
+            host, segment, BuildAuthorizationRequestFields(pkce), proof, TestContext.CancellationToken).ConfigureAwait(false);
+
+        DpopCodeBindingWire.AssertError(response.StatusCode, response.Body, 400, "invalid_dpop_proof", "DPoP proof validation failed: InvalidAlg.");
+        Assert.DoesNotContain("\"request_uri\":", response.Body, StringComparison.Ordinal, response.Body);
     }
 
 
@@ -1251,6 +1540,10 @@ internal sealed class DpopEndToEndTests
     /// redirect echoes it.
     /// </summary>
     private static string CodeBindingState { get; } = "state-code-binding";
+
+
+    /// <summary>The listener authority a row configures on the host, unlike the issuer's loopback authority.</summary>
+    private static Uri ListenerAliasAuthority { get; } = new("https://as-alias.test");
 
 
     /// <summary>

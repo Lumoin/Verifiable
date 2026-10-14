@@ -1870,6 +1870,213 @@ internal sealed class UserInfoEndpointTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">RFC 9449 Section 4.3</see>: "To validate a DPoP
+    /// proof, the receiving server MUST ensure the following: 1. There is not more than one DPoP HTTP request header
+    /// field.", with <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">Section 7.1</see>: "invalid_dpop_proof
+    /// is used to indicate that the DPoP proof itself was deemed invalid based on the criteria of Section 4.3." A
+    /// DPoP-bound access token presented at UserInfo over a raw TLS connection under the <c>DPoP</c> scheme with two
+    /// <c>DPoP</c> field lines, each a valid proof carrying the nonce UserInfo provided, is refused: 401 with the one
+    /// challenge <c>DPoP error="invalid_dpop_proof", algs="..."</c> and <c>invalid_dpop_proof</c> in the body.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task UserInfoRefusesTwoDpopFieldsAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        using DpopClientFixture fixture = await CreateDpopFixtureAsync(host, material).ConfigureAwait(false);
+        DpopPresentationContext presentation = await PrepareDpopPresentationAsync(host, material, fixture).ConfigureAwait(false);
+
+        string firstProof = await ResourceDpopProofs.BuildAsync(
+            presentation.DpopKey, "POST", presentation.UserInfoUrl, presentation.AccessToken, presentation.Nonce,
+            TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+        string secondProof = await ResourceDpopProofs.BuildAsync(
+            presentation.DpopKey, "POST", presentation.UserInfoUrl, presentation.AccessToken, presentation.Nonce,
+            TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Post, new Uri(presentation.UserInfoUrl),
+            [
+                new(WellKnownHttpHeaderNames.Authorization, $"DPoP {presentation.AccessToken}"),
+                new(WellKnownHttpHeaderNames.DPoP, firstProof),
+                new(WellKnownHttpHeaderNames.DPoP, secondProof)
+            ],
+            ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        AssertRefusedOverARawConnection(response, ResourceDpopProofs.DpopChallenge("invalid_dpop_proof"), "invalid_dpop_proof");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">RFC 9449 Section 4.3</see>, check 9: "The htu claim
+    /// matches the HTTP URI value for the HTTP request in which the JWT was received, ignoring any query and fragment
+    /// parts.", with <see href="https://www.rfc-editor.org/rfc/rfc9110#section-7.1">RFC 9110 Section 7.1</see>: "Upon
+    /// receipt of a client's request, a server reconstructs the target URI from the received components in accordance
+    /// with their local configuration and incoming connection context." A host whose configuration names its listener's
+    /// authority <c>https://as-alias.test</c>, unlike its issuer's, judges a UserInfo proof against that authority: a
+    /// DPoP-bound access token presented over the wire with a proof carrying the provided nonce whose <c>htu</c> is the
+    /// UserInfo path at the listener's authority is served, 200 with the End-User's <c>sub</c>, and one whose <c>htu</c>
+    /// is UserInfo at the issuer's authority is refused, 401 with the one challenge
+    /// <c>DPoP error="invalid_dpop_proof", algs="..."</c> and "DPoP proof validation failed: HtuMismatch." in the body.
+    /// </summary>
+    /// <param name="isHtuAtTheListenerAuthority">Whether the proof's <c>htu</c> names the listener's authority rather than the issuer's.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(true, DisplayName = "htu at the listener authority")]
+    [DataRow(false, DisplayName = "htu at the issuer authority")]
+    public async Task UserInfoHoldsHtuToTheListenerAuthorityAsync(bool isHtuAtTheListenerAuthority)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        using DpopClientFixture fixture = await CreateDpopFixtureAsync(host, material).ConfigureAwait(false);
+        DpopPresentationContext presentation = await PrepareDpopPresentationAsync(host, material, fixture).ConfigureAwait(false);
+
+        Uri listenerAuthority = new("https://as-alias.test");
+        host.Host("default").TrustedListenerAuthority = listenerAuthority;
+        string htu = isHtuAtTheListenerAuthority switch
+        {
+            true => new Uri(listenerAuthority, new Uri(presentation.UserInfoUrl).AbsolutePath).OriginalString,
+            false => presentation.UserInfoUrl
+        };
+        string proof = await ResourceDpopProofs.BuildAsync(
+            presentation.DpopKey, "POST", htu, presentation.AccessToken, presentation.Nonce,
+            TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+        using HttpResponseMessage response = await SendUserInfoOverWireAsync(
+            host, material, presentation.AccessToken, scheme: "DPoP", dpopProof: proof).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        if(isHtuAtTheListenerAuthority)
+        {
+            Assert.AreEqual(HttpStatusCode.OK, response.StatusCode, body);
+            using JsonDocument served = JsonDocument.Parse(body);
+            Assert.AreEqual(SubjectId, served.RootElement.GetProperty("sub").GetString());
+
+            return;
+        }
+
+        AssertRefused(response, body, HttpStatusCode.Unauthorized, ResourceDpopProofs.DpopChallenge("invalid_dpop_proof"), "invalid_dpop_proof");
+        using JsonDocument refused = JsonDocument.Parse(body);
+        Assert.AreEqual("DPoP proof validation failed: HtuMismatch.", refused.RootElement.GetProperty("error_description").GetString());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">RFC 9449 Section 4.3</see>, check 9: "The htu claim
+    /// matches the HTTP URI value for the HTTP request in which the JWT was received", the target the server reconstructs
+    /// "in accordance with their local configuration and incoming connection context"
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-7.1">RFC 9110 Section 7.1</see>). A host that
+    /// configures no listener authority judges a UserInfo proof against its issuer's authority whatever <c>Host</c> the
+    /// request names: a DPoP-bound access token presented over a raw TLS connection whose <c>Host</c> field names
+    /// <c>attacker.example</c> is served, 200 with the End-User's <c>sub</c>, with a proof whose <c>htu</c> is the
+    /// configured UserInfo URL, and is refused, 401 with the one challenge <c>DPoP error="invalid_dpop_proof",
+    /// algs="..."</c>, with a proof whose <c>htu</c> is the UserInfo path at <c>https://attacker.example</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task UserInfoJudgesTheProofAgainstTheConfiguredOriginWhateverHostTheRequestNamesAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        using DpopClientFixture fixture = await CreateDpopFixtureAsync(host, material).ConfigureAwait(false);
+        DpopPresentationContext presentation = await PrepareDpopPresentationAsync(host, material, fixture).ConfigureAwait(false);
+        Uri userInfoUrl = new(presentation.UserInfoUrl);
+        const string attackerHost = "attacker.example";
+
+        string configuredProof = await ResourceDpopProofs.BuildAsync(
+            presentation.DpopKey, "POST", presentation.UserInfoUrl, presentation.AccessToken, presentation.Nonce,
+            TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+        HttpResponseData configured = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Post, userInfoUrl,
+            [
+                new(WellKnownHttpHeaderNames.Authorization, $"DPoP {presentation.AccessToken}"),
+                new(WellKnownHttpHeaderNames.DPoP, configuredProof)
+            ],
+            ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken, attackerHost).ConfigureAwait(false);
+        Assert.AreEqual(200, configured.StatusCode, configured.Body);
+        using JsonDocument served = JsonDocument.Parse(configured.Body);
+        Assert.AreEqual(SubjectId, served.RootElement.GetProperty("sub").GetString());
+
+        string namedHostProof = await ResourceDpopProofs.BuildAsync(
+            presentation.DpopKey, "POST", new Uri(new Uri($"https://{attackerHost}"), userInfoUrl.AbsolutePath).OriginalString,
+            presentation.AccessToken, presentation.Nonce, TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+        HttpResponseData namedHost = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Post, userInfoUrl,
+            [
+                new(WellKnownHttpHeaderNames.Authorization, $"DPoP {presentation.AccessToken}"),
+                new(WellKnownHttpHeaderNames.DPoP, namedHostProof)
+            ],
+            ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken, attackerHost).ConfigureAwait(false);
+        AssertRefusedOverARawConnection(namedHost, ResourceDpopProofs.DpopChallenge("invalid_dpop_proof"), "invalid_dpop_proof");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "For such an access
+    /// token, a resource server MUST check that a DPoP proof was also received in the DPoP header field of the HTTP
+    /// request, check the DPoP proof according to the rules in Section 4.3 ... The resource server MUST NOT grant access
+    /// to the resource unless all checks are successful.", the checks of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">Section 4.3</see> reading the proof's claims: "10.
+    /// If the server provided a nonce value to the client, the nonce claim matches the server-provided nonce value." and
+    /// "11. The creation time of the JWT ... is within an acceptable window (see Section 11.1)", where
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">Section 11.1</see> keeps "the jti value of each
+    /// DPoP proof". A resource whose DPoP proof validation answers a valid proof with no claims has neither the nonce nor
+    /// the <c>jti</c> to check: a DPoP-bound access token presented at UserInfo over the wire with a valid proof carrying
+    /// the nonce UserInfo provided is answered 500 <c>server_error</c> "The DPoP proof validator answered no claims for a
+    /// valid proof." in a JSON error body, with no <c>WWW-Authenticate</c> challenge and no subject.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task UserInfoProofWhoseValidatorAnswersNoClaimsIsAServerErrorAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        using DpopClientFixture fixture = await CreateDpopFixtureAsync(host, material).ConfigureAwait(false);
+        await host.VerifyDpopProofsWithAsync(MicrosoftCryptographicFunctionsAdapter.VerifyP256Async).ConfigureAwait(false);
+        DpopPresentationContext presentation = await PrepareDpopPresentationAsync(host, material, fixture).ConfigureAwait(false);
+
+        await host.AnswerValidatedDpopProofsWithoutClaimsAsync().ConfigureAwait(false);
+        string proof = await ResourceDpopProofs.BuildAsync(
+            presentation.DpopKey, "POST", presentation.UserInfoUrl, presentation.AccessToken, presentation.Nonce,
+            TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        await AssertServerErrorAsync(presentation, proof, "The DPoP proof validator answered no claims for a valid proof.").ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: a resource server MUST
+    /// "check that the public key of the DPoP proof matches the public key to which the access token is bound per Section
+    /// 6", and "The resource server MUST NOT grant access to the resource unless all checks are successful.", the binding
+    /// being (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.1">Section 6.1</see>) a <c>jkt</c> whose value
+    /// "MUST be the base64url encoding (as defined in [RFC7515]) of the JWK SHA-256 Thumbprint (according to [RFC7638])
+    /// of the DPoP public key". A resource whose DPoP proof validation answers a valid proof with no such thumbprint has
+    /// no public key to match: a DPoP-bound access token presented at UserInfo over the wire with a valid proof carrying
+    /// the nonce UserInfo provided, validated with no thumbprint or with a 42-character value, is answered 500
+    /// <c>server_error</c> "The DPoP proof validator answered no JWK SHA-256 Thumbprint for a valid proof." in a JSON
+    /// error body, with no <c>WWW-Authenticate</c> challenge and no subject.
+    /// </summary>
+    /// <param name="answeredJwkThumbprint">The JWK thumbprint the validation answers for the valid proof.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(null, DisplayName = "no thumbprint")]
+    [DataRow("0ZcOCORZNYy-DWpqq30jZyJGHTN0d2HglBV3uiguA4", DisplayName = "a 42-character value")]
+    public async Task UserInfoProofWhoseValidatorAnswersNoThumbprintIsAServerErrorAsync(string? answeredJwkThumbprint)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        using DpopClientFixture fixture = await CreateDpopFixtureAsync(host, material).ConfigureAwait(false);
+        await host.VerifyDpopProofsWithAsync(MicrosoftCryptographicFunctionsAdapter.VerifyP256Async).ConfigureAwait(false);
+        DpopPresentationContext presentation = await PrepareDpopPresentationAsync(host, material, fixture).ConfigureAwait(false);
+
+        await host.AnswerValidatedDpopProofsWithJwkThumbprintAsync(answeredJwkThumbprint).ConfigureAwait(false);
+        string proof = await ResourceDpopProofs.BuildAsync(
+            presentation.DpopKey, "POST", presentation.UserInfoUrl, presentation.AccessToken, presentation.Nonce,
+            TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        await AssertServerErrorAsync(presentation, proof, "The DPoP proof validator answered no JWK SHA-256 Thumbprint for a valid proof.").ConfigureAwait(false);
+    }
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.1">RFC 9449 Section 4.1</see>: "However, case
     /// is significant in the header field value." Two proofs for one UserInfo request are presented over the wire
     /// with the DPoP-bound token they were built for: the one whose first segment is sent with the case of every
@@ -3451,6 +3658,52 @@ internal sealed class UserInfoEndpointTests
         Assert.AreEqual(challenge, challenges.Single());
 
         using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual(error, document.RootElement.GetProperty("error").GetString());
+        Assert.IsFalse(document.RootElement.TryGetProperty("sub", out _), "A refused request reveals no subject.");
+    }
+
+
+    /// <summary>
+    /// Presents <paramref name="proof"/> with the presentation's token under the <c>DPoP</c> scheme at UserInfo over the
+    /// wire and asserts the server-side failure: 500, a JSON error body whose <c>error</c> is <c>server_error</c> and
+    /// whose <c>error_description</c> is <paramref name="expectedDescription"/>, no <c>WWW-Authenticate</c> challenge and
+    /// no subject. The body is asserted to carry an <c>error</c> member before it is parsed, so an answer with no JSON
+    /// error body fails at that assertion.
+    /// </summary>
+    /// <param name="presentation">The presentation state.</param>
+    /// <param name="proof">The DPoP proof sent.</param>
+    /// <param name="expectedDescription">The expected <c>error_description</c>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    private async Task AssertServerErrorAsync(DpopPresentationContext presentation, string proof, string expectedDescription)
+    {
+        using HttpResponseMessage response = await SendUserInfoOverWireAsync(
+            presentation.Host, presentation.Material, presentation.AccessToken, scheme: "DPoP", dpopProof: proof)
+            .ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.InternalServerError, response.StatusCode, body);
+        DpopCodeBindingWire.AssertCarriesJsonErrorBody(body);
+        Assert.IsFalse(response.Headers.Contains("WWW-Authenticate"), "A server error carries no WWW-Authenticate challenge.");
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual("server_error", document.RootElement.GetProperty("error").GetString(), body);
+        Assert.AreEqual(expectedDescription, document.RootElement.GetProperty("error_description").GetString(), body);
+        Assert.IsFalse(document.RootElement.TryGetProperty("sub", out _), "A server error reveals no subject.");
+    }
+
+
+    /// <summary>
+    /// Asserts a UserInfo refusal received over a raw TLS connection: 401, exactly one <c>WWW-Authenticate</c> field
+    /// line equal to <paramref name="challenge"/>, <paramref name="error"/> in the body, and no subject revealed.
+    /// </summary>
+    /// <param name="response">The wire response.</param>
+    /// <param name="challenge">The expected single challenge value.</param>
+    /// <param name="error">The expected body <c>error</c>.</param>
+    private static void AssertRefusedOverARawConnection(HttpResponseData response, string challenge, string error)
+    {
+        Assert.AreEqual(401, response.StatusCode, response.Body);
+        Assert.AreEqual(challenge, Assert.ContainsSingle(response.Headers.Headers.GetValues("WWW-Authenticate")));
+
+        using JsonDocument document = JsonDocument.Parse(response.Body);
         Assert.AreEqual(error, document.RootElement.GetProperty("error").GetString());
         Assert.IsFalse(document.RootElement.TryGetProperty("sub", out _), "A refused request reveals no subject.");
     }

@@ -17,7 +17,7 @@ namespace Verifiable.OAuth;
 /// claim per RFC 7800 §3 / RFC 9449 §6.1; consumers compare its
 /// <see cref="ConfirmationMethod.JwkThumbprint"/> against the proof
 /// thumbprint returned by
-/// <see cref="Verifiable.OAuth.Dpop.DpopProofValidator.ValidateAsync"/>
+/// <see cref="Verifiable.OAuth.Dpop.DpopProofValidator"/>'s <c>ValidateAsync</c>
 /// to enforce DPoP binding.
 /// </para>
 /// <para>

@@ -52,4 +52,35 @@ public sealed record DpopProofValidationRequest
     /// supplied.
     /// </summary>
     public required bool NonceRequired { get; init; }
+
+    /// <summary>
+    /// The JWS <c>alg</c> values the receiver accepts for this proof, or <see langword="null"/> to hold
+    /// the proof only to the identifiers a DPoP proof may be signed under
+    /// (<see cref="Verifiable.JCose.WellKnownJwaValues.IsAsymmetricSignatureAlgorithm(string)"/>). An
+    /// empty list accepts no proof.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">RFC 9449 Section 4.3</see>, check 5:
+    /// "The alg JOSE Header Parameter indicates a registered asymmetric digital signature algorithm
+    /// [IANA.JOSE.ALGS], is not none, is supported by the application, and is acceptable per local
+    /// policy." The structural half (an asymmetric JWS signature identifier of the JOSE catalogue,
+    /// <see cref="Verifiable.JCose.WellKnownJwaValues.IsAsymmetricSignatureAlgorithm(string)"/>, never <c>none</c> or a
+    /// MAC) is the validator's own; this list is the application's half, the identifiers it supports and
+    /// its local policy accepts. The library's authorization server fills it from
+    /// <see cref="Verifiable.OAuth.Server.AuthorizationServerCryptography.ResolveSupportedSigningAlgorithmsAsync"/>
+    /// for <see cref="Verifiable.Cryptography.Context.KeyUsageContext.DpopProof"/>, the list its metadata
+    /// publishes as <c>dpop_signing_alg_values_supported</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-5.1">RFC 9449 Section 5.1</see>). Each
+    /// entry is compared with the proof's <c>alg</c> exactly, as a JWS <c>alg</c> value is case-sensitive
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7515#section-4.1.1">RFC 7515 Section 4.1.1</see>).
+    /// An identifier this list names is accepted only where <see cref="DpopProofValidator"/> binds a public
+    /// key family to it (P-256, P-384, P-521, secp256k1, Ed25519 and RSA, through the identifiers of those
+    /// families); a proof under a Brainpool ECDSA or an ML-DSA identifier is refused
+    /// <see cref="DpopProofValidationFailureReason.InvalidAlg"/> for want of a binding, whatever this list names.
+    /// The list accepts; it does not verify: the signature of an accepted proof is verified by the provider the host's
+    /// registry serves for the family of the proof's public key, or by the primitive the host bound, and a family
+    /// neither serves is refused <see cref="DpopProofValidationFailureReason.SignatureFailed"/>. An RSA public key is
+    /// tagged by the proof's <c>alg</c>, so the registry verifies an accepted RSA identifier under the scheme it names.
+    /// </remarks>
+    public IReadOnlyList<string>? AcceptedAlgorithms { get; init; }
 }

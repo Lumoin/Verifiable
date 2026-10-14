@@ -130,6 +130,19 @@ internal static class DpopCodeBindingWire
 
 
     /// <summary>
+    /// Asserts that <paramref name="body"/> is an error response's JSON body naming its <c>error</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>: "The parameters are
+    /// included in the entity-body of the HTTP response using the "application/json" media type"), before any reading
+    /// parses it, so an answer with an empty or non-JSON body fails at this assertion.
+    /// </summary>
+    /// <param name="body">The response's body.</param>
+    public static void AssertCarriesJsonErrorBody(string body)
+    {
+        Assert.Contains("\"error\":\"", body, $"The answer carries a JSON error body naming its error; the body was '{body}'.");
+    }
+
+
+    /// <summary>
     /// Asserts a successful token response: status <c>200</c>, <c>token_type</c> equal to
     /// <paramref name="expectedTokenType"/>, and the issued access token's <c>cnf.jkt</c> equal to
     /// <paramref name="expectedJwkThumbprint"/>, or no <c>cnf</c> claim when that is <see langword="null"/>.

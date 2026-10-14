@@ -122,9 +122,10 @@ internal static class CredentialEndpointDpopValidation
                 "The Access Token is sender-constrained and must be presented under the DPoP scheme.");
         }
 
-        //A bound token with no DPoP enforcement wired is a misconfiguration — fail loud rather
-        //than fall back to bearer, which would silently drop the proof-of-possession check.
-        if(oauth.ValidateDpopProofAsync is null
+        //A bound token with no DPoP enforcement wired (no validator assigned and no parser for the library
+        //default, or no nonce delegates) is a misconfiguration: fail loud rather than fall back to bearer,
+        //which would silently drop the proof-of-possession check.
+        if(!DpopRequestReading.IsProofValidationWired(oauth)
             || oauth.IssueDpopNonceAsync is null
             || oauth.ValidateDpopNonceAsync is null)
         {
@@ -136,8 +137,17 @@ internal static class CredentialEndpointDpopValidation
         Uri issuerUri = await ResolveIssuerAsync(server, registration, context, cancellationToken)
             .ConfigureAwait(false);
 
-        string? dpopProof = null;
-        _ = (context.IncomingRequest?.Headers.TryGetSingle(WellKnownHttpHeaderNames.DPoP, out dpopProof));
+        //RFC 9449 Section 4.3, check 1: "There is not more than one DPoP HTTP request header field."
+        //Two field lines are an invalid proof (Section 7.1: "invalid_dpop_proof is used to indicate
+        //that the DPoP proof itself was deemed invalid based on the criteria of Section 4.3"), refused
+        //before the nonce challenge a request with no proof is answered with.
+        (string? dpopProof, bool isDpopFieldRepeated) = DpopRequestReading.ReadDpopField(context.IncomingRequest);
+        if(isDpopFieldRepeated)
+        {
+            return RefuseUnderScheme(isDpopPresentation, OAuthErrors.InvalidDpopProof,
+                DpopRequestReading.MoreThanOneDpopFieldDescription);
+        }
+
         if(dpopProof is null)
         {
             return await ChallengeForNonceAsync(
@@ -147,10 +157,14 @@ internal static class CredentialEndpointDpopValidation
         }
 
         //RFC 9449 §4.3: the htm claim matches the HTTP method of the current request, and the htu
-        //claim its target URI; both are read from the request this endpoint is serving.
+        //claim its target URI; both are read from the request this endpoint is serving, its
+        //authority the listener authority the host stamped when it names one and the issuer's
+        //otherwise (RFC 9110 Section 7.1).
         IncomingRequest request = context.IncomingRequest!;
-        string htu = $"{issuerUri.GetLeftPart(UriPartial.Authority)}{request.Path}";
-        DpopProofValidationResult proofResult = await oauth.ValidateDpopProofAsync(
+        string htu = DpopRequestReading.ComposeTargetUri(request, issuerUri);
+        DpopProofValidationResult proofResult = await DpopRequestReading.ValidateProofAsync(
+            oauth,
+            server.TimeProvider,
             new DpopProofValidationRequest
             {
                 Proof = dpopProof,
@@ -173,10 +187,32 @@ internal static class CredentialEndpointDpopValidation
                     $"DPoP proof validation failed: {proofResult.FailureReason}.");
         }
 
+        //A validation that answers success names the base64url JWK SHA-256 Thumbprint of the proof's
+        //public key (DpopProofValidationResult.JwkThumbprint; RFC 9449 Section 6.1, the jkt member;
+        //RFC 7638 Section 3), the value Section 7.1 has the resource match against the token's
+        //binding. An application's validator answering success with no value or text of another
+        //spelling leaves nothing to match, a fault of the server's own validator rather than of the
+        //client's proof, so the request fails closed as a server error before the binding compare,
+        //never as the invalid_token that compare answers.
+        if(proofResult.JwkThumbprint is not string proofThumbprint
+            || !DpopJwkUtilities.IsJwkSha256ThumbprintSpelling(proofThumbprint))
+        {
+            return ServerHttpResponse.ServerError(OAuthErrors.ServerError, DpopRequestReading.ValidatedProofWithoutThumbprintDescription);
+        }
+
+        //A validation that answers success carries the proof's claims, the nonce and the jti the
+        //checks below read (RFC 9449 Section 4.3, checks 10 and 11; Section 11.1). An application's
+        //validator answering success without them leaves neither to check, so the request fails
+        //closed as a server error, as for a missing thumbprint.
+        if(proofResult.Claims is not DpopProofClaims proofClaims)
+        {
+            return ServerHttpResponse.ServerError(OAuthErrors.ServerError, DpopRequestReading.ValidatedProofWithoutClaimsDescription);
+        }
+
         //RFC 9449 §4.3 item 12 and §7.1: the proving key MUST be the one the token was bound to.
         //Constant-time — the thumbprint is matched, not merely compared. The refusal is the
         //invalid_token of §7.1's Figure 16, the binding of the token being what fails.
-        if(!FixedTimeComparison.AreEqual(proofResult.JwkThumbprint, boundThumbprint))
+        if(!FixedTimeComparison.AreEqual(proofThumbprint, boundThumbprint))
         {
             return RefuseUnderScheme(isDpopPresentation, OAuthErrors.InvalidToken,
                 "The DPoP proof key does not match the Access Token's cnf.jkt binding.");
@@ -184,7 +220,7 @@ internal static class CredentialEndpointDpopValidation
 
         //RFC 9449 §11.3: no proof without the nonce claim is accepted once a nonce has been
         //provided, and this resource provides one to every client it challenges.
-        if(proofResult.Claims!.Nonce is null)
+        if(proofClaims.Nonce is null)
         {
             return await ChallengeForNonceAsync(
                 server, registration, context, issuerUri, "DPoP nonce required.", cancellationToken)
@@ -192,7 +228,7 @@ internal static class CredentialEndpointDpopValidation
         }
 
         DpopNonceValidationResult nonceResult = await oauth.ValidateDpopNonceAsync(
-            proofResult.Claims.Nonce, issuerUri, registration.TenantId, context, cancellationToken)
+            proofClaims.Nonce, issuerUri, registration.TenantId, context, cancellationToken)
             .ConfigureAwait(false);
         if(!nonceResult.IsSuccess)
         {
@@ -205,7 +241,7 @@ internal static class CredentialEndpointDpopValidation
         //the target URI this request is served at (RFC 9449 §11.1).
         JtiReplayOutcome jtiOutcome = await JtiReplayGuard.ConsultDpopProofAsync(
             server, context, registration.TenantId,
-            issuerUri.OriginalString, htu, proofResult.Claims.Jti,
+            issuerUri.OriginalString, htu, proofClaims.Jti,
             now + WellKnownDpopValues.DefaultReplayWindow,
             cancellationToken).ConfigureAwait(false);
 

@@ -13,22 +13,33 @@ namespace Verifiable.Tests.OAuth;
 /// </summary>
 internal static class DpopTestSupport
 {
+    /// <summary>
+    /// The library's <see cref="DpopJwsPartSerializerJson.Default"/>, the serializer every proof the tests build is
+    /// written with.
+    /// </summary>
     public static DpopJwsPartSerializer Serializer { get; } = DpopJwsPartSerializerJson.Default;
 
 
-    public static DpopJwsPartParser Parser { get; } = new()
-    {
-        ParseHeader = ParseHeaderJson,
-        ParseClaims = ParseClaimsJson
-    };
+    /// <summary>
+    /// The library's <see cref="DpopJwsPartParserJson.Default"/>, the parser the test hosts pass to
+    /// <see cref="DpopProofValidator"/>'s <c>ValidateAsync</c> where they wire their DPoP proof validation and the parser
+    /// their codecs carry for the library default, so every proof a host receives is read as the library reads it.
+    /// </summary>
+    public static DpopJwsPartParser Parser { get; } = DpopJwsPartParserJson.Default;
 
 
+    /// <summary>
+    /// Reads a decoded DPoP proof header the way a test inspects what a proof builder wrote: <c>alg</c>, <c>typ</c>
+    /// (the empty string when absent) and the string members of <c>jwk</c>.
+    /// </summary>
+    /// <param name="bytes">The UTF-8 JSON of the decoded header segment.</param>
+    /// <returns>The header.</returns>
     public static DpopProofHeader ParseHeaderJson(ReadOnlyMemory<byte> bytes)
     {
         using JsonDocument doc = JsonDocument.Parse(bytes);
         JsonElement root = doc.RootElement;
 
-        string alg = root.GetProperty(WellKnownJwkMemberNames.Alg).GetString()
+        string alg = root.GetProperty(WellKnownJoseHeaderNames.Alg).GetString()
             ?? throw new FormatException("DPoP header is missing 'alg'.");
         string typ = root.TryGetProperty(WellKnownJoseHeaderNames.Typ, out JsonElement typElement)
             ? typElement.GetString() ?? string.Empty
@@ -53,6 +64,12 @@ internal static class DpopTestSupport
     }
 
 
+    /// <summary>
+    /// Reads a decoded DPoP proof payload the way a test inspects what a proof builder wrote: <c>htm</c>, <c>htu</c>,
+    /// <c>iat</c> as whole seconds, <c>jti</c>, and <c>nonce</c> and <c>ath</c> when present.
+    /// </summary>
+    /// <param name="bytes">The UTF-8 JSON of the decoded payload segment.</param>
+    /// <returns>The claims.</returns>
     public static DpopProofClaims ParseClaimsJson(ReadOnlyMemory<byte> bytes)
     {
         using JsonDocument doc = JsonDocument.Parse(bytes);

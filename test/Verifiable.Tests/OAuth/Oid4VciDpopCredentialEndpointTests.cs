@@ -381,11 +381,13 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
         BoundTokenContext ctx = await AcquireAsync(host).ConfigureAwait(false);
         using DpopClientFixture fixture = ctx.Fixture;
 
-        //Unwire the proof-validation seam AFTER the bound token was minted: a bound token must
-        //never silently fall back to bearer, so the credential endpoint fails loud.
+        //Unwire proof validation AFTER the bound token was minted, the slot unassigned and no parser for the
+        //library default: a bound token must never silently fall back to bearer, so the credential endpoint
+        //fails loud.
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
             candidateIntegration.ValidateDpopProofAsync = null;
+            candidateIntegration.Codecs.DpopProofParser = null;
         }).ConfigureAwait(false);
 
         string proof = await BuildCredentialProofAsync(ctx, freshKey: null, nonce: null).ConfigureAwait(false);

@@ -106,7 +106,8 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
         using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
             ClientId, ClientBaseUri, profile: PolicyProfile.Fapi20, capabilities: TokenServerCapabilities).ConfigureAwait(false);
 
-        //ValidateDpopProofAsync is the gate for advertising dpop_signing_alg_values_supported.
+        //Proof validation (the ValidateDpopProofAsync slot, or the codecs' DpopProofParser for the library
+        //default EnableDpopAsync wires) is the gate for advertising dpop_signing_alg_values_supported.
         _ = await host.EnableDpopAsync().ConfigureAwait(false);
 
         //ValidateClientCredentialsAsync is the gate for the client_credentials

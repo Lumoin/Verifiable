@@ -572,7 +572,7 @@ public static class AuthCodeEndpoints
                 //request parameters in the POST body of the PAR request." Read only when the server
                 //verifies DPoP proofs; otherwise dpop_jkt is an unrecognized parameter, which RFC
                 //6749 Section 3.1 says the authorization server MUST ignore.
-                bool isDpopVerified = oauth.ValidateDpopProofAsync is not null;
+                bool isDpopVerified = DpopRequestReading.IsProofValidationWired(oauth);
                 (ConfirmationMethod? dpopBinding, string? dpopJktFailure) = isDpopVerified switch
                 {
                     true => ReadDpopJkt(fields),
@@ -1368,10 +1368,10 @@ public static class AuthCodeEndpoints
                 //above, so a repeated or malformed dpop_jkt is reported as an Authorization Error
                 //Response redirect, RFC 6749 Section 4.1.2.1, invalid_request: "includes an invalid
                 //parameter value, includes a parameter more than once, or is otherwise malformed."
-                (ConfirmationMethod? dpopBinding, string? dpopJktFailure) = oauth.ValidateDpopProofAsync switch
+                (ConfirmationMethod? dpopBinding, string? dpopJktFailure) = DpopRequestReading.IsProofValidationWired(oauth) switch
                 {
-                    null => (null, null),
-                    _ => ReadDpopJkt(fields)
+                    false => (null, null),
+                    true => ReadDpopJkt(fields)
                 };
                 if(dpopJktFailure is not null)
                 {
@@ -1858,7 +1858,7 @@ public static class AuthCodeEndpoints
                 //not spelled as a JWK SHA-256 Thumbprint fails the request's validation, answered in
                 //place as RFC 9101 Section 6.3 says: "as specified in Section 5.2 of [RFC6749]".
                 ConfirmationMethod? dpopBinding = null;
-                if(oauth.ValidateDpopProofAsync is not null)
+                if(DpopRequestReading.IsProofValidationWired(oauth))
                 {
                     (ConfirmationMethod? requestedBinding, string? dpopJktFailure) = ReadDpopJktValue(ro.DpopJkt);
                     if(dpopJktFailure is not null)
@@ -2061,10 +2061,10 @@ public static class AuthCodeEndpoints
                 //answered in place rather than by redirect, RFC 9101 Section 6.3: "the authorization
                 //server MUST return an error to the client in response to the authorization request,
                 //as specified in Section 5.2 of [RFC6749]".
-                (ConfirmationMethod? dpopBinding, string? dpopJktFailure) = oauth.ValidateDpopProofAsync switch
+                (ConfirmationMethod? dpopBinding, string? dpopJktFailure) = DpopRequestReading.IsProofValidationWired(oauth) switch
                 {
-                    null => (null, null),
-                    _ => ReadDpopJktValue(ro.DpopJkt)
+                    false => (null, null),
+                    true => ReadDpopJktValue(ro.DpopJkt)
                 };
                 if(dpopJktFailure is not null)
                 {
@@ -10419,7 +10419,7 @@ public static class AuthCodeEndpoints
     /// <param name="server">The authorization server holding the DPoP delegates.</param>
     /// <param name="context">The per-request context bag.</param>
     /// <param name="registration">The client the pushed request belongs to.</param>
-    /// <param name="issuerUri">The resolved issuer; its authority and the request path form the expected <c>htu</c>.</param>
+    /// <param name="issuerUri">The resolved issuer; its authority, unless the request carries a listener authority, combined with the request path forms the expected DPoP <c>htu</c> claim, and it keys the JTI replay record.</param>
     /// <param name="now">The instant the proof's freshness and replay window are judged at.</param>
     /// <param name="binding">The binding <c>dpop_jkt</c> asked for, or <see langword="null"/>.</param>
     /// <param name="cancellationToken">Cancellation token.</param>

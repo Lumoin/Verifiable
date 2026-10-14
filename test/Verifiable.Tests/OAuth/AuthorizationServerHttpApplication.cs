@@ -93,6 +93,14 @@ internal sealed class AuthorizationServerHttpApplication
     private HostedAuthorizationServer? Host { get; }
 
 
+    /// <summary>
+    /// The listener authority the host configured (<see cref="HostedAuthorizationServer.TrustedListenerAuthority"/>),
+    /// read when each request arrives, or <see langword="null"/> for a skin with no owning host or a host that
+    /// configured none. It is the host's own configuration, never a value read from the request.
+    /// </summary>
+    private Uri? TrustedListenerAuthority => Host?.TrustedListenerAuthority;
+
+
     /// <summary>Wraps <paramref name="server"/> so <see cref="ProcessRequestAsync"/> can dispatch to it.</summary>
     public AuthorizationServerHttpApplication(
         EndpointServer server,
@@ -116,7 +124,7 @@ internal sealed class AuthorizationServerHttpApplication
     public async Task ProcessRequestAsync(HttpContext context)
     {
         IncomingRequest incomingRequest = await BuildIncomingRequestAsync(
-            context.Request, context.RequestAborted).ConfigureAwait(false);
+            context.Request, TrustedListenerAuthority, context.RequestAborted).ConfigureAwait(false);
 
         ExchangeContext ExchangeContext = [];
         string? tenantSegment = ExtractTenantSegmentFromPath(incomingRequest.Path);
@@ -317,10 +325,18 @@ internal sealed class AuthorizationServerHttpApplication
 
     /// <summary>
     /// Reads <paramref name="request"/>'s body (if any) and maps it, its content type, its query
-    /// string, and its headers onto a new <see cref="IncomingRequest"/>.
+    /// string, and its headers onto a new <see cref="IncomingRequest"/>, stamping
+    /// <paramref name="listenerAuthority"/> as its <see cref="IncomingRequest.ListenerAuthority"/>.
     /// </summary>
+    /// <param name="request">The inbound HTTP request.</param>
+    /// <param name="listenerAuthority">
+    /// The listener authority the host configured, or <see langword="null"/> to stamp none; never read from
+    /// <paramref name="request"/>.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the body read.</param>
+    /// <returns>The request envelope the library dispatches.</returns>
     private static async ValueTask<IncomingRequest> BuildIncomingRequestAsync(
-        HttpRequest request, CancellationToken cancellationToken)
+        HttpRequest request, Uri? listenerAuthority, CancellationToken cancellationToken)
     {
         //Buffer the body bytes. OAuth bodies are tiny — form fields or
         //short JSON registration documents — and buffering keeps the
@@ -374,7 +390,8 @@ internal sealed class AuthorizationServerHttpApplication
             Headers: headers,
             RouteValues: RouteValues.Empty)
         {
-            Body = body
+            Body = body,
+            ListenerAuthority = listenerAuthority
         };
     }
 

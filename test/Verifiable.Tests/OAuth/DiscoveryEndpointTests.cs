@@ -763,6 +763,54 @@ internal sealed class DiscoveryEndpointTests
     }
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5.1">RFC 9449 Section 5.1</see>:
+    /// "dpop_signing_alg_values_supported: A JSON array containing a list of the JWS alg values (from the
+    /// [IANA.JOSE.ALGS] registry) supported by the authorization server for DPoP proof JWTs." An authorization server
+    /// that verifies DPoP proofs and names no list of its own publishes, in the discovery document fetched over the
+    /// wire, exactly the list its default policy accepts, in this order: <c>ES256</c>, <c>ES384</c>,
+    /// <c>ES512</c>, <c>ES256K</c> (<see href="https://www.rfc-editor.org/rfc/rfc8812#section-4.3">RFC 8812 Section
+    /// 4.3</see>), <c>RS256</c>, <c>RS384</c>, <c>RS512</c>, <c>PS256</c>, <c>PS384</c>, <c>PS512</c>, <c>EdDSA</c> and
+    /// <c>Ed25519</c> (<see href="https://www.rfc-editor.org/rfc/rfc9864#section-4.1.1">RFC 9864 Section 4.1.1</see>).
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task DiscoveryPublishesTheAlgorithmsTheDefaultSlotAcceptsAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        ImmutableHashSet<CapabilityIdentifier> capabilities = ImmutableHashSet.Create(
+            WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
+            WellKnownCapabilityIdentifiers.OidcOpenIdConnect,
+            WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
+            WellKnownCapabilityIdentifiers.OAuthJwksEndpoint);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: capabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer hosted = host.Host("default");
+        Uri discoveryUrl = new(hosted.HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.MetadataDiscovery, material.Registration.TenantId.Value));
+        using HttpResponseMessage response = await hosted.SharedHttpClient!.GetAsync(discoveryUrl, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode, body);
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreSequenceEqual(
+            DefaultDpopProofAlgorithms,
+            EnumerateStrings(document.RootElement.GetProperty(AuthorizationServerMetadataParameterNames.DpopSigningAlgValuesSupported)));
+    }
+
+
+    /// <summary>
+    /// The DPoP proof algorithms an authorization server that names no list of its own publishes, written out in their
+    /// published order.
+    /// </summary>
+    private static IReadOnlyList<string> DefaultDpopProofAlgorithms { get; } =
+        ["ES256", "ES384", "ES512", "ES256K", "RS256", "RS384", "RS512", "PS256", "PS384", "PS512", "EdDSA", "Ed25519"];
+
+
     [TestMethod]
     public async Task DiscoveryAdvertisesDpopSigningAlgValuesWhenDpopIsWired()
     {
@@ -772,7 +820,8 @@ internal sealed class DiscoveryEndpointTests
         using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
-        //Wire the server's DPoP proof validation — the gate for advertising the algs.
+        //Wire the server's DPoP proof validation (the library default over the codecs'
+        //proof parser), the gate for advertising the algs.
         _ = await host.EnableDpopAsync().ConfigureAwait(false);
 
         ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
@@ -841,8 +890,9 @@ internal sealed class DiscoveryEndpointTests
         AssertFieldPresent(body, AuthorizationServerMetadataParameterNames.RequirePushedAuthorizationRequests);
         AssertFieldPresent(body, AuthorizationServerMetadataParameterNames.AuthorizationResponseIssParameterSupported);
         //dpop_signing_alg_values_supported is advertised only when DPoP validation is
-        //wired (server.Integration.ValidateDpopProofAsync); this registration does not
-        //enable it, so it is intentionally absent here — covered by the dedicated test.
+        //wired (the ValidateDpopProofAsync slot, or the codecs' DpopProofParser for the
+        //library default); this registration does not enable it, so it is intentionally
+        //absent here, covered by the dedicated test.
     }
 
 

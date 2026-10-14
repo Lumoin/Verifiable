@@ -1312,7 +1312,7 @@ internal sealed class Oid4VciWalletClientTests
         bool isNonceKeyRotated = false;
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            ValidateDpopProofDelegate validateProof = candidateIntegration.ValidateDpopProofAsync!;
+            ValidateDpopProofDelegate validateProof = host.CurrentDpopProofValidation(candidateIntegration);
             candidateIntegration.ValidateDpopProofAsync = (request, ct) =>
             {
                 if(request.HttpUrl.EndsWith(credentialPath, StringComparison.Ordinal))
@@ -2544,7 +2544,7 @@ internal sealed class Oid4VciWalletClientTests
         bool isNonceKeyRotated = false;
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            ValidateDpopProofDelegate validateProof = candidateIntegration.ValidateDpopProofAsync!;
+            ValidateDpopProofDelegate validateProof = host.CurrentDpopProofValidation(candidateIntegration);
             candidateIntegration.ValidateDpopProofAsync = (request, ct) =>
             {
                 if(request.HttpUrl.EndsWith(credentialPath, StringComparison.Ordinal))

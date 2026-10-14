@@ -623,9 +623,10 @@ public static class MetadataEndpoints
                     }
 
                     //RFC 9449 §5.1 — advertise the DPoP proof signature algorithms the AS
-                    //accepts whenever DPoP validation is wired (FAPI 2.0 sender-constrained
-                    //tokens). Independent of the authorize-endpoint chain.
-                    if(oauth.ValidateDpopProofAsync is not null)
+                    //accepts whenever DPoP validation is wired, the application's validator or
+                    //the library default (FAPI 2.0 sender-constrained tokens). Independent of
+                    //the authorize-endpoint chain.
+                    if(Dpop.DpopRequestReading.IsProofValidationWired(oauth))
                     {
                         IReadOnlyList<string> dpopAlgs = await resolveSigningAlgorithms(
                             registration, KeyUsageContext.DpopProof, context, ct).ConfigureAwait(false);

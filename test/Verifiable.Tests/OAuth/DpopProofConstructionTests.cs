@@ -122,10 +122,12 @@ internal sealed class DpopProofConstructionTests
     /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.2">RFC 9449 Section 4.2</see>, of the proof's
     /// <c>alg</c>: "An identifier for a JWS asymmetric digital signature algorithm from [IANA.JOSE.ALGS]." A client
-    /// constructs a DPoP key declaring each asymmetric JWS signature algorithm the library's servers accept for a proof
-    /// (the ECDSA identifiers <c>ES256</c>, <c>ES384</c>, <c>ES512</c> and <c>ES256K</c>, the RSA PKCS#1 v1.5
-    /// identifiers <c>RS256</c>, <c>RS384</c> and <c>RS512</c>, the RSA-PSS identifiers <c>PS256</c>, <c>PS384</c> and
-    /// <c>PS512</c>, and <c>EdDSA</c>), and the DPoP key carries the identifier as declared.
+    /// constructs a DPoP key declaring each asymmetric JWS signature algorithm identifier, the identifiers the DPoP header
+    /// factory writes and the servers' proof validation admits (the ECDSA identifiers <c>ES256</c>, <c>ES384</c>,
+    /// <c>ES512</c> and <c>ES256K</c>, the Brainpool ECDSA identifier <c>ESB256</c>, the RSA PKCS#1 v1.5 identifiers
+    /// <c>RS256</c>, <c>RS384</c> and <c>RS512</c>, the RSA-PSS identifiers <c>PS256</c>, <c>PS384</c> and <c>PS512</c>,
+    /// <c>EdDSA</c>, the fully-specified <c>Ed25519</c>, and <c>ML-DSA-44</c>), and the DPoP key carries the identifier as
+    /// declared.
     /// </summary>
     /// <param name="alg">The algorithm the DPoP key declares.</param>
     [TestMethod]
@@ -133,6 +135,7 @@ internal sealed class DpopProofConstructionTests
     [DataRow("ES384")]
     [DataRow("ES512")]
     [DataRow("ES256K")]
+    [DataRow("ESB256")]
     [DataRow("RS256")]
     [DataRow("RS384")]
     [DataRow("RS512")]
@@ -140,6 +143,8 @@ internal sealed class DpopProofConstructionTests
     [DataRow("PS384")]
     [DataRow("PS512")]
     [DataRow("EdDSA")]
+    [DataRow("Ed25519")]
+    [DataRow("ML-DSA-44")]
     public void ClientAcceptsADpopKeyDeclaringAnAsymmetricSignatureAlgorithm(string alg)
     {
         var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
@@ -190,11 +195,18 @@ internal sealed class DpopProofConstructionTests
     /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.2">RFC 9449 Section 4.2</see>: "The JOSE Header of a
     /// DPoP JWT MUST contain at least the following parameters: typ: A field with the value dpop+jwt ... alg: An
     /// identifier for a JWS asymmetric digital signature algorithm from [IANA.JOSE.ALGS] ... jwk: Represents the public
-    /// key chosen by the client". The factory asked for a header declaring <c>ES256</c> writes <c>typ</c>
-    /// <c>dpop+jwt</c>, <c>alg</c> <c>ES256</c> and the given <c>jwk</c>.
+    /// key chosen by the client". The factory asked for a header declaring an asymmetric JWS signature algorithm
+    /// identifier the client's DPoP key also accepts writes <c>typ</c> <c>dpop+jwt</c>, that <c>alg</c> and the given
+    /// <c>jwk</c>. The rows: <c>ES256</c>, the Brainpool ECDSA identifier <c>ESB256</c>, the fully-specified
+    /// <c>Ed25519</c> and <c>ML-DSA-44</c>.
     /// </summary>
+    /// <param name="algorithm">The algorithm the header declares.</param>
     [TestMethod]
-    public void DpopHeaderFactoryWritesAnAsymmetricSignatureAlgorithm()
+    [DataRow("ES256")]
+    [DataRow("ESB256")]
+    [DataRow("Ed25519")]
+    [DataRow("ML-DSA-44")]
+    public void DpopHeaderFactoryWritesAnAsymmetricSignatureAlgorithm(string algorithm)
     {
         Dictionary<string, object> jwk = new(StringComparer.Ordinal) { [WellKnownJwkMemberNames.Kty] = "EC" };
 
@@ -202,17 +214,17 @@ internal sealed class DpopProofConstructionTests
         ArgumentException? refusal = null;
         try
         {
-            header = JwtHeader.ForDpop(WellKnownJwaValues.Es256, jwk);
+            header = JwtHeader.ForDpop(algorithm, jwk);
         }
         catch(ArgumentException exception)
         {
             refusal = exception;
         }
 
-        Assert.IsNull(refusal, $"The factory writes a header declaring ES256; it refused: {refusal?.Message}");
+        Assert.IsNull(refusal, $"The factory writes a header declaring {algorithm}; it refused: {refusal?.Message}");
         Assert.IsNotNull(header);
         Assert.AreEqual(WellKnownMediaTypes.Jwt.DpopJwt, header[WellKnownJoseHeaderNames.Typ]);
-        Assert.AreEqual(WellKnownJwaValues.Es256, header[WellKnownJwkMemberNames.Alg]);
+        Assert.AreEqual(algorithm, header[WellKnownJoseHeaderNames.Alg]);
         Assert.AreSame(jwk, header[WellKnownJoseHeaderNames.Jwk]);
     }
 

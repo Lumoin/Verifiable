@@ -90,5 +90,39 @@ namespace Verifiable.Tests.Jose
             Assert.IsFalse(WellKnownJwaValues.Equals(WellKnownJwaValues.Es256, tamperedAlgorithm));
             Assert.IsFalse(WellKnownJwaValues.IsEs256(tamperedAlgorithm));
         }
+
+
+        /// <summary>
+        /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.2">RFC 9449 Section 4.2</see>, of a DPoP proof's
+        /// <c>alg</c>: "An identifier for a JWS asymmetric digital signature algorithm from [IANA.JOSE.ALGS]. It MUST NOT
+        /// be none or an identifier for a symmetric algorithm (Message Authentication Code (MAC)).", each identifier
+        /// compared exactly (<see href="https://www.rfc-editor.org/rfc/rfc7515#section-4.1.1">RFC 7515 Section
+        /// 4.1.1</see>: "The "alg" value is a case-sensitive ASCII string containing a StringOrURI value.").
+        /// <see cref="WellKnownJwaValues.IsAsymmetricSignatureAlgorithm(string)"/> names the catalogue's asymmetric JWS
+        /// signature identifiers <c>ES256</c>, <c>ES256K</c>, <c>RS256</c>, <c>PS256</c>, <c>EdDSA</c>, <c>Ed25519</c>,
+        /// <c>ESB256</c> and <c>ML-DSA-44</c>, and names neither the MAC identifier <c>HS256</c>, <c>none</c>, the JWE
+        /// key agreement identifier <c>ECDH-ES</c>, <c>es256</c>, <c>ES256</c> with a leading space, nor the empty string.
+        /// </summary>
+        /// <param name="alg">The identifier asked about.</param>
+        /// <param name="isAsymmetricSignatureAlgorithm">Whether the predicate names it.</param>
+        [TestMethod]
+        [DataRow("ES256", true)]
+        [DataRow("ES256K", true)]
+        [DataRow("RS256", true)]
+        [DataRow("PS256", true)]
+        [DataRow("EdDSA", true)]
+        [DataRow("Ed25519", true)]
+        [DataRow("ESB256", true)]
+        [DataRow("ML-DSA-44", true)]
+        [DataRow("HS256", false)]
+        [DataRow("none", false)]
+        [DataRow("ECDH-ES", false)]
+        [DataRow("es256", false)]
+        [DataRow(" ES256", false, DisplayName = "ES256 with a leading space")]
+        [DataRow("", false, DisplayName = "the empty string")]
+        public void IsAsymmetricSignatureAlgorithmNamesTheCataloguesAsymmetricSignatureIdentifiers(string alg, bool isAsymmetricSignatureAlgorithm)
+        {
+            Assert.AreEqual(isAsymmetricSignatureAlgorithm, WellKnownJwaValues.IsAsymmetricSignatureAlgorithm(alg));
+        }
     }
 }

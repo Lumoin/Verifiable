@@ -3,6 +3,7 @@ using System.Text;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
+using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Oid4Vp;
 
 namespace Verifiable.OAuth.Server;
@@ -202,6 +203,42 @@ public sealed class AuthorizationServerCodecs: WiringComponent
     /// </para>
     /// </remarks>
     public JwtHeaderDeserializer? JwtHeaderDeserializer
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
+
+    /// <summary>
+    /// Reads a DPoP proof's protected header and claims (<see cref="DpopJwsPartParser"/>): the parser
+    /// <see cref="DefaultDpopProofValidation"/>, the proof validation the library's servers run when the application
+    /// assigns no <see cref="AuthorizationServerIntegration.ValidateDpopProofAsync"/>, reads every presented proof with.
+    /// Optional: DPoP stays optional, and <see cref="Validate"/> requires nothing of this slot.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Wire to the application's chosen JSON library, as the other codecs are; the library's JSON leaf supplies
+    /// <c>DpopJwsPartParserJson.Default</c>. With this slot, <see cref="Encoder"/> and <see cref="Decoder"/> wired, a
+    /// server whose <see cref="AuthorizationServerIntegration.ValidateDpopProofAsync"/> is unassigned validates proofs
+    /// through <see cref="DefaultDpopProofValidation.ValidateAsync"/>; with this slot unwired and that delegate
+    /// unassigned, the server validates no proof.
+    /// </para>
+    /// <para>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </para>
+    /// </remarks>
+    public DpopJwsPartParser? DpopProofParser
     {
         get;
         set

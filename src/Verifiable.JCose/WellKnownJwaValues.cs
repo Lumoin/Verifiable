@@ -519,6 +519,59 @@ namespace Verifiable.JCose
 
 
         /// <summary>
+        /// Whether <paramref name="alg"/> is an asymmetric JWS digital signature algorithm this catalogue
+        /// names: the ECDSA identifiers (<see cref="IsEcdsa"/>, <see cref="IsEsb"/>), the RSA PKCS#1 v1.5
+        /// and RSA-PSS identifiers, <see cref="EdDsa"/> and <see cref="Ed25519"/>, and the ML-DSA
+        /// identifiers (<see cref="IsMlDsa"/>). The catalogue groups no identifier as asymmetric, so the
+        /// set is its JWS signature identifiers less <see cref="None"/> and the MAC identifiers
+        /// <see cref="Hs256"/>, <see cref="Hs384"/> and <see cref="Hs512"/>; <see cref="Ecdha"/>, a JWE
+        /// key agreement identifier, is no signature algorithm.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Each identifier is sourced at its own entry of this catalogue: the ECDSA and RSA identifiers of
+        /// RFC 7518, <c>ES256K</c> of RFC 8812, <c>EdDSA</c> of RFC 8037, <c>Ed25519</c> registered in the
+        /// JOSE algorithms registry by
+        /// <see href="https://www.rfc-editor.org/rfc/rfc9864#section-4.1.1">RFC 9864 Section 4.1.1</see>, the
+        /// Brainpool ECDSA identifiers (<see cref="IsEsb"/>) from the JOSE fully-specified algorithms draft and
+        /// the ML-DSA identifiers (<see cref="IsMlDsa"/>) from the ML-DSA for JOSE and COSE draft, each entry
+        /// citing its draft. The draft-sourced identifiers are not read here as registered.
+        /// </para>
+        /// <para>
+        /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.2">RFC 9449 Section 4.2</see>, of
+        /// a DPoP proof's <c>alg</c>: "An identifier for a JWS asymmetric digital signature algorithm from
+        /// [IANA.JOSE.ALGS]. It MUST NOT be none or an identifier for a symmetric algorithm (Message
+        /// Authentication Code (MAC))." This predicate is the structural rule a DPoP proof's identifier is
+        /// held to, an asymmetric signature identifier and never <c>none</c> or a MAC: the DPoP header
+        /// factory, the client's DPoP key and the servers' proof validation read it, so what may be built
+        /// and what may be received agree; which of these identifiers a server accepts is that server's
+        /// policy, not this predicate's.
+        /// </para>
+        /// <para>
+        /// Each comparison is exact (<see cref="Equals(string, string)"/>), as a JWS <c>alg</c> value is
+        /// case-sensitive (<see href="https://www.rfc-editor.org/rfc/rfc7515#section-4.1.1">RFC 7515
+        /// Section 4.1.1</see>: "The "alg" value is a case-sensitive ASCII string containing a
+        /// StringOrURI value."), so a spelling in another case, or with surrounding whitespace, names no
+        /// algorithm here.
+        /// </para>
+        /// </remarks>
+        /// <param name="alg">The <c>alg</c> identifier.</param>
+        /// <returns><see langword="true"/> when the identifier names an asymmetric JWS signature algorithm.</returns>
+        public static bool IsAsymmetricSignatureAlgorithm(string alg) =>
+            IsEcdsa(alg)
+            || IsEsb(alg)
+            || IsRs256(alg)
+            || IsRs384(alg)
+            || IsRs512(alg)
+            || IsPs256(alg)
+            || IsPs384(alg)
+            || IsPs512(alg)
+            || IsEdDsa(alg)
+            || IsEd25519(alg)
+            || IsMlDsa(alg);
+
+
+        /// <summary>
         /// Returns the equivalent static instance, or the original instance if none match.
         /// This conversion is optional but allows for performance optimizations when comparing method values elsewhere.
         /// </summary>

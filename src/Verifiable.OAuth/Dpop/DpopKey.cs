@@ -46,18 +46,21 @@ public sealed class DpopKey
     /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.6">Section 11.6</see>: "Implementers MUST ensure
     /// that only asymmetric digital signature algorithms (such as ES256) that are deemed secure can be used for signing
     /// DPoP proofs. In particular, the algorithm none MUST NOT be allowed." Every proof is built under the
-    /// <see cref="Alg"/> this DPoP key carries, so the identifier is held here to the asymmetric JWS signature
-    /// algorithms the library's servers accept for a proof (<see cref="DpopProofValidator.IsDpopProofAlg"/>), and a
-    /// DPoP key declaring any other identifier, <c>none</c>, a MAC, a JWE identifier or an unregistered name, is
-    /// refused and no proof is ever built under it. The comparison is exact, as a JWS <c>alg</c> value is
-    /// case-sensitive (<see href="https://www.rfc-editor.org/rfc/rfc7515#section-4.1.1">RFC 7515 Section
-    /// 4.1.1</see>), so a spelling in another case or with surrounding whitespace is refused.
+    /// <see cref="Alg"/> this DPoP key carries, so the identifier is held here to the JOSE catalogue's asymmetric JWS
+    /// signature identifiers (<see cref="DpopProofValidator.IsDpopProofAlg"/>, the one predicate the DPoP header
+    /// factory and the servers' proof validation read as well), each sourced at its own catalogue entry: the Brainpool
+    /// ECDSA and the ML-DSA identifiers among them come from the drafts their entries cite. A DPoP key declaring any
+    /// other identifier, <c>none</c>, a MAC, a JWE identifier or a name the catalogue does not hold, is refused and no
+    /// proof is ever built under it. Which identifiers a server accepts is that server's policy. The comparison is
+    /// exact, as a JWS <c>alg</c> value is case-sensitive
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7515#section-4.1.1">RFC 7515 Section 4.1.1</see>), so a spelling
+    /// in another case or with surrounding whitespace is refused.
     /// </remarks>
     /// <param name="material">The non-owning key material the application created and manages.</param>
     /// <param name="alg">The JWS algorithm identifier every proof built with this DPoP key declares.</param>
     /// <exception cref="ArgumentException">
-    /// <paramref name="alg"/> is empty or is not, exactly, an asymmetric JWS signature algorithm identifier the
-    /// library's servers accept for a DPoP proof.
+    /// <paramref name="alg"/> is empty or is not, exactly, an asymmetric JWS signature algorithm identifier a DPoP proof
+    /// may be signed under.
     /// </exception>
     public DpopKey(
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> material,

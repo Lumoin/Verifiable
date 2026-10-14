@@ -46,7 +46,7 @@ namespace Verifiable.OAuth;
 /// DPoP binding (RFC 9449 §6.1) is NOT validated here. When the validated
 /// token carries <see cref="ConfirmationMethod.JwkThumbprint"/>, the
 /// resource-server caller chains
-/// <see cref="Verifiable.OAuth.Dpop.DpopProofValidator.ValidateAsync"/>
+/// <see cref="Verifiable.OAuth.Dpop.DpopProofValidator"/>'s <c>ValidateAsync</c>
 /// against the inbound DPoP proof and compares the proof's computed
 /// thumbprint against the access token's <c>cnf.jkt</c>. Composition is
 /// the caller's concern; the validator stays focused on the JWS access

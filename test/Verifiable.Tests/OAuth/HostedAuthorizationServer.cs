@@ -154,6 +154,20 @@ internal sealed class HostedAuthorizationServer: IClientRegistrationStore
 
 
     /// <summary>
+    /// The scheme and authority this host's listener is addressed under, as the host's own configuration names it:
+    /// the authority a proxy in front of the listener serves clients under. The skin
+    /// (<see cref="AuthorizationServerHttpApplication"/>) stamps it on every request it builds as
+    /// <see cref="Verifiable.Server.IncomingRequest.ListenerAuthority"/>, so the library holds a DPoP proof's <c>htu</c>
+    /// to it (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-7.1">RFC 9110 Section 7.1</see>: "a server
+    /// reconstructs the target URI from the received components in accordance with their local configuration and
+    /// incoming connection context"). It is the host's configuration and is never read from a request field.
+    /// <see langword="null"/>, the default, stamps nothing, and the issuer's authority stays in force. Settable so a
+    /// test configures it on a started host, as <see cref="IsUnvalidatedListenerAllowed"/> is.
+    /// </summary>
+    public Uri? TrustedListenerAuthority { get; set; }
+
+
+    /// <summary>
     /// Whether <see cref="AuthorizationServerHttpApplication.ProcessRequestAsync"/> holds an
     /// inbound request the ordering matrix (<see cref="ResolveOrderingKey"/>) can place behind
     /// other requests of the SAME (tenant, grant key) before dispatching it to the library. This is

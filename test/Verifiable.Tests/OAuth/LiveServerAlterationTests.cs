@@ -4067,6 +4067,37 @@ countingMetadataBuilder
 
 
     /// <summary>
+    /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Live configuration Section 4.1</see>:
+    /// "The named `InvalidOperationException` identifies missing or incoherent wiring.", for a server that validates DPoP
+    /// proofs (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">RFC 9449 Section 4.3</see>: "To validate a
+    /// DPoP proof, the receiving server MUST ensure the following") and supplies the nonces whose
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">check 10</see> reads "If the server provided a
+    /// nonce value to the client, the nonce claim matches the server-provided nonce value." A composition whose codecs
+    /// carry the DPoP proof parser, so the server validates proofs through the library default, and which wires no
+    /// nonce issuance, nonce validation or HMAC delegates is refused at construction with the named fault; the same
+    /// composition without the parser is admitted.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ParserWiredDpopWithoutTheNonceDelegatesIsRefusedAtConstructionAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        AuthorizationServerIntegration family = app.Server.OAuth();
+        family.Codecs.DpopProofParser = Verifiable.Json.DpopJwsPartParserJson.Default;
+
+        InvalidOperationException construction = Assert.ThrowsExactly<InvalidOperationException>(app.Server.Validate);
+        Assert.AreEqual(
+            "AuthorizationServerIntegration DPoP proof validation, by ValidateDpopProofAsync or by the library default over Codecs.DpopProofParser, Encoder and Decoder, requires IssueDpopNonceAsync, ValidateDpopNonceAsync, ResolveServerHmacKeyAsync and GetHmacKeySetAsync.",
+            construction.Message);
+        Assert.IsFalse(app.Server.IsValidated, "A refused construction is not admitted.");
+
+        family.Codecs.DpopProofParser = null;
+        app.Server.Validate();
+        Assert.IsTrue(app.Server.IsValidated, "The composition without the parser validates no DPoP proof and is admitted.");
+    }
+
+
+    /// <summary>
     /// Proves authenticated management under <see href="https://www.rfc-editor.org/rfc/rfc7592#section-2">RFC 7592 section 2</see>.
     /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Section 4.1</see>:
     /// "Observer failure reports receive a detached context containing no request, headers, body, live registration or management bearer."

@@ -17,7 +17,7 @@ namespace Verifiable.OAuth;
 /// verification keys, then admits or rejects the request. Composition
 /// happens at the handler level (e.g.,
 /// <see cref="JwsAccessTokenValidator.ValidateAsync"/> chained with
-/// <see cref="Dpop.DpopProofValidator.ValidateAsync"/> for DPoP-bound
+/// <see cref="Dpop.DpopProofValidator"/>'s <c>ValidateAsync</c> for DPoP-bound
 /// tokens).
 /// </remarks>
 [DebuggerDisplay("ResourceServerIntegration ExpectedAudience={ExpectedAudience,nq}")]

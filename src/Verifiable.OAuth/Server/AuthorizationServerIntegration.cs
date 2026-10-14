@@ -2513,18 +2513,53 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
 
 
     /// <summary>
-    /// Validates inbound DPoP proofs at the token endpoint per RFC 9449 §4.3.
-    /// Library default backing: <see cref="Verifiable.OAuth.Dpop.DpopProofValidator.ValidateAsync"/>
-    /// adapted to the <see cref="Verifiable.OAuth.Dpop.ValidateDpopProofDelegate"/>
-    /// shape. Required when any registration's <see cref="PolicyProfile"/>
-    /// requires DPoP (HAIP 1.0, FAPI 2.0).
+    /// Validates inbound DPoP proofs at the token endpoint, the pushed authorization request and the protected
+    /// resources per <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">RFC 9449 Section 4.3</see>. The
+    /// application validates proofs in one of three ways: it assigns this slot with
+    /// <see cref="Verifiable.OAuth.Dpop.DpopProofValidator"/>'s overload that takes its own
+    /// <see cref="Verifiable.Cryptography.VerificationDelegate"/>; it assigns this slot with the overload without one, so
+    /// the registry's provider for the family of each proof's public key verifies; or it leaves this slot unassigned and
+    /// wires <see cref="AuthorizationServerCodecs.DpopProofParser"/>, so the server runs
+    /// <see cref="Verifiable.OAuth.Dpop.DefaultDpopProofValidation.ValidateAsync"/>, the registry form with the server's
+    /// codecs. Required, in one of those ways, when any registration's <see cref="PolicyProfile"/> requires DPoP
+    /// (HAIP 1.0, FAPI 2.0).
     /// </summary>
     /// <remarks>
+    /// <para>
+    /// The two assignments, the registry form first, the host's own primitive second:
+    /// </para>
+    /// <code>
+    /// integration.ValidateDpopProofAsync = (request, ct) =>
+    ///     DpopProofValidator.ValidateAsync(request, parser, encoder, decoder, clock, pool, skew, ct);
+    ///
+    /// integration.ValidateDpopProofAsync = (request, ct) =>
+    ///     DpopProofValidator.ValidateAsync(request, hostVerification, parser, encoder, decoder, clock, pool, skew, ct);
+    /// </code>
+    /// <para>
+    /// In the first, the provider the cryptographic function registry serves for the tag of the public key
+    /// reconstructed from the proof's <c>jwk</c> verifies, so one host verifies every key family it registered. In the
+    /// second, <c>hostVerification</c> verifies every proof whatever its family, so it must verify every family the host
+    /// accepts. In both, a proof of a family the verification does not serve is refused <c>invalid_dpop_proof</c>
+    /// (<see cref="Verifiable.OAuth.Dpop.DpopProofValidationFailureReason.SignatureFailed"/>). When this slot is
+    /// unassigned and any of <see cref="AuthorizationServerCodecs.DpopProofParser"/>,
+    /// <see cref="AuthorizationServerCodecs.Encoder"/> or <see cref="AuthorizationServerCodecs.Decoder"/> is unwired, the
+    /// server validates no proof: a request that presents a proof, or for which DPoP is required, is answered
+    /// <c>server_error</c>, a fault of the composition, never a fallback.
+    /// </para>
+    /// <para>
+    /// A server that validates proofs in any of the three ways requires <see cref="IssueDpopNonceAsync"/>,
+    /// <see cref="ValidateDpopNonceAsync"/>, <see cref="ResolveServerHmacKeyAsync"/> and <see cref="GetHmacKeySetAsync"/>:
+    /// <see cref="Validate"/> refuses the composition without them. The cryptographic function registry the registry form
+    /// and the library default verify through is the application's startup to initialize; it is checked when a proof is
+    /// validated, where an uninitialized registry throws <see cref="InvalidOperationException"/> before any check runs.
+    /// </para>
+    /// <para>
     /// Set during construction or on an alteration candidate. A serving setter throws
     /// <see cref="InvalidOperationException"/> naming this member; use
     /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
     /// Dispatch retains this operation and its dependencies from admission through completion.
     /// Delegate targets own synchronization of mutable application state.
+    /// </para>
     /// </remarks>
     public Verifiable.OAuth.Dpop.ValidateDpopProofDelegate? ValidateDpopProofAsync
     {
@@ -3190,10 +3225,10 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
             throw new InvalidOperationException("AuthorizationServerIntegration token exchange requires ValidateTokenExchangeTokenAsync, AuthorizeTokenExchangeAsync and ValidateClientCredentialsAsync.");
         }
 
-        if(ValidateDpopProofAsync is not null
+        if(Verifiable.OAuth.Dpop.DpopRequestReading.IsProofValidationWired(this)
             && (IssueDpopNonceAsync is null || ValidateDpopNonceAsync is null || ResolveServerHmacKeyAsync is null || GetHmacKeySetAsync is null))
         {
-            throw new InvalidOperationException("AuthorizationServerIntegration DPoP requires IssueDpopNonceAsync, ValidateDpopNonceAsync, ResolveServerHmacKeyAsync and GetHmacKeySetAsync.");
+            throw new InvalidOperationException("AuthorizationServerIntegration DPoP proof validation, by ValidateDpopProofAsync or by the library default over Codecs.DpopProofParser, Encoder and Decoder, requires IssueDpopNonceAsync, ValidateDpopNonceAsync, ResolveServerHmacKeyAsync and GetHmacKeySetAsync.");
         }
 
         if(IssueCredentialAsync is not null && ParseCredentialRequestAsync is null)

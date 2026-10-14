@@ -52,6 +52,11 @@ internal static class RawHttpsRequest
     /// <param name="fieldLines">The request's field lines besides <c>Host</c>, <c>Content-Length</c> and <c>Connection</c>, each sent on its own line.</param>
     /// <param name="body">The body bytes, sent as given.</param>
     /// <param name="cancellationToken">Cancels the exchange.</param>
+    /// <param name="hostFieldValue">
+    /// The value of the <c>Host</c> field line, or <see langword="null"/> for the authority of <paramref name="target"/>;
+    /// the connection still goes to <paramref name="target"/>'s loopback port, so a request names an authority its
+    /// listener does not serve under.
+    /// </param>
     /// <returns>The status, every received field line and the body.</returns>
     internal static async Task<HttpResponseData> SendAsync(
         TestHostShell host,
@@ -59,7 +64,8 @@ internal static class RawHttpsRequest
         Uri target,
         IReadOnlyList<KeyValuePair<string, string>> fieldLines,
         ReadOnlyMemory<byte> body,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? hostFieldValue = null)
     {
         ArgumentNullException.ThrowIfNull(host);
         ArgumentException.ThrowIfNullOrWhiteSpace(method);
@@ -68,7 +74,7 @@ internal static class RawHttpsRequest
 
         StringBuilder head = new();
         _ = head.Append(method).Append(' ').Append(target.PathAndQuery).Append(" HTTP/1.1").Append(LineEnd);
-        _ = head.Append("Host: ").Append(target.Authority).Append(LineEnd);
+        _ = head.Append("Host: ").Append(hostFieldValue ?? target.Authority).Append(LineEnd);
         foreach(KeyValuePair<string, string> fieldLine in fieldLines)
         {
             _ = head.Append(fieldLine.Key).Append(": ").Append(fieldLine.Value).Append(LineEnd);
@@ -110,6 +116,21 @@ internal static class RawHttpsRequest
         }
 
         return Parse(received.WrittenSpan);
+    }
+
+
+    /// <summary>
+    /// Writes <paramref name="fields"/> as an <c>application/x-www-form-urlencoded</c> body in the order given, each name
+    /// and value escaped with <see cref="Uri.EscapeDataString(string)"/>, as the ASCII bytes a raw request carries.
+    /// </summary>
+    /// <param name="fields">The form fields, repeats included.</param>
+    /// <returns>The body bytes.</returns>
+    internal static byte[] FormBody(IEnumerable<KeyValuePair<string, string>> fields)
+    {
+        ArgumentNullException.ThrowIfNull(fields);
+
+        return Encoding.ASCII.GetBytes(string.Join('&', fields.Select(
+            static pair => $"{Uri.EscapeDataString(pair.Key)}={Uri.EscapeDataString(pair.Value)}")));
     }
 
 
