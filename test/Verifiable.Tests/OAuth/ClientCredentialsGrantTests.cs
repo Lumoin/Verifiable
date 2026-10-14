@@ -1730,7 +1730,9 @@ internal sealed class ClientCredentialsGrantTests
     /// the refusal answered with a <c>DPoP-Nonce</c> field, and no access token. The rows: the supplied text with the
     /// lowest pad bit of its last character set, with the highest pad bit of its last character set, and with its first
     /// <c>-</c> or <c>_</c> written <c>+</c> or <c>/</c>; each under a nonce HMAC key whose identifier is 12 octets (an
-    /// 85-octet nonce, four pad bits) and 13 octets (86 octets, two pad bits).
+    /// 85-octet nonce, four pad bits) and 13 octets (86 octets, two pad bits); and under the 12-octet identifier, the
+    /// supplied text with the second-lowest pad bit (value <c>0b0010</c>) and with the third-lowest pad bit (value
+    /// <c>0b0100</c>) of its last character set alone, the two pad bits between the lowest and the highest.
     /// </summary>
     /// <param name="keyIdRow">The nonce HMAC key, by the length of its identifier.</param>
     /// <param name="spellingRow">How the presented nonce spells the supplied octets.</param>
@@ -1738,6 +1740,8 @@ internal sealed class ClientCredentialsGrantTests
     [TestMethod]
     [DataRow(TwelveOctetKeyIdRow, PadBitSetSpellingRow)]
     [DataRow(TwelveOctetKeyIdRow, HighestPadBitSetSpellingRow)]
+    [DataRow(TwelveOctetKeyIdRow, SecondLowestPadBitSetSpellingRow)]
+    [DataRow(TwelveOctetKeyIdRow, ThirdLowestPadBitSetSpellingRow)]
     [DataRow(TwelveOctetKeyIdRow, Base64CharacterSpellingRow)]
     [DataRow(ThirteenOctetKeyIdRow, PadBitSetSpellingRow)]
     [DataRow(ThirteenOctetKeyIdRow, HighestPadBitSetSpellingRow)]
@@ -1757,6 +1761,8 @@ internal sealed class ClientCredentialsGrantTests
         {
             PadBitSetSpellingRow => ResourceDpopProofs.SetUnusedBitsOfNonce(supplied),
             HighestPadBitSetSpellingRow => ResourceDpopProofs.SetHighestUnusedBitOfNonce(supplied),
+            SecondLowestPadBitSetSpellingRow => ResourceDpopProofs.SetPadBitOfNonce(supplied, 1),
+            ThirdLowestPadBitSetSpellingRow => ResourceDpopProofs.SetPadBitOfNonce(supplied, 2),
             Base64CharacterSpellingRow => ResourceDpopProofs.SpellNonceInTheBase64Alphabet(supplied),
             _ => throw new ArgumentOutOfRangeException(nameof(spellingRow), spellingRow, "Unknown spelling row.")
         };
@@ -1848,6 +1854,12 @@ internal sealed class ClientCredentialsGrantTests
 
     /// <summary>The row of a permissive-decoder test whose presented nonce is the supplied one with the highest pad bit of its last character set.</summary>
     private const string HighestPadBitSetSpellingRow = "highest-pad-bit-set";
+
+    /// <summary>The row of a permissive-decoder test whose presented nonce is the supplied one with the second-lowest pad bit of its last character set alone, of value <c>0b0010</c>.</summary>
+    private const string SecondLowestPadBitSetSpellingRow = "second-lowest-pad-bit-set";
+
+    /// <summary>The row of a permissive-decoder test whose presented nonce is the supplied one with the third-lowest pad bit of its last character set alone, of value <c>0b0100</c>.</summary>
+    private const string ThirdLowestPadBitSetSpellingRow = "third-lowest-pad-bit-set";
 
     /// <summary>The row of a permissive-decoder test whose presented nonce writes the supplied one's first <c>-</c> or <c>_</c> as <c>+</c> or <c>/</c>.</summary>
     private const string Base64CharacterSpellingRow = "base64-character";

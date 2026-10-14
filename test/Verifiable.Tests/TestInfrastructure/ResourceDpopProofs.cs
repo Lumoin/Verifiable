@@ -372,6 +372,46 @@ internal static class ResourceDpopProofs
     }
 
 
+    /// <summary>
+    /// Sets one of the bits of the last character of <paramref name="nonce"/> that no octet carries, the one at
+    /// <paramref name="padBitIndex"/> counted from the lowest at 0, the count of such bits read from the length of the
+    /// text: a text of length 2 modulo 4 ends in a final quantum of 8 bits, whose last character carries two of them and
+    /// four pad bits (indexes 0 to 3); a text of length 3 modulo 4 ends in a final quantum of 16 bits, whose last
+    /// character carries four of them and two pad bits (indexes 0 and 1)
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc4648#section-4">RFC 4648 Section 4</see>).
+    /// <see href="https://www.rfc-editor.org/rfc/rfc4648#section-3.5">RFC 4648 Section 3.5</see>: "only the first two
+    /// bits of the next symbol are used. These pad bits MUST be set to zero by conforming encoders", so the value is
+    /// another spelling of the same octets that no conforming encoder writes, and a decoder that ignores pad bits reads it
+    /// as the supplied octets, while a pad-bit check whose mask leaves that bit out passes it as the canonical spelling.
+    /// </summary>
+    /// <param name="nonce">The nonce as the issuer supplied it, its last group partial and its pad bits zero.</param>
+    /// <param name="padBitIndex">The index of the pad bit to set, counted from the lowest pad bit at 0.</param>
+    /// <returns>The nonce with that one pad bit of its last character set.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The last character of <paramref name="nonce"/> carries no pad bit at <paramref name="padBitIndex"/>.</exception>
+    public static string SetPadBitOfNonce(string nonce, int padBitIndex)
+    {
+        ArgumentNullException.ThrowIfNull(nonce);
+
+        int padBitCount = (nonce.Length % 4) switch
+        {
+            2 => 4,
+            3 => 2,
+            _ => throw new AssertFailedException($"The nonce's length is no unpadded base64url length ending in a partial group: '{nonce}'.")
+        };
+
+        ArgumentOutOfRangeException.ThrowIfNegative(padBitIndex);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(padBitIndex, padBitCount);
+
+        int last = Base64UrlAlphabet.IndexOf(nonce[^1], StringComparison.Ordinal);
+        if(last < 0 || (last & ((1 << padBitCount) - 1)) != 0)
+        {
+            throw new AssertFailedException($"The nonce's last character is no base64url character with its pad bits zero: '{nonce}'.");
+        }
+
+        return string.Concat(nonce.AsSpan(0, nonce.Length - 1), Base64UrlAlphabet[last | (1 << padBitIndex)].ToString());
+    }
+
+
     /// <summary>The base64url alphabet of <see href="https://www.rfc-editor.org/rfc/rfc4648#section-5">RFC 4648 Section 5</see>, Table 2, in value order.</summary>
     private static string Base64UrlAlphabet { get; } = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
