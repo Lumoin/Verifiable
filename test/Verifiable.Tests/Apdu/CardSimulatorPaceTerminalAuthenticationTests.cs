@@ -94,19 +94,19 @@ internal sealed class CardSimulatorPaceTerminalAuthenticationTests
         ReadOnlyMemory<byte> chipStaticPrivateKey = Convert.FromHexString(ChipStaticPrivateKey);
         ReadOnlyMemory<byte> terminalChipAuthenticationPrivateKey = Convert.FromHexString(TerminalChipAuthenticationPrivateKey);
 
-        //CVCA, Document Verifier, and Terminal keys mint the CA/attestation chain (cert-factory carve-out); CardVerifiableCertificateMinter.Mint signs and embeds ECDsa instances directly.
+        //CVCA, Document Verifier, and Terminal keys mint the CA/attestation chain (cert-factory carve-out); CardVerifiableCertificateMinter.MintAsync signs and embeds ECDsa instances directly.
         using ECDsa cvcaKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa documentVerifierKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa terminalKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         byte[] terminalPrivateKey = terminalKey.ExportParameters(includePrivateParameters: true).D!;
 
-        using CardVerifiableCertificate trustAnchor = CardVerifiableCertificateMinter.Mint(
-            cvcaKey, cvcaKey, CvcaReference, CvcaReference, CardVerifiableCertificateMinter.CvcaRole, includeDomainParameters: true, Effective, Expiration, inheritedCurve: null, BaseMemoryPool.Shared, TestContext.CancellationToken);
+        using CardVerifiableCertificate trustAnchor = await CardVerifiableCertificateMinter.MintAsync(
+            cvcaKey, cvcaKey, CvcaReference, CvcaReference, CardVerifiableCertificateMinter.CvcaRole, includeDomainParameters: true, Effective, Expiration, inheritedCurve: null, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
         Tag certificateCurve = trustAnchor.PublicKey.EllipticCurvePoint!.Tag;
-        using CardVerifiableCertificate documentVerifier = CardVerifiableCertificateMinter.Mint(
-            cvcaKey, documentVerifierKey, CvcaReference, DocumentVerifierReference, CardVerifiableCertificateMinter.DocumentVerifierRole, includeDomainParameters: false, Effective, Expiration, certificateCurve, BaseMemoryPool.Shared, TestContext.CancellationToken);
-        using CardVerifiableCertificate terminal = CardVerifiableCertificateMinter.Mint(
-            documentVerifierKey, terminalKey, DocumentVerifierReference, TerminalReference, CardVerifiableCertificateMinter.TerminalRole, includeDomainParameters: false, Effective, Expiration, certificateCurve, BaseMemoryPool.Shared, TestContext.CancellationToken);
+        using CardVerifiableCertificate documentVerifier = await CardVerifiableCertificateMinter.MintAsync(
+            cvcaKey, documentVerifierKey, CvcaReference, DocumentVerifierReference, CardVerifiableCertificateMinter.DocumentVerifierRole, includeDomainParameters: false, Effective, Expiration, certificateCurve, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
+        using CardVerifiableCertificate terminal = await CardVerifiableCertificateMinter.MintAsync(
+            documentVerifierKey, terminalKey, DocumentVerifierReference, TerminalReference, CardVerifiableCertificateMinter.TerminalRole, includeDomainParameters: false, Effective, Expiration, certificateCurve, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
 
         using EncodedEcPoint chipStaticPublicKey = await multiplyGenerator(chipStaticPrivateKey, chipCurve, BaseMemoryPool.Shared, TestContext.CancellationToken);
         using EncodedEcPoint terminalChipAuthenticationPublicKey = await multiplyGenerator(terminalChipAuthenticationPrivateKey, chipCurve, BaseMemoryPool.Shared, TestContext.CancellationToken);

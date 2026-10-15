@@ -131,8 +131,8 @@ internal sealed class TimeProviderInjectionRespectTests
         using PkiCertificateMemory rootPki = MetadataBlobTestVectors.ToPkiCertificateMemory(fixture.RootCertificate.RawData);
         var tenantId = new TenantId("time-provider-injection-respect-mds");
 
-        var justInsideBlobBytes = BuildMetadataBlob(fixture, nextUpdate: "2026-06-01", TestContext.CancellationToken);
-        var justOutsideBlobBytes = BuildMetadataBlob(fixture, nextUpdate: "2026-05-31", TestContext.CancellationToken);
+        var justInsideBlobBytes = await BuildMetadataBlobAsync(fixture, nextUpdate: "2026-06-01", TestContext.CancellationToken).ConfigureAwait(false);
+        var justOutsideBlobBytes = await BuildMetadataBlobAsync(fixture, nextUpdate: "2026-05-31", TestContext.CancellationToken).ConfigureAwait(false);
 
         VerifyMetadataBlobAsyncDelegate verify = MetadataBlobVerification.Build(MetadataBlobReader.Read, MicrosoftX509Functions.ValidateChainAsync);
 
@@ -213,13 +213,13 @@ internal sealed class TimeProviderInjectionRespectTests
     /// <param name="fixture">The MDS root/signer PKI to sign under.</param>
     /// <param name="nextUpdate">The <c>nextUpdate</c> ISO-8601 date string.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <returns>The compact-JWS BLOB bytes.</returns>
-    private static byte[] BuildMetadataBlob(MdsPkiFixture fixture, string nextUpdate, CancellationToken cancellationToken)
+    /// <returns>The compact-JWS BLOB bytes, once signed.</returns>
+    private static async ValueTask<byte[]> BuildMetadataBlobAsync(MdsPkiFixture fixture, string nextUpdate, CancellationToken cancellationToken)
     {
         string entryJson = MetadataBlobTestVectors.BuildEntryJson(aaguid: Guid.NewGuid());
         string headerJson = MetadataBlobTestVectors.BuildHeaderJson(WellKnownJwaValues.Es256, [fixture.SigningCertificate.RawData]);
         string payloadJson = MetadataBlobTestVectors.BuildPayloadJson(1, nextUpdate, [entryJson]);
 
-        return MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(fixture.SigningKey, data, cancellationToken));
+        return await MetadataBlobTestVectors.BuildBlobBytesAsync(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256Async(fixture.SigningKey, data, cancellationToken)).ConfigureAwait(false);
     }
 }

@@ -305,7 +305,7 @@ internal sealed class MetadataDrivenRegistrationTests
         X509Certificate2 mdsRootCertificate = MetadataBlobTestVectors.CreateMdsRootCa("CN=Test MDS Root Capstone", mdsRootKey);
 
         //Independent-oracle carve-out: besides minting mdsSigningCertificate, this key produces the
-        //Metadata BLOB's compact-JWS signature directly (SignEs256, below) outside the library's own
+        //Metadata BLOB's compact-JWS signature directly (SignEs256Async, below) outside the library's own
         //signing seam, so the shipped MetadataBlobVerification verifier under test is exercised
         //against genuinely external wire material.
         ECDsa mdsSigningKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
@@ -318,7 +318,7 @@ internal sealed class MetadataDrivenRegistrationTests
             statusReportJsons: [MetadataBlobTestVectors.BuildStatusReportJson(status, "2020-01-01")]);
         string headerJson = MetadataBlobTestVectors.BuildHeaderJson(WellKnownJwaValues.Es256, [mdsSigningCertificate.RawData]);
         string payloadJson = MetadataBlobTestVectors.BuildPayloadJson(1, "2030-01-01", [entryJson]);
-        var blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(mdsSigningKey, data, cancellationToken));
+        var blobBytes = await MetadataBlobTestVectors.BuildBlobBytesAsync(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256Async(mdsSigningKey, data, cancellationToken)).ConfigureAwait(false);
 
         PkiCertificateMemory mdsRootPki = MetadataBlobTestVectors.ToPkiCertificateMemory(mdsRootCertificate.RawData);
 

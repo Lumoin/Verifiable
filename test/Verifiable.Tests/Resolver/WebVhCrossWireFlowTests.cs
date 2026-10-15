@@ -118,7 +118,7 @@ internal sealed class WebVhCrossWireFlowTests
         ], TestContext.CancellationToken).ConfigureAwait(false);
 
         string whois = await WebVhTestLog.MintWhoisPresentationAsync(
-            log.Did, authentication, GenesisTime, SerializePresentation, SerializeProofOptions, TestContext.CancellationToken).ConfigureAwait(false);
+            log.Did, authentication, GenesisTime, SerializePresentation, SerializeProofOptions, boundChallenge: null, boundDomain: null, verificationMethodId: null, TestContext.CancellationToken).ConfigureAwait(false);
 
         byte[] issuersFile = Encoding.UTF8.GetBytes("{\"issuers\":[\"did:webvh:issuer\"]}");
 

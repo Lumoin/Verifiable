@@ -223,7 +223,7 @@ internal static class DataIntegrityContextTamperingFixture
     /// <summary>
     /// Signs an eddsa-jcs-2022 presentation for the holder of <paramref name="holderDidDocument"/> with the document's
     /// first verification method, through
-    /// <see cref="SignJcsPresentationAsync(string, string, PrivateKeyMemory, string?, string?, DateTime, CancellationToken, List{VerifiableCredential}?, List{EnvelopedVerifiableCredential}?)"/>.
+    /// <see cref="SignJcsPresentationAsync(string, string, PrivateKeyMemory, string?, string?, DateTime, List{VerifiableCredential}?, List{EnvelopedVerifiableCredential}?, CancellationToken)"/>.
     /// </summary>
     /// <param name="holderDidDocument">
     /// The holder's DID document: its first verification method signs, and its <c>id</c> is the presentation's holder.
@@ -238,7 +238,7 @@ internal static class DataIntegrityContextTamperingFixture
         DidDocument holderDidDocument, PrivateKeyMemory privateKey, string? challenge, string? domain, DateTime proofCreated,
         CancellationToken cancellationToken) =>
         SignJcsPresentationAsync(
-            holderDidDocument.Id!.ToString(), holderDidDocument.VerificationMethod![0].Id!, privateKey, challenge, domain, proofCreated, cancellationToken);
+            holderDidDocument.Id!.ToString(), holderDidDocument.VerificationMethod![0].Id!, privateKey, challenge, domain, proofCreated, containedCredentials: null, envelopedCredentials: null, cancellationToken);
 
 
     /// <summary>
@@ -259,9 +259,9 @@ internal static class DataIntegrityContextTamperingFixture
     /// <param name="challenge">The challenge to bind into the proof, or <see langword="null"/> for none.</param>
     /// <param name="domain">The domain to bind into the proof, or <see langword="null"/> for none.</param>
     /// <param name="proofCreated">The instant written into the proof's <c>created</c> member.</param>
-    /// <param name="cancellationToken">Cancels the operation.</param>
     /// <param name="containedCredentials">The presentation's <c>verifiableCredential</c> entries, or <see langword="null"/> for none.</param>
     /// <param name="envelopedCredentials">The presentation's enveloped credential entries, or <see langword="null"/> for none.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The secured presentation.</returns>
     public static async Task<DataIntegritySecuredPresentation> SignJcsPresentationAsync(
         string holderDid,
@@ -270,9 +270,9 @@ internal static class DataIntegrityContextTamperingFixture
         string? challenge,
         string? domain,
         DateTime proofCreated,
-        CancellationToken cancellationToken,
-        List<VerifiableCredential>? containedCredentials = null,
-        List<EnvelopedVerifiableCredential>? envelopedCredentials = null)
+        List<VerifiableCredential>? containedCredentials,
+        List<EnvelopedVerifiableCredential>? envelopedCredentials,
+        CancellationToken cancellationToken)
     {
         VerifiablePresentation unsigned = new()
         {

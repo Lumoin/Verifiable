@@ -49,22 +49,39 @@ internal static class WebVhTestLog
     }
 
 
-    /// <summary>Mints a single-entry (genesis-only) log signed by <paramref name="signer"/>.</summary>
+    /// <summary>Mints a single-entry (genesis-only) log signed by <paramref name="signer"/>, carrying none of the optional genesis inputs.</summary>
+    /// <param name="domain">The domain the DID is hosted under.</param>
+    /// <param name="signer">The controller whose key is the genesis update key and signs the entry.</param>
+    /// <param name="versionTime">The entry's <c>versionTime</c>.</param>
+    /// <param name="cancellationToken">Cancels the minting.</param>
+    /// <returns>The minted log.</returns>
     public static Task<WebVhMintedLog> MintGenesisAsync(
         string domain,
         WebVhController signer,
         string versionTime,
-        CancellationToken cancellationToken,
-        ImmutableArray<string>? nextKeyHashes = null,
-        WebVhController? authentication = null,
-        string? explicitFilesServiceEndpoint = null,
-        string? explicitFilesServiceEndpointMap = null,
-        string? explicitWhoisServiceEndpoint = null,
-        ImmutableArray<string>? genesisAlsoKnownAs = null)
+        CancellationToken cancellationToken) =>
+        MintGenesisAsync(domain, signer, versionTime, WebVhGenesisOptions.None, cancellationToken);
+
+
+    /// <summary>Mints a single-entry (genesis-only) log signed by <paramref name="signer"/>, carrying the optional genesis inputs <paramref name="options"/> states.</summary>
+    /// <param name="domain">The domain the DID is hosted under.</param>
+    /// <param name="signer">The controller whose key is the genesis update key and signs the entry.</param>
+    /// <param name="versionTime">The entry's <c>versionTime</c>.</param>
+    /// <param name="options">The optional inputs the genesis entry carries.</param>
+    /// <param name="cancellationToken">Cancels the minting.</param>
+    /// <returns>The minted log.</returns>
+    public static Task<WebVhMintedLog> MintGenesisAsync(
+        string domain,
+        WebVhController signer,
+        string versionTime,
+        WebVhGenesisOptions options,
+        CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(options);
+
         return MintAsync(domain,
         [
-            new WebVhEntryPlan(signer, [signer.Multikey], nextKeyHashes, Deactivated: false, versionTime, Authentication: authentication, ExplicitFilesServiceEndpoint: explicitFilesServiceEndpoint, ExplicitFilesServiceEndpointMap: explicitFilesServiceEndpointMap, ExplicitWhoisServiceEndpoint: explicitWhoisServiceEndpoint, GenesisAlsoKnownAs: genesisAlsoKnownAs)
+            new WebVhEntryPlan(signer, [signer.Multikey], options.NextKeyHashes, Deactivated: false, versionTime, Authentication: options.Authentication, ExplicitFilesServiceEndpoint: options.ExplicitFilesServiceEndpoint, ExplicitFilesServiceEndpointMap: options.ExplicitFilesServiceEndpointMap, ExplicitWhoisServiceEndpoint: options.ExplicitWhoisServiceEndpoint, GenesisAlsoKnownAs: options.GenesisAlsoKnownAs)
         ], cancellationToken);
     }
 
@@ -309,10 +326,10 @@ internal static class WebVhTestLog
         string created,
         PresentationSerializeDelegate serializePresentation,
         ProofOptionsSerializeDelegate serializeProofOptions,
-        CancellationToken cancellationToken,
-        string? boundChallenge = null,
-        string? boundDomain = null,
-        string? verificationMethodId = null)
+        string? boundChallenge,
+        string? boundDomain,
+        string? verificationMethodId,
+        CancellationToken cancellationToken)
     {
         VerifiablePresentation unsignedPresentation = new()
         {
@@ -627,6 +644,35 @@ internal sealed record WebVhEntryPlan(
     ImmutableArray<string>? GenesisAlsoKnownAs = null,
     string? MethodOverride = null,
     ImmutableArray<string>? ExtraMoveAlsoKnownAs = null);
+
+
+/// <summary>
+/// The optional inputs a did:webvh genesis entry may carry beyond its signer and version time; <see cref="None"/> carries
+/// none of them.
+/// </summary>
+internal sealed record WebVhGenesisOptions
+{
+    /// <summary>A genesis entry that carries none of the optional inputs.</summary>
+    public static WebVhGenesisOptions None { get; } = new();
+
+    /// <summary>The pre-rotation commitments the genesis entry declares, or <see langword="null"/> for none.</summary>
+    public ImmutableArray<string>? NextKeyHashes { get; init; }
+
+    /// <summary>The controller whose key is the document's authentication method, or <see langword="null"/> for none.</summary>
+    public WebVhController? Authentication { get; init; }
+
+    /// <summary>An explicit <c>#files</c> service endpoint, or <see langword="null"/> for the implicit one.</summary>
+    public string? ExplicitFilesServiceEndpoint { get; init; }
+
+    /// <summary>An explicit <c>#files</c> service endpoint written as a map, or <see langword="null"/> for none.</summary>
+    public string? ExplicitFilesServiceEndpointMap { get; init; }
+
+    /// <summary>An explicit <c>#whois</c> service endpoint, or <see langword="null"/> for the implicit one.</summary>
+    public string? ExplicitWhoisServiceEndpoint { get; init; }
+
+    /// <summary>The genesis document's <c>alsoKnownAs</c> entries, or <see langword="null"/> for the default.</summary>
+    public ImmutableArray<string>? GenesisAlsoKnownAs { get; init; }
+}
 
 
 /// <summary>

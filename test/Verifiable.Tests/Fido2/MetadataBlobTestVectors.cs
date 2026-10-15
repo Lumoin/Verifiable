@@ -252,15 +252,15 @@ internal static class MetadataBlobTestVectors
     /// <param name="headerJson">The JWT Header JSON text.</param>
     /// <param name="payloadJson">The Metadata BLOB Payload JSON text.</param>
     /// <param name="sign">Signs the UTF-8 <c>tbsPayload</c> bytes and returns the raw (not DER-wrapped) signature bytes.</param>
-    /// <returns>The compact-JWS BLOB bytes.</returns>
-    internal static byte[] BuildBlobBytes(string headerJson, string payloadJson, Func<byte[], byte[]> sign)
+    /// <returns>The compact-JWS BLOB bytes, once the signing completes.</returns>
+    internal static async ValueTask<byte[]> BuildBlobBytesAsync(string headerJson, string payloadJson, Func<byte[], ValueTask<byte[]>> sign)
     {
         ArgumentNullException.ThrowIfNull(sign);
 
         string headerSegment = Base64Url.EncodeToString(Encoding.UTF8.GetBytes(headerJson));
         string payloadSegment = Base64Url.EncodeToString(Encoding.UTF8.GetBytes(payloadJson));
         string signingInput = $"{headerSegment}.{payloadSegment}";
-        byte[] signature = sign(Encoding.UTF8.GetBytes(signingInput));
+        var signature = await sign(Encoding.UTF8.GetBytes(signingInput)).ConfigureAwait(false);
         string signatureSegment = Base64Url.EncodeToString(signature);
 
         return Encoding.UTF8.GetBytes($"{signingInput}.{signatureSegment}");
@@ -276,7 +276,7 @@ internal static class MetadataBlobTestVectors
     /// <param name="data">The bytes to sign.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The raw P1363 ECDSA/SHA-256 signature bytes.</returns>
-    internal static byte[] SignEs256(ECDsa key, byte[] data, CancellationToken cancellationToken)
+    internal static async ValueTask<byte[]> SignEs256Async(ECDsa key, byte[] data, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(data);
@@ -287,7 +287,8 @@ internal static class MetadataBlobTestVectors
         CryptographicOperations.ZeroMemory(exportedPrivateKey);
 
         SigningDelegate sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.P256, Purpose.Signing);
-        using var signature = sign(privateKeyOwner.Memory, data, BaseMemoryPool.Shared, null, cancellationToken).AsTask().GetAwaiter().GetResult().Signature;
+        var signingResult = await sign(privateKeyOwner.Memory, data, BaseMemoryPool.Shared, null, cancellationToken).ConfigureAwait(false);
+        using var signature = signingResult.Signature;
 
         return signature.AsReadOnlySpan().ToArray();
     }
@@ -301,7 +302,7 @@ internal static class MetadataBlobTestVectors
     /// <param name="data">The bytes to sign.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The raw RSASSA-PKCS1-v1_5/SHA-256 signature bytes.</returns>
-    internal static byte[] SignRs256(RSA key, byte[] data, CancellationToken cancellationToken)
+    internal static async ValueTask<byte[]> SignRs256Async(RSA key, byte[] data, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(data);
@@ -312,7 +313,8 @@ internal static class MetadataBlobTestVectors
         CryptographicOperations.ZeroMemory(exportedPrivateKey);
 
         SigningDelegate sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.RsaSha256, Purpose.Signing);
-        using var signature = sign(privateKeyOwner.Memory, data, BaseMemoryPool.Shared, null, cancellationToken).AsTask().GetAwaiter().GetResult().Signature;
+        var signingResult = await sign(privateKeyOwner.Memory, data, BaseMemoryPool.Shared, null, cancellationToken).ConfigureAwait(false);
+        using var signature = signingResult.Signature;
 
         return signature.AsReadOnlySpan().ToArray();
     }
@@ -370,7 +372,7 @@ internal static class MetadataBlobTestVectors
         ECDsa rootKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         X509Certificate2 rootCertificate = CreateMdsRootCa("CN=Test MDS Root", rootKey);
         //Cert-factory carve-out: this key is signing input to CreateMdsSigningCertificate's CertificateRequest, and it is
-        //also the independent oracle exposed via MdsPkiFixture.SigningKey, which callers hand to SignEs256 to produce
+        //also the independent oracle exposed via MdsPkiFixture.SigningKey, which callers hand to SignEs256Async to produce
         //the raw JWS signature the library's own verifier is proven against.
         ECDsa signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         X509Certificate2 signingCertificate = CreateMdsSigningCertificate(rootCertificate, signingKey);

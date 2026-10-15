@@ -671,7 +671,7 @@ internal static class Fido2AttestationTestVectors
         CryptographicOperations.ZeroMemory(exportedPrivateKey);
 
         SigningDelegate sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.P256, Purpose.Signing);
-        using Signature p1363Signature = (await sign(privateKeyOwner.Memory, toBeSigned, BaseMemoryPool.Shared, null, cancellationToken).ConfigureAwait(false)).Signature;
+        using var p1363Signature = (await sign(privateKeyOwner.Memory, toBeSigned, BaseMemoryPool.Shared, null, cancellationToken).ConfigureAwait(false)).Signature;
         using IMemoryOwner<byte> derOwner = EcdsaSignatureEncoding.ConvertP1363ToDer(p1363Signature.AsReadOnlySpan(), BaseMemoryPool.Shared, out int derLength);
 
         return derOwner.Memory.Span[..derLength].ToArray();
@@ -697,7 +697,7 @@ internal static class Fido2AttestationTestVectors
         CryptographicOperations.ZeroMemory(exportedPrivateKey);
 
         SigningDelegate sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.P384, Purpose.Signing);
-        using Signature p1363Signature = (await sign(privateKeyOwner.Memory, toBeSigned, BaseMemoryPool.Shared, null, cancellationToken).ConfigureAwait(false)).Signature;
+        using var p1363Signature = (await sign(privateKeyOwner.Memory, toBeSigned, BaseMemoryPool.Shared, null, cancellationToken).ConfigureAwait(false)).Signature;
         using IMemoryOwner<byte> derOwner = EcdsaSignatureEncoding.ConvertP1363ToDer(p1363Signature.AsReadOnlySpan(), BaseMemoryPool.Shared, out int derLength);
 
         return derOwner.Memory.Span[..derLength].ToArray();
@@ -723,7 +723,7 @@ internal static class Fido2AttestationTestVectors
         CryptographicOperations.ZeroMemory(exportedPrivateKey);
 
         SigningDelegate sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.P521, Purpose.Signing);
-        using Signature p1363Signature = (await sign(privateKeyOwner.Memory, toBeSigned, BaseMemoryPool.Shared, null, cancellationToken).ConfigureAwait(false)).Signature;
+        using var p1363Signature = (await sign(privateKeyOwner.Memory, toBeSigned, BaseMemoryPool.Shared, null, cancellationToken).ConfigureAwait(false)).Signature;
         using IMemoryOwner<byte> derOwner = EcdsaSignatureEncoding.ConvertP1363ToDer(p1363Signature.AsReadOnlySpan(), BaseMemoryPool.Shared, out int derLength);
 
         return derOwner.Memory.Span[..derLength].ToArray();
@@ -750,7 +750,7 @@ internal static class Fido2AttestationTestVectors
         CryptographicOperations.ZeroMemory(exportedPrivateKey);
 
         SigningDelegate sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.RsaSha256, Purpose.Signing);
-        using Signature signature = (await sign(privateKeyOwner.Memory, toBeSigned, BaseMemoryPool.Shared, null, cancellationToken).ConfigureAwait(false)).Signature;
+        using var signature = (await sign(privateKeyOwner.Memory, toBeSigned, BaseMemoryPool.Shared, null, cancellationToken).ConfigureAwait(false)).Signature;
 
         return signature.AsReadOnlySpan().ToArray();
     }

@@ -99,13 +99,13 @@ internal sealed class TpmBackedTerminalAuthenticationTests
         using ECDsa cvcaKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa documentVerifierKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
-        using CardVerifiableCertificate trustAnchor = CardVerifiableCertificateMinter.Mint(
-            cvcaKey, cvcaKey, CvcaReference, CvcaReference, CardVerifiableCertificateMinter.CvcaRole, includeDomainParameters: true, Effective, Expiration, inheritedCurve: null, pool, TestContext.CancellationToken, TerminalType.InspectionSystem);
+        using CardVerifiableCertificate trustAnchor = await CardVerifiableCertificateMinter.MintAsync(
+            cvcaKey, cvcaKey, CvcaReference, CvcaReference, CardVerifiableCertificateMinter.CvcaRole, includeDomainParameters: true, Effective, Expiration, inheritedCurve: null, pool, TerminalType.InspectionSystem, TestContext.CancellationToken).ConfigureAwait(false);
         Tag certificateCurve = trustAnchor.PublicKey.EllipticCurvePoint!.Tag;
-        using CardVerifiableCertificate documentVerifier = CardVerifiableCertificateMinter.Mint(
-            cvcaKey, documentVerifierKey, CvcaReference, DocumentVerifierReference, CardVerifiableCertificateMinter.DocumentVerifierRole, includeDomainParameters: false, Effective, Expiration, certificateCurve, pool, TestContext.CancellationToken, TerminalType.InspectionSystem);
-        using CardVerifiableCertificate terminal = CardVerifiableCertificateMinter.Mint(
-            documentVerifierKey, terminalPublicPoint.AsReadOnlyMemory(), DocumentVerifierReference, TerminalReference, CardVerifiableCertificateMinter.TerminalRole, Effective, Expiration, certificateCurve, pool, TestContext.CancellationToken, TerminalType.InspectionSystem);
+        using CardVerifiableCertificate documentVerifier = await CardVerifiableCertificateMinter.MintAsync(
+            cvcaKey, documentVerifierKey, CvcaReference, DocumentVerifierReference, CardVerifiableCertificateMinter.DocumentVerifierRole, includeDomainParameters: false, Effective, Expiration, certificateCurve, pool, TerminalType.InspectionSystem, TestContext.CancellationToken).ConfigureAwait(false);
+        using CardVerifiableCertificate terminal = await CardVerifiableCertificateMinter.MintAsync(
+            documentVerifierKey, terminalPublicPoint.AsReadOnlyMemory(), DocumentVerifierReference, TerminalReference, CardVerifiableCertificateMinter.TerminalRole, Effective, Expiration, certificateCurve, pool, TerminalType.InspectionSystem, TestContext.CancellationToken).ConfigureAwait(false);
 
         using EncodedEcPoint chipStaticPublicKey = await multiplyGenerator(Convert.FromHexString(ChipStaticPrivateKey), chipCurve, pool, TestContext.CancellationToken);
         using EncodedEcPoint terminalEphemeralPublicKey = await multiplyGenerator(terminalEphemeralPrivateKey, chipCurve, pool, TestContext.CancellationToken);

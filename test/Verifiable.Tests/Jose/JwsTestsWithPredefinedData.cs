@@ -75,19 +75,17 @@ signingDelegate,
 
         //Verifies with framework ECDsa, independent of the project's own crypto drivers — an
         //independent-oracle check of the signature Jws.SignAsync produced.
-        ValueTask<(bool IsVerified, CryptoEvent? Event)> verificationDelegate(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> publicKeyBytes, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
-        {
-            using ECDsa key = ECDsa.Create();
-            key.ImportSubjectPublicKeyInfo(publicKeyBytes.Span, out _);
-            return ValueTask.FromResult<(bool, CryptoEvent?)>((key.VerifyData(dataToVerify.Span, signature.Span, hashAlgorithm), null));
-        }
-
         bool isValid = await Jws.VerifyAsync(
             signedJwt,
             TestSetup.Base64UrlDecoder,
             BaseMemoryPool.Shared,
             publicKey,
-verificationDelegate,
+            (dataToVerify, signature, verificationKey, context, cancellationToken) =>
+            {
+                using var key = ECDsa.Create();
+                key.ImportSubjectPublicKeyInfo(verificationKey.Span, out _);
+                return ValueTask.FromResult<(bool, CryptoEvent?)>((key.VerifyData(dataToVerify.Span, signature.Span, hashAlgorithm), null));
+            },
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "Signature verification should succeed.");
@@ -184,19 +182,17 @@ signingDelegate,
         //of the project's own crypto drivers, closing the self-consistency-firewall loop.
         using PublicKeyMemory publicKey = CreatePublicKeyMemory(publicKeyBytes, CryptoTags.Rsa2048PublicKey);
 
-        ValueTask<(bool IsVerified, CryptoEvent? Event)> verificationDelegate(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> pubKey, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
-        {
-            using RSA key = RSA.Create();
-            key.ImportSubjectPublicKeyInfo(pubKey.Span, out _);
-            return ValueTask.FromResult<(bool, CryptoEvent?)>((key.VerifyData(dataToVerify.Span, signature.Span, hashAlgorithm, RSASignaturePadding.Pss), null));
-        }
-
         bool isValid = await Jws.VerifyAsync(
             signedJwt,
             TestSetup.Base64UrlDecoder,
             BaseMemoryPool.Shared,
             publicKey,
-verificationDelegate,
+            (dataToVerify, signature, verificationKey, context, cancellationToken) =>
+            {
+                using var key = RSA.Create();
+                key.ImportSubjectPublicKeyInfo(verificationKey.Span, out _);
+                return ValueTask.FromResult<(bool, CryptoEvent?)>((key.VerifyData(dataToVerify.Span, signature.Span, hashAlgorithm, RSASignaturePadding.Pss), null));
+            },
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid, "RSA-PSS signature verification should succeed.");

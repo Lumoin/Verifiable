@@ -5082,7 +5082,7 @@ internal sealed class VcalmVerifierEndpointTests
     /// <paramref name="signerVerificationMethodId"/>, binding the given
     /// <paramref name="challenge"/> and <paramref name="domain"/>, at this class's clock instant. This is the common
     /// plumbing shared by every <c>SignPresentation*</c> fixture below; the signing itself is the one shared
-    /// <see cref="DataIntegrityContextTamperingFixture.SignJcsPresentationAsync(string, string, PrivateKeyMemory, string?, string?, DateTime, CancellationToken, List{VerifiableCredential}?, List{EnvelopedVerifiableCredential}?)"/>.
+    /// <see cref="DataIntegrityContextTamperingFixture.SignJcsPresentationAsync(string, string, PrivateKeyMemory, string?, string?, DateTime, List{VerifiableCredential}?, List{EnvelopedVerifiableCredential}?, CancellationToken)"/>.
     /// </summary>
     /// <param name="challenge">The verifier's challenge to bind into the proof.</param>
     /// <param name="domain">The verifier's domain to bind into the proof.</param>
@@ -5104,7 +5104,7 @@ internal sealed class VcalmVerifierEndpointTests
         List<EnvelopedVerifiableCredential>? envelopedCredentials = null) =>
         DataIntegrityContextTamperingFixture.SignJcsPresentationAsync(
             holderDid, signerVerificationMethodId, signerPrivate, challenge, domain, TimeProvider.GetUtcNow().UtcDateTime,
-            TestContext.CancellationToken, containedCredentials, envelopedCredentials);
+            containedCredentials, envelopedCredentials, TestContext.CancellationToken);
 
 
     /// <summary>

@@ -494,8 +494,7 @@ internal sealed class ClientAssertionCredentialFlowRefusalTests
         OAuthClientInfrastructure.Create(
             sendFormPostAsync: (endpoint, fields, headers, context, ct) =>
             {
-                observations.SentAssertions.Add(fields.First(
-                    field => string.Equals(field.Key, OAuthRequestParameterNames.ClientAssertion, StringComparison.Ordinal)).Value);
+                observations.SentAssertions.Add(fields.First(field => OAuthRequestParameterNames.IsClientAssertion(field.Key)).Value);
 
                 throw new InvalidOperationException(TransportReachedMessage);
             },

@@ -887,7 +887,7 @@ internal sealed class WebVhDidResolverResolvingTests
         using WebVhController genesisKey = WebVhController.Create();
         using WebVhController nextKey = WebVhController.Create();
 
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, genesisKey, GenesisTime, nextKeyHashes: [nextKey.KeyHash], cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, genesisKey, GenesisTime, new WebVhGenesisOptions { NextKeyHashes = [nextKey.KeyHash] }, TestContext.CancellationToken).ConfigureAwait(false);
 
         //Re-encode the genesis nextKeyHashes commitment with a SHA3-256 (0x16) multihash code AFTER the entry is
         //minted, so the genesis entryHash (computed over the original commitment) no longer matches the tampered

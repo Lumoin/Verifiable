@@ -609,6 +609,12 @@ public static class OAuthRequestParameterNames
     /// </summary>
     public static string ClientAssertion { get; } = Utf8Constants.ToInternedString(ClientAssertionUtf8);
 
+    /// <summary>Returns <see langword="true"/> when <paramref name="value"/> is exactly <c>client_assertion</c>.</summary>
+    /// <param name="value">The parameter name to recognize.</param>
+    /// <returns><see langword="true"/> when <paramref name="value"/> names the <see cref="ClientAssertion"/> parameter.</returns>
+    public static bool IsClientAssertion(string value) =>
+        string.Equals(value, ClientAssertion, StringComparison.Ordinal);
+
     /// <summary>The UTF-8 source literal of <see cref="ClientAssertionType"/>.</summary>
     public static ReadOnlySpan<byte> ClientAssertionTypeUtf8 => "client_assertion_type"u8;
 

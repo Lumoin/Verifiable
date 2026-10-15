@@ -183,7 +183,7 @@ internal sealed class Fido2CliCompositionRootGapTests
         using ECDsa mdsRootKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using X509Certificate2 mdsRootCertificate = MetadataBlobTestVectors.CreateMdsRootCa("CN=Test MDS Root Fido2CliCompositionRootGapTests", mdsRootKey);
         //Cert-factory-keep: CertificateRequest (inside CreateMdsSigningCertificate) requires a framework
-        //AsymmetricAlgorithm; the same key also independently signs the MDS BLOB JWS below (SignEs256).
+        //AsymmetricAlgorithm; the same key also independently signs the MDS BLOB JWS below (SignEs256Async).
         using ECDsa mdsSigningKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using X509Certificate2 mdsSigningCertificate = MetadataBlobTestVectors.CreateMdsSigningCertificate(mdsRootCertificate, mdsSigningKey);
 
@@ -194,7 +194,7 @@ internal sealed class Fido2CliCompositionRootGapTests
             statusReportJsons: [MetadataBlobTestVectors.BuildStatusReportJson(WellKnownAuthenticatorStatuses.FidoCertified, "2020-01-01")]);
         string headerJson = MetadataBlobTestVectors.BuildHeaderJson(WellKnownJwaValues.Es256, [mdsSigningCertificate.RawData]);
         string payloadJson = MetadataBlobTestVectors.BuildPayloadJson(1, "2099-01-01", [entryJson]);
-        var blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(mdsSigningKey, data, TestContext.CancellationToken));
+        var blobBytes = await MetadataBlobTestVectors.BuildBlobBytesAsync(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256Async(mdsSigningKey, data, TestContext.CancellationToken)).ConfigureAwait(false);
 
         string attestationObjectPath = WriteTempFile("attestation-object.cbor", fixture.AttestationObjectBytes);
         string clientDataPath = WriteTempFile("client-data.json", fixture.ClientDataJsonBytes);

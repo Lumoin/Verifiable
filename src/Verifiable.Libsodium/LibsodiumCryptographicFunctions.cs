@@ -85,6 +85,7 @@ public static class LibsodiumCryptographicFunctions
     {
         ArgumentNullException.ThrowIfNull(signaturePool);
         ArgumentNullException.ThrowIfNull(timeProvider);
+        cancellationToken.ThrowIfCancellationRequested();
         LibsodiumCrypto.EnsureInitialized();
 
         if(privateKeyBytes.Length != LibsodiumCrypto.Ed25519SeedLength)

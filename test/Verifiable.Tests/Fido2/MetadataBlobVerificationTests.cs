@@ -20,6 +20,9 @@ namespace Verifiable.Tests.Fido2;
 [TestClass]
 internal sealed class MetadataBlobVerificationTests
 {
+    /// <summary>The <c>nextUpdate</c> every BLOB this file signs carries, far past the validation instant.</summary>
+    private const string FarNextUpdate = "2030-01-01";
+
     /// <summary>The fixed instant every test in this file validates against.</summary>
     private static DateTimeOffset ValidationTime { get; } = new(2027, 6, 1, 0, 0, 0, TimeSpan.Zero);
 
@@ -35,7 +38,7 @@ internal sealed class MetadataBlobVerificationTests
     public async Task VerifiedHappyPathEs256()
     {
         using MdsPkiFixture fixture = MetadataBlobTestVectors.CreateMdsPkiFixture();
-        var blobBytes = BuildSignedBlob(fixture, WellKnownJwaValues.Es256, out _, TestContext.CancellationToken);
+        var blobBytes = (await BuildSignedBlobAsync(fixture, WellKnownJwaValues.Es256, no: 1, TestContext.CancellationToken).ConfigureAwait(false)).Bytes;
 
         using PkiCertificateMemory rootPki = MetadataBlobTestVectors.ToPkiCertificateMemory(fixture.RootCertificate.RawData);
         MetadataBlobResult result = await VerifyAsync(blobBytes, [rootPki]);
@@ -53,7 +56,7 @@ internal sealed class MetadataBlobVerificationTests
         using ECDsa rootKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using X509Certificate2 rootCertificate = MetadataBlobTestVectors.CreateMdsRootCa("CN=Test MDS Root Rsa", rootKey);
         //Cert-factory carve-out (signing input to CreateMdsSigningCertificateRsa's CertificateRequest) and independent
-        //oracle: SignRs256 below signs the BLOB with this raw RSA key, and the library's own RS256 verifier is proven
+        //oracle: SignRs256Async below signs the BLOB with this raw RSA key, and the library's own RS256 verifier is proven
         //against that independent signature.
         using RSA signingKey = RSA.Create(2048);
         using X509Certificate2 signingCertificate = MetadataBlobTestVectors.CreateMdsSigningCertificateRsa(rootCertificate, signingKey);
@@ -61,7 +64,7 @@ internal sealed class MetadataBlobVerificationTests
         string entryJson = MetadataBlobTestVectors.BuildEntryJson(aaguid: Guid.NewGuid());
         string headerJson = MetadataBlobTestVectors.BuildHeaderJson(WellKnownJwaValues.Rs256, [signingCertificate.RawData]);
         string payloadJson = MetadataBlobTestVectors.BuildPayloadJson(1, "2030-01-01", [entryJson]);
-        var blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignRs256(signingKey, data, TestContext.CancellationToken));
+        var blobBytes = await MetadataBlobTestVectors.BuildBlobBytesAsync(headerJson, payloadJson, data => MetadataBlobTestVectors.SignRs256Async(signingKey, data, TestContext.CancellationToken)).ConfigureAwait(false);
 
         using PkiCertificateMemory rootPki = MetadataBlobTestVectors.ToPkiCertificateMemory(rootCertificate.RawData);
         MetadataBlobResult result = await VerifyAsync(blobBytes, [rootPki]);
@@ -76,7 +79,7 @@ internal sealed class MetadataBlobVerificationTests
     public async Task SignatureTamperIsRejected()
     {
         using MdsPkiFixture fixture = MetadataBlobTestVectors.CreateMdsPkiFixture();
-        var blobBytes = MetadataBlobTestVectors.TamperSignatureSegment(BuildSignedBlob(fixture, WellKnownJwaValues.Es256, out _, TestContext.CancellationToken));
+        var blobBytes = MetadataBlobTestVectors.TamperSignatureSegment((await BuildSignedBlobAsync(fixture, WellKnownJwaValues.Es256, no: 1, TestContext.CancellationToken).ConfigureAwait(false)).Bytes);
 
         using PkiCertificateMemory rootPki = MetadataBlobTestVectors.ToPkiCertificateMemory(fixture.RootCertificate.RawData);
         Fido2MetadataError? error = await VerifyAndGetRejectionErrorAsync(blobBytes, [rootPki]);
@@ -91,7 +94,7 @@ internal sealed class MetadataBlobVerificationTests
     public async Task WrongRootIsRejected()
     {
         using MdsPkiFixture fixture = MetadataBlobTestVectors.CreateMdsPkiFixture();
-        var blobBytes = BuildSignedBlob(fixture, WellKnownJwaValues.Es256, out _, TestContext.CancellationToken);
+        var blobBytes = (await BuildSignedBlobAsync(fixture, WellKnownJwaValues.Es256, no: 1, TestContext.CancellationToken).ConfigureAwait(false)).Bytes;
 
         //Cert-factory carve-out: this key is signing input to CreateMdsRootCa's CertificateRequest.
         using ECDsa untrustedRootKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
@@ -110,7 +113,7 @@ internal sealed class MetadataBlobVerificationTests
     public async Task NoTrustAnchorsIsRejected()
     {
         using MdsPkiFixture fixture = MetadataBlobTestVectors.CreateMdsPkiFixture();
-        var blobBytes = BuildSignedBlob(fixture, WellKnownJwaValues.Es256, out _, TestContext.CancellationToken);
+        var blobBytes = (await BuildSignedBlobAsync(fixture, WellKnownJwaValues.Es256, no: 1, TestContext.CancellationToken).ConfigureAwait(false)).Bytes;
 
         Fido2MetadataError? error = await VerifyAndGetRejectionErrorAsync(blobBytes, []);
 
@@ -124,7 +127,7 @@ internal sealed class MetadataBlobVerificationTests
     public async Task UnsupportedAlgorithmNoneIsRejected()
     {
         using MdsPkiFixture fixture = MetadataBlobTestVectors.CreateMdsPkiFixture();
-        var blobBytes = BuildSignedBlob(fixture, WellKnownJwaValues.None, out _, TestContext.CancellationToken);
+        var blobBytes = (await BuildSignedBlobAsync(fixture, WellKnownJwaValues.None, no: 1, TestContext.CancellationToken).ConfigureAwait(false)).Bytes;
 
         using PkiCertificateMemory rootPki = MetadataBlobTestVectors.ToPkiCertificateMemory(fixture.RootCertificate.RawData);
         Fido2MetadataError? error = await VerifyAndGetRejectionErrorAsync(blobBytes, [rootPki]);
@@ -139,7 +142,7 @@ internal sealed class MetadataBlobVerificationTests
     public async Task UnsupportedAlgorithmHs256IsRejected()
     {
         using MdsPkiFixture fixture = MetadataBlobTestVectors.CreateMdsPkiFixture();
-        var blobBytes = BuildSignedBlob(fixture, WellKnownJwaValues.Hs256, out _, TestContext.CancellationToken);
+        var blobBytes = (await BuildSignedBlobAsync(fixture, WellKnownJwaValues.Hs256, no: 1, TestContext.CancellationToken).ConfigureAwait(false)).Bytes;
 
         using PkiCertificateMemory rootPki = MetadataBlobTestVectors.ToPkiCertificateMemory(fixture.RootCertificate.RawData);
         Fido2MetadataError? error = await VerifyAndGetRejectionErrorAsync(blobBytes, [rootPki]);
@@ -154,7 +157,7 @@ internal sealed class MetadataBlobVerificationTests
     public async Task SerialNumberRegressionIsRejected()
     {
         using MdsPkiFixture fixture = MetadataBlobTestVectors.CreateMdsPkiFixture();
-        var blobBytes = BuildSignedBlob(fixture, WellKnownJwaValues.Es256, out _, TestContext.CancellationToken, no: 5);
+        var blobBytes = (await BuildSignedBlobAsync(fixture, WellKnownJwaValues.Es256, no: 5, TestContext.CancellationToken).ConfigureAwait(false)).Bytes;
         var store = new FakeMetadataBlobSerialNumberStore();
         store.Seed(DefaultTenantId, 5);
 
@@ -180,7 +183,7 @@ internal sealed class MetadataBlobVerificationTests
     public async Task SerialNumberOneGreaterThanPreviousIsAcceptedAndPersisted()
     {
         using MdsPkiFixture fixture = MetadataBlobTestVectors.CreateMdsPkiFixture();
-        var blobBytes = BuildSignedBlob(fixture, WellKnownJwaValues.Es256, out _, TestContext.CancellationToken, no: 6);
+        var blobBytes = (await BuildSignedBlobAsync(fixture, WellKnownJwaValues.Es256, no: 6, TestContext.CancellationToken).ConfigureAwait(false)).Bytes;
         var store = new FakeMetadataBlobSerialNumberStore();
         store.Seed(DefaultTenantId, 5);
 
@@ -209,7 +212,7 @@ internal sealed class MetadataBlobVerificationTests
     public async Task RequiredSerialNumberPolicyWithUnwiredDelegatesYieldsStoreUnavailable()
     {
         using MdsPkiFixture fixture = MetadataBlobTestVectors.CreateMdsPkiFixture();
-        var blobBytes = BuildSignedBlob(fixture, WellKnownJwaValues.Es256, out _, TestContext.CancellationToken);
+        var blobBytes = (await BuildSignedBlobAsync(fixture, WellKnownJwaValues.Es256, no: 1, TestContext.CancellationToken).ConfigureAwait(false)).Bytes;
 
         using PkiCertificateMemory rootPki = MetadataBlobTestVectors.ToPkiCertificateMemory(fixture.RootCertificate.RawData);
         MetadataBlobResult result = await VerifyAsync(
@@ -230,7 +233,7 @@ internal sealed class MetadataBlobVerificationTests
     public async Task ThrowingResolveDelegateYieldsStoreUnavailable()
     {
         using MdsPkiFixture fixture = MetadataBlobTestVectors.CreateMdsPkiFixture();
-        var blobBytes = BuildSignedBlob(fixture, WellKnownJwaValues.Es256, out _, TestContext.CancellationToken);
+        var blobBytes = (await BuildSignedBlobAsync(fixture, WellKnownJwaValues.Es256, no: 1, TestContext.CancellationToken).ConfigureAwait(false)).Bytes;
         var store = new FakeMetadataBlobSerialNumberStore();
 
         using PkiCertificateMemory rootPki = MetadataBlobTestVectors.ToPkiCertificateMemory(fixture.RootCertificate.RawData);
@@ -255,7 +258,7 @@ internal sealed class MetadataBlobVerificationTests
     public async Task NotTrackedSerialNumberPolicyAcceptsARegressingSerialNumber()
     {
         using MdsPkiFixture fixture = MetadataBlobTestVectors.CreateMdsPkiFixture();
-        var blobBytes = BuildSignedBlob(fixture, WellKnownJwaValues.Es256, out _, TestContext.CancellationToken, no: 1);
+        var blobBytes = (await BuildSignedBlobAsync(fixture, WellKnownJwaValues.Es256, no: 1, TestContext.CancellationToken).ConfigureAwait(false)).Bytes;
         var store = new FakeMetadataBlobSerialNumberStore();
         store.Seed(DefaultTenantId, 999);
 
@@ -280,7 +283,7 @@ internal sealed class MetadataBlobVerificationTests
     public async Task PersistIsNotInvokedWhenSignatureTamperRejects()
     {
         using MdsPkiFixture fixture = MetadataBlobTestVectors.CreateMdsPkiFixture();
-        var blobBytes = MetadataBlobTestVectors.TamperSignatureSegment(BuildSignedBlob(fixture, WellKnownJwaValues.Es256, out _, TestContext.CancellationToken));
+        var blobBytes = MetadataBlobTestVectors.TamperSignatureSegment((await BuildSignedBlobAsync(fixture, WellKnownJwaValues.Es256, no: 1, TestContext.CancellationToken).ConfigureAwait(false)).Bytes);
         var store = new FakeMetadataBlobSerialNumberStore();
 
         using PkiCertificateMemory rootPki = MetadataBlobTestVectors.ToPkiCertificateMemory(fixture.RootCertificate.RawData);
@@ -305,7 +308,7 @@ internal sealed class MetadataBlobVerificationTests
     public async Task TenantScopedResolveProducesPerTenantOutcomes()
     {
         using MdsPkiFixture fixture = MetadataBlobTestVectors.CreateMdsPkiFixture();
-        var blobBytes = BuildSignedBlob(fixture, WellKnownJwaValues.Es256, out _, TestContext.CancellationToken, no: 10);
+        var blobBytes = (await BuildSignedBlobAsync(fixture, WellKnownJwaValues.Es256, no: 10, TestContext.CancellationToken).ConfigureAwait(false)).Bytes;
         var store = new FakeMetadataBlobSerialNumberStore();
         TenantId tenantAllowing = new("tenant-behind-the-new-serial");
         TenantId tenantRejecting = new("tenant-ahead-of-the-new-serial");
@@ -345,7 +348,7 @@ internal sealed class MetadataBlobVerificationTests
     public async Task RequiredRevocationPolicyWithUnwiredDelegateYieldsStoreUnavailable()
     {
         using MdsPkiFixture fixture = MetadataBlobTestVectors.CreateMdsPkiFixture();
-        var blobBytes = BuildSignedBlob(fixture, WellKnownJwaValues.Es256, out _, TestContext.CancellationToken);
+        var blobBytes = (await BuildSignedBlobAsync(fixture, WellKnownJwaValues.Es256, no: 1, TestContext.CancellationToken).ConfigureAwait(false)).Bytes;
 
         using PkiCertificateMemory rootPki = MetadataBlobTestVectors.ToPkiCertificateMemory(fixture.RootCertificate.RawData);
         MetadataBlobResult result = await VerifyAsync(
@@ -367,7 +370,7 @@ internal sealed class MetadataBlobVerificationTests
     public async Task NotCheckedRevocationPolicyBypassesAWiredRevocationDelegate()
     {
         using MdsPkiFixture fixture = MetadataBlobTestVectors.CreateMdsPkiFixture();
-        var blobBytes = BuildSignedBlob(fixture, WellKnownJwaValues.Es256, out _, TestContext.CancellationToken);
+        var blobBytes = (await BuildSignedBlobAsync(fixture, WellKnownJwaValues.Es256, no: 1, TestContext.CancellationToken).ConfigureAwait(false)).Bytes;
 
         using PkiCertificateMemory rootPki = MetadataBlobTestVectors.ToPkiCertificateMemory(fixture.RootCertificate.RawData);
         MetadataBlobResult result = await VerifyAsync(
@@ -392,7 +395,7 @@ internal sealed class MetadataBlobVerificationTests
     public async Task VerifiedResultCarriesTheRequiredRevocationPosture()
     {
         using MdsPkiFixture fixture = MetadataBlobTestVectors.CreateMdsPkiFixture();
-        var blobBytes = BuildSignedBlob(fixture, WellKnownJwaValues.Es256, out _, TestContext.CancellationToken);
+        var blobBytes = (await BuildSignedBlobAsync(fixture, WellKnownJwaValues.Es256, no: 1, TestContext.CancellationToken).ConfigureAwait(false)).Bytes;
 
         DateTimeOffset crlThisUpdate = ValidationTime.AddDays(-1);
         DateTimeOffset crlNextUpdate = ValidationTime.AddDays(30);
@@ -420,7 +423,7 @@ internal sealed class MetadataBlobVerificationTests
         string entryJson = MetadataBlobTestVectors.BuildEntryJson(aaguid: Guid.NewGuid());
         string headerJson = MetadataBlobTestVectors.BuildHeaderJson(WellKnownJwaValues.Es256, [fixture.SigningCertificate.RawData]);
         string payloadJson = MetadataBlobTestVectors.BuildPayloadJson(1, "2020-01-01", [entryJson]);
-        var blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(fixture.SigningKey, data, TestContext.CancellationToken));
+        var blobBytes = await MetadataBlobTestVectors.BuildBlobBytesAsync(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256Async(fixture.SigningKey, data, TestContext.CancellationToken)).ConfigureAwait(false);
 
         using PkiCertificateMemory rootPki = MetadataBlobTestVectors.ToPkiCertificateMemory(fixture.RootCertificate.RawData);
         Fido2MetadataError? error = await VerifyAndGetRejectionErrorAsync(blobBytes, [rootPki]);
@@ -435,7 +438,7 @@ internal sealed class MetadataBlobVerificationTests
     public async Task RevokedSignerCertificateIsRejected()
     {
         using MdsPkiFixture fixture = MetadataBlobTestVectors.CreateMdsPkiFixture();
-        var blobBytes = BuildSignedBlob(fixture, WellKnownJwaValues.Es256, out _, TestContext.CancellationToken);
+        var blobBytes = (await BuildSignedBlobAsync(fixture, WellKnownJwaValues.Es256, no: 1, TestContext.CancellationToken).ConfigureAwait(false)).Bytes;
 
         DateTimeOffset crlThisUpdate = ValidationTime.AddDays(-1);
         DateTimeOffset crlNextUpdate = ValidationTime.AddDays(30);
@@ -467,7 +470,7 @@ internal sealed class MetadataBlobVerificationTests
         using ECDsa intermediateKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using X509Certificate2 intermediateCertificate = Fido2AttestationTestVectors.CreateIntermediateCaCertificate(rootCertificate, intermediateKey, "CN=Test MDS Intermediate");
         //Cert-factory carve-out (signing input to CreateMdsSigningCertificate's CertificateRequest) and independent
-        //oracle: SignEs256 below signs the BLOB with this raw ECDsa key, and the library's own ES256 verifier is
+        //oracle: SignEs256Async below signs the BLOB with this raw ECDsa key, and the library's own ES256 verifier is
         //proven against that independent signature.
         using ECDsa signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
@@ -480,7 +483,7 @@ internal sealed class MetadataBlobVerificationTests
         string entryJson = MetadataBlobTestVectors.BuildEntryJson(aaguid: Guid.NewGuid());
         string headerJson = MetadataBlobTestVectors.BuildHeaderJson(WellKnownJwaValues.Es256, [signingCertificate.RawData, intermediateCertificate.RawData]);
         string payloadJson = MetadataBlobTestVectors.BuildPayloadJson(1, "2030-01-01", [entryJson]);
-        var blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(signingKey, data, TestContext.CancellationToken));
+        var blobBytes = await MetadataBlobTestVectors.BuildBlobBytesAsync(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256Async(signingKey, data, TestContext.CancellationToken)).ConfigureAwait(false);
 
         DateTimeOffset crlThisUpdate = ValidationTime.AddDays(-1);
         DateTimeOffset crlNextUpdate = ValidationTime.AddDays(30);
@@ -506,7 +509,9 @@ internal sealed class MetadataBlobVerificationTests
     public async Task AaguidLookupMissReportsNoMatchWithoutRejectingTheBlob()
     {
         using MdsPkiFixture fixture = MetadataBlobTestVectors.CreateMdsPkiFixture();
-        var blobBytes = BuildSignedBlob(fixture, WellKnownJwaValues.Es256, out Guid listedAaguid, TestContext.CancellationToken);
+        var signedBlob = await BuildSignedBlobAsync(fixture, WellKnownJwaValues.Es256, no: 1, TestContext.CancellationToken).ConfigureAwait(false);
+        var blobBytes = signedBlob.Bytes;
+        var listedAaguid = signedBlob.Aaguid;
         Guid unlistedAaguid = Guid.NewGuid();
         Assert.AreNotEqual(listedAaguid, unlistedAaguid);
 
@@ -633,15 +638,27 @@ internal sealed class MetadataBlobVerificationTests
 
 
     /// <summary>Builds and signs a Metadata BLOB with a single AAGUID'd entry, under <paramref name="fixture"/>'s PKI.</summary>
-    private static byte[] BuildSignedBlob(MdsPkiFixture fixture, string algorithm, out Guid aaguid, CancellationToken cancellationToken, long no = 1, string nextUpdate = "2030-01-01")
+    /// <param name="fixture">The MDS root/signer PKI to sign under.</param>
+    /// <param name="algorithm">The <c>alg</c> the JWT Header names.</param>
+    /// <param name="no">The BLOB's <c>no</c> serial number.</param>
+    /// <param name="cancellationToken">Cancels the signing.</param>
+    /// <returns>The signed BLOB and the AAGUID its single entry lists.</returns>
+    private static async ValueTask<SignedBlob> BuildSignedBlobAsync(MdsPkiFixture fixture, string algorithm, long no, CancellationToken cancellationToken)
     {
-        aaguid = Guid.NewGuid();
+        var aaguid = Guid.NewGuid();
         string entryJson = MetadataBlobTestVectors.BuildEntryJson(aaguid: aaguid);
         string headerJson = MetadataBlobTestVectors.BuildHeaderJson(algorithm, [fixture.SigningCertificate.RawData]);
-        string payloadJson = MetadataBlobTestVectors.BuildPayloadJson(no, nextUpdate, [entryJson]);
+        string payloadJson = MetadataBlobTestVectors.BuildPayloadJson(no, FarNextUpdate, [entryJson]);
+        var blobBytes = await MetadataBlobTestVectors.BuildBlobBytesAsync(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256Async(fixture.SigningKey, data, cancellationToken)).ConfigureAwait(false);
 
-        return MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(fixture.SigningKey, data, cancellationToken));
+        return new SignedBlob(blobBytes, aaguid);
     }
+
+
+    /// <summary>A signed Metadata BLOB and the AAGUID its single entry lists.</summary>
+    /// <param name="Bytes">The compact-JWS BLOB bytes.</param>
+    /// <param name="Aaguid">The AAGUID of the BLOB's single entry.</param>
+    private sealed record SignedBlob(byte[] Bytes, Guid Aaguid);
 
 
     /// <summary>
@@ -660,7 +677,7 @@ internal sealed class MetadataBlobVerificationTests
         string entryJson = MetadataBlobTestVectors.BuildEntryJson(aaguid: aaguid, statusReportJsons: reports);
         string headerJson = MetadataBlobTestVectors.BuildHeaderJson(WellKnownJwaValues.Es256, [fixture.SigningCertificate.RawData]);
         string payloadJson = MetadataBlobTestVectors.BuildPayloadJson(1, "2030-01-01", [entryJson]);
-        var blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(fixture.SigningKey, data, TestContext.CancellationToken));
+        var blobBytes = await MetadataBlobTestVectors.BuildBlobBytesAsync(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256Async(fixture.SigningKey, data, TestContext.CancellationToken)).ConfigureAwait(false);
 
         using PkiCertificateMemory rootPki = MetadataBlobTestVectors.ToPkiCertificateMemory(fixture.RootCertificate.RawData);
         MetadataBlobResult result = await VerifyAsync(blobBytes, [rootPki]);

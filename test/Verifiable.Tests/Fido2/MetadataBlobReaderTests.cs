@@ -29,9 +29,9 @@ internal sealed class MetadataBlobReaderTests
     /// modeled field correctly.
     /// </summary>
     [TestMethod]
-    public void HappyPathParsesTwoEntriesOneAaguidOneAcki()
+    public async Task HappyPathParsesTwoEntriesOneAaguidOneAcki()
     {
-        //Cert-factory carve-out: backs CreateMdsRootCa's CertificateRequest (requires a genuine ECDsa instance) and also signs the JWS tbsPayload via SignEs256, producing realistic (Read()-unverified) signature bytes.
+        //Cert-factory carve-out: backs CreateMdsRootCa's CertificateRequest (requires a genuine ECDsa instance) and also signs the JWS tbsPayload via SignEs256Async, producing realistic (Read()-unverified) signature bytes.
         using ECDsa signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
         //Cert-factory carve-out: backs CreateMdsRootCa's CertificateRequest below, which requires a genuine framework ECDsa instance.
@@ -48,7 +48,7 @@ internal sealed class MetadataBlobReaderTests
 
         string headerJson = MetadataBlobTestVectors.BuildHeaderJson(WellKnownJwaValues.Es256, [signerCertificate.RawData]);
         string payloadJson = MetadataBlobTestVectors.BuildPayloadJson(1, "2030-01-01", [entry1, entry2]);
-        var blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(signingKey, data, TestContext.CancellationToken));
+        var blobBytes = await MetadataBlobTestVectors.BuildBlobBytesAsync(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256Async(signingKey, data, TestContext.CancellationToken)).ConfigureAwait(false);
 
         using UnverifiedMetadataBlob blob = MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared);
 
@@ -112,15 +112,15 @@ internal sealed class MetadataBlobReaderTests
 
     /// <summary>A JWT Header carrying an <c>x5u</c> member is rejected outright — out of this library's fetcher-free scope.</summary>
     [TestMethod]
-    public void X5uHeaderIsRejected()
+    public async Task X5uHeaderIsRejected()
     {
-        //Cert-factory carve-out: backs CreateMdsRootCa's CertificateRequest (requires a genuine ECDsa instance) and also signs the JWS tbsPayload via SignEs256, producing realistic (Read()-unverified) signature bytes.
+        //Cert-factory carve-out: backs CreateMdsRootCa's CertificateRequest (requires a genuine ECDsa instance) and also signs the JWS tbsPayload via SignEs256Async, producing realistic (Read()-unverified) signature bytes.
         using ECDsa signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using var signerCertificate = MetadataBlobTestVectors.CreateMdsRootCa("CN=Test MDS Signer X5u", signingKey);
 
         string headerJson = MetadataBlobTestVectors.BuildHeaderJson(WellKnownJwaValues.Es256, [signerCertificate.RawData], includeX5u: true);
         string payloadJson = MetadataBlobTestVectors.BuildPayloadJson(1, "2030-01-01", [MetadataBlobTestVectors.BuildEntryJson(aaguid: Guid.NewGuid())]);
-        var blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(signingKey, data, TestContext.CancellationToken));
+        var blobBytes = await MetadataBlobTestVectors.BuildBlobBytesAsync(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256Async(signingKey, data, TestContext.CancellationToken)).ConfigureAwait(false);
 
         _ = Assert.ThrowsExactly<Fido2FormatException>(() => MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared));
     }
@@ -128,15 +128,15 @@ internal sealed class MetadataBlobReaderTests
 
     /// <summary>A Metadata BLOB Payload with a repeated top-level member (<c>no</c> twice) is rejected.</summary>
     [TestMethod]
-    public void DuplicateTopLevelPayloadMemberIsRejected()
+    public async Task DuplicateTopLevelPayloadMemberIsRejected()
     {
-        //Cert-factory carve-out: backs CreateMdsRootCa's CertificateRequest (requires a genuine ECDsa instance) and also signs the JWS tbsPayload via SignEs256, producing realistic (Read()-unverified) signature bytes.
+        //Cert-factory carve-out: backs CreateMdsRootCa's CertificateRequest (requires a genuine ECDsa instance) and also signs the JWS tbsPayload via SignEs256Async, producing realistic (Read()-unverified) signature bytes.
         using ECDsa signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using var signerCertificate = MetadataBlobTestVectors.CreateMdsRootCa("CN=Test MDS Signer Dup", signingKey);
 
         string headerJson = MetadataBlobTestVectors.BuildHeaderJson(WellKnownJwaValues.Es256, [signerCertificate.RawData]);
         const string payloadJson = """{"no":1,"no":2,"nextUpdate":"2030-01-01","entries":[]}""";
-        var blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(signingKey, data, TestContext.CancellationToken));
+        var blobBytes = await MetadataBlobTestVectors.BuildBlobBytesAsync(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256Async(signingKey, data, TestContext.CancellationToken)).ConfigureAwait(false);
 
         _ = Assert.ThrowsExactly<Fido2FormatException>(() => MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared));
     }
@@ -144,15 +144,15 @@ internal sealed class MetadataBlobReaderTests
 
     /// <summary>A Metadata BLOB Payload whose top level is a JSON array, not an object, is rejected.</summary>
     [TestMethod]
-    public void NonObjectPayloadIsRejected()
+    public async Task NonObjectPayloadIsRejected()
     {
-        //Cert-factory carve-out: backs CreateMdsRootCa's CertificateRequest (requires a genuine ECDsa instance) and also signs the JWS tbsPayload via SignEs256, producing realistic (Read()-unverified) signature bytes.
+        //Cert-factory carve-out: backs CreateMdsRootCa's CertificateRequest (requires a genuine ECDsa instance) and also signs the JWS tbsPayload via SignEs256Async, producing realistic (Read()-unverified) signature bytes.
         using ECDsa signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using var signerCertificate = MetadataBlobTestVectors.CreateMdsRootCa("CN=Test MDS Signer NonObj", signingKey);
 
         string headerJson = MetadataBlobTestVectors.BuildHeaderJson(WellKnownJwaValues.Es256, [signerCertificate.RawData]);
         const string payloadJson = "[]";
-        var blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(signingKey, data, TestContext.CancellationToken));
+        var blobBytes = await MetadataBlobTestVectors.BuildBlobBytesAsync(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256Async(signingKey, data, TestContext.CancellationToken)).ConfigureAwait(false);
 
         _ = Assert.ThrowsExactly<Fido2FormatException>(() => MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared));
     }
@@ -160,15 +160,15 @@ internal sealed class MetadataBlobReaderTests
 
     /// <summary>A Metadata BLOB Payload missing the required <c>entries</c> member is rejected.</summary>
     [TestMethod]
-    public void MissingEntriesMemberIsRejected()
+    public async Task MissingEntriesMemberIsRejected()
     {
-        //Cert-factory carve-out: backs CreateMdsRootCa's CertificateRequest (requires a genuine ECDsa instance) and also signs the JWS tbsPayload via SignEs256, producing realistic (Read()-unverified) signature bytes.
+        //Cert-factory carve-out: backs CreateMdsRootCa's CertificateRequest (requires a genuine ECDsa instance) and also signs the JWS tbsPayload via SignEs256Async, producing realistic (Read()-unverified) signature bytes.
         using ECDsa signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using var signerCertificate = MetadataBlobTestVectors.CreateMdsRootCa("CN=Test MDS Signer NoEntries", signingKey);
 
         string headerJson = MetadataBlobTestVectors.BuildHeaderJson(WellKnownJwaValues.Es256, [signerCertificate.RawData]);
         const string payloadJson = """{"no":1,"nextUpdate":"2030-01-01"}""";
-        var blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(signingKey, data, TestContext.CancellationToken));
+        var blobBytes = await MetadataBlobTestVectors.BuildBlobBytesAsync(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256Async(signingKey, data, TestContext.CancellationToken)).ConfigureAwait(false);
 
         Fido2FormatException exception = Assert.ThrowsExactly<Fido2FormatException>(() => MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared));
         Assert.Contains("entries", exception.Message, StringComparison.Ordinal);
@@ -177,16 +177,16 @@ internal sealed class MetadataBlobReaderTests
 
     /// <summary>An entry whose <c>aaguid</c> is not a canonical GUID string is rejected.</summary>
     [TestMethod]
-    public void NonCanonicalAaguidIsRejected()
+    public async Task NonCanonicalAaguidIsRejected()
     {
-        //Cert-factory carve-out: backs CreateMdsRootCa's CertificateRequest (requires a genuine ECDsa instance) and also signs the JWS tbsPayload via SignEs256, producing realistic (Read()-unverified) signature bytes.
+        //Cert-factory carve-out: backs CreateMdsRootCa's CertificateRequest (requires a genuine ECDsa instance) and also signs the JWS tbsPayload via SignEs256Async, producing realistic (Read()-unverified) signature bytes.
         using ECDsa signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using var signerCertificate = MetadataBlobTestVectors.CreateMdsRootCa("CN=Test MDS Signer BadGuid", signingKey);
 
         string headerJson = MetadataBlobTestVectors.BuildHeaderJson(WellKnownJwaValues.Es256, [signerCertificate.RawData]);
         const string entryJson = """{"aaguid":"not-a-guid","metadataStatement":{},"statusReports":[{"status":"FIDO_CERTIFIED"}]}""";
         string payloadJson = MetadataBlobTestVectors.BuildPayloadJson(1, "2030-01-01", [entryJson]);
-        var blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(signingKey, data, TestContext.CancellationToken));
+        var blobBytes = await MetadataBlobTestVectors.BuildBlobBytesAsync(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256Async(signingKey, data, TestContext.CancellationToken)).ConfigureAwait(false);
 
         _ = Assert.ThrowsExactly<Fido2FormatException>(() => MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared));
     }
@@ -194,9 +194,9 @@ internal sealed class MetadataBlobReaderTests
 
     /// <summary>Nesting beyond the reader's depth bound is rejected.</summary>
     [TestMethod]
-    public void ExcessiveNestingDepthIsRejected()
+    public async Task ExcessiveNestingDepthIsRejected()
     {
-        //Cert-factory carve-out: backs CreateMdsRootCa's CertificateRequest (requires a genuine ECDsa instance) and also signs the JWS tbsPayload via SignEs256, producing realistic (Read()-unverified) signature bytes.
+        //Cert-factory carve-out: backs CreateMdsRootCa's CertificateRequest (requires a genuine ECDsa instance) and also signs the JWS tbsPayload via SignEs256Async, producing realistic (Read()-unverified) signature bytes.
         using ECDsa signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using var signerCertificate = MetadataBlobTestVectors.CreateMdsRootCa("CN=Test MDS Signer DeepNest", signingKey);
 
@@ -204,7 +204,7 @@ internal sealed class MetadataBlobReaderTests
         string deeplyNestedValue = BuildDeeplyNestedJsonValue(24);
         string entryJson = $$"""{"aaguid":"{{Guid.NewGuid():D}}","metadataStatement":{"poison":{{deeplyNestedValue}}},"statusReports":[{"status":"FIDO_CERTIFIED"}]}""";
         string payloadJson = MetadataBlobTestVectors.BuildPayloadJson(1, "2030-01-01", [entryJson]);
-        var blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(signingKey, data, TestContext.CancellationToken));
+        var blobBytes = await MetadataBlobTestVectors.BuildBlobBytesAsync(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256Async(signingKey, data, TestContext.CancellationToken)).ConfigureAwait(false);
 
         _ = Assert.ThrowsExactly<Fido2FormatException>(() => MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared));
     }

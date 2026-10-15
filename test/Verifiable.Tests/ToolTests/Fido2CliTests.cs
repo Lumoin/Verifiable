@@ -146,7 +146,7 @@ internal sealed class Fido2CliTests
             statusReportJsons: [MetadataBlobTestVectors.BuildStatusReportJson(WellKnownAuthenticatorStatuses.FidoCertified, "2020-01-01")]);
         string headerJson = MetadataBlobTestVectors.BuildHeaderJson(WellKnownJwaValues.Es256, [mdsSigningCertificate.RawData]);
         string payloadJson = MetadataBlobTestVectors.BuildPayloadJson(1, "2099-01-01", [entryJson]);
-        var blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(mdsSigningKey, data, TestContext.CancellationToken));
+        var blobBytes = await MetadataBlobTestVectors.BuildBlobBytesAsync(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256Async(mdsSigningKey, data, TestContext.CancellationToken)).ConfigureAwait(false);
 
         string attestationObjectPath = WriteTempFile("attestation-object.cbor", fixture.AttestationObjectBytes);
         string clientDataPath = WriteTempFile("client-data.json", fixture.ClientDataJsonBytes);

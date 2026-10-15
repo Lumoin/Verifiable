@@ -36,10 +36,10 @@ internal sealed class MetadataBlobPayloadQueriesTests
     /// mutation that would instead throw on <c>StatusReports[0]</c> or silently reject the entry.
     /// </summary>
     [TestMethod]
-    public void EvaluateStatusWithZeroStatusReportsAcceptsWithNoDecidingReport()
+    public async Task EvaluateStatusWithZeroStatusReportsAcceptsWithNoDecidingReport()
     {
         string entryJson = MetadataBlobTestVectors.BuildEntryJson(aaguid: Guid.NewGuid(), statusReportJsons: []);
-        using var blob = ParseSingleEntryBlob(entryJson, TestContext.CancellationToken);
+        using var blob = await ParseSingleEntryBlobAsync(entryJson, TestContext.CancellationToken).ConfigureAwait(false);
         MetadataBlobPayloadEntry entry = blob.Payload.Entries[0];
         Assert.IsEmpty(entry.StatusReports);
 
@@ -58,11 +58,11 @@ internal sealed class MetadataBlobPayloadQueriesTests
     [TestMethod]
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "The out entry aliases an element already owned by blob.Payload.Entries, disposed via blob.Dispose() — not separately; the analyzer cannot see that ownership relationship from the call site alone.")]
-    public void TryFindEntryByAttestationCertificateKeyIdentifierFindsExactMatch()
+    public async Task TryFindEntryByAttestationCertificateKeyIdentifierFindsExactMatch()
     {
         const string keyIdentifier = "aabbccddeeff00112233445566778899aabbccdd";
         string entryJson = MetadataBlobTestVectors.BuildEntryJson(attestationCertificateKeyIdentifiers: [keyIdentifier]);
-        using var blob = ParseSingleEntryBlob(entryJson, TestContext.CancellationToken);
+        using var blob = await ParseSingleEntryBlobAsync(entryJson, TestContext.CancellationToken).ConfigureAwait(false);
 
         bool found = MetadataBlobPayloadQueries.TryFindEntryByAttestationCertificateKeyIdentifier(blob.Payload, keyIdentifier, out MetadataBlobPayloadEntry? entry);
 
@@ -78,10 +78,10 @@ internal sealed class MetadataBlobPayloadQueriesTests
     [TestMethod]
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "TryFindEntryByAttestationCertificateKeyIdentifier reports a miss here, so the out entry is null — there is nothing to dispose; the analyzer cannot see that from the call site alone.")]
-    public void TryFindEntryByAttestationCertificateKeyIdentifierReportsMissForUnknownIdentifier()
+    public async Task TryFindEntryByAttestationCertificateKeyIdentifierReportsMissForUnknownIdentifier()
     {
         string entryJson = MetadataBlobTestVectors.BuildEntryJson(attestationCertificateKeyIdentifiers: ["aabbccddeeff00112233445566778899aabbccdd"]);
-        using var blob = ParseSingleEntryBlob(entryJson, TestContext.CancellationToken);
+        using var blob = await ParseSingleEntryBlobAsync(entryJson, TestContext.CancellationToken).ConfigureAwait(false);
 
         bool found = MetadataBlobPayloadQueries.TryFindEntryByAttestationCertificateKeyIdentifier(blob.Payload, "0011223344556677889900112233445566778899", out MetadataBlobPayloadEntry? entry);
 
@@ -99,11 +99,11 @@ internal sealed class MetadataBlobPayloadQueriesTests
     [TestMethod]
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "TryFindEntryByAttestationCertificateKeyIdentifier reports a miss here, so the out entry is null — there is nothing to dispose; the analyzer cannot see that from the call site alone.")]
-    public void TryFindEntryByAttestationCertificateKeyIdentifierComparisonIsCaseSensitive()
+    public async Task TryFindEntryByAttestationCertificateKeyIdentifierComparisonIsCaseSensitive()
     {
         const string keyIdentifier = "aabbccddeeff00112233445566778899aabbccdd";
         string entryJson = MetadataBlobTestVectors.BuildEntryJson(attestationCertificateKeyIdentifiers: [keyIdentifier]);
-        using var blob = ParseSingleEntryBlob(entryJson, TestContext.CancellationToken);
+        using var blob = await ParseSingleEntryBlobAsync(entryJson, TestContext.CancellationToken).ConfigureAwait(false);
 
         bool found = MetadataBlobPayloadQueries.TryFindEntryByAttestationCertificateKeyIdentifier(blob.Payload, keyIdentifier.ToUpperInvariant(), out MetadataBlobPayloadEntry? entry);
 
@@ -136,7 +136,7 @@ internal sealed class MetadataBlobPayloadQueriesTests
         string expectedHexSki = Convert.ToHexStringLower(expectedSkiExtension.SubjectKeyIdentifierBytes.Span);
 
         string entryJson = MetadataBlobTestVectors.BuildEntryJson(attestationCertificateKeyIdentifiers: [expectedHexSki]);
-        using var blob = ParseSingleEntryBlob(entryJson, TestContext.CancellationToken);
+        using var blob = await ParseSingleEntryBlobAsync(entryJson, TestContext.CancellationToken).ConfigureAwait(false);
         using PkiCertificateMemory certificateMemory = MetadataBlobTestVectors.ToPkiCertificateMemory(attestationCertificate.RawData);
 
         (bool isFound, MetadataBlobPayloadEntry? entry) = await MetadataBlobPayloadQueries.TryFindEntryByAttestationCertificateKeyIdentifierAsync(
@@ -158,7 +158,7 @@ internal sealed class MetadataBlobPayloadQueriesTests
     {
         const string keyIdentifier = "aabbccddeeff00112233445566778899aabbccdd";
         string entryJson = MetadataBlobTestVectors.BuildEntryJson(attestationCertificateKeyIdentifiers: [keyIdentifier]);
-        using var blob = ParseSingleEntryBlob(entryJson, TestContext.CancellationToken);
+        using var blob = await ParseSingleEntryBlobAsync(entryJson, TestContext.CancellationToken).ConfigureAwait(false);
 
         //The key feeds MetadataBlobTestVectors.CreateMdsRootCa's CertificateRequest-based minting, the
         //test-side X.509 certificate factory carve-out — the certificate itself is the fixture, not the key.
@@ -183,7 +183,7 @@ internal sealed class MetadataBlobPayloadQueriesTests
     /// <c>MetadataBlobVerificationTests.AttestationKeyCompromiseRejectsTrustUnderDefaultPolicy</c> proves.
     /// </summary>
     [TestMethod]
-    public void DecidingStatusReportCarriesCertificateWhenPresent()
+    public async Task DecidingStatusReportCarriesCertificateWhenPresent()
     {
         //The key feeds MetadataBlobTestVectors.CreateMdsRootCa's CertificateRequest-based minting, the
         //test-side X.509 certificate factory carve-out — the certificate itself is the fixture, not the key.
@@ -193,7 +193,7 @@ internal sealed class MetadataBlobPayloadQueriesTests
 
         string statusReportJson = MetadataBlobTestVectors.BuildStatusReportJson(WellKnownAuthenticatorStatuses.AttestationKeyCompromise, "2025-01-01", certificateBase64);
         string entryJson = MetadataBlobTestVectors.BuildEntryJson(aaguid: Guid.NewGuid(), statusReportJsons: [statusReportJson]);
-        using var blob = ParseSingleEntryBlob(entryJson, TestContext.CancellationToken);
+        using var blob = await ParseSingleEntryBlobAsync(entryJson, TestContext.CancellationToken).ConfigureAwait(false);
         MetadataBlobPayloadEntry entry = blob.Payload.Entries[0];
 
         MetadataStatusEvaluation evaluation = MetadataBlobPayloadQueries.EvaluateStatus(entry);
@@ -212,12 +212,12 @@ internal sealed class MetadataBlobPayloadQueriesTests
     /// unrecognized value proves it holds rather than merely being structurally compatible with it.
     /// </summary>
     [TestMethod]
-    public void UnrecognizedStatusValueIsSilentlyAcceptedRatherThanRejected()
+    public async Task UnrecognizedStatusValueIsSilentlyAcceptedRatherThanRejected()
     {
         const string inventedStatus = "SOME_FUTURE_STATUS";
         string statusReportJson = MetadataBlobTestVectors.BuildStatusReportJson(inventedStatus, "2025-01-01");
         string entryJson = MetadataBlobTestVectors.BuildEntryJson(aaguid: Guid.NewGuid(), statusReportJsons: [statusReportJson]);
-        using var blob = ParseSingleEntryBlob(entryJson, TestContext.CancellationToken);
+        using var blob = await ParseSingleEntryBlobAsync(entryJson, TestContext.CancellationToken).ConfigureAwait(false);
         MetadataBlobPayloadEntry entry = blob.Payload.Entries[0];
 
         MetadataStatusEvaluation evaluation = MetadataBlobPayloadQueries.EvaluateStatus(entry);
@@ -235,10 +235,10 @@ internal sealed class MetadataBlobPayloadQueriesTests
     /// caller always supplies exactly one root certificate).
     /// </summary>
     [TestMethod]
-    public void GetAttestationTrustAnchorsReturnsEmptyWhenMemberIsAbsent()
+    public async Task GetAttestationTrustAnchorsReturnsEmptyWhenMemberIsAbsent()
     {
         string entryJson = MetadataBlobTestVectors.BuildEntryJson(aaguid: Guid.NewGuid());
-        using var blob = ParseSingleEntryBlob(entryJson, TestContext.CancellationToken);
+        using var blob = await ParseSingleEntryBlobAsync(entryJson, TestContext.CancellationToken).ConfigureAwait(false);
         MetadataBlobPayloadEntry entry = blob.Payload.Entries[0];
         Assert.IsNull(entry.AttestationRootCertificates);
 
@@ -254,11 +254,11 @@ internal sealed class MetadataBlobPayloadQueriesTests
     /// "member absent" case above, both routed through the same <c>{ Count: &gt; 0 }</c> guard.
     /// </summary>
     [TestMethod]
-    public void GetAttestationTrustAnchorsReturnsEmptyWhenArrayIsPresentButEmpty()
+    public async Task GetAttestationTrustAnchorsReturnsEmptyWhenArrayIsPresentButEmpty()
     {
         string metadataStatementJson = MetadataBlobTestVectors.BuildMetadataStatementJson(attestationRootCertificates: []);
         string entryJson = MetadataBlobTestVectors.BuildEntryJson(aaguid: Guid.NewGuid(), metadataStatementJson: metadataStatementJson);
-        using var blob = ParseSingleEntryBlob(entryJson, TestContext.CancellationToken);
+        using var blob = await ParseSingleEntryBlobAsync(entryJson, TestContext.CancellationToken).ConfigureAwait(false);
         MetadataBlobPayloadEntry entry = blob.Payload.Entries[0];
         Assert.IsNotNull(entry.AttestationRootCertificates);
         Assert.IsEmpty(entry.AttestationRootCertificates);
@@ -275,7 +275,7 @@ internal sealed class MetadataBlobPayloadQueriesTests
     /// leave the first-listed report deciding instead, flipping this assertion.
     /// </summary>
     [TestMethod]
-    public void EvaluateStatusTieBreakWithEqualDatesPicksLastInWireOrder()
+    public async Task EvaluateStatusTieBreakWithEqualDatesPicksLastInWireOrder()
     {
         string[] statusReports =
         [
@@ -283,7 +283,7 @@ internal sealed class MetadataBlobPayloadQueriesTests
             MetadataBlobTestVectors.BuildStatusReportJson(WellKnownAuthenticatorStatuses.Revoked, "2025-01-01")
         ];
         string entryJson = MetadataBlobTestVectors.BuildEntryJson(aaguid: Guid.NewGuid(), statusReportJsons: statusReports);
-        using var blob = ParseSingleEntryBlob(entryJson, TestContext.CancellationToken);
+        using var blob = await ParseSingleEntryBlobAsync(entryJson, TestContext.CancellationToken).ConfigureAwait(false);
         MetadataBlobPayloadEntry entry = blob.Payload.Entries[0];
 
         MetadataStatusEvaluation evaluation = MetadataBlobPayloadQueries.EvaluateStatus(entry);
@@ -301,7 +301,7 @@ internal sealed class MetadataBlobPayloadQueriesTests
     /// they happen to coincide.
     /// </summary>
     [TestMethod]
-    public void EvaluateStatusTieBreakWithBothReportsUndatedPicksLastInWireOrder()
+    public async Task EvaluateStatusTieBreakWithBothReportsUndatedPicksLastInWireOrder()
     {
         string[] statusReports =
         [
@@ -309,7 +309,7 @@ internal sealed class MetadataBlobPayloadQueriesTests
             MetadataBlobTestVectors.BuildStatusReportJson(WellKnownAuthenticatorStatuses.Revoked)
         ];
         string entryJson = MetadataBlobTestVectors.BuildEntryJson(aaguid: Guid.NewGuid(), statusReportJsons: statusReports);
-        using var blob = ParseSingleEntryBlob(entryJson, TestContext.CancellationToken);
+        using var blob = await ParseSingleEntryBlobAsync(entryJson, TestContext.CancellationToken).ConfigureAwait(false);
         MetadataBlobPayloadEntry entry = blob.Payload.Entries[0];
 
         MetadataStatusEvaluation evaluation = MetadataBlobPayloadQueries.EvaluateStatus(entry);
@@ -328,7 +328,7 @@ internal sealed class MetadataBlobPayloadQueriesTests
     /// <param name="entryJson">The single entry's JSON text.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The verified projection of the parsed BLOB; the caller owns and disposes it.</returns>
-    private static MetadataBlob ParseSingleEntryBlob(string entryJson, CancellationToken cancellationToken)
+    private static async ValueTask<MetadataBlob> ParseSingleEntryBlobAsync(string entryJson, CancellationToken cancellationToken)
     {
         //The key feeds MetadataBlobTestVectors.CreateMdsRootCa's CertificateRequest-based minting, the
         //test-side X.509 certificate factory carve-out, and is reused below to sign the BLOB bytes themselves.
@@ -337,7 +337,7 @@ internal sealed class MetadataBlobPayloadQueriesTests
 
         string headerJson = MetadataBlobTestVectors.BuildHeaderJson(WellKnownJwaValues.Es256, [signerCertificate.RawData]);
         string payloadJson = MetadataBlobTestVectors.BuildPayloadJson(1, "2030-01-01", [entryJson]);
-        var blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(signingKey, data, cancellationToken));
+        var blobBytes = await MetadataBlobTestVectors.BuildBlobBytesAsync(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256Async(signingKey, data, cancellationToken)).ConfigureAwait(false);
 
         UnverifiedMetadataBlob unverifiedBlob = MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared);
 

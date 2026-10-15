@@ -215,10 +215,10 @@ internal sealed class DidResolutionHttpBindingTests
         using WebVhController controller = WebVhController.Create();
         using WebVhController authentication = WebVhController.Create();
         WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(
-            Domain, controller, GenesisTime, authentication: authentication, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            Domain, controller, GenesisTime, new WebVhGenesisOptions { Authentication = authentication }, TestContext.CancellationToken).ConfigureAwait(false);
 
         string whois = await WebVhTestLog.MintWhoisPresentationAsync(
-            log.Did, authentication, GenesisTime, SerializePresentation, SerializeProofOptions, TestContext.CancellationToken).ConfigureAwait(false);
+            log.Did, authentication, GenesisTime, SerializePresentation, SerializeProofOptions, boundChallenge: null, boundDomain: null, verificationMethodId: null, TestContext.CancellationToken).ConfigureAwait(false);
 
         var routes = LogRoutes(log);
         routes[WhoisUrl] = (200, Encoding.UTF8.GetBytes(whois), WellKnownWebVhValues.WhoisMediaType);
@@ -320,10 +320,10 @@ internal sealed class DidResolutionHttpBindingTests
         using WebVhController controller = WebVhController.Create();
         using WebVhController authentication = WebVhController.Create();
         WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(
-            Domain, controller, GenesisTime, authentication: authentication, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            Domain, controller, GenesisTime, new WebVhGenesisOptions { Authentication = authentication }, TestContext.CancellationToken).ConfigureAwait(false);
 
         string whois = await WebVhTestLog.MintWhoisPresentationAsync(
-            log.Did, authentication, GenesisTime, SerializePresentation, SerializeProofOptions, TestContext.CancellationToken).ConfigureAwait(false);
+            log.Did, authentication, GenesisTime, SerializePresentation, SerializeProofOptions, boundChallenge: null, boundDomain: null, verificationMethodId: null, TestContext.CancellationToken).ConfigureAwait(false);
 
         //Flip the last character of the proofValue so the presentation's signature no longer verifies; the
         //dereferencer's whois verify is load-bearing through the binding, so the failure must surface as the

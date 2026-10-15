@@ -60,7 +60,7 @@ public static class BouncyCastleRecoverableSignatureFunctions
     /// <param name="signaturePool">The memory pool used to allocate the signature buffer.</param>
     /// <param name="timeProvider">Supplies the timestamp recorded on the produced <see cref="SignatureProducedEvent"/>.</param>
     /// <param name="context">Optional context dictionary. Reserved for future use.</param>
-    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <param name="cancellationToken">Observed before the key is parsed, so a cancelled operation signs nothing.</param>
     /// <returns>
     /// A pool-allocated signature tagged with <see cref="CryptoTags.RsaIso9796d2Signature"/>, paired with
     /// the <see cref="SignatureProducedEvent"/> describing the operation. Matches
@@ -77,6 +77,7 @@ public static class BouncyCastleRecoverableSignatureFunctions
     {
         ArgumentNullException.ThrowIfNull(signaturePool);
         ArgumentNullException.ThrowIfNull(timeProvider);
+        cancellationToken.ThrowIfCancellationRequested();
 
         ProviderOperation operation = new(nameof(SignRsaIso9796d2Async));
         using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.Sign);
@@ -134,7 +135,7 @@ public static class BouncyCastleRecoverableSignatureFunctions
     /// <param name="publicKeyMaterial">The DER <c>RSAPublicKey</c> (modulus and public exponent), as carried in EF.DG15.</param>
     /// <param name="timeProvider">Supplies the timestamp recorded on the produced <see cref="VerificationCompletedEvent"/>.</param>
     /// <param name="context">Optional context dictionary. Reserved for future use.</param>
-    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <param name="cancellationToken">Observed before the key is parsed, so a cancelled operation signs nothing.</param>
     /// <returns>
     /// <see langword="true"/> if the signature verifies under any recognised trailer/hash pairing; otherwise
     /// <see langword="false"/>, paired with a <see cref="VerificationCompletedEvent"/> when the verification

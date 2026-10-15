@@ -83,10 +83,10 @@ internal static class CardVerifiableCertificateMinter
     /// <param name="expiration">The certificate expiration date.</param>
     /// <param name="inheritedCurve">The issuing curve for a certificate that omits its domain parameters, or <see langword="null"/> for a self-signed CVCA certificate.</param>
     /// <param name="pool">The memory pool for the encoding and the parsed carrier.</param>
+    /// <param name="terminalType">The terminal type the Certificate Holder Authorization Template declares, selecting the object identifier and discretionary-data layout (id-AT with a five-octet value, or id-IS with a single octet).</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <param name="terminalType">The terminal type the Certificate Holder Authorization Template declares, selecting the object identifier and discretionary-data layout (id-AT with a five-octet value, or id-IS with a single octet). Defaults to an Authentication Terminal.</param>
-    /// <returns>The parsed certificate. The caller disposes it.</returns>
-    public static CardVerifiableCertificate Mint(
+    /// <returns>The parsed certificate, once the body is signed. The caller disposes it.</returns>
+    public static ValueTask<CardVerifiableCertificate> MintAsync(
         ECDsa issuerKey,
         ECDsa subjectKey,
         string certificationAuthorityReference,
@@ -97,9 +97,9 @@ internal static class CardVerifiableCertificateMinter
         DateOnly expiration,
         Tag? inheritedCurve,
         BaseMemoryPool pool,
-        CancellationToken cancellationToken,
-        TerminalType terminalType = TerminalType.AuthenticationTerminal) =>
-        MintCore(new IssuerKey(issuerKey), new SubjectPublicKey(subjectKey, includeDomainParameters), certificationAuthorityReference, certificateHolderReference, authorizationOctet, effective, expiration, inheritedCurve, pool, terminalType, tamperSignature: false, cancellationToken);
+        TerminalType terminalType,
+        CancellationToken cancellationToken) =>
+        MintCoreAsync(new IssuerKey(issuerKey), new SubjectPublicKey(subjectKey, includeDomainParameters), certificationAuthorityReference, certificateHolderReference, authorizationOctet, effective, expiration, inheritedCurve, pool, terminalType, tamperSignature: false, cancellationToken);
 
 
     /// <summary>
@@ -118,10 +118,10 @@ internal static class CardVerifiableCertificateMinter
     /// <param name="expiration">The certificate expiration date.</param>
     /// <param name="inheritedCurve">The issuing curve the subject inherits.</param>
     /// <param name="pool">The memory pool for the encoding and the parsed carrier.</param>
+    /// <param name="terminalType">The terminal type the Certificate Holder Authorization Template declares.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <param name="terminalType">The terminal type the Certificate Holder Authorization Template declares. Defaults to an Authentication Terminal.</param>
-    /// <returns>The parsed certificate. The caller disposes it.</returns>
-    public static CardVerifiableCertificate Mint(
+    /// <returns>The parsed certificate, once the body is signed. The caller disposes it.</returns>
+    public static ValueTask<CardVerifiableCertificate> MintAsync(
         ECDsa issuerKey,
         ReadOnlyMemory<byte> subjectPublicPoint,
         string certificationAuthorityReference,
@@ -131,9 +131,9 @@ internal static class CardVerifiableCertificateMinter
         DateOnly expiration,
         Tag? inheritedCurve,
         BaseMemoryPool pool,
-        CancellationToken cancellationToken,
-        TerminalType terminalType = TerminalType.AuthenticationTerminal) =>
-        MintCore(new IssuerKey(issuerKey), new SubjectPublicKey(subjectPublicPoint), certificationAuthorityReference, certificateHolderReference, authorizationOctet, effective, expiration, inheritedCurve, pool, terminalType, tamperSignature: false, cancellationToken);
+        TerminalType terminalType,
+        CancellationToken cancellationToken) =>
+        MintCoreAsync(new IssuerKey(issuerKey), new SubjectPublicKey(subjectPublicPoint), certificationAuthorityReference, certificateHolderReference, authorizationOctet, effective, expiration, inheritedCurve, pool, terminalType, tamperSignature: false, cancellationToken);
 
 
     /// <summary>
@@ -150,10 +150,10 @@ internal static class CardVerifiableCertificateMinter
     /// <param name="effective">The certificate effective date.</param>
     /// <param name="expiration">The certificate expiration date.</param>
     /// <param name="pool">The memory pool for the encoding and the parsed carrier.</param>
+    /// <param name="terminalType">The terminal type the Certificate Holder Authorization Template declares.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <param name="terminalType">The terminal type the Certificate Holder Authorization Template declares. Defaults to an Authentication Terminal.</param>
-    /// <returns>The parsed certificate. The caller disposes it.</returns>
-    public static CardVerifiableCertificate Mint(
+    /// <returns>The parsed certificate, once the body is signed. The caller disposes it.</returns>
+    public static ValueTask<CardVerifiableCertificate> MintAsync(
         ECDsa issuerKey,
         RSA subjectKey,
         string certificationAuthorityReference,
@@ -162,9 +162,9 @@ internal static class CardVerifiableCertificateMinter
         DateOnly effective,
         DateOnly expiration,
         BaseMemoryPool pool,
-        CancellationToken cancellationToken,
-        TerminalType terminalType = TerminalType.AuthenticationTerminal) =>
-        MintCore(new IssuerKey(issuerKey), new SubjectPublicKey(subjectKey), certificationAuthorityReference, certificateHolderReference, authorizationOctet, effective, expiration, inheritedCurve: null, pool, terminalType, tamperSignature: false, cancellationToken);
+        TerminalType terminalType,
+        CancellationToken cancellationToken) =>
+        MintCoreAsync(new IssuerKey(issuerKey), new SubjectPublicKey(subjectKey), certificationAuthorityReference, certificateHolderReference, authorizationOctet, effective, expiration, inheritedCurve: null, pool, terminalType, tamperSignature: false, cancellationToken);
 
 
     /// <summary>
@@ -181,10 +181,10 @@ internal static class CardVerifiableCertificateMinter
     /// <param name="effective">The certificate effective date.</param>
     /// <param name="expiration">The certificate expiration date.</param>
     /// <param name="pool">The memory pool for the encoding and the parsed carrier.</param>
+    /// <param name="terminalType">The terminal type the Certificate Holder Authorization Template declares.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <param name="terminalType">The terminal type the Certificate Holder Authorization Template declares. Defaults to an Authentication Terminal.</param>
-    /// <returns>The parsed certificate. The caller disposes it.</returns>
-    public static CardVerifiableCertificate Mint(
+    /// <returns>The parsed certificate, once the body is signed. The caller disposes it.</returns>
+    public static ValueTask<CardVerifiableCertificate> MintAsync(
         RSA issuerKey,
         RSA subjectKey,
         string certificationAuthorityReference,
@@ -193,16 +193,16 @@ internal static class CardVerifiableCertificateMinter
         DateOnly effective,
         DateOnly expiration,
         BaseMemoryPool pool,
-        CancellationToken cancellationToken,
-        TerminalType terminalType = TerminalType.AuthenticationTerminal) =>
-        MintCore(new IssuerKey(issuerKey), new SubjectPublicKey(subjectKey), certificationAuthorityReference, certificateHolderReference, authorizationOctet, effective, expiration, inheritedCurve: null, pool, terminalType, tamperSignature: false, cancellationToken);
+        TerminalType terminalType,
+        CancellationToken cancellationToken) =>
+        MintCoreAsync(new IssuerKey(issuerKey), new SubjectPublicKey(subjectKey), certificationAuthorityReference, certificateHolderReference, authorizationOctet, effective, expiration, inheritedCurve: null, pool, terminalType, tamperSignature: false, cancellationToken);
 
 
     /// <summary>
     /// Mints a card-verifiable certificate whose signature has been corrupted, for the rejection tests. The
     /// structure parses, but the signature does not verify against the issuer's public key.
     /// </summary>
-    public static CardVerifiableCertificate MintWithTamperedSignature(
+    public static ValueTask<CardVerifiableCertificate> MintWithTamperedSignatureAsync(
         ECDsa issuerKey,
         ECDsa subjectKey,
         string certificationAuthorityReference,
@@ -213,9 +213,9 @@ internal static class CardVerifiableCertificateMinter
         DateOnly expiration,
         Tag? inheritedCurve,
         BaseMemoryPool pool,
-        CancellationToken cancellationToken,
-        TerminalType terminalType = TerminalType.AuthenticationTerminal) =>
-        MintCore(new IssuerKey(issuerKey), new SubjectPublicKey(subjectKey, includeDomainParameters), certificationAuthorityReference, certificateHolderReference, authorizationOctet, effective, expiration, inheritedCurve, pool, terminalType, tamperSignature: true, cancellationToken);
+        TerminalType terminalType,
+        CancellationToken cancellationToken) =>
+        MintCoreAsync(new IssuerKey(issuerKey), new SubjectPublicKey(subjectKey, includeDomainParameters), certificationAuthorityReference, certificateHolderReference, authorizationOctet, effective, expiration, inheritedCurve, pool, terminalType, tamperSignature: true, cancellationToken);
 
 
     /// <summary>
@@ -223,7 +223,7 @@ internal static class CardVerifiableCertificateMinter
     /// corrupted, for the RSA chain rejection test. The structure parses, but the RSA signature does not
     /// verify against the issuer's public key.
     /// </summary>
-    public static CardVerifiableCertificate MintWithTamperedSignature(
+    public static ValueTask<CardVerifiableCertificate> MintWithTamperedSignatureAsync(
         RSA issuerKey,
         RSA subjectKey,
         string certificationAuthorityReference,
@@ -232,13 +232,30 @@ internal static class CardVerifiableCertificateMinter
         DateOnly effective,
         DateOnly expiration,
         BaseMemoryPool pool,
-        CancellationToken cancellationToken,
-        TerminalType terminalType = TerminalType.AuthenticationTerminal) =>
-        MintCore(new IssuerKey(issuerKey), new SubjectPublicKey(subjectKey), certificationAuthorityReference, certificateHolderReference, authorizationOctet, effective, expiration, inheritedCurve: null, pool, terminalType, tamperSignature: true, cancellationToken);
+        TerminalType terminalType,
+        CancellationToken cancellationToken) =>
+        MintCoreAsync(new IssuerKey(issuerKey), new SubjectPublicKey(subjectKey), certificationAuthorityReference, certificateHolderReference, authorizationOctet, effective, expiration, inheritedCurve: null, pool, terminalType, tamperSignature: true, cancellationToken);
 
 
+    /// <summary>
+    /// Mints every form of certificate the public mints offer: encodes the body over the subject key, signs it with the
+    /// issuer key, optionally corrupts the signature's last octet, assembles the outer certificate and parses it back.
+    /// </summary>
+    /// <param name="issuerKey">The key signing the certificate body.</param>
+    /// <param name="subjectKey">The public key the certificate carries.</param>
+    /// <param name="certificationAuthorityReference">The issuer's holder reference (DO'42').</param>
+    /// <param name="certificateHolderReference">The subject's holder reference (DO'5F20').</param>
+    /// <param name="authorizationOctet">The first relative-authorization octet.</param>
+    /// <param name="effective">The certificate effective date.</param>
+    /// <param name="expiration">The certificate expiration date.</param>
+    /// <param name="inheritedCurve">The issuing curve for a certificate that omits its domain parameters, or <see langword="null"/>.</param>
+    /// <param name="pool">The memory pool for the encoding and the parsed carrier.</param>
+    /// <param name="terminalType">The terminal type the Certificate Holder Authorization Template declares.</param>
+    /// <param name="tamperSignature">Whether the signature's last octet is flipped so the certificate no longer verifies.</param>
+    /// <param name="cancellationToken">Cancels the signing.</param>
+    /// <returns>The parsed certificate. The caller disposes it.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the parsed certificate transfers to the caller, which disposes it; the rented encoding buffers are disposed by their using declarations.")]
-    private static CardVerifiableCertificate MintCore(
+    private static async ValueTask<CardVerifiableCertificate> MintCoreAsync(
         IssuerKey issuerKey,
         SubjectPublicKey subjectKey,
         string certificationAuthorityReference,
@@ -262,8 +279,9 @@ internal static class CardVerifiableCertificateMinter
 
         //Sign the body; the issuer key is independent of the library wiring under test (ECDSA r||s, or RSA
         //PKCS#1 v1.5 over SHA-256 for an id-TA-RSA-v1-5-SHA-256 issuer).
-        using var signatureOwner = SignBody(issuerKey, body, pool, out int signatureLength, cancellationToken);
-        Span<byte> signature = signatureOwner.Memory.Span[..signatureLength];
+        using var bodySignature = await SignBodyAsync(issuerKey, body, pool, cancellationToken).ConfigureAwait(false);
+        var signatureLength = bodySignature.Length;
+        var signature = bodySignature.Octets.Memory.Span[..signatureLength];
         if(tamperSignature)
         {
             signature[signatureLength - 1] ^= 0xFF;
@@ -289,57 +307,50 @@ internal static class CardVerifiableCertificateMinter
     /// issuer produces a plain <c>r ‖ s</c> ECDSA signature over SHA-256 (the id-TA-ECDSA-SHA-256 form), an RSA
     /// issuer a PKCS#1 v1.5 signature over SHA-256 (the id-TA-RSA-v1-5-SHA-256 form).
     /// </summary>
+    /// <param name="issuerKey">The key signing the body.</param>
+    /// <param name="body">The encoded certificate body the signature covers.</param>
+    /// <param name="pool">The memory pool for the private key's transient copy and the signature's octets.</param>
+    /// <param name="cancellationToken">Cancels the signing.</param>
+    /// <returns>The signature in pooled octets, which the caller disposes.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the caller, which disposes it via a using declaration.")]
-    private static IMemoryOwner<byte> SignBody(IssuerKey issuerKey, ReadOnlyMemory<byte> body, BaseMemoryPool pool, out int length, CancellationToken cancellationToken)
+    private static async ValueTask<BodySignature> SignBodyAsync(IssuerKey issuerKey, ReadOnlyMemory<byte> body, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
-        if(issuerKey.Rsa is RSA rsa)
-        {
-            byte[] exportedRsaPrivateKey = rsa.ExportRSAPrivateKey();
-            using IMemoryOwner<byte> rsaPrivateKeyOwner = pool.Rent(exportedRsaPrivateKey.Length, AllocationKind.Pinned);
-            exportedRsaPrivateKey.CopyTo(rsaPrivateKeyOwner.Memory);
-            CryptographicOperations.ZeroMemory(exportedRsaPrivateKey);
+        var isRsaIssuer = issuerKey.Rsa is not null;
+        var exportedPrivateKey = isRsaIssuer ? issuerKey.Rsa!.ExportRSAPrivateKey() : issuerKey.EllipticCurve!.ExportParameters(true).D!;
+        using var privateKeyOwner = pool.Rent(exportedPrivateKey.Length, AllocationKind.Pinned);
+        exportedPrivateKey.CopyTo(privateKeyOwner.Memory);
+        CryptographicOperations.ZeroMemory(exportedPrivateKey);
 
-            SigningDelegate signRsa = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.RsaSha256, Purpose.Signing);
-            using var rsaSignature = signRsa(rsaPrivateKeyOwner.Memory, body, pool, null, cancellationToken).AsTask().GetAwaiter().GetResult().Signature;
-            IMemoryOwner<byte> rsaOwner = pool.Rent(rsaSignature.Length);
-            try
-            {
-                rsaSignature.AsReadOnlySpan().CopyTo(rsaOwner.Memory.Span);
-                length = rsaSignature.Length;
-
-                return rsaOwner;
-            }
-            catch
-            {
-                rsaOwner.Dispose();
-
-                throw;
-            }
-        }
-
-        byte[] exportedEcPrivateKey = issuerKey.EllipticCurve!.ExportParameters(true).D!;
-        using IMemoryOwner<byte> ecPrivateKeyOwner = pool.Rent(exportedEcPrivateKey.Length, AllocationKind.Pinned);
-        exportedEcPrivateKey.CopyTo(ecPrivateKeyOwner.Memory);
-        CryptographicOperations.ZeroMemory(exportedEcPrivateKey);
-
-        SigningDelegate signEc = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.P256, Purpose.Signing);
-        using var ecdsaSignature = signEc(ecPrivateKeyOwner.Memory, body, pool, null, cancellationToken).AsTask().GetAwaiter().GetResult().Signature;
-        IMemoryOwner<byte> ecOwner = pool.Rent(ecdsaSignature.Length);
+        var sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(isRsaIssuer ? CryptoAlgorithm.RsaSha256 : CryptoAlgorithm.P256, Purpose.Signing);
+        var signingResult = await sign(privateKeyOwner.Memory, body, pool, null, cancellationToken).ConfigureAwait(false);
+        using var signature = signingResult.Signature;
+        var octets = pool.Rent(signature.Length);
         try
         {
-            ecdsaSignature.AsReadOnlySpan().CopyTo(ecOwner.Memory.Span);
-            length = ecdsaSignature.Length;
+            signature.AsReadOnlySpan().CopyTo(octets.Memory.Span);
 
-            return ecOwner;
+            return new BodySignature(octets, signature.Length);
         }
         catch
         {
-            ecOwner.Dispose();
+            octets.Dispose();
 
             throw;
         }
     }
 
+
+    /// <summary>
+    /// A signature over a certificate body: the pooled octets it is written into and how many of them it fills. Disposing it
+    /// returns the octets to their pool.
+    /// </summary>
+    /// <param name="Octets">The pooled octets holding the signature.</param>
+    /// <param name="Length">How many of the octets the signature fills.</param>
+    private sealed record BodySignature(IMemoryOwner<byte> Octets, int Length): IDisposable
+    {
+        /// <summary>Returns the signature's octets to their pool.</summary>
+        public void Dispose() => Octets.Dispose();
+    }
 
     /// <summary>
     /// Writes the certificate body (7F4E): profile identifier, certification authority reference, public key,

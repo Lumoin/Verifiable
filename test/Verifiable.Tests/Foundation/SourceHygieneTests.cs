@@ -957,14 +957,11 @@ internal sealed class SourceHygieneTests
     /// </summary>
     private static IReadOnlyDictionary<string, int> BlockingGetResultAllowlist { get; } = new Dictionary<string, int>
     {
-        ["test/Verifiable.Tests/Apdu/CardVerifiableCertificateMinter.cs"] = 2,
         ["test/Verifiable.Tests/Cryptography/XAdESRealWireEndToEndTests.cs"] = 1,
         ["test/Verifiable.Tests/Cryptography/XAdESSignatureFactsTests.cs"] = 6,
         ["test/Verifiable.Tests/DidComm/DidCommRoutingForwardTests.cs"] = 1,
         ["test/Verifiable.Tests/DidComm/DidCommSocketSessionTests.cs"] = 2,
-        ["test/Verifiable.Tests/Fido2/MetadataBlobTestVectors.cs"] = 2,
         ["test/Verifiable.Tests/Resolver/WebPlusUpdateRulePropertyTests.cs"] = 1,
-        ["test/Verifiable.Tests/TestInfrastructure/SyntheticPassportFactory.cs"] = 1,
         ["test/Verifiable.Tests/Xml/XmlSignatureInteropCorpusGenerator.cs"] = 1,
     };
 

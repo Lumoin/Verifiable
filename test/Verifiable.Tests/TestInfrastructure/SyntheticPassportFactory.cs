@@ -318,7 +318,7 @@ internal static class SyntheticPassportFactory
     /// <c>nextUpdate</c> element from the TBSCertList, and re-signs the result with <paramref name="issuerKey"/>.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the pooled CRL carrier transfers to the caller, which disposes it.")]
-    public static PkiCertificateMemory MintCrlWithoutNextUpdate(X509Certificate2 issuer, ECDsa issuerKey, DateTimeOffset thisUpdate, CancellationToken cancellationToken)
+    public static async ValueTask<PkiCertificateMemory> MintCrlWithoutNextUpdateAsync(X509Certificate2 issuer, ECDsa issuerKey, DateTimeOffset thisUpdate, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(issuer);
         ArgumentNullException.ThrowIfNull(issuerKey);
@@ -365,7 +365,8 @@ internal static class SyntheticPassportFactory
         CryptographicOperations.ZeroMemory(exportedIssuerPrivateKey);
 
         SigningDelegate sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.P256, Purpose.Signing);
-        using var p1363Signature = sign(issuerPrivateKeyOwner.Memory, modifiedTbs.Memory, BaseMemoryPool.Shared, null, cancellationToken).AsTask().GetAwaiter().GetResult().Signature;
+        var signingResult = await sign(issuerPrivateKeyOwner.Memory, modifiedTbs.Memory, BaseMemoryPool.Shared, null, cancellationToken).ConfigureAwait(false);
+        using var p1363Signature = signingResult.Signature;
         using IMemoryOwner<byte> signatureBuffer = EcdsaSignatureEncoding.ConvertP1363ToDer(p1363Signature.AsReadOnlySpan(), BaseMemoryPool.Shared, out int signatureLength);
 
         var crlWriter = new AsnWriter(AsnEncodingRules.DER);
@@ -388,7 +389,7 @@ internal static class SyntheticPassportFactory
     /// malformed CRL.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the pooled certificate and CRL carriers transfers to the returned RevocationScenario, which the caller disposes.")]
-    public static RevocationScenario MintRevocationScenario(DateTimeOffset validationTime, CancellationToken cancellationToken)
+    public static async ValueTask<RevocationScenario> MintRevocationScenarioAsync(DateTimeOffset validationTime, CancellationToken cancellationToken)
     {
         //Certificate-factory carve-out (see class remarks): these keys sign the certificates and CRLs minted below via CertificateRequest / CertificateRevocationListBuilder.
         using ECDsa cscaKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
@@ -417,7 +418,7 @@ internal static class SyntheticPassportFactory
             ForgedRevokingCrl = MintCrl(impostorCsca, documentSigner, thisUpdate, nextUpdate, crlNumber: 4),
             ForgedCleanCrl = MintCrl(impostorCsca, revokedCertificate: null, thisUpdate, nextUpdate, crlNumber: 5),
             NotYetValidCrl = MintCrl(csca, revokedCertificate: null, validationTime.AddDays(1), validationTime.AddDays(30), crlNumber: 6),
-            NoNextUpdateCrl = MintCrlWithoutNextUpdate(csca, cscaKey, thisUpdate, cancellationToken),
+            NoNextUpdateCrl = await MintCrlWithoutNextUpdateAsync(csca, cscaKey, thisUpdate, cancellationToken).ConfigureAwait(false),
             MalformedCrl = new PkiCertificateMemory(ToPooled(MalformedCrlBytes), PkiCertificateTags.X509Crl)
         };
     }
