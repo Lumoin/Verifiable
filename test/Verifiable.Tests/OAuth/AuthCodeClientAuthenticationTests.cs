@@ -1153,7 +1153,7 @@ internal sealed class AuthCodeClientAuthenticationTests
     /// <c>client_secret_jwt</c> names no key identifier (OpenID Connect Core 1.0 §9: the secret is the client's own), so
     /// options naming a <c>kid</c> were composed for a signing key: after a pushed request composed under options naming
     /// none, the library's token exchange under options naming one answers the typed refusal
-    /// (<see cref="ClientAssertionRefusalReason.ClientSecretNamesAKeyIdentifier"/>) its result carries, rendered from the
+    /// (<see cref="ClientAssertionCredentialRefusalReason.ClientSecretNamesAKeyIdentifier"/>) its result carries, rendered from the
     /// refusal, before anything is MACed or sent, and the server sees no token request.
     /// </summary>
     [TestMethod]
@@ -1203,9 +1203,9 @@ internal sealed class AuthCodeClientAuthenticationTests
                 TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.AreEqual(AuthCodeFlowEndpointOutcome.InternalError, tokenResult.Outcome);
-            Assert.IsNotNull(tokenResult.ClientAssertionRefusal, "The result carries the typed refusal.");
-            Assert.AreEqual(ClientAssertionRefusalReason.ClientSecretNamesAKeyIdentifier, tokenResult.ClientAssertionRefusal.Reason);
-            Assert.AreEqual(tokenResult.ClientAssertionRefusal.Describe(), tokenResult.ErrorDescription);
+            Assert.IsNotNull(tokenResult.ClientAssertionCredentialRefusal, "The result carries the typed refusal.");
+            Assert.AreEqual(ClientAssertionCredentialRefusalReason.ClientSecretNamesAKeyIdentifier, tokenResult.ClientAssertionCredentialRefusal.Reason);
+            Assert.AreEqual(tokenResult.ClientAssertionCredentialRefusal.Describe(), tokenResult.ErrorDescription);
             Assert.HasCount(1, verifiedIdentifiers, "Only the pushed request was sent; the refused token exchange never was.");
         }
         finally

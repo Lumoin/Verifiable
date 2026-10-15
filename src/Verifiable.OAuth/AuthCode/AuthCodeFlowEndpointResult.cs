@@ -80,7 +80,7 @@ public sealed class AuthCodeFlowEndpointResult
     /// or sent (<see cref="ClientAssertionCredential.Of"/>): the rule broken and the values it was judged
     /// on, from which <see cref="ErrorDescription"/> was rendered. <see langword="null"/> for every other outcome.
     /// </summary>
-    public ClientAssertionRefusal? ClientAssertionRefusal { get; init; }
+    public ClientAssertionCredentialRefusal? ClientAssertionCredentialRefusal { get; init; }
 
     /// <summary>
     /// The individual validation claims produced during callback validation.

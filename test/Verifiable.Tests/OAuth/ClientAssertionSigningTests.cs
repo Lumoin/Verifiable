@@ -231,7 +231,7 @@ internal sealed class ClientAssertionSigningTests
 
         var refused = ClientAssertionCredential.OfClientSecret(shortSecret, algorithm);
         Assert.IsFalse(refused.IsSuccess, "A secret shorter than the hash output keys no assertion.");
-        Assert.AreEqual(ClientAssertionRefusalReason.ClientSecretShorterThanHashOutput, refused.Error.Reason);
+        Assert.AreEqual(ClientAssertionCredentialRefusalReason.ClientSecretShorterThanHashOutput, refused.Error.Reason);
         Assert.AreEqual(algorithm, refused.Error.Algorithm);
         Assert.AreEqual(hashOutputLength - 1, refused.Error.SecretOctets);
         Assert.AreEqual(hashOutputLength, refused.Error.RequiredOctets);
@@ -260,7 +260,7 @@ internal sealed class ClientAssertionSigningTests
         var refused = ClientAssertionCredential.OfClientSecret(secret, algorithm);
 
         Assert.IsFalse(refused.IsSuccess, "Only an HMAC algorithm keys a client secret assertion.");
-        Assert.AreEqual(ClientAssertionRefusalReason.AlgorithmIsNotAnHmac, refused.Error.Reason);
+        Assert.AreEqual(ClientAssertionCredentialRefusalReason.AlgorithmIsNotAnHmac, refused.Error.Reason);
         Assert.AreEqual(algorithm, refused.Error.Algorithm);
     }
 
@@ -280,7 +280,7 @@ internal sealed class ClientAssertionSigningTests
 
         var refused = ClientAssertionCredential.Of(registration, OptionsNaming("a-key-identifier-no-secret-carries"));
         Assert.IsFalse(refused.IsSuccess, "Options naming a key identifier were composed for a signing key.");
-        Assert.AreEqual(ClientAssertionRefusalReason.ClientSecretNamesAKeyIdentifier, refused.Error.Reason);
+        Assert.AreEqual(ClientAssertionCredentialRefusalReason.ClientSecretNamesAKeyIdentifier, refused.Error.Reason);
         Assert.AreEqual(WellKnownJwaValues.Hs256, refused.Error.Algorithm);
 
         var accepted = ClientAssertionCredential.Of(registration, OptionsNaming(keyId: null));
@@ -305,7 +305,7 @@ internal sealed class ClientAssertionSigningTests
 
         var refused = ClientAssertionCredential.Of(registration, OptionsNaming(keyId: null));
         Assert.IsFalse(refused.IsSuccess, "A private key assertion names the key identifier the server resolves the key by.");
-        Assert.AreEqual(ClientAssertionRefusalReason.PrivateKeyNamesNoKeyIdentifier, refused.Error.Reason);
+        Assert.AreEqual(ClientAssertionCredentialRefusalReason.PrivateKeyNamesNoKeyIdentifier, refused.Error.Reason);
         Assert.AreEqual(WellKnownJwaValues.Es256, refused.Error.Algorithm);
 
         var accepted = ClientAssertionCredential.Of(registration, OptionsNaming(SigningKeyId));

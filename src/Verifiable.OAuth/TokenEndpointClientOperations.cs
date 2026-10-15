@@ -146,7 +146,7 @@ internal static class TokenEndpointClientOperations
     /// Forms, before anything is composed or sent, the key a registration's assertion method composes its assertions under
     /// (<see cref="ClientAssertionCredential.Of"/>): for <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/> and
     /// <see cref="ClientAuthenticationMethod.ClientSecretJwt"/> the key, or the caller's failure carrying the typed
-    /// <see cref="ClientAssertionRefusal"/> (<see cref="AuthCodeFlowEndpointResult.ClientAssertionRefusal"/>) of options
+    /// <see cref="ClientAssertionCredentialRefusal"/> (<see cref="AuthCodeFlowEndpointResult.ClientAssertionCredentialRefusal"/>) of options
     /// or a secret the assertion refuses; for every other method no key.
     /// </summary>
     /// <param name="registration">The registration naming the method.</param>
@@ -177,7 +177,7 @@ internal static class TokenEndpointClientOperations
                 Outcome = AuthCodeFlowEndpointOutcome.InternalError,
                 ErrorCode = "server_error",
                 ErrorDescription = key.Error.Describe(),
-                ClientAssertionRefusal = key.Error
+                ClientAssertionCredentialRefusal = key.Error
             });
         }
 

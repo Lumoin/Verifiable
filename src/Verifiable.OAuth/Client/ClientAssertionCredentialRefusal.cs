@@ -7,7 +7,7 @@ namespace Verifiable.OAuth.Client;
 /// The rule a client authentication assertion's key refuses (<see cref="ClientAssertionCredential"/>), before anything is signed
 /// or sent.
 /// </summary>
-public enum ClientAssertionRefusalReason
+public enum ClientAssertionCredentialRefusalReason
 {
     /// <summary>
     /// A <c>client_secret_jwt</c> assertion names an algorithm other than an HMAC algorithm of RFC 7518 Section 3.2
@@ -43,24 +43,24 @@ public enum ClientAssertionRefusalReason
 /// (<see cref="Reason"/>) and the values it was judged on, which a caller and a record carry as they are and render
 /// through <see cref="Describe"/>.
 /// </summary>
-[DebuggerDisplay("ClientAssertionRefusal Reason={Reason} Algorithm={Algorithm}")]
-public sealed record ClientAssertionRefusal
+[DebuggerDisplay("ClientAssertionCredentialRefusal Reason={Reason} Algorithm={Algorithm}")]
+public sealed record ClientAssertionCredentialRefusal
 {
     /// <summary>The rule broken.</summary>
-    public required ClientAssertionRefusalReason Reason { get; init; }
+    public required ClientAssertionCredentialRefusalReason Reason { get; init; }
 
     /// <summary>The JWS <c>alg</c> the assertion was to be signed or MACed under, as the options named it.</summary>
     public required string Algorithm { get; init; }
 
     /// <summary>
-    /// The octets the client secret carries, for <see cref="ClientAssertionRefusalReason.ClientSecretShorterThanHashOutput"/>;
+    /// The octets the client secret carries, for <see cref="ClientAssertionCredentialRefusalReason.ClientSecretShorterThanHashOutput"/>;
     /// zero for every other reason.
     /// </summary>
     public int SecretOctets { get; init; }
 
     /// <summary>
     /// The fewest octets the algorithm's key may carry, its hash output, for
-    /// <see cref="ClientAssertionRefusalReason.ClientSecretShorterThanHashOutput"/>; zero for every other reason.
+    /// <see cref="ClientAssertionCredentialRefusalReason.ClientSecretShorterThanHashOutput"/>; zero for every other reason.
     /// </summary>
     public int RequiredOctets { get; init; }
 
@@ -69,15 +69,15 @@ public sealed record ClientAssertionRefusal
     /// <returns>The sentence naming the rule broken.</returns>
     public string Describe() => Reason switch
     {
-        ClientAssertionRefusalReason.AlgorithmIsNotAnHmac => string.Create(
+        ClientAssertionCredentialRefusalReason.AlgorithmIsNotAnHmac => string.Create(
             CultureInfo.InvariantCulture,
             $"A client_secret_jwt assertion is MACed under an HMAC algorithm of RFC 7518 Section 3.2 (HS256, HS384 or HS512); '{Algorithm}' is none."),
-        ClientAssertionRefusalReason.ClientSecretShorterThanHashOutput => string.Create(
+        ClientAssertionCredentialRefusalReason.ClientSecretShorterThanHashOutput => string.Create(
             CultureInfo.InvariantCulture,
             $"RFC 7518 Section 3.2: a key of the same size as the hash output or larger MUST be used with {Algorithm}; the client secret carries {SecretOctets} octets and {Algorithm} needs {RequiredOctets}."),
-        ClientAssertionRefusalReason.ClientSecretNamesAKeyIdentifier =>
+        ClientAssertionCredentialRefusalReason.ClientSecretNamesAKeyIdentifier =>
             "A client_secret_jwt assertion names no key identifier: the secret is the client's own, which its identifier already names (OpenID Connect Core 1.0 Section 9).",
-        ClientAssertionRefusalReason.PrivateKeyNamesNoKeyIdentifier =>
+        ClientAssertionCredentialRefusalReason.PrivateKeyNamesNoKeyIdentifier =>
             "A private_key_jwt assertion names the key identifier the authorization server resolves the client's key by (RFC 7515 Section 4.1.4).",
         _ => throw new UnreachableException($"The refusal reason '{Reason}' has no description.")
     };
