@@ -7,9 +7,9 @@ using Verifiable.JCose;
 namespace Verifiable.OAuth.Client;
 
 /// <summary>
-/// The key a client authentication assertion (RFC 7523 Section 2.2) is signed under, with the header inputs and the
-/// signing operation it supplies to the assertion's one composition (<see cref="ClientAssertionSigning"/>): a private
-/// key for <c>private_key_jwt</c>, its <c>alg</c> named by the key's <see cref="Tag"/>, its <c>kid</c> the identifier the
+/// The credential a client authentication assertion (RFC 7523 Section 2.2) is signed under - a private key or a client
+/// secret - with the header inputs and the signing operation it supplies to the assertion's one composition
+/// (<see cref="ClientAssertionSigning"/>): a private key for <c>private_key_jwt</c>, its <c>alg</c> named by the key's <see cref="Tag"/>, its <c>kid</c> the identifier the
 /// authorization server resolves the key by, and its signing function the one the registry holds for the key; or the
 /// client secret a <c>client_secret_jwt</c> assertion is MACed with (OpenID Connect Core 1.0 Section 9), its <c>alg</c> one
 /// of RFC 7518 Section 3.2's HMAC algorithms, no <c>kid</c>, and its signing operation the HMAC computed through the
@@ -19,15 +19,15 @@ namespace Verifiable.OAuth.Client;
 /// <remarks>
 /// The key's octets are not owned: the caller keeps the <see cref="PrivateKeyMemory"/> alive and disposes it.
 /// </remarks>
-[DebuggerDisplay("ClientAssertionKey Algorithm={Algorithm} KeyId={KeyId}")]
-public sealed class ClientAssertionKey
+[DebuggerDisplay("ClientAssertionCredential Algorithm={Algorithm} KeyId={KeyId}")]
+public sealed class ClientAssertionCredential
 {
     /// <summary>Forms a key from its parts.</summary>
     /// <param name="key">The key's octets, not owned.</param>
     /// <param name="algorithm">The JWS <c>alg</c> the header names.</param>
     /// <param name="keyId">The <c>kid</c> the header names, or <see langword="null"/> for none.</param>
     /// <param name="sign">The signing operation the composition is handed.</param>
-    private ClientAssertionKey(PrivateKeyMemory key, string algorithm, string? keyId, SigningDelegate sign)
+    private ClientAssertionCredential(PrivateKeyMemory key, string algorithm, string? keyId, SigningDelegate sign)
     {
         Key = key;
         Algorithm = algorithm;
@@ -57,7 +57,7 @@ public sealed class ClientAssertionKey
     /// <param name="signingKey">The client's signing key, not owned.</param>
     /// <param name="signingKeyId">The <c>kid</c> header parameter value identifying the key to the authorization server.</param>
     /// <returns>The key.</returns>
-    public static ClientAssertionKey OfPrivateKey(PrivateKeyMemory signingKey, string signingKeyId)
+    public static ClientAssertionCredential OfPrivateKey(PrivateKeyMemory signingKey, string signingKeyId)
     {
         ArgumentNullException.ThrowIfNull(signingKey);
         ArgumentException.ThrowIfNullOrWhiteSpace(signingKeyId);
@@ -66,7 +66,7 @@ public sealed class ClientAssertionKey
         var sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(
             signingKey.Tag.Get<CryptoAlgorithm>(), signingKey.Tag.Get<Purpose>());
 
-        return new ClientAssertionKey(signingKey, algorithm, signingKeyId, sign);
+        return new ClientAssertionCredential(signingKey, algorithm, signingKeyId, sign);
     }
 
 
@@ -84,14 +84,14 @@ public sealed class ClientAssertionKey
     /// output, which RFC 7518 Section 3.2 makes the fewest octets its key may carry
     /// (<see cref="ClientAssertionRefusalReason.ClientSecretShorterThanHashOutput"/>).
     /// </returns>
-    public static Result<ClientAssertionKey, ClientAssertionRefusal> OfClientSecret(PrivateKeyMemory clientSecret, string algorithm)
+    public static Result<ClientAssertionCredential, ClientAssertionRefusal> OfClientSecret(PrivateKeyMemory clientSecret, string algorithm)
     {
         ArgumentNullException.ThrowIfNull(clientSecret);
         ArgumentNullException.ThrowIfNull(algorithm);
 
         if(ClientSecretMac.Of(algorithm) is not ClientSecretMac mac)
         {
-            return Result<ClientAssertionKey, ClientAssertionRefusal>.Failure(new ClientAssertionRefusal
+            return Result<ClientAssertionCredential, ClientAssertionRefusal>.Failure(new ClientAssertionRefusal
             {
                 Reason = ClientAssertionRefusalReason.AlgorithmIsNotAnHmac,
                 Algorithm = algorithm
@@ -101,7 +101,7 @@ public sealed class ClientAssertionKey
         var secretOctets = clientSecret.AsReadOnlySpan().Length;
         if(secretOctets < mac.Length)
         {
-            return Result<ClientAssertionKey, ClientAssertionRefusal>.Failure(new ClientAssertionRefusal
+            return Result<ClientAssertionCredential, ClientAssertionRefusal>.Failure(new ClientAssertionRefusal
             {
                 Reason = ClientAssertionRefusalReason.ClientSecretShorterThanHashOutput,
                 Algorithm = mac.Algorithm,
@@ -110,8 +110,8 @@ public sealed class ClientAssertionKey
             });
         }
 
-        return Result<ClientAssertionKey, ClientAssertionRefusal>.Success(
-            new ClientAssertionKey(clientSecret, mac.Algorithm, keyId: null, mac.SignAsync));
+        return Result<ClientAssertionCredential, ClientAssertionRefusal>.Success(
+            new ClientAssertionCredential(clientSecret, mac.Algorithm, keyId: null, mac.SignAsync));
     }
 
 
@@ -132,7 +132,7 @@ public sealed class ClientAssertionKey
     /// </returns>
     /// <exception cref="ArgumentException">The registration names a method that presents no assertion.</exception>
     /// <exception cref="InvalidOperationException">The registration carries no authentication key material.</exception>
-    public static Result<ClientAssertionKey, ClientAssertionRefusal> Of(ClientRegistration registration, ClientAssertionOptions options)
+    public static Result<ClientAssertionCredential, ClientAssertionRefusal> Of(ClientRegistration registration, ClientAssertionOptions options)
     {
         ArgumentNullException.ThrowIfNull(registration);
         ArgumentNullException.ThrowIfNull(options);
@@ -154,8 +154,8 @@ public sealed class ClientAssertionKey
         if(isPrivateKey)
         {
             return options.SigningKeyId is string signingKeyId
-                ? Result<ClientAssertionKey, ClientAssertionRefusal>.Success(OfPrivateKey(key, signingKeyId))
-                : Result<ClientAssertionKey, ClientAssertionRefusal>.Failure(new ClientAssertionRefusal
+                ? Result<ClientAssertionCredential, ClientAssertionRefusal>.Success(OfPrivateKey(key, signingKeyId))
+                : Result<ClientAssertionCredential, ClientAssertionRefusal>.Failure(new ClientAssertionRefusal
                 {
                     Reason = ClientAssertionRefusalReason.PrivateKeyNamesNoKeyIdentifier,
                     Algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(key.Tag)
@@ -164,7 +164,7 @@ public sealed class ClientAssertionKey
 
         if(options.SigningKeyId is not null)
         {
-            return Result<ClientAssertionKey, ClientAssertionRefusal>.Failure(new ClientAssertionRefusal
+            return Result<ClientAssertionCredential, ClientAssertionRefusal>.Failure(new ClientAssertionRefusal
             {
                 Reason = ClientAssertionRefusalReason.ClientSecretNamesAKeyIdentifier,
                 Algorithm = options.ClientSecretAlgorithm

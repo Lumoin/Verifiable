@@ -4,7 +4,7 @@ using System.Globalization;
 namespace Verifiable.OAuth.Client;
 
 /// <summary>
-/// The rule a client authentication assertion's key refuses (<see cref="ClientAssertionKey"/>), before anything is signed
+/// The rule a client authentication assertion's key refuses (<see cref="ClientAssertionCredential"/>), before anything is signed
 /// or sent.
 /// </summary>
 public enum ClientAssertionRefusalReason

@@ -9,7 +9,7 @@ namespace Verifiable.OAuth.Client;
 /// Per-call inputs for composing the client assertion a token-endpoint request presents per
 /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-2.2">RFC 7523 §2.2</see>, the
 /// <c>private_key_jwt</c> assertion signed with a key or the <c>client_secret_jwt</c> assertion MACed with a secret
-/// (OpenID Connect Core 1.0 §9), which <see cref="ClientAssertionKey.Of"/> forms the key of and
+/// (OpenID Connect Core 1.0 §9), which <see cref="ClientAssertionCredential.Of"/> forms the key of and
 /// <see cref="ClientTokenEndpointAuthentication.AttachClientAssertionAsync"/> attaches. The signing key or the client
 /// secret itself is read from
 /// <see cref="ClientRegistration.AuthenticationKeyMaterial"/> — this record carries only the pieces that vary
@@ -64,7 +64,7 @@ public static class ClientTokenEndpointAuthentication
     /// signed under. The <c>jti</c> is generated for this assertion alone, the validity window runs from
     /// <paramref name="now"/>, the <c>aud</c> value follows <see cref="ClientRegistration.ClientAssertionAudience"/> and
     /// the <c>typ</c> header follows <see cref="ClientRegistration.IsClientAssertionExplicitlyTyped"/>; the key supplies
-    /// the header's <c>alg</c> and <c>kid</c> and the signing operation (<see cref="ClientAssertionKey"/>).
+    /// the header's <c>alg</c> and <c>kid</c> and the signing operation (<see cref="ClientAssertionCredential"/>).
     /// </summary>
     /// <param name="form">The outgoing form fields the assertion parameters are added to.</param>
     /// <param name="registration">
@@ -84,8 +84,8 @@ public static class ClientTokenEndpointAuthentication
     /// states the deviation from rfc7523bis-11 Section 4 that choosing it makes.
     /// </param>
     /// <param name="key">
-    /// The key the assertion is signed under: a private key (<see cref="ClientAssertionKey.OfPrivateKey"/>) or a client
-    /// secret (<see cref="ClientAssertionKey.OfClientSecret"/>, judged as it was formed).
+    /// The key the assertion is signed under: a private key (<see cref="ClientAssertionCredential.OfPrivateKey"/>) or a client
+    /// secret (<see cref="ClientAssertionCredential.OfClientSecret"/>, judged as it was formed).
     /// </param>
     /// <param name="headerSerializer">Serialises the protected header to UTF-8 JSON bytes.</param>
     /// <param name="payloadSerializer">Serialises the payload claims to UTF-8 JSON bytes.</param>
@@ -98,7 +98,7 @@ public static class ClientTokenEndpointAuthentication
         OutgoingFormFields form,
         ClientRegistration registration,
         Uri tokenEndpoint,
-        ClientAssertionKey key,
+        ClientAssertionCredential key,
         JwtHeaderSerializer headerSerializer,
         JwtPayloadSerializer payloadSerializer,
         TimeSpan clientAssertionLifetime,

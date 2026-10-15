@@ -343,7 +343,7 @@ internal static class AuthCodeFlowDriver
                     "An assertion method requires a ClientAssertionOptions instance to compose the PAR client_assertion.");
             }
 
-            var key = ClientAssertionKey.Of(registration, clientAssertionOptions);
+            var key = ClientAssertionCredential.Of(registration, clientAssertionOptions);
             if(!key.IsSuccess)
             {
                 throw new InvalidOperationException(key.Error.Describe());

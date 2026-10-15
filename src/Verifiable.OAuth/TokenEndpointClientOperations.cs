@@ -144,7 +144,7 @@ internal static class TokenEndpointClientOperations
 
     /// <summary>
     /// Forms, before anything is composed or sent, the key a registration's assertion method composes its assertions under
-    /// (<see cref="ClientAssertionKey.Of"/>): for <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/> and
+    /// (<see cref="ClientAssertionCredential.Of"/>): for <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/> and
     /// <see cref="ClientAuthenticationMethod.ClientSecretJwt"/> the key, or the caller's failure carrying the typed
     /// <see cref="ClientAssertionRefusal"/> (<see cref="AuthCodeFlowEndpointResult.ClientAssertionRefusal"/>) of options
     /// or a secret the assertion refuses; for every other method no key.
@@ -153,13 +153,13 @@ internal static class TokenEndpointClientOperations
     /// <param name="clientAssertionOptions">The assertion options, required for an assertion method.</param>
     /// <returns>The key, <see langword="null"/> for a method presenting no assertion, or the refusal.</returns>
     /// <exception cref="InvalidOperationException">An assertion method is handed no options.</exception>
-    internal static Result<ClientAssertionKey?, AuthCodeFlowEndpointResult> ResolveClientAssertionKey(
+    internal static Result<ClientAssertionCredential?, AuthCodeFlowEndpointResult> ResolveClientAssertionKey(
         ClientRegistration registration,
         ClientAssertionOptions? clientAssertionOptions)
     {
         if(!PresentsAssertion(registration))
         {
-            return Result<ClientAssertionKey?, AuthCodeFlowEndpointResult>.Success(null);
+            return Result<ClientAssertionCredential?, AuthCodeFlowEndpointResult>.Success(null);
         }
 
         if(clientAssertionOptions is null)
@@ -169,10 +169,10 @@ internal static class TokenEndpointClientOperations
                 + "requires a ClientAssertionOptions instance to compose the client_assertion.");
         }
 
-        var key = ClientAssertionKey.Of(registration, clientAssertionOptions);
+        var key = ClientAssertionCredential.Of(registration, clientAssertionOptions);
         if(!key.IsSuccess)
         {
-            return Result<ClientAssertionKey?, AuthCodeFlowEndpointResult>.Failure(new AuthCodeFlowEndpointResult
+            return Result<ClientAssertionCredential?, AuthCodeFlowEndpointResult>.Failure(new AuthCodeFlowEndpointResult
             {
                 Outcome = AuthCodeFlowEndpointOutcome.InternalError,
                 ErrorCode = "server_error",
@@ -181,7 +181,7 @@ internal static class TokenEndpointClientOperations
             });
         }
 
-        return Result<ClientAssertionKey?, AuthCodeFlowEndpointResult>.Success(key.Value);
+        return Result<ClientAssertionCredential?, AuthCodeFlowEndpointResult>.Success(key.Value);
     }
 
 
@@ -213,7 +213,7 @@ internal static class TokenEndpointClientOperations
         OutgoingFormFields form,
         ClientRegistration registration,
         Uri tokenEndpoint,
-        ClientAssertionKey? assertionKey,
+        ClientAssertionCredential? assertionKey,
         ClientAssertionOptions? clientAssertionOptions,
         OAuthClientInfrastructure infrastructure,
         DateTimeOffset now,
@@ -243,7 +243,7 @@ internal static class TokenEndpointClientOperations
             OutgoingFormFields form,
             ClientRegistration registration,
             Uri tokenEndpoint,
-            ClientAssertionKey? assertionKey,
+            ClientAssertionCredential? assertionKey,
             ClientAssertionOptions? clientAssertionOptions,
             OAuthClientInfrastructure infrastructure,
             DateTimeOffset now,

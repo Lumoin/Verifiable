@@ -10,8 +10,8 @@ namespace Verifiable.OAuth.Client;
 /// <see href="https://www.rfc-editor.org/rfc/rfc7521#section-4.2">RFC 7521 §4.2</see>): the <c>private_key_jwt</c>
 /// assertion signed with the client's registered key, and the <c>client_secret_jwt</c> assertion MACed with the client
 /// secret (OpenID Connect Core 1.0 §9), both composed once, by
-/// <see cref="SignAsync(string, string, string, DateTimeOffset, DateTimeOffset, ClientAssertionKey, string, JwtHeaderSerializer, JwtPayloadSerializer, EncodeDelegate, BaseMemoryPool, CancellationToken)"/>,
-/// the <see cref="ClientAssertionKey"/> supplying the header inputs and the signing operation. The client presents the
+/// <see cref="SignAsync(string, string, string, DateTimeOffset, DateTimeOffset, ClientAssertionCredential, string, JwtHeaderSerializer, JwtPayloadSerializer, EncodeDelegate, BaseMemoryPool, CancellationToken)"/>,
+/// the <see cref="ClientAssertionCredential"/> supplying the header inputs and the signing operation. The client presents the
 /// resulting compact JWS as the <c>client_assertion</c> token-endpoint parameter, paired with
 /// <c>client_assertion_type</c> = <c>urn:ietf:params:oauth:client-assertion-type:jwt-bearer</c>.
 /// </summary>
@@ -69,7 +69,7 @@ public static class ClientAssertionSigning
             jti,
             issuedAt,
             expiresAt,
-            ClientAssertionKey.OfPrivateKey(signingKey, signingKeyId),
+            ClientAssertionCredential.OfPrivateKey(signingKey, signingKeyId),
             WellKnownJwkValues.TypeJwt,
             headerSerializer,
             payloadSerializer,
@@ -127,7 +127,7 @@ public static class ClientAssertionSigning
             jti,
             issuedAt,
             expiresAt,
-            ClientAssertionKey.OfPrivateKey(signingKey, signingKeyId),
+            ClientAssertionCredential.OfPrivateKey(signingKey, signingKeyId),
             type,
             headerSerializer,
             payloadSerializer,
@@ -168,7 +168,7 @@ public static class ClientAssertionSigning
         string jti,
         DateTimeOffset issuedAt,
         DateTimeOffset expiresAt,
-        ClientAssertionKey key,
+        ClientAssertionCredential key,
         string type,
         JwtHeaderSerializer headerSerializer,
         JwtPayloadSerializer payloadSerializer,
@@ -209,7 +209,7 @@ public static class ClientAssertionSigning
     /// <param name="key">The key the assertion is signed under.</param>
     /// <param name="type">The <c>typ</c> value.</param>
     /// <returns>The header.</returns>
-    private static JwtHeader HeaderOf(ClientAssertionKey key, string type) =>
+    private static JwtHeader HeaderOf(ClientAssertionCredential key, string type) =>
         key.KeyId is string keyId
             ? JwtHeader.ForSigning(key.Algorithm, type, keyId)
             : new JwtHeader(capacity: 2)

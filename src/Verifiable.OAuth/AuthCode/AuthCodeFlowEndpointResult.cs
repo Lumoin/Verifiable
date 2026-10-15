@@ -77,7 +77,7 @@ public sealed class AuthCodeFlowEndpointResult
 
     /// <summary>
     /// The refusal of the client authentication assertion the request was to present, judged before anything was composed
-    /// or sent (<see cref="ClientAssertionKey.Of"/>): the rule broken and the values it was judged
+    /// or sent (<see cref="ClientAssertionCredential.Of"/>): the rule broken and the values it was judged
     /// on, from which <see cref="ErrorDescription"/> was rendered. <see langword="null"/> for every other outcome.
     /// </summary>
     public ClientAssertionRefusal? ClientAssertionRefusal { get; init; }
