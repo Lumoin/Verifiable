@@ -42,7 +42,7 @@ namespace Verifiable.Json.Converters;
 /// source-generated path the converter replaces.
 /// </para>
 /// </remarks>
-public class VerifiableCredentialConverter: JsonConverter<VerifiableCredential>
+public class VerifiableCredentialConverter : JsonConverter<VerifiableCredential>
 {
     /// <inheritdoc/>
     public override bool CanConvert(Type typeToConvert)

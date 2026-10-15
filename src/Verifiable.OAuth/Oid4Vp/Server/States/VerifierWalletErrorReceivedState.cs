@@ -10,7 +10,7 @@ namespace Verifiable.OAuth.Oid4Vp.Server.States;
 /// answer.
 /// </summary>
 [DebuggerDisplay("VerifierWalletErrorReceived FlowId={FlowId} Error={Error}")]
-public sealed record VerifierWalletErrorReceivedState: FlowState
+public sealed record VerifierWalletErrorReceivedState : FlowState
 {
     /// <summary>The RFC 6749 §4.1.2.1 error code the Wallet reported.</summary>
     public required string Error { get; init; }

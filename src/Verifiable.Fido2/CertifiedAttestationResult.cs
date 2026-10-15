@@ -26,7 +26,7 @@ namespace Verifiable.Fido2;
 /// and attestation trust path x5c."
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed record CertifiedAttestationResult(AttestationType Type, IReadOnlyList<PkiCertificateMemory> TrustPath): AttestationResult
+public sealed record CertifiedAttestationResult(AttestationType Type, IReadOnlyList<PkiCertificateMemory> TrustPath) : AttestationResult
 {
     /// <summary>
     /// Determines whether this result and <paramref name="other"/> report the same attestation

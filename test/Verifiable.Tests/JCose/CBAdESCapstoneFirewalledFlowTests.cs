@@ -458,7 +458,7 @@ internal sealed class CBAdESCapstoneFirewalledFlowTests
 
     /// <summary>Wraps a <see cref="PkiCertificateMemory"/> so it can stand in for the format-neutral engine's <see cref="SensitiveMemory"/> Signed Data Object slot.</summary>
     /// <param name="carrier">The owned carrier.</param>
-    private sealed class SensitiveMemoryHolder(PkiCertificateMemory carrier): IDisposable
+    private sealed class SensitiveMemoryHolder(PkiCertificateMemory carrier) : IDisposable
     {
         /// <summary>Gets the carrier as the engine's own Signed Data Object type.</summary>
         public SensitiveMemory Memory => carrier;
@@ -481,7 +481,7 @@ internal sealed class CBAdESCapstoneFirewalledFlowTests
         PkiCertificateMemory TrustAnchor,
         PkiCertificateMemory RevocationList,
         SignatureValidationInputs Inputs,
-        SignatureValidationSeams Seams): IDisposable
+        SignatureValidationSeams Seams) : IDisposable
     {
         /// <inheritdoc/>
         public void Dispose()

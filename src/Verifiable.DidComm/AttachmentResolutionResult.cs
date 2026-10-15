@@ -78,7 +78,7 @@ public enum AttachmentResolutionSource
 /// because it owns the pooled payload buffer; dispose it once the payload has been consumed.
 /// </para>
 /// </remarks>
-public sealed class AttachmentResolutionResult: IDisposable
+public sealed class AttachmentResolutionResult : IDisposable
 {
     private IMemoryOwner<byte>? PayloadOwner { get; }
     private int PayloadLength { get; }

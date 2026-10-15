@@ -23,7 +23,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </list>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class MakeCredentialInput: ITpmCommandInput, IDisposable
+public sealed class MakeCredentialInput : ITpmCommandInput, IDisposable
 {
     private bool Disposed { get; set; }
 

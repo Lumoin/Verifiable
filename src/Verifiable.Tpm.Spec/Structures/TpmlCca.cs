@@ -41,7 +41,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class TpmlCca: ITpmWireType
+public sealed class TpmlCca : ITpmWireType
 {
     /// <summary>
     /// The shared zero-length instance backing every empty list.

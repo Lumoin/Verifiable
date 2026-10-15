@@ -43,7 +43,7 @@ namespace Verifiable.Xml;
 /// caller could usefully branch on beyond "matched" or "did not."
 /// </para>
 /// </remarks>
-public readonly struct XAdESDateTime: IEquatable<XAdESDateTime>
+public readonly struct XAdESDateTime : IEquatable<XAdESDateTime>
 {
     /// <summary>The bound this parser enforces on the year numeral's digit count, comfortably inside the
     /// range a <see cref="long"/> accumulation never overflows for, and a hardening bound against a

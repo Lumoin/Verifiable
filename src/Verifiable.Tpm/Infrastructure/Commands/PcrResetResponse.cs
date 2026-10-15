@@ -12,7 +12,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// response.
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class PcrResetResponse: ITpmWireType
+public sealed class PcrResetResponse : ITpmWireType
 {
     /// <summary>
     /// Gets the singleton instance every parse returns.

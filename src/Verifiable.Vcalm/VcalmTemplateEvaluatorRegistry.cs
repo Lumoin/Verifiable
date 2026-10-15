@@ -34,7 +34,7 @@ namespace Verifiable.Vcalm;
 /// concern, configured on the engine itself.
 /// </para>
 /// </remarks>
-public sealed class VcalmTemplateEvaluatorRegistry: WiringComponent
+public sealed class VcalmTemplateEvaluatorRegistry : WiringComponent
 {
     /// <summary>
     /// The §3.6.1 template type whose body is JSONata: <c>jsonata</c>. The only template type VCALM

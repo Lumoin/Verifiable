@@ -27,7 +27,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class Tpm2bAttest: ITpmWireType, IDisposable
+public sealed class Tpm2bAttest : ITpmWireType, IDisposable
 {
     private IMemoryOwner<byte>? RawStorage { get; }
     private int RawLength { get; }

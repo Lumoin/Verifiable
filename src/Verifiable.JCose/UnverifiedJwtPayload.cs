@@ -42,7 +42,7 @@ namespace Verifiable.JCose;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("UnverifiedJwtPayload({Count} claims)")]
-public sealed class UnverifiedJwtPayload: JoseDictionary, IEquatable<UnverifiedJwtPayload>
+public sealed class UnverifiedJwtPayload : JoseDictionary, IEquatable<UnverifiedJwtPayload>
 {
     /// <summary>Creates an empty unverified JWT payload.</summary>
     public UnverifiedJwtPayload() : base() { }

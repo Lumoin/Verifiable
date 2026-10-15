@@ -68,7 +68,7 @@ namespace Verifiable.Cryptography;
 /// here as the convention, not a compiler check.
 /// </para>
 /// </remarks>
-public sealed class BoundProvenance: VerificationProvenance
+public sealed class BoundProvenance : VerificationProvenance
 {
     private object Subject { get; }
 

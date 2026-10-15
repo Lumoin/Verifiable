@@ -13,7 +13,7 @@ namespace Verifiable.Xml;
 /// the message-imprint input, XA-5.1.4.4.2.3-4) — this reader models one <c>Include</c> at a time, so
 /// preserving that order is <see cref="XAdESTimeStamp"/>'s own list-building responsibility, not this type's.
 /// </summary>
-public readonly struct XAdESInclude: IEquatable<XAdESInclude>
+public readonly struct XAdESInclude : IEquatable<XAdESInclude>
 {
     /// <summary>The table the value's spans read from.</summary>
     internal XmlNodeTable Table { get; }

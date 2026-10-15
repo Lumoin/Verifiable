@@ -8,7 +8,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 /// own <c>DisposeRequestCarriers</c> at the end of a synchronous call is, on a parked command, released
 /// here instead — whenever <see cref="CtapPendingUserPresenceState"/> is discarded.
 /// </summary>
-public abstract record CtapUserPresenceContinuation: IDisposable
+public abstract record CtapUserPresenceContinuation : IDisposable
 {
     /// <summary>
     /// Releases the pooled carriers of the parked request this continuation resumes.
@@ -44,7 +44,7 @@ public abstract record CtapUserPresenceContinuation: IDisposable
 /// identical carry-through) — never recomputed once a decision arrives.
 /// </param>
 public sealed record CtapMakeCredentialUserPresenceContinuation(
-    MakeCredentialRequested Requested, bool UserVerified, bool EnterpriseAttestationGranted): CtapUserPresenceContinuation
+    MakeCredentialRequested Requested, bool UserVerified, bool EnterpriseAttestationGranted) : CtapUserPresenceContinuation
 {
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
@@ -78,7 +78,7 @@ public sealed record CtapMakeCredentialUserPresenceContinuation(
 /// <see cref="CtapRememberGetAssertionRequest.AuthenticatingPinUvAuthProtocol"/>'s identical purpose.
 /// </param>
 public sealed record CtapGetAssertionUserPresenceContinuation(
-    GetAssertionRequested Requested, bool UserVerified, CtapPinUvAuthProtocolId? AuthenticatingPinUvAuthProtocol): CtapUserPresenceContinuation
+    GetAssertionRequested Requested, bool UserVerified, CtapPinUvAuthProtocolId? AuthenticatingPinUvAuthProtocol) : CtapUserPresenceContinuation
 {
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
@@ -120,7 +120,7 @@ public sealed record CtapGetAssertionUserPresenceContinuation(
 /// </param>
 /// <param name="Continuation">Everything the post-collection <c>Continue*</c> path needs to resume.</param>
 public sealed record CtapPendingUserPresenceState(
-    DateTimeOffset ArmedAt, bool IsDeferralAllowed, CtapUserPresenceContinuation Continuation): IDisposable
+    DateTimeOffset ArmedAt, bool IsDeferralAllowed, CtapUserPresenceContinuation Continuation) : IDisposable
 {
     /// <summary>
     /// Releases <see cref="Continuation"/>'s own pooled carriers.

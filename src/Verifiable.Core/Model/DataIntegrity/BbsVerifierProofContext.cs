@@ -24,7 +24,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// </remarks>
 [DebuggerDisplay("BbsVerifierContext: {DisclosedNonMandatoryStatements.Count} disclosed, {MandatoryStatements.Count} mandatory")]
 [SuppressMessage("Performance", "CA1819:Properties should not return arrays", Justification = "Wire-format POCO representing parsed proof components.")]
-public sealed class BbsVerifierProofContext: IDisposable
+public sealed class BbsVerifierProofContext : IDisposable
 {
     /// <summary>
     /// The disclosed non-mandatory statements.

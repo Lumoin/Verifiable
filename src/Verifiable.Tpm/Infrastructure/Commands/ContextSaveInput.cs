@@ -24,7 +24,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// Specification reference: TPM 2.0 Library Part 3, clause 28.2 (Table 224).
 /// </para>
 /// </remarks>
-public readonly record struct ContextSaveInput(TpmiDhContext SaveHandle): ITpmCommandInput
+public readonly record struct ContextSaveInput(TpmiDhContext SaveHandle) : ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_ContextSave;

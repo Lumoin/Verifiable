@@ -195,7 +195,7 @@ public sealed record TransientKeyState(
     Tpm2bAuth AuthValue,
     Tpm2bDigest SeedValue,
     Tpm2bPublic PublicArea,
-    Tpm2bName QualifiedName): IDisposable
+    Tpm2bName QualifiedName) : IDisposable
 {
     /// <summary>
     /// Gets a value indicating whether this object is dictionary-attack protected: an authorization failure

@@ -24,7 +24,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public readonly struct TpmsMlDsaParms: IEquatable<TpmsMlDsaParms>
+public readonly struct TpmsMlDsaParms : IEquatable<TpmsMlDsaParms>
 {
     /// <summary>
     /// Gets the ML-DSA parameter set.

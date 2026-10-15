@@ -41,7 +41,7 @@ namespace Verifiable.Cryptography.Pki;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("AdESCertificateThumbprints: {Thumbprints.Count} thumbprints")]
-public sealed class AdESCertificateThumbprints: IDisposable, IEquatable<AdESCertificateThumbprints>
+public sealed class AdESCertificateThumbprints : IDisposable, IEquatable<AdESCertificateThumbprints>
 {
     private bool disposed;
 
@@ -213,7 +213,7 @@ public sealed class AdESCertificateThumbprints: IDisposable, IEquatable<AdESCert
 /// </para>
 /// </remarks>
 [DebuggerDisplay("AdESCertificateThumbprint: HashAlgorithm={HashAlgorithm}")]
-public sealed class AdESCertificateThumbprint: IDisposable, IEquatable<AdESCertificateThumbprint>
+public sealed class AdESCertificateThumbprint : IDisposable, IEquatable<AdESCertificateThumbprint>
 {
     private bool disposed;
 

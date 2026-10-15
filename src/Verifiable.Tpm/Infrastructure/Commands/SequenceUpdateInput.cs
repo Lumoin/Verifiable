@@ -28,7 +28,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </list>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class SequenceUpdateInput: ITpmCommandInput, IDisposable
+public sealed class SequenceUpdateInput : ITpmCommandInput, IDisposable
 {
     private bool Disposed { get; set; }
 

@@ -37,7 +37,7 @@ public enum XAdESSignedSignaturePropertyName
 /// <see cref="XAdESSignerRoleV2"/>); this container exposes identity and position only, per its own
 /// "containers expose their child properties as ordered recognized-name entries" design.
 /// </summary>
-public readonly struct XAdESSignedSignaturePropertyEntry: IEquatable<XAdESSignedSignaturePropertyEntry>
+public readonly struct XAdESSignedSignaturePropertyEntry : IEquatable<XAdESSignedSignaturePropertyEntry>
 {
     /// <summary>The property element's own index.</summary>
     public int ElementIndex { get; }
@@ -95,7 +95,7 @@ public readonly struct XAdESSignedSignaturePropertyEntry: IEquatable<XAdESSigned
 /// Carries no owned pooled content of its own — every entry is a plain (element index, name) pair over
 /// <see cref="Table"/> — so no <see cref="IDisposable"/> surface is needed.
 /// </remarks>
-public readonly struct XAdESSignedSignatureProperties: IEquatable<XAdESSignedSignatureProperties>
+public readonly struct XAdESSignedSignatureProperties : IEquatable<XAdESSignedSignatureProperties>
 {
     private static (byte[] LocalName, bool IsDeprecated, XAdESSignedSignaturePropertyName Name)[] Slots { get; } =
     [

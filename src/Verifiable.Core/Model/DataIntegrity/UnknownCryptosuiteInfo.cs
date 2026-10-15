@@ -28,7 +28,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// }
 /// </code>
 /// </remarks>
-public sealed class UnknownCryptosuiteInfo: CryptosuiteInfo
+public sealed class UnknownCryptosuiteInfo : CryptosuiteInfo
 {
     private static IReadOnlyList<string> EmptyContexts { get; } = Array.Empty<string>();
 

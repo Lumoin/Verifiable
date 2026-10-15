@@ -12,7 +12,7 @@ namespace Verifiable.OAuth.Oid4Vp.Server;
 /// <param name="Refusal">The typed refusal answered to the Wallet, selecting the RFC 6749 §4.1.2.1 error code.</param>
 /// <param name="LogReason">A human-readable reason for server-side logging only; never forwarded to clients.</param>
 /// <param name="FailedAt">The UTC instant the refusal was recorded.</param>
-public sealed record VerifierPresentationRefused(VerifierFlowRefusal Refusal, string LogReason, DateTimeOffset FailedAt): FlowInput
+public sealed record VerifierPresentationRefused(VerifierFlowRefusal Refusal, string LogReason, DateTimeOffset FailedAt) : FlowInput
 {
     /// <summary>
     /// The credential-status policy's typed verdict when <see cref="Refusal"/> is

@@ -32,7 +32,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// See TPM 2.0 Library Part 3, clause 11.1 - TPM2_StartAuthSession.
 /// </para>
 /// </remarks>
-public readonly record struct StartAuthSessionInput: ITpmCommandInput
+public readonly record struct StartAuthSessionInput : ITpmCommandInput
 {
     /// <summary>
     /// Handle of a loaded key for salt encryption, or TPM_RH_NULL for unsalted session.

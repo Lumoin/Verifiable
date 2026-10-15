@@ -22,7 +22,7 @@ namespace Verifiable.OAuth;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("OidcDiscoveryDocument Issuer={Issuer}")]
-public sealed class OidcDiscoveryDocument: IEquatable<OidcDiscoveryDocument>
+public sealed class OidcDiscoveryDocument : IEquatable<OidcDiscoveryDocument>
 {
     /// <summary>The authorization server's issuer identifier URI.</summary>
     public string Issuer { get; init; } = string.Empty;

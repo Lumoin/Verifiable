@@ -20,7 +20,7 @@ public abstract record TokenRequestBuilderError;
 /// </summary>
 /// <param name="Value">The resource value that failed the check, exactly as supplied.</param>
 /// <param name="Reason">The specific well-formedness rule <paramref name="Value"/> failed.</param>
-public sealed record InvalidResourceParameter(string Value, string Reason): TokenRequestBuilderError;
+public sealed record InvalidResourceParameter(string Value, string Reason) : TokenRequestBuilderError;
 
 
 /// <summary>
@@ -30,4 +30,4 @@ public sealed record InvalidResourceParameter(string Value, string Reason): Toke
 /// parameter can never mask or corrupt a core wire value.
 /// </summary>
 /// <param name="ParameterName">The reserved name the additional-parameters seam attempted to set.</param>
-public sealed record ReservedParameterNameCollision(string ParameterName): TokenRequestBuilderError;
+public sealed record ReservedParameterNameCollision(string ParameterName) : TokenRequestBuilderError;

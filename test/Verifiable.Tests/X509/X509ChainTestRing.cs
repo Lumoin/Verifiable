@@ -631,7 +631,7 @@ internal static class X509ChainTestRing
 /// returning the JOSE-shaped base64-DER chain (leaf first per RFC 7515 §4.1.6).
 /// Disposing this disposes all three nodes.
 /// </summary>
-internal sealed class X509ChainTestRingChain: IDisposable
+internal sealed class X509ChainTestRingChain : IDisposable
 {
     public X509ChainTestRingNode Root { get; }
 

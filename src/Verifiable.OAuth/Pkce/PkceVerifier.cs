@@ -24,7 +24,7 @@ namespace Verifiable.OAuth.Pkce;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("PkceVerifier Length={EncodedLength}")]
-public sealed class PkceVerifier: IDisposable, IEquatable<PkceVerifier>
+public sealed class PkceVerifier : IDisposable, IEquatable<PkceVerifier>
 {
     private bool disposed;
     private IMemoryOwner<byte> Owner { get; }

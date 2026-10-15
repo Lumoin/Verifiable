@@ -16,7 +16,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class ReadClockResponse: ITpmWireType
+public sealed class ReadClockResponse : ITpmWireType
 {
     /// <summary>
     /// Gets the current time, clock, resetCount, restartCount, and Safe snapshot.

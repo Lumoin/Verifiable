@@ -1060,7 +1060,7 @@ internal sealed class JAdESLifecycleFlowTests
 
 
     /// <summary>A genuine in-process Time-Stamping Authority: a root CA, a TSA leaf certificate under it, and <see cref="MintingTimestampResponder"/> minting real RFC 3161 tokens over whatever message imprint a call sends — no network socket involved. Mirrors <c>JAdESSignatureAugmentationTests.TsaFixture</c>.</summary>
-    private sealed class TsaFixture: IDisposable
+    private sealed class TsaFixture : IDisposable
     {
         private X509ChainTestRingNode Root { get; }
         private X509ChainTestRingNode AuthorityNode { get; }

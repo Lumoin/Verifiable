@@ -23,7 +23,7 @@ namespace Verifiable.Cryptography.Pki;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("RetainedOcspResponse({Status}, {Response is null ? \"no response\" : \"response retained\",nq})")]
-public sealed class RetainedOcspResponse: IDisposable
+public sealed class RetainedOcspResponse : IDisposable
 {
     /// <summary>Gets the certificate's revocation status.</summary>
     public CertificateRevocationStatus Status { get; }

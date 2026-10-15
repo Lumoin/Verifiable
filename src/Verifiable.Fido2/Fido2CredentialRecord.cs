@@ -85,7 +85,7 @@ public sealed record Fido2CredentialRecord(
     IReadOnlyList<string> Transports,
     bool BackupEligible,
     bool BackupState,
-    string? AuthenticatorAttachment = null): IDisposable
+    string? AuthenticatorAttachment = null) : IDisposable
 {
     /// <summary>
     /// Determines whether this record and <paramref name="other"/> report the same content. The

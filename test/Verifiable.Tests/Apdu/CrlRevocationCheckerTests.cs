@@ -19,12 +19,16 @@ namespace Verifiable.Tests.Apdu;
 [TestClass]
 internal sealed class CrlRevocationCheckerTests
 {
+    /// <summary>The instant every certificate and CRL of the minted scenario is judged at.</summary>
     private static DateTimeOffset ValidationTime { get; } = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
 
+    /// <summary>The test framework's context, supplying cancellation for the minting and the checks.</summary>
     public required TestContext TestContext { get; set; }
 
 
+    /// <summary>A valid CRL covering the issuer that does not list the Document Signer reports it Good.</summary>
+    /// <returns>A task completing once the status is judged.</returns>
     [TestMethod]
     public async Task ReportsGoodForACleanCrl()
     {
@@ -38,6 +42,8 @@ internal sealed class CrlRevocationCheckerTests
     }
 
 
+    /// <summary>A valid CRL listing the Document Signer's serial reports it Revoked.</summary>
+    /// <returns>A task completing once the status is judged.</returns>
     [TestMethod]
     public async Task ReportsRevokedForARevokingCrl()
     {
@@ -51,6 +57,8 @@ internal sealed class CrlRevocationCheckerTests
     }
 
 
+    /// <summary>With no CRL at all the status cannot be determined, and the checker fails closed to Unknown.</summary>
+    /// <returns>A task completing once the status is judged.</returns>
     [TestMethod]
     public async Task ReportsUnknownWhenNoCrlIsAvailable()
     {
@@ -64,6 +72,8 @@ internal sealed class CrlRevocationCheckerTests
     }
 
 
+    /// <summary>A CRL past its next-update time is not authoritative, so the status is Unknown rather than Good.</summary>
+    /// <returns>A task completing once the status is judged.</returns>
     [TestMethod]
     public async Task ReportsUnknownForAStaleCrl()
     {
@@ -77,6 +87,8 @@ internal sealed class CrlRevocationCheckerTests
     }
 
 
+    /// <summary>A revoking CRL claiming the CSCA's issuer name but signed by another key does not authenticate, so the status stays Unknown.</summary>
+    /// <returns>A task completing once the status is judged.</returns>
     [TestMethod]
     public async Task ReportsUnknownForACrlItCannotVerify()
     {
@@ -93,6 +105,8 @@ internal sealed class CrlRevocationCheckerTests
     }
 
 
+    /// <summary>A revocation in any authoritative CRL is decisive, even beside a clean one.</summary>
+    /// <returns>A task completing once the status is judged.</returns>
     [TestMethod]
     public async Task RevocationWinsWhenACleanAndARevokingCrlAreBothPresent()
     {
@@ -106,6 +120,8 @@ internal sealed class CrlRevocationCheckerTests
     }
 
 
+    /// <summary>A CRL whose this-update time lies in the future is not yet valid, so the status is Unknown.</summary>
+    /// <returns>A task completing once the status is judged.</returns>
     [TestMethod]
     public async Task ReportsUnknownForANotYetValidCrl()
     {
@@ -119,6 +135,8 @@ internal sealed class CrlRevocationCheckerTests
     }
 
 
+    /// <summary>A clean CRL signed by an untrusted key is not authoritative, so it cannot vouch for the Document Signer.</summary>
+    /// <returns>A task completing once the status is judged.</returns>
     [TestMethod]
     public async Task ReportsUnknownForAnUntrustedCleanCrl()
     {
@@ -135,6 +153,8 @@ internal sealed class CrlRevocationCheckerTests
     }
 
 
+    /// <summary>A candidate whose Key Usage lacks cRLSign cannot make a CRL authoritative, even when its key verifies the signature (RFC 5280 section 6.3.3(f)).</summary>
+    /// <returns>A task completing once the status is judged.</returns>
     [TestMethod]
     public async Task ReportsUnknownWhenTheAuthorisingCandidateLacksCrlSign()
     {
@@ -151,6 +171,8 @@ internal sealed class CrlRevocationCheckerTests
     }
 
 
+    /// <summary>By default a CRL without a next-update time has no freshness bound and is not authoritative, so the status is Unknown.</summary>
+    /// <returns>A task completing once the status is judged.</returns>
     [TestMethod]
     public async Task ReportsUnknownForACrlWithoutNextUpdateByDefault()
     {
@@ -166,6 +188,8 @@ internal sealed class CrlRevocationCheckerTests
     }
 
 
+    /// <summary>With the opt-in flag a CRL without a next-update time is authoritative, and its clean listing reports Good.</summary>
+    /// <returns>A task completing once the status is judged.</returns>
     [TestMethod]
     public async Task AcceptsACrlWithoutNextUpdateWhenTheFlagAllowsIt()
     {
@@ -181,6 +205,8 @@ internal sealed class CrlRevocationCheckerTests
     }
 
 
+    /// <summary>A malformed CRL in the set is skipped rather than aborting the scan, and a valid revoking CRL after it is still honoured.</summary>
+    /// <returns>A task completing once the status is judged.</returns>
     [TestMethod]
     public async Task SkipsAMalformedCrlAndStillConsultsAValidOne()
     {
@@ -196,6 +222,8 @@ internal sealed class CrlRevocationCheckerTests
     }
 
 
+    /// <summary>Plugged into the chain-validation seam as the revocation source, the checker makes chain validation reject a revoked Document Signer.</summary>
+    /// <returns>A task completing once the status is judged.</returns>
     [TestMethod]
     public async Task ChainValidationRejectsALeafRevokedByTheCrlChecker()
     {
@@ -220,6 +248,8 @@ internal sealed class CrlRevocationCheckerTests
     }
 
 
+    /// <summary>Plugged into the chain-validation seam, a clean CRL lets chain validation complete and return the leaf key.</summary>
+    /// <returns>A task completing once the status is judged.</returns>
     [TestMethod]
     public async Task ChainValidationAcceptsALeafClearedByTheCrlChecker()
     {

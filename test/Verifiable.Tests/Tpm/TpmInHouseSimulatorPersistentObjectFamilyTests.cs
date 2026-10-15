@@ -1025,7 +1025,7 @@ internal sealed class TpmInHouseSimulatorPersistentObjectFamilyTests
     /// real signing key.
     /// </summary>
     /// <param name="inner">The wrapped <see cref="SignInput"/>; this wrapper is its terminal owner.</param>
-    private sealed class SequenceKeyedSignInput(SignInput inner): ITpmCommandInput, IDisposable
+    private sealed class SequenceKeyedSignInput(SignInput inner) : ITpmCommandInput, IDisposable
     {
         /// <inheritdoc/>
         public TpmCcConstants CommandCode => inner.CommandCode;
@@ -1054,7 +1054,7 @@ internal sealed class TpmInHouseSimulatorPersistentObjectFamilyTests
     /// handle, exactly as <see cref="SequenceKeyedSignInput"/> does for <see cref="SignInput"/>.
     /// </summary>
     /// <param name="inner">The wrapped <see cref="SignDigestInput"/>; this wrapper is its terminal owner.</param>
-    private sealed class SequenceKeyedSignDigestInput(SignDigestInput inner): ITpmCommandInput, IDisposable
+    private sealed class SequenceKeyedSignDigestInput(SignDigestInput inner) : ITpmCommandInput, IDisposable
     {
         /// <inheritdoc/>
         public TpmCcConstants CommandCode => inner.CommandCode;

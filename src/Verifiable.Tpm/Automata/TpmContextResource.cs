@@ -11,7 +11,7 @@ namespace Verifiable.Tpm.Automata;
 /// assigned constant; they need only be stable within one running simulator, since a blob never crosses a
 /// process boundary except through <see cref="Tpm2bContextData"/>'s own opaque octets.
 /// </remarks>
-public enum TpmContextResourceKind: byte
+public enum TpmContextResourceKind : byte
 {
     /// <summary>A <see cref="TransientKeyState"/> — an ordinary or <c>stClear</c> Transient Object.</summary>
     TransientKey = 0,
@@ -50,7 +50,7 @@ public enum TpmContextResourceKind: byte
 /// other loaded resource's does, and this envelope is discarded unwrapped.
 /// </para>
 /// </remarks>
-public abstract record TpmContextResource: IDisposable
+public abstract record TpmContextResource : IDisposable
 {
     /// <summary>Gets the wire kind tag this resource serializes under (<see cref="TpmContextResourceKind"/>).</summary>
     public abstract TpmContextResourceKind Kind { get; }
@@ -91,7 +91,7 @@ public abstract record TpmContextResource: IDisposable
 /// <c>TPM2_ContextSave()</c>/<c>TPM2_ContextLoad()</c>.
 /// </summary>
 /// <param name="Key">The wrapped Transient Object state; BORROWED on the save path, OWNED on the load path (see <see cref="TpmContextResource"/>'s remarks).</param>
-public sealed record TpmContextTransientKey(TransientKeyState Key): TpmContextResource
+public sealed record TpmContextTransientKey(TransientKeyState Key) : TpmContextResource
 {
     /// <inheritdoc/>
     public override TpmContextResourceKind Kind => TpmContextResourceKind.TransientKey;
@@ -111,7 +111,7 @@ public sealed record TpmContextTransientKey(TransientKeyState Key): TpmContextRe
 /// <c>TPM2_ContextSave()</c>/<c>TPM2_ContextLoad()</c>.
 /// </summary>
 /// <param name="Object">The wrapped KEYEDHASH object state; BORROWED on the save path, OWNED on the load path (see <see cref="TpmContextResource"/>'s remarks).</param>
-public sealed record TpmContextKeyedHashObject(KeyedHashObjectState Object): TpmContextResource
+public sealed record TpmContextKeyedHashObject(KeyedHashObjectState Object) : TpmContextResource
 {
     /// <inheritdoc/>
     public override TpmContextResourceKind Kind => TpmContextResourceKind.KeyedHashObject;
@@ -131,7 +131,7 @@ public sealed record TpmContextKeyedHashObject(KeyedHashObjectState Object): Tpm
 /// <c>TPM2_ContextSave()</c>/<c>TPM2_ContextLoad()</c>.
 /// </summary>
 /// <param name="Sequence">The wrapped sequence-context state; BORROWED on the save path, OWNED on the load path (see <see cref="TpmContextResource"/>'s remarks).</param>
-public sealed record TpmContextSequenceObject(SequenceObjectState Sequence): TpmContextResource
+public sealed record TpmContextSequenceObject(SequenceObjectState Sequence) : TpmContextResource
 {
     /// <inheritdoc/>
     public override TpmContextResourceKind Kind => TpmContextResourceKind.SequenceObject;
@@ -151,7 +151,7 @@ public sealed record TpmContextSequenceObject(SequenceObjectState Sequence): Tpm
 /// <c>TPM2_ContextSave()</c>/<c>TPM2_ContextLoad()</c>.
 /// </summary>
 /// <param name="Session">The wrapped HMAC session state; BORROWED on the save path (the live record the save effect is about to remove and dispose itself), OWNED on the load path (see <see cref="TpmContextResource"/>'s remarks).</param>
-public sealed record TpmContextHmacSession(HmacSessionState Session): TpmContextResource
+public sealed record TpmContextHmacSession(HmacSessionState Session) : TpmContextResource
 {
     /// <inheritdoc/>
     public override TpmContextResourceKind Kind => TpmContextResourceKind.HmacSession;
@@ -171,7 +171,7 @@ public sealed record TpmContextHmacSession(HmacSessionState Session): TpmContext
 /// <c>TPM2_ContextSave()</c>/<c>TPM2_ContextLoad()</c>.
 /// </summary>
 /// <param name="Session">The wrapped policy session state; BORROWED on the save path (the live record the save effect is about to remove and dispose itself), OWNED on the load path (see <see cref="TpmContextResource"/>'s remarks).</param>
-public sealed record TpmContextPolicySession(PolicySessionState Session): TpmContextResource
+public sealed record TpmContextPolicySession(PolicySessionState Session) : TpmContextResource
 {
     /// <inheritdoc/>
     public override TpmContextResourceKind Kind => TpmContextResourceKind.PolicySession;

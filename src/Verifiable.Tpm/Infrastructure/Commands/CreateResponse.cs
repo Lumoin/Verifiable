@@ -19,7 +19,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </list>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class CreateResponse: ITpmWireType, IDisposable
+public sealed class CreateResponse : ITpmWireType, IDisposable
 {
     private bool disposed;
 

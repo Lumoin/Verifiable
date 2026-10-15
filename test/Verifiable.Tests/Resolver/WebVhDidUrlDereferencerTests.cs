@@ -78,7 +78,7 @@ internal sealed class WebVhDidUrlDereferencerTests
     public async Task PathDereferencesFileBytes()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         byte[] served = Encoding.UTF8.GetBytes("{\"issuers\":[\"did:webvh:issuer\"]}");
         var routes = LogRoutes(log);
@@ -102,7 +102,7 @@ internal sealed class WebVhDidUrlDereferencerTests
     public async Task PathDereferenceMaxAgeResponseReportsThatManySecondsOfStorableFreshness()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         byte[] served = Encoding.UTF8.GetBytes("{\"issuers\":[\"did:webvh:issuer\"]}");
         var routes = LogRoutes(log);
@@ -128,7 +128,7 @@ internal sealed class WebVhDidUrlDereferencerTests
     public async Task PathDereferenceNon200ResponseReportsNonStorableFreshness()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         var routes = LogRoutes(log);
         routes["https://example.com/governance/issuers.json"] = (404, null, null);
@@ -149,7 +149,7 @@ internal sealed class WebVhDidUrlDereferencerTests
     public async Task PathNotFoundWhenFileMissing()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         //The #files endpoint resolves but the targeted file is served as a 404.
         var routes = LogRoutes(log);
@@ -203,7 +203,7 @@ internal sealed class WebVhDidUrlDereferencerTests
     public async Task PathFetchCancellationCarriedInsideTheTransportFaultPropagates(string cancellationShape, bool isCallerCancelled)
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
         using CancellationTokenSource caller = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
 
         //The DID Log is served, so the base DID resolves; only the resource fetch meets the cancellation.
@@ -394,7 +394,7 @@ internal sealed class WebVhDidUrlDereferencerTests
     public async Task WhoisParseCancellationCarriedInsideTheParserFaultPropagates(string cancellationShape, bool isCallerCancelled)
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
         using CancellationTokenSource caller = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
         VerifiablePresentation CancelledPresentationParser(string serialized)
         {
@@ -582,7 +582,7 @@ internal sealed class WebVhDidUrlDereferencerTests
     public async Task PathWithUnknownVersionQueryIsNotFound()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         //The file IS served, so the only reason to fail is the version query: a versionId that does not exist
         //makes base resolution NotFound, proving the DID-URL version query is threaded into resolution rather
@@ -626,7 +626,7 @@ internal sealed class WebVhDidUrlDereferencerTests
     public async Task QueryOnlyUnknownVersionIdIsNotFound()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         DidDereferencingResult result = await DereferenceAsync(
             $"{log.Did}?versionId=9-QmUnknownVersionXXXXXXXXXXXXXXXXXXXXXXXXXXXX", LogRoutes(log)).ConfigureAwait(false);

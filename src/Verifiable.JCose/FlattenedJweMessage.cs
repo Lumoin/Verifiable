@@ -29,7 +29,7 @@ namespace Verifiable.JCose;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("FlattenedJweMessage EncryptionAlgorithm={EncryptionAlgorithm} KeyId={Recipient.KeyId}")]
-public sealed class FlattenedJweMessage: IDisposable
+public sealed class FlattenedJweMessage : IDisposable
 {
     private bool disposed;
 

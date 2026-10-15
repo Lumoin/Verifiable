@@ -12,7 +12,7 @@ namespace Verifiable.Fido2;
 /// Level 3, section 10.1.5: Large blob storage extension (largeBlob)</see> — client extension
 /// output <c>supported</c>, registration-only.
 /// </remarks>
-public sealed record LargeBlobSupportedContext: ClaimContext
+public sealed record LargeBlobSupportedContext : ClaimContext
 {
     /// <summary>Whether the authenticator reported support for large-blob storage.</summary>
     public required bool Supported { get; init; }

@@ -19,7 +19,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 /// </remarks>
 /// <param name="PublicKey">The P-256 key-agreement public point. Owned by this record.</param>
 /// <param name="PrivateKey">The P-256 key-agreement private scalar. Owned by this record.</param>
-public sealed record CtapPinUvAuthKeyAgreementKeyPair(PublicKeyMemory PublicKey, PrivateKeyMemory PrivateKey): IDisposable
+public sealed record CtapPinUvAuthKeyAgreementKeyPair(PublicKeyMemory PublicKey, PrivateKeyMemory PrivateKey) : IDisposable
 {
     /// <summary>
     /// Releases the key-agreement public and private key material this record owns.

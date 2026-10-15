@@ -7,7 +7,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <remarks>
 /// See TPM 2.0 Library Part 3, clause 31.7 (Table 254).
 /// </remarks>
-public sealed class NvWriteResponse: ITpmWireType
+public sealed class NvWriteResponse : ITpmWireType
 {
     /// <summary>
     /// The shared instance returned for a successful, parameterless response.

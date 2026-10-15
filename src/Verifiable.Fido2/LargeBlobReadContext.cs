@@ -15,7 +15,7 @@ namespace Verifiable.Fido2;
 /// array rather than copying it into pooled memory — not pooled, per this codebase's
 /// <see cref="TaggedMemory{T}"/> convention for short-lived deserialization buffers.
 /// </remarks>
-public sealed record LargeBlobReadContext: ClaimContext
+public sealed record LargeBlobReadContext : ClaimContext
 {
     /// <summary>The decoded <c>blob</c> payload bytes, tagged <see cref="Fido2BufferTags.LargeBlob"/>.</summary>
     public required TaggedMemory<byte> Blob { get; init; }

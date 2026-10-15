@@ -24,7 +24,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("Statements: {Statements.Count}, Labels: {LabelMap.Count}")]
-public readonly struct RelabelingResult: IEquatable<RelabelingResult>
+public readonly struct RelabelingResult : IEquatable<RelabelingResult>
 {
     /// <summary>
     /// The relabeled N-Quad statements with HMAC-derived blank node identifiers.

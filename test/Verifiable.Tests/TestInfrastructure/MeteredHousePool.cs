@@ -18,7 +18,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// evidence is the balance: <see cref="OutstandingCount"/> reaching the expected residue proves every
 /// other rented carrier came back.
 /// </remarks>
-internal sealed class MeteredHousePool: IDisposable
+internal sealed class MeteredHousePool : IDisposable
 {
     /// <summary>The counter name the pool publishes each successful rent under.</summary>
     private const string RentCounterName = "Lumoin.BaseMemoryPool.RentOperationsTotal";

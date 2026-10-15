@@ -8,7 +8,7 @@ namespace Verifiable.OAuth.AuthCode;
 /// <remarks>
 /// Accessed via <c>FlowKind.AuthCodeClient</c>.
 /// </remarks>
-public sealed class AuthCodeClientFlowKind: StatefulFlowKind
+public sealed class AuthCodeClientFlowKind : StatefulFlowKind
 {
     /// <summary>The singleton instance.</summary>
     public static AuthCodeClientFlowKind Instance { get; } = new();

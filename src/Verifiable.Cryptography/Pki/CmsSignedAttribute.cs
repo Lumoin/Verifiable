@@ -16,7 +16,7 @@ namespace Verifiable.Cryptography.Pki;
 /// holds the first, which is the single-valued case the CAdES attributes use.
 /// </remarks>
 [DebuggerDisplay("CmsSignedAttribute({AttributeType}, {Length} bytes)")]
-public sealed class CmsSignedAttribute: SensitiveMemory
+public sealed class CmsSignedAttribute : SensitiveMemory
 {
     /// <summary>
     /// Initialises a new <see cref="CmsSignedAttribute"/> from owned value bytes.

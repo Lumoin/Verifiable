@@ -30,4 +30,4 @@ namespace Verifiable.JCose;
 /// </remarks>
 /// <param name="Value">The raw token string from the request.</param>
 [DebuggerDisplay("OpaqueShape Length={Value.Length}")]
-public sealed record OpaqueShape(string Value): JoseTokenShape;
+public sealed record OpaqueShape(string Value) : JoseTokenShape;

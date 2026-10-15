@@ -17,7 +17,7 @@ namespace Verifiable.Vcalm.Exchange;
 /// state retains the §3.6.6 reporting fields so a later get-state read surfaces the same error.
 /// </remarks>
 [DebuggerDisplay("VcalmExchangeInvalidState FlowId={FlowId} ExchangeId={ExchangeId} Reason={ErrorTitle,nq}")]
-public sealed record VcalmExchangeInvalidState: FlowState
+public sealed record VcalmExchangeInvalidState : FlowState
 {
     /// <summary>The §3.6 <c>{localExchangeId}</c> the exchange is addressed by, or empty for the pre-initiation sentinel.</summary>
     public required string ExchangeId { get; init; }

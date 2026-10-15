@@ -114,7 +114,7 @@ public sealed class PreservationOperationContext<TRequest> where TRequest : Pres
 /// carries; the caller disposes it. On failure it owns nothing.
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class PreservationOperationResult<TResponse>: IDisposable where TResponse : PreservationResponse
+public sealed class PreservationOperationResult<TResponse> : IDisposable where TResponse : PreservationResponse
 {
     /// <summary>How the peer disposed of the call; <see cref="PreservationOperationOutcome.Succeeded"/> is the only success.</summary>
     public required PreservationOperationOutcome Outcome { get; init; }
@@ -424,7 +424,7 @@ public enum PreservationMessageEncodeStatus
 /// caller disposes them. On failure it owns nothing.
 /// </summary>
 [DebuggerDisplay("PreservationMessageEncodeResult: {Status}")]
-public sealed class PreservationMessageEncodeResult: IDisposable
+public sealed class PreservationMessageEncodeResult : IDisposable
 {
     /// <summary>The encoding outcome; <see cref="PreservationMessageEncodeStatus.Encoded"/> is the only success.</summary>
     public required PreservationMessageEncodeStatus Status { get; init; }
@@ -561,7 +561,7 @@ public enum PreservationMessageParseStatus
 /// payload that message carries; the caller disposes it. On failure it owns nothing.
 /// </summary>
 [DebuggerDisplay("PreservationMessageParseResult: {Status}")]
-public sealed class PreservationMessageParseResult: IDisposable
+public sealed class PreservationMessageParseResult : IDisposable
 {
     /// <summary>The parse outcome; <see cref="PreservationMessageParseStatus.Valid"/> is the only success.</summary>
     public required PreservationMessageParseStatus Status { get; init; }

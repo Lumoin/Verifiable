@@ -24,7 +24,7 @@ namespace Verifiable.Core.Model.Did;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("UnknownPurposeMethod(Id = {Id}, Purpose = {PurposeName}, IsEmbedded = {IsEmbeddedVerification})")]
-public sealed class UnknownPurposeMethod: VerificationMethodReference
+public sealed class UnknownPurposeMethod : VerificationMethodReference
 {
     /// <summary>
     /// The proof's own <c>proofPurpose</c> value exactly as it was read, or the empty string when the proof declared

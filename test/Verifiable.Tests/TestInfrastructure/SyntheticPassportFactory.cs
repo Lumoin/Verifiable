@@ -386,9 +386,13 @@ internal static class SyntheticPassportFactory
     /// <paramref name="validationTime"/>: the certificates (including a same-name CA whose Key Usage lacks
     /// <c>cRLSign</c>), a clean CRL, a revoking CRL, a stale (expired) CRL, a forged revoking and a forged clean CRL
     /// (the CSCA's issuer name but a different key), a not-yet-valid CRL, a CRL with no <c>nextUpdate</c>, and a
-    /// malformed CRL.
+    /// malformed CRL. The pooled carriers are owned by this method until the scenario holding them is constructed: a cancellation
+    /// of the awaited signing, or a failure minting any carrier, disposes every carrier minted so far, and only a constructed
+    /// scenario takes them over, which the caller disposes.
     /// </summary>
-    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the pooled certificate and CRL carriers transfers to the returned RevocationScenario, which the caller disposes.")]
+    /// <param name="validationTime">The instant every certificate and CRL of the scenario is minted relative to.</param>
+    /// <param name="cancellationToken">Cancels the signing of the CRL without a next-update time.</param>
+    /// <returns>The scenario, owning every carrier it holds.</returns>
     public static async ValueTask<RevocationScenario> MintRevocationScenarioAsync(DateTimeOffset validationTime, CancellationToken cancellationToken)
     {
         //Certificate-factory carve-out (see class remarks): these keys sign the certificates and CRLs minted below via CertificateRequest / CertificateRevocationListBuilder.
@@ -404,23 +408,71 @@ internal static class SyntheticPassportFactory
         //genuine CSCA CRL (same key), but it is not authorised to sign CRLs, so the checker must still reject it.
         using X509Certificate2 nonCrlSigner = MintCscaWithoutCrlSign(cscaKey);
 
-        DateTimeOffset thisUpdate = validationTime.AddDays(-1);
-        DateTimeOffset nextUpdate = validationTime.AddDays(30);
+        var thisUpdate = validationTime.AddDays(-1);
+        var nextUpdate = validationTime.AddDays(30);
+        var minted = new List<PkiCertificateMemory>();
+        var constructed = false;
 
-        return new RevocationScenario
+        try
         {
-            DocumentSigner = ToPkiCertificate(documentSigner),
-            CscaAnchor = ToPkiCertificate(csca),
-            NonCrlSignerAnchor = ToPkiCertificate(nonCrlSigner),
-            CleanCrl = MintCrl(csca, revokedCertificate: null, thisUpdate, nextUpdate, crlNumber: 1),
-            RevokingCrl = MintCrl(csca, documentSigner, thisUpdate, nextUpdate, crlNumber: 2),
-            StaleCrl = MintCrl(csca, revokedCertificate: null, validationTime.AddDays(-30), validationTime.AddDays(-1), crlNumber: 3),
-            ForgedRevokingCrl = MintCrl(impostorCsca, documentSigner, thisUpdate, nextUpdate, crlNumber: 4),
-            ForgedCleanCrl = MintCrl(impostorCsca, revokedCertificate: null, thisUpdate, nextUpdate, crlNumber: 5),
-            NotYetValidCrl = MintCrl(csca, revokedCertificate: null, validationTime.AddDays(1), validationTime.AddDays(30), crlNumber: 6),
-            NoNextUpdateCrl = await MintCrlWithoutNextUpdateAsync(csca, cscaKey, thisUpdate, cancellationToken).ConfigureAwait(false),
-            MalformedCrl = new PkiCertificateMemory(ToPooled(MalformedCrlBytes), PkiCertificateTags.X509Crl)
-        };
+            var noNextUpdateCrl = Held(minted, await MintCrlWithoutNextUpdateAsync(csca, cscaKey, thisUpdate, cancellationToken).ConfigureAwait(false));
+            var documentSignerCarrier = Held(minted, ToPkiCertificate(documentSigner));
+            var cscaAnchor = Held(minted, ToPkiCertificate(csca));
+            var nonCrlSignerAnchor = Held(minted, ToPkiCertificate(nonCrlSigner));
+            var cleanCrl = Held(minted, MintCrl(csca, revokedCertificate: null, thisUpdate, nextUpdate, crlNumber: 1));
+            var revokingCrl = Held(minted, MintCrl(csca, documentSigner, thisUpdate, nextUpdate, crlNumber: 2));
+            var staleCrl = Held(minted, MintCrl(csca, revokedCertificate: null, validationTime.AddDays(-30), validationTime.AddDays(-1), crlNumber: 3));
+            var forgedRevokingCrl = Held(minted, MintCrl(impostorCsca, documentSigner, thisUpdate, nextUpdate, crlNumber: 4));
+            var forgedCleanCrl = Held(minted, MintCrl(impostorCsca, revokedCertificate: null, thisUpdate, nextUpdate, crlNumber: 5));
+            var notYetValidCrl = Held(minted, MintCrl(csca, revokedCertificate: null, validationTime.AddDays(1), validationTime.AddDays(30), crlNumber: 6));
+            var malformedCrl = Held(minted, new PkiCertificateMemory(ToPooled(MalformedCrlBytes), PkiCertificateTags.X509Crl));
+
+            //Every carrier is minted, so the scenario is constructed of assignments alone and owns them from here on; its caller
+            //disposes it.
+            var scenario = new RevocationScenario
+            {
+                DocumentSigner = documentSignerCarrier,
+                CscaAnchor = cscaAnchor,
+                NonCrlSignerAnchor = nonCrlSignerAnchor,
+                CleanCrl = cleanCrl,
+                RevokingCrl = revokingCrl,
+                StaleCrl = staleCrl,
+                ForgedRevokingCrl = forgedRevokingCrl,
+                ForgedCleanCrl = forgedCleanCrl,
+                NotYetValidCrl = notYetValidCrl,
+                NoNextUpdateCrl = noNextUpdateCrl,
+                MalformedCrl = malformedCrl
+            };
+            constructed = true;
+
+            return scenario;
+        }
+        finally
+        {
+            //A cancellation of the awaited signing, or a failure minting any carrier, leaves no scenario to own what was minted.
+            if(!constructed)
+            {
+                foreach(var carrier in minted)
+                {
+                    carrier.Dispose();
+                }
+            }
+        }
+    }
+
+
+    /// <summary>
+    /// Holds a minted carrier among those the minting method owns until the scenario holding them is constructed, so a failure
+    /// before then disposes it.
+    /// </summary>
+    /// <param name="minted">The carriers the minting method owns.</param>
+    /// <param name="carrier">The carrier just minted.</param>
+    /// <returns>The carrier.</returns>
+    private static PkiCertificateMemory Held(List<PkiCertificateMemory> minted, PkiCertificateMemory carrier)
+    {
+        minted.Add(carrier);
+
+        return carrier;
     }
 
 
@@ -605,7 +657,7 @@ internal static class SyntheticPassportFactory
 /// A firewalled synthetic passport: the EF.SOD and data groups held in pooled memory as a real read returns
 /// them, plus the CSCA trust anchor. Owns and disposes all of it.
 /// </summary>
-internal sealed class SyntheticPassport: IDisposable
+internal sealed class SyntheticPassport : IDisposable
 {
     /// <summary>
     /// Initialises a new <see cref="SyntheticPassport"/>, taking ownership of every carrier.
@@ -656,7 +708,7 @@ internal sealed class SyntheticPassport: IDisposable
 /// and forged (the CSCA's issuer name but a different signing key) — all held as pooled carriers. Owns and disposes
 /// all of them.
 /// </summary>
-internal sealed class RevocationScenario: IDisposable
+internal sealed class RevocationScenario : IDisposable
 {
     /// <summary>Gets the Document Signer certificate whose revocation status the CRLs speak to.</summary>
     public required PkiCertificateMemory DocumentSigner { get; init; }

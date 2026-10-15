@@ -80,7 +80,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class TpmtTkVerified: IDisposable, ITpmWireType
+public sealed class TpmtTkVerified : IDisposable, ITpmWireType
 {
     /// <summary>
     /// The shared NULL Verified Ticket instance (TPM_ST_VERIFIED, TPM_RH_NULL, no metadata, empty hmac); it owns

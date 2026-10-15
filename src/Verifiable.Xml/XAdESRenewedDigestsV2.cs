@@ -11,7 +11,7 @@ namespace Verifiable.Xml;
 /// octets (clause 5.5.3, <c>RecomputedDigestValueType</c>). Neither child carries an attribute of its own — the
 /// schema types both as the bare <c>ds:DigestValueType</c> simple type.
 /// </summary>
-public readonly struct XAdESRecomputedDigestValue: IEquatable<XAdESRecomputedDigestValue>
+public readonly struct XAdESRecomputedDigestValue : IEquatable<XAdESRecomputedDigestValue>
 {
     /// <summary>The table the value's spans read from.</summary>
     internal XmlNodeTable Table { get; }
@@ -103,7 +103,7 @@ public readonly struct XAdESRecomputedDigestValue: IEquatable<XAdESRecomputedDig
 /// <see cref="IDisposable"/>.
 /// </para>
 /// </remarks>
-public sealed class XAdESRenewedDigestsV2: IDisposable
+public sealed class XAdESRenewedDigestsV2 : IDisposable
 {
     /// <summary>The document the property was read from. Not owned; the caller disposes it separately.</summary>
     public XmlNodeTable Table { get; }

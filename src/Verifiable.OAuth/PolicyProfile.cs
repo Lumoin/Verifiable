@@ -57,7 +57,7 @@ namespace Verifiable.OAuth;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{PolicyProfileNames.GetName(this),nq}")]
-public readonly struct PolicyProfile: IEquatable<PolicyProfile>
+public readonly struct PolicyProfile : IEquatable<PolicyProfile>
 {
     /// <summary>Gets the numeric code identifying this profile.</summary>
     public int Code { get; }

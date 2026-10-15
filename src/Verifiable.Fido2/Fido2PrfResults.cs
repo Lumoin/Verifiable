@@ -27,7 +27,7 @@ namespace Verifiable.Fido2;
 /// the bytes.
 /// </para>
 /// </remarks>
-public sealed class Fido2PrfResults: IDisposable
+public sealed class Fido2PrfResults : IDisposable
 {
     /// <summary>Whether <see cref="Dispose"/> has already run, guarding against a double dispose.</summary>
     private bool IsDisposed { get; set; }

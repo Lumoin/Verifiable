@@ -15,7 +15,7 @@ namespace Verifiable.Apdu.Lds;
 /// Authentication. Only ECDH keys are extracted; plain Diffie–Hellman keys (<c>id-PK-DH</c>) are not.
 /// </para>
 /// </remarks>
-public sealed class ChipAuthenticationPublicKeyInfo: IDisposable
+public sealed class ChipAuthenticationPublicKeyInfo : IDisposable
 {
     private bool disposed;
 

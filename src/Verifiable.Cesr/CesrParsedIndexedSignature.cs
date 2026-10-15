@@ -11,7 +11,7 @@ namespace Verifiable.Cesr;
 /// The raw value is owned by the caller, who MUST dispose this instance to return the buffer to its pool.
 /// </remarks>
 [SuppressMessage("Performance", "CA1815:Override equals and operator equals on value types", Justification = "This is a disposable owner of pooled memory, not a comparable value; equality is not meaningful.")]
-public readonly struct CesrParsedIndexedSignature: IDisposable
+public readonly struct CesrParsedIndexedSignature : IDisposable
 {
     private IMemoryOwner<byte> RawOwner { get; }
 

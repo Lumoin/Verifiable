@@ -137,7 +137,7 @@ public sealed record SequenceObjectState(
     Tpm2bAuth AuthValue,
     ImmutableList<Tpm2bMaxBuffer> Segments,
     TpmSequenceFirstBlock FirstBlock,
-    Tpm2bSensitiveData HmacKey): IDisposable
+    Tpm2bSensitiveData HmacKey) : IDisposable
 {
     /// <summary>
     /// Releases the sequence's owned carriers — <see cref="StartingKeyName"/>, <see cref="AuthValue"/>,
@@ -295,7 +295,7 @@ public sealed record SequenceObjectState(
     /// the owning <see cref="Tpm2bMaxBuffer"/> (or the completing command's own trailing buffer) outlives the
     /// short-lived <see cref="ReadOnlySequence{T}"/> built over it.
     /// </summary>
-    private sealed class TpmSequenceSegment: ReadOnlySequenceSegment<byte>
+    private sealed class TpmSequenceSegment : ReadOnlySequenceSegment<byte>
     {
         /// <summary>
         /// Initializes the chain's first link over <paramref name="memory"/>, at running index zero.

@@ -12,7 +12,7 @@ namespace Verifiable.Tpm;
 /// </para>
 /// </remarks>
 [SuppressMessage("Design", "CA1008:Enums should have zero value", Justification = "These values follow standard POSIX error codes.")]
-public enum LinuxErrno: uint
+public enum LinuxErrno : uint
 {
     /// <summary>
     /// EIO (5) - I/O error.

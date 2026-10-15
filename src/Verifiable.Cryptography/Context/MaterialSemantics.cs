@@ -164,7 +164,7 @@ namespace Verifiable.Cryptography.Context;
 /// <seealso cref="EncodingScheme"/>
 /// <seealso cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>
 [DebuggerDisplay("{MaterialSemanticsNames.GetName(this),nq}")]
-public readonly struct MaterialSemantics: IEquatable<MaterialSemantics>
+public readonly struct MaterialSemantics : IEquatable<MaterialSemantics>
 {
     /// <summary>
     /// Gets the numeric code for this material semantics.

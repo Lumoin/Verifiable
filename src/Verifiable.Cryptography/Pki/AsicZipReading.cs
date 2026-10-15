@@ -188,7 +188,7 @@ public sealed record AsicZipReadLimits
 /// One entry of a container that was read: its name, its decompressed octets, and what its headers recorded.
 /// </summary>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class AsicZipEntry: IDisposable
+public sealed class AsicZipEntry : IDisposable
 {
     /// <summary>Gets the entry name as the container carries it: root-relative and <c>/</c>-separated (Annex A.6).</summary>
     public required string Name { get; init; }
@@ -243,7 +243,7 @@ public sealed class AsicZipEntry: IDisposable
 /// their content that clauses 4.3.3.2, 4.4.4.2 and A.7 answer, and a layer above this one asks.
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class AsicZipContainer: IDisposable
+public sealed class AsicZipContainer : IDisposable
 {
     /// <summary>Gets the entries, in the order the archive's central directory lists them. Owned by this instance.</summary>
     public required IReadOnlyList<AsicZipEntry> Entries { get; init; }
@@ -315,7 +315,7 @@ public sealed class AsicZipContainer: IDisposable
 /// What <see cref="AsicZipReading.Read"/> concluded, and the container when it read one.
 /// </summary>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class AsicZipReadResult: IDisposable
+public sealed class AsicZipReadResult : IDisposable
 {
     /// <summary>Gets what the reader concluded.</summary>
     public required AsicZipReadStatus Status { get; init; }
@@ -1357,7 +1357,7 @@ public static class AsicZipReading
     /// memory this library does not copy into a managed array to read. Nothing here writes, so the writing
     /// members refuse rather than pretend.
     /// </remarks>
-    private sealed class ReadOnlyMemoryStream: Stream
+    private sealed class ReadOnlyMemoryStream : Stream
     {
         /// <summary>The octets this stream reads from.</summary>
         private ReadOnlyMemory<byte> Source { get; }

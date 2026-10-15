@@ -26,7 +26,7 @@ namespace Verifiable.Core.Model.Mdoc;
 /// <see cref="IssuerSigned"/>.
 /// </para>
 /// </remarks>
-public sealed class MdocPresentationDocument: IDisposable
+public sealed class MdocPresentationDocument : IDisposable
 {
     private bool disposed;
 

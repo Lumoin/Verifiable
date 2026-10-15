@@ -45,7 +45,7 @@ namespace Verifiable.Core.Model.Dcql;
 /// var query2 = await builder.BuildAsync(ct);
 /// </code>
 /// </example>
-public sealed class DcqlQueryBuilder: Builder<DcqlQuery, DcqlQueryBuildState, DcqlQueryBuilder>
+public sealed class DcqlQueryBuilder : Builder<DcqlQuery, DcqlQueryBuildState, DcqlQueryBuilder>
 {
     /// <summary>
     /// Builds the <see cref="DcqlQuery"/> by executing the fold/aggregate pipeline.

@@ -25,7 +25,7 @@ public enum XAdESCertificateValueKind
 /// <see cref="Kind"/> — the same two-arm-entry shape <see cref="XAdESCertifiedRole"/> takes for
 /// <c>CertifiedRoleTypeV2</c>'s own choice.
 /// </summary>
-public readonly struct XAdESCertificateValueEntry: IEquatable<XAdESCertificateValueEntry>
+public readonly struct XAdESCertificateValueEntry : IEquatable<XAdESCertificateValueEntry>
 {
     /// <summary>Which arm of the choice this entry holds.</summary>
     public XAdESCertificateValueKind Kind { get; }
@@ -117,7 +117,7 @@ public readonly struct XAdESCertificateValueEntry: IEquatable<XAdESCertificateVa
 /// fields.
 /// </para>
 /// </remarks>
-public sealed class XAdESCertificateValues: IDisposable
+public sealed class XAdESCertificateValues : IDisposable
 {
     /// <summary>
     /// The maximum number of <c>EncapsulatedX509Certificate</c>/<c>OtherCertificate</c> entries <see cref="TryRead"/>

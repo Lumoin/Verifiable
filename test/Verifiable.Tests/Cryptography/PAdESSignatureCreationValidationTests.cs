@@ -653,7 +653,7 @@ internal sealed class PAdESSignatureCreationValidationTests
 
 
     /// <summary>Mints the signer identity and the unsigned base PDF one <see cref="PAdESSigningRequest"/> is built against.</summary>
-    private sealed class PAdESScenario: IDisposable
+    private sealed class PAdESScenario : IDisposable
     {
         internal required X509ChainTestRingNode Root { get; init; }
 

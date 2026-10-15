@@ -986,7 +986,7 @@ internal sealed class TpmInHouseSimulatorObjectChangeAuthTests
     /// public area (the unchanged area a rewrapped private area reloads with), and the width of the private area
     /// its creation returned.
     /// </summary>
-    private sealed class SealedObject: IDisposable
+    private sealed class SealedObject : IDisposable
     {
         /// <summary>Whether the owned clones have been released.</summary>
         private bool isDisposed;

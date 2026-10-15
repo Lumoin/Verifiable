@@ -1481,7 +1481,7 @@ internal sealed class TpmInHouseSimulatorRsaDecryptSessionTests
     /// load carries into the simulator: the modulus and one prime factor go over the wire, and the framework
     /// object itself is the independent off-TPM encryption oracle.
     /// </summary>
-    private sealed class RsaKeyMaterial: IDisposable
+    private sealed class RsaKeyMaterial : IDisposable
     {
         /// <summary>Gets the framework key, the off-TPM encryption oracle.</summary>
         public RSA Key { get; }

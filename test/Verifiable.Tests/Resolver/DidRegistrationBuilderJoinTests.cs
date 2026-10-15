@@ -512,7 +512,7 @@ internal sealed class DidRegistrationBuilderJoinTests
     /// <summary>Collects the registration PDA's emitted trace entries for assertion.</summary>
     /// <typeparam name="T">The trace entry type.</typeparam>
     /// <param name="entries">The list each emitted entry is appended to.</param>
-    private sealed class TraceObserver<T>(List<T> entries): IObserver<T>
+    private sealed class TraceObserver<T>(List<T> entries) : IObserver<T>
     {
         /// <summary>Records an emitted trace entry.</summary>
         /// <param name="value">The emitted trace entry.</param>

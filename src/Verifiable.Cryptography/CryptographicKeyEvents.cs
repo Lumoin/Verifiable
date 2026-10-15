@@ -469,7 +469,7 @@ public static class CryptographicKeyEvents
     //concurrent emitter or subscriber interleaves with it. This is what makes concurrent subscribe/dispose
     //during an in-flight emit safe: the emit either sees the observer or it does not, but it never sees a
     //partially-updated array.
-    internal sealed class CryptoSubject: IObservable<CryptoEvent>
+    internal sealed class CryptoSubject : IObservable<CryptoEvent>
     {
         private volatile IObserver<CryptoEvent>[] observers = [];
 
@@ -557,7 +557,7 @@ public static class CryptographicKeyEvents
 
         private sealed class Subscription(
             CryptoSubject subject,
-            IObserver<CryptoEvent> observer): IDisposable
+            IObserver<CryptoEvent> observer) : IDisposable
         {
             private bool disposed;
 

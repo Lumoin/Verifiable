@@ -12,7 +12,7 @@ namespace Verifiable.Tests.SelectiveDisclosure;
 internal sealed class SdTokenEquatableTests
 {
     /// <summary>An <see cref="SdToken{TEnvelope}"/> subtype with no additional identity members.</summary>
-    private sealed class DerivedSdToken: SdToken<string>
+    private sealed class DerivedSdToken : SdToken<string>
     {
         /// <summary>
         /// Creates a subtype instance carrying the same issuer-signed payload and no disclosures.

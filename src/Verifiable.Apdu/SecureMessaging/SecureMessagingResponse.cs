@@ -15,7 +15,7 @@ namespace Verifiable.Apdu.SecureMessaging;
 /// transport-level <c>9000</c> that wraps every Secure Messaging response.
 /// </para>
 /// </remarks>
-public sealed class SecureMessagingResponse: IDisposable
+public sealed class SecureMessagingResponse : IDisposable
 {
     private DecryptedContent? DecryptedData { get; }
     private bool disposed;

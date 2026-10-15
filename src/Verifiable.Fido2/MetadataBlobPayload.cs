@@ -51,7 +51,7 @@ public sealed record MetadataBlobPayload(
     string? LegalHeader,
     long No,
     DateOnly NextUpdate,
-    IReadOnlyList<MetadataBlobPayloadEntry> Entries): IDisposable
+    IReadOnlyList<MetadataBlobPayloadEntry> Entries) : IDisposable
 {
     /// <summary>
     /// Determines whether this payload and <paramref name="other"/> report the same content. The

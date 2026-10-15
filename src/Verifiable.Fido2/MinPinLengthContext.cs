@@ -13,7 +13,7 @@ namespace Verifiable.Fido2;
 /// extension output, registration-only. <see cref="Length"/> carries no restricted value set: any
 /// non-negative code-point count is a spec-legal minimum PIN length.
 /// </remarks>
-public sealed record MinPinLengthContext: ClaimContext
+public sealed record MinPinLengthContext : ClaimContext
 {
     /// <summary>The authenticator's current minimum PIN length, in Unicode code points.</summary>
     public required int Length { get; init; }

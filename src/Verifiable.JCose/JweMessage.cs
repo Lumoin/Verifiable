@@ -19,7 +19,7 @@ namespace Verifiable.JCose;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("JweMessage EncryptionAlgorithm={EncryptionAlgorithm} CiphertextLength={EncryptResult.Ciphertext.Length}")]
-public sealed class JweMessage: IDisposable
+public sealed class JweMessage : IDisposable
 {
     private bool disposed;
 

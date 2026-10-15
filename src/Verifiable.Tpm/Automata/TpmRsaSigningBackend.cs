@@ -321,7 +321,7 @@ public sealed record TpmRsaSigningBackend(
 /// </summary>
 /// <param name="PrivateKey">The generated private key, in the backend's own encoding.</param>
 /// <param name="Modulus">The generated public modulus (big-endian).</param>
-public sealed record TpmGeneratedRsaKey(PrivateKeyMemory PrivateKey, PublicKeyMemory Modulus): IDisposable
+public sealed record TpmGeneratedRsaKey(PrivateKeyMemory PrivateKey, PublicKeyMemory Modulus) : IDisposable
 {
     /// <summary>
     /// Releases the key material backing the private key and the public modulus.

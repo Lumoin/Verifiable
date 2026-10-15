@@ -77,7 +77,7 @@ namespace Verifiable.Cryptography.Aead;
 /// </code>
 /// </remarks>
 [DebuggerDisplay("ContentEncryptionKey UseCount={UseCount} Consumed={inner is null}")]
-public sealed class ContentEncryptionKey: IDisposable
+public sealed class ContentEncryptionKey : IDisposable
 {
     private SymmetricKeyMemory? inner;
     private int useCount;

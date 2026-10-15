@@ -14,7 +14,7 @@ namespace Verifiable.Vcalm;
 /// from held verifiable credentials.
 /// </remarks>
 [DebuggerDisplay("AuthorizationCapabilityRequest Capabilities={CapabilityQuery.Length} Group={Group}")]
-public sealed record AuthorizationCapabilityRequestQuery: VcalmPresentationQuery
+public sealed record AuthorizationCapabilityRequestQuery : VcalmPresentationQuery
 {
     /// <summary>The §3.4.4 <c>capabilityQuery</c> array of requested capabilities.</summary>
     public ImmutableArray<CapabilityQueryItem> CapabilityQuery { get; init; } =

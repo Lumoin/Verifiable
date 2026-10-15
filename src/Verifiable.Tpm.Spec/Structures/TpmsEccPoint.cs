@@ -28,7 +28,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class TpmsEccPoint: IDisposable
+public sealed class TpmsEccPoint : IDisposable
 {
     private static TpmsEccPoint EmptyInstance { get; } = new(Tpm2bEccParameter.Empty, Tpm2bEccParameter.Empty);
 

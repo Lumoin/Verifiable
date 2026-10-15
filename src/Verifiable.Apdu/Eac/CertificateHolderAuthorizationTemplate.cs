@@ -21,7 +21,7 @@ namespace Verifiable.Apdu.Eac;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("CHAT({TerminalType}, {Role})")]
-public sealed class CertificateHolderAuthorizationTemplate: SensitiveMemory
+public sealed class CertificateHolderAuthorizationTemplate : SensitiveMemory
 {
     /// <summary>The relative-authorization bits an Inspection System template uses for eMRTD sensitive-data read access (EF.DG3 and EF.DG4); the leading two role bits and the remaining reserved bits are masked off.</summary>
     private const byte EmrtdReadAccessMask = (byte)(InspectionSystemAccess.ReadDataGroup3Fingerprint | InspectionSystemAccess.ReadDataGroup4Iris);

@@ -32,7 +32,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class CreateInput: ITpmCommandInput, IDisposable
+public sealed class CreateInput : ITpmCommandInput, IDisposable
 {
     private bool disposed;
 

@@ -14,7 +14,7 @@ namespace Verifiable.Fido2;
 /// value set: both <see langword="true"/> and <see langword="false"/> are legitimate authenticator
 /// states, not protocol violations.
 /// </remarks>
-public sealed record HmacSecretSupportedContext: ClaimContext
+public sealed record HmacSecretSupportedContext : ClaimContext
 {
     /// <summary>Whether the authenticator generated and associated its CredRandom pair with the credential.</summary>
     public required bool Supported { get; init; }

@@ -14,7 +14,7 @@ namespace Verifiable.Apdu.SecureMessaging;
 /// in a <see cref="DecryptedContent"/> carrier and cleared on disposal.
 /// </para>
 /// </remarks>
-public sealed class SecureMessagingCommand: IDisposable
+public sealed class SecureMessagingCommand : IDisposable
 {
     private DecryptedContent? CommandData { get; }
     private bool disposed;

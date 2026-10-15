@@ -8,7 +8,7 @@ namespace Verifiable.OAuth.Federation;
 /// mark identifier, the issuer in question, and the reason the
 /// authorization could not be established.
 /// </summary>
-public sealed record TrustMarkIssuerAuthorizationContext: ClaimContext
+public sealed record TrustMarkIssuerAuthorizationContext : ClaimContext
 {
     /// <summary>The trust mark identifier being authorized.</summary>
     public required string MarkId { get; init; }

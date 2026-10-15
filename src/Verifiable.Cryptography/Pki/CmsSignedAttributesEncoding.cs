@@ -47,7 +47,7 @@ namespace Verifiable.Cryptography.Pki;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class CmsSignedAttributesEncoding: IDisposable
+public sealed class CmsSignedAttributesEncoding : IDisposable
 {
     /// <summary>
     /// The largest number of attributes one <c>SignedAttributes</c> set is built with. The syntax leaves the

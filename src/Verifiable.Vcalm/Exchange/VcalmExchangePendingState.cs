@@ -16,7 +16,7 @@ namespace Verifiable.Vcalm.Exchange;
 /// straight to <see cref="VcalmExchangeCompleteState"/>.
 /// </remarks>
 [DebuggerDisplay("VcalmExchangePendingState FlowId={FlowId} ExchangeId={ExchangeId}")]
-public sealed record VcalmExchangePendingState: FlowState
+public sealed record VcalmExchangePendingState : FlowState
 {
     /// <summary>The §3.6 <c>{localExchangeId}</c> the exchange is addressed by.</summary>
     public required string ExchangeId { get; init; }

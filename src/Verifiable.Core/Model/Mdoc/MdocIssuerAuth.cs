@@ -33,7 +33,7 @@ namespace Verifiable.Core.Model.Mdoc;
 /// pool.
 /// </para>
 /// </remarks>
-public sealed class MdocIssuerAuth: IDisposable
+public sealed class MdocIssuerAuth : IDisposable
 {
     private bool disposed;
 

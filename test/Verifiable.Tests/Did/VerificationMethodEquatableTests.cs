@@ -331,7 +331,7 @@ namespace Verifiable.Tests.Did
 
 
         /// <summary>A <see cref="VerificationMethod"/> subtype with no additional identity members.</summary>
-        private sealed class DerivedVerificationMethod: VerificationMethod
+        private sealed class DerivedVerificationMethod : VerificationMethod
         {
         }
 

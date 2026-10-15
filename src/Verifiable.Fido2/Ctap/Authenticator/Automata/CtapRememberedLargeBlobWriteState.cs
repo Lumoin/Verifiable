@@ -62,7 +62,7 @@ public sealed record CtapRememberedLargeBlobWriteState(
     int ExpectedLength,
     int ExpectedNextOffset,
     IMemoryOwner<byte> PendingBuffer,
-    CtapPinUvAuthProtocolId? AuthenticatingPinUvAuthProtocol): IDisposable
+    CtapPinUvAuthProtocolId? AuthenticatingPinUvAuthProtocol) : IDisposable
 {
     /// <summary>
     /// Releases the not-yet-committed <see cref="PendingBuffer"/> this record owns.

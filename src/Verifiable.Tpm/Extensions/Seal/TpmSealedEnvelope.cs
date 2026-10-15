@@ -32,7 +32,7 @@ namespace Verifiable.Tpm.Extensions.Seal;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class TpmSealedEnvelope: IDisposable
+public sealed class TpmSealedEnvelope : IDisposable
 {
     /// <summary>Whether the carriers this envelope owns have already been released.</summary>
     private bool isDisposed;

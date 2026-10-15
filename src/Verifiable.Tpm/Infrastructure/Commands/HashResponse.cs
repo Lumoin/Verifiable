@@ -15,7 +15,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// released by <see cref="Dispose"/>.
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class HashResponse: IDisposable, ITpmWireType
+public sealed class HashResponse : IDisposable, ITpmWireType
 {
     /// <summary>Whether this instance has been disposed.</summary>
     private bool Disposed { get; set; }

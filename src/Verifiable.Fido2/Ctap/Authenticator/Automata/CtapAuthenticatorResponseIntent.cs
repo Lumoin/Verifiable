@@ -14,35 +14,35 @@ public abstract record CtapAuthenticatorResponseIntent;
 /// CBOR-encoded.
 /// </summary>
 /// <param name="Response">The <c>authenticatorGetInfo</c> response model.</param>
-public sealed record GetInfoResponseReady(CtapGetInfoResponse Response): CtapAuthenticatorResponseIntent;
+public sealed record GetInfoResponseReady(CtapGetInfoResponse Response) : CtapAuthenticatorResponseIntent;
 
 /// <summary>
 /// The result of a successful <c>authenticatorClientPIN</c> command: the response model ready to be
 /// CBOR-encoded.
 /// </summary>
 /// <param name="Response">The <c>authenticatorClientPIN</c> response model.</param>
-public sealed record ClientPinResponseReady(CtapClientPinResponse Response): CtapAuthenticatorResponseIntent;
+public sealed record ClientPinResponseReady(CtapClientPinResponse Response) : CtapAuthenticatorResponseIntent;
 
 /// <summary>
 /// The result of an <see cref="UnsupportedCtapCommandReceived"/> input: a bare
 /// <see cref="WellKnownCtapStatusCodes.InvalidCommand"/> status, no CBOR body.
 /// </summary>
 /// <param name="CommandByte">The unrecognized command byte, retained for tracing.</param>
-public sealed record UnsupportedCommandResponse(byte CommandByte): CtapAuthenticatorResponseIntent;
+public sealed record UnsupportedCommandResponse(byte CommandByte) : CtapAuthenticatorResponseIntent;
 
 /// <summary>
 /// The result of a successful <c>authenticatorMakeCredential</c> command: the response model ready to be
 /// CBOR-encoded.
 /// </summary>
 /// <param name="Response">The <c>authenticatorMakeCredential</c> response model.</param>
-public sealed record MakeCredentialResponseReady(CtapMakeCredentialResponse Response): CtapAuthenticatorResponseIntent;
+public sealed record MakeCredentialResponseReady(CtapMakeCredentialResponse Response) : CtapAuthenticatorResponseIntent;
 
 /// <summary>
 /// The result of a successful <c>authenticatorGetAssertion</c> command: the response model ready to be
 /// CBOR-encoded.
 /// </summary>
 /// <param name="Response">The <c>authenticatorGetAssertion</c> response model.</param>
-public sealed record GetAssertionResponseReady(CtapGetAssertionResponse Response): CtapAuthenticatorResponseIntent;
+public sealed record GetAssertionResponseReady(CtapGetAssertionResponse Response) : CtapAuthenticatorResponseIntent;
 
 /// <summary>
 /// A rejected command: a bare non-<c>CTAP2_OK</c> status byte, no CBOR body — the general-purpose shape
@@ -51,7 +51,7 @@ public sealed record GetAssertionResponseReady(CtapGetAssertionResponse Response
 /// CTAP 2.3, section 8.2: Status codes</see>.
 /// </summary>
 /// <param name="StatusCode">The CTAP2 status code to report, one of <see cref="WellKnownCtapStatusCodes"/>'s non-<see cref="WellKnownCtapStatusCodes.Ok"/> values.</param>
-public sealed record CtapErrorResponse(byte StatusCode): CtapAuthenticatorResponseIntent;
+public sealed record CtapErrorResponse(byte StatusCode) : CtapAuthenticatorResponseIntent;
 
 /// <summary>
 /// The result of a successful <c>authenticatorConfig</c> command: a bare <see cref="WellKnownCtapStatusCodes.Ok"/>
@@ -64,7 +64,7 @@ public sealed record CtapErrorResponse(byte StatusCode): CtapAuthenticatorRespon
 /// to <see cref="CtapErrorResponse"/>'s bare-status shape, not <see cref="ClientPinResponseReady"/>'s
 /// CBOR-body shape.
 /// </remarks>
-public sealed record AuthenticatorConfigResponseReady: CtapAuthenticatorResponseIntent;
+public sealed record AuthenticatorConfigResponseReady : CtapAuthenticatorResponseIntent;
 
 /// <summary>
 /// The result of a successful <c>authenticatorCredentialManagement</c> command.
@@ -80,7 +80,7 @@ public sealed record AuthenticatorConfigResponseReady: CtapAuthenticatorResponse
 /// <see cref="ClientPinResponseReady"/>'s shape.
 /// </remarks>
 /// <param name="Response">The response model to CBOR-encode, or <see langword="null"/> for a bare <c>CTAP2_OK</c>.</param>
-public sealed record CredentialManagementResponseReady(CtapCredentialManagementResponse? Response): CtapAuthenticatorResponseIntent;
+public sealed record CredentialManagementResponseReady(CtapCredentialManagementResponse? Response) : CtapAuthenticatorResponseIntent;
 
 /// <summary>
 /// The result of a successful <c>authenticatorReset</c> command: a bare <see cref="WellKnownCtapStatusCodes.Ok"/>
@@ -92,7 +92,7 @@ public sealed record CredentialManagementResponseReady(CtapCredentialManagementR
 /// every outcome is a status code alone, no response map is ever defined. Framed identically to
 /// <see cref="AuthenticatorConfigResponseReady"/>'s bare-status shape.
 /// </remarks>
-public sealed record AuthenticatorResetResponseReady: CtapAuthenticatorResponseIntent;
+public sealed record AuthenticatorResetResponseReady : CtapAuthenticatorResponseIntent;
 
 /// <summary>
 /// The result of a successful <c>authenticatorBioEnrollment</c> command.
@@ -110,7 +110,7 @@ public sealed record AuthenticatorResetResponseReady: CtapAuthenticatorResponseI
 /// body.
 /// </remarks>
 /// <param name="Response">The response model to CBOR-encode, or <see langword="null"/> for a bare <c>CTAP2_OK</c>.</param>
-public sealed record BioEnrollmentResponseReady(CtapBioEnrollmentResponse? Response): CtapAuthenticatorResponseIntent;
+public sealed record BioEnrollmentResponseReady(CtapBioEnrollmentResponse? Response) : CtapAuthenticatorResponseIntent;
 
 /// <summary>
 /// The result of a successful <c>authenticatorLargeBlobs</c> command.
@@ -126,7 +126,7 @@ public sealed record BioEnrollmentResponseReady(CtapBioEnrollmentResponse? Respo
 /// is framed as a one-member CBOR body.
 /// </remarks>
 /// <param name="Response">The response model to CBOR-encode, or <see langword="null"/> for a bare <c>CTAP2_OK</c>.</param>
-public sealed record LargeBlobsResponseReady(CtapLargeBlobsResponse? Response): CtapAuthenticatorResponseIntent;
+public sealed record LargeBlobsResponseReady(CtapLargeBlobsResponse? Response) : CtapAuthenticatorResponseIntent;
 
 /// <summary>
 /// An <c>authenticatorMakeCredential</c>/<c>authenticatorGetAssertion</c> user-presence wait remains
@@ -138,4 +138,4 @@ public sealed record LargeBlobsResponseReady(CtapLargeBlobsResponse? Response): 
 /// inputs it builds never allow deferral (<see cref="MakeCredentialRequested.IsUserPresenceDeferralAllowed"/>/
 /// <see cref="GetAssertionRequested.IsUserPresenceDeferralAllowed"/> stay <see langword="false"/>).
 /// </summary>
-public sealed record UserPresencePending: CtapAuthenticatorResponseIntent;
+public sealed record UserPresencePending : CtapAuthenticatorResponseIntent;

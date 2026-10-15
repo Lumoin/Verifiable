@@ -30,7 +30,7 @@ namespace Verifiable.Json.Converters;
 /// through <see cref="DidResolver.DereferenceAsync"/> rather than reconstructing it from JSON.
 /// </para>
 /// </remarks>
-public class DidDereferencingResultConverter: JsonConverter<DidDereferencingResult>
+public class DidDereferencingResultConverter : JsonConverter<DidDereferencingResult>
 {
     /// <inheritdoc />
     public override bool CanConvert(Type typeToConvert)

@@ -23,7 +23,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </remarks>
 /// <param name="SessionHandle">The policy (or HMAC) session handle to restart.</param>
 [DebuggerDisplay("PolicyRestartInput(Session=0x{SessionHandle,h})")]
-public readonly record struct PolicyRestartInput(uint SessionHandle): ITpmCommandInput
+public readonly record struct PolicyRestartInput(uint SessionHandle) : ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_PolicyRestart;

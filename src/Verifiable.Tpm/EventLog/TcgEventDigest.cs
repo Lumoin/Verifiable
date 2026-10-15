@@ -11,7 +11,7 @@ namespace Verifiable.Tpm.EventLog;
 /// (Section 10.2.2 "TCG_PCR_EVENT2 Structure", TPMT_HA within TPML_DIGEST_VALUES).
 /// </para>
 /// </remarks>
-public sealed class TcgEventDigest: IEquatable<TcgEventDigest>
+public sealed class TcgEventDigest : IEquatable<TcgEventDigest>
 {
     /// <summary>
     /// Gets the TPM algorithm ID.

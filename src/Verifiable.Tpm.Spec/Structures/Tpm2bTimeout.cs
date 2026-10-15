@@ -36,7 +36,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class Tpm2bTimeout: IDisposable
+public sealed class Tpm2bTimeout : IDisposable
 {
     /// <summary>
     /// Maximum size of the timeout value in octets (<c>sizeof(UINT64)</c>, Part 2, Table 98).

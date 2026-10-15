@@ -33,7 +33,7 @@ namespace Verifiable.Json.Converters;
 /// Integrity proofs, where those bytes are exactly what is signed.
 /// </para>
 /// </remarks>
-public class JsonLdContextConverter: JsonConverter<Context>
+public class JsonLdContextConverter : JsonConverter<Context>
 {
     /// <inheritdoc/>
     public override bool CanConvert(Type typeToConvert)

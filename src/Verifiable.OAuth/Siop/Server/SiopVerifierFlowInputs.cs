@@ -11,7 +11,7 @@ namespace Verifiable.OAuth.Siop.Server;
 /// <c>nonce</c>/<c>client_id</c> of a Self-Issued ID Token transaction and minted the per-flow
 /// request handle.
 /// </summary>
-public sealed record SiopRequestPrepared: FlowInput
+public sealed record SiopRequestPrepared : FlowInput
 {
     /// <summary>The internal flow identifier.</summary>
     public required string FlowId { get; init; }
@@ -77,7 +77,7 @@ public sealed record SiopRequestPrepared: FlowInput
 /// <see cref="Verifiable.Core.ExchangeContext"/> (the SIOP request-object slot), so the served state carries only
 /// the transaction-forwarding values.
 /// </summary>
-public sealed record SiopRequestObjectSigned: FlowInput
+public sealed record SiopRequestObjectSigned : FlowInput
 {
     /// <summary>When the Request Object was signed and served.</summary>
     public required DateTimeOffset ServedAt { get; init; }
@@ -90,7 +90,7 @@ public sealed record SiopRequestObjectSigned: FlowInput
 /// resulting <see cref="States.SiopResponseReceivedState"/> declares, so the endpoint's
 /// <c>BuildInputAsync</c> performs no side effects.
 /// </summary>
-public sealed record SiopResponsePosted: FlowInput
+public sealed record SiopResponsePosted : FlowInput
 {
     /// <summary>The compact Self-Issued ID Token the Wallet POSTed.</summary>
     public required string IdToken { get; init; }
@@ -109,7 +109,7 @@ public sealed record SiopResponsePosted: FlowInput
 /// <c>BuildInputAsync</c> performs no side effects. The encrypted sibling of
 /// <see cref="SiopResponsePosted"/>, which carries the bare-JWS <c>id_token</c>.
 /// </summary>
-public sealed record SiopEncryptedResponsePosted: FlowInput
+public sealed record SiopEncryptedResponsePosted : FlowInput
 {
     /// <summary>The compact JWE (five dot-separated segments) carrying the encrypted Self-Issued ID Token.</summary>
     public required string EncryptedIdToken { get; init; }
@@ -127,7 +127,7 @@ public sealed record SiopEncryptedResponsePosted: FlowInput
 /// are all deferred to the action the resulting <see cref="States.SiopCombinedResponseReceivedState"/>
 /// declares, so the endpoint's <c>BuildInputAsync</c> performs no side effects.
 /// </summary>
-public sealed record SiopCombinedResponsePosted: FlowInput
+public sealed record SiopCombinedResponsePosted : FlowInput
 {
     /// <summary>The compact Self-Issued ID Token the Wallet POSTed.</summary>
     public required string IdToken { get; init; }
@@ -144,7 +144,7 @@ public sealed record SiopCombinedResponsePosted: FlowInput
 /// The result of the §11.1 validation action, produced by the registered handler on the
 /// <see cref="OAuthActionExecutor"/>, driving the flow to terminal success.
 /// </summary>
-public sealed record SelfIssuedAuthenticationVerified: FlowInput
+public sealed record SelfIssuedAuthenticationVerified : FlowInput
 {
     /// <summary>The verified <c>sub</c>.</summary>
     public required string Subject { get; init; }
@@ -180,7 +180,7 @@ public sealed record SelfIssuedAuthenticationVerified: FlowInput
 
 
 /// <summary>Drives any non-terminal SIOP RP flow state to terminal failure.</summary>
-public sealed record SiopFlowFailed: FlowInput
+public sealed record SiopFlowFailed : FlowInput
 {
     /// <summary>Why the flow failed. Server-side logging only; never forwarded to the Wallet.</summary>
     public required string Reason { get; init; }

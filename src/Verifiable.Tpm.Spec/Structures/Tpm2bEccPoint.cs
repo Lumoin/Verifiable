@@ -28,7 +28,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class Tpm2bEccPoint: IDisposable, ITpmWireType
+public sealed class Tpm2bEccPoint : IDisposable, ITpmWireType
 {
     /// <summary>
     /// Shared empty instance wrapping <see cref="TpmsEccPoint.Empty"/> — the omitted-point shape (Table 199's

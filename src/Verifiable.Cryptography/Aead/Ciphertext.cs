@@ -21,7 +21,7 @@ namespace Verifiable.Cryptography.Aead;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class Ciphertext: SensitiveMemory, IEquatable<Ciphertext>
+public sealed class Ciphertext : SensitiveMemory, IEquatable<Ciphertext>
 {
     /// <summary>Gets the length of the ciphertext in bytes.</summary>
     public int Length => MemoryOwner.Memory.Length;

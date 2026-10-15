@@ -17,7 +17,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// </remarks>
 /// <param name="LockHandle">The lockout hierarchy authorizing the reset (<c>TPM_RH_LOCKOUT</c>).</param>
-public readonly record struct DictionaryAttackLockResetInput(TpmRh LockHandle): ITpmCommandInput
+public readonly record struct DictionaryAttackLockResetInput(TpmRh LockHandle) : ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_DictionaryAttackLockReset;

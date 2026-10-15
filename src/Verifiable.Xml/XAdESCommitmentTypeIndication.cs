@@ -30,7 +30,7 @@ public enum XAdESCommitmentTypeIndicationChoice
 /// <see cref="Table"/>, a nested <see cref="XAdESObjectIdentifier"/>, or an <see cref="XAdESUnmodeledContent"/>
 /// list — so no <see cref="IDisposable"/> surface is needed.
 /// </remarks>
-public readonly struct XAdESCommitmentTypeIndication: IEquatable<XAdESCommitmentTypeIndication>
+public readonly struct XAdESCommitmentTypeIndication : IEquatable<XAdESCommitmentTypeIndication>
 {
     /// <summary>The table the property's spans read from.</summary>
     internal XmlNodeTable Table { get; }

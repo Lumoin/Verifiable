@@ -107,7 +107,7 @@ internal static class CtapPinCryptoFixtures
 /// platform role with — building <c>newPinEnc</c>/<c>pinHashEnc</c>/<c>pinUvAuthParam</c> request
 /// members and decrypting a returned <c>pinUvAuthToken</c>.
 /// </summary>
-internal sealed class CtapPlatformPinSession: IDisposable
+internal sealed class CtapPlatformPinSession : IDisposable
 {
     /// <summary>The stored PIN hash length in bytes: <c>LEFT(SHA-256(pin), 16)</c> (CTAP 2.3, lines 5592/5641).</summary>
     private const int PinHashLength = 16;

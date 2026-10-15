@@ -19,7 +19,7 @@ namespace Verifiable.Xml;
 /// or nested arbitrarily deep the same way — <see cref="TryRead"/> is usable standalone over any element
 /// index a caller already knows names a <c>Manifest</c>.
 /// </remarks>
-public sealed class XmlManifest: IDisposable
+public sealed class XmlManifest : IDisposable
 {
     /// <summary>The document the manifest was read from. Not owned; the caller disposes it separately.</summary>
     public XmlNodeTable Table { get; }

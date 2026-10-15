@@ -14,7 +14,7 @@ namespace Verifiable.Apdu.Automata;
 /// whose <see cref="CardRngAction"/> draws the card nonce (RND.IC) from the injected RNG backend — the
 /// same pattern as the TPM simulator's <c>TpmRngAction</c>.
 /// </remarks>
-public abstract record CardAction: PdaAction;
+public abstract record CardAction : PdaAction;
 
 /// <summary>
 /// Declares that the simulator must draw <paramref name="ByteCount"/> random octets from its RNG backend
@@ -22,7 +22,7 @@ public abstract record CardAction: PdaAction;
 /// buffer via the injected backend and feeds the octets back as a <see cref="CardEntropyGenerated"/> input.
 /// </summary>
 /// <param name="ByteCount">The number of octets to produce (the challenge length the terminal requested).</param>
-public sealed record CardRngAction(int ByteCount): CardAction;
+public sealed record CardRngAction(int ByteCount) : CardAction;
 
 /// <summary>
 /// Declares that the simulator must run the Basic Access Control mutual authentication: verify the
@@ -32,7 +32,7 @@ public sealed record CardRngAction(int ByteCount): CardAction;
 /// <see cref="BacAuthenticationCompleted"/> or <see cref="BacAuthenticationFailed"/> input.
 /// </summary>
 /// <param name="TerminalToken">The terminal's authentication token <c>EIFD || MIFD</c> (a view into the command APDU).</param>
-public sealed record BacAuthenticateAction(System.ReadOnlyMemory<byte> TerminalToken): CardAction;
+public sealed record BacAuthenticateAction(System.ReadOnlyMemory<byte> TerminalToken) : CardAction;
 
 /// <summary>
 /// Declares that the simulator must capture the PACE mechanism selected by MSE:Set AT — the protocol OID,
@@ -40,14 +40,14 @@ public sealed record BacAuthenticateAction(System.ReadOnlyMemory<byte> TerminalT
 /// stores the OID as device state and feeds a <see cref="PaceMechanismSelected"/> input back.
 /// </summary>
 /// <param name="ObjectIdentifier">The PACE protocol OID value bytes from DO'80' (a view into the command APDU).</param>
-public sealed record PaceSelectMechanismAction(System.ReadOnlyMemory<byte> ObjectIdentifier): CardAction;
+public sealed record PaceSelectMechanismAction(System.ReadOnlyMemory<byte> ObjectIdentifier) : CardAction;
 
 /// <summary>
 /// Declares that the simulator must run the PACE encrypted-nonce round: derive the password key from the
 /// card's MRZ, draw the nonce, and encrypt it. Emitted by the first GENERAL AUTHENTICATE; the effectful loop
 /// runs the crypto and feeds the encrypted nonce back as a <see cref="PaceRoundCompleted"/> input.
 /// </summary>
-public sealed record PaceEncryptNonceAction: CardAction;
+public sealed record PaceEncryptNonceAction : CardAction;
 
 /// <summary>
 /// Declares that the simulator must run the PACE nonce-mapping round, mapping the nonce to the ephemeral
@@ -60,7 +60,7 @@ public sealed record PaceEncryptNonceAction: CardAction;
 /// The terminal's DO'81' mapping data (a view into the command APDU): the mapping public key for Generic
 /// Mapping, or the additional nonce <c>t</c> for Integrated Mapping.
 /// </param>
-public sealed record PaceMapAction(System.ReadOnlyMemory<byte> TerminalMappingData): CardAction;
+public sealed record PaceMapAction(System.ReadOnlyMemory<byte> TerminalMappingData) : CardAction;
 
 /// <summary>
 /// Declares that the simulator must run the PACE key-agreement round: generate the chip's ephemeral key pair
@@ -69,7 +69,7 @@ public sealed record PaceMapAction(System.ReadOnlyMemory<byte> TerminalMappingDa
 /// crypto and feeds the agreement response back as a <see cref="PaceRoundCompleted"/> input.
 /// </summary>
 /// <param name="TerminalEphemeralPublicKey">The terminal's ephemeral public key (a view into the command APDU).</param>
-public sealed record PaceAgreeAction(System.ReadOnlyMemory<byte> TerminalEphemeralPublicKey): CardAction;
+public sealed record PaceAgreeAction(System.ReadOnlyMemory<byte> TerminalEphemeralPublicKey) : CardAction;
 
 /// <summary>
 /// Declares that the simulator must run the PACE mutual-authentication round: verify the terminal's token,
@@ -78,7 +78,7 @@ public sealed record PaceAgreeAction(System.ReadOnlyMemory<byte> TerminalEphemer
 /// <see cref="PaceRoundCompleted"/> (establishing Secure Messaging) or <see cref="PaceExchangeFailed"/> input.
 /// </summary>
 /// <param name="TerminalToken">The terminal's authentication token T_IFD (a view into the command APDU).</param>
-public sealed record PaceAuthenticateAction(System.ReadOnlyMemory<byte> TerminalToken): CardAction;
+public sealed record PaceAuthenticateAction(System.ReadOnlyMemory<byte> TerminalToken) : CardAction;
 
 /// <summary>
 /// Declares that the simulator must run EACv1 Chip Authentication: agree the static–ephemeral ECDH secret
@@ -89,7 +89,7 @@ public sealed record PaceAuthenticateAction(System.ReadOnlyMemory<byte> Terminal
 /// </summary>
 /// <param name="TerminalEphemeralPublicKey">The terminal's ephemeral public key from DO'91' (a view into the recovered command).</param>
 /// <param name="KeyId">The chip key identifier from DO'84', or <see langword="null"/> when MSE:Set KAT carried none.</param>
-public sealed record ChipAuthenticateAction(System.ReadOnlyMemory<byte> TerminalEphemeralPublicKey, int? KeyId): CardAction;
+public sealed record ChipAuthenticateAction(System.ReadOnlyMemory<byte> TerminalEphemeralPublicKey, int? KeyId) : CardAction;
 
 /// <summary>
 /// Declares that the simulator must run Active Authentication: sign the terminal's challenge with the
@@ -98,7 +98,7 @@ public sealed record ChipAuthenticateAction(System.ReadOnlyMemory<byte> Terminal
 /// an <see cref="ActiveAuthenticationSigned"/> or <see cref="ActiveAuthenticationFailed"/> input.
 /// </summary>
 /// <param name="Challenge">The terminal's challenge RND.IFD to sign (a view into the command APDU).</param>
-public sealed record ActiveAuthenticateAction(System.ReadOnlyMemory<byte> Challenge): CardAction;
+public sealed record ActiveAuthenticateAction(System.ReadOnlyMemory<byte> Challenge) : CardAction;
 
 /// <summary>
 /// Declares that the simulator must record the Terminal Authentication MSE:Set DST public-key reference —
@@ -108,7 +108,7 @@ public sealed record ActiveAuthenticateAction(System.ReadOnlyMemory<byte> Challe
 /// <see cref="TerminalAuthenticationStepCompleted"/> input back.
 /// </summary>
 /// <param name="PublicKeyReference">The certificate holder reference of the verifying key from DO'83' (a view into the recovered command).</param>
-public sealed record SetDigitalSignatureTemplateAction(System.ReadOnlyMemory<byte> PublicKeyReference): CardAction;
+public sealed record SetDigitalSignatureTemplateAction(System.ReadOnlyMemory<byte> PublicKeyReference) : CardAction;
 
 /// <summary>
 /// Declares that the simulator must verify a presented card-verifiable certificate against the public key the
@@ -117,7 +117,7 @@ public sealed record SetDigitalSignatureTemplateAction(System.ReadOnlyMemory<byt
 /// <see cref="TerminalAuthenticationStepCompleted"/> input back.
 /// </summary>
 /// <param name="CertificateContent">The certificate content <c>7F4E ‖ 5F37</c> from the command data field (a view into the recovered command).</param>
-public sealed record VerifyCertificateAction(System.ReadOnlyMemory<byte> CertificateContent): CardAction;
+public sealed record VerifyCertificateAction(System.ReadOnlyMemory<byte> CertificateContent) : CardAction;
 
 /// <summary>
 /// Declares that the simulator must select, by holder reference, the imported terminal certificate's key for
@@ -127,7 +127,7 @@ public sealed record VerifyCertificateAction(System.ReadOnlyMemory<byte> Certifi
 /// </summary>
 /// <param name="ObjectIdentifier">The Terminal Authentication protocol object identifier from DO'80' (a view into the recovered command).</param>
 /// <param name="TerminalReference">The terminal certificate holder reference from DO'83' (a view into the recovered command).</param>
-public sealed record SetTerminalAuthenticationTemplateAction(System.ReadOnlyMemory<byte> ObjectIdentifier, System.ReadOnlyMemory<byte> TerminalReference): CardAction;
+public sealed record SetTerminalAuthenticationTemplateAction(System.ReadOnlyMemory<byte> ObjectIdentifier, System.ReadOnlyMemory<byte> TerminalReference) : CardAction;
 
 /// <summary>
 /// Declares that the simulator must verify the terminal's EXTERNAL AUTHENTICATE signature against the imported
@@ -138,4 +138,4 @@ public sealed record SetTerminalAuthenticationTemplateAction(System.ReadOnlyMemo
 /// <see cref="TerminalAuthenticationFailed"/> input back.
 /// </summary>
 /// <param name="Signature">The terminal's signature s_IFD from the EXTERNAL AUTHENTICATE data field (a view into the recovered command).</param>
-public sealed record TerminalAuthenticateAction(System.ReadOnlyMemory<byte> Signature): CardAction;
+public sealed record TerminalAuthenticateAction(System.ReadOnlyMemory<byte> Signature) : CardAction;

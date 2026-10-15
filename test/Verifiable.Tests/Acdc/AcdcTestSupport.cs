@@ -44,7 +44,7 @@ internal static class AcdcTestSupport
     /// <summary>
     /// A serialization's bytes, carried in a pooled buffer the test owns and disposes.
     /// </summary>
-    internal sealed class EncodedSerialization: IDisposable
+    internal sealed class EncodedSerialization : IDisposable
     {
         private IMemoryOwner<byte> Owner { get; }
 

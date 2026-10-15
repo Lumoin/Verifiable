@@ -32,7 +32,7 @@ namespace Verifiable.Apdu;
 /// </code>
 /// </remarks>
 [DebuggerDisplay("{StatusWordNames.GetName(this),nq}")]
-public readonly struct StatusWord: IEquatable<StatusWord>
+public readonly struct StatusWord : IEquatable<StatusWord>
 {
     /// <summary>Gets the raw 16-bit status word value.</summary>
     public ushort Value { get; }

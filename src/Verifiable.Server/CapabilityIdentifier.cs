@@ -27,7 +27,7 @@ namespace Verifiable.Server;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{Urn,nq}")]
-public readonly struct CapabilityIdentifier: IEquatable<CapabilityIdentifier>
+public readonly struct CapabilityIdentifier : IEquatable<CapabilityIdentifier>
 {
     /// <summary>
     /// The URN-shaped string identifying this capability. Canonical identity;

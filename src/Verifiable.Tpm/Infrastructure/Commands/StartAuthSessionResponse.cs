@@ -24,7 +24,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </list>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class StartAuthSessionResponse: ITpmWireType, IDisposable
+public sealed class StartAuthSessionResponse : ITpmWireType, IDisposable
 {
     private bool disposed;
 

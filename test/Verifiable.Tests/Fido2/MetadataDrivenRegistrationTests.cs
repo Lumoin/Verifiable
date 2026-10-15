@@ -403,7 +403,7 @@ internal sealed class MetadataDrivenRegistrationTests
 /// self-contained MDS root/signer PKI plus the signed Metadata BLOB vouching for the attestation
 /// root. Owns and disposes every certificate and key.
 /// </summary>
-internal sealed class RegistrationFixture: IDisposable
+internal sealed class RegistrationFixture : IDisposable
 {
     /// <summary>Initializes a new <see cref="RegistrationFixture"/>, taking ownership of every certificate and key.</summary>
     public RegistrationFixture(

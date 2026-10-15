@@ -94,7 +94,7 @@ public sealed record HmacSessionState(
     Tpm2bDigest AuditDigest,
     bool IsBoundEntityDaProtected = false,
     bool IsBoundToLockout = false,
-    bool IsAudit = false): IDisposable, IAuthSessionState
+    bool IsAudit = false) : IDisposable, IAuthSessionState
 {
     /// <summary>
     /// The <see cref="IAuthSessionState"/> reading of this session's handle, widened from

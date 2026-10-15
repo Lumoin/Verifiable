@@ -65,7 +65,7 @@ internal sealed record EArkCapstoneMintContext
 /// <strong>Ownership.</strong> An instance owns <see cref="Archive"/> and nothing else; every other member is a
 /// name, an instant or a copy of public octets.
 /// </remarks>
-internal sealed record EArkCapstonePackage: IDisposable
+internal sealed record EArkCapstonePackage : IDisposable
 {
     /// <summary>The package as one archive that unpacks to a single root folder. Owned by this instance.</summary>
     public required PooledMemory Archive { get; init; }
@@ -830,7 +830,7 @@ internal static class EArkCapstoneSource
 /// <strong>Ownership.</strong> An instance owns every carrier it rented, released in reverse order.
 /// </para>
 /// </remarks>
-internal sealed class ReconstructedEArkVerifyingParty: IDisposable
+internal sealed class ReconstructedEArkVerifyingParty : IDisposable
 {
     /// <summary>The carriers this party rented, released in reverse order.</summary>
     private List<IDisposable> Owned { get; } = [];

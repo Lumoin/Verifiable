@@ -17,7 +17,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// <seealso cref="ConditionalTestMethodAttribute"/>
 /// <seealso cref="ConditionalTestClassAttribute"/>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true, Inherited = true)]
-internal abstract class BaseSkipAttribute: Attribute
+internal abstract class BaseSkipAttribute : Attribute
 {
     /// <summary>
     /// Gets the reason why the test is being skipped.

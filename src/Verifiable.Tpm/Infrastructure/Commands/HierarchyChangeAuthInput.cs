@@ -28,7 +28,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <c>TPM_ST_SESSIONS</c>. See TPM 2.0 Library Part 3, clause 24.8 (Table 205/206).
 /// </para>
 /// </remarks>
-public sealed class HierarchyChangeAuthInput: ITpmCommandInput, IDisposable
+public sealed class HierarchyChangeAuthInput : ITpmCommandInput, IDisposable
 {
     private bool disposed;
 

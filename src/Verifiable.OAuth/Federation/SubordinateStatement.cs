@@ -27,4 +27,4 @@ namespace Verifiable.OAuth.Federation;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("SubordinateStatement Iss={Issuer,nq} Sub={Subject,nq}")]
-public sealed record SubordinateStatement: EntityStatement;
+public sealed record SubordinateStatement : EntityStatement;

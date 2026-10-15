@@ -17,7 +17,7 @@ namespace Verifiable.Apdu.Lds;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("DataGroup13(OptionalDetails, {Length} bytes)")]
-public sealed class DataGroup13: SensitiveMemory
+public sealed class DataGroup13 : SensitiveMemory
 {
     /// <summary>The eMRTD elementary file identifier of EF.DG13.</summary>
     public const ushort FileIdentifier = 0x010D;

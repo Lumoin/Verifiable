@@ -2157,7 +2157,7 @@ internal sealed class TpmInHouseSimulatorSignSessionTests
     /// </summary>
     /// <param name="keyHandle">The signing key's handle.</param>
     /// <param name="digest">The <c>digest</c> octets to marshal, unbounded.</param>
-    private sealed class OversizedDigestSignInput(uint keyHandle, ReadOnlyMemory<byte> digest): ITpmCommandInput
+    private sealed class OversizedDigestSignInput(uint keyHandle, ReadOnlyMemory<byte> digest) : ITpmCommandInput
     {
         /// <summary>The <c>TPM2_Sign()</c> command code.</summary>
         public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_Sign;

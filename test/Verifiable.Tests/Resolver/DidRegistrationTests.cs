@@ -286,7 +286,7 @@ internal sealed class DidRegistrationTests
         return DidRegistrationTransitions.CreateAutomaton("test-run", handler, new FakeTimeProvider(TestClock.CanonicalEpoch));
     }
 
-    private sealed class TestObserver<T>(List<T> entries): IObserver<T>
+    private sealed class TestObserver<T>(List<T> entries) : IObserver<T>
     {
         public void OnNext(T value) => entries.Add(value);
         public void OnError(Exception error) { }

@@ -416,7 +416,7 @@ internal sealed record SchemeFixture(
 /// <see cref="Owned"/> only — the <see cref="JarSigningKeyPair"/> is owned by the
 /// host (ownership transfers to <c>RegisterJarSigningClient</c>).
 /// </summary>
-internal sealed class SchemeMaterial: IDisposable
+internal sealed class SchemeMaterial : IDisposable
 {
     public required string ClientId { get; init; }
 

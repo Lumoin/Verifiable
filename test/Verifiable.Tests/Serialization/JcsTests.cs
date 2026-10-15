@@ -18,7 +18,7 @@ internal sealed class TestObject
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(TestObject))]
-internal sealed partial class JcsTestsContext: JsonSerializerContext { }
+internal sealed partial class JcsTestsContext : JsonSerializerContext { }
 
 
 /// <summary>

@@ -92,7 +92,7 @@ public enum PreservationMessageKind
 /// <strong>Ownership.</strong> A message owns every payload it carries, and disposing it disposes them.
 /// </para>
 /// </remarks>
-public abstract class PreservationMessage: IDisposable
+public abstract class PreservationMessage : IDisposable
 {
     /// <summary>Restricts the cases to those declared in this assembly, making this a closed hierarchy.</summary>
     private protected PreservationMessage()
@@ -173,7 +173,7 @@ public abstract class PreservationMessage: IDisposable
 /// <see href="https://www.etsi.org/deliver/etsi_ts/119500_119599/119512/01.02.01_60/ts_119512v010201p.pdf">
 /// ETSI TS 119 512 V1.2.1</see>.
 /// </summary>
-public abstract class PreservationRequest: PreservationMessage
+public abstract class PreservationRequest : PreservationMessage
 {
     /// <summary>Restricts the cases to those declared in this assembly.</summary>
     private protected PreservationRequest()
@@ -206,7 +206,7 @@ public abstract class PreservationRequest: PreservationMessage
 /// <see cref="Result"/> is required because clause 5.3.1.2 states it shall be present: a response with no result
 /// says nothing about whether the operation succeeded, which is exactly what a response is for.
 /// </remarks>
-public abstract class PreservationResponse: PreservationMessage
+public abstract class PreservationResponse : PreservationMessage
 {
     /// <summary>Restricts the cases to those declared in this assembly.</summary>
     private protected PreservationResponse()
@@ -241,7 +241,7 @@ public abstract class PreservationResponse: PreservationMessage
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
     Justification = "A profile identifier is compared as an exact character sequence; System.Uri normalises case, escaping and trailing separators, which would make two identifiers naming different profiles compare equal.")]
-public sealed class RetrieveInfoRequest: PreservationRequest
+public sealed class RetrieveInfoRequest : PreservationRequest
 {
     /// <inheritdoc/>
     public override PreservationMessageKind Kind => PreservationMessageKind.RetrieveInfoRequest;
@@ -272,7 +272,7 @@ public sealed class RetrieveInfoRequest: PreservationRequest
 /// </summary>
 /// <remarks>Ownership: this response owns the profiles it carries.</remarks>
 [DebuggerDisplay("RetrieveInfoResponse: {Profiles.Count} profiles")]
-public sealed class RetrieveInfoResponse: PreservationResponse
+public sealed class RetrieveInfoResponse : PreservationResponse
 {
     /// <inheritdoc/>
     public override PreservationMessageKind Kind => PreservationMessageKind.RetrieveInfoResponse;
@@ -314,7 +314,7 @@ public sealed class RetrieveInfoResponse: PreservationResponse
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
     Justification = "A profile identifier is compared as an exact character sequence, for the reason given on RetrieveInfoRequest.")]
-public sealed class PreservePreservationObjectRequest: PreservationRequest
+public sealed class PreservePreservationObjectRequest : PreservationRequest
 {
     /// <inheritdoc/>
     public override PreservationMessageKind Kind => PreservationMessageKind.PreservePreservationObjectRequest;
@@ -367,7 +367,7 @@ public sealed class PreservePreservationObjectRequest: PreservationRequest
 /// <para>Ownership: this response owns the objects it carries.</para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class PreservePreservationObjectResponse: PreservationResponse
+public sealed class PreservePreservationObjectResponse : PreservationResponse
 {
     /// <inheritdoc/>
     public override PreservationMessageKind Kind => PreservationMessageKind.PreservePreservationObjectResponse;
@@ -415,7 +415,7 @@ public sealed class PreservePreservationObjectResponse: PreservationResponse
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
     Justification = "Format identifiers are compared as exact character sequences against PreservationFormatWellKnown, for the reason given there.")]
-public sealed class RetrievePreservationObjectRequest: PreservationRequest
+public sealed class RetrievePreservationObjectRequest : PreservationRequest
 {
     /// <inheritdoc/>
     public override PreservationMessageKind Kind => PreservationMessageKind.RetrievePreservationObjectRequest;
@@ -459,7 +459,7 @@ public sealed class RetrievePreservationObjectRequest: PreservationRequest
 /// objects it carries.
 /// </remarks>
 [DebuggerDisplay("RetrievePreservationObjectResponse: {PreservationObjects.Count} objects")]
-public sealed class RetrievePreservationObjectResponse: PreservationResponse
+public sealed class RetrievePreservationObjectResponse : PreservationResponse
 {
     /// <inheritdoc/>
     public override PreservationMessageKind Kind => PreservationMessageKind.RetrievePreservationObjectResponse;
@@ -491,7 +491,7 @@ public sealed class RetrievePreservationObjectResponse: PreservationResponse
 /// ETSI TS 119 512 V1.2.1</see>), which the same clause permits only in a scheme with storage.
 /// </summary>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class DeletePreservationObjectRequest: PreservationRequest
+public sealed class DeletePreservationObjectRequest : PreservationRequest
 {
     /// <inheritdoc/>
     public override PreservationMessageKind Kind => PreservationMessageKind.DeletePreservationObjectRequest;
@@ -531,7 +531,7 @@ public sealed class DeletePreservationObjectRequest: PreservationRequest
 /// <see cref="PreservationResponse.Result"/>, which is why this type adds no member.
 /// </remarks>
 [DebuggerDisplay("DeletePreservationObjectResponse: {Result.ResultMajor}")]
-public sealed class DeletePreservationObjectResponse: PreservationResponse
+public sealed class DeletePreservationObjectResponse : PreservationResponse
 {
     /// <inheritdoc/>
     public override PreservationMessageKind Kind => PreservationMessageKind.DeletePreservationObjectResponse;
@@ -560,7 +560,7 @@ public sealed class DeletePreservationObjectResponse: PreservationResponse
 /// <para>Ownership: this request owns the deltas it carries.</para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class UpdatePreservationObjectContainerRequest: PreservationRequest
+public sealed class UpdatePreservationObjectContainerRequest : PreservationRequest
 {
     /// <inheritdoc/>
     public override PreservationMessageKind Kind => PreservationMessageKind.UpdatePreservationObjectContainerRequest;
@@ -605,7 +605,7 @@ public sealed class UpdatePreservationObjectContainerRequest: PreservationReques
 /// the value is carried as the string it is.
 /// </remarks>
 [DebuggerDisplay("UpdatePreservationObjectContainerResponse: {VersionId}")]
-public sealed class UpdatePreservationObjectContainerResponse: PreservationResponse
+public sealed class UpdatePreservationObjectContainerResponse : PreservationResponse
 {
     /// <inheritdoc/>
     public override PreservationMessageKind Kind => PreservationMessageKind.UpdatePreservationObjectContainerResponse;
@@ -624,7 +624,7 @@ public sealed class UpdatePreservationObjectContainerResponse: PreservationRespo
 /// ETSI TS 119 512 V1.2.1</see>).
 /// </summary>
 [DebuggerDisplay("RetrieveTraceRequest: {PreservationObjectId}")]
-public sealed class RetrieveTraceRequest: PreservationRequest
+public sealed class RetrieveTraceRequest : PreservationRequest
 {
     /// <inheritdoc/>
     public override PreservationMessageKind Kind => PreservationMessageKind.RetrieveTraceRequest;
@@ -647,7 +647,7 @@ public sealed class RetrieveTraceRequest: PreservationRequest
 /// the member is required — a trace with no events is how a service says it recorded none.
 /// </remarks>
 [DebuggerDisplay("RetrieveTraceResponse: {Trace.Events.Count} events")]
-public sealed class RetrieveTraceResponse: PreservationResponse
+public sealed class RetrieveTraceResponse : PreservationResponse
 {
     /// <inheritdoc/>
     public override PreservationMessageKind Kind => PreservationMessageKind.RetrieveTraceResponse;
@@ -677,7 +677,7 @@ public sealed class RetrieveTraceResponse: PreservationResponse
 /// <para>Ownership: this request owns the evidence and the objects it carries.</para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class ValidateEvidenceRequest: PreservationRequest
+public sealed class ValidateEvidenceRequest : PreservationRequest
 {
     /// <inheritdoc/>
     public override PreservationMessageKind Kind => PreservationMessageKind.ValidateEvidenceRequest;
@@ -726,7 +726,7 @@ public sealed class ValidateEvidenceRequest: PreservationRequest
 /// <para>Ownership: this response owns the validation report when it carries one.</para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class ValidateEvidenceResponse: PreservationResponse
+public sealed class ValidateEvidenceResponse : PreservationResponse
 {
     /// <inheritdoc/>
     public override PreservationMessageKind Kind => PreservationMessageKind.ValidateEvidenceResponse;
@@ -773,7 +773,7 @@ public sealed class ValidateEvidenceResponse: PreservationResponse
 /// here. The query language itself is defined by the profile and not by this document, so the value is opaque.
 /// </remarks>
 [DebuggerDisplay("SearchRequest: {Filter}")]
-public sealed class SearchRequest: PreservationRequest
+public sealed class SearchRequest : PreservationRequest
 {
     /// <inheritdoc/>
     public override PreservationMessageKind Kind => PreservationMessageKind.SearchRequest;
@@ -792,7 +792,7 @@ public sealed class SearchRequest: PreservationRequest
 /// ETSI TS 119 512 V1.2.1</see>).
 /// </summary>
 [DebuggerDisplay("SearchResponse: {PreservationObjectIds.Count} identifiers")]
-public sealed class SearchResponse: PreservationResponse
+public sealed class SearchResponse : PreservationResponse
 {
     /// <inheritdoc/>
     public override PreservationMessageKind Kind => PreservationMessageKind.SearchResponse;

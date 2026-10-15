@@ -22,7 +22,7 @@ namespace Verifiable.Apdu.Lds;
 /// the domain parameters are a named-curve OID or are encoded explicitly (the common eMRTD case).
 /// </para>
 /// </remarks>
-public sealed class DataGroup14: IDisposable
+public sealed class DataGroup14 : IDisposable
 {
     /// <summary>The eMRTD elementary file identifier of EF.DG14.</summary>
     public const ushort FileIdentifier = 0x010E;

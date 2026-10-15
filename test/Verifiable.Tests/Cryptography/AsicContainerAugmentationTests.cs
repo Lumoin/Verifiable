@@ -1415,7 +1415,7 @@ internal sealed class AsicContainerAugmentationTests
     /// The minted world every test of this class runs against: a root certification authority, a Time-Stamping
     /// Authority under it answering through a <see cref="MintingTimestampResponder"/>, and a signer.
     /// </summary>
-    private sealed class AugmentationWorld: IDisposable
+    private sealed class AugmentationWorld : IDisposable
     {
         /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
         private bool disposed;

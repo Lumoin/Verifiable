@@ -5,7 +5,7 @@ namespace Verifiable.Acdc;
 /// unexpected top-level field, fields out of their canonical order, the mutually exclusive attribute and aggregate
 /// sections both present, an unmodeled message type, or a SAID that does not verify against its block.
 /// </summary>
-public sealed class AcdcException: Exception
+public sealed class AcdcException : Exception
 {
     /// <summary>
     /// Creates an <see cref="AcdcException"/>.

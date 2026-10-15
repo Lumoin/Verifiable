@@ -35,7 +35,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class TpmlCc: ITpmWireType
+public sealed class TpmlCc : ITpmWireType
 {
     private static TpmlCc EmptyInstance { get; } = new(ImmutableArray<TpmCcConstants>.Empty);
 

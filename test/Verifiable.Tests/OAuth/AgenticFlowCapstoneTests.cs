@@ -1024,7 +1024,7 @@ internal sealed class AgenticFlowCapstoneTests
     /// token endpoint.
     /// </para>
     /// </remarks>
-    private sealed class CapstoneTopology: IAsyncDisposable
+    private sealed class CapstoneTopology : IAsyncDisposable
     {
         public const string As2HostName = "as2";
 

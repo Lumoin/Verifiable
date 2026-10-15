@@ -61,7 +61,7 @@ namespace Verifiable.Cryptography;
 /// </code>
 /// </remarks>
 [DebuggerDisplay("KeyId={Value}")]
-public readonly struct KeyId: IEquatable<KeyId>
+public readonly struct KeyId : IEquatable<KeyId>
 {
     /// <summary>
     /// The raw identifier value. Opaque to the library; meaningful to the application's

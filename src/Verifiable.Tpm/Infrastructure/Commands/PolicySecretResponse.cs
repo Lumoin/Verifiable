@@ -17,7 +17,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </list>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class PolicySecretResponse: IDisposable, ITpmWireType
+public sealed class PolicySecretResponse : IDisposable, ITpmWireType
 {
     private bool disposed;
     private IMemoryOwner<byte> TimeoutOwner { get; }

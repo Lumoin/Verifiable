@@ -34,7 +34,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class Tpm2bPublicKeyRsa: IDisposable, ITpmWireType
+public sealed class Tpm2bPublicKeyRsa : IDisposable, ITpmWireType
 {
     /// <summary>
     /// Maximum RSA key size in bytes (4096 bits) — Table 194's <c>MAX_RSA_KEY_BYTES</c>.

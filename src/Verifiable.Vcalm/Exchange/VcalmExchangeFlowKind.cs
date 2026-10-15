@@ -13,7 +13,7 @@ namespace Verifiable.Vcalm.Exchange;
 /// needs no family action executor — keeping the engine usable on a host that wires no executor (the
 /// VCALM family has none of its own; only the OAuth family ships one).
 /// </remarks>
-public sealed class VcalmExchangeFlowKind: StatefulFlowKind
+public sealed class VcalmExchangeFlowKind : StatefulFlowKind
 {
     /// <summary>The singleton instance.</summary>
     public static VcalmExchangeFlowKind Instance { get; } = new();

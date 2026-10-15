@@ -10,4 +10,4 @@ namespace Verifiable.Vcalm;
 /// responsibility (the hostile-input-safety guidance on <see cref="MatchPayload"/>).
 /// </summary>
 [DebuggerDisplay("VcalmCredentialIdMatchPayload CredentialId={CredentialId}")]
-public sealed record VcalmCredentialIdMatchPayload(string CredentialId): MatchPayload;
+public sealed record VcalmCredentialIdMatchPayload(string CredentialId) : MatchPayload;

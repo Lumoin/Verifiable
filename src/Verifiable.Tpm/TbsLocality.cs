@@ -13,7 +13,7 @@ namespace Verifiable.Tpm;
 /// Tbsip_Submit_Command</see>.
 /// </para>
 /// </remarks>
-public enum TbsLocality: uint
+public enum TbsLocality : uint
 {
     /// <summary>
     /// Locality 0 - default locality for user-mode applications.

@@ -20,7 +20,7 @@ namespace Verifiable.JCose;
 /// the SD-CWT issuance and verification pipeline.
 /// </para>
 /// </remarks>
-public class CwtPayload: Dictionary<int, object>
+public class CwtPayload : Dictionary<int, object>
 {
     /// <summary>
     /// Creates an empty CWT payload.

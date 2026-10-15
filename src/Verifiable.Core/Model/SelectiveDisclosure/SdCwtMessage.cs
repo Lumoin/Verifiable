@@ -17,7 +17,7 @@ namespace Verifiable.Core.Model.SelectiveDisclosure;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class SdCwtMessage: IEquatable<SdCwtMessage>
+public sealed class SdCwtMessage : IEquatable<SdCwtMessage>
 {
     /// <summary>
     /// The CWT payload bytes.

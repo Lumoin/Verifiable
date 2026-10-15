@@ -42,7 +42,7 @@ namespace Verifiable.JCose;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class CoseKey: IEquatable<CoseKey>
+public sealed class CoseKey : IEquatable<CoseKey>
 {
     /// <summary>
     /// Initializes a COSE_Key view from its parsed parameters.

@@ -14,7 +14,7 @@ namespace Verifiable.Core.Model.Did
     /// </remarks>
     [DebuggerDisplay("PublicKeyPem({Key,nq})")]
     [Obsolete("Use PublicKeyJwk or PublicKeyMultibase instead for new implementations.")]
-    public class PublicKeyPem: KeyFormat
+    public class PublicKeyPem : KeyFormat
     {
         /// <summary>
         /// The PEM-encoded public key string.

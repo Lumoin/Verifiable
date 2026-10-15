@@ -867,7 +867,7 @@ public sealed record XmlEvidenceRecordCreationContext
 /// <see cref="EvidenceRecordCreation"/>.
 /// </summary>
 [DebuggerDisplay("XmlEvidenceRecordCreation: {Documents.Count} documents at {ArchiveTime}")]
-public sealed class XmlEvidenceRecordCreation: IDisposable
+public sealed class XmlEvidenceRecordCreation : IDisposable
 {
     /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
     private bool disposed;

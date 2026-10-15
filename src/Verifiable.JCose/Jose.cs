@@ -1285,7 +1285,7 @@ public static class Jws
     /// the verify overloads honour the contract that verification of untrusted input never throws on
     /// malformed content.
     /// </summary>
-    private readonly struct DecodedSegment: IDisposable
+    private readonly struct DecodedSegment : IDisposable
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="DecodedSegment"/> struct.

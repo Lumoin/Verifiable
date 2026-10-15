@@ -11,4 +11,4 @@ namespace Verifiable.OAuth;
 /// The effectful dispatch loop pattern-matches on <see cref="OAuthAction"/> subtypes
 /// and dispatches to the registered handler.
 /// </remarks>
-public abstract record OAuthAction: PdaAction;
+public abstract record OAuthAction : PdaAction;

@@ -32,7 +32,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <param name="AuthHandle">The hierarchy authorizing the change (endorsement, owner, or platform).</param>
 /// <param name="Enable">The enable being modified.</param>
 /// <param name="State">YES to SET the enable, NO to CLEAR it.</param>
-public readonly record struct HierarchyControlInput(TpmRh AuthHandle, TpmRh Enable, TpmiYesNo State): ITpmCommandInput
+public readonly record struct HierarchyControlInput(TpmRh AuthHandle, TpmRh Enable, TpmiYesNo State) : ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_HierarchyControl;

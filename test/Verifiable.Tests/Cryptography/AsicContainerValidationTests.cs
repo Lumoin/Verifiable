@@ -1127,7 +1127,7 @@ internal sealed class AsicContainerValidationTests
     /// A container this class authored entry by entry, together with the two objects a test checks it against:
     /// the octets the CAdES object is detached over, and the CAdES object itself.
     /// </summary>
-    private sealed class AuthoredContainer: IDisposable
+    private sealed class AuthoredContainer : IDisposable
     {
         /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
         private bool disposed;
@@ -1198,7 +1198,7 @@ internal sealed class AsicContainerValidationTests
     /// The world every container of this class is built and validated in: the ring, the responder, the signer
     /// whose certificate chains to the ring's root, and the validation inputs and seams.
     /// </summary>
-    private sealed class ValidationWorld: IDisposable
+    private sealed class ValidationWorld : IDisposable
     {
         /// <summary>The carriers this world rented, released in reverse order.</summary>
         private List<IDisposable> Owned { get; } = [];

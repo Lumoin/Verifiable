@@ -13,7 +13,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class PolicyAuthorizeResponse: ITpmWireType
+public sealed class PolicyAuthorizeResponse : ITpmWireType
 {
     /// <summary>
     /// Gets the singleton instance. Since this response has no data, a single instance is reused.

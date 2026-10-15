@@ -23,7 +23,7 @@ namespace Verifiable.OAuth.Oid4Vp.States;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("PresentationVerified FlowId={FlowId} VerifiedAt={VerifiedAt}")]
-public sealed record PresentationVerifiedState: FlowState
+public sealed record PresentationVerifiedState : FlowState
 {
     /// <summary>
     /// The verified credentials, keyed by the <see cref="CredentialQueryId"/> each answered — one

@@ -22,7 +22,7 @@ public enum FaceImageFormat
 /// memory, clears it on disposal, and carries <see cref="ApduTags.FaceImage"/> for provenance.
 /// </summary>
 [DebuggerDisplay("FaceImage({Format}, {Length} bytes)")]
-public sealed class FaceImage: SensitiveMemory
+public sealed class FaceImage : SensitiveMemory
 {
     /// <summary>
     /// Initialises a new <see cref="FaceImage"/> from owned image bytes.

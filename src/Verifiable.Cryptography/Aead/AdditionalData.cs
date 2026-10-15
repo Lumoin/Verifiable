@@ -28,7 +28,7 @@ namespace Verifiable.Cryptography.Aead;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class AdditionalData: SensitiveMemory, IEquatable<AdditionalData>
+public sealed class AdditionalData : SensitiveMemory, IEquatable<AdditionalData>
 {
     /// <summary>Gets the length of the additional authenticated data in bytes.</summary>
     public int Length => MemoryOwner.Memory.Length;

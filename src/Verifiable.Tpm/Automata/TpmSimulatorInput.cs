@@ -18,19 +18,19 @@ public abstract record TpmSimulatorInput;
 /// command and produces no response; it moves the device into <see cref="TpmLifecyclePhase.Initializing"/>
 /// and is the only exit from <see cref="TpmLifecyclePhase.FailureMode"/>.
 /// </summary>
-public sealed record TpmInitSignal: TpmSimulatorInput;
+public sealed record TpmInitSignal : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_Startup()</c> command (TPM 2.0 Library Part 1, clause 9.2.3).
 /// </summary>
 /// <param name="StartupType">The startup type argument (<c>TPM_SU_CLEAR</c> or <c>TPM_SU_STATE</c>).</param>
-public sealed record TpmStartupRequested(TpmSuConstants StartupType): TpmSimulatorInput;
+public sealed record TpmStartupRequested(TpmSuConstants StartupType) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_Shutdown()</c> command (TPM 2.0 Library Part 1, clause 9.2.4).
 /// </summary>
 /// <param name="ShutdownType">The shutdown type argument (<c>TPM_SU_CLEAR</c> or <c>TPM_SU_STATE</c>).</param>
-public sealed record TpmShutdownRequested(TpmSuConstants ShutdownType): TpmSimulatorInput;
+public sealed record TpmShutdownRequested(TpmSuConstants ShutdownType) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_SelfTest()</c> command (TPM 2.0 Library Part 1, clause 9.3).
@@ -39,13 +39,13 @@ public sealed record TpmShutdownRequested(TpmSuConstants ShutdownType): TpmSimul
 /// Whether a full self-test of all algorithms was requested. The lifecycle skeleton does not track
 /// per-algorithm test state, so this only records the request.
 /// </param>
-public sealed record TpmSelfTestRequested(bool IsFullTest): TpmSimulatorInput;
+public sealed record TpmSelfTestRequested(bool IsFullTest) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_GetTestResult()</c> command (TPM 2.0 Library Part 1, clause 9.3). Permitted both
 /// operationally and in <see cref="TpmLifecyclePhase.FailureMode"/>.
 /// </summary>
-public sealed record TpmTestResultRequested: TpmSimulatorInput;
+public sealed record TpmTestResultRequested : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_GetRandom()</c> command (TPM 2.0 Library Part 3, clause 16.1). Permitted only while
@@ -56,7 +56,7 @@ public sealed record TpmTestResultRequested: TpmSimulatorInput;
 /// simulated TPM can return before declaring the RNG action (clause 16.1: requesting more than fits
 /// in a <c>TPM2B_DIGEST</c> is not an error — the TPM returns only what fits).
 /// </param>
-public sealed record TpmGetRandomRequested(ushort BytesRequested): TpmSimulatorInput;
+public sealed record TpmGetRandomRequested(ushort BytesRequested) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_GetCapability()</c> command (TPM 2.0 Library Part 3, clause 30.2). Permitted while
@@ -65,7 +65,7 @@ public sealed record TpmGetRandomRequested(ushort BytesRequested): TpmSimulatorI
 /// <param name="Capability">The capability category to query.</param>
 /// <param name="Property">The first property (tag) to return.</param>
 /// <param name="PropertyCount">The maximum number of properties to return.</param>
-public sealed record TpmGetCapabilityRequested(TpmCapConstants Capability, uint Property, uint PropertyCount): TpmSimulatorInput;
+public sealed record TpmGetCapabilityRequested(TpmCapConstants Capability, uint Property, uint PropertyCount) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_NV_DefineSpace()</c> command (TPM 2.0 Library Part 3, clause 31.3). Reserves space for an
@@ -93,7 +93,7 @@ public sealed record TpmNvDefineSpaceRequested(
     ushort DataSize,
     TpmiAlgHash NameAlg,
     Tpm2bDigest AuthPolicy,
-    TpmNvIndexData IndexData): TpmSimulatorInput, IDisposable
+    TpmNvIndexData IndexData) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="IndexAuth"/>, <see cref="AuthPolicy"/> and <see cref="IndexData"/> carriers
@@ -126,7 +126,7 @@ public sealed record TpmNvReadRequested(
     TpmiRhNvIndex NvIndex,
     Tpm2bAuth AuthSupplied,
     ushort Size,
-    ushort Offset): TpmSimulatorInput, IDisposable
+    ushort Offset) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="AuthSupplied"/> carrier on a refusing path; the authorizing transition disposes
@@ -154,7 +154,7 @@ public sealed record TpmNvWriteRequested(
     TpmiRhNvIndex NvIndex,
     Tpm2bAuth AuthSupplied,
     Tpm2bMaxNvBuffer Data,
-    ushort Offset): TpmSimulatorInput, IDisposable
+    ushort Offset) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="Data"/> carrier on a refusing path; the storing transition releases it
@@ -182,7 +182,7 @@ public sealed record TpmNvWriteRequested(
 public sealed record TpmNvUndefineSpaceRequested(
     TpmiRhProvision AuthHandle,
     TpmiRhNvDefinedIndex NvIndex,
-    Tpm2bAuth AuthSupplied): TpmSimulatorInput, IDisposable
+    Tpm2bAuth AuthSupplied) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="AuthSupplied"/> carrier on a refusing path; the authorizing transition disposes
@@ -206,7 +206,7 @@ public sealed record TpmNvUndefineSpaceRequested(
 public sealed record TpmNvIncrementRequested(
     TpmiRhNvAuth AuthHandle,
     TpmiRhNvIndex NvIndex,
-    Tpm2bAuth AuthSupplied): TpmSimulatorInput, IDisposable
+    Tpm2bAuth AuthSupplied) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="AuthSupplied"/> carrier on a refusing path; the authorizing transition disposes
@@ -234,7 +234,7 @@ public sealed record TpmNvExtendRequested(
     TpmiRhNvAuth AuthHandle,
     TpmiRhNvIndex NvIndex,
     Tpm2bAuth AuthSupplied,
-    Tpm2bMaxNvBuffer Data): TpmSimulatorInput, IDisposable
+    Tpm2bMaxNvBuffer Data) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="Data"/> carrier on a refusing path; the declaring transition transfers it
@@ -263,7 +263,7 @@ public sealed record TpmNvSetBitsRequested(
     TpmiRhNvAuth AuthHandle,
     TpmiRhNvIndex NvIndex,
     Tpm2bAuth AuthSupplied,
-    ulong Bits): TpmSimulatorInput, IDisposable
+    ulong Bits) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="AuthSupplied"/> carrier on a refusing path; the authorizing transition disposes
@@ -287,7 +287,7 @@ public sealed record TpmNvSetBitsRequested(
 public sealed record TpmNvWriteLockRequested(
     TpmiRhNvAuth AuthHandle,
     TpmiRhNvIndex NvIndex,
-    Tpm2bAuth AuthSupplied): TpmSimulatorInput, IDisposable
+    Tpm2bAuth AuthSupplied) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="AuthSupplied"/> carrier on a refusing path; the authorizing transition disposes
@@ -312,7 +312,7 @@ public sealed record TpmNvWriteLockRequested(
 public sealed record TpmNvReadLockRequested(
     TpmiRhNvAuth AuthHandle,
     TpmiRhNvIndex NvIndex,
-    Tpm2bAuth AuthSupplied): TpmSimulatorInput, IDisposable
+    Tpm2bAuth AuthSupplied) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="AuthSupplied"/> carrier on a refusing path; the authorizing transition disposes
@@ -331,7 +331,7 @@ public sealed record TpmNvReadLockRequested(
 /// clause 31.6.1), so no auth area is parsed and no session ever accompanies it.
 /// </summary>
 /// <param name="NvIndex">The NV Index whose public area and Name are requested.</param>
-public sealed record TpmNvReadPublicRequested(TpmiRhNvIndex NvIndex): TpmSimulatorInput;
+public sealed record TpmNvReadPublicRequested(TpmiRhNvIndex NvIndex) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_ReadPublic()</c> command (TPM 2.0 Library Part 3, clause 12.4). Reads a loaded object's public
@@ -339,7 +339,7 @@ public sealed record TpmNvReadPublicRequested(TpmiRhNvIndex NvIndex): TpmSimulat
 /// authorization" (clause 12.4.1), so no auth area is parsed and no session ever accompanies it.
 /// </summary>
 /// <param name="ObjectHandle">The loaded object (<c>TPMI_DH_OBJECT</c>: a transient or persistent handle, TPM 2.0 Library Part 2, clause 9.3, Table 49) whose public area is requested.</param>
-public sealed record TpmReadPublicRequested(TpmiDhObject ObjectHandle): TpmSimulatorInput;
+public sealed record TpmReadPublicRequested(TpmiDhObject ObjectHandle) : TpmSimulatorInput;
 
 /// <summary>
 /// The result of executing a <see cref="TpmComputeNvPublicNameAction"/>: the NV Index's marshaled public area
@@ -353,7 +353,7 @@ public sealed record TpmReadPublicRequested(TpmiDhObject ObjectHandle): TpmSimul
 /// <param name="Name">The Index's computed Name as an owned <c>TPM2B_NAME</c> carrier (TPM 2.0 Library Part 2, clause 10.4.3, Table 105); ownership flows to the <c>TpmNvReadPublicResponse</c> and is released once framed.</param>
 public sealed record TpmNvPublicNameComputed(
     TpmsNvPublic NvPublic,
-    Tpm2bName Name): TpmSimulatorInput;
+    Tpm2bName Name) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_NV_Read()</c> command whose <c>authHandle</c> is authorized by an HMAC session rather than a
@@ -398,7 +398,7 @@ public sealed record TpmNvReadOverSessionRequested(
     ushort Size,
     ushort Offset,
     Tpm2bName ResolvedIndexName,
-    Tpm2bAuth? ResolvedAuthValue = null): TpmSimulatorInput, IDisposable
+    Tpm2bAuth? ResolvedAuthValue = null) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="RawParameterArea"/>, <see cref="ResolvedIndexName"/>,
@@ -447,7 +447,7 @@ public sealed record TpmNvWriteOverSessionRequested(
     Tpm2bMaxNvBuffer Data,
     ushort Offset,
     Tpm2bName ResolvedIndexName,
-    Tpm2bAuth? ResolvedAuthValue = null): TpmSimulatorInput, IDisposable
+    Tpm2bAuth? ResolvedAuthValue = null) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="RawParameterArea"/>, <see cref="Data"/>,
@@ -492,7 +492,7 @@ public sealed record TpmNvUndefineSpaceOverSessionRequested(
     Tpm2bAuth Hmac,
     TpmParameterArea RawParameterArea,
     Tpm2bName ResolvedIndexName,
-    Tpm2bAuth? ResolvedAuthValue = null): TpmSimulatorInput, IDisposable
+    Tpm2bAuth? ResolvedAuthValue = null) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="RawParameterArea"/>, <see cref="ResolvedIndexName"/>,
@@ -554,7 +554,7 @@ public sealed record TpmNvDefineSpaceOverSessionRequested(
     Tpm2bDigest AuthPolicy,
     ushort DataSize,
     TpmNvIndexData IndexData,
-    Tpm2bAuth? ResolvedAuthValue = null): TpmSimulatorInput, IDisposable
+    Tpm2bAuth? ResolvedAuthValue = null) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="IndexAuth"/>, <see cref="AuthPolicy"/>, <see cref="RawParameterArea"/> and
@@ -611,7 +611,7 @@ public sealed record TpmNvIncrementOverSessionRequested(
     Tpm2bAuth Hmac,
     TpmParameterArea RawParameterArea,
     Tpm2bName ResolvedIndexName,
-    Tpm2bAuth? ResolvedAuthValue = null): TpmSimulatorInput, IDisposable
+    Tpm2bAuth? ResolvedAuthValue = null) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="RawParameterArea"/>, <see cref="ResolvedIndexName"/>,
@@ -672,7 +672,7 @@ public sealed record TpmNvExtendOverSessionRequested(
     Tpm2bMaxNvBuffer Data,
     Tpm2bName ResolvedIndexName,
     Tpm2bAuth? ResolvedAuthValue = null,
-    bool IsSuppliedHmacEmpty = false): TpmSimulatorInput, IDisposable
+    bool IsSuppliedHmacEmpty = false) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="RawParameterArea"/>, <see cref="Data"/>,
@@ -729,7 +729,7 @@ public sealed record TpmNvSetBitsOverSessionRequested(
     TpmParameterArea RawParameterArea,
     ulong Bits,
     Tpm2bName ResolvedIndexName,
-    Tpm2bAuth? ResolvedAuthValue = null): TpmSimulatorInput, IDisposable
+    Tpm2bAuth? ResolvedAuthValue = null) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="RawParameterArea"/>, <see cref="ResolvedIndexName"/>,
@@ -780,7 +780,7 @@ public sealed record TpmNvWriteLockOverSessionRequested(
     Tpm2bAuth Hmac,
     TpmParameterArea RawParameterArea,
     Tpm2bName ResolvedIndexName,
-    Tpm2bAuth? ResolvedAuthValue = null): TpmSimulatorInput, IDisposable
+    Tpm2bAuth? ResolvedAuthValue = null) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="RawParameterArea"/>, <see cref="ResolvedIndexName"/>,
@@ -830,7 +830,7 @@ public sealed record TpmNvReadLockOverSessionRequested(
     Tpm2bAuth Hmac,
     TpmParameterArea RawParameterArea,
     Tpm2bName ResolvedIndexName,
-    Tpm2bAuth? ResolvedAuthValue = null): TpmSimulatorInput, IDisposable
+    Tpm2bAuth? ResolvedAuthValue = null) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="RawParameterArea"/>, <see cref="ResolvedIndexName"/>,
@@ -927,7 +927,7 @@ public sealed record TpmNvChangeAuthOverSessionRequested(
     TpmParameterArea RawParameterArea,
     Tpm2bAuth NewAuth,
     Tpm2bName ResolvedIndexName,
-    Tpm2bAuth? ResolvedAuthValue = null): TpmSimulatorInput, IDisposable
+    Tpm2bAuth? ResolvedAuthValue = null) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="NewAuth"/> carrier on a refusing path (or, on the decrypted path,
@@ -970,7 +970,7 @@ public sealed record TpmNvChangeAuthOverSessionRequested(
 /// </remarks>
 public sealed record TpmNvIndexNameComputed(
     Tpm2bName Name,
-    TpmSimulatorInput Resume): TpmSimulatorInput;
+    TpmSimulatorInput Resume) : TpmSimulatorInput;
 
 /// <summary>
 /// The result of executing a <see cref="TpmFrameNvSessionResponseAction"/>: the rolled nonceTPM, framed
@@ -996,7 +996,7 @@ public sealed record TpmNvSessionResponseFramed(
     TpmaSession SessionAttributes,
     TpmParameterArea ParameterArea,
     Tpm2bAuth Hmac,
-    Tpm2bDigest? NewAuditDigest = null): TpmSimulatorInput;
+    Tpm2bDigest? NewAuditDigest = null) : TpmSimulatorInput;
 
 /// <summary>
 /// The result of executing a <see cref="TpmNvExtendAction"/>: the Extend Index's new digest-sized value,
@@ -1011,7 +1011,7 @@ public sealed record TpmNvSessionResponseFramed(
 public sealed record TpmNvExtended(
     TpmiRhNvIndex NvIndex,
     DigestValue Digest,
-    TpmSimulatorInput Resume): TpmSimulatorInput;
+    TpmSimulatorInput Resume) : TpmSimulatorInput;
 
 /// <summary>
 /// The result of executing a <see cref="Automata.TpmDecryptNvChangeAuthAction"/>: <c>TPM2_NV_ChangeAuth()</c>'s
@@ -1027,7 +1027,7 @@ public sealed record TpmNvExtended(
 public sealed record TpmNvChangeAuthDecrypted(
     TpmRcConstants ResponseCode,
     TpmNvChangeAuthOverSessionRequested Request,
-    Tpm2bAuth DecryptedNewAuth): TpmSimulatorInput, IDisposable
+    Tpm2bAuth DecryptedNewAuth) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="DecryptedNewAuth"/> carrier and the threaded <see cref="Request"/>'s
@@ -1120,7 +1120,7 @@ public sealed record TpmNvChangeAuthFramedSessionEntry(
 /// </remarks>
 /// <param name="Entries">Every session's framed response entry, in command-session order; each real entry owns its own <c>Hmac</c> buffer, released after framing, while a password placeholder owns none.</param>
 public sealed record TpmNvChangeAuthResponseFramed(
-    ImmutableArray<TpmNvChangeAuthFramedSessionEntry> Entries): TpmSimulatorInput;
+    ImmutableArray<TpmNvChangeAuthFramedSessionEntry> Entries) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_NV_UndefineSpaceSpecial()</c> command (TPM 2.0 Library Part 3, clause 31.5). Deletes a
@@ -1173,7 +1173,7 @@ public sealed record TpmNvUndefineSpaceSpecialRequested(
     TpmParameterArea RawParameterArea,
     Tpm2bName ResolvedIndexName,
     Tpm2bAuth? ResolvedAuthValue = null,
-    Tpm2bAuth? ResolvedPlatformAuthValue = null): TpmSimulatorInput, IDisposable
+    Tpm2bAuth? ResolvedPlatformAuthValue = null) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="RawParameterArea"/>, <see cref="ResolvedIndexName"/>, and both slots'
@@ -1216,7 +1216,7 @@ public sealed record TpmEvictControlRequested(
     TpmiRhProvision AuthHandle,
     Tpm2bAuth SuppliedAuthPassword,
     TpmiDhObject ObjectHandle,
-    TpmiDhPersistent PersistentHandle): TpmSimulatorInput, IDisposable
+    TpmiDhPersistent PersistentHandle) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="SuppliedAuthPassword"/> carrier on a refusing path; the consuming
@@ -1240,7 +1240,7 @@ public sealed record TpmEvictControlRequested(
 /// <see cref="TpmRandomResponse"/> the transition produces and is released by <see cref="TpmSimulator"/>
 /// once the response is framed.
 /// </param>
-public sealed record TpmRandomGenerated(Tpm2bDigest Bytes): TpmSimulatorInput;
+public sealed record TpmRandomGenerated(Tpm2bDigest Bytes) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_CreatePrimary()</c> command (TPM 2.0 Library Part 3, clause 24.1). Creates a primary signing
@@ -1284,7 +1284,7 @@ public sealed record TpmCreatePrimaryRequested(
     Tpm2bDigest AuthPolicy,
     Tpm2bAuth UserAuth,
     Tpm2bData OutsideInfo,
-    TpmlPcrSelection CreationPcr): TpmSimulatorInput, IDisposable
+    TpmlPcrSelection CreationPcr) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="SuppliedHierarchyPassword"/>, <see cref="AuthPolicy"/>,
@@ -1353,7 +1353,7 @@ public sealed record TpmCreateEccKemKeyRequested(
     Tpm2bDigest AuthPolicy,
     Tpm2bAuth UserAuth,
     Tpm2bData OutsideInfo,
-    TpmlPcrSelection CreationPcr): TpmSimulatorInput, IDisposable
+    TpmlPcrSelection CreationPcr) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="SuppliedHierarchyPassword"/>, <see cref="AuthPolicy"/>,
@@ -1414,7 +1414,7 @@ public sealed record TpmCreateRsaPrimaryRequested(
     Tpm2bDigest AuthPolicy,
     Tpm2bAuth UserAuth,
     Tpm2bData OutsideInfo,
-    TpmlPcrSelection CreationPcr): TpmSimulatorInput, IDisposable
+    TpmlPcrSelection CreationPcr) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="SuppliedHierarchyPassword"/>, <see cref="AuthPolicy"/>,
@@ -1477,7 +1477,7 @@ public sealed record TpmSignRequested(
     TpmiAlgSigScheme SignatureScheme,
     TpmiAlgHash SchemeHashAlg,
     TpmiRhHierarchy ValidationHierarchy,
-    Tpm2bDigest ValidationDigest): TpmSimulatorInput, IDisposable
+    Tpm2bDigest ValidationDigest) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="SuppliedKeyPassword"/>, <see cref="Digest"/> and
@@ -1532,7 +1532,7 @@ public sealed record TpmSignDigestRequested(
     Tpm2bSignatureCtx Context,
     Tpm2bDigest Digest,
     TpmiRhHierarchy ValidationHierarchy,
-    Tpm2bDigest ValidationDigest): TpmSimulatorInput, IDisposable
+    Tpm2bDigest ValidationDigest) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases every owned carrier on a refusing path; the consuming transition instead releases the password
@@ -1572,7 +1572,7 @@ public sealed record TpmSignDigestRequested(
 public sealed record TpmSignSequenceStartRequested(
     TpmiDhObject KeyHandle,
     Tpm2bAuth SequenceAuth,
-    Tpm2bSignatureCtx Context): TpmSimulatorInput, IDisposable
+    Tpm2bSignatureCtx Context) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="SequenceAuth"/> and <see cref="Context"/> carriers on a refusing path; the
@@ -1609,7 +1609,7 @@ public sealed record TpmSignSequenceStartRequested(
 public sealed record TpmSequenceUpdateRequested(
     TpmiDhObject SequenceHandle,
     Tpm2bAuth SuppliedSequencePassword,
-    Tpm2bMaxBuffer Buffer): TpmSimulatorInput, IDisposable
+    Tpm2bMaxBuffer Buffer) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="SuppliedSequencePassword"/> and <see cref="Buffer"/> carriers on a
@@ -1662,7 +1662,7 @@ public sealed record TpmSignSequenceCompleteRequested(
     TpmiDhObject KeyHandle,
     Tpm2bAuth SuppliedSequencePassword,
     Tpm2bAuth SuppliedKeyPassword,
-    Tpm2bMaxBuffer Buffer): TpmSimulatorInput, IDisposable
+    Tpm2bMaxBuffer Buffer) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases every owned carrier on a refusing path; the consuming transition's success path instead
@@ -1689,7 +1689,7 @@ public sealed record TpmSignSequenceCompleteRequested(
 /// </summary>
 /// <param name="Handle">The transient handle the transition allocated for the new sequence.</param>
 /// <param name="State">The fully built sequence context, owning its own deep-copied Name and adopted authorization carriers; ready to install under <paramref name="Handle"/>, or released through <see cref="Dispose"/> on a refusing path.</param>
-public sealed record TpmSequenceStarted(TpmiDhObject Handle, SequenceObjectState State): TpmSimulatorInput, IDisposable
+public sealed record TpmSequenceStarted(TpmiDhObject Handle, SequenceObjectState State) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases <see cref="State"/>'s owned carriers on a refusing path — mirroring <see cref="TpmObjectPersisted.Dispose"/>.
@@ -1716,7 +1716,7 @@ public sealed record TpmSequenceStarted(TpmiDhObject Handle, SequenceObjectState
 public sealed record TpmSequenceSigned(
     TpmRcConstants ResponseCode,
     TpmiDhObject SequenceHandle,
-    TpmtSignature? Signature): TpmSimulatorInput, IDisposable
+    TpmtSignature? Signature) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases <see cref="Signature"/> when one was produced, on a refusing path — mirroring
@@ -1742,7 +1742,7 @@ public sealed record TpmSequenceSigned(
 /// <param name="HashAlg">The sequence's hash algorithm (<c>hashAlg</c>, <c>TPMI_ALG_HASH+</c>): an implemented hash opens a hash sequence, <c>TPM_ALG_NULL</c> an Event Sequence (clause 17.4.1).</param>
 public sealed record TpmHashSequenceStartRequested(
     Tpm2bAuth SequenceAuth,
-    TpmiAlgHash HashAlg): TpmSimulatorInput, IDisposable
+    TpmiAlgHash HashAlg) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="SequenceAuth"/> carrier on a refusing path; the installing transition
@@ -1768,7 +1768,7 @@ public sealed record TpmSequenceCompleteRequested(
     TpmiDhObject SequenceHandle,
     Tpm2bAuth SuppliedSequencePassword,
     Tpm2bMaxBuffer Buffer,
-    TpmiRhHierarchy Hierarchy): TpmSimulatorInput, IDisposable
+    TpmiRhHierarchy Hierarchy) : TpmSimulatorInput, IDisposable
 {
     /// <summary>Releases the owned password and buffer carriers on a refusing path.</summary>
     public void Dispose()
@@ -1789,7 +1789,7 @@ public sealed record TpmSequenceCompleteRequested(
 public sealed record TpmHashRequested(
     Tpm2bMaxBuffer Data,
     TpmiAlgHash HashAlg,
-    TpmiRhHierarchy Hierarchy): TpmSimulatorInput, IDisposable
+    TpmiRhHierarchy Hierarchy) : TpmSimulatorInput, IDisposable
 {
     /// <summary>Releases the owned <see cref="Data"/> carrier on a refusing path.</summary>
     public void Dispose()
@@ -1810,7 +1810,7 @@ public sealed record TpmHashRequested(
 public sealed record TpmDigestComputed(
     TpmiDhObject? SequenceHandle,
     Tpm2bDigest Result,
-    TpmtTkHashcheck Validation): TpmSimulatorInput, IDisposable
+    TpmtTkHashcheck Validation) : TpmSimulatorInput, IDisposable
 {
     /// <summary>Releases the owned digest and ticket when the result never reaches its framing transition.</summary>
     public void Dispose()
@@ -1832,7 +1832,7 @@ public sealed record TpmHmacRequested(
     TpmiDhObject KeyHandle,
     Tpm2bAuth SuppliedKeyPassword,
     Tpm2bMaxBuffer Buffer,
-    TpmiAlgHash HashAlg): TpmSimulatorInput, IDisposable
+    TpmiAlgHash HashAlg) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned supplied-password and buffer carriers on any arm that refuses before the consuming
@@ -1858,7 +1858,7 @@ public sealed record TpmHmacStartRequested(
     TpmiDhObject KeyHandle,
     Tpm2bAuth SuppliedKeyPassword,
     Tpm2bAuth SequenceAuth,
-    TpmiAlgHash HashAlg): TpmSimulatorInput, IDisposable
+    TpmiAlgHash HashAlg) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned supplied-password and sequence-authorization carriers on any arm that refuses before
@@ -1879,7 +1879,7 @@ public sealed record TpmHmacStartRequested(
 /// <param name="Result">The computed HMAC in a <c>TPM2B_DIGEST</c>; owned, transferred to the response intent.</param>
 public sealed record TpmHmacComputed(
     TpmiDhObject? SequenceHandle,
-    Tpm2bDigest Result): TpmSimulatorInput, IDisposable
+    Tpm2bDigest Result) : TpmSimulatorInput, IDisposable
 {
     /// <summary>Releases the owned HMAC-result carrier on any arm that refuses before the response intent takes it.</summary>
     public void Dispose()
@@ -1914,7 +1914,7 @@ public sealed record TpmHmacOverSessionRequested(
     Tpm2bAuth Hmac,
     Tpm2bMaxBuffer Buffer,
     TpmiAlgHash HashAlg,
-    TpmParameterArea RawParameterArea): TpmSimulatorInput, IDisposable
+    TpmParameterArea RawParameterArea) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases every owned carrier — the slot's caller nonce and supplied hmac, the buffer, and the captured
@@ -1952,7 +1952,7 @@ public sealed record TpmHmacStartOverSessionRequested(
     Tpm2bAuth Hmac,
     Tpm2bAuth SequenceAuth,
     TpmiAlgHash HashAlg,
-    TpmParameterArea RawParameterArea): TpmSimulatorInput, IDisposable
+    TpmParameterArea RawParameterArea) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases every owned carrier — the slot's caller nonce and supplied hmac, the sequence authorization, and
@@ -2047,7 +2047,7 @@ public sealed record TpmHmacFramedSession(
 /// <param name="Entry">The authorizing session's framed response entry, its owned carriers released by the serializer and the completing transition.</param>
 public sealed record TpmHmacComputedOverSession(
     TpmParameterArea ParameterArea,
-    TpmHmacFramedSession Entry): TpmSimulatorInput, IDisposable
+    TpmHmacFramedSession Entry) : TpmSimulatorInput, IDisposable
 {
     /// <summary>Releases the owned parameter area and the entry's carriers on a path that frames no response.</summary>
     public void Dispose()
@@ -2071,7 +2071,7 @@ public sealed record TpmHmacComputedOverSession(
 public sealed record TpmHmacSequenceStartedOverSession(
     TpmiDhObject Handle,
     SequenceObjectState State,
-    TpmHmacFramedSession Entry): TpmSimulatorInput, IDisposable
+    TpmHmacFramedSession Entry) : TpmSimulatorInput, IDisposable
 {
     /// <summary>Releases the sequence context's owned carriers and the entry's carriers on a path that installs and frames nothing.</summary>
     public void Dispose()
@@ -2101,7 +2101,7 @@ public sealed record TpmHmacSequenceStartedOverSession(
 public sealed record TpmKeyedHashParameterDecrypted(
     TpmRcConstants ResponseCode,
     TpmCcConstants CommandCode,
-    TpmSimulatorInput Request): TpmSimulatorInput, IDisposable
+    TpmSimulatorInput Request) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the threaded <see cref="Request"/>'s carriers on a refusing path; the resuming path hands the
@@ -2145,7 +2145,7 @@ public sealed record TpmVerifySequenceStartRequested(
     TpmiDhObject KeyHandle,
     Tpm2bAuth SequenceAuth,
     Tpm2bSignatureHint Hint,
-    Tpm2bSignatureCtx Context): TpmSimulatorInput, IDisposable
+    Tpm2bSignatureCtx Context) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="SequenceAuth"/>, <see cref="Hint"/>, and <see cref="Context"/> carriers on
@@ -2191,7 +2191,7 @@ public sealed record TpmVerifySequenceCompleteRequested(
     Tpm2bAuth SuppliedSequencePassword,
     TpmiAlgSigScheme SignatureScheme,
     TpmiAlgHash SchemeHashAlg,
-    TpmtSignature Signature): TpmSimulatorInput, IDisposable
+    TpmtSignature Signature) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases every owned carrier on a refusing path; the consuming transition's success path instead
@@ -2238,7 +2238,7 @@ public sealed record TpmSignOverSessionRequested(
     TpmiRhHierarchy ValidationHierarchy,
     Tpm2bDigest ValidationDigest,
     TpmParameterArea RawParameterArea,
-    ImmutableArray<Tpm2bAuth> ResolvedAuthValues = default): TpmSimulatorInput, IDisposable
+    ImmutableArray<Tpm2bAuth> ResolvedAuthValues = default) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned area, the recovered digest, the validation ticket digest, and the raw parameter area
@@ -2284,7 +2284,7 @@ public sealed record TpmSignDigestOverSessionRequested(
     TpmiRhHierarchy ValidationHierarchy,
     Tpm2bDigest ValidationDigest,
     TpmParameterArea RawParameterArea,
-    ImmutableArray<Tpm2bAuth> ResolvedAuthValues = default): TpmSimulatorInput, IDisposable
+    ImmutableArray<Tpm2bAuth> ResolvedAuthValues = default) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned area, the context, the digest, the ticket digest, and the raw parameter area on a
@@ -2325,7 +2325,7 @@ public sealed record TpmSequenceUpdateOverSessionRequested(
     TpmAuthorizationArea Area,
     Tpm2bMaxBuffer Buffer,
     TpmParameterArea RawParameterArea,
-    ImmutableArray<Tpm2bAuth> ResolvedAuthValues = default): TpmSimulatorInput, IDisposable
+    ImmutableArray<Tpm2bAuth> ResolvedAuthValues = default) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned area, the recovered block, and the raw parameter area on a refusing path.
@@ -2364,7 +2364,7 @@ public sealed record TpmSignSequenceCompleteOverSessionRequested(
     TpmAuthorizationArea Area,
     Tpm2bMaxBuffer Buffer,
     TpmParameterArea RawParameterArea,
-    ImmutableArray<Tpm2bAuth> ResolvedAuthValues = default): TpmSimulatorInput, IDisposable
+    ImmutableArray<Tpm2bAuth> ResolvedAuthValues = default) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned area, the recovered block, and the raw parameter area on a refusing path.
@@ -2407,7 +2407,7 @@ public sealed record TpmVerifySequenceCompleteOverSessionRequested(
     TpmiAlgHash SchemeHashAlg,
     TpmtSignature Signature,
     TpmParameterArea RawParameterArea,
-    ImmutableArray<Tpm2bAuth> ResolvedAuthValues = default): TpmSimulatorInput, IDisposable
+    ImmutableArray<Tpm2bAuth> ResolvedAuthValues = default) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned area, the signature, and the raw parameter area on a refusing path.
@@ -2435,7 +2435,7 @@ public sealed record TpmVerifySequenceCompleteOverSessionRequested(
 public sealed record TpmSequenceSignatureVerified(
     TpmRcConstants ResponseCode,
     TpmiDhObject SequenceHandle,
-    TpmtTkVerified? Validation): TpmSimulatorInput, IDisposable
+    TpmtTkVerified? Validation) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases <see cref="Validation"/> when a ticket was minted, on a refusing path — mirroring
@@ -2486,7 +2486,7 @@ public sealed record TpmPrimaryKeyCreated(
     Tpm2bCreationData CreationData,
     Tpm2bDigest CreationHash,
     TpmtTkCreation CreationTicket,
-    Tpm2bName Name): TpmSimulatorInput;
+    Tpm2bName Name) : TpmSimulatorInput;
 
 /// <summary>
 /// The result of executing a <see cref="TpmEccSignAction"/> or <see cref="TpmRsaSignAction"/>: the produced
@@ -2498,7 +2498,7 @@ public sealed record TpmPrimaryKeyCreated(
 /// signature. Ownership flows to the <c>TpmSignResponse</c> the transition produces and is released by
 /// <see cref="TpmSimulator"/> once the response is framed.
 /// </param>
-public sealed record TpmMessageSigned(TpmtSignature Signature): TpmSimulatorInput;
+public sealed record TpmMessageSigned(TpmtSignature Signature) : TpmSimulatorInput;
 
 /// <summary>
 /// The result of executing a <see cref="TpmEccSignDigestWithTicketAction"/> or
@@ -2512,7 +2512,7 @@ public sealed record TpmMessageSigned(TpmtSignature Signature): TpmSimulatorInpu
 /// <param name="Signature">The produced <c>TPMT_SIGNATURE</c>; ownership flows to the <c>TpmSignResponse</c> the transition produces and is released by <see cref="TpmSimulator"/> once framed. <see langword="null"/> when the ticket did not validate, where no signature is framed at all.</param>
 public sealed record TpmDigestSigned(
     TpmRcConstants ResponseCode,
-    TpmtSignature? Signature): TpmSimulatorInput;
+    TpmtSignature? Signature) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_CreatePrimary()</c> command for an ECC restricted storage key (TPM 2.0 Library Part 3, clause
@@ -2563,7 +2563,7 @@ public sealed record TpmCreateStorageParentRequested(
     Tpm2bDigest AuthPolicy,
     Tpm2bAuth UserAuth,
     Tpm2bData OutsideInfo,
-    TpmlPcrSelection CreationPcr): TpmSimulatorInput, IDisposable
+    TpmlPcrSelection CreationPcr) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="SuppliedHierarchyPassword"/>, <see cref="AuthPolicy"/>,
@@ -2632,7 +2632,7 @@ public sealed record TpmCreateRsaStorageParentRequested(
     Tpm2bDigest AuthPolicy,
     Tpm2bAuth UserAuth,
     Tpm2bData OutsideInfo,
-    TpmlPcrSelection CreationPcr): TpmSimulatorInput, IDisposable
+    TpmlPcrSelection CreationPcr) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="SuppliedHierarchyPassword"/>, <see cref="AuthPolicy"/>,
@@ -2699,7 +2699,7 @@ public sealed record TpmCreateKeyedHashRequested(
     Tpm2bSensitiveData SecretData,
     Tpm2bAuth UserAuth,
     Tpm2bData OutsideInfo,
-    TpmlPcrSelection CreationPcr): TpmSimulatorInput, IDisposable
+    TpmlPcrSelection CreationPcr) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="SuppliedParentPassword"/>, <see cref="AuthPolicy"/>,
@@ -2768,7 +2768,7 @@ public sealed record TpmLoadObjectRequested(
     bool UserWithAuth,
     TpmaObject TemplateAttributes,
     Tpm2bPublic InPublic,
-    Tpm2bPrivate PrivateBlob): TpmSimulatorInput, IDisposable
+    Tpm2bPrivate PrivateBlob) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="SuppliedParentPassword"/>, <see cref="AuthPolicy"/>, <see cref="InPublic"/>
@@ -2821,7 +2821,7 @@ public sealed record TpmLoadObjectRequested(
 public sealed record TpmLoadExternalRequested(
     TpmtSensitive? InPrivate,
     Tpm2bPublic InPublic,
-    uint Hierarchy): TpmSimulatorInput, IDisposable
+    uint Hierarchy) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="InPrivate"/> (when present) and <see cref="InPublic"/> carriers on a
@@ -2859,7 +2859,7 @@ public sealed record TpmExternalObjectLoaded(
     Tpm2bName Name,
     TransientKeyState? KeyState,
     KeyedHashObjectState? SealedState,
-    TpmSimulatorInput Request): TpmSimulatorInput, IDisposable
+    TpmSimulatorInput Request) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the <see cref="Name"/> carrier on a refusing path (the dispose-immune empty sentinel, a no-op);
@@ -2887,7 +2887,7 @@ public sealed record TpmExternalObjectLoaded(
 /// transition is its terminal owner; every refusing path releases it through
 /// <see cref="IDisposable.Dispose"/>.
 /// </param>
-public sealed record TpmUnsealRequested(TpmiDhObject ItemHandle, Tpm2bAuth SuppliedPassword): TpmSimulatorInput, IDisposable
+public sealed record TpmUnsealRequested(TpmiDhObject ItemHandle, Tpm2bAuth SuppliedPassword) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="SuppliedPassword"/> carrier on a refusing path; the authorizing transition
@@ -2942,7 +2942,7 @@ public sealed record TpmUnsealOverSessionsRequested(
     TpmiShAuthSession EncryptSession,
     Tpm2bNonce EncryptNonceCaller,
     TpmaSession EncryptAttributes,
-    Tpm2bAuth EncryptHmac): TpmSimulatorInput, IDisposable
+    Tpm2bAuth EncryptHmac) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases both slots' credential and caller-nonce carriers on every path that does not frame the
@@ -2982,7 +2982,7 @@ public sealed record TpmUnsealedOverSessions(
     bool HasPolicyPlaceholder,
     int PolicyNonceLength,
     TpmaSession PolicyAttributes,
-    ImmutableArray<TpmUnsealFramedSessionEntry> Entries): TpmSimulatorInput;
+    ImmutableArray<TpmUnsealFramedSessionEntry> Entries) : TpmSimulatorInput;
 
 /// <summary>
 /// The result of executing a <see cref="TpmCreateKeyedHashAction"/>: the wrapped private blob, the exported public area,
@@ -3011,7 +3011,7 @@ public sealed record TpmKeyedHashCreated(
     Tpm2bPublic OutPublic,
     Tpm2bCreationData CreationData,
     Tpm2bDigest CreationHash,
-    TpmtTkCreation CreationTicket): TpmSimulatorInput;
+    TpmtTkCreation CreationTicket) : TpmSimulatorInput;
 
 /// <summary>
 /// The result of executing a <see cref="TpmLoadObjectAction"/>: the object Name the effectful loop computed and
@@ -3046,7 +3046,7 @@ public sealed record TpmObjectLoaded(
     Tpm2bAuth UserAuth,
     Tpm2bDigest SeedValue,
     Tpm2bPublic PublicArea,
-    Tpm2bName QualifiedName): TpmSimulatorInput, IDisposable
+    Tpm2bName QualifiedName) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the two owned Name carriers and the <see cref="Data"/>/<see cref="AuthPolicy"/>/
@@ -3088,7 +3088,7 @@ public sealed record TpmDuplicateRequested(
     TpmiDhObject NewParentHandle,
     TpmiShAuthSession PolicySession,
     TpmaSession PolicySessionAttributes,
-    TpmParameterArea RawParameterArea): TpmSimulatorInput, IDisposable
+    TpmParameterArea RawParameterArea) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="RawParameterArea"/>: on a refusing path through the rejection helper, on a
@@ -3110,7 +3110,7 @@ public sealed record TpmDuplicateRequested(
 /// <param name="OutSymSeed">The outer-wrapper seed protected to the new parent (<c>TPM2B_ENCRYPTED_SECRET</c>) in an owned pooled carrier — the dispose-immune empty sentinel for a <c>TPM_RH_NULL</c> new parent; ownership flows to the response intent alongside <see cref="Duplicate"/>.</param>
 public sealed record TpmObjectDuplicated(
     Tpm2bPrivate Duplicate,
-    Tpm2bEncryptedSecret OutSymSeed): TpmSimulatorInput, IDisposable
+    Tpm2bEncryptedSecret OutSymSeed) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned duplicate and seed carriers on a refusing path; the framing path transfers both to
@@ -3154,7 +3154,7 @@ public sealed record TpmObjectChangeAuthRequested(
     Tpm2bAuth Hmac,
     TpmParameterArea RawParameterArea,
     Tpm2bAuth NewAuth,
-    Tpm2bAuth? ResolvedAuthValue = null): TpmSimulatorInput, IDisposable
+    Tpm2bAuth? ResolvedAuthValue = null) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases every owned carrier this record still holds — the slot's caller nonce and supplied credential,
@@ -3186,7 +3186,7 @@ public sealed record TpmObjectChangeAuthRequested(
 public sealed record TpmObjectAuthChanged(
     TpmRcConstants ResponseCode,
     Tpm2bPrivate OutPrivate,
-    TpmSimulatorInput Request): TpmSimulatorInput, IDisposable
+    TpmSimulatorInput Request) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="OutPrivate"/> carrier on a refusing path (the dispose-immune empty
@@ -3222,7 +3222,7 @@ public sealed record TpmRsaEncryptRequested(
     TpmiDhObject KeyHandle,
     Tpm2bPublicKeyRsa Message,
     TpmtRsaDecrypt InScheme,
-    Tpm2bData Label): TpmSimulatorInput, IDisposable
+    Tpm2bData Label) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="Message"/> and <see cref="Label"/> carriers on a refusing path, the
@@ -3259,7 +3259,7 @@ public sealed record TpmRsaEncrypted(
     TpmRcConstants ResponseCode,
     Tpm2bPublicKeyRsa OutData,
     TpmSimulatorInput Request,
-    TpmRsaEncryptRefusalNature Nature = TpmRsaEncryptRefusalNature.Operation): TpmSimulatorInput, IDisposable
+    TpmRsaEncryptRefusalNature Nature = TpmRsaEncryptRefusalNature.Operation) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="OutData"/> carrier on a refusing path (the dispose-immune empty sentinel,
@@ -3326,7 +3326,7 @@ public sealed record TpmRsaDecryptRequested(
     Tpm2bAuth SuppliedKeyPassword,
     Tpm2bPublicKeyRsa CipherText,
     TpmtRsaDecrypt InScheme,
-    Tpm2bData Label): TpmSimulatorInput, IDisposable
+    Tpm2bData Label) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="SuppliedKeyPassword"/>, <see cref="CipherText"/> and <see cref="Label"/>
@@ -3372,7 +3372,7 @@ public sealed record TpmRsaDecryptOverSessionRequested(
     TpmtRsaDecrypt InScheme,
     Tpm2bData Label,
     TpmParameterArea RawParameterArea,
-    ImmutableArray<Tpm2bAuth> ResolvedAuthValues = default): TpmSimulatorInput, IDisposable
+    ImmutableArray<Tpm2bAuth> ResolvedAuthValues = default) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned area, the recovered ciphertext, the label, and the raw parameter area on a refusing
@@ -3407,7 +3407,7 @@ public sealed record TpmRsaDecryptOverSessionRequested(
 public sealed record TpmRsaDecrypted(
     TpmRcConstants ResponseCode,
     Tpm2bPublicKeyRsa Message,
-    TpmSimulatorInput Request): TpmSimulatorInput, IDisposable
+    TpmSimulatorInput Request) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="Message"/> carrier on a refusing path, zeroing it first — the recovered
@@ -3446,7 +3446,7 @@ public sealed record TpmImportRequested(
     TpmaObject TemplateAttributes,
     Tpm2bPublic InPublic,
     Tpm2bPrivate Duplicate,
-    Tpm2bEncryptedSecret InSymSeed): TpmSimulatorInput, IDisposable
+    Tpm2bEncryptedSecret InSymSeed) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned password, public-area, duplicate, and seed carriers on a refusing path; the accepting
@@ -3471,7 +3471,7 @@ public sealed record TpmImportRequested(
 /// <param name="OutPrivate">The re-wrapped sensitive area (<c>TPM2B_PRIVATE</c>) in an owned pooled carrier — the dispose-immune empty sentinel on failure; ownership flows to the <c>TpmImportResponse</c> intent and is released by <see cref="TpmSimulator"/> once framed.</param>
 public sealed record TpmObjectImported(
     TpmRcConstants ResponseCode,
-    Tpm2bPrivate OutPrivate): TpmSimulatorInput, IDisposable
+    Tpm2bPrivate OutPrivate) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned re-wrapped carrier on a refusing path; the framing path transfers it to the response
@@ -3522,7 +3522,7 @@ public sealed record TpmCertifyRequested(
     Tpm2bAuth SuppliedSignPassword,
     Tpm2bData QualifyingData,
     TpmiAlgSigScheme SignatureScheme,
-    TpmiAlgHash SchemeHashAlg): TpmSimulatorInput, IDisposable
+    TpmiAlgHash SchemeHashAlg) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the request's owned carriers — both slots' supplied passwords and the qualifying data — on a
@@ -3547,7 +3547,7 @@ public sealed record TpmCertifyRequested(
 /// <param name="Signature">The <c>TPMT_SIGNATURE</c> over <c>H_hashAlg(certifyInfo)</c>; ownership flows to the <c>TpmCertifyResponse</c> and is released once framed.</param>
 public sealed record TpmObjectCertified(
     Tpm2bAttest CertifyInfo,
-    TpmtSignature Signature): TpmSimulatorInput;
+    TpmtSignature Signature) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_PCR_Read()</c> command (TPM 2.0 Library Part 3, clause 22.4): reads the current values of the
@@ -3560,7 +3560,7 @@ public sealed record TpmObjectCertified(
 /// intent, whose framing re-marshals it as <c>pcrSelectionOut</c> and disposes it once framed; every refusing
 /// arm releases it through this record's own <see cref="IDisposable.Dispose"/>.
 /// </param>
-public sealed record TpmPcrReadRequested(TpmlPcrSelection PcrSelection): TpmSimulatorInput, IDisposable
+public sealed record TpmPcrReadRequested(TpmlPcrSelection PcrSelection) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the parse-rented selection carrier on a refusing path; the successful path transfers it into the
@@ -3585,7 +3585,7 @@ public sealed record TpmPcrReadRequested(TpmlPcrSelection PcrSelection): TpmSimu
 public sealed record TpmPcrExtendRequested(
     TpmiDhPcr PcrHandle,
     Tpm2bAuth SuppliedPcrPassword,
-    TpmlDigestValues Digests): TpmSimulatorInput, IDisposable
+    TpmlDigestValues Digests) : TpmSimulatorInput, IDisposable
 {
     /// <summary>Releases the owned password and digest-list carriers on a refusing or no-op path.</summary>
     public void Dispose()
@@ -3608,7 +3608,7 @@ public sealed record TpmPcrExtendRequested(
 public sealed record TpmPcrEventRequested(
     TpmiDhPcr PcrHandle,
     Tpm2bAuth SuppliedPcrPassword,
-    Tpm2bEvent EventData): TpmSimulatorInput, IDisposable
+    Tpm2bEvent EventData) : TpmSimulatorInput, IDisposable
 {
     /// <summary>Releases the owned password and event carriers on a refusing path.</summary>
     public void Dispose()
@@ -3628,7 +3628,7 @@ public sealed record TpmPcrEventRequested(
 /// <param name="SuppliedPcrPassword">The password presented for the PCR slot, in an owned pooled carrier rented at parse; the comparing transition is its terminal owner, and every refusing arm releases it through <see cref="Dispose"/>.</param>
 public sealed record TpmPcrResetRequested(
     TpmiDhPcr PcrHandle,
-    Tpm2bAuth SuppliedPcrPassword): TpmSimulatorInput, IDisposable
+    Tpm2bAuth SuppliedPcrPassword) : TpmSimulatorInput, IDisposable
 {
     /// <summary>Releases the owned password carrier on a refusing path.</summary>
     public void Dispose()
@@ -3655,7 +3655,7 @@ public sealed record TpmEventSequenceCompleteRequested(
     Tpm2bAuth SuppliedPcrPassword,
     TpmiDhObject SequenceHandle,
     Tpm2bAuth SuppliedSequencePassword,
-    Tpm2bMaxBuffer Buffer): TpmSimulatorInput, IDisposable
+    Tpm2bMaxBuffer Buffer) : TpmSimulatorInput, IDisposable
 {
     /// <summary>Releases the owned password and buffer carriers on a refusing path.</summary>
     public void Dispose()
@@ -3678,7 +3678,7 @@ public sealed record TpmEventSequenceCompleteRequested(
 public sealed record TpmPcrExtended(
     TpmiDhPcr PcrHandle,
     ReadOnlyMemory<byte> ExtendedValue,
-    int ExtendCount): TpmSimulatorInput;
+    int ExtendCount) : TpmSimulatorInput;
 
 /// <summary>
 /// The result of executing a <see cref="TpmPcrEventAction"/>: the event's tagged digests and, when a register
@@ -3695,7 +3695,7 @@ public sealed record TpmPcrEventDigested(
     TpmiDhObject? SequenceHandle,
     TpmiDhPcr PcrHandle,
     TpmlDigestValues Digests,
-    ReadOnlyMemory<byte>? ExtendedValue): TpmSimulatorInput, IDisposable
+    ReadOnlyMemory<byte>? ExtendedValue) : TpmSimulatorInput, IDisposable
 {
     /// <summary>Releases the owned digest list when the result never reaches its framing transition.</summary>
     public void Dispose()
@@ -3739,7 +3739,7 @@ public sealed record TpmQuoteRequested(
     Tpm2bData QualifyingData,
     TpmiAlgSigScheme SignatureScheme,
     TpmiAlgHash SchemeHashAlg,
-    TpmlPcrSelection PcrSelection): TpmSimulatorInput, IDisposable
+    TpmlPcrSelection PcrSelection) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the request's owned carriers — the sign slot's supplied password, the qualifying data, and the
@@ -3764,7 +3764,7 @@ public sealed record TpmQuoteRequested(
 /// <param name="Signature">The <c>TPMT_SIGNATURE</c> over <c>H_hashAlg(quoted)</c>; ownership flows to the <c>TpmQuoteResponse</c> and is released once framed.</param>
 public sealed record TpmObjectQuoted(
     Tpm2bAttest Quoted,
-    TpmtSignature Signature): TpmSimulatorInput;
+    TpmtSignature Signature) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_CertifyCreation()</c> command (TPM 2.0 Library Part 3, clause 18.3): a signing key attests that the
@@ -3810,7 +3810,7 @@ public sealed record TpmCertifyCreationRequested(
     Tpm2bDigest CreationHash,
     TpmiAlgSigScheme SignatureScheme,
     TpmiAlgHash SchemeHashAlg,
-    Tpm2bDigest TicketDigest): TpmSimulatorInput, IDisposable
+    Tpm2bDigest TicketDigest) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the request's owned carriers — the sign slot's supplied password, the qualifying data, the
@@ -3844,7 +3844,7 @@ public sealed record TpmCertifyCreationRequested(
 public sealed record TpmObjectCreationCertified(
     TpmRcConstants ResponseCode,
     Tpm2bAttest? CertifyInfo,
-    TpmtSignature? Signature): TpmSimulatorInput;
+    TpmtSignature? Signature) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_GetTime()</c> command (TPM 2.0 Library Part 3, clause 18.7): a signing key attests the TPM's current
@@ -3882,7 +3882,7 @@ public sealed record TpmGetTimeRequested(
     Tpm2bAuth SuppliedSignPassword,
     Tpm2bData QualifyingData,
     TpmiAlgSigScheme SignatureScheme,
-    TpmiAlgHash SchemeHashAlg): TpmSimulatorInput, IDisposable
+    TpmiAlgHash SchemeHashAlg) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the request's owned carriers — both slots' supplied passwords and the qualifying data — on a
@@ -3907,14 +3907,14 @@ public sealed record TpmGetTimeRequested(
 /// <param name="Signature">The <c>TPMT_SIGNATURE</c> over <c>H_hashAlg(timeInfo)</c>; ownership flows to the <c>TpmGetTimeResponse</c> and is released once framed.</param>
 public sealed record TpmTimeAttested(
     Tpm2bAttest TimeInfo,
-    TpmtSignature Signature): TpmSimulatorInput;
+    TpmtSignature Signature) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_ReadClock()</c> command (TPM 2.0 Library Part 3, clause 29.1). Reads the current
 /// <c>TPMS_TIME_INFO</c> — uncertified, unsigned Time/Clock/resetCount/restartCount — with no handles and no
 /// authorization.
 /// </summary>
-public sealed record TpmReadClockRequested: TpmSimulatorInput;
+public sealed record TpmReadClockRequested : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_ClockRateAdjust()</c> command (TPM 2.0 Library Part 3, clause 29.3): adjusts the rate at which
@@ -3933,7 +3933,7 @@ public sealed record TpmReadClockRequested: TpmSimulatorInput;
 public sealed record TpmClockRateAdjustRequested(
     TpmiRhProvision AuthHandle,
     Tpm2bAuth AuthSupplied,
-    TpmClockAdjustConstants RateAdjust): TpmSimulatorInput, IDisposable
+    TpmClockAdjustConstants RateAdjust) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="AuthSupplied"/> carrier on a refusing path; the authorizing transition
@@ -3965,7 +3965,7 @@ public sealed record TpmClockRateAdjustOverSessionRequested(
     Tpm2bAuth Hmac,
     TpmParameterArea RawParameterArea,
     TpmClockAdjustConstants RateAdjust,
-    Tpm2bAuth? ResolvedAuthValue = null): TpmSimulatorInput, IDisposable
+    Tpm2bAuth? ResolvedAuthValue = null) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="RawParameterArea"/>, <see cref="NonceCaller"/> and <see cref="Hmac"/>
@@ -4002,7 +4002,7 @@ public sealed record TpmClockRateAdjustOverSessionRequested(
 public sealed record TpmClockSetRequested(
     TpmiRhProvision AuthHandle,
     Tpm2bAuth AuthSupplied,
-    ulong NewTime): TpmSimulatorInput, IDisposable
+    ulong NewTime) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="AuthSupplied"/> carrier on a refusing path; the authorizing transition
@@ -4033,7 +4033,7 @@ public sealed record TpmClockSetOverSessionRequested(
     Tpm2bAuth Hmac,
     TpmParameterArea RawParameterArea,
     ulong NewTime,
-    Tpm2bAuth? ResolvedAuthValue = null): TpmSimulatorInput, IDisposable
+    Tpm2bAuth? ResolvedAuthValue = null) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="RawParameterArea"/>, <see cref="NonceCaller"/> and <see cref="Hmac"/>
@@ -4062,7 +4062,7 @@ public sealed record TpmClockSetOverSessionRequested(
 /// <param name="LockoutAuthSupplied">The authorization value the caller supplied — the password session's plaintext authValue, which is the same <c>TPM2B_AUTH</c> wire field a real session carries an HMAC in (TPM 2.0 Library Part 2, clause 10.12.2, Table 156) — in a pooled carrier this record OWNS, rented as the parse's last act, compared against the lockout hierarchy's authorization value. The authorizing transition is its terminal owner; every refusing path releases it through <see cref="IDisposable.Dispose"/>.</param>
 public sealed record TpmDictionaryAttackLockResetRequested(
     TpmiRhLockout LockHandle,
-    Tpm2bAuth LockoutAuthSupplied): TpmSimulatorInput, IDisposable
+    Tpm2bAuth LockoutAuthSupplied) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="LockoutAuthSupplied"/> carrier on a refusing path; the authorizing
@@ -4090,7 +4090,7 @@ public sealed record TpmDictionaryAttackParametersRequested(
     Tpm2bAuth LockoutAuthSupplied,
     uint NewMaxTries,
     uint NewRecoveryTime,
-    uint NewLockoutRecovery): TpmSimulatorInput, IDisposable
+    uint NewLockoutRecovery) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="LockoutAuthSupplied"/> carrier on a refusing path; the authorizing
@@ -4147,7 +4147,7 @@ public sealed record TpmNvCertifyRequested(
     TpmiAlgSigScheme SignatureScheme,
     TpmiAlgHash SchemeHashAlg,
     ushort Size,
-    ushort Offset): TpmSimulatorInput, IDisposable
+    ushort Offset) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the request's owned carriers — both slots' supplied passwords and the qualifying data — on a
@@ -4173,7 +4173,7 @@ public sealed record TpmNvCertifyRequested(
 /// <param name="Signature">The <c>TPMT_SIGNATURE</c> over <c>H_hashAlg(certifyInfo)</c>; ownership flows to the <c>TpmNvCertifyResponse</c> and is released once framed.</param>
 public sealed record TpmNvIndexCertified(
     Tpm2bAttest CertifyInfo,
-    TpmtSignature Signature): TpmSimulatorInput;
+    TpmtSignature Signature) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_NV_Certify()</c> command at least one of whose two authorization slots carries a real session
@@ -4290,7 +4290,7 @@ public sealed record TpmNvCertifyOverSessionRequested(
     Tpm2bAuth SuppliedCompanionHmac,
     Tpm2bName ResolvedIndexName,
     Tpm2bAuth? ResolvedAuthValue = null,
-    Tpm2bAuth? ResolvedSignAuthValue = null): TpmSimulatorInput, IDisposable
+    Tpm2bAuth? ResolvedSignAuthValue = null) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the request's owned carriers — all three slots' supplied HMACs and caller nonces, the
@@ -4429,7 +4429,7 @@ public sealed record TpmQuoteOverSessionRequested(
     Tpm2bNonce SecondCompanionNonceCaller,
     TpmaSession SecondCompanionSessionAttributes,
     Tpm2bAuth SuppliedSecondCompanionHmac,
-    Tpm2bAuth? ResolvedSignAuthValue = null): TpmSimulatorInput, IDisposable
+    Tpm2bAuth? ResolvedSignAuthValue = null) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the request's owned carriers — the sign slot's supplied HMAC and caller nonce, each companion
@@ -4578,7 +4578,7 @@ public sealed record TpmCertifyCreationOverSessionRequested(
     Tpm2bNonce SecondCompanionNonceCaller,
     TpmaSession SecondCompanionSessionAttributes,
     Tpm2bAuth SuppliedSecondCompanionHmac,
-    Tpm2bAuth? ResolvedSignAuthValue = null): TpmSimulatorInput, IDisposable
+    Tpm2bAuth? ResolvedSignAuthValue = null) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the request's owned carriers — the sign slot's supplied HMAC and caller nonce, each companion
@@ -4694,7 +4694,7 @@ public sealed record TpmCertifyOverSessionRequested(
     TpmaSession CompanionSessionAttributes,
     Tpm2bAuth SuppliedCompanionHmac,
     Tpm2bAuth? ResolvedObjectAuthValue = null,
-    Tpm2bAuth? ResolvedSignAuthValue = null): TpmSimulatorInput, IDisposable
+    Tpm2bAuth? ResolvedSignAuthValue = null) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the request's owned carriers — all three slots' supplied HMACs and caller nonces, and the
@@ -4807,7 +4807,7 @@ public sealed record TpmGetTimeOverSessionRequested(
     TpmaSession CompanionSessionAttributes,
     Tpm2bAuth SuppliedCompanionHmac,
     Tpm2bAuth? ResolvedPrivacyAdminAuthValue = null,
-    Tpm2bAuth? ResolvedSignAuthValue = null): TpmSimulatorInput, IDisposable
+    Tpm2bAuth? ResolvedSignAuthValue = null) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the request's owned carriers — all three slots' supplied HMACs and caller nonces, and the
@@ -4880,7 +4880,7 @@ public sealed record TpmGetSessionAuditDigestRequested(
     TpmiShHmac SessionHandle,
     Tpm2bData QualifyingData,
     TpmiAlgSigScheme SignatureScheme,
-    TpmiAlgHash SchemeHashAlg): TpmSimulatorInput, IDisposable
+    TpmiAlgHash SchemeHashAlg) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the request's owned carriers — both slots' supplied passwords and the qualifying data — on a
@@ -4907,7 +4907,7 @@ public sealed record TpmGetSessionAuditDigestRequested(
 /// <param name="Signature">The <c>TPMT_SIGNATURE</c> over <c>H_hashAlg(auditInfo)</c>, or the dispose-immune <see cref="TpmtSignature.Null"/> for the NULL signer; ownership flows to the <c>TpmGetSessionAuditDigestResponse</c> and is released once framed.</param>
 public sealed record TpmSessionAuditAttested(
     Tpm2bAttest AuditInfo,
-    TpmtSignature Signature): TpmSimulatorInput;
+    TpmtSignature Signature) : TpmSimulatorInput;
 
 /// <summary>
 /// A session-authorized <c>TPM2_GetSessionAuditDigest()</c> command (TPM 2.0 Library Part 3, clause 18.5): the
@@ -5008,7 +5008,7 @@ public sealed record TpmGetSessionAuditDigestOverSessionRequested(
     TpmaSession CompanionSessionAttributes,
     Tpm2bAuth SuppliedCompanionHmac,
     Tpm2bAuth? ResolvedPrivacyAdminAuthValue = null,
-    Tpm2bAuth? ResolvedSignAuthValue = null): TpmSimulatorInput, IDisposable
+    Tpm2bAuth? ResolvedSignAuthValue = null) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the request's owned carriers — all three slots' supplied HMACs and caller nonces, and the
@@ -5129,7 +5129,7 @@ public sealed record TpmResponseFramedOverSessions(
     TpmParameterArea ParameterArea,
     ImmutableArray<TpmFramedSessionEntry> Entries,
     TpmiDhObject? FlushedSequenceHandle = null,
-    TpmHandle? ResponseHandle = null): TpmSimulatorInput;
+    TpmHandle? ResponseHandle = null) : TpmSimulatorInput;
 
 /// <summary>
 /// The result of the first-parameter decryption step of a session-authorized <c>TPM2_Sign()</c>,
@@ -5147,7 +5147,7 @@ public sealed record TpmFirstParameterDecrypted(
     TpmRcConstants ResponseCode,
     TpmCcConstants CommandCode,
     int DecryptSessionIndex,
-    TpmSimulatorInput Request): TpmSimulatorInput, IDisposable
+    TpmSimulatorInput Request) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the carried request's owned carriers on a refusing path.
@@ -5174,7 +5174,7 @@ public sealed record TpmVerifySignatureRequested(
     Tpm2bDigest Digest,
     TpmiAlgSigScheme SignatureScheme,
     TpmiAlgHash SchemeHashAlg,
-    TpmtSignature Signature): TpmSimulatorInput, IDisposable
+    TpmtSignature Signature) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="Digest"/> and <see cref="Signature"/> carriers on a refusing path; the
@@ -5198,7 +5198,7 @@ public sealed record TpmVerifySignatureRequested(
 /// <param name="Validation">The minted <c>TPMT_TK_VERIFIED</c> — the whole single response parameter of <c>TPM2_VerifySignature()</c> (TPM 2.0 Library Part 3, clause 20.2.2, Table 117), tag, hierarchy, and ticket HMAC digest together (Part 2, clause 10.6.5, Table 113); an owned carrier whose ownership flows to the <c>TpmVerifySignatureResponse</c> and is released by <see cref="TpmSimulator"/> once framed. <see langword="null"/> when the signature did not verify, where no ticket is framed at all.</param>
 public sealed record TpmSignatureVerified(
     TpmRcConstants ResponseCode,
-    TpmtTkVerified? Validation): TpmSimulatorInput;
+    TpmtTkVerified? Validation) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_VerifyDigestSignature()</c> command (TPM 2.0 Library Part 3, clause 20.4): validate that
@@ -5222,7 +5222,7 @@ public sealed record TpmVerifyDigestSignatureRequested(
     Tpm2bDigest Digest,
     TpmiAlgSigScheme SignatureScheme,
     TpmiAlgHash SchemeHashAlg,
-    TpmtSignature Signature): TpmSimulatorInput, IDisposable
+    TpmtSignature Signature) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases every owned carrier on a refusing path; the consuming transition disposes <see cref="Context"/>
@@ -5249,7 +5249,7 @@ public sealed record TpmVerifyDigestSignatureRequested(
 /// <param name="Validation">The minted <c>TPMT_TK_VERIFIED</c> — the whole single response parameter of <c>TPM2_VerifyDigestSignature()</c> (TPM 2.0 Library Part 3, clause 20.4, Table 121), tagged <c>TPM_ST_DIGEST_VERIFIED</c> with the verified scheme's hash algorithm as its metadata (Part 2, clause 10.6.4, Table 111; clause 10.6.5, Table 113); an owned carrier whose ownership flows to the <c>TpmVerifyDigestSignatureResponse</c> and is released by <see cref="TpmSimulator"/> once framed. <see langword="null"/> when the signature did not verify, where no ticket is framed at all.</param>
 public sealed record TpmDigestSignatureVerified(
     TpmRcConstants ResponseCode,
-    TpmtTkVerified? Validation): TpmSimulatorInput;
+    TpmtTkVerified? Validation) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_Encapsulate()</c> command (TPM 2.0 Library Part 3, clause 14.10). <c>keyHandle</c> carries no
@@ -5258,7 +5258,7 @@ public sealed record TpmDigestSignatureVerified(
 /// command parameters beyond the handle area.
 /// </summary>
 /// <param name="KeyHandle">The handle of the KEM key whose public portion performs the encapsulation.</param>
-public sealed record TpmEncapsulateRequested(TpmiDhObject KeyHandle): TpmSimulatorInput;
+public sealed record TpmEncapsulateRequested(TpmiDhObject KeyHandle) : TpmSimulatorInput;
 
 /// <summary>
 /// The result of executing a <see cref="TpmEncapsulateAction"/>: the DHKEM shared secret and its ciphertext
@@ -5271,7 +5271,7 @@ public sealed record TpmEncapsulateRequested(TpmiDhObject KeyHandle): TpmSimulat
 /// <param name="Ciphertext">The ephemeral SEC 1 point serving as the DHKEM ciphertext (<c>TPM2B_KEM_CIPHERTEXT</c>); an owned carrier whose ownership flows to the <c>TpmEncapsulateResponse</c> and is released by <see cref="TpmSimulator"/> once framed.</param>
 public sealed record TpmEncapsulated(
     Tpm2bSharedSecret SharedSecret,
-    Tpm2bKemCiphertext Ciphertext): TpmSimulatorInput;
+    Tpm2bKemCiphertext Ciphertext) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_Decapsulate()</c> command (TPM 2.0 Library Part 3, clause 14.11). Unlike
@@ -5292,7 +5292,7 @@ public sealed record TpmEncapsulated(
 public sealed record TpmDecapsulateRequested(
     TpmiDhObject KeyHandle,
     Tpm2bAuth SuppliedKeyPassword,
-    Tpm2bKemCiphertext Ciphertext): TpmSimulatorInput, IDisposable
+    Tpm2bKemCiphertext Ciphertext) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="SuppliedKeyPassword"/> and <see cref="Ciphertext"/> carriers on a
@@ -5318,7 +5318,7 @@ public sealed record TpmDecapsulateRequested(
 /// <param name="SharedSecret">The recovered DHKEM shared secret (<c>TPM2B_SHARED_SECRET</c>) — the whole single response parameter of <c>TPM2_Decapsulate()</c> (TPM 2.0 Library Part 3, clause 14.11.2, Table 63); an owned carrier whose ownership flows to the <c>TpmDecapsulateResponse</c> and is released by <see cref="TpmSimulator"/> once framed. <see langword="null"/> when the ciphertext did not validate, where no secret is framed at all.</param>
 public sealed record TpmDecapsulated(
     TpmRcConstants ResponseCode,
-    Tpm2bSharedSecret? SharedSecret): TpmSimulatorInput;
+    Tpm2bSharedSecret? SharedSecret) : TpmSimulatorInput;
 
 /// <summary>
 /// The result of executing a <see cref="TpmVerifyPolicySignedAction"/> or
@@ -5344,7 +5344,7 @@ public sealed record TpmPolicySignedVerified(
     ulong Timeout,
     Tpm2bTimeout FramedTimeout,
     TpmiRhHierarchy Hierarchy,
-    Tpm2bDigest? TicketDigest): TpmSimulatorInput;
+    Tpm2bDigest? TicketDigest) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_StartAuthSession()</c> command (TPM 2.0 Library Part 3, clause 11.1) that starts a POLICY or TRIAL
@@ -5377,7 +5377,7 @@ public sealed record TpmStartAuthSessionRequested(
     Tpm2bNonce NonceCaller,
     TpmtSymDef Symmetric,
     TpmiDhObject TpmKey,
-    Tpm2bEncryptedSecret EncryptedSalt): TpmSimulatorInput, IDisposable
+    Tpm2bEncryptedSecret EncryptedSalt) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="NonceCaller"/> and <see cref="EncryptedSalt"/> carriers on a refusing path;
@@ -5420,7 +5420,7 @@ public sealed record TpmStartHmacSessionRequested(
     TpmtSymDef Symmetric,
     TpmiAlgHash AuthHash,
     TpmiDhObject TpmKey,
-    Tpm2bEncryptedSecret EncryptedSalt): TpmSimulatorInput, IDisposable
+    Tpm2bEncryptedSecret EncryptedSalt) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="NonceCaller"/> and <see cref="EncryptedSalt"/> carriers on a refusing path;
@@ -5480,7 +5480,7 @@ public sealed record TpmHmacSessionStarted(
     SessionBoundEntity BoundEntity,
     TpmPolicySessionKeyContext? PolicyContext = null,
     bool IsBoundEntityDaProtected = false,
-    bool IsBoundToLockout = false): TpmSimulatorInput;
+    bool IsBoundToLockout = false) : TpmSimulatorInput;
 
 /// <summary>
 /// A no-authorization command carried over an authorization area of 1-3 companion slots (TPM 2.0 Library Part 3,
@@ -5551,7 +5551,7 @@ public sealed record TpmNoAuthOverSessionsRequested(
     TpmAuthorizationArea Area,
     TpmParameterArea RawParameterArea,
     ImmutableArray<TpmHandle> Handles,
-    Tpm2bName? ComputedHandleName = null): TpmSimulatorInput, IDisposable
+    Tpm2bName? ComputedHandleName = null) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="Area"/> and <see cref="RawParameterArea"/> carriers, the
@@ -5583,7 +5583,7 @@ public sealed record TpmNoAuthOverSessionsRequested(
 /// accepting transition TRANSFERS it into the <see cref="Automata.TpmStirRandomAction"/>, whose effect is its
 /// terminal owner; every refusing path releases it through this record's <see cref="IDisposable.Dispose"/>.
 /// </param>
-public sealed record TpmStirRandomRequested(Tpm2bSensitiveData InData): TpmSimulatorInput, IDisposable
+public sealed record TpmStirRandomRequested(Tpm2bSensitiveData InData) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="InData"/> carrier on a refusing path; the accepting transition disposes
@@ -5604,7 +5604,7 @@ public sealed record TpmStirRandomRequested(Tpm2bSensitiveData InData): TpmSimul
 /// </summary>
 /// <param name="CommandCode">The command being resumed — always <c>TPM_CC_StirRandom</c>.</param>
 /// <param name="Request">The <see cref="TpmStirRandomRequested"/> the response is framed for, threaded through unread here.</param>
-public sealed record TpmRandomStirred(TpmCcConstants CommandCode, TpmSimulatorInput Request): TpmSimulatorInput;
+public sealed record TpmRandomStirred(TpmCcConstants CommandCode, TpmSimulatorInput Request) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_TestParms()</c> command (TPM 2.0 Library Part 3, clause 30.3): asks whether <see cref="Parameters"/>
@@ -5618,7 +5618,7 @@ public sealed record TpmRandomStirred(TpmCcConstants CommandCode, TpmSimulatorIn
 /// every field <see cref="Verifiable.Tpm.Spec.Structures.TpmtPublicParms"/> and its union arms hold is a primitive or another
 /// value type.
 /// </param>
-public sealed record TpmTestParmsRequested(TpmtPublicParms Parameters): TpmSimulatorInput;
+public sealed record TpmTestParmsRequested(TpmtPublicParms Parameters) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_PolicyCommandCode()</c> command (TPM 2.0 Library Part 3, clause 23.4): restricts a policy session to
@@ -5627,7 +5627,7 @@ public sealed record TpmTestParmsRequested(TpmtPublicParms Parameters): TpmSimul
 /// </summary>
 /// <param name="PolicySession">The policy session handle the restriction is applied to.</param>
 /// <param name="Code">The command code the policy is restricted to.</param>
-public sealed record TpmPolicyCommandCodeRequested(TpmiShPolicy PolicySession, TpmCcConstants Code): TpmSimulatorInput;
+public sealed record TpmPolicyCommandCodeRequested(TpmiShPolicy PolicySession, TpmCcConstants Code) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_PolicyAuthValue()</c> command (TPM 2.0 Library Part 3, clause 23.18): binds a policy to the
@@ -5635,14 +5635,14 @@ public sealed record TpmPolicyCommandCodeRequested(TpmiShPolicy PolicySession, T
 /// <c>H(policyDigest ‖ TPM_CC_PolicyAuthValue)</c>. The policy session is a command handle with no authorization.
 /// </summary>
 /// <param name="PolicySession">The policy session handle the assertion is applied to.</param>
-public sealed record TpmPolicyAuthValueRequested(TpmiShPolicy PolicySession): TpmSimulatorInput;
+public sealed record TpmPolicyAuthValueRequested(TpmiShPolicy PolicySession) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_PolicyGetDigest()</c> command (TPM 2.0 Library Part 3, clause 23.6): returns the current policyDigest
 /// of a policy or trial session. The policy session is a command handle with no authorization.
 /// </summary>
 /// <param name="PolicySession">The policy session handle whose digest is read.</param>
-public sealed record TpmPolicyGetDigestRequested(TpmiShPolicy PolicySession): TpmSimulatorInput;
+public sealed record TpmPolicyGetDigestRequested(TpmiShPolicy PolicySession) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_PolicyPCR()</c> command (TPM 2.0 Library Part 3, clause 23.7): binds a policy to a set of PCRs,
@@ -5666,7 +5666,7 @@ public sealed record TpmPolicyGetDigestRequested(TpmiShPolicy PolicySession): Tp
 public sealed record TpmPolicyPcrRequested(
     TpmiShPolicy PolicySession,
     Tpm2bDigest PcrDigest,
-    TpmlPcrSelection PcrSelection): TpmSimulatorInput, IDisposable
+    TpmlPcrSelection PcrSelection) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="PcrDigest"/> and <see cref="PcrSelection"/> carriers on a refusing path;
@@ -5695,7 +5695,7 @@ public sealed record TpmPolicyPcrRequested(
 /// </param>
 public sealed record TpmPolicyOrRequested(
     TpmiShPolicy PolicySession,
-    TpmlDigest Branches): TpmSimulatorInput, IDisposable
+    TpmlDigest Branches) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="Branches"/> list and every branch carrier in it on a refusing path; the
@@ -5744,7 +5744,7 @@ public sealed record TpmPolicySecretRequested(
     Tpm2bNonce NonceTpm,
     Tpm2bDigest CpHashA,
     Tpm2bNonce PolicyRef,
-    int Expiration): TpmSimulatorInput, IDisposable
+    int Expiration) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="AuthValueSupplied"/>, <see cref="NonceTpm"/>, <see cref="CpHashA"/> and
@@ -5849,7 +5849,7 @@ public sealed record TpmPolicySecretOverSessionRequested(
     Tpm2bDigest CpHashA,
     Tpm2bNonce PolicyRef,
     int Expiration,
-    Tpm2bName? ResolvedIndexName = null): TpmSimulatorInput, IDisposable
+    Tpm2bName? ResolvedIndexName = null) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="CpHashA"/>, <see cref="PolicyRef"/>, <see cref="RawParameterArea"/>,
@@ -5887,7 +5887,7 @@ public sealed record TpmPolicySecretPasswordArmNvNameResume(
     bool IsNonceTpmEmpty,
     Tpm2bDigest CpHashA,
     Tpm2bNonce PolicyRef,
-    int Expiration): TpmSimulatorInput, IDisposable
+    int Expiration) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="CpHashA"/> and <see cref="PolicyRef"/> carriers; called only when the
@@ -5923,7 +5923,7 @@ public sealed record TpmPolicySecretSessionResponseFramed(
     TpmaSession SessionAttributes,
     TpmParameterArea ParameterArea,
     Tpm2bAuth Hmac,
-    Tpm2bDigest? NewAuditDigest = null): TpmSimulatorInput;
+    Tpm2bDigest? NewAuditDigest = null) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_PolicySigned()</c> command (TPM 2.0 Library Part 3, clause 23.3): binds a policy session to a
@@ -5967,7 +5967,7 @@ public sealed record TpmPolicySignedRequested(
     int Expiration,
     TpmiAlgSigScheme SignatureScheme,
     TpmiAlgHash SchemeHashAlg,
-    TpmtSignature Signature): TpmSimulatorInput, IDisposable
+    TpmtSignature Signature) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="NonceTpm"/>, <see cref="CpHashA"/>, <see cref="PolicyRef"/> and
@@ -6039,7 +6039,7 @@ public sealed record TpmPolicyAuthorizeRequested(
     TpmStConstants CheckTicketTag,
     TpmiRhHierarchy CheckTicketHierarchy,
     TpmiAlgHash? CheckTicketMetadata,
-    Tpm2bDigest CheckTicketDigest): TpmSimulatorInput, IDisposable
+    Tpm2bDigest CheckTicketDigest) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="ApprovedPolicy"/>, <see cref="PolicyRef"/>, <see cref="KeySign"/>, and
@@ -6072,7 +6072,7 @@ public sealed record TpmPolicyAuthorizeRequested(
 public sealed record TpmPolicyAuthorizeVerified(
     TpmRcConstants ResponseCode,
     TpmiShPolicy PolicySession,
-    Tpm2bDigest FoldedDigest): TpmSimulatorInput;
+    Tpm2bDigest FoldedDigest) : TpmSimulatorInput;
 
 /// <summary>
 /// The result of executing a <see cref="Automata.TpmMintPolicySecretTicketAction"/>: the real
@@ -6094,7 +6094,7 @@ public sealed record TpmPolicySecretTicketMinted(
     Tpm2bTimeout Timeout,
     TpmiRhHierarchy Hierarchy,
     Tpm2bDigest TicketDigest,
-    PolicySecretAuthorizingSession? AuthorizingSession = null): TpmSimulatorInput;
+    PolicySecretAuthorizingSession? AuthorizingSession = null) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_PolicyTicket()</c> command (TPM 2.0 Library Part 3, clause 23.5): authorizes a policy session by
@@ -6149,7 +6149,7 @@ public sealed record TpmPolicyTicketRequested(
     Tpm2bName AuthName,
     ushort TicketTag,
     TpmiRhHierarchy TicketHierarchy,
-    Tpm2bDigest TicketDigest): TpmSimulatorInput, IDisposable
+    Tpm2bDigest TicketDigest) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="Timeout"/>, <see cref="CpHashA"/>, <see cref="PolicyRef"/>,
@@ -6184,7 +6184,7 @@ public sealed record TpmPolicyTicketVerified(
     TpmiShPolicy PolicySession,
     Tpm2bDigest FoldedDigest,
     Tpm2bDigest CpHashA,
-    ulong Timeout): TpmSimulatorInput;
+    ulong Timeout) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_PolicyNV()</c> command (TPM 2.0 Library Part 3, clause 23.9): binds a policy to a comparison against
@@ -6224,7 +6224,7 @@ public sealed record TpmPolicyNvRequested(
     TpmiShPolicy PolicySession,
     Tpm2bOperand OperandB,
     ushort Offset,
-    ushort Operation): TpmSimulatorInput, IDisposable
+    ushort Operation) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="SuppliedAuthPassword"/> and <see cref="OperandB"/> carriers on a refusing
@@ -6261,7 +6261,7 @@ public sealed record TpmPolicyCounterTimerRequested(
     TpmiShPolicy PolicySession,
     Tpm2bOperand OperandB,
     ushort Offset,
-    ushort Operation): TpmSimulatorInput, IDisposable
+    ushort Operation) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="OperandB"/> carrier on a refusing path; the consuming transition instead
@@ -6281,7 +6281,7 @@ public sealed record TpmPolicyCounterTimerRequested(
 /// isAuthValueNeeded. The policy session is a command handle with no authorization.
 /// </summary>
 /// <param name="PolicySession">The policy session handle the assertion is applied to.</param>
-public sealed record TpmPolicyPasswordRequested(TpmiShPolicy PolicySession): TpmSimulatorInput;
+public sealed record TpmPolicyPasswordRequested(TpmiShPolicy PolicySession) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_PolicyCpHash()</c> command (TPM 2.0 Library Part 3, clause 23.13): binds a policy to a specific
@@ -6296,7 +6296,7 @@ public sealed record TpmPolicyPasswordRequested(TpmiShPolicy PolicySession): Tpm
 /// <see cref="Automata.PolicySessionState.WithCpHash(Tpm2bDigest, Automata.TpmPolicyCpHashKind)"/>, and a refusing
 /// arm releases it through this record's own <see cref="Dispose"/>.
 /// </param>
-public sealed record TpmPolicyCpHashRequested(TpmiShPolicy PolicySession, Tpm2bDigest CpHashA): TpmSimulatorInput, IDisposable
+public sealed record TpmPolicyCpHashRequested(TpmiShPolicy PolicySession, Tpm2bDigest CpHashA) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="CpHashA"/> carrier on a refusing path; the consuming transition instead
@@ -6320,7 +6320,7 @@ public sealed record TpmPolicyCpHashRequested(TpmiShPolicy PolicySession, Tpm2bD
 /// clause 10.3.2, Table 90) in an owned pooled carrier rented at parse; the accepted arm transfers it onto the
 /// session, and a refusing arm releases it through this record's own <see cref="Dispose"/>.
 /// </param>
-public sealed record TpmPolicyNameHashRequested(TpmiShPolicy PolicySession, Tpm2bDigest NameHash): TpmSimulatorInput, IDisposable
+public sealed record TpmPolicyNameHashRequested(TpmiShPolicy PolicySession, Tpm2bDigest NameHash) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="NameHash"/> carrier on a refusing path; the consuming transition instead
@@ -6344,7 +6344,7 @@ public sealed record TpmPolicyNameHashRequested(TpmiShPolicy PolicySession, Tpm2
 /// Library Part 2, clause 10.3.2, Table 90) in an owned pooled carrier rented at parse; the accepted arm transfers
 /// it onto the session, and a refusing arm releases it through this record's own <see cref="Dispose"/>.
 /// </param>
-public sealed record TpmPolicyTemplateRequested(TpmiShPolicy PolicySession, Tpm2bDigest TemplateHash): TpmSimulatorInput, IDisposable
+public sealed record TpmPolicyTemplateRequested(TpmiShPolicy PolicySession, Tpm2bDigest TemplateHash) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="TemplateHash"/> carrier on a refusing path; the consuming transition instead
@@ -6364,7 +6364,7 @@ public sealed record TpmPolicyTemplateRequested(TpmiShPolicy PolicySession, Tpm2
 /// </summary>
 /// <param name="PolicySession">The policy session handle the assertion is applied to.</param>
 /// <param name="Locality">The <c>TPMA_LOCALITY</c> octet exactly as sent: bits 0–4 select localities 0–4, a value of 32 or more is an extended locality.</param>
-public sealed record TpmPolicyLocalityRequested(TpmiShPolicy PolicySession, byte Locality): TpmSimulatorInput;
+public sealed record TpmPolicyLocalityRequested(TpmiShPolicy PolicySession, byte Locality) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_PolicyDuplicationSelect()</c> command (TPM 2.0 Library Part 3, clause 23.15): qualifies a
@@ -6378,7 +6378,7 @@ public sealed record TpmPolicyLocalityRequested(TpmiShPolicy PolicySession, byte
 /// <param name="ObjectName">The Name of the object to be duplicated (<c>TPM2B_NAME</c>, TPM 2.0 Library Part 2, clause 10.4.3, Table 105) in an owned pooled carrier rented at parse; the accepted arm transfers it into the fold effect, and a refusing arm releases it through this record's own <see cref="Dispose"/>.</param>
 /// <param name="NewParentName">The Name of the new parent (<c>TPM2B_NAME</c>) in an owned pooled carrier rented at parse; ownership rides the same path as <see cref="ObjectName"/>.</param>
 /// <param name="IsObjectIncluded">Whether <c>includeObject</c> was YES, folding the object Name into the policyDigest so the policy binds this specific object to the new parent rather than any object.</param>
-public sealed record TpmPolicyDuplicationSelectRequested(TpmiShPolicy PolicySession, Tpm2bName ObjectName, Tpm2bName NewParentName, bool IsObjectIncluded): TpmSimulatorInput, IDisposable
+public sealed record TpmPolicyDuplicationSelectRequested(TpmiShPolicy PolicySession, Tpm2bName ObjectName, Tpm2bName NewParentName, bool IsObjectIncluded) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="ObjectName"/> and <see cref="NewParentName"/> carriers on a refusing path;
@@ -6404,7 +6404,7 @@ public sealed record TpmPolicyDuplicationSelectRequested(TpmiShPolicy PolicySess
 /// Library Part 2, clause 10.3.2, Table 90) in an owned pooled carrier rented at parse; the accepted arm
 /// transfers it onto the session, and a refusing arm releases it through this record's own <see cref="Dispose"/>.
 /// </param>
-public sealed record TpmPolicyParametersRequested(TpmiShPolicy PolicySession, Tpm2bDigest ParametersHash): TpmSimulatorInput, IDisposable
+public sealed record TpmPolicyParametersRequested(TpmiShPolicy PolicySession, Tpm2bDigest ParametersHash) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="ParametersHash"/> carrier on a refusing path; the consuming transition
@@ -6423,7 +6423,7 @@ public sealed record TpmPolicyParametersRequested(TpmiShPolicy PolicySession, Tp
 /// can be replayed. The session is a command handle with no authorization.
 /// </summary>
 /// <param name="SessionHandle">The policy session handle to restart.</param>
-public sealed record TpmPolicyRestartRequested(TpmiShPolicy SessionHandle): TpmSimulatorInput;
+public sealed record TpmPolicyRestartRequested(TpmiShPolicy SessionHandle) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_PolicyNvWritten()</c> command (TPM 2.0 Library Part 3, clause 23.20): a deferred assertion that
@@ -6433,7 +6433,7 @@ public sealed record TpmPolicyRestartRequested(TpmiShPolicy SessionHandle): TpmS
 /// </summary>
 /// <param name="PolicySession">The policy session handle the assertion is applied to.</param>
 /// <param name="IsWrittenSet">Whether the Index is required to have been written (<c>YES</c>) or required not to have been (<c>NO</c>).</param>
-public sealed record TpmPolicyNvWrittenRequested(TpmiShPolicy PolicySession, bool IsWrittenSet): TpmSimulatorInput;
+public sealed record TpmPolicyNvWrittenRequested(TpmiShPolicy PolicySession, bool IsWrittenSet) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_PolicyAuthorizeNV()</c> command (TPM 2.0 Library Part 3, clause 23.22): the revocable form of
@@ -6456,7 +6456,7 @@ public sealed record TpmPolicyAuthorizeNvRequested(
     TpmiRhNvAuth AuthHandle,
     Tpm2bAuth SuppliedAuthPassword,
     TpmiRhNvIndex NvIndex,
-    TpmiShPolicy PolicySession): TpmSimulatorInput, IDisposable
+    TpmiShPolicy PolicySession) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="SuppliedAuthPassword"/> carrier on a refusing path; the consuming transition
@@ -6478,7 +6478,7 @@ public sealed record TpmPolicyAuthorizeNvRequested(
 /// <param name="FoldedDigest">The policyDigest the effect folded from the Index's Name and the assertion's arguments (<c>ExtendForNv</c>, TPM 2.0 Library Part 3, clause 23.9) in an owned pooled carrier rented at the session's own digest width; the continuation installs it on the session, which becomes its owner.</param>
 public sealed record TpmNvNameComputedForPolicy(
     TpmiShPolicy PolicySession,
-    Tpm2bDigest FoldedDigest): TpmSimulatorInput;
+    Tpm2bDigest FoldedDigest) : TpmSimulatorInput;
 
 /// <summary>
 /// The result of executing a <see cref="Automata.TpmFoldPolicyDigestAction"/>: the advanced policyDigest, fed
@@ -6508,7 +6508,7 @@ public sealed record TpmPolicyDigestFolded(
     string Label,
     ulong TimeoutMagnitude,
     PolicySecretAuthorizingSession? AuthorizingSession,
-    Tpm2bDigest LatchedDigest): TpmSimulatorInput;
+    Tpm2bDigest LatchedDigest) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_FlushContext()</c> command (TPM 2.0 Library Part 3, clause 28.4): removes a loaded policy session or
@@ -6516,7 +6516,7 @@ public sealed record TpmPolicyDigestFolded(
 /// and the command takes no authorization.
 /// </summary>
 /// <param name="FlushHandle">The session or transient-object handle to remove.</param>
-public sealed record TpmFlushContextRequested(TpmiDhContext FlushHandle): TpmSimulatorInput;
+public sealed record TpmFlushContextRequested(TpmiDhContext FlushHandle) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_ContextSave()</c> command (TPM 2.0 Library Part 3, clause 28.2.1): "This command saves a
@@ -6529,7 +6529,7 @@ public sealed record TpmFlushContextRequested(TpmiDhContext FlushHandle): TpmSim
 /// 2, clause 9.11, Table 57). Owns nothing — a bare handle value, mirroring <see cref="TpmFlushContextRequested"/>'s
 /// shape.
 /// </param>
-public sealed record TpmContextSaveRequested(TpmiDhContext SaveHandle): TpmSimulatorInput;
+public sealed record TpmContextSaveRequested(TpmiDhContext SaveHandle) : TpmSimulatorInput;
 
 /// <summary>
 /// The result of executing a <see cref="Automata.TpmContextSaveAction"/>: the framed, encrypted,
@@ -6562,7 +6562,7 @@ public sealed record TpmContextSaved(
     TpmiDhContext SaveHandle,
     bool IsSession,
     bool IsInternalFailure,
-    TpmSimulatorInput Request): TpmSimulatorInput, IDisposable
+    TpmSimulatorInput Request) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases an un-installed <see cref="Context"/> on a refusing path; the completing transition instead
@@ -6585,7 +6585,7 @@ public sealed record TpmContextSaved(
 /// <see cref="Automata.TpmContextLoadAction"/> on acceptance, whose effect is its terminal owner; released
 /// through this record's <see cref="IDisposable.Dispose"/> on every refusing path.
 /// </param>
-public sealed record TpmContextLoadRequested(TpmsContext Context): TpmSimulatorInput, IDisposable
+public sealed record TpmContextLoadRequested(TpmsContext Context) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="Context"/> (and, through it, its <see cref="Verifiable.Tpm.Spec.Structures.TpmsContext.ContextBlob"/>)
@@ -6636,7 +6636,7 @@ public sealed record TpmContextLoaded(
     TpmiRhHierarchy Hierarchy,
     ulong Sequence,
     bool IsInternalFailure,
-    TpmSimulatorInput Request): TpmSimulatorInput, IDisposable
+    TpmSimulatorInput Request) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases an un-installed <see cref="Resource"/> on a refusing path; the completing transition instead
@@ -6666,7 +6666,7 @@ public sealed record TpmContextLoaded(
 public sealed record TpmMakeCredentialRequested(
     TpmiDhObject KeyHandle,
     Tpm2bDigest Credential,
-    Tpm2bName ObjectName): TpmSimulatorInput, IDisposable
+    Tpm2bName ObjectName) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="Credential"/> and <see cref="ObjectName"/> carriers on a refusing path;
@@ -6688,7 +6688,7 @@ public sealed record TpmMakeCredentialRequested(
 /// <param name="Secret">The seed transport (for an ECC credential key a marshaled <c>TPMS_ECC_POINT</c>, the ephemeral public point; for an RSA one the OAEP ciphertext verbatim) in an owned <c>TPM2B_ENCRYPTED_SECRET</c> carrier (TPM 2.0 Library Part 2, clause 11.4.3, Table 224); disposed after framing.</param>
 public sealed record TpmCredentialMade(
     Tpm2bIdObject CredentialBlob,
-    Tpm2bEncryptedSecret Secret): TpmSimulatorInput;
+    Tpm2bEncryptedSecret Secret) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_ActivateCredential()</c> command (TPM 2.0 Library Part 3, clause 12.5): recovers a credential wrapped
@@ -6733,7 +6733,7 @@ public sealed record TpmActivateCredentialRequested(
     TpmiDhObject KeyHandle,
     Tpm2bAuth SuppliedKeyPassword,
     Tpm2bIdObject CredentialBlob,
-    Tpm2bEncryptedSecret Secret): TpmSimulatorInput, IDisposable
+    Tpm2bEncryptedSecret Secret) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="SuppliedActivatePassword"/>, <see cref="SuppliedKeyPassword"/>,
@@ -6807,7 +6807,7 @@ public sealed record TpmActivateCredentialOverSessionRequested(
     Tpm2bEncryptedSecret Secret,
     TpmiShAuthSession KeyPolicySession,
     TpmaSession KeyPolicyAttributes,
-    TpmParameterArea RawParameterArea): TpmSimulatorInput, IDisposable
+    TpmParameterArea RawParameterArea) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="SuppliedActivatePassword"/>, <see cref="CredentialBlob"/>, <see cref="Secret"/>
@@ -6841,14 +6841,14 @@ public sealed record TpmActivateCredentialOverSessionRequested(
 /// <param name="CertInfo">The recovered credential secret in an owned <c>TPM2B_DIGEST</c> carrier, the type Table 27 gives <c>certInfo</c> (TPM 2.0 Library Part 3, clause 12.5.2, Table 27; TPM2B_DIGEST itself is Part 2, clause 10.3.2, Table 90); <see langword="null"/> on rejection; disposed after framing.</param>
 public sealed record TpmCredentialActivated(
     TpmRcConstants ResponseCode,
-    Tpm2bDigest? CertInfo): TpmSimulatorInput;
+    Tpm2bDigest? CertInfo) : TpmSimulatorInput;
 
 /// <summary>
 /// A command whose code the lifecycle skeleton does not yet model. It is gated by the current phase
 /// like any other command (rejected with the phase-appropriate response code).
 /// </summary>
 /// <param name="CommandCode">The unsupported command code as parsed from the request header.</param>
-public sealed record TpmUnsupportedCommandReceived(TpmCcConstants CommandCode): TpmSimulatorInput;
+public sealed record TpmUnsupportedCommandReceived(TpmCcConstants CommandCode) : TpmSimulatorInput;
 
 /// <summary>
 /// A <c>TPM2_Create()</c> command (TPM 2.0 Library Part 3, clause 12.1) whose parent authorization is either a
@@ -6897,7 +6897,7 @@ public sealed record TpmCreateKeyedHashOverSessionsRequested(
     Tpm2bNonce DecryptNonceCaller,
     TpmaSession DecryptAttributes,
     Tpm2bAuth DecryptHmac,
-    TpmParameterArea RawParameterArea): TpmSimulatorInput, IDisposable
+    TpmParameterArea RawParameterArea) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="RawParameterArea"/> carrier and both slots' credential and caller-nonce
@@ -6974,7 +6974,7 @@ public sealed record TpmCreateSensitiveDecrypted(
     Tpm2bSensitiveData SecretData,
     Tpm2bAuth UserAuth,
     Tpm2bData OutsideInfo,
-    TpmlPcrSelection CreationPcr): TpmSimulatorInput, IDisposable
+    TpmlPcrSelection CreationPcr) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="AuthPolicy"/>, <see cref="SecretData"/>, <see cref="UserAuth"/>,
@@ -7007,7 +7007,7 @@ public sealed record TpmCreateSensitiveDecrypted(
 public sealed record TpmNvDefineAuthDecrypted(
     TpmRcConstants ResponseCode,
     TpmNvDefineSpaceOverSessionRequested Request,
-    Tpm2bAuth DecryptedAuth): TpmSimulatorInput, IDisposable
+    Tpm2bAuth DecryptedAuth) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="DecryptedAuth"/> carrier and the threaded <see cref="Request"/>'s own
@@ -7054,7 +7054,7 @@ public sealed record TpmAttestQualifyingDataDecrypted(
     TpmCcConstants CommandCode,
     int DecryptSessionIndex,
     TpmSimulatorInput Request,
-    Tpm2bData QualifyingData): TpmSimulatorInput, IDisposable
+    Tpm2bData QualifyingData) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="QualifyingData"/> carrier and cascades to the threaded
@@ -7132,7 +7132,7 @@ public sealed record TpmKeyedHashCreatedOverSessions(
     TpmParameterArea ParameterArea,
     bool HasPasswordPlaceholder,
     TpmaSession PasswordPlaceholderAttributes,
-    ImmutableArray<TpmCreateFramedSessionEntry> Entries): TpmSimulatorInput;
+    ImmutableArray<TpmCreateFramedSessionEntry> Entries) : TpmSimulatorInput;
 
 /// <summary>
 /// A password-authorized <c>TPM2_Clear()</c> command (TPM 2.0 Library Part 3, clause 24.6): the removal of all
@@ -7149,7 +7149,7 @@ public sealed record TpmKeyedHashCreatedOverSessions(
 /// <param name="AuthSupplied">The authorization value the caller supplied — the password session's plaintext authValue, which is the same <c>TPM2B_AUTH</c> wire field a real session carries an HMAC in (TPM 2.0 Library Part 2, clause 10.12.2, Table 156: "either an HMAC, a password, or an EmptyAuth") — in a pooled carrier this record OWNS, rented as the parse's last act. It authorizes the lockout entity or the platform hierarchy. The authorizing transition is its terminal owner; every refusing path releases it through <see cref="IDisposable.Dispose"/>.</param>
 public sealed record TpmClearRequested(
     TpmiRhClear AuthHandle,
-    Tpm2bAuth AuthSupplied): TpmSimulatorInput, IDisposable
+    Tpm2bAuth AuthSupplied) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="AuthSupplied"/> carrier on a refusing path; the authorizing transition disposes
@@ -7194,7 +7194,7 @@ public sealed record TpmClearOverSessionRequested(
     TpmParameterArea RawParameterArea,
     Tpm2bAuth? ResolvedAuthValue = null,
     bool BindOmitsAuthValue = false,
-    bool IsSuppliedHmacEmpty = false): TpmSimulatorInput, IDisposable
+    bool IsSuppliedHmacEmpty = false) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="RawParameterArea"/>, <see cref="NonceCaller"/> and <see cref="Hmac"/>
@@ -7227,7 +7227,7 @@ public sealed record TpmClearOverSessionRequested(
 public sealed record TpmClearControlRequested(
     TpmiRhClear AuthHandle,
     Tpm2bAuth AuthSupplied,
-    TpmiYesNo Disable): TpmSimulatorInput, IDisposable
+    TpmiYesNo Disable) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="AuthSupplied"/> carrier on a refusing path; the authorizing transition disposes
@@ -7258,7 +7258,7 @@ public sealed record TpmClearControlOverSessionRequested(
     Tpm2bAuth Hmac,
     TpmParameterArea RawParameterArea,
     TpmiYesNo Disable,
-    Tpm2bAuth? ResolvedAuthValue = null): TpmSimulatorInput, IDisposable
+    Tpm2bAuth? ResolvedAuthValue = null) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="RawParameterArea"/>, <see cref="NonceCaller"/> and <see cref="Hmac"/>
@@ -7293,7 +7293,7 @@ public sealed record TpmClearControlOverSessionRequested(
 /// <param name="AuthSupplied">The authorization value the caller supplied — the password session's plaintext authValue, which is the same <c>TPM2B_AUTH</c> wire field a real session carries an HMAC in (TPM 2.0 Library Part 2, clause 10.12.2, Table 156: "either an HMAC, a password, or an EmptyAuth") — in a pooled carrier this record OWNS, rented as the parse's last act. It authorizes the owner or the platform hierarchy. The authorizing transition is its terminal owner; every refusing path releases it through <see cref="IDisposable.Dispose"/>.</param>
 public sealed record TpmNvGlobalWriteLockRequested(
     TpmiRhProvision AuthHandle,
-    Tpm2bAuth AuthSupplied): TpmSimulatorInput, IDisposable
+    Tpm2bAuth AuthSupplied) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="AuthSupplied"/> carrier on a refusing path; the authorizing transition disposes
@@ -7323,7 +7323,7 @@ public sealed record TpmNvGlobalWriteLockOverSessionRequested(
     TpmaSession SessionAttributes,
     Tpm2bAuth Hmac,
     TpmParameterArea RawParameterArea,
-    Tpm2bAuth? ResolvedAuthValue = null): TpmSimulatorInput, IDisposable
+    Tpm2bAuth? ResolvedAuthValue = null) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="RawParameterArea"/>, <see cref="NonceCaller"/> and <see cref="Hmac"/>
@@ -7354,7 +7354,7 @@ public sealed record TpmHierarchyControlRequested(
     TpmiRhBaseHierarchy AuthHandle,
     Tpm2bAuth AuthSupplied,
     TpmiRhEnables Enable,
-    TpmiYesNo State): TpmSimulatorInput, IDisposable
+    TpmiYesNo State) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="AuthSupplied"/> carrier on a refusing path; the authorizing transition disposes
@@ -7387,7 +7387,7 @@ public sealed record TpmHierarchyControlOverSessionRequested(
     TpmParameterArea RawParameterArea,
     TpmiRhEnables Enable,
     TpmiYesNo State,
-    Tpm2bAuth? ResolvedAuthValue = null): TpmSimulatorInput, IDisposable
+    Tpm2bAuth? ResolvedAuthValue = null) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="RawParameterArea"/>, <see cref="NonceCaller"/> and <see cref="Hmac"/>
@@ -7423,7 +7423,7 @@ public sealed record TpmSetPrimaryPolicyRequested(
     TpmiRhHierarchyPolicy AuthHandle,
     Tpm2bAuth AuthSupplied,
     Tpm2bDigest AuthPolicy,
-    TpmiAlgHash HashAlg): TpmSimulatorInput, IDisposable
+    TpmiAlgHash HashAlg) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="AuthPolicy"/> carrier on a refusing path; the installing path transfers
@@ -7459,7 +7459,7 @@ public sealed record TpmSetPrimaryPolicyOverSessionRequested(
     TpmParameterArea RawParameterArea,
     Tpm2bDigest AuthPolicy,
     TpmiAlgHash HashAlg,
-    Tpm2bAuth? ResolvedAuthValue = null): TpmSimulatorInput, IDisposable
+    Tpm2bAuth? ResolvedAuthValue = null) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="AuthPolicy"/> carrier on a refusing path; the installing path transfers
@@ -7492,7 +7492,7 @@ public sealed record TpmSetPrimaryPolicyOverSessionRequested(
 public sealed record TpmHierarchyChangeAuthRequested(
     TpmiRhHierarchyAuth AuthHandle,
     Tpm2bAuth AuthSupplied,
-    Tpm2bAuth NewAuth): TpmSimulatorInput, IDisposable
+    Tpm2bAuth NewAuth) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="NewAuth"/> carrier on a refusing path; the installing path transfers
@@ -7572,7 +7572,7 @@ public sealed record TpmHierarchyChangeAuthOverSessionRequested(
     TpmParameterArea RawParameterArea,
     Tpm2bAuth NewAuth,
     Tpm2bAuth? ResolvedAuthValue = null,
-    bool BindOmitsAuthValue = false): TpmSimulatorInput, IDisposable
+    bool BindOmitsAuthValue = false) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="NewAuth"/> carrier on a refusing path (or, on the decrypted path,
@@ -7610,7 +7610,7 @@ public sealed record TpmHierarchyChangeAuthOverSessionRequested(
 public sealed record TpmHierarchyChangeAuthDecrypted(
     TpmRcConstants ResponseCode,
     TpmHierarchyChangeAuthOverSessionRequested Request,
-    Tpm2bAuth DecryptedNewAuth): TpmSimulatorInput, IDisposable
+    Tpm2bAuth DecryptedNewAuth) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="DecryptedNewAuth"/> carrier and the threaded <see cref="Request"/>'s
@@ -7631,7 +7631,7 @@ public sealed record TpmHierarchyChangeAuthDecrypted(
 /// </summary>
 /// <param name="PersistentCopy">The persistent instance, owning its own deep-copied private-key carrier; ownership transfers to <c>PersistentObjects</c> at install, and a refusing path releases it through <see cref="Dispose"/>.</param>
 public sealed record TpmObjectPersisted(
-    TransientKeyState PersistentCopy): TpmSimulatorInput, IDisposable
+    TransientKeyState PersistentCopy) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the persistent copy's owned private-key carrier on a refusing path; the installing
@@ -7658,7 +7658,7 @@ public sealed record TpmObjectPersisted(
 /// <param name="Resume">The parsed <c>TPM2_Clear()</c> request to resume, deciding whether the response is header-only or session-framed.</param>
 public sealed record TpmStorageProofSeedGenerated(
     StorageProofSeed StorageProofSeed,
-    TpmSimulatorInput Resume): TpmSimulatorInput, IDisposable
+    TpmSimulatorInput Resume) : TpmSimulatorInput, IDisposable
 {
     /// <summary>
     /// Releases the owned <see cref="StorageProofSeed"/> carrier (and whatever the resumed request itself

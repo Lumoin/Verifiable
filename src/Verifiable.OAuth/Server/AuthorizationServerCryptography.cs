@@ -17,7 +17,7 @@ namespace Verifiable.OAuth.Server;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("AuthorizationServerCryptography Validated={IsValidated}")]
-public sealed class AuthorizationServerCryptography: WiringComponent
+public sealed class AuthorizationServerCryptography : WiringComponent
 {
     /// <summary>
     /// Resolves a private signing key by identifier. Required when the composition declares no

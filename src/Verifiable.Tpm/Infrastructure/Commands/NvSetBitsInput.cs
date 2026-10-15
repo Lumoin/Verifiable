@@ -38,7 +38,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <param name="AuthHandle">The authorization handle (the Index itself for Index authorization, or the owner hierarchy).</param>
 /// <param name="NvIndex">The NV Bit Field Index whose bits are SET.</param>
 /// <param name="Bits">The 64-bit value ORed into the Index's current contents.</param>
-public readonly record struct NvSetBitsInput(uint AuthHandle, uint NvIndex, ulong Bits): ITpmCommandInput
+public readonly record struct NvSetBitsInput(uint AuthHandle, uint NvIndex, ulong Bits) : ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_NV_SetBits;

@@ -29,7 +29,7 @@ namespace Verifiable.Cryptography.Pki;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("PdfSignatureDictionary: {SubFilter.Value}, ByteRange {ByteRange.DocumentLength} bytes")]
-public sealed class PdfSignatureDictionary: IDisposable
+public sealed class PdfSignatureDictionary : IDisposable
 {
     private bool disposed;
 

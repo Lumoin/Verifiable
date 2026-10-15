@@ -76,7 +76,7 @@ namespace Verifiable.Cryptography;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class DigestValue: SensitiveMemory, IEquatable<DigestValue>
+public sealed class DigestValue : SensitiveMemory, IEquatable<DigestValue>
 {
     private Activity? DigestLifetime { get; }
 

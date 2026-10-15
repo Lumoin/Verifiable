@@ -11,4 +11,4 @@ namespace Verifiable.Vcalm;
 /// guidance on <see cref="MatchPayload"/>).
 /// </summary>
 [DebuggerDisplay("VcalmInteractionIdMatchPayload Id={Id}")]
-public sealed record VcalmInteractionIdMatchPayload(string Id): MatchPayload;
+public sealed record VcalmInteractionIdMatchPayload(string Id) : MatchPayload;

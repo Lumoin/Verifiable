@@ -16,7 +16,7 @@ namespace Verifiable.Tests.DataIntegrity;
 internal sealed record JwtTestHeader(string Alg, string Typ, string Kid);
 
 [System.Text.Json.Serialization.JsonSerializable(typeof(JwtTestHeader))]
-internal partial class DataIntegrityTestsJsonContext: System.Text.Json.Serialization.JsonSerializerContext { }
+internal partial class DataIntegrityTestsJsonContext : System.Text.Json.Serialization.JsonSerializerContext { }
 
 /// <summary>
 /// Tests for W3C Data Integrity proofs using the eddsa-rdfc-2022 cryptosuite.

@@ -124,6 +124,11 @@ internal sealed class Fido2CliTests
     }
 
 
+    /// <summary>
+    /// The FIDO2 command line accepts a packed registration whose authenticator a signed Metadata BLOB lists as FIDO certified,
+    /// the BLOB signed ES256 under the run's own MDS signing certificate.
+    /// </summary>
+    /// <returns>A task completing once the command's answer is judged.</returns>
     [TestMethod]
     public async Task RegistrationPackedCertifiedThroughMdsBlobSucceeds()
     {
@@ -809,7 +814,7 @@ internal sealed class Fido2CliTests
     /// <summary>
     /// A minted packed-certified registration fixture. Owns and disposes every certificate and key.
     /// </summary>
-    private sealed class PackedFixture: IDisposable
+    private sealed class PackedFixture : IDisposable
     {
         public PackedFixture(
             Guid aaguid,

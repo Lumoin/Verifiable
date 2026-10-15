@@ -40,7 +40,7 @@ namespace Verifiable.Core.Model.Credentials;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("VerifiableCredential(Id = {Id}, Issuer = {Issuer?.Id})")]
-public class VerifiableCredential: IEquatable<VerifiableCredential>
+public class VerifiableCredential : IEquatable<VerifiableCredential>
 {
     /// <summary>
     /// The JSON-LD context that defines the terms used in this credential.

@@ -49,7 +49,7 @@ namespace Verifiable.Cryptography.Pki;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("CBAdESSignatureAndReferencesTimestamp: {TimestampContainer}")]
-public sealed class CBAdESSignatureAndReferencesTimestamp: IDisposable
+public sealed class CBAdESSignatureAndReferencesTimestamp : IDisposable
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="CBAdESSignatureAndReferencesTimestamp"/> class.

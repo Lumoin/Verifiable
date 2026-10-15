@@ -41,7 +41,7 @@ namespace Verifiable.Cryptography;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class MacValue: SensitiveMemory, IEquatable<MacValue>
+public sealed class MacValue : SensitiveMemory, IEquatable<MacValue>
 {
     private Activity? MacLifetime { get; }
 

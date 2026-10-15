@@ -15,7 +15,7 @@ namespace Verifiable.Xml;
 /// transcoding step name the position in the document's once-transcoded UTF-8 form.
 /// </remarks>
 /// <seealso cref="XmlReadFailure"/>
-public readonly struct XmlReadError: IEquatable<XmlReadError>
+public readonly struct XmlReadError : IEquatable<XmlReadError>
 {
     /// <summary>
     /// The reason the document was refused.

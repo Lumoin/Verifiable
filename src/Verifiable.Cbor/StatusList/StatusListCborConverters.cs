@@ -19,7 +19,7 @@ namespace Verifiable.Cbor.StatusList;
 /// }
 /// </code>
 /// </remarks>
-public sealed class StatusListCborConverter: CborConverter<Core.StatusLists.StatusList>
+public sealed class StatusListCborConverter : CborConverter<Core.StatusLists.StatusList>
 {
     /// <summary>
     /// The pool this converter allocates decompressed status-list bytes from, supplied by the caller
@@ -141,7 +141,7 @@ public sealed class StatusListCborConverter: CborConverter<Core.StatusLists.Stat
 /// CBOR converter for <see cref="StatusListReference"/> handling the CBOR map
 /// with <c>idx</c> and <c>uri</c> text string keys.
 /// </summary>
-public sealed class StatusListReferenceCborConverter: CborConverter<StatusListReference>
+public sealed class StatusListReferenceCborConverter : CborConverter<StatusListReference>
 {
     /// <inheritdoc/>
     public override StatusListReference Read(CborReader reader)
@@ -211,7 +211,7 @@ public sealed class StatusListReferenceCborConverter: CborConverter<StatusListRe
 /// CBOR converter for <see cref="StatusListToken"/> handling the CWT Claims Set
 /// with integer claim keys as defined in Section 5.2 of the specification.
 /// </summary>
-public sealed class StatusListTokenCborConverter: CborConverter<StatusListToken>
+public sealed class StatusListTokenCborConverter : CborConverter<StatusListToken>
 {
     /// <summary>
     /// The nested <see cref="Core.StatusLists.StatusList"/> converter this token converter delegates

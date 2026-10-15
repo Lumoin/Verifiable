@@ -313,7 +313,7 @@ internal sealed class PackedRevocationAndChainCompletionTests
 /// <see cref="PackedRevocationAndChainCompletionTests"/> verifies against. Owns and disposes every certificate and
 /// carrier.
 /// </summary>
-internal sealed class ChainFixture: IDisposable
+internal sealed class ChainFixture : IDisposable
 {
     /// <summary>Initialises a new <see cref="ChainFixture"/>, taking ownership of every certificate and carrier.</summary>
     public ChainFixture(

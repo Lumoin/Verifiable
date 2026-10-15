@@ -126,7 +126,7 @@ internal readonly record struct VerificationKeyResolution(
 /// </para>
 /// </remarks>
 [DebuggerDisplay("HostedAuthorizationServer Name={Name} Clients={Registrations.Count} HasHttp={HttpHost != null}")]
-internal sealed class HostedAuthorizationServer: IClientRegistrationStore
+internal sealed class HostedAuthorizationServer : IClientRegistrationStore
 {
     /// <summary>Records named server faults observed by the real HTTP skin.</summary>
     public ConcurrentQueue<Exception> HttpFaults { get; } = new();
@@ -813,7 +813,7 @@ internal sealed class HostedAuthorizationServer: IClientRegistrationStore
         HostedAuthorizationServer host,
         (TenantId, string) key,
         GrantOrderGateEntry entry,
-        TaskCompletionSource myTurn): IAsyncDisposable
+        TaskCompletionSource myTurn) : IAsyncDisposable
     {
         /// <summary>
         /// 0 until released. A field, not a property: <see cref="Interlocked.Exchange(ref int, int)"/>
@@ -2026,7 +2026,7 @@ internal sealed class HostedAuthorizationServer: IClientRegistrationStore
 
 
     /// <summary>The application's effect handler for capability grant and revoke notifications.</summary>
-    private sealed class RegistrationObserver(HostedAuthorizationServer host): IObserver<ClientRegistrationEvent>
+    private sealed class RegistrationObserver(HostedAuthorizationServer host) : IObserver<ClientRegistrationEvent>
     {
         /// <summary>Applies capability signals; registration persistence belongs to the required store.</summary>
         public void OnNext(ClientRegistrationEvent value)

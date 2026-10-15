@@ -20,7 +20,7 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("DirectPostJwtBody ResponseLength={EncryptedResponse.Length}")]
-public sealed class DirectPostJwtBody: IEquatable<DirectPostJwtBody>
+public sealed class DirectPostJwtBody : IEquatable<DirectPostJwtBody>
 {
     /// <summary>
     /// The compact JWE serialization of the encrypted Authorization Response.

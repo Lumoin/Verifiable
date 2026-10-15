@@ -50,7 +50,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// </remarks>
 /// <seealso cref="BbsBaseProof"/>
 /// <seealso cref="BbsDerivedProof"/>
-public sealed class Bbs2023CryptosuiteInfo: CryptosuiteInfo
+public sealed class Bbs2023CryptosuiteInfo : CryptosuiteInfo
 {
     private static IReadOnlyList<string> ContextsArray { get; } =
         new[] { "https://w3id.org/security/data-integrity/v2" }.AsReadOnly();

@@ -207,7 +207,7 @@ internal sealed class KeriEventMgpkConformanceTests
 
 
     //A minted event's MGPK serialization, carried in a pooled buffer the test owns and disposes.
-    private sealed class MintedEvent: IDisposable
+    private sealed class MintedEvent : IDisposable
     {
         private IMemoryOwner<byte> Owner { get; }
         private int Length { get; }

@@ -25,7 +25,7 @@ namespace Verifiable.Core.Model.Mdoc;
 /// bytes carried inside.
 /// </para>
 /// </remarks>
-public sealed class MdocDeviceAuth: IDisposable
+public sealed class MdocDeviceAuth : IDisposable
 {
     private bool disposed;
 
@@ -102,7 +102,7 @@ public sealed class MdocDeviceAuth: IDisposable
 /// Owns <see cref="EncodedCoseSign1"/>; disposing releases the pool memory.
 /// </para>
 /// </remarks>
-public sealed class MdocDeviceSignature: IDisposable
+public sealed class MdocDeviceSignature : IDisposable
 {
     private bool disposed;
 
@@ -155,7 +155,7 @@ public sealed class MdocDeviceSignature: IDisposable
 /// <see cref="MdocDeviceSignature"/> path.
 /// </para>
 /// </remarks>
-public sealed class MdocDeviceMac: IDisposable
+public sealed class MdocDeviceMac : IDisposable
 {
     private bool disposed;
 

@@ -490,7 +490,7 @@ internal sealed class CesrStreamReaderTests
     /// <summary>
     /// A linked sequence segment used to build a multi-segment <see cref="ReadOnlySequence{T}"/> for the tests.
     /// </summary>
-    private sealed class MemorySegment: ReadOnlySequenceSegment<byte>
+    private sealed class MemorySegment : ReadOnlySequenceSegment<byte>
     {
         public MemorySegment(ReadOnlyMemory<byte> memory)
         {

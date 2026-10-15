@@ -23,7 +23,7 @@ namespace Verifiable.Core.Model.Mdoc;
 /// the trust-resolver overload's documentation already directs.
 /// </para>
 /// </remarks>
-public sealed class MdocIssuerAuthVerificationContext: IDisposable
+public sealed class MdocIssuerAuthVerificationContext : IDisposable
 {
     private bool disposed;
 

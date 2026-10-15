@@ -20,7 +20,7 @@ namespace Verifiable.Core.Model.Mdoc;
 /// cascades into every document, releasing the device-side carriers.
 /// </para>
 /// </remarks>
-public sealed class MdocDeviceResponse: IDisposable
+public sealed class MdocDeviceResponse : IDisposable
 {
     private bool disposed;
 

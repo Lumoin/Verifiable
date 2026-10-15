@@ -37,7 +37,7 @@ namespace Verifiable.Core.Model.Did
     /// </para>
     /// </remarks>
     [DebuggerDisplay("VerificationMethod(Id = {Id}, Type = {Type}, Controller = {Controller})")]
-    public class VerificationMethod: IEquatable<VerificationMethod>
+    public class VerificationMethod : IEquatable<VerificationMethod>
     {
         /// <summary>
         /// A unique identifier for the verification method that conforms to URL syntax.

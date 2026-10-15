@@ -10,7 +10,7 @@ namespace Verifiable.Foundation.Automata;
 /// <c>NextAction</c> property. The effectful dispatch loop stops and yields control
 /// back to the caller when it encounters a <see cref="NullAction"/>.
 /// </remarks>
-public sealed record NullAction: PdaAction
+public sealed record NullAction : PdaAction
 {
     /// <summary>The singleton instance.</summary>
     public static NullAction Instance { get; } = new();

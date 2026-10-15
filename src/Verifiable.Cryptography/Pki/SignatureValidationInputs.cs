@@ -21,7 +21,7 @@ namespace Verifiable.Cryptography.Pki;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("SignatureValidationResources: {Count} carriers")]
-public sealed class SignatureValidationResources: IDisposable
+public sealed class SignatureValidationResources : IDisposable
 {
     /// <summary>The carriers tracked so far, in tracking order.</summary>
     private List<IDisposable> Resources { get; } = [];

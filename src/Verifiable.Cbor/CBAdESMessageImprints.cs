@@ -53,7 +53,7 @@ public abstract record CBAdESSignatureStructureContext
 /// fixed literal <c>"Signature"</c>. A stateless marker; use <see cref="Instance"/> rather than constructing
 /// a new value.
 /// </summary>
-public sealed record CBAdESCoseSignStructureContext: CBAdESSignatureStructureContext
+public sealed record CBAdESCoseSignStructureContext : CBAdESSignatureStructureContext
 {
     /// <summary>Prevents external construction; use <see cref="Instance"/>.</summary>
     private CBAdESCoseSignStructureContext()
@@ -77,7 +77,7 @@ public sealed record CBAdESCoseSignStructureContext: CBAdESSignatureStructureCon
 /// layer distinct from the body layer (see the <see cref="CBAdESArchiveTimestampImprintContext.SignerProtectedHeader"/>
 /// remarks).
 /// </remarks>
-public sealed record CBAdESCoseSign1StructureContext: CBAdESSignatureStructureContext
+public sealed record CBAdESCoseSign1StructureContext : CBAdESSignatureStructureContext
 {
     /// <summary>Prevents external construction; use <see cref="Instance"/>.</summary>
     private CBAdESCoseSign1StructureContext()
@@ -97,7 +97,7 @@ public sealed record CBAdESCoseSign1StructureContext: CBAdESSignatureStructureCo
 /// data since this file does not itself model the countersignature substrate.
 /// </summary>
 [DebuggerDisplay("CBAdESCountersignatureStructureContext: {ContextText}")]
-public sealed record CBAdESCountersignatureStructureContext: CBAdESSignatureStructureContext
+public sealed record CBAdESCountersignatureStructureContext : CBAdESSignatureStructureContext
 {
     /// <summary>
     /// Initializes a new <see cref="CBAdESCountersignatureStructureContext"/>.
@@ -142,7 +142,7 @@ public abstract class CBAdESPayloadImprintSource
 /// and <see cref="PayloadBytes"/> is its content.
 /// </summary>
 [DebuggerDisplay("CBAdESAttachedPayloadImprintSource: {PayloadBytes.Length} bytes")]
-public sealed class CBAdESAttachedPayloadImprintSource: CBAdESPayloadImprintSource
+public sealed class CBAdESAttachedPayloadImprintSource : CBAdESPayloadImprintSource
 {
     /// <summary>Initializes a new <see cref="CBAdESAttachedPayloadImprintSource"/>.</summary>
     /// <param name="payloadBytes">
@@ -169,7 +169,7 @@ public sealed class CBAdESAttachedPayloadImprintSource: CBAdESPayloadImprintSour
 /// closing paragraph).
 /// </summary>
 [DebuggerDisplay("CBAdESDetachedPayloadImprintSource: {PayloadBytes.Length} bytes")]
-public sealed class CBAdESDetachedPayloadImprintSource: CBAdESPayloadImprintSource
+public sealed class CBAdESDetachedPayloadImprintSource : CBAdESPayloadImprintSource
 {
     /// <summary>Initializes a new <see cref="CBAdESDetachedPayloadImprintSource"/>.</summary>
     /// <param name="payloadBytes">
@@ -200,7 +200,7 @@ public sealed class CBAdESDetachedPayloadImprintSource: CBAdESPayloadImprintSour
 /// is load-bearing (COSE-Payload byte order); <see cref="ProcessedParBytes"/> preserves it.
 /// </remarks>
 [DebuggerDisplay("CBAdESSigDProcessedPayloadImprintSource: {ProcessedParBytes.Count} segments")]
-public sealed class CBAdESSigDProcessedPayloadImprintSource: CBAdESPayloadImprintSource
+public sealed class CBAdESSigDProcessedPayloadImprintSource : CBAdESPayloadImprintSource
 {
     /// <summary>
     /// Initializes a new <see cref="CBAdESSigDProcessedPayloadImprintSource"/>.

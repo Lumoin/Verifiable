@@ -60,7 +60,7 @@ namespace Verifiable.OAuth;
 /// </list>
 /// </remarks>
 [DebuggerDisplay("HttpResponseData StatusCode={StatusCode} BodyLength={Body.Length}")]
-public readonly struct HttpResponseData: IEquatable<HttpResponseData>
+public readonly struct HttpResponseData : IEquatable<HttpResponseData>
 {
     /// <summary>
     /// Initialises an empty <see cref="HttpResponseData"/> with empty body,

@@ -65,7 +65,7 @@ internal delegate Task<MinimalHttpResponse> MinimalHttpHandlerDelegate(
 /// on this host at all. Callers pin their <see cref="System.Net.Http.HttpClient"/> to
 /// <see cref="Certificate"/> via <see cref="LoopbackTls.CreatePinnedHttpClient(X509Certificate2, Uri?)"/>.
 /// </summary>
-internal sealed class MinimalHttpHost: IAsyncDisposable
+internal sealed class MinimalHttpHost : IAsyncDisposable
 {
     private WebApplication App { get; }
 

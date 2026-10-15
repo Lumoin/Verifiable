@@ -8,7 +8,7 @@ namespace Verifiable.Cryptography.Context;
 /// Attribute to mark properties for registration discovery.
 /// </summary>
 [AttributeUsage(AttributeTargets.Property, Inherited = false, AllowMultiple = false)]
-public sealed class CryptoAlgorithmRegistrationAttribute: Attribute
+public sealed class CryptoAlgorithmRegistrationAttribute : Attribute
 {
 }
 
@@ -125,7 +125,7 @@ public sealed class CryptoAlgorithmRegistrationAttribute: Attribute
 /// <seealso cref="MaterialSemantics"/>
 /// <seealso cref="Tag"/>
 [DebuggerDisplay("{CryptoAlgorithmNames.GetName(this),nq}")]
-public readonly struct CryptoAlgorithm: IEquatable<CryptoAlgorithm>
+public readonly struct CryptoAlgorithm : IEquatable<CryptoAlgorithm>
 {
     /// <summary>
     /// Gets the numeric code for this algorithm.

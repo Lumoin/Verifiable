@@ -104,7 +104,7 @@ public enum EArkFixityStatus
 /// <strong>Ownership.</strong> An instance owns whatever carrier it holds; whoever holds the fixity disposes it.
 /// </para>
 /// </remarks>
-public abstract class EArkFixity: IDisposable
+public abstract class EArkFixity : IDisposable
 {
     /// <summary>
     /// Restricts the cases to those declared in this assembly, making this a closed hierarchy: no external type
@@ -271,7 +271,7 @@ public abstract class EArkFixity: IDisposable
 /// can become a document — both are refused where the model is built rather than where it is written.
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class EArkRecomputableFixity: EArkFixity
+public sealed class EArkRecomputableFixity : EArkFixity
 {
     /// <summary>
     /// Initialises a recomputable fixity from an algorithm and the digest computed under it.
@@ -353,7 +353,7 @@ public sealed class EArkRecomputableFixity: EArkFixity
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class EArkStatedFixity: EArkFixity, IEquatable<EArkStatedFixity>
+public sealed class EArkStatedFixity : EArkFixity, IEquatable<EArkStatedFixity>
 {
     /// <summary>
     /// Initialises a stated fixity from the text a document carried.

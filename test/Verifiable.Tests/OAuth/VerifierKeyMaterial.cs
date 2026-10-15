@@ -15,7 +15,7 @@ namespace Verifiable.Tests.OAuth;
 /// are <see cref="PrivateKeyMemory"/> instances backed by pooled memory.
 /// </remarks>
 [DebuggerDisplay("VerifierKeyMaterial Handle={Registration.TenantHandle}")]
-internal sealed class VerifierKeyMaterial: IDisposable
+internal sealed class VerifierKeyMaterial : IDisposable
 {
     private bool disposed;
 

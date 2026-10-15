@@ -32,7 +32,7 @@ public enum XAdESValidationDataFamily
 /// delivers only the antecedent (this type); <c>Verifiable.Cryptography.Pki.XAdESLevelRules.CheckReferencesResolveToValidationDataAsync</c>
 /// composes with it above the leaf, adding nothing structural of its own.
 /// </remarks>
-public readonly struct XAdESValidationDataTriggerResult: IEquatable<XAdESValidationDataTriggerResult>
+public readonly struct XAdESValidationDataTriggerResult : IEquatable<XAdESValidationDataTriggerResult>
 {
     /// <summary>Whether the plain values property (<c>CertificateValues</c>/<c>RevocationValues</c>) is incorporated at least once.</summary>
     public bool HasValuesProperty { get; }

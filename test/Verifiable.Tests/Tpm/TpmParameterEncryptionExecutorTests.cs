@@ -745,7 +745,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
     /// parameter-encryption path. It reports <see cref="TpmCcConstants.TPM_CC_GetRandom"/> (zero handles) so the
     /// executor's command-attribute lookup resolves, and writes a single TPM2B holding the supplied data.
     /// </summary>
-    private sealed class EncryptableProbeInput: ITpmCommandInput, IDisposable
+    private sealed class EncryptableProbeInput : ITpmCommandInput, IDisposable
     {
         private Tpm2bData Payload { get; }
 

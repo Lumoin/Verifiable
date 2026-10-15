@@ -827,7 +827,7 @@ internal sealed class AsicCapstoneFirewalledFlowTests
     /// beside the container except the trust anchor's octets, which is what a Driving Application configures
     /// rather than receives.
     /// </remarks>
-    private sealed class ReconstructedAsicVerifyingParty: IDisposable
+    private sealed class ReconstructedAsicVerifyingParty : IDisposable
     {
         /// <summary>The carriers this party rented, released in reverse order.</summary>
         private List<IDisposable> Owned { get; } = [];

@@ -184,7 +184,7 @@ namespace Verifiable.Foundation
     /// var jws = await Jws.SignAsync(header, payload, signingFunction, encoder, pool, cancellationToken);
     /// </code>
     /// </example>
-    public class Builder<TResult, TState, TBuilder>: IBuilder
+    public class Builder<TResult, TState, TBuilder> : IBuilder
         where TBuilder : Builder<TResult, TState, TBuilder>
         where TResult : new()
     {

@@ -29,7 +29,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class TpmlDigestValues: ITpmWireType, IDisposable
+public sealed class TpmlDigestValues : ITpmWireType, IDisposable
 {
     /// <summary>
     /// The bound on <c>count</c>: Table 127's <c>{:HASH_COUNT}</c>, rendered with the same library constant

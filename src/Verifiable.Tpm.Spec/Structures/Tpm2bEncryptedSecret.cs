@@ -26,7 +26,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class Tpm2bEncryptedSecret: IDisposable
+public sealed class Tpm2bEncryptedSecret : IDisposable
 {
     /// <summary>
     /// Maximum size of the encrypted secret: <c>sizeof(TPMU_ENCRYPTED_SECRET)</c>, bounded by the largest

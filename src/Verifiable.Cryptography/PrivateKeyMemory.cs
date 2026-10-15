@@ -12,7 +12,7 @@ namespace Verifiable.Cryptography;
 /// following the same pattern as <see cref="PublicKeyMemory"/>.
 /// </remarks>
 [DebuggerDisplay("PrivateKeyMemory Algorithm={Tag.Get<Verifiable.Cryptography.Context.CryptoAlgorithm>()} Purpose={Tag.Get<Verifiable.Cryptography.Context.Purpose>()}")]
-public class PrivateKeyMemory: SensitiveMemory
+public class PrivateKeyMemory : SensitiveMemory
 {
     /// <summary>
     /// Initializes a new <see cref="PrivateKeyMemory"/> from owned memory.

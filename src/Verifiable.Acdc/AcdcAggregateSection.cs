@@ -68,7 +68,7 @@ public abstract record AcdcAggregateBlock
 /// block's detail, revealing nothing about the block's attribute values.
 /// </summary>
 /// <param name="Said">The block's SAID.</param>
-public sealed record CompactAggregateBlock(string Said): AcdcAggregateBlock;
+public sealed record CompactAggregateBlock(string Said) : AcdcAggregateBlock;
 
 
 /// <summary>
@@ -76,4 +76,4 @@ public sealed record CompactAggregateBlock(string Said): AcdcAggregateBlock;
 /// fields), from which the block's SAID is recomputed to prove the block a member of the aggregate.
 /// </summary>
 /// <param name="Detail">The block's revealed detail block, an order-preserving field map.</param>
-public sealed record ExpandedAggregateBlock(MessageFieldMap Detail): AcdcAggregateBlock;
+public sealed record ExpandedAggregateBlock(MessageFieldMap Detail) : AcdcAggregateBlock;

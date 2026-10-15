@@ -39,7 +39,7 @@ namespace Verifiable.Core.Model.Did
     /// </para>
     /// </remarks>
     [DebuggerDisplay("DidUrl({ToString(),nq})")]
-    public sealed class DidUrl: IEquatable<DidUrl>
+    public sealed class DidUrl : IEquatable<DidUrl>
     {
         /// <summary>
         /// The DID method name (e.g., "example" from "did:example:123").

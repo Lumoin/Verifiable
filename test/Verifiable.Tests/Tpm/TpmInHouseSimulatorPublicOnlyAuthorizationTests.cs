@@ -1246,7 +1246,7 @@ internal sealed class TpmInHouseSimulatorPublicOnlyAuthorizationTests
     }
 
     /// <summary>A P-256 key pair minted by the framework, its coordinates padded to the field width.</summary>
-    private sealed class EccKeyMaterial: IDisposable
+    private sealed class EccKeyMaterial : IDisposable
     {
         /// <summary>Gets the framework key, the off-TPM signing oracle.</summary>
         public ECDsa Key { get; }

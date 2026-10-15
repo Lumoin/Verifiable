@@ -681,7 +681,7 @@ internal sealed class Bbs2023W3cVectorTests
     /// Binds the BBS Sign/Verify/ProofGen/ProofVerify operations from Lumoin.Veridical to the cryptosuite
     /// delegate seams, holding the BLS12-381 managed backends and the issuer key material.
     /// </summary>
-    internal sealed class BbsOperations: IDisposable
+    internal sealed class BbsOperations : IDisposable
     {
         //BBS secret keys, signatures, and proofs request AllocationKind.Native. The shared pool disallows
         //native degradation, so a dedicated pool that degrades Native to Pinned backs the BBS value types.

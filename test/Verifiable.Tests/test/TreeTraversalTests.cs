@@ -3,7 +3,7 @@ using Verifiable.Core.Assessment;
 
 namespace Verifiable.Tests.test
 {
-    internal record TestClaimContext: ClaimContext { }
+    internal record TestClaimContext : ClaimContext { }
 
 
     [TestClass]

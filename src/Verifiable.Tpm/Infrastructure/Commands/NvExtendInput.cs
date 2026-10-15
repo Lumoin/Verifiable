@@ -40,7 +40,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <param name="AuthHandle">The authorization handle (the Index itself for Index authorization, or the owner hierarchy).</param>
 /// <param name="NvIndex">The NV Index to extend.</param>
 /// <param name="Data">The data to extend into the Index (<c>TPM2B_MAX_NV_BUFFER</c>, TPM 2.0 Library Part 2, clause 10.3.9, Table 97) in a pooled carrier this input BORROWS: the caller owns it and releases it once the command has been framed.</param>
-public readonly record struct NvExtendInput(uint AuthHandle, uint NvIndex, Tpm2bMaxNvBuffer Data): ITpmCommandInput
+public readonly record struct NvExtendInput(uint AuthHandle, uint NvIndex, Tpm2bMaxNvBuffer Data) : ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_NV_Extend;

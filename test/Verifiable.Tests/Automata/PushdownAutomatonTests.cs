@@ -587,7 +587,7 @@ internal sealed class PushdownAutomatonTests
         return ValueTask.FromResult<TransitionResult<string, string>?>(null);
     }
 
-    private sealed class TestObserver<T>(List<T> entries): IObserver<T>
+    private sealed class TestObserver<T>(List<T> entries) : IObserver<T>
     {
         public void OnNext(T value) => entries.Add(value);
         public void OnError(Exception error) { }

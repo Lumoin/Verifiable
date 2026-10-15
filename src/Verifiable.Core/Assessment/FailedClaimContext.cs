@@ -27,7 +27,7 @@ namespace Verifiable.Core.Assessment
     /// </item>
     /// </list>
     /// </remarks>
-    public record FailedClaimContext: ClaimContext
+    public record FailedClaimContext : ClaimContext
     {
         /// <summary>
         /// Gets the name of the delegate or validation rule that encountered the failure.

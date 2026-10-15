@@ -18,7 +18,7 @@ namespace Verifiable.Json.Converters
     /// Converts a DID identifier between its JSON string representation and a <see cref="GenericDidMethod"/>
     /// instance, delegating construction of the concrete method type to a <see cref="DidMethodFactoryDelegate"/>.
     /// </summary>
-    public class DidIdConverter: JsonConverter<GenericDidMethod>
+    public class DidIdConverter : JsonConverter<GenericDidMethod>
     {
         private DidMethodFactoryDelegate DidFactory { get; }
 

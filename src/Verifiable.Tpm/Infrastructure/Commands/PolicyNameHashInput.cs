@@ -26,7 +26,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <param name="NameHash">The digest of the concatenated target Names, at most <see cref="Tpm2bDigest.MaxSize"/> octets. The caller owns the underlying memory.</param>
 /// <exception cref="ArgumentException"><paramref name="NameHash"/> is longer than <see cref="Tpm2bDigest.MaxSize"/>.</exception>
 [DebuggerDisplay("PolicyNameHashInput(Session=0x{PolicySession,h})")]
-public readonly record struct PolicyNameHashInput(uint PolicySession, ReadOnlyMemory<byte> NameHash): ITpmCommandInput
+public readonly record struct PolicyNameHashInput(uint PolicySession, ReadOnlyMemory<byte> NameHash) : ITpmCommandInput
 {
     /// <summary>
     /// Gets the digest of the concatenated target Names, bounded at construction by

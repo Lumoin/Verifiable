@@ -23,7 +23,7 @@ namespace Verifiable.Core.Model.Mdoc;
 /// signature commitment hashes them, and re-encoding could shift bytes.
 /// </para>
 /// </remarks>
-public sealed class MdocDeviceSigned: IDisposable
+public sealed class MdocDeviceSigned : IDisposable
 {
     private bool disposed;
 

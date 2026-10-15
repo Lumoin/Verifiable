@@ -33,7 +33,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </list>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class VerifySequenceStartInput: ITpmCommandInput, IDisposable
+public sealed class VerifySequenceStartInput : ITpmCommandInput, IDisposable
 {
     /// <summary>Whether <see cref="Dispose"/> has already released <see cref="SequenceAuth"/>.</summary>
     private bool Disposed { get; set; }

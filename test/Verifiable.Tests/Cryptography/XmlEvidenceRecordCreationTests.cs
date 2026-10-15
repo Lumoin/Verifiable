@@ -366,7 +366,7 @@ internal sealed class XmlEvidenceRecordCreationTests
 
 
     /// <summary>The Root CA and Time-Stamping Authority every test here mints its genuine token from.</summary>
-    internal sealed class AuthorityRing: IDisposable
+    internal sealed class AuthorityRing : IDisposable
     {
         /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
         private bool disposed;

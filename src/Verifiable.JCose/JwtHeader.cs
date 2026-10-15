@@ -31,7 +31,7 @@ namespace Verifiable.JCose;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("JwtHeader({Count} entries)")]
-public sealed class JwtHeader: JoseDictionary, IEquatable<JwtHeader>
+public sealed class JwtHeader : JoseDictionary, IEquatable<JwtHeader>
 {
     /// <summary>
     /// Creates an empty JWT header.

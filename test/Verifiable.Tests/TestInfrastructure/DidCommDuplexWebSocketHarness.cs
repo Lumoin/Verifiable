@@ -33,7 +33,7 @@ internal static class DidCommDuplexFraming
 /// either or both ends — the identical session type serving the mediator's accept side and the recipient's
 /// dial side (the seam's documented role symmetry).
 /// </summary>
-internal sealed class DidCommDuplexMediatorHost: IAsyncDisposable
+internal sealed class DidCommDuplexMediatorHost : IAsyncDisposable
 {
     private WebApplication App { get; }
     private X509Certificate2 ListenerCertificate { get; }
@@ -151,7 +151,7 @@ internal sealed class DidCommDuplexMediatorHost: IAsyncDisposable
 /// to the mediator's exact leaf certificate (there is no CA in this loopback topology), staying open across
 /// many send/receive round trips — the client-side counterpart to <see cref="DidCommDuplexMediatorHost"/>.
 /// </summary>
-internal sealed class DidCommDuplexWalletConnection: IAsyncDisposable
+internal sealed class DidCommDuplexWalletConnection : IAsyncDisposable
 {
     private ClientWebSocket Client { get; }
 

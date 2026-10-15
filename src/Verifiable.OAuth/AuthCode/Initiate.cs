@@ -28,7 +28,7 @@ public sealed record Initiate(
     string FlowId,
     string ExpectedIssuer,
     DateTimeOffset InitiatedAt,
-    DateTimeOffset InitialExpiresAt): FlowInput
+    DateTimeOffset InitialExpiresAt) : FlowInput
 {
     /// <summary>
     /// The <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 §2</see>

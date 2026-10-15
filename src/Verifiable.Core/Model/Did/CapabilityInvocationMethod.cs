@@ -59,7 +59,7 @@ namespace Verifiable.Core.Model.Did;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("CapabilityInvocationMethod(Id = {Id}, IsEmbedded = {IsEmbeddedVerification})")]
-public sealed class CapabilityInvocationMethod: VerificationMethodReference
+public sealed class CapabilityInvocationMethod : VerificationMethodReference
 {
     /// <summary>
     /// The verification purpose string as defined in W3C specifications.

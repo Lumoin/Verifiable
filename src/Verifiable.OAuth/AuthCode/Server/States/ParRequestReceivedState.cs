@@ -25,7 +25,7 @@ namespace Verifiable.OAuth.AuthCode.Server.States;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("ParRequestReceived FlowId={FlowId} RequestUri={RequestUri}")]
-public sealed record ParRequestReceivedState: FlowState
+public sealed record ParRequestReceivedState : FlowState
 {
     /// <summary>
     /// The <c>request_uri</c> assigned to this PAR entry and returned to the client.

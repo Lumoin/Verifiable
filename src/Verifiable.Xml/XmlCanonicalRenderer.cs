@@ -175,7 +175,7 @@ internal static class XmlCanonicalRenderer
     /// Orders <see cref="AttributeRenderItem"/>s by <see cref="CompareAttributeItems"/> for the
     /// introspective sort of <see cref="SortAttributeItems"/>.
     /// </summary>
-    private readonly struct AttributeRenderItemComparer: IComparer<AttributeRenderItem>
+    private readonly struct AttributeRenderItemComparer : IComparer<AttributeRenderItem>
     {
         /// <summary>The table the items reference attributes of.</summary>
         private XmlNodeTable Table { get; }
@@ -214,7 +214,7 @@ internal static class XmlCanonicalRenderer
     /// namespace node with local name <c>xml</c>, which defines the <c>xml</c> prefix, if its string
     /// value is <c>http://www.w3.org/XML/1998/namespace</c>".
     /// </summary>
-    private sealed class NamespaceRenderContext: IDisposable
+    private sealed class NamespaceRenderContext : IDisposable
     {
         /// <summary>The table the walk renders.</summary>
         private XmlNodeTable Table { get; }

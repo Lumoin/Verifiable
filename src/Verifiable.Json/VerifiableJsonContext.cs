@@ -86,6 +86,6 @@ namespace Verifiable.Json;
 [JsonSerializable(typeof(DidCommMessage))]
 [JsonSerializable(typeof(Attachment))]
 [JsonSerializable(typeof(AttachmentData))]
-public partial class VerifiableJsonContext: JsonSerializerContext
+public partial class VerifiableJsonContext : JsonSerializerContext
 {
 }

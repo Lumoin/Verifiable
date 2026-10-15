@@ -64,7 +64,7 @@ public sealed record EvidenceRecordCreationContext
 /// The Evidence Records one initial Archive Timestamp produced, one per data object group.
 /// </summary>
 [DebuggerDisplay("EvidenceRecordCreation({EvidenceRecords.Count} records, archived {ArchiveTime})")]
-public sealed class EvidenceRecordCreation: IDisposable
+public sealed class EvidenceRecordCreation : IDisposable
 {
     /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
     private bool disposed;

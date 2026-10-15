@@ -217,7 +217,7 @@ public delegate CBAdESSign1ParseResult ParseCBAdESSign1Delegate(ReadOnlyMemory<b
 /// </para>
 /// </remarks>
 [DebuggerDisplay("CBAdESSign1ParseResult: IsSuccess={IsSuccess}")]
-public sealed class CBAdESSign1ParseResult: IDisposable
+public sealed class CBAdESSign1ParseResult : IDisposable
 {
     private bool disposed;
 

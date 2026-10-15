@@ -1,7 +1,7 @@
 namespace Verifiable.Server;
 
 /// <summary>A validated request view and its exactly-once release of the serving owner's admission count.</summary>
-public sealed class ServerRequestLease: IDisposable
+public sealed class ServerRequestLease : IDisposable
 {
     /// <summary>The pending release callback; this field is an Interlocked target for exactly-once lease release.</summary>
     private Action? release;

@@ -68,7 +68,7 @@ public sealed record MetadataBlobPayloadEntry(
     IReadOnlyList<MetadataStatusReport> StatusReports,
     DateOnly? TimeOfLastStatusChange,
     IReadOnlyList<PkiCertificateMemory>? AttestationRootCertificates,
-    ReadOnlyMemory<byte> RawMetadataStatement): IDisposable
+    ReadOnlyMemory<byte> RawMetadataStatement) : IDisposable
 {
     /// <summary>
     /// Determines whether this entry and <paramref name="other"/> report the same content. The

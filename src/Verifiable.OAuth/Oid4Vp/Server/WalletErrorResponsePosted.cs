@@ -26,4 +26,4 @@ public sealed record WalletErrorResponsePosted(
     string Error,
     string? ErrorDescription,
     DateTimeOffset ReceivedAt,
-    Uri? RedirectUri): FlowInput;
+    Uri? RedirectUri) : FlowInput;

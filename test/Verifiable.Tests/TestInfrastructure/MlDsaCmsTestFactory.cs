@@ -39,7 +39,7 @@ internal static class MlDsaCmsTestFactory
     /// An ML-DSA authority: the pooled key carriers, the parameter-set identifier, and the BouncyCastle-native
     /// certificate and signing key the independent generators consume.
     /// </summary>
-    internal sealed class MlDsaSigningAuthority: IDisposable
+    internal sealed class MlDsaSigningAuthority : IDisposable
     {
         /// <summary>The authority's public key carrier (raw FIPS 204 encoding).</summary>
         public PublicKeyMemory PublicKey { get; }

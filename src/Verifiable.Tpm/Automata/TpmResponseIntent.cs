@@ -21,7 +21,7 @@ public abstract record TpmResponseIntent(TpmRcConstants ResponseCode);
 /// every error response.
 /// </summary>
 /// <param name="ResponseCode">The response code.</param>
-public sealed record TpmHeaderOnlyResponse(TpmRcConstants ResponseCode): TpmResponseIntent(ResponseCode);
+public sealed record TpmHeaderOnlyResponse(TpmRcConstants ResponseCode) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_GetTestResult()</c>: an outData buffer (empty in this lifecycle
@@ -32,7 +32,7 @@ public sealed record TpmHeaderOnlyResponse(TpmRcConstants ResponseCode): TpmResp
 /// The self-test outcome reported in the response body: <c>TPM_RC_SUCCESS</c> when the self-test
 /// passed, <c>TPM_RC_FAILURE</c> when it failed (TPM 2.0 Library Part 1, clause 9.4).
 /// </param>
-public sealed record TpmTestResultResponse(TpmRcConstants ResponseCode, TpmRcConstants TestResult): TpmResponseIntent(ResponseCode);
+public sealed record TpmTestResultResponse(TpmRcConstants ResponseCode, TpmRcConstants TestResult) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_GetRandom()</c>: a <c>TPM2B_DIGEST</c> carrying the random
@@ -45,7 +45,7 @@ public sealed record TpmTestResultResponse(TpmRcConstants ResponseCode, TpmRcCon
 /// </remarks>
 /// <param name="ResponseCode">The command response code (success).</param>
 /// <param name="RandomBytes">The produced octets as the <c>TPM2B_DIGEST</c> Table 76 gives <c>randomBytes</c>; owned, disposed after framing.</param>
-public sealed record TpmRandomResponse(TpmRcConstants ResponseCode, Tpm2bDigest RandomBytes): TpmResponseIntent(ResponseCode);
+public sealed record TpmRandomResponse(TpmRcConstants ResponseCode, Tpm2bDigest RandomBytes) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_GetCapability()</c>: a <c>moreData</c> flag followed by the
@@ -58,7 +58,7 @@ public sealed record TpmRandomResponse(TpmRcConstants ResponseCode, Tpm2bDigest 
 /// <param name="ResponseCode">The command response code (success).</param>
 /// <param name="CapabilityData">The capability-data union arm to return.</param>
 /// <param name="MoreData">Whether more properties are available beyond those returned.</param>
-public sealed record TpmCapabilityResponse(TpmRcConstants ResponseCode, TpmsCapabilityData CapabilityData, TpmiYesNo MoreData): TpmResponseIntent(ResponseCode);
+public sealed record TpmCapabilityResponse(TpmRcConstants ResponseCode, TpmsCapabilityData CapabilityData, TpmiYesNo MoreData) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_CreatePrimary()</c>: the object handle followed by the exported
@@ -97,7 +97,7 @@ public sealed record TpmCreatePrimaryResponse(
     Tpm2bCreationData CreationData,
     Tpm2bDigest CreationHash,
     TpmtTkCreation CreationTicket,
-    Tpm2bName Name): TpmResponseIntent(ResponseCode);
+    Tpm2bName Name) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_Sign()</c>, <c>TPM2_SignDigest()</c>, or <c>TPM2_SignSequenceComplete()</c>:
@@ -112,7 +112,7 @@ public sealed record TpmCreatePrimaryResponse(
 /// </remarks>
 /// <param name="ResponseCode">The command response code (success).</param>
 /// <param name="Signature">The <c>TPMT_SIGNATURE</c>; disposed after framing.</param>
-public sealed record TpmSignResponse(TpmRcConstants ResponseCode, TpmtSignature Signature): TpmResponseIntent(ResponseCode);
+public sealed record TpmSignResponse(TpmRcConstants ResponseCode, TpmtSignature Signature) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to every sequence Start command — <c>TPM2_HashSequenceStart()</c>,
@@ -123,7 +123,7 @@ public sealed record TpmSignResponse(TpmRcConstants ResponseCode, TpmtSignature 
 /// </summary>
 /// <param name="ResponseCode">The command response code (success).</param>
 /// <param name="SequenceHandle">The handle of the newly opened sequence, framed in the response handle area. Tables 86/88/90 type this slot <c>TPMI_DH_OBJECT</c> — "handle of a sequence object" is the description, not an interface-type constraint the unmarshaling enforces.</param>
-public sealed record TpmSequenceStartResponse(TpmRcConstants ResponseCode, TpmHandle SequenceHandle): TpmResponseIntent(ResponseCode);
+public sealed record TpmSequenceStartResponse(TpmRcConstants ResponseCode, TpmHandle SequenceHandle) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_VerifySequenceComplete()</c>: a <c>TPMT_TK_VERIFIED</c> validation
@@ -138,7 +138,7 @@ public sealed record TpmSequenceStartResponse(TpmRcConstants ResponseCode, TpmHa
 /// </remarks>
 /// <param name="ResponseCode">The command response code (success).</param>
 /// <param name="Validation">The <c>TPMT_TK_VERIFIED</c> validation ticket (TPM 2.0 Library Part 2, clause 10.6.5, Table 113); owned, disposed after framing.</param>
-public sealed record TpmVerifySequenceCompleteResponse(TpmRcConstants ResponseCode, TpmtTkVerified Validation): TpmResponseIntent(ResponseCode);
+public sealed record TpmVerifySequenceCompleteResponse(TpmRcConstants ResponseCode, TpmtTkVerified Validation) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_SequenceComplete()</c> and <c>TPM2_Hash()</c>: the digest and its
@@ -153,7 +153,7 @@ public sealed record TpmVerifySequenceCompleteResponse(TpmRcConstants ResponseCo
 /// <param name="ResponseCode">The command response code (success).</param>
 /// <param name="Result">The digest (<c>result</c> / <c>outHash</c>, <c>TPM2B_DIGEST</c>); owned, disposed after framing.</param>
 /// <param name="Validation">The hash-check ticket (<c>validation</c>, <c>TPMT_TK_HASHCHECK</c>, TPM 2.0 Library Part 2, clause 10.6.7, Table 115) — the NULL ticket when the hierarchy was <c>TPM_RH_NULL</c> or the octets were not safe to sign; owned, disposed after framing.</param>
-public sealed record TpmDigestResponse(TpmRcConstants ResponseCode, Tpm2bDigest Result, TpmtTkHashcheck Validation): TpmResponseIntent(ResponseCode);
+public sealed record TpmDigestResponse(TpmRcConstants ResponseCode, Tpm2bDigest Result, TpmtTkHashcheck Validation) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_HMAC()</c> (TPM 2.0 Library Part 3, clause 15.5, Table 72): the single
@@ -163,7 +163,7 @@ public sealed record TpmDigestResponse(TpmRcConstants ResponseCode, Tpm2bDigest 
 /// </summary>
 /// <param name="ResponseCode">The command response code (success).</param>
 /// <param name="OutHmac">The computed HMAC (<c>outHMAC</c>, <c>TPM2B_DIGEST</c>); owned, disposed after framing.</param>
-public sealed record TpmHmacResponse(TpmRcConstants ResponseCode, Tpm2bDigest OutHmac): TpmResponseIntent(ResponseCode);
+public sealed record TpmHmacResponse(TpmRcConstants ResponseCode, Tpm2bDigest OutHmac) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to a session-authorized <c>TPM2_HMAC()</c> (TPM 2.0 Library Part 3, clause 15.5,
@@ -183,7 +183,7 @@ public sealed record TpmHmacResponse(TpmRcConstants ResponseCode, Tpm2bDigest Ou
 public sealed record TpmHmacOverSessionResponse(
     TpmRcConstants ResponseCode,
     TpmParameterArea ParameterArea,
-    TpmHmacFramedSession Entry): TpmResponseIntent(ResponseCode);
+    TpmHmacFramedSession Entry) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to a session-authorized <c>TPM2_HMAC_Start()</c> (TPM 2.0 Library Part 3, clause
@@ -202,7 +202,7 @@ public sealed record TpmHmacOverSessionResponse(
 public sealed record TpmHmacStartOverSessionResponse(
     TpmRcConstants ResponseCode,
     TpmiDhObject SequenceHandle,
-    TpmHmacFramedSession Entry): TpmResponseIntent(ResponseCode);
+    TpmHmacFramedSession Entry) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_Create()</c>: the wrapped private blob, the exported public area, and the
@@ -236,7 +236,7 @@ public sealed record TpmCreateResponse(
     Tpm2bPublic OutPublic,
     Tpm2bCreationData CreationData,
     Tpm2bDigest CreationHash,
-    TpmtTkCreation CreationTicket): TpmResponseIntent(ResponseCode);
+    TpmtTkCreation CreationTicket) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_Create()</c> over one or two sessions: a <c>TPM_ST_SESSIONS</c>-tagged
@@ -263,7 +263,7 @@ public sealed record TpmCreateOverSessionsResponse(
     TpmParameterArea ParameterArea,
     bool HasPasswordPlaceholder,
     TpmaSession PasswordPlaceholderAttributes,
-    ImmutableArray<TpmCreateFramedSessionEntry> Entries): TpmResponseIntent(ResponseCode);
+    ImmutableArray<TpmCreateFramedSessionEntry> Entries) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_Load()</c>: the transient handle of the loaded object followed by its Name
@@ -279,7 +279,7 @@ public sealed record TpmCreateOverSessionsResponse(
 public sealed record TpmLoadResponse(
     TpmRcConstants ResponseCode,
     TpmHandle ObjectHandle,
-    Tpm2bName Name): TpmResponseIntent(ResponseCode);
+    Tpm2bName Name) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_ContextSave()</c>: the framed <c>TPMS_CONTEXT</c> — sequence, savedHandle,
@@ -295,7 +295,7 @@ public sealed record TpmLoadResponse(
 /// <param name="Context">The framed context (<c>TPMS_CONTEXT</c>); owned, disposed after framing.</param>
 public sealed record TpmContextSaveResponse(
     TpmRcConstants ResponseCode,
-    TpmsContext Context): TpmResponseIntent(ResponseCode);
+    TpmsContext Context) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_ContextLoad()</c>: the handle assigned to the reloaded resource, carried
@@ -310,7 +310,7 @@ public sealed record TpmContextSaveResponse(
 /// <param name="LoadedHandle">The handle assigned to the reloaded resource — the saved handle itself for a session, or the freshly drawn transient handle for an object or sequence.</param>
 public sealed record TpmContextLoadResponse(
     TpmRcConstants ResponseCode,
-    TpmiDhContext LoadedHandle): TpmResponseIntent(ResponseCode);
+    TpmiDhContext LoadedHandle) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_Unseal()</c>: a <c>TPM2B_SENSITIVE_DATA</c> carrying the recovered sealed
@@ -325,7 +325,7 @@ public sealed record TpmContextLoadResponse(
 /// </remarks>
 /// <param name="ResponseCode">The command response code (success).</param>
 /// <param name="OutData">The recovered sealed data — a borrowed reference to the carrier the loaded sealed object owns.</param>
-public sealed record TpmUnsealResponse(TpmRcConstants ResponseCode, Tpm2bSensitiveData OutData): TpmResponseIntent(ResponseCode);
+public sealed record TpmUnsealResponse(TpmRcConstants ResponseCode, Tpm2bSensitiveData OutData) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The framed outcome of <c>TPM2_Duplicate()</c> (TPM 2.0 Library Part 3, clause 13.1): the duplication blob
@@ -335,7 +335,7 @@ public sealed record TpmUnsealResponse(TpmRcConstants ResponseCode, Tpm2bSensiti
 /// <param name="ResponseCode">The response code.</param>
 /// <param name="Duplicate">The duplicated sensitive area (<c>TPM2B_PRIVATE</c>) in an owned pooled carrier; released by the framing step once serialized.</param>
 /// <param name="OutSymSeed">The protected outer-wrapper seed (<c>TPM2B_ENCRYPTED_SECRET</c>) in an owned pooled carrier — the dispose-immune empty sentinel for a <c>TPM_RH_NULL</c> new parent; released by the framing step once serialized.</param>
-public sealed record TpmDuplicateResponse(TpmRcConstants ResponseCode, Tpm2bPrivate Duplicate, Tpm2bEncryptedSecret OutSymSeed): TpmResponseIntent(ResponseCode);
+public sealed record TpmDuplicateResponse(TpmRcConstants ResponseCode, Tpm2bPrivate Duplicate, Tpm2bEncryptedSecret OutSymSeed) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The framed outcome of <c>TPM2_Import()</c> (TPM 2.0 Library Part 3, clause 13.3): the imported object's
@@ -343,7 +343,7 @@ public sealed record TpmDuplicateResponse(TpmRcConstants ResponseCode, Tpm2bPriv
 /// </summary>
 /// <param name="ResponseCode">The response code.</param>
 /// <param name="OutPrivate">The re-wrapped sensitive area (<c>TPM2B_PRIVATE</c>) in an owned pooled carrier; released by the framing step once serialized.</param>
-public sealed record TpmImportResponse(TpmRcConstants ResponseCode, Tpm2bPrivate OutPrivate): TpmResponseIntent(ResponseCode);
+public sealed record TpmImportResponse(TpmRcConstants ResponseCode, Tpm2bPrivate OutPrivate) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The framed outcome of a password- or bare-policy-authorized <c>TPM2_ObjectChangeAuth()</c> (TPM 2.0 Library
@@ -355,7 +355,7 @@ public sealed record TpmImportResponse(TpmRcConstants ResponseCode, Tpm2bPrivate
 /// </summary>
 /// <param name="ResponseCode">The response code.</param>
 /// <param name="OutPrivate">The wrapped private area (<c>TPM2B_PRIVATE</c>) in an owned pooled carrier; released by the framing step once serialized.</param>
-public sealed record TpmObjectChangeAuthResponse(TpmRcConstants ResponseCode, Tpm2bPrivate OutPrivate): TpmResponseIntent(ResponseCode);
+public sealed record TpmObjectChangeAuthResponse(TpmRcConstants ResponseCode, Tpm2bPrivate OutPrivate) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful plain-form response to <c>TPM2_RSA_Encrypt()</c>: a <c>TPM2B_PUBLIC_KEY_RSA</c> carrying the
@@ -366,7 +366,7 @@ public sealed record TpmObjectChangeAuthResponse(TpmRcConstants ResponseCode, Tp
 /// </summary>
 /// <param name="ResponseCode">The response code (success).</param>
 /// <param name="OutData">The encrypted output (<c>TPM2B_PUBLIC_KEY_RSA</c>) in an owned pooled carrier; released by the framing step once serialized.</param>
-public sealed record TpmRsaEncryptResponse(TpmRcConstants ResponseCode, Tpm2bPublicKeyRsa OutData): TpmResponseIntent(ResponseCode);
+public sealed record TpmRsaEncryptResponse(TpmRcConstants ResponseCode, Tpm2bPublicKeyRsa OutData) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful plain-form response to <c>TPM2_RSA_Decrypt()</c>: a <c>TPM2B_PUBLIC_KEY_RSA</c> carrying the
@@ -381,7 +381,7 @@ public sealed record TpmRsaEncryptResponse(TpmRcConstants ResponseCode, Tpm2bPub
 /// step once serialized, zeroed first — the recovered plaintext is never left in a freed pooled buffer (the
 /// clear-before-dispose discipline).
 /// </param>
-public sealed record TpmRsaDecryptResponse(TpmRcConstants ResponseCode, Tpm2bPublicKeyRsa Message): TpmResponseIntent(ResponseCode);
+public sealed record TpmRsaDecryptResponse(TpmRcConstants ResponseCode, Tpm2bPublicKeyRsa Message) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_NV_Read()</c>: the data read from the NV Index as a
@@ -398,7 +398,7 @@ public sealed record TpmRsaDecryptResponse(TpmRcConstants ResponseCode, Tpm2bPub
 /// </remarks>
 /// <param name="ResponseCode">The command response code (success).</param>
 /// <param name="Data">The window of the Index's data area the read answers with, borrowed from the Index that owns it.</param>
-public sealed record TpmNvReadDataResponse(TpmRcConstants ResponseCode, TpmNvDataWindow Data): TpmResponseIntent(ResponseCode);
+public sealed record TpmNvReadDataResponse(TpmRcConstants ResponseCode, TpmNvDataWindow Data) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_NV_ReadPublic()</c>: the NV Index's public area followed by its computed
@@ -417,7 +417,7 @@ public sealed record TpmNvReadDataResponse(TpmRcConstants ResponseCode, TpmNvDat
 public sealed record TpmNvReadPublicResponse(
     TpmRcConstants ResponseCode,
     TpmsNvPublic NvPublic,
-    Tpm2bName NvName): TpmResponseIntent(ResponseCode);
+    Tpm2bName NvName) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_ReadPublic()</c>: a loaded object's public area, Name, and Qualified Name
@@ -437,7 +437,7 @@ public sealed record TpmReadPublicResponse(
     TpmRcConstants ResponseCode,
     Tpm2bPublic OutPublic,
     Tpm2bName Name,
-    Tpm2bName QualifiedName): TpmResponseIntent(ResponseCode);
+    Tpm2bName QualifiedName) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to a session-authorized NV command (<c>TPM2_NV_Read()</c>, <c>TPM2_NV_Write()</c>,
@@ -471,7 +471,7 @@ public sealed record TpmNvSessionResponse(
     TpmParameterArea ParameterArea,
     Tpm2bNonce NonceTpm,
     TpmaSession SessionAttributes,
-    Tpm2bAuth Hmac): TpmResponseIntent(ResponseCode);
+    Tpm2bAuth Hmac) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to an authValue rotation — <c>TPM2_NV_ChangeAuth()</c> (TPM 2.0 Library Part 3,
@@ -493,7 +493,7 @@ public sealed record TpmNvSessionResponse(
 /// <param name="Entries">Every session's framed response entry, in command-session order.</param>
 public sealed record TpmNvChangeAuthResponse(
     TpmRcConstants ResponseCode,
-    ImmutableArray<TpmNvChangeAuthFramedSessionEntry> Entries): TpmResponseIntent(ResponseCode);
+    ImmutableArray<TpmNvChangeAuthFramedSessionEntry> Entries) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_Certify()</c>: the signed attestation as a <c>TPM2B_ATTEST</c> followed by
@@ -509,7 +509,7 @@ public sealed record TpmNvChangeAuthResponse(
 public sealed record TpmCertifyResponse(
     TpmRcConstants ResponseCode,
     Tpm2bAttest CertifyInfo,
-    TpmtSignature Signature): TpmResponseIntent(ResponseCode);
+    TpmtSignature Signature) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_CertifyCreation()</c>: the signed attestation as a <c>TPM2B_ATTEST</c>
@@ -526,7 +526,7 @@ public sealed record TpmCertifyResponse(
 public sealed record TpmCertifyCreationResponse(
     TpmRcConstants ResponseCode,
     Tpm2bAttest CertifyInfo,
-    TpmtSignature Signature): TpmResponseIntent(ResponseCode);
+    TpmtSignature Signature) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_GetTime()</c>: the signed attestation as a <c>TPM2B_ATTEST</c> followed by
@@ -543,7 +543,7 @@ public sealed record TpmCertifyCreationResponse(
 public sealed record TpmGetTimeResponse(
     TpmRcConstants ResponseCode,
     Tpm2bAttest TimeInfo,
-    TpmtSignature Signature): TpmResponseIntent(ResponseCode);
+    TpmtSignature Signature) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_GetSessionAuditDigest()</c>: the signed attestation as a
@@ -561,7 +561,7 @@ public sealed record TpmGetTimeResponse(
 public sealed record TpmGetSessionAuditDigestResponse(
     TpmRcConstants ResponseCode,
     Tpm2bAttest AuditInfo,
-    TpmtSignature Signature): TpmResponseIntent(ResponseCode);
+    TpmtSignature Signature) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_ReadClock()</c>: the current <c>TPMS_TIME_INFO</c>, uncertified and
@@ -572,7 +572,7 @@ public sealed record TpmGetSessionAuditDigestResponse(
 /// </remarks>
 /// <param name="ResponseCode">The command response code (success).</param>
 /// <param name="CurrentTime">The current Time/Clock/resetCount/restartCount/Safe snapshot.</param>
-public sealed record TpmReadClockResponse(TpmRcConstants ResponseCode, TpmsTimeInfo CurrentTime): TpmResponseIntent(ResponseCode);
+public sealed record TpmReadClockResponse(TpmRcConstants ResponseCode, TpmsTimeInfo CurrentTime) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_NV_Certify()</c>: the signed attestation as a <c>TPM2B_ATTEST</c> followed
@@ -589,7 +589,7 @@ public sealed record TpmReadClockResponse(TpmRcConstants ResponseCode, TpmsTimeI
 public sealed record TpmNvCertifyResponse(
     TpmRcConstants ResponseCode,
     Tpm2bAttest CertifyInfo,
-    TpmtSignature Signature): TpmResponseIntent(ResponseCode);
+    TpmtSignature Signature) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to a command whose authorization area carried at least one real session and whose
@@ -635,7 +635,7 @@ public sealed record TpmOverSessionsResponse(
     TpmRcConstants ResponseCode,
     TpmParameterArea ParameterArea,
     ImmutableArray<TpmFramedSessionEntry> Entries,
-    TpmHandle? ResponseHandle = null): TpmResponseIntent(ResponseCode);
+    TpmHandle? ResponseHandle = null) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_VerifySignature()</c>: a <c>TPMT_TK_VERIFIED</c> validation ticket (TPM 2.0
@@ -651,7 +651,7 @@ public sealed record TpmOverSessionsResponse(
 /// <param name="Validation">The <c>TPMT_TK_VERIFIED</c> validation ticket (TPM 2.0 Library Part 2, clause 10.6.5, Table 113); owned, disposed after framing.</param>
 public sealed record TpmVerifySignatureResponse(
     TpmRcConstants ResponseCode,
-    TpmtTkVerified Validation): TpmResponseIntent(ResponseCode);
+    TpmtTkVerified Validation) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_VerifyDigestSignature()</c>: a <c>TPMT_TK_VERIFIED</c> validation ticket
@@ -669,7 +669,7 @@ public sealed record TpmVerifySignatureResponse(
 /// <param name="Validation">The <c>TPMT_TK_VERIFIED</c> validation ticket (TPM 2.0 Library Part 2, clause 10.6.5, Table 113); owned, disposed after framing.</param>
 public sealed record TpmVerifyDigestSignatureResponse(
     TpmRcConstants ResponseCode,
-    TpmtTkVerified Validation): TpmResponseIntent(ResponseCode);
+    TpmtTkVerified Validation) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_Encapsulate()</c>: the DHKEM shared secret followed by its ciphertext
@@ -686,7 +686,7 @@ public sealed record TpmVerifyDigestSignatureResponse(
 public sealed record TpmEncapsulateResponse(
     TpmRcConstants ResponseCode,
     Tpm2bSharedSecret SharedSecret,
-    Tpm2bKemCiphertext Ciphertext): TpmResponseIntent(ResponseCode);
+    Tpm2bKemCiphertext Ciphertext) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_Decapsulate()</c>: the recovered DHKEM shared secret alone (TPM 2.0
@@ -700,7 +700,7 @@ public sealed record TpmEncapsulateResponse(
 /// <param name="SharedSecret">The recovered DHKEM shared secret (<c>TPM2B_SHARED_SECRET</c>); disposed after framing.</param>
 public sealed record TpmDecapsulateResponse(
     TpmRcConstants ResponseCode,
-    Tpm2bSharedSecret SharedSecret): TpmResponseIntent(ResponseCode);
+    Tpm2bSharedSecret SharedSecret) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_PCR_Read()</c>: the PCR update counter, the selection actually read, and
@@ -724,7 +724,7 @@ public sealed record TpmPcrReadResponse(
     TpmRcConstants ResponseCode,
     uint PcrUpdateCounter,
     TpmlPcrSelection PcrSelection,
-    ImmutableArray<ReadOnlyMemory<byte>> PcrValues): TpmResponseIntent(ResponseCode);
+    ImmutableArray<ReadOnlyMemory<byte>> PcrValues) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_PCR_Event()</c> and <c>TPM2_EventSequenceComplete()</c>: the tagged
@@ -738,7 +738,7 @@ public sealed record TpmPcrReadResponse(
 /// </remarks>
 /// <param name="ResponseCode">The command response code (success).</param>
 /// <param name="Digests">The tagged digests (<c>digests</c> / <c>results</c>, <c>TPML_DIGEST_VALUES</c>, TPM 2.0 Library Part 2, clause 10.8.6, Table 127); owned, disposed after framing.</param>
-public sealed record TpmDigestValuesResponse(TpmRcConstants ResponseCode, TpmlDigestValues Digests): TpmResponseIntent(ResponseCode);
+public sealed record TpmDigestValuesResponse(TpmRcConstants ResponseCode, TpmlDigestValues Digests) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_Quote()</c>: the signed attestation as a <c>TPM2B_ATTEST</c> followed by
@@ -754,7 +754,7 @@ public sealed record TpmDigestValuesResponse(TpmRcConstants ResponseCode, TpmlDi
 public sealed record TpmQuoteResponse(
     TpmRcConstants ResponseCode,
     Tpm2bAttest Quoted,
-    TpmtSignature Signature): TpmResponseIntent(ResponseCode);
+    TpmtSignature Signature) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_StartAuthSession()</c>: the started session's handle followed by the TPM's
@@ -773,7 +773,7 @@ public sealed record TpmQuoteResponse(
 public sealed record TpmStartAuthSessionResponse(
     TpmRcConstants ResponseCode,
     TpmiShAuthSession SessionHandle,
-    Tpm2bNonce NonceTpm): TpmResponseIntent(ResponseCode);
+    Tpm2bNonce NonceTpm) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_Unseal()</c> over one or two sessions: a <c>TPM_ST_SESSIONS</c>-tagged
@@ -802,7 +802,7 @@ public sealed record TpmUnsealOverSessionsResponse(
     bool HasPolicyPlaceholder,
     int PolicyNonceLength,
     TpmaSession PolicyAttributes,
-    ImmutableArray<TpmUnsealFramedSessionEntry> Entries): TpmResponseIntent(ResponseCode);
+    ImmutableArray<TpmUnsealFramedSessionEntry> Entries) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_PolicyGetDigest()</c>: the session's current policyDigest as a
@@ -820,7 +820,7 @@ public sealed record TpmUnsealOverSessionsResponse(
 /// <param name="PolicyDigest">The session's accumulated policyDigest (<c>TPM2B_DIGEST</c>, TPM 2.0 Library Part 2, clause 10.3.2, Table 90), borrowed from the session record that owns it.</param>
 public sealed record TpmPolicyGetDigestResponse(
     TpmRcConstants ResponseCode,
-    Tpm2bDigest PolicyDigest): TpmResponseIntent(ResponseCode);
+    Tpm2bDigest PolicyDigest) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_PolicySecret()</c>: the timeout and policy authorization ticket (TPM 2.0
@@ -843,7 +843,7 @@ public sealed record TpmPolicySecretResponse(
     TpmRcConstants ResponseCode,
     Tpm2bTimeout Timeout,
     TpmiRhHierarchy Hierarchy,
-    Tpm2bDigest? TicketDigest): TpmResponseIntent(ResponseCode);
+    Tpm2bDigest? TicketDigest) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_PolicySecret()</c> when <c>authHandle</c> was authorized by an HMAC or
@@ -869,7 +869,7 @@ public sealed record TpmPolicySecretOverSessionResponse(
     TpmParameterArea ParameterArea,
     Tpm2bNonce NonceTpm,
     TpmaSession SessionAttributes,
-    Tpm2bAuth Hmac): TpmResponseIntent(ResponseCode);
+    Tpm2bAuth Hmac) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_PolicySigned()</c>: the timeout and policy authorization ticket (TPM 2.0
@@ -891,7 +891,7 @@ public sealed record TpmPolicySignedResponse(
     TpmRcConstants ResponseCode,
     Tpm2bTimeout Timeout,
     TpmiRhHierarchy Hierarchy,
-    Tpm2bDigest? TicketDigest): TpmResponseIntent(ResponseCode);
+    Tpm2bDigest? TicketDigest) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_MakeCredential()</c>: the integrity-protected, encrypted credential blob
@@ -909,7 +909,7 @@ public sealed record TpmPolicySignedResponse(
 public sealed record TpmMakeCredentialResponse(
     TpmRcConstants ResponseCode,
     Tpm2bIdObject CredentialBlob,
-    Tpm2bEncryptedSecret Secret): TpmResponseIntent(ResponseCode);
+    Tpm2bEncryptedSecret Secret) : TpmResponseIntent(ResponseCode);
 
 /// <summary>
 /// The successful response to <c>TPM2_ActivateCredential()</c>: a single <c>TPM2B_DIGEST</c> <c>certInfo</c> — the
@@ -926,4 +926,4 @@ public sealed record TpmMakeCredentialResponse(
 /// <param name="CertInfo">The recovered credential secret as the <c>TPM2B_DIGEST</c> Table 27 gives <c>certInfo</c>; owned, disposed after framing.</param>
 public sealed record TpmActivateCredentialResponse(
     TpmRcConstants ResponseCode,
-    Tpm2bDigest CertInfo): TpmResponseIntent(ResponseCode);
+    Tpm2bDigest CertInfo) : TpmResponseIntent(ResponseCode);

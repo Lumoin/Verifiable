@@ -17,7 +17,7 @@ namespace Verifiable.Json.Converters;
 /// <see cref="DidResolutionResult.DocumentUrl"/> are NOT W3C envelope members and are not emitted.
 /// </para>
 /// </remarks>
-public class DidResolutionResultConverter: JsonConverter<DidResolutionResult>
+public class DidResolutionResultConverter : JsonConverter<DidResolutionResult>
 {
     /// <inheritdoc />
     public override bool CanConvert(Type typeToConvert)

@@ -1665,7 +1665,7 @@ internal sealed class CBAdESLifecycleFlowTests
     /// <summary>The minted Root CA and Time-Stamping Authority nodes for one Time-Stamping Authority scenario, disposed together.</summary>
     /// <param name="Root">The self-signed Root CA node.</param>
     /// <param name="Authority">The Time-Stamping Authority node issued from <paramref name="Root"/>.</param>
-    private sealed record TsaScenario(X509ChainTestRingNode Root, X509ChainTestRingNode Authority): IDisposable
+    private sealed record TsaScenario(X509ChainTestRingNode Root, X509ChainTestRingNode Authority) : IDisposable
     {
         /// <summary>Disposes <see cref="Authority"/> then <see cref="Root"/>.</summary>
         public void Dispose()

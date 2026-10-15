@@ -32,7 +32,7 @@ namespace Verifiable.OAuth.Server;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("AuthorizationServerIntegration Validated={IsValidated}")]
-public sealed class AuthorizationServerIntegration: ServerIntegration
+public sealed class AuthorizationServerIntegration : ServerIntegration
 {
     /// <summary>Preserves RFC 7592 section 2.1 authentication refusal at the configured management URI when its client is absent.</summary>
     /// <param name="tenantId">The resolved tenant whose record is absent.</param>
@@ -3388,7 +3388,7 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
 
 
     /// <summary>The copied subscription membership shared by this stream's integration views.</summary>
-    private sealed class EventSubject: IObservable<ClientRegistrationEvent>
+    private sealed class EventSubject : IObservable<ClientRegistrationEvent>
     {
         /// <summary>A field enables volatile publication of immutable membership arrays across emitters.</summary>
         private volatile Subscription[] subscriptions = [];
@@ -3474,7 +3474,7 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
 
 
         /// <summary>The unique identity of one subscription, independent of observer equality.</summary>
-        private sealed class Subscription(EventSubject subject, IObserver<ClientRegistrationEvent> observer): IDisposable
+        private sealed class Subscription(EventSubject subject, IObserver<ClientRegistrationEvent> observer) : IDisposable
         {
             /// <summary>The observer captured by this subscription.</summary>
             public IObserver<ClientRegistrationEvent> Observer { get; } = observer;

@@ -30,7 +30,7 @@ public readonly record struct DirectoryNameAttribute(string AttributeTypeOid, st
 /// into a <see cref="CertificateMintRequest"/> and the mint call has returned.
 /// </remarks>
 [DebuggerDisplay("CertificateExtensionContent: {ExtensionOid}, critical={IsCritical}, {Value.Length} octets")]
-public sealed class CertificateExtensionContent: IDisposable
+public sealed class CertificateExtensionContent : IDisposable
 {
     /// <summary>Creates an extension content carrier, taking ownership of <paramref name="value"/>.</summary>
     /// <param name="extensionOid">The extension identifier (<c>extnID</c>).</param>

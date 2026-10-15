@@ -28,7 +28,7 @@ namespace Verifiable.OAuth.AuthCode.Server.States;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("ServerRefreshTokenIssued ClientId={ClientId,nq} IssuedAt={IssuedAt} Bound={Confirmation is not null}")]
-public sealed record ServerRefreshTokenIssuedState: FlowState
+public sealed record ServerRefreshTokenIssuedState : FlowState
 {
     /// <summary>
     /// The flow identifier naming the grant this refresh token belongs to — the code flow's own

@@ -82,7 +82,7 @@ public sealed record AsicEvidenceRecordFile
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class AsicContainerFacts: IDisposable
+public sealed class AsicContainerFacts : IDisposable
 {
     /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
     private bool disposed;
@@ -156,7 +156,7 @@ public sealed class AsicContainerFacts: IDisposable
 /// nothing about why the archive was refused is lost on the way through.
 /// </remarks>
 [DebuggerDisplay("AsicContainerReadResult: {Status}")]
-public sealed class AsicContainerReadResult: IDisposable
+public sealed class AsicContainerReadResult : IDisposable
 {
     /// <summary>Whether the archive was read, and if not why (<see cref="AsicZipReadStatus.Read"/> is the only success).</summary>
     public required AsicZipReadStatus Status { get; init; }

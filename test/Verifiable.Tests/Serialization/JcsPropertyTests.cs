@@ -10,7 +10,7 @@ namespace Verifiable.Tests.Serialization;
 
 
 [JsonSerializable(typeof(decimal))]
-internal partial class JcsPropertyTestsJsonContext: JsonSerializerContext
+internal partial class JcsPropertyTestsJsonContext : JsonSerializerContext
 {
 }
 

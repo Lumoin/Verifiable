@@ -71,7 +71,7 @@ public abstract record DiscoveryField(string Name);
 /// <param name="Name">The JSON property name.</param>
 /// <param name="Value">The JSON property value, written as a JSON string.</param>
 [DebuggerDisplay("DiscoveryStringField {Name,nq} = {Value,nq}")]
-public sealed record DiscoveryStringField(string Name, string Value): DiscoveryField(Name);
+public sealed record DiscoveryStringField(string Name, string Value) : DiscoveryField(Name);
 
 
 /// <summary>
@@ -82,7 +82,7 @@ public sealed record DiscoveryStringField(string Name, string Value): DiscoveryF
 /// <param name="Name">The JSON property name.</param>
 /// <param name="Value">The JSON property value, written as a JSON boolean.</param>
 [DebuggerDisplay("DiscoveryBooleanField {Name,nq} = {Value}")]
-public sealed record DiscoveryBooleanField(string Name, bool Value): DiscoveryField(Name);
+public sealed record DiscoveryBooleanField(string Name, bool Value) : DiscoveryField(Name);
 
 
 /// <summary>
@@ -100,7 +100,7 @@ public sealed record DiscoveryBooleanField(string Name, bool Value): DiscoveryFi
 /// <param name="Name">The JSON property name.</param>
 /// <param name="Value">The JSON property value, written as a JSON integer.</param>
 [DebuggerDisplay("DiscoveryNumberField {Name,nq} = {Value}")]
-public sealed record DiscoveryNumberField(string Name, long Value): DiscoveryField(Name);
+public sealed record DiscoveryNumberField(string Name, long Value) : DiscoveryField(Name);
 
 
 /// <summary>
@@ -114,4 +114,4 @@ public sealed record DiscoveryNumberField(string Name, long Value): DiscoveryFie
 [DebuggerDisplay("DiscoveryStringArrayField {Name,nq} = [{Values.Count}]")]
 public sealed record DiscoveryStringArrayField(
     string Name,
-    IReadOnlyList<string> Values): DiscoveryField(Name);
+    IReadOnlyList<string> Values) : DiscoveryField(Name);

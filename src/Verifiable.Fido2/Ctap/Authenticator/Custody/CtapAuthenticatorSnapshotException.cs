@@ -12,7 +12,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 /// finer-grained hierarchy, since every caller's correct reaction is identical: discard the snapshot,
 /// discard any state built from it, and treat the authenticator as unable to rehydrate.
 /// </remarks>
-public sealed class CtapAuthenticatorSnapshotException: Exception
+public sealed class CtapAuthenticatorSnapshotException : Exception
 {
     /// <summary>
     /// Initializes a new instance with no message.

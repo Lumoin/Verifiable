@@ -97,7 +97,7 @@ public abstract record JAdESCertificateChoice
 /// <see cref="AdESPkiObject.Encoding"/>, DER is the default per clause 5.4.2 (JA-5.4.2-06).
 /// </param>
 [DebuggerDisplay("JAdESX509Certificate({Certificate.Val.Length} bytes)")]
-public sealed record JAdESX509Certificate(AdESPkiObject Certificate): JAdESCertificateChoice;
+public sealed record JAdESX509Certificate(AdESPkiObject Certificate) : JAdESCertificateChoice;
 
 
 /// <summary>
@@ -110,7 +110,7 @@ public sealed record JAdESX509Certificate(AdESPkiObject Certificate): JAdESCerti
 /// <see cref="AdESPkiObject.SpecRef"/> identify the format.
 /// </param>
 [DebuggerDisplay("JAdESOtherCertificate({Certificate.Val.Length} bytes)")]
-public sealed record JAdESOtherCertificate(AdESPkiObject Certificate): JAdESCertificateChoice;
+public sealed record JAdESOtherCertificate(AdESPkiObject Certificate) : JAdESCertificateChoice;
 
 
 /// <summary>

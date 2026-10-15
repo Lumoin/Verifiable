@@ -65,7 +65,7 @@ namespace Verifiable.Server.Pipeline;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("EndpointChain Count={Count}")]
-public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
+public sealed class EndpointChain : IReadOnlyList<ServerEndpoint>
 {
     private ServerEndpoint[] Endpoints { get; }
 

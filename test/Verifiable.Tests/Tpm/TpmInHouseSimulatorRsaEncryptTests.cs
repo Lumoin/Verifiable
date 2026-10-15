@@ -1572,7 +1572,7 @@ internal sealed class TpmInHouseSimulatorRsaEncryptTests
     }
 
     /// <summary>A framework-minted RSA-2048 key pair, retained off-TPM as the independent decryption oracle.</summary>
-    private sealed class RsaKeyMaterial: IDisposable
+    private sealed class RsaKeyMaterial : IDisposable
     {
         /// <summary>Gets the framework key, the off-TPM decryption oracle.</summary>
         public RSA Key { get; }

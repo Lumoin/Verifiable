@@ -60,7 +60,7 @@ public enum TimestampAcquisitionFailureKind
 /// <see cref="SignatureValidationConclusion"/>, which is purpose-built for evaluating already-attached material
 /// against ETSI EN 319 102-1 clause 5 rather than for gating what gets attached in the first place).
 /// </summary>
-public sealed class TimestampAcquisitionException: Exception
+public sealed class TimestampAcquisitionException : Exception
 {
     /// <summary>Gets the classification of why acquisition failed.</summary>
     public TimestampAcquisitionFailureKind FailureKind { get; }
@@ -151,7 +151,7 @@ public sealed class TimestampAcquisitionException: Exception
 /// an unsigned attribute (<see cref="CmsAttribute"/> plus <see cref="CmsSignedDataAugmentation.AppendUnsignedAttributes"/>);
 /// nothing in this type re-parses the token.
 /// </summary>
-public sealed class AcquiredTimestampToken: IDisposable
+public sealed class AcquiredTimestampToken : IDisposable
 {
     private bool disposed;
 

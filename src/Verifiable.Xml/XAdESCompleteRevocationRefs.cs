@@ -34,7 +34,7 @@ public enum XAdESResponderIdKind
 /// Carries no owned pooled content of its own — every field is a span or a self-contained
 /// <see cref="XAdESDateTime"/> — so no <see cref="IDisposable"/> surface is needed.
 /// </remarks>
-public readonly struct XAdESCrlIdentifier: IEquatable<XAdESCrlIdentifier>
+public readonly struct XAdESCrlIdentifier : IEquatable<XAdESCrlIdentifier>
 {
     /// <summary>The table the value's spans read from.</summary>
     internal XmlNodeTable Table { get; }
@@ -250,7 +250,7 @@ public readonly struct XAdESCrlIdentifier: IEquatable<XAdESCrlIdentifier>
 /// so this type stays a value struct with no <see cref="IDisposable"/> surface of its own; its owning
 /// <see cref="XAdESCompleteRevocationRefs"/> disposes the decoded octets.
 /// </remarks>
-public readonly struct XAdESOcspIdentifier: IEquatable<XAdESOcspIdentifier>
+public readonly struct XAdESOcspIdentifier : IEquatable<XAdESOcspIdentifier>
 {
     /// <summary>The table the value's spans read from.</summary>
     internal XmlNodeTable Table { get; }
@@ -492,7 +492,7 @@ public readonly struct XAdESOcspIdentifier: IEquatable<XAdESOcspIdentifier>
 /// via the caller-supplied custody list the same way <see cref="XAdESCertIdV2"/>'s <c>CertDigest</c> is — no
 /// <see cref="IDisposable"/> surface of its own.
 /// </remarks>
-public readonly struct XAdESCrlRef: IEquatable<XAdESCrlRef>
+public readonly struct XAdESCrlRef : IEquatable<XAdESCrlRef>
 {
     /// <summary>The table the value's spans read from.</summary>
     internal XmlNodeTable Table { get; }
@@ -631,7 +631,7 @@ public readonly struct XAdESCrlRef: IEquatable<XAdESCrlRef>
 /// <see cref="DigestAlgAndValue"/>'s own <c>DigestValueOctets</c>, both held via the caller-supplied custody
 /// list — no <see cref="IDisposable"/> surface of its own.
 /// </remarks>
-public readonly struct XAdESOcspRef: IEquatable<XAdESOcspRef>
+public readonly struct XAdESOcspRef : IEquatable<XAdESOcspRef>
 {
     /// <summary>The table the value's spans read from.</summary>
     internal XmlNodeTable Table { get; }
@@ -809,7 +809,7 @@ public readonly struct XAdESOcspRef: IEquatable<XAdESOcspRef>
 /// across every decoded field.
 /// </para>
 /// </remarks>
-public sealed class XAdESCompleteRevocationRefs: IDisposable
+public sealed class XAdESCompleteRevocationRefs : IDisposable
 {
     /// <summary>
     /// The maximum number of <c>CRLRef</c>/<c>OCSPRef</c> entries <see cref="TryReadNonEmptyCrlRefList"/>/

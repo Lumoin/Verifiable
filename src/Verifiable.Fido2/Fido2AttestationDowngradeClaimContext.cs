@@ -13,4 +13,4 @@ namespace Verifiable.Fido2;
 /// </summary>
 /// <param name="Downgrade">The original attestation format and trust-path shortfall that was downgraded.</param>
 [DebuggerDisplay("Fido2AttestationDowngradeClaimContext({Downgrade,nq})")]
-public sealed record Fido2AttestationDowngradeClaimContext(Fido2AttestationDowngrade Downgrade): ClaimContext;
+public sealed record Fido2AttestationDowngradeClaimContext(Fido2AttestationDowngrade Downgrade) : ClaimContext;

@@ -108,7 +108,7 @@ namespace Verifiable.Core.Did.Methods.Web
     /// var didDocument = await builder.BuildAsync(keyInputs, "example.com", cancellationToken: ct);
     /// </code>
     /// </example>
-    public sealed class WebDidBuilder: Builder<DidDocument, WebDidBuildState, WebDidBuilder>
+    public sealed class WebDidBuilder : Builder<DidDocument, WebDidBuildState, WebDidBuilder>
     {
         /// <summary>
         /// Gets or sets the fragment generator used to create fragment identifiers for verification methods.

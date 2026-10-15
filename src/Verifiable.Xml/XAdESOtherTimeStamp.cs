@@ -24,7 +24,7 @@ namespace Verifiable.Xml;
 /// to prove the grammar shape against the schema and to let a future property that DOES instantiate it read
 /// structurally without further reader work, should one ever be found.
 /// </remarks>
-public readonly struct XAdESOtherTimeStamp: IEquatable<XAdESOtherTimeStamp>
+public readonly struct XAdESOtherTimeStamp : IEquatable<XAdESOtherTimeStamp>
 {
     /// <summary>The table the value's spans read from.</summary>
     internal XmlNodeTable Table { get; }

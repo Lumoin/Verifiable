@@ -28,7 +28,7 @@ public enum XAdESCertifiedRoleKind
 /// OtherAttributeCertificate element"), the same two-arm-entry shape <see cref="XAdESTimeStampEntry"/> takes
 /// for <c>GenericTimeStampType</c>'s own choice.
 /// </summary>
-public readonly struct XAdESCertifiedRole: IEquatable<XAdESCertifiedRole>
+public readonly struct XAdESCertifiedRole : IEquatable<XAdESCertifiedRole>
 {
     /// <summary>Which arm of the choice this entry holds.</summary>
     public XAdESCertifiedRoleKind Kind { get; }
@@ -109,7 +109,7 @@ public readonly struct XAdESCertifiedRole: IEquatable<XAdESCertifiedRole>
 /// is itself <see cref="IDisposable"/>, owning one flat custody list across every <see cref="CertifiedRoles"/>
 /// entry's decoded fields.
 /// </remarks>
-public sealed class XAdESSignerRoleV2: IDisposable
+public sealed class XAdESSignerRoleV2 : IDisposable
 {
     /// <summary>The document the property was read from. Not owned; the caller disposes it separately.</summary>
     public XmlNodeTable Table { get; }

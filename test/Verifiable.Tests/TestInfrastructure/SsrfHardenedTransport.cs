@@ -11,7 +11,7 @@ internal delegate ValueTask<IReadOnlyList<IPAddress>> HostResolverDelegate(strin
 
 
 /// <summary>Thrown when a host resolves (or is a literal) to an address the policy forbids.</summary>
-internal sealed class SsrfBlockedException: Exception
+internal sealed class SsrfBlockedException : Exception
 {
     public SsrfBlockedException() { }
 

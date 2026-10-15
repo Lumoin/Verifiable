@@ -20,7 +20,7 @@ namespace Verifiable.Apdu;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class ExternalAuthenticateResponse: SensitiveMemory, IApduWireType
+public sealed class ExternalAuthenticateResponse : SensitiveMemory, IApduWireType
 {
     internal ExternalAuthenticateResponse(IMemoryOwner<byte> storage, int length)
         : base(storage, ApduTags.Response)

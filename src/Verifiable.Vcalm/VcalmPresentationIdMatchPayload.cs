@@ -12,4 +12,4 @@ namespace Verifiable.Vcalm;
 /// id-bearing routes never cross-bind.
 /// </summary>
 [DebuggerDisplay("VcalmPresentationIdMatchPayload PresentationId={PresentationId}")]
-public sealed record VcalmPresentationIdMatchPayload(string PresentationId): MatchPayload;
+public sealed record VcalmPresentationIdMatchPayload(string PresentationId) : MatchPayload;

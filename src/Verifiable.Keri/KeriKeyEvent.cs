@@ -46,7 +46,7 @@ public record KeriInceptionEvent(
     IReadOnlyList<string> NextKeyDigests,
     string BackerThreshold,
     IReadOnlyList<string> Backers,
-    IReadOnlyList<string> ConfigurationTraits): KeriKeyEvent(Said, Prefix, SequenceNumber);
+    IReadOnlyList<string> ConfigurationTraits) : KeriKeyEvent(Said, Prefix, SequenceNumber);
 
 /// <summary>
 /// An interaction (<c>ixn</c>) event: a non-establishment event that seals data to the current key state without
@@ -65,7 +65,7 @@ public sealed record KeriInteractionEvent(
     string Said,
     string Prefix,
     long SequenceNumber,
-    string PriorSaid): KeriKeyEvent(Said, Prefix, SequenceNumber);
+    string PriorSaid) : KeriKeyEvent(Said, Prefix, SequenceNumber);
 
 /// <summary>
 /// A rotation (<c>rot</c>) event: an establishment event that revokes the current signing keys and replaces them
@@ -102,7 +102,7 @@ public record KeriRotationEvent(
     string BackerThreshold,
     IReadOnlyList<string> BackersToRemove,
     IReadOnlyList<string> BackersToAdd,
-    IReadOnlyList<string> ConfigurationTraits): KeriKeyEvent(Said, Prefix, SequenceNumber);
+    IReadOnlyList<string> ConfigurationTraits) : KeriKeyEvent(Said, Prefix, SequenceNumber);
 
 /// <summary>
 /// A delegated inception (<c>dip</c>) event: the genesis event of a delegated AID. It establishes the delegated
@@ -139,7 +139,7 @@ public sealed record KeriDelegatedInceptionEvent(
     string BackerThreshold,
     IReadOnlyList<string> Backers,
     IReadOnlyList<string> ConfigurationTraits,
-    string DelegatorPrefix): KeriInceptionEvent(
+    string DelegatorPrefix) : KeriInceptionEvent(
         Said, Prefix, SequenceNumber, SigningThreshold, SigningKeys, NextThreshold, NextKeyDigests, BackerThreshold, Backers, ConfigurationTraits);
 
 /// <summary>
@@ -176,5 +176,5 @@ public sealed record KeriDelegatedRotationEvent(
     string BackerThreshold,
     IReadOnlyList<string> BackersToRemove,
     IReadOnlyList<string> BackersToAdd,
-    IReadOnlyList<string> ConfigurationTraits): KeriRotationEvent(
+    IReadOnlyList<string> ConfigurationTraits) : KeriRotationEvent(
         Said, Prefix, SequenceNumber, PriorSaid, SigningThreshold, SigningKeys, NextThreshold, NextKeyDigests, BackerThreshold, BackersToRemove, BackersToAdd, ConfigurationTraits);

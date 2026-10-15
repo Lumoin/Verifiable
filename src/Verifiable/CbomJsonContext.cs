@@ -18,6 +18,6 @@ namespace Verifiable;
 /// </remarks>
 [JsonSourceGenerationOptions(WriteIndented = true, PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(CbomDocument))]
-internal partial class CbomJsonContext: JsonSerializerContext
+internal partial class CbomJsonContext : JsonSerializerContext
 {
 }

@@ -127,7 +127,7 @@ public enum JAdESAugmentationFailureKind
 /// <see cref="Verifiable.JCose.CBAdESAugmentationException"/>'s shape exactly.
 /// </remarks>
 [DebuggerDisplay("JAdESAugmentationException({FailureKind}): {Message}")]
-public sealed class JAdESAugmentationException: Exception
+public sealed class JAdESAugmentationException : Exception
 {
     /// <summary>Gets what could not be done.</summary>
     public JAdESAugmentationFailureKind FailureKind { get; }

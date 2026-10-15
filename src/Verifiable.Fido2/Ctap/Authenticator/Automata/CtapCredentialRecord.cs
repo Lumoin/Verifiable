@@ -137,7 +137,7 @@ public sealed record CtapCredentialRecord(
     IMemoryOwner<byte> CredRandomWithUV,
     IMemoryOwner<byte> CredRandomWithoutUV,
     IMemoryOwner<byte>? LargeBlobKey = null,
-    PooledMemory? CredentialKeyCustodyExport = null): IDisposable
+    PooledMemory? CredentialKeyCustodyExport = null) : IDisposable
 {
     /// <summary>
     /// Releases the credential identifier, user handle, private key, both CredRandom values, and (when

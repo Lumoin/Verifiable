@@ -22,7 +22,7 @@ namespace Verifiable.Fido2;
 /// by reference, since a memory pool has no meaningful value identity.
 /// </para>
 /// </remarks>
-public readonly struct Fido2RegistrationOptionsBuildState: IEquatable<Fido2RegistrationOptionsBuildState>, IBuilderState
+public readonly struct Fido2RegistrationOptionsBuildState : IEquatable<Fido2RegistrationOptionsBuildState>, IBuilderState
 {
     /// <summary>The relying party identifier. See <see cref="PublicKeyCredentialRpEntity.Id"/>.</summary>
     public required string RpId { get; init; }

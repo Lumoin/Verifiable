@@ -54,7 +54,7 @@ public readonly record struct SignatureFormatIdentifier(string Value)
 /// </remarks>
 /// <param name="content">The owned content bytes.</param>
 [DebuggerDisplay("SignedContentMemory({Length} bytes)")]
-public sealed class SignedContentMemory(IMemoryOwner<byte> content): SensitiveMemory(content, ContentTag)
+public sealed class SignedContentMemory(IMemoryOwner<byte> content) : SensitiveMemory(content, ContentTag)
 {
     /// <summary>
     /// The tag every instance carries for CBOM and OpenTelemetry provenance: octets under a signature, in the
@@ -356,7 +356,7 @@ public enum SignedContentPlacement
 /// </para>
 /// </remarks>
 [DebuggerDisplay("SignatureFacts: {Status}, {Format.Value}, {Attributes.Count} attributes")]
-public sealed class SignatureFacts: IDisposable
+public sealed class SignatureFacts : IDisposable
 {
     /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
     private bool disposed;

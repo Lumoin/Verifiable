@@ -42,4 +42,4 @@ public sealed record ProcessVpTokenAction(
     string VpTokenJson,
     TransactionNonce Nonce,
     IReadOnlyList<CredentialQuery> CredentialQueries,
-    IReadOnlyList<string>? TransactionData = null): OAuthAction;
+    IReadOnlyList<string>? TransactionData = null) : OAuthAction;

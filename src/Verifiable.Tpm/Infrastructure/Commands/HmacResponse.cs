@@ -10,7 +10,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <see cref="OutHmac"/> is owned by this response and released by <see cref="Dispose"/>.
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class HmacResponse: IDisposable, ITpmWireType
+public sealed class HmacResponse : IDisposable, ITpmWireType
 {
     /// <summary>Whether this instance has been disposed.</summary>
     private bool Disposed { get; set; }

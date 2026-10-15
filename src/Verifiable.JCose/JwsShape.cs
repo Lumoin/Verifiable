@@ -37,4 +37,4 @@ namespace Verifiable.JCose;
 /// signature bytes, and payload.
 /// </param>
 [DebuggerDisplay("JwsShape Alg={Message.Signatures[0].ClaimedAlgorithm,nq}")]
-public sealed record JwsShape(UnverifiedJwsMessage Message): JoseTokenShape;
+public sealed record JwsShape(UnverifiedJwsMessage Message) : JoseTokenShape;

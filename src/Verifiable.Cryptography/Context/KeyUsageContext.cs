@@ -65,7 +65,7 @@ namespace Verifiable.Cryptography.Context;
 /// <seealso cref="MaterialSemantics"/>
 /// <seealso cref="Tag"/>
 [DebuggerDisplay("{KeyUsageContextNames.GetName(this),nq}")]
-public readonly struct KeyUsageContext: IEquatable<KeyUsageContext>
+public readonly struct KeyUsageContext : IEquatable<KeyUsageContext>
 {
     /// <summary>
     /// Gets the numeric code for this usage context.

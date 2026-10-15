@@ -41,7 +41,7 @@ public enum XAdESSignaturePolicyStoreChoice
 /// reader implements clause 5.2.10's own syntax only, not that conditioning.
 /// </para>
 /// </remarks>
-public sealed class XAdESSignaturePolicyStore: IDisposable
+public sealed class XAdESSignaturePolicyStore : IDisposable
 {
     /// <summary>The document the property was read from. Not owned; the caller disposes it separately.</summary>
     public XmlNodeTable Table { get; }

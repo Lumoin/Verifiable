@@ -19,7 +19,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class RsaDecryptResponse: ITpmWireType, IDisposable
+public sealed class RsaDecryptResponse : ITpmWireType, IDisposable
 {
     /// <summary>
     /// Whether <see cref="Dispose"/> has run.

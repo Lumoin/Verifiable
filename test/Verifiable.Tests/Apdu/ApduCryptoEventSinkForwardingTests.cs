@@ -200,14 +200,14 @@ internal sealed class ApduCryptoEventSinkForwardingTests
         using ECDsa documentVerifierKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa terminalKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
-        using CardVerifiableCertificate cvca = await CardVerifiableCertificateMinter.MintAsync(
+        using var cvca = await CardVerifiableCertificateMinter.MintAsync(
             cvcaKey, cvcaKey, "UTCVCA00002", "UTCVCA00002", CardVerifiableCertificateMinter.CvcaRole,
             includeDomainParameters: true, effective, expiration, inheritedCurve: null, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
         Tag curve = cvca.PublicKey.EllipticCurvePoint!.Tag;
-        using CardVerifiableCertificate documentVerifier = await CardVerifiableCertificateMinter.MintAsync(
+        using var documentVerifier = await CardVerifiableCertificateMinter.MintAsync(
             cvcaKey, documentVerifierKey, "UTCVCA00002", "UTDVDE00002", CardVerifiableCertificateMinter.DocumentVerifierRole,
             includeDomainParameters: false, effective, expiration, curve, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
-        using CardVerifiableCertificate terminal = await CardVerifiableCertificateMinter.MintAsync(
+        using var terminal = await CardVerifiableCertificateMinter.MintAsync(
             documentVerifierKey, terminalKey, "UTDVDE00002", "UTISDE00002", CardVerifiableCertificateMinter.TerminalRole,
             includeDomainParameters: false, effective, expiration, curve, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
 

@@ -4,7 +4,7 @@ namespace Verifiable.Core.Did.Methods;
 /// The DID AtProto Placeholder method identifier.
 /// </summary>
 /// <remarks>Authoritative definition at <see href="https://atproto.com/specs/did-plc">DID Placeholder (did:plc)</see>.</remarks>
-public record PlaceholderDidMethod: GenericDidMethod
+public record PlaceholderDidMethod : GenericDidMethod
 {
     /// <summary>
     /// Creates a new instance of <see cref="PlaceholderDidMethod"/>.

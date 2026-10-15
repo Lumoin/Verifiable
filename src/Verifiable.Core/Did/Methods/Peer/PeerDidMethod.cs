@@ -21,7 +21,7 @@ namespace Verifiable.Core.Did.Methods.Peer
     /// ledger.
     /// </para>
     /// </remarks>
-    public record PeerDidMethod: GenericDidMethod
+    public record PeerDidMethod : GenericDidMethod
     {
         /// <summary>
         /// The prefix of the <c>did:peer</c> method, including the trailing <c>':'</c>.

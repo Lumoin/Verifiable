@@ -30,7 +30,7 @@ namespace Verifiable.Tpm;
 /// </code>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class TpmResponse: SensitiveMemory
+public sealed class TpmResponse : SensitiveMemory
 {
     /// <summary>
     /// Initializes a new TPM response with the specified storage.

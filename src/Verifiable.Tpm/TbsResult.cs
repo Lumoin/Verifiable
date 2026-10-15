@@ -21,7 +21,7 @@ namespace Verifiable.Tpm;
 /// TBS Return Codes</see> for the complete list.
 /// </para>
 /// </remarks>
-public enum TbsResult: uint
+public enum TbsResult : uint
 {
     /// <summary>
     /// TBS_SUCCESS: The function succeeded.

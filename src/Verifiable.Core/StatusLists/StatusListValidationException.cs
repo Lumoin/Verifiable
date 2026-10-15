@@ -7,7 +7,7 @@ namespace Verifiable.Core.StatusLists;
 /// the Status List Token in the first place flows through the same "no statement about the status can
 /// be made" classification callers already catch this type for.
 /// </summary>
-public class StatusListValidationException: Exception
+public class StatusListValidationException : Exception
 {
     /// <summary>
     /// Creates a new validation exception.

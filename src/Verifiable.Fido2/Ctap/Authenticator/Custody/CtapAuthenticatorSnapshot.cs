@@ -71,7 +71,7 @@ public sealed record CtapAuthenticatorSnapshot(
     bool IsEnterpriseAttestationEnabled,
     PooledMemory SerializedLargeBlobArray,
     ImmutableDictionary<string, CtapCredentialRecord> CredentialsByCredentialId,
-    ImmutableDictionary<string, CtapBioEnrollmentTemplateRecord> BioEnrollmentTemplatesByTemplateId): IDisposable
+    ImmutableDictionary<string, CtapBioEnrollmentTemplateRecord> BioEnrollmentTemplatesByTemplateId) : IDisposable
 {
     /// <summary>
     /// Releases every carrier this snapshot owns: the stored PIN digest (if any), the serialized

@@ -21,7 +21,7 @@ namespace Verifiable.Tpm.Automata;
 /// </remarks>
 /// <param name="Framing">The command code and every companion slot's response-entry material, in command-session order — built exactly as <c>CompleteNoAuthOverSessions</c> builds every other command's framing, over the wrapper's whole authorization area.</param>
 /// <param name="ResponseCarriesHandle">Whether the framed response carries a 4-octet response handle ahead of parameterSize (<c>TPMA_CC.R_HANDLE</c>, TPM 2.0 Library Part 2, clause 8.9, Table 43; TPM 2.0 Library Part 3, clause 4.3) — set for the commands whose response returns a handle (<c>TPM2_HashSequenceStart()</c>, <c>TPM2_SignSequenceStart()</c>, <c>TPM2_VerifySequenceStart()</c>, <c>TPM2_LoadExternal()</c>), clear for every other command the framing serves.</param>
-public sealed record TpmPendingSessionFrame(TpmOverSessionsFraming Framing, bool ResponseCarriesHandle): IDisposable
+public sealed record TpmPendingSessionFrame(TpmOverSessionsFraming Framing, bool ResponseCarriesHandle) : IDisposable
 {
     /// <summary>
     /// Releases every companion slot's caller-nonce carrier (<see cref="TpmResponseSession.NonceCaller"/>) —

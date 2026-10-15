@@ -27,7 +27,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class TpmsCreationInfo: ITpmWireType, IDisposable
+public sealed class TpmsCreationInfo : ITpmWireType, IDisposable
 {
     private bool disposed;
 

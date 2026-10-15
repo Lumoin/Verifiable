@@ -20,7 +20,7 @@ namespace Verifiable.Core.Resolvers;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("Error={Error.Type.AbsoluteUri,nq} ContentType={ContentType,nq}")]
-public sealed class DidResolutionMetadata: IEquatable<DidResolutionMetadata>
+public sealed class DidResolutionMetadata : IEquatable<DidResolutionMetadata>
 {
     /// <summary>
     /// The media type of the returned DID document representation. MUST be an ASCII string

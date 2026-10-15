@@ -25,7 +25,7 @@ namespace Verifiable.Cryptography.Aead;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class SharedSecret: SensitiveMemory, IEquatable<SharedSecret>
+public sealed class SharedSecret : SensitiveMemory, IEquatable<SharedSecret>
 {
     /// <summary>Gets the length of the shared secret in bytes.</summary>
     public int Length => MemoryOwner.Memory.Length;

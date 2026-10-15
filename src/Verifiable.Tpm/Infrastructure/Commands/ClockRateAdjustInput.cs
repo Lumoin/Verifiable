@@ -24,7 +24,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </remarks>
 /// <param name="AuthHandle">The provisioning hierarchy authorizing the adjustment.</param>
 /// <param name="RateAdjust">The requested rate adjustment.</param>
-public readonly record struct ClockRateAdjustInput(TpmRh AuthHandle, TpmClockAdjustConstants RateAdjust): ITpmCommandInput
+public readonly record struct ClockRateAdjustInput(TpmRh AuthHandle, TpmClockAdjustConstants RateAdjust) : ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_ClockRateAdjust;

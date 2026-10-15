@@ -386,7 +386,7 @@ internal static class MetadataBlobTestVectors
 /// A minted MDS root CA plus BLOB-signing leaf certificate (P-256), owning every certificate and
 /// key it carries.
 /// </summary>
-internal sealed class MdsPkiFixture: IDisposable
+internal sealed class MdsPkiFixture : IDisposable
 {
     /// <summary>Initializes a new <see cref="MdsPkiFixture"/>, taking ownership of every certificate and key.</summary>
     public MdsPkiFixture(ECDsa rootKey, X509Certificate2 rootCertificate, ECDsa signingKey, X509Certificate2 signingCertificate)

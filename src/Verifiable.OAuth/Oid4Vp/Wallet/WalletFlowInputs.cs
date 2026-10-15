@@ -18,7 +18,7 @@ namespace Verifiable.OAuth.Oid4Vp.Wallet;
 public sealed record JarReceived(
     Uri RequestUri,
     AuthorizationRequestObject Request,
-    DateTimeOffset FetchedAt): FlowInput;
+    DateTimeOffset FetchedAt) : FlowInput;
 
 
 /// <summary>
@@ -36,7 +36,7 @@ public sealed record JarReceived(
 public sealed record WalletPostSent(
     Uri RequestUri,
     string WalletNonce,
-    DateTimeOffset SentAt): FlowInput;
+    DateTimeOffset SentAt) : FlowInput;
 
 
 /// <summary>
@@ -53,7 +53,7 @@ public sealed record WalletPostSent(
 public sealed record DcqlMatched(
     PreparedDcqlQuery PreparedQuery,
     IReadOnlyDictionary<string, string> MatchedPresentationsByQueryId,
-    DateTimeOffset EvaluatedAt): FlowInput;
+    DateTimeOffset EvaluatedAt) : FlowInput;
 
 
 /// <summary>
@@ -66,7 +66,7 @@ public sealed record DcqlMatched(
 /// <param name="SelectedAt">The UTC instant at which disclosures were selected.</param>
 public sealed record PresentationSelected(
     string VpTokenJson,
-    DateTimeOffset SelectedAt): FlowInput;
+    DateTimeOffset SelectedAt) : FlowInput;
 
 
 /// <summary>
@@ -79,7 +79,7 @@ public sealed record PresentationSelected(
 public sealed record ResponsePostedByWallet(
     Uri ResponseUri,
     string? State,
-    DateTimeOffset SentAt): FlowInput;
+    DateTimeOffset SentAt) : FlowInput;
 
 
 /// <summary>
@@ -104,4 +104,4 @@ public sealed record ResponsePostedByWallet(
 /// </param>
 public sealed record RedirectReceived(
     Uri RedirectUri,
-    DateTimeOffset ReceivedAt): FlowInput;
+    DateTimeOffset ReceivedAt) : FlowInput;

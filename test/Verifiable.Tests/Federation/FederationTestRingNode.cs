@@ -9,7 +9,7 @@ namespace Verifiable.Tests.Federation;
 /// kid, and JWKS-shaped public-key dictionary suitable for inclusion in
 /// an Entity Configuration's <c>jwks</c> claim.
 /// </summary>
-internal sealed class FederationTestRingNode: IDisposable
+internal sealed class FederationTestRingNode : IDisposable
 {
     /// <summary>The node's Entity Identifier (absolute URL).</summary>
     public EntityIdentifier Identifier { get; }

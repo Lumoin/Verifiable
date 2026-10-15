@@ -8,7 +8,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// See <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
 /// Specification</see>, Part 3, clause 16.2 (Table 78).
 /// </remarks>
-public sealed class StirRandomResponse: ITpmWireType
+public sealed class StirRandomResponse : ITpmWireType
 {
     /// <summary>
     /// The shared instance returned for a successful, parameterless response.

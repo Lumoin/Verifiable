@@ -28,7 +28,7 @@ namespace Verifiable.Cryptography
     /// <seealso cref="PublicKeyMemory"/>
     /// <seealso cref="PrivateKey"/>
     /// <seealso cref="CryptoFunctionRegistry{TDiscriminator1, TDiscriminator2}"/>
-    public class PublicKey: SensitiveMemoryKey
+    public class PublicKey : SensitiveMemoryKey
     {
         /// <summary>
         /// The verification delegate that verifies signatures against data using this key.

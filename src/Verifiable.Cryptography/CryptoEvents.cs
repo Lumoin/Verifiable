@@ -96,7 +96,7 @@ public abstract record CryptoEvent
 /// <see cref="Nonce"/>, <see cref="Salt"/>, or other value via its
 /// <see cref="Tag"/>.
 /// </remarks>
-public sealed record EntropyConsumedEvent: CryptoEvent
+public sealed record EntropyConsumedEvent : CryptoEvent
 {
     /// <summary>The source that produced the bytes.</summary>
     public EntropySource Source { get; init; }
@@ -154,7 +154,7 @@ public sealed record EntropyConsumedEvent: CryptoEvent
 /// byte generation. Carries the method, assessor, time window, and optional
 /// evidence reference.
 /// </remarks>
-public sealed record EntropyHealthAssessedEvent: CryptoEvent
+public sealed record EntropyHealthAssessedEvent : CryptoEvent
 {
     /// <summary>The source that was assessed.</summary>
     public EntropySource Source { get; init; }
@@ -192,7 +192,7 @@ public sealed record EntropyHealthAssessedEvent: CryptoEvent
 /// Emitted when key material is generated. Carries algorithm and backend
 /// metadata only — never raw key bytes.
 /// </summary>
-public sealed record KeyMaterialGeneratedEvent: CryptoEvent
+public sealed record KeyMaterialGeneratedEvent : CryptoEvent
 {
     /// <summary>The cryptographic algorithm of the generated material.</summary>
     public CryptoAlgorithm Algorithm { get; init; }
@@ -247,7 +247,7 @@ public sealed record KeyMaterialGeneratedEvent: CryptoEvent
 /// Emitted when a signing operation completes. Carries algorithm and size
 /// metadata only — never the signed data or signature bytes.
 /// </summary>
-public sealed record SignatureProducedEvent: CryptoEvent
+public sealed record SignatureProducedEvent : CryptoEvent
 {
     /// <summary>The algorithm used to produce the signature.</summary>
     public CryptoAlgorithm Algorithm { get; init; }
@@ -299,7 +299,7 @@ public sealed record SignatureProducedEvent: CryptoEvent
 /// A <see cref="VerificationOutcome.Invalid"/> result in a regulated flow
 /// is a security event and should be treated accordingly by the subscriber.
 /// </remarks>
-public sealed record VerificationCompletedEvent: CryptoEvent
+public sealed record VerificationCompletedEvent : CryptoEvent
 {
     /// <summary>The algorithm used for verification.</summary>
     public CryptoAlgorithm Algorithm { get; init; }
@@ -347,7 +347,7 @@ public sealed record VerificationCompletedEvent: CryptoEvent
 /// <summary>
 /// Emitted when a digest (hash) is computed.
 /// </summary>
-public sealed record DigestComputedEvent: CryptoEvent
+public sealed record DigestComputedEvent : CryptoEvent
 {
     /// <summary>The algorithm used (e.g. SHA-256).</summary>
     public string AlgorithmName { get; init; } = string.Empty;
@@ -395,7 +395,7 @@ public sealed record DigestComputedEvent: CryptoEvent
 /// <summary>
 /// Emitted when an HMAC is computed.
 /// </summary>
-public sealed record HmacComputedEvent: CryptoEvent
+public sealed record HmacComputedEvent : CryptoEvent
 {
     /// <summary>The hash algorithm backing the HMAC (e.g. SHA-256).</summary>
     public string AlgorithmName { get; init; } = string.Empty;
@@ -442,7 +442,7 @@ public sealed record HmacComputedEvent: CryptoEvent
 /// An <see cref="VerificationOutcome.Invalid"/> result in a regulated flow is a
 /// security event and should be treated accordingly by the subscriber.
 /// </remarks>
-public sealed record HmacVerifiedEvent: CryptoEvent
+public sealed record HmacVerifiedEvent : CryptoEvent
 {
     /// <summary>The hash algorithm backing the HMAC.</summary>
     public string AlgorithmName { get; init; } = string.Empty;
@@ -487,7 +487,7 @@ public sealed record HmacVerifiedEvent: CryptoEvent
 /// operation completes. Carries algorithm and size metadata only — never the plaintext,
 /// ciphertext, or key bytes.
 /// </summary>
-public sealed record SymmetricCipherPerformedEvent: CryptoEvent
+public sealed record SymmetricCipherPerformedEvent : CryptoEvent
 {
     /// <summary>The block cipher used (e.g. Triple-DES, AES).</summary>
     public CryptoAlgorithm Algorithm { get; init; }
@@ -540,7 +540,7 @@ public sealed record SymmetricCipherPerformedEvent: CryptoEvent
 /// <summary>
 /// Emitted when a block-cipher MAC (CMAC, ISO/IEC 9797-1 Algorithm 3) is computed.
 /// </summary>
-public sealed record BlockCipherMacComputedEvent: CryptoEvent
+public sealed record BlockCipherMacComputedEvent : CryptoEvent
 {
     /// <summary>The block cipher backing the MAC (e.g. Triple-DES, AES).</summary>
     public CryptoAlgorithm Algorithm { get; init; }
@@ -593,7 +593,7 @@ public sealed record BlockCipherMacComputedEvent: CryptoEvent
 /// event and should be treated accordingly by the subscriber. A failed Secure Messaging
 /// MAC, for instance, signals a tampered or desynchronized session.
 /// </remarks>
-public sealed record BlockCipherMacVerifiedEvent: CryptoEvent
+public sealed record BlockCipherMacVerifiedEvent : CryptoEvent
 {
     /// <summary>The block cipher backing the MAC.</summary>
     public CryptoAlgorithm Algorithm { get; init; }

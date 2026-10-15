@@ -23,7 +23,7 @@ namespace Verifiable.OAuth.Client;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{GrantTypeNames.GetName(this),nq}")]
-public readonly struct GrantType: IEquatable<GrantType>
+public readonly struct GrantType : IEquatable<GrantType>
 {
     /// <summary>Gets the numeric code identifying this grant type.</summary>
     public int Code { get; }

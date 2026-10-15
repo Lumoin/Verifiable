@@ -25,7 +25,7 @@ namespace Verifiable.Cryptography;
 /// so two independently-established bindings for the same identity are correctly NOT equal.
 /// </para>
 /// </remarks>
-public sealed class AssertedProvenance: VerificationProvenance, IEquatable<AssertedProvenance>
+public sealed class AssertedProvenance : VerificationProvenance, IEquatable<AssertedProvenance>
 {
     private AssertedProvenance(KeyId? identity) : base(identity)
     {

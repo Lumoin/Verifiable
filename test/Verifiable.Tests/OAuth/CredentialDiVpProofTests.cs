@@ -974,7 +974,7 @@ internal sealed class CredentialDiVpProofTests
     /// A canned single-hop transport that serves one did.json at one URL and refuses any other target,
     /// so the test exercises the resolve → guarded fetch → parse path with no real network.
     /// </summary>
-    private sealed class CannedDidJsonHandler(string documentUrl, string didJson): HttpMessageHandler
+    private sealed class CannedDidJsonHandler(string documentUrl, string didJson) : HttpMessageHandler
     {
         /// <summary>The one absolute URL this handler serves the canned document at.</summary>
         private string DocumentUrl { get; } = documentUrl;

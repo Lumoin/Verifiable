@@ -22,7 +22,7 @@ namespace Verifiable.OAuth.Pkce;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("PkceChallenge Length={EncodedLength}")]
-public sealed class PkceChallenge: IDisposable, IEquatable<PkceChallenge>
+public sealed class PkceChallenge : IDisposable, IEquatable<PkceChallenge>
 {
     private bool disposed;
     private IMemoryOwner<byte> Owner { get; }

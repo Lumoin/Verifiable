@@ -26,7 +26,7 @@ namespace Verifiable.Core.Model.Credentials;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("Evidence(Id = {Id}, Type = {Type})")]
-public class Evidence: IEquatable<Evidence>
+public class Evidence : IEquatable<Evidence>
 {
     /// <summary>
     /// An optional identifier for this evidence.

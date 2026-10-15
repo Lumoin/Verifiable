@@ -25,7 +25,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class TpmuSensitiveComposite: IDisposable, IEquatable<TpmuSensitiveComposite>
+public sealed class TpmuSensitiveComposite : IDisposable, IEquatable<TpmuSensitiveComposite>
 {
     /// <summary>Whether <see cref="Dispose"/> has already released the populated arm.</summary>
     private bool disposed;

@@ -35,7 +35,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class Tpm2bOperand: IDisposable
+public sealed class Tpm2bOperand : IDisposable
 {
     /// <summary>
     /// Maximum size of the operand: the largest digest this library supports (64 octets, SHA-512), matching

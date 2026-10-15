@@ -5,7 +5,7 @@ namespace Verifiable.Core.Model.Did.CryptographicSuites
     /// <see href="https://www.w3.org/TR/vc-data-integrity/#multikey">VC Data Integrity, Multikey</see>: a
     /// single multibase-encoded, multicodec-prefixed key covering every supported algorithm.
     /// </summary>
-    public sealed class MultikeyVerificationMethodTypeInfo: VerificationMethodTypeInfo
+    public sealed class MultikeyVerificationMethodTypeInfo : VerificationMethodTypeInfo
     {
         /// <summary>The shared <c>Multikey</c> type-info singleton.</summary>
         public static MultikeyVerificationMethodTypeInfo Instance { get; } = new()

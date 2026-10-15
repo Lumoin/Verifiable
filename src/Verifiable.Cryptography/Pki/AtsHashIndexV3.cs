@@ -58,7 +58,7 @@ namespace Verifiable.Cryptography.Pki;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class AtsHashIndexV3: SensitiveMemory, IEquatable<AtsHashIndexV3>
+public sealed class AtsHashIndexV3 : SensitiveMemory, IEquatable<AtsHashIndexV3>
 {
     /// <summary>
     /// The largest number of entries one hash-index list is read or written with. The syntax bounds none of the

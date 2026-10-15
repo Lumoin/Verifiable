@@ -19,7 +19,7 @@ namespace Verifiable.Tpm.Spec.Attributes;
 /// </remarks>
 [Flags]
 [SuppressMessage("Naming", "CA1720:Identifier contains type name", Justification = "Enum values defined by TPM 2.0 specification.")]
-public enum TpmaAlgorithm: uint
+public enum TpmaAlgorithm : uint
 {
     /// <summary>
     /// ASYMMETRIC (bit 0):

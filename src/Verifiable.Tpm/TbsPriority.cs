@@ -16,7 +16,7 @@ namespace Verifiable.Tpm;
 /// </para>
 /// </remarks>
 [SuppressMessage("Design", "CA1008:Enums should have zero value", Justification = "This follows the Windows TBS API.")]
-public enum TbsPriority: uint
+public enum TbsPriority : uint
 {
     /// <summary>
     /// Low priority (100).

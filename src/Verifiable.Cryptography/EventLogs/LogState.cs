@@ -50,7 +50,7 @@ public abstract record LogState<TState>;
 /// returns an error in that case.
 /// </remarks>
 /// <typeparam name="TState">The domain state type.</typeparam>
-public sealed record EmptyLogState<TState>: LogState<TState>;
+public sealed record EmptyLogState<TState> : LogState<TState>;
 
 /// <summary>
 /// The log state after the genesis entry has been applied and before deactivation.
@@ -63,7 +63,7 @@ public sealed record EmptyLogState<TState>: LogState<TState>;
 /// </remarks>
 /// <typeparam name="TState">The domain state type.</typeparam>
 /// <param name="Value">The current domain state.</param>
-public sealed record ActiveLogState<TState>(TState Value): LogState<TState>;
+public sealed record ActiveLogState<TState>(TState Value) : LogState<TState>;
 
 /// <summary>
 /// The terminal log state after a deactivation entry has been applied.
@@ -77,4 +77,4 @@ public sealed record ActiveLogState<TState>(TState Value): LogState<TState>;
 /// </remarks>
 /// <typeparam name="TState">The domain state type.</typeparam>
 /// <param name="Value">The domain state at the time of deactivation.</param>
-public sealed record DeactivatedLogState<TState>(TState Value): LogState<TState>;
+public sealed record DeactivatedLogState<TState>(TState Value) : LogState<TState>;

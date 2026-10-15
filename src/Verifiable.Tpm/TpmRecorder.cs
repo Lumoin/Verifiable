@@ -43,7 +43,7 @@ namespace Verifiable.Tpm;
 /// <seealso cref="TpmRecording"/>
 /// <seealso cref="Verifiable.Tpm.Automata.TpmSimulator"/>
 /// <seealso cref="TpmDevice"/>
-public sealed class TpmRecorder: IObserver<TpmExchange>, IDisposable
+public sealed class TpmRecorder : IObserver<TpmExchange>, IDisposable
 {
     private List<TpmExchange> Exchanges { get; } = [];
 

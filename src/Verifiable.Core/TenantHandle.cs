@@ -26,7 +26,7 @@ namespace Verifiable.Core;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("TenantHandle={Value}")]
-public readonly struct TenantHandle: IEquatable<TenantHandle>
+public readonly struct TenantHandle : IEquatable<TenantHandle>
 {
     /// <summary>
     /// The display value. Opaque to the library; chosen by the application.

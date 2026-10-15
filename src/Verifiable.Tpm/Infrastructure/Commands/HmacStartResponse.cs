@@ -12,7 +12,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <c>TPM2_FlushContext()</c>, or by <c>TPM2_Startup()</c>.
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class HmacStartResponse: ITpmWireType
+public sealed class HmacStartResponse : ITpmWireType
 {
     /// <summary>The handle of the newly opened HMAC sequence context (<c>sequenceHandle</c>, TPMI_DH_OBJECT).</summary>
     public TpmiDhObject SequenceHandle { get; }

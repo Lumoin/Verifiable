@@ -33,7 +33,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class TpmlAlg: ITpmWireType
+public sealed class TpmlAlg : ITpmWireType
 {
     private static TpmlAlg EmptyInstance { get; } = new(ImmutableArray<TpmAlgIdConstants>.Empty);
 

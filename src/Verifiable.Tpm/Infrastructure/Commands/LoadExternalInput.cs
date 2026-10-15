@@ -30,7 +30,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class LoadExternalInput: ITpmCommandInput, IDisposable
+public sealed class LoadExternalInput : ITpmCommandInput, IDisposable
 {
     /// <summary>Whether <see cref="Dispose"/> has already released the owned public and sensitive areas.</summary>
     private bool disposed;

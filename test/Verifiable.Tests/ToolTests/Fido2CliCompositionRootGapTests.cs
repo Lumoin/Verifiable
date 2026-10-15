@@ -961,7 +961,7 @@ internal sealed class Fido2CliCompositionRootGapTests
 
 
     /// <summary>A minted <c>android-key</c> registration fixture. Owns and disposes every certificate and key.</summary>
-    private sealed class AndroidKeyFixture: IDisposable
+    private sealed class AndroidKeyFixture : IDisposable
     {
         public AndroidKeyFixture(
             Guid aaguid,
@@ -1000,7 +1000,7 @@ internal sealed class Fido2CliCompositionRootGapTests
 
 
     /// <summary>A minted <c>fido-u2f</c> registration fixture. Owns and disposes every certificate and key.</summary>
-    private sealed class FidoU2fFixture: IDisposable
+    private sealed class FidoU2fFixture : IDisposable
     {
         public FidoU2fFixture(
             byte[] attestationObjectBytes,

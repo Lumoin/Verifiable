@@ -30,7 +30,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// </remarks>
 /// <seealso cref="ConditionalTestMethodAttribute"/>
 /// <seealso cref="BaseSkipAttribute"/>
-internal sealed class ConditionalTestClassAttribute: TestClassAttribute
+internal sealed class ConditionalTestClassAttribute : TestClassAttribute
 {
     /// <inheritdoc/>
     public override TestMethodAttribute? GetTestMethodAttribute(TestMethodAttribute? testMethodAttribute)

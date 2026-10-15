@@ -37,7 +37,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// (<see cref="TraceTreeAssertions.FilterByTrace"/>).
 /// </para>
 /// </remarks>
-internal sealed class TraceTreeCapture: IDisposable
+internal sealed class TraceTreeCapture : IDisposable
 {
     private ConcurrentQueue<Activity> StoppedActivityLog { get; } = new();
     private ActivityListener Listener { get; }

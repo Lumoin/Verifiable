@@ -25,7 +25,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class HashSequenceStartInput: ITpmCommandInput, IDisposable
+public sealed class HashSequenceStartInput : ITpmCommandInput, IDisposable
 {
     /// <summary>Whether this instance has been disposed.</summary>
     private bool Disposed { get; set; }

@@ -29,7 +29,7 @@ namespace Verifiable.Fido2;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("AttestedCredentialData(Aaguid={Aaguid}, CredentialId={CredentialId})")]
-public sealed class AttestedCredentialData: IDisposable, IEquatable<AttestedCredentialData>
+public sealed class AttestedCredentialData : IDisposable, IEquatable<AttestedCredentialData>
 {
     /// <summary>
     /// Initializes an <see cref="AttestedCredentialData"/> view from its parsed members. Ownership

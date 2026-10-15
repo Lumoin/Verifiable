@@ -22,7 +22,7 @@ namespace Verifiable.Core.Model.Mdoc;
 /// transferred to the resulting <see cref="MdocDocument"/>.
 /// </para>
 /// </remarks>
-public sealed class MdocLogicalDocument: IDisposable
+public sealed class MdocLogicalDocument : IDisposable
 {
     private bool disposed;
 

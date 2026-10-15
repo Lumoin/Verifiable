@@ -43,7 +43,7 @@ public enum XAdESPkiDataEncoding
 /// <see cref="TryRead"/> does not itself check the wrapping element's local name; the caller has already
 /// recognized it.
 /// </summary>
-public readonly struct XAdESEncapsulatedPkiData: IEquatable<XAdESEncapsulatedPkiData>
+public readonly struct XAdESEncapsulatedPkiData : IEquatable<XAdESEncapsulatedPkiData>
 {
     /// <summary>The table the value's spans read from.</summary>
     internal XmlNodeTable Table { get; }

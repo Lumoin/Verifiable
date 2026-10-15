@@ -31,7 +31,7 @@ public abstract record CtapAuthenticatorInput;
 /// backend is injected — the source <c>CtapAuthenticatorTransitions.BuildGetInfoResponse</c> builds
 /// the <c>algorithms</c> (<c>0x0A</c>) getInfo member from (CTAP 2.3, snapshot lines 4424-4427).
 /// </param>
-public sealed record GetInfoRequested(IReadOnlyList<int>? SupportedAlgorithms = null): CtapAuthenticatorInput;
+public sealed record GetInfoRequested(IReadOnlyList<int>? SupportedAlgorithms = null) : CtapAuthenticatorInput;
 
 /// <summary>
 /// An <c>authenticatorClientPIN</c> (<c>0x06</c>) request, already CBOR-decoded by
@@ -52,7 +52,7 @@ public sealed record GetInfoRequested(IReadOnlyList<int>? SupportedAlgorithms = 
 /// <c>beginUsingPinUvAuthToken</c> call stamps as a fresh token's usage-timer start. The pure transition
 /// never reads a clock itself.
 /// </param>
-public sealed record ClientPinRequested(CtapClientPinRequest Request, DateTimeOffset Now): CtapAuthenticatorInput;
+public sealed record ClientPinRequested(CtapClientPinRequest Request, DateTimeOffset Now) : CtapAuthenticatorInput;
 
 /// <summary>
 /// The effect fold-back of a <see cref="CtapComputeKeyAgreementPublicKeyAction"/>: the computed
@@ -60,7 +60,7 @@ public sealed record ClientPinRequested(CtapClientPinRequest Request, DateTimeOf
 /// <c>getKeyAgreement</c> response.
 /// </summary>
 /// <param name="PublicKey">The computed COSE_Key view.</param>
-public sealed record ClientPinKeyAgreementComputed(CoseKey PublicKey): CtapAuthenticatorInput;
+public sealed record ClientPinKeyAgreementComputed(CoseKey PublicKey) : CtapAuthenticatorInput;
 
 /// <summary>
 /// A command byte this simulator does not implement.
@@ -72,7 +72,7 @@ public sealed record ClientPinKeyAgreementComputed(CoseKey PublicKey): CtapAuthe
 /// the rejection is recorded in the automaton's trace.
 /// </remarks>
 /// <param name="CommandByte">The unrecognized command byte.</param>
-public sealed record UnsupportedCtapCommandReceived(byte CommandByte): CtapAuthenticatorInput;
+public sealed record UnsupportedCtapCommandReceived(byte CommandByte) : CtapAuthenticatorInput;
 
 /// <summary>
 /// An <c>authenticatorMakeCredential</c> (<c>0x01</c>) request, already CBOR-decoded by
@@ -106,7 +106,7 @@ public sealed record UnsupportedCtapCommandReceived(byte CommandByte): CtapAuthe
 /// to <see cref="WellKnownCtapStatusCodes.UserActionTimeout"/> rather than parking.
 /// </param>
 public sealed record MakeCredentialRequested(
-    CtapMakeCredentialRequest Request, int? SelectedAlgorithm, DateTimeOffset Now, bool IsUserPresenceDeferralAllowed = false): CtapAuthenticatorInput;
+    CtapMakeCredentialRequest Request, int? SelectedAlgorithm, DateTimeOffset Now, bool IsUserPresenceDeferralAllowed = false) : CtapAuthenticatorInput;
 
 /// <summary>
 /// An <c>authenticatorGetAssertion</c> (<c>0x02</c>) request, already CBOR-decoded by
@@ -132,7 +132,7 @@ public sealed record MakeCredentialRequested(
 /// identical remark. Defaults to <see langword="false"/>.
 /// </param>
 public sealed record GetAssertionRequested(
-    CtapGetAssertionRequest Request, DateTimeOffset Now, bool IsUserPresenceDeferralAllowed = false): CtapAuthenticatorInput;
+    CtapGetAssertionRequest Request, DateTimeOffset Now, bool IsUserPresenceDeferralAllowed = false) : CtapAuthenticatorInput;
 
 /// <summary>
 /// An <c>authenticatorGetNextAssertion</c> (<c>0x08</c>) request. The command takes no parameters, so
@@ -149,7 +149,7 @@ public sealed record GetAssertionRequested(
 /// ordinary comparison of two already-known values, not a clock read, so the pure transition stays
 /// time-free.
 /// </param>
-public sealed record GetNextAssertionRequested(DateTimeOffset Now): CtapAuthenticatorInput;
+public sealed record GetNextAssertionRequested(DateTimeOffset Now) : CtapAuthenticatorInput;
 
 /// <summary>
 /// An <c>authenticatorConfig</c> (<c>0x0D</c>) request, already CBOR-decoded by
@@ -168,7 +168,7 @@ public sealed record GetNextAssertionRequested(DateTimeOffset Now): CtapAuthenti
 /// evaluated against ahead of trusting it, and the stamp a successful verify writes into the token's
 /// <see cref="CtapPinUvAuthTokenState.LastUsedAt"/>. The pure transition never reads a clock itself.
 /// </param>
-public sealed record AuthenticatorConfigRequested(CtapAuthenticatorConfigRequest Request, DateTimeOffset Now): CtapAuthenticatorInput;
+public sealed record AuthenticatorConfigRequested(CtapAuthenticatorConfigRequest Request, DateTimeOffset Now) : CtapAuthenticatorInput;
 
 /// <summary>
 /// The effect fold-back of a <see cref="CtapResetPinUvAuthTokensAction"/>: two freshly minted, not-in-use
@@ -185,7 +185,7 @@ public sealed record AuthenticatorConfigRequested(CtapAuthenticatorConfigRequest
 /// <param name="FreshProtocolOneToken">PIN/UV auth protocol one's freshly reset token state.</param>
 /// <param name="FreshProtocolTwoToken">PIN/UV auth protocol two's freshly reset token state.</param>
 public sealed record PinUvAuthTokensReset(
-    CtapPinUvAuthTokenState FreshProtocolOneToken, CtapPinUvAuthTokenState FreshProtocolTwoToken): CtapAuthenticatorInput;
+    CtapPinUvAuthTokenState FreshProtocolOneToken, CtapPinUvAuthTokenState FreshProtocolTwoToken) : CtapAuthenticatorInput;
 
 /// <summary>
 /// The effect fold-back of a <see cref="CtapGenerateCredentialKeyAction"/>: the completed
@@ -193,7 +193,7 @@ public sealed record PinUvAuthTokensReset(
 /// </summary>
 /// <param name="Response">The completed response, ready to be CBOR-encoded.</param>
 /// <param name="Record">The credential record to add to the store.</param>
-public sealed record CredentialMinted(CtapMakeCredentialResponse Response, CtapCredentialRecord Record): CtapAuthenticatorInput;
+public sealed record CredentialMinted(CtapMakeCredentialResponse Response, CtapCredentialRecord Record) : CtapAuthenticatorInput;
 
 /// <summary>
 /// The effect fold-back of a <see cref="CtapSignAssertionAction"/>: the completed
@@ -212,7 +212,7 @@ public sealed record CredentialMinted(CtapMakeCredentialResponse Response, CtapC
 /// <c>authenticatorGetNextAssertion</c> sign).
 /// </param>
 public sealed record AssertionSigned(
-    CtapGetAssertionResponse Response, CredentialId CredentialId, uint NewSignCount, CtapRememberedGetAssertionState? RememberedState): CtapAuthenticatorInput;
+    CtapGetAssertionResponse Response, CredentialId CredentialId, uint NewSignCount, CtapRememberedGetAssertionState? RememberedState) : CtapAuthenticatorInput;
 
 /// <summary>
 /// The discriminants a <see cref="CtapSignAssertionAction.HmacSecret"/> crypto sequence can conclude
@@ -242,7 +242,7 @@ public enum CtapGetAssertionHmacSecretOutcomeKind
 /// persisted, since <see cref="AssertionSigned"/> is never produced on this path.
 /// </summary>
 /// <param name="Kind">Which hmac-secret crypto step failed (never <see cref="CtapGetAssertionHmacSecretOutcomeKind.Success"/>).</param>
-public sealed record GetAssertionHmacSecretFailed(CtapGetAssertionHmacSecretOutcomeKind Kind): CtapAuthenticatorInput;
+public sealed record GetAssertionHmacSecretFailed(CtapGetAssertionHmacSecretOutcomeKind Kind) : CtapAuthenticatorInput;
 
 /// <summary>
 /// The effect fold-back of a <see cref="CtapGenerateCredentialKeyAction"/> whose
@@ -253,7 +253,7 @@ public sealed record GetAssertionHmacSecretFailed(CtapGetAssertionHmacSecretOutc
 /// ever minted, since <see cref="CredentialMinted"/> is never produced on this path.
 /// </summary>
 /// <param name="Kind">Which hmac-secret-mc crypto step failed (never <see cref="CtapGetAssertionHmacSecretOutcomeKind.Success"/>).</param>
-public sealed record MakeCredentialHmacSecretMcFailed(CtapGetAssertionHmacSecretOutcomeKind Kind): CtapAuthenticatorInput;
+public sealed record MakeCredentialHmacSecretMcFailed(CtapGetAssertionHmacSecretOutcomeKind Kind) : CtapAuthenticatorInput;
 
 /// <summary>
 /// The effect fold-back of a <see cref="CtapVerifyPinUvAuthTokenAction"/>: whether the presented
@@ -262,7 +262,7 @@ public sealed record MakeCredentialHmacSecretMcFailed(CtapGetAssertionHmacSecret
 /// </summary>
 /// <param name="Verified"><see langword="true"/> when verification succeeded; otherwise <see langword="false"/>.</param>
 /// <param name="Continuation">The interrupted command's own decoded-request context to resume.</param>
-public sealed record PinUvAuthTokenVerified(bool Verified, CtapVerifyPinUvAuthTokenContinuation Continuation): CtapAuthenticatorInput;
+public sealed record PinUvAuthTokenVerified(bool Verified, CtapVerifyPinUvAuthTokenContinuation Continuation) : CtapAuthenticatorInput;
 
 /// <summary>
 /// An <c>authenticatorCredentialManagement</c> (<c>0x0A</c>) request, already CBOR-decoded by
@@ -284,7 +284,7 @@ public sealed record PinUvAuthTokenVerified(bool Verified, CtapVerifyPinUvAuthTo
 /// <see cref="CtapRememberedEnumerateCredentialsState.LastActivityAt"/> starts from. The pure transition
 /// never reads a clock itself.
 /// </param>
-public sealed record CredentialManagementRequested(CtapCredentialManagementRequest Request, DateTimeOffset Now): CtapAuthenticatorInput;
+public sealed record CredentialManagementRequested(CtapCredentialManagementRequest Request, DateTimeOffset Now) : CtapAuthenticatorInput;
 
 /// <summary>
 /// The effect fold-back of a <see cref="CtapEmitCredentialManagementRpAction"/>: one fully assembled
@@ -293,7 +293,7 @@ public sealed record CredentialManagementRequested(CtapCredentialManagementReque
 /// computed <c>rpIDHash</c> bytes having required the effectful loop's own memory pool.
 /// </summary>
 /// <param name="Response">The completed response, ready to be CBOR-encoded.</param>
-public sealed record CredentialManagementResponseComputed(CtapCredentialManagementResponse Response): CtapAuthenticatorInput;
+public sealed record CredentialManagementResponseComputed(CtapCredentialManagementResponse Response) : CtapAuthenticatorInput;
 
 /// <summary>
 /// The effect fold-back of a <see cref="CtapLocateCredentialManagementCredentialsAction"/>:
@@ -310,7 +310,7 @@ public sealed record CredentialManagementResponseComputed(CtapCredentialManageme
 public sealed record CredentialManagementCredentialsLocated(
     IReadOnlyList<CredentialId> MatchedCredentialIds,
     DateTimeOffset Now,
-    CtapPinUvAuthProtocolId AuthenticatingPinUvAuthProtocol): CtapAuthenticatorInput;
+    CtapPinUvAuthProtocolId AuthenticatingPinUvAuthProtocol) : CtapAuthenticatorInput;
 
 /// <summary>
 /// The discriminants a <see cref="CtapEstablishPinAction"/>'s crypto sequence can conclude with
@@ -354,7 +354,7 @@ public enum CtapSetPinOutcomeKind
 public sealed record PinEstablishmentCompleted(
     CtapSetPinOutcomeKind Kind,
     int NewPinCodePointLength,
-    DigestValue? NewPinHash): CtapAuthenticatorInput;
+    DigestValue? NewPinHash) : CtapAuthenticatorInput;
 
 /// <summary>
 /// The discriminants a <see cref="CtapChangePinAction"/>'s crypto sequence can conclude with
@@ -445,7 +445,7 @@ public sealed record PinChangeCompleted(
     DigestValue? NewPinHash,
     CtapPinUvAuthTokenState? FreshProtocolOneToken,
     CtapPinUvAuthTokenState? FreshProtocolTwoToken,
-    CtapPinAttemptVerdict? Verdict = null): CtapAuthenticatorInput;
+    CtapPinAttemptVerdict? Verdict = null) : CtapAuthenticatorInput;
 
 /// <summary>
 /// The discriminants the shared <c>getPinToken</c>/<c>getPinUvAuthTokenUsingPinWithPermissions</c>
@@ -535,7 +535,7 @@ public sealed record PinTokenIssuanceCompleted(
     CtapPinUvAuthTokenState? FreshProtocolTwoToken,
     ReadOnlyMemory<byte>? EncryptedToken,
     byte? ForcePinChangeDeniedStatusCode = null,
-    CtapPinAttemptVerdict? Verdict = null): CtapAuthenticatorInput;
+    CtapPinAttemptVerdict? Verdict = null) : CtapAuthenticatorInput;
 
 /// <summary>
 /// The effect fold-back of a <see cref="CtapPerformBuiltInUvAction"/>: the simulated attempt loop's
@@ -551,7 +551,7 @@ public sealed record PinTokenIssuanceCompleted(
 /// </param>
 /// <param name="Continuation">The interrupted command's own decoded-request context to resume.</param>
 public sealed record BuiltInUvAttempted(
-    CtapBuiltInUvAttemptOutcome Outcome, int AttemptsConsumed, CtapPerformBuiltInUvContinuation Continuation): CtapAuthenticatorInput;
+    CtapBuiltInUvAttemptOutcome Outcome, int AttemptsConsumed, CtapPerformBuiltInUvContinuation Continuation) : CtapAuthenticatorInput;
 
 /// <summary>
 /// The discriminants a <see cref="CtapIssueUvTokenAction"/>'s crypto sequence can conclude with (CTAP
@@ -608,7 +608,7 @@ public sealed record UvTokenIssuanceCompleted(
     int AttemptsConsumed,
     CtapPinUvAuthTokenState? FreshProtocolOneToken,
     CtapPinUvAuthTokenState? FreshProtocolTwoToken,
-    ReadOnlyMemory<byte>? EncryptedToken): CtapAuthenticatorInput;
+    ReadOnlyMemory<byte>? EncryptedToken) : CtapAuthenticatorInput;
 
 /// <summary>
 /// An <c>authenticatorReset</c> (<c>0x07</c>) request. The command takes no parameters at all — no
@@ -634,7 +634,7 @@ public sealed record UvTokenIssuanceCompleted(
 /// <see cref="MakeCredentialRequested.SelectedAlgorithm"/>'s own "precompute outside, use inside"
 /// precedent for a composition-time dependency the pure transition cannot construct itself).
 /// </param>
-public sealed record ResetRequested(DateTimeOffset Now, BaseMemoryPool Pool): CtapAuthenticatorInput;
+public sealed record ResetRequested(DateTimeOffset Now, BaseMemoryPool Pool) : CtapAuthenticatorInput;
 
 /// <summary>
 /// The effect fold-back of a <see cref="CtapFactoryResetKeyMaterialAction"/>: a freshly minted
@@ -651,7 +651,7 @@ public sealed record AuthenticatorResetKeyMaterialMinted(
     CtapPinUvAuthKeyAgreementKeyPair FreshProtocolOneKeyPair,
     CtapPinUvAuthKeyAgreementKeyPair FreshProtocolTwoKeyPair,
     CtapPinUvAuthTokenState FreshProtocolOneToken,
-    CtapPinUvAuthTokenState FreshProtocolTwoToken): CtapAuthenticatorInput;
+    CtapPinUvAuthTokenState FreshProtocolTwoToken) : CtapAuthenticatorInput;
 
 /// <summary>
 /// An <c>authenticatorBioEnrollment</c> (<c>0x09</c>) request, already CBOR-decoded by
@@ -675,7 +675,7 @@ public sealed record AuthenticatorResetKeyMaterialMinted(
 /// the stamp a successful verify writes into the token's <see cref="CtapPinUvAuthTokenState.LastUsedAt"/>.
 /// The pure transition never reads a clock itself.
 /// </param>
-public sealed record BioEnrollmentRequested(CtapBioEnrollmentRequest Request, DateTimeOffset Now): CtapAuthenticatorInput;
+public sealed record BioEnrollmentRequested(CtapBioEnrollmentRequest Request, DateTimeOffset Now) : CtapAuthenticatorInput;
 
 /// <summary>
 /// The effect fold-back of a <see cref="CtapBeginBioEnrollmentCaptureAction"/>: a freshly minted
@@ -692,7 +692,7 @@ public sealed record BioEnrollmentRequested(CtapBioEnrollmentRequest Request, Da
 /// The first sample's capture outcome, one of <see cref="WellKnownCtapLastEnrollSampleStatuses"/> — a
 /// response FIELD value, never a protocol error.
 /// </param>
-public sealed record BioEnrollmentCaptureStarted(BioEnrollmentTemplateId TemplateId, int LastEnrollSampleStatus): CtapAuthenticatorInput;
+public sealed record BioEnrollmentCaptureStarted(BioEnrollmentTemplateId TemplateId, int LastEnrollSampleStatus) : CtapAuthenticatorInput;
 
 /// <summary>
 /// The effect fold-back of a <see cref="CtapContinueBioEnrollmentCaptureAction"/>: the
@@ -705,7 +705,7 @@ public sealed record BioEnrollmentCaptureStarted(BioEnrollmentTemplateId Templat
 /// echoed here: the pure transition already knows it from <see cref="CtapAuthenticatorState.RememberedBioEnrollment"/>,
 /// matched against the request before this action was ever declared.
 /// </param>
-public sealed record BioEnrollmentSampleCaptured(int LastEnrollSampleStatus): CtapAuthenticatorInput;
+public sealed record BioEnrollmentSampleCaptured(int LastEnrollSampleStatus) : CtapAuthenticatorInput;
 
 /// <summary>
 /// An <c>authenticatorLargeBlobs</c> (<c>0x0C</c>) request, already CBOR-decoded by
@@ -728,7 +728,7 @@ public sealed record BioEnrollmentSampleCaptured(int LastEnrollSampleStatus): Ct
 /// against ahead of trusting it, and the stamp a successful verify writes into the token's
 /// <see cref="CtapPinUvAuthTokenState.LastUsedAt"/>.
 /// </param>
-public sealed record LargeBlobsRequested(CtapLargeBlobsRequest Request, DateTimeOffset Now): CtapAuthenticatorInput;
+public sealed record LargeBlobsRequested(CtapLargeBlobsRequest Request, DateTimeOffset Now) : CtapAuthenticatorInput;
 
 /// <summary>
 /// The effect fold-back of a <see cref="CtapCommitLargeBlobArrayAction"/>: whether the appended fragment
@@ -774,7 +774,7 @@ public sealed record CtapLargeBlobArrayCommitAttempted(
     int ExpectedLength,
     CtapPinUvAuthProtocolId? AuthenticatingPinUvAuthProtocol,
     bool IsIntegrityValid,
-    PooledMemory? CommittedArray): CtapAuthenticatorInput;
+    PooledMemory? CommittedArray) : CtapAuthenticatorInput;
 
 /// <summary>
 /// The effect fold-back of a <see cref="CtapCollectUserPresenceAction"/>: the injected
@@ -789,7 +789,7 @@ public sealed record CtapLargeBlobArrayCommitAttempted(
 /// The time this decision was collected, read once from the simulator's threaded
 /// <see cref="TimeProvider"/> by the executor — the pure transition never reads a clock itself.
 /// </param>
-public sealed record UserPresenceDecisionCollected(CtapUserPresenceDecision Decision, DateTimeOffset Now): CtapAuthenticatorInput;
+public sealed record UserPresenceDecisionCollected(CtapUserPresenceDecision Decision, DateTimeOffset Now) : CtapAuthenticatorInput;
 
 /// <summary>
 /// A platform poll for a parked <c>authenticatorMakeCredential</c>/<c>authenticatorGetAssertion</c>
@@ -803,7 +803,7 @@ public sealed record UserPresenceDecisionCollected(CtapUserPresenceDecision Deci
 /// before this input was built — compared against <see cref="CtapPendingUserPresenceState.ArmedAt"/> for
 /// the :2840 timeout check. The pure transition never reads a clock itself.
 /// </param>
-public sealed record UserPresencePollRequested(DateTimeOffset Now): CtapAuthenticatorInput;
+public sealed record UserPresencePollRequested(DateTimeOffset Now) : CtapAuthenticatorInput;
 
 /// <summary>
 /// A platform cancel of a parked <c>authenticatorMakeCredential</c>/<c>authenticatorGetAssertion</c>
@@ -816,4 +816,4 @@ public sealed record UserPresencePollRequested(DateTimeOffset Now): CtapAuthenti
 /// The time this cancel arrived, read once from the simulator's threaded <see cref="TimeProvider"/>
 /// before this input was built. The pure transition never reads a clock itself.
 /// </param>
-public sealed record UserPresenceCancelRequested(DateTimeOffset Now): CtapAuthenticatorInput;
+public sealed record UserPresenceCancelRequested(DateTimeOffset Now) : CtapAuthenticatorInput;

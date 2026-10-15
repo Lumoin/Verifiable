@@ -24,7 +24,7 @@ namespace Verifiable.Xml;
 /// <c>DigestAlgAndValueType</c>, optional <c>Id</c>/<c>URI</c> for <c>ReferenceInfoType</c> — so the shared
 /// core skips the wrapping element's own attribute validation, leaving that to each caller.
 /// </remarks>
-public readonly struct XAdESDigestAlgAndValue: IEquatable<XAdESDigestAlgAndValue>
+public readonly struct XAdESDigestAlgAndValue : IEquatable<XAdESDigestAlgAndValue>
 {
     /// <summary>The table the value's spans read from.</summary>
     internal XmlNodeTable Table { get; }

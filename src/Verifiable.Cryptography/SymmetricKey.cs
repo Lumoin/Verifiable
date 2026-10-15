@@ -20,7 +20,7 @@ namespace Verifiable.Cryptography;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("SymmetricKey Id={Id,nq}")]
-public sealed class SymmetricKey: SensitiveMemoryKey
+public sealed class SymmetricKey : SensitiveMemoryKey
 {
     private ComputeHmacDelegate ComputeHmac { get; }
     private VerifyHmacDelegate VerifyHmac { get; }

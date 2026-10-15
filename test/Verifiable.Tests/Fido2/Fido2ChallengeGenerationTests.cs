@@ -118,7 +118,7 @@ internal sealed class Fido2ChallengeGenerationTests
     /// runs alongside other parallel tests that also exercise the registered entropy seam, since <see
     /// cref="List{T}"/> is not itself thread-safe.
     /// </summary>
-    private sealed class CollectingObserver(List<CryptoEvent> sink): IObserver<CryptoEvent>
+    private sealed class CollectingObserver(List<CryptoEvent> sink) : IObserver<CryptoEvent>
     {
         /// <summary>No-op: this test never completes the observed sequence.</summary>
         public void OnCompleted()

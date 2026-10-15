@@ -91,7 +91,7 @@ public enum PremisParseStatus
 /// fixity carrier that document holds); the caller disposes it. On failure it owns nothing.
 /// </summary>
 [DebuggerDisplay("PremisParseResult: {Status}")]
-public sealed class PremisParseResult: IDisposable
+public sealed class PremisParseResult : IDisposable
 {
     /// <summary>The parse outcome; <see cref="PremisParseStatus.Valid"/> is the only success.</summary>
     public required PremisParseStatus Status { get; init; }
@@ -225,7 +225,7 @@ public enum PremisEncodeStatus
 /// them. On failure it owns nothing.
 /// </summary>
 [DebuggerDisplay("PremisEncodeResult: {Status}")]
-public sealed class PremisEncodeResult: IDisposable
+public sealed class PremisEncodeResult : IDisposable
 {
     /// <summary>The encoding outcome; <see cref="PremisEncodeStatus.Encoded"/> is the only success.</summary>
     public required PremisEncodeStatus Status { get; init; }

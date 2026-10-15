@@ -36,7 +36,7 @@ public enum PAdESDocTimeStampStatus
 /// </summary>
 /// <remarks>Mint-only (internal factories), mirroring <c>PAdESSignatureValidationResult</c>'s own rationale.</remarks>
 [DebuggerDisplay("PAdESDocTimeStampValidationResult: {Status}")]
-public sealed class PAdESDocTimeStampValidationResult: IDisposable
+public sealed class PAdESDocTimeStampValidationResult : IDisposable
 {
     private bool disposed;
 
@@ -101,7 +101,7 @@ public sealed class PAdESDocTimeStampValidationResult: IDisposable
 /// </summary>
 /// <remarks>Ownership: owns the underlying <see cref="PdfByteSurfaceParseResult"/> and every entry of <see cref="DocTimeStamps"/>; <see cref="Dispose"/> disposes both.</remarks>
 [DebuggerDisplay("PAdESDocTimeStampCollectionResult: {IsSuccess}, {DocTimeStamps?.Count} time-stamp(s)")]
-public sealed class PAdESDocTimeStampCollectionResult: IDisposable
+public sealed class PAdESDocTimeStampCollectionResult : IDisposable
 {
     private PdfByteSurfaceParseResult ByteSurface { get; }
     private bool disposed;

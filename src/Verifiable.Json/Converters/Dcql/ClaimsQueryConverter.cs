@@ -25,7 +25,7 @@ namespace Verifiable.Json.Converters.Dcql;
 ///   </description></item>
 /// </list>
 /// </remarks>
-public sealed class ClaimsQueryConverter: JsonConverter<ClaimsQuery>
+public sealed class ClaimsQueryConverter : JsonConverter<ClaimsQuery>
 {
     /// <inheritdoc/>
     [return: NotNull]

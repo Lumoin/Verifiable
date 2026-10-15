@@ -43,7 +43,7 @@ public sealed class EArkPackageEntrySource
 /// that surfaced it disposes it. Everything that classifies a package holds non-owning references to entries.
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class EArkPackageEntry: IDisposable
+public sealed class EArkPackageEntry : IDisposable
 {
     /// <summary>
     /// Gets the entry name, root-relative to the package root and <c>/</c>-separated, a folder entry ending in
@@ -124,7 +124,7 @@ public sealed class EArkPackageEntry: IDisposable
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class EArkPackageSnapshot: IDisposable
+public sealed class EArkPackageSnapshot : IDisposable
 {
     /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
     private bool disposed;
@@ -267,7 +267,7 @@ public enum EArkPackageSnapshotStatus
 /// What <see cref="EArkPackageSnapshotReading"/> concluded, and the snapshot when it read one.
 /// </summary>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class EArkPackageSnapshotResult: IDisposable
+public sealed class EArkPackageSnapshotResult : IDisposable
 {
     /// <summary>Gets what the reader concluded.</summary>
     public required EArkPackageSnapshotStatus Status { get; init; }

@@ -35,14 +35,14 @@ namespace Verifiable.Apdu;
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 [SuppressMessage("Design", "CA1000:Do not declare static members on generic types",
     Justification = "Intentional factory pattern matching the established convention.")]
-public readonly struct ApduResult<T>: IEquatable<ApduResult<T>>
+public readonly struct ApduResult<T> : IEquatable<ApduResult<T>>
 {
     private T? SuccessValue { get; }
     private StatusWord CardStatusWord { get; }
     private uint RawTransportErrorCode { get; }
     private ResultKind Kind { get; }
 
-    private enum ResultKind: byte
+    private enum ResultKind : byte
     {
         Success,
         CardError,

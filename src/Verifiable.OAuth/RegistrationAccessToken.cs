@@ -30,7 +30,7 @@ namespace Verifiable.OAuth;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("RegistrationAccessToken Length={Value.Length}")]
-public readonly struct RegistrationAccessToken: IEquatable<RegistrationAccessToken>
+public readonly struct RegistrationAccessToken : IEquatable<RegistrationAccessToken>
 {
     /// <summary>Gets the bearer token's wire-format string value.</summary>
     public string Value { get; }

@@ -33,7 +33,7 @@ namespace Verifiable.JCose;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("CoseSignatureComponent: Signature={Signature.AsReadOnlySpan().Length} bytes")]
-public sealed class CoseSignatureComponent: IEquatable<CoseSignatureComponent>, IDisposable
+public sealed class CoseSignatureComponent : IEquatable<CoseSignatureComponent>, IDisposable
 {
     private bool disposed;
 

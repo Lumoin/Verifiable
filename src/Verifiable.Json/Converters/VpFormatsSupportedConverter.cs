@@ -17,7 +17,7 @@ namespace Verifiable.Json.Converters;
 /// protocol tokens (for example <c>dc+sd-jwt</c>, <c>sd-jwt_alg_values</c>) and are
 /// written verbatim — no naming policy is applied to them.
 /// </remarks>
-public sealed class VpFormatsSupportedConverter: JsonConverter<VpFormatsSupported>
+public sealed class VpFormatsSupportedConverter : JsonConverter<VpFormatsSupported>
 {
     /// <inheritdoc/>
     [return: NotNull]

@@ -12,7 +12,7 @@ namespace Verifiable.Server;
 /// That stream is the audit trail; state records do not embed history links.
 /// </remarks>
 [DebuggerDisplay("FlowFailed FlowId={FlowId} Reason={Reason}")]
-public sealed record FlowFailed: FlowState
+public sealed record FlowFailed : FlowState
 {
     /// <summary>
     /// Human-readable reason for the failure, suitable for server-side logging.

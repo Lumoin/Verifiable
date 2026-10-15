@@ -642,7 +642,7 @@ internal sealed class CAdESTimestampCoverageTests
     /// whose key material comes from the repository's test-key creator, and the CAdES-B-T signature the shipped
     /// creation and augmentation surfaces produced with them.
     /// </summary>
-    private sealed class CoverageWorld: IDisposable
+    private sealed class CoverageWorld : IDisposable
     {
         /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
         private bool disposed;

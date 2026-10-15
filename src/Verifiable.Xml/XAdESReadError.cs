@@ -15,7 +15,7 @@ namespace Verifiable.Xml;
 /// <see cref="XAdESReadFailure"/>'s own remarks.
 /// </remarks>
 /// <seealso cref="XAdESReadFailure"/>
-public readonly struct XAdESReadError: IEquatable<XAdESReadError>
+public readonly struct XAdESReadError : IEquatable<XAdESReadError>
 {
     /// <summary>
     /// The reason the structural read was refused.

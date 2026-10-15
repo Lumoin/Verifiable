@@ -36,7 +36,7 @@ namespace Verifiable.Core.Did.Methods.Ebsi
     /// synchronous operations.
     /// </para>
     /// </remarks>
-    public class EbsiDidBuilder: Builder<DidDocument, object, EbsiDidBuilder>
+    public class EbsiDidBuilder : Builder<DidDocument, object, EbsiDidBuilder>
     {
     }
 }

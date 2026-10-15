@@ -29,7 +29,7 @@ namespace Verifiable.Json.Converters
     /// <item><description>If other properties are set: Writes as an object.</description></item>
     /// </list>
     /// </remarks>
-    public class IssuerConverter: JsonConverter<Issuer>
+    public class IssuerConverter : JsonConverter<Issuer>
     {
         /// <inheritdoc/>
         public override Issuer? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)

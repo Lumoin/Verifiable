@@ -224,7 +224,7 @@ internal sealed class KeyCreationFunctionRegistryTests
     /// here against <c>SignVerifyEventTests</c>'/<c>Fido2ObservedWorkloadEventTests</c>' own observers,
     /// both since fixed to the same <see cref="ConcurrentQueue{T}"/> shape this file uses from the start).
     /// </summary>
-    private sealed class CollectingObserver(ConcurrentQueue<CryptoEvent> sink): IObserver<CryptoEvent>
+    private sealed class CollectingObserver(ConcurrentQueue<CryptoEvent> sink) : IObserver<CryptoEvent>
     {
         /// <summary>No-op: this test observer never unsubscribes via completion.</summary>
         public void OnCompleted()

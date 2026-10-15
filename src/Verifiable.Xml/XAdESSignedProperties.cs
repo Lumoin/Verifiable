@@ -14,7 +14,7 @@ namespace Verifiable.Xml;
 /// or a nested read-model struct over the same table — so no <see cref="IDisposable"/> surface is needed,
 /// mirroring <see cref="XmlSignatureProperties"/>'s own posture.
 /// </remarks>
-public readonly struct XAdESSignedProperties: IEquatable<XAdESSignedProperties>
+public readonly struct XAdESSignedProperties : IEquatable<XAdESSignedProperties>
 {
     /// <summary>The table the properties' spans read from.</summary>
     internal XmlNodeTable Table { get; }

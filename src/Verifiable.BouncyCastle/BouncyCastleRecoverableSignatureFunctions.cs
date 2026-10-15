@@ -135,7 +135,7 @@ public static class BouncyCastleRecoverableSignatureFunctions
     /// <param name="publicKeyMaterial">The DER <c>RSAPublicKey</c> (modulus and public exponent), as carried in EF.DG15.</param>
     /// <param name="timeProvider">Supplies the timestamp recorded on the produced <see cref="VerificationCompletedEvent"/>.</param>
     /// <param name="context">Optional context dictionary. Reserved for future use.</param>
-    /// <param name="cancellationToken">Observed before the key is parsed, so a cancelled operation signs nothing.</param>
+    /// <param name="cancellationToken">Observed before the key is parsed, so a cancelled operation verifies nothing.</param>
     /// <returns>
     /// <see langword="true"/> if the signature verifies under any recognised trailer/hash pairing; otherwise
     /// <see langword="false"/>, paired with a <see cref="VerificationCompletedEvent"/> when the verification
@@ -150,6 +150,7 @@ public static class BouncyCastleRecoverableSignatureFunctions
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(timeProvider);
+        cancellationToken.ThrowIfCancellationRequested();
 
         ProviderOperation operation = new(nameof(VerifyRsaIso9796d2Async));
         using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.Verify);

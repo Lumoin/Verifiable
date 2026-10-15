@@ -29,7 +29,7 @@ namespace Verifiable.Apdu.SecureMessaging;
 /// protected command and once per unprotected response, exactly as the protocol requires.
 /// </para>
 /// </remarks>
-public sealed class SecureMessagingSession: IDisposable
+public sealed class SecureMessagingSession : IDisposable
 {
     /// <summary>The bit ISO 7816-4 sets in the class byte to mark a command as secure-messaged with a protected header.</summary>
     private const byte SecureMessagingClassBits = 0x0C;

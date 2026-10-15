@@ -33,7 +33,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public readonly struct TpmuPublicParms: IEquatable<TpmuPublicParms>
+public readonly struct TpmuPublicParms : IEquatable<TpmuPublicParms>
 {
     /// <summary>
     /// Gets the algorithm type that determines union interpretation.

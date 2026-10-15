@@ -25,7 +25,7 @@ namespace Verifiable.Libsodium;
 /// guarantees every scratch rental made through it gets the strongest posture the running platform can
 /// offer, independent of which pool the caller supplied for the surrounding public/private key material.
 /// </remarks>
-internal sealed class SodiumScratchPool: MemoryPool<byte>
+internal sealed class SodiumScratchPool : MemoryPool<byte>
 {
     /// <summary>
     /// The shared instance used by every call site in this assembly that needs Ed25519 secret-key
@@ -87,7 +87,7 @@ internal sealed class SodiumScratchPool: MemoryPool<byte>
     /// assert <see cref="Rent(int)"/> never hands one out there, observing the actual owner rather than
     /// restating <see cref="IsGuardedNativeMemory"/>.
     /// </summary>
-    internal sealed class PinnedZeroOnReturnMemoryOwner: IMemoryOwner<byte>
+    internal sealed class PinnedZeroOnReturnMemoryOwner : IMemoryOwner<byte>
     {
         /// <summary>The pinned backing buffer, or <see langword="null"/> once disposed.</summary>
         private byte[]? buffer;

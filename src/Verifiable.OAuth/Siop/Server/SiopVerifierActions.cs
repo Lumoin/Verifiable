@@ -17,7 +17,7 @@ public sealed record ValidateSelfIssuedIdToken(
     string IdToken,
     string ExpectedAudience,
     string ExpectedNonce,
-    IReadOnlyList<string> AllowedAlgorithms): OAuthAction;
+    IReadOnlyList<string> AllowedAlgorithms) : OAuthAction;
 
 
 /// <summary>
@@ -46,7 +46,7 @@ public sealed record ValidateCombinedSiopResponse(
     string VpToken,
     string ExpectedAudience,
     string ExpectedNonce,
-    IReadOnlyList<string> AllowedAlgorithms): OAuthAction;
+    IReadOnlyList<string> AllowedAlgorithms) : OAuthAction;
 
 
 /// <summary>
@@ -76,4 +76,4 @@ public sealed record DecryptSiopResponse(
     IReadOnlyList<string> AllowedEncAlgorithms,
     string ExpectedAudience,
     string ExpectedNonce,
-    IReadOnlyList<string> AllowedAlgorithms): OAuthAction;
+    IReadOnlyList<string> AllowedAlgorithms) : OAuthAction;

@@ -10,7 +10,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// </remarks>
 /// <param name="StartupType">The startup type (<c>TPM_SU_CLEAR</c> or <c>TPM_SU_STATE</c>).</param>
-public readonly record struct StartupInput(TpmSuConstants StartupType): ITpmCommandInput
+public readonly record struct StartupInput(TpmSuConstants StartupType) : ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_Startup;

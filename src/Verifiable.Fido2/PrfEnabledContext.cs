@@ -12,7 +12,7 @@ namespace Verifiable.Fido2;
 /// section 10.1.4: Pseudo-random function extension (prf)</see> — client extension output
 /// <c>enabled</c>, registration-only.
 /// </remarks>
-public sealed record PrfEnabledContext: ClaimContext
+public sealed record PrfEnabledContext : ClaimContext
 {
     /// <summary>Whether the PRF is available for use with the created credential.</summary>
     public required bool Enabled { get; init; }

@@ -4130,7 +4130,7 @@ countingMetadataBuilder
         string declaration = source[source.IndexOf("public sealed record RegistrationObserverFailureStage(", StringComparison.Ordinal)..]
             .Trim().ReplaceLineEndings("\n");
         Assert.AreEqual("public sealed record RegistrationObserverFailureStage(\n"
-            + "    ClientRegistrationEvent Event, Exception Exception): InspectionStage;", declaration,
+            + "    ClientRegistrationEvent Event, Exception Exception) : InspectionStage;", declaration,
             "The stage declaration must expose exactly Event and Exception, with no request, headers, body or bearer member.");
     }
 
@@ -4637,7 +4637,7 @@ countingMetadataBuilder
 
 
     /// <summary>An observer that invokes its action without retaining a mutable delivery collection.</summary>
-    private sealed class ActionRegistrationObserver(Action<ClientRegistrationEvent> action): IObserver<ClientRegistrationEvent>
+    private sealed class ActionRegistrationObserver(Action<ClientRegistrationEvent> action) : IObserver<ClientRegistrationEvent>
     {
         /// <summary>Invokes the application callback for the supplied immutable event.</summary>
         public void OnNext(ClientRegistrationEvent value) => action(value);
@@ -4658,7 +4658,7 @@ countingMetadataBuilder
 
     /// <summary>An observer whose application equality is deliberately independent of subscription identity.</summary>
     /// <param name="events">The collection receiving notifications for this particular observer.</param>
-    private sealed class EqualRegistrationObserver(List<ClientRegistrationEvent> events): IObserver<ClientRegistrationEvent>
+    private sealed class EqualRegistrationObserver(List<ClientRegistrationEvent> events) : IObserver<ClientRegistrationEvent>
     {
         /// <summary>Records this observer's own delivery.</summary>
         public void OnNext(ClientRegistrationEvent value)
@@ -4887,7 +4887,7 @@ countingMetadataBuilder
     /// <typeparam name="T">The notification type.</typeparam>
     /// <param name="collected">The list used by the test to inspect notifications.</param>
     /// <param name="observe">An optional synchronous request observer.</param>
-    private sealed class CollectingObserver<T>(List<T> collected, Action<T>? observe = null): IObserver<T>
+    private sealed class CollectingObserver<T>(List<T> collected, Action<T>? observe = null) : IObserver<T>
     {
         /// <summary>
         /// Records the delivered notification so the test can inspect its payload.
@@ -4923,7 +4923,7 @@ countingMetadataBuilder
     /// their URNs agree up to the last colon, so a set built with it answers that it names every
     /// capability sharing that prefix with a member it holds.
     /// </summary>
-    private sealed class CapabilityPrefixMatchingComparer: IEqualityComparer<CapabilityIdentifier>
+    private sealed class CapabilityPrefixMatchingComparer : IEqualityComparer<CapabilityIdentifier>
     {
         /// <summary>Treats two capabilities as equal when their URN prefixes are ordinally equal.</summary>
         /// <param name="x">The first capability.</param>

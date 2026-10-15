@@ -8,7 +8,7 @@ namespace Verifiable.OAuth.AuthCode.Server;
 /// <remarks>
 /// Accessed via <c>FlowKind.AuthCodeServer</c>.
 /// </remarks>
-public sealed class AuthCodeServerFlowKind: StatefulFlowKind
+public sealed class AuthCodeServerFlowKind : StatefulFlowKind
 {
     /// <summary>The singleton instance.</summary>
     public static AuthCodeServerFlowKind Instance { get; } = new();

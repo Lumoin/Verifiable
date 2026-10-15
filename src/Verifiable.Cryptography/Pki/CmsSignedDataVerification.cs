@@ -81,7 +81,7 @@ public delegate ValueTask<CmsVerifiedContent> VerifyDetachedCmsSignedDataDelegat
 /// identifier, and the certificates the structure carried — including the signer's, ready to feed
 /// <see cref="ValidateCertificateChainAsyncDelegate"/> for the separate trust step.
 /// </summary>
-public sealed class CmsVerifiedContent: IDisposable
+public sealed class CmsVerifiedContent : IDisposable
 {
     private IMemoryOwner<byte> ContentOwner { get; }
     private int ContentLength { get; }

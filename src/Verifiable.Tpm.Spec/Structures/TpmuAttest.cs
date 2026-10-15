@@ -30,7 +30,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class TpmuAttest: IDisposable
+public sealed class TpmuAttest : IDisposable
 {
     private bool disposed;
 

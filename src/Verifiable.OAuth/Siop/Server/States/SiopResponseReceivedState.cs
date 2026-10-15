@@ -13,7 +13,7 @@ namespace Verifiable.OAuth.Siop.Server.States;
 /// verifier's response-received state.
 /// </summary>
 [DebuggerDisplay("SiopResponseReceivedState FlowId={FlowId} ReceivedAt={ReceivedAt}")]
-public sealed record SiopResponseReceivedState: FlowState
+public sealed record SiopResponseReceivedState : FlowState
 {
     /// <summary>The compact Self-Issued ID Token the Wallet POSTed. Preserved for audit and replay detection.</summary>
     public required string IdToken { get; init; }

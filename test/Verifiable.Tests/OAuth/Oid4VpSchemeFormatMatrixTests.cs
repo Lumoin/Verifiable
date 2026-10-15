@@ -168,7 +168,7 @@ internal sealed record FormatFixture(
 /// formats (mdoc, SD-CWT) bind the issuer key into the host's verification seams
 /// at construction time, so the issuer key must exist before the host is built.
 /// </remarks>
-internal sealed class FormatRun: IAsyncDisposable
+internal sealed class FormatRun : IAsyncDisposable
 {
     public required TestHostShell App { get; init; }
 

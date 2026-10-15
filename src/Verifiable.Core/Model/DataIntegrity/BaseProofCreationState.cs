@@ -21,7 +21,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1819:Properties should not return arrays", Justification = "Wire-format POCO representing parsed proof components.")]
-public sealed class BaseProofCreationState: IDisposable
+public sealed class BaseProofCreationState : IDisposable
 {
     /// <summary>
     /// Gets the credential with the base proof attached.

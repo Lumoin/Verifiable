@@ -37,7 +37,7 @@ public enum XmlEvidenceRecordRootStatus
 /// The outcome of walking a hash tree to its root.
 /// </summary>
 [DebuggerDisplay("XmlEvidenceRecordRootComputation: {Status}")]
-public sealed class XmlEvidenceRecordRootComputation: IDisposable
+public sealed class XmlEvidenceRecordRootComputation : IDisposable
 {
     /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
     private bool disposed;
@@ -703,7 +703,7 @@ public sealed record XmlEvidenceRecordHashTreeBuildContext
 /// <see href="https://www.rfc-editor.org/rfc/rfc6283#section-3.1.1">IETF RFC 6283</see>).
 /// </summary>
 [DebuggerDisplay("XmlEvidenceRecordHashTreeBuild: {GroupCount} groups")]
-public sealed class XmlEvidenceRecordHashTreeBuild: IDisposable
+public sealed class XmlEvidenceRecordHashTreeBuild : IDisposable
 {
     /// <summary>The per-group reduced trees; a claimed slot is <see langword="null"/> and no longer this instance's to release.</summary>
     private XmlEvidenceRecordHashTree?[] ReducedHashTrees { get; }

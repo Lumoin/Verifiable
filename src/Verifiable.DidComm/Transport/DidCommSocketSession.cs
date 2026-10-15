@@ -156,7 +156,7 @@ public sealed class DidCommInboundFrameResult
 /// <see cref="DidCommExchangeResult.TransportFailed"/> instead of leaving it pending forever.
 /// </para>
 /// </remarks>
-public sealed class DidCommSocketSession: IAsyncDisposable
+public sealed class DidCommSocketSession : IAsyncDisposable
 {
     private DidCommSessionSendDelegate Send { get; }
     private DidCommSocketSessionOptions Options { get; }

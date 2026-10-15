@@ -36,7 +36,7 @@ namespace Verifiable.DidComm;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("MessageTypeUri({Value})")]
-public sealed class MessageTypeUri: IEquatable<MessageTypeUri>
+public sealed class MessageTypeUri : IEquatable<MessageTypeUri>
 {
     private MessageTypeUri(
         string value,

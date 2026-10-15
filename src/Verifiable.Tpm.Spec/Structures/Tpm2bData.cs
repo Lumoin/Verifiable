@@ -26,7 +26,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class Tpm2bData: IDisposable
+public sealed class Tpm2bData : IDisposable
 {
     /// <summary>
     /// Maximum size of the data buffer: <c>sizeof(TPMT_HA)</c> — the 2-octet algorithm identifier plus the

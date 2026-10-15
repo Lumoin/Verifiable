@@ -25,7 +25,7 @@ namespace Verifiable.Server;
 /// </para>
 /// </remarks>
 [SuppressMessage("Design", "CA1032:Implement standard exception constructors", Justification = "This exception always carries the dependency failures that refused the composition; the parameterless and message-only constructors would violate that invariant.")]
-public sealed class CompositionDependencyException: InvalidOperationException
+public sealed class CompositionDependencyException : InvalidOperationException
 {
     /// <summary>
     /// Creates the refusal from the failures in the order they are reported.

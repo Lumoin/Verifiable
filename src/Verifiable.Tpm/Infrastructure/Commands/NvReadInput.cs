@@ -24,7 +24,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// clause 31.13 (Table 265).
 /// </para>
 /// </remarks>
-public readonly record struct NvReadInput(uint AuthHandle, uint NvIndex, ushort Size, ushort Offset): ITpmCommandInput
+public readonly record struct NvReadInput(uint AuthHandle, uint NvIndex, ushort Size, ushort Offset) : ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_NV_Read;

@@ -51,7 +51,7 @@ namespace Verifiable.OAuth.Client;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("ClientId Value={Value}")]
-public readonly struct ClientId: IEquatable<ClientId>
+public readonly struct ClientId : IEquatable<ClientId>
 {
     /// <summary>Gets the underlying wire-format string value.</summary>
     public string Value { get; }

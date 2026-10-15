@@ -27,7 +27,7 @@ namespace Verifiable.Apdu;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("CommandApdu({Length} bytes)")]
-public sealed class CommandApdu: SensitiveMemory
+public sealed class CommandApdu : SensitiveMemory
 {
     private CommandApdu(IMemoryOwner<byte> storage)
         : base(storage, ApduTags.CommandApdu)

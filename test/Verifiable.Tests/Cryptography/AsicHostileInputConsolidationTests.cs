@@ -621,7 +621,7 @@ internal sealed class AsicHostileInputConsolidationTests
     /// A signature carrying one <c>archive-time-stamp-v3</c> and that attribute's own token, held together so a
     /// test can change the signature and ask the unchanged token what it still protects.
     /// </summary>
-    private sealed class ArchiveTimestampWorld: IDisposable
+    private sealed class ArchiveTimestampWorld : IDisposable
     {
         /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
         private bool disposed;

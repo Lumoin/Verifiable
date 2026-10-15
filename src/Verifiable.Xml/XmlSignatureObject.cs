@@ -18,7 +18,7 @@ namespace Verifiable.Xml;
 /// <see cref="XmlSignatureProperties.TryRead"/>, or a whole nested <c>ds:Signature</c> via
 /// <see cref="XmlSignature.TryRead"/> — reads that content itself, over one of these indices.
 /// </remarks>
-public readonly struct XmlSignatureObject: IEquatable<XmlSignatureObject>
+public readonly struct XmlSignatureObject : IEquatable<XmlSignatureObject>
 {
     /// <summary>The table the object's spans read from.</summary>
     internal XmlNodeTable Table { get; }

@@ -9,7 +9,8 @@ namespace Verifiable.Tests.Cryptography
 {
     /// <summary>
     /// Every signing provider observes the cancellation its caller gives: a signing asked for under an already-cancelled
-    /// token is refused as cancelled before the key is imported, and no signature octets are rented from the caller's pool.
+    /// token is refused as cancelled before the key is imported, and no signature octets are rented from the caller's pool; the
+    /// recoverable verification its contract says observes the cancellation is refused as cancelled before it parses the key.
     /// </summary>
     [TestClass]
     internal sealed class SigningCancellationTests
@@ -126,6 +127,28 @@ namespace Verifiable.Tests.Cryptography
             using var privateKey = keys.PrivateKey;
 
             await AssertCancelledSigningSignsNothingAsync(BouncyCastleRecoverableSignatureFunctionsAdapter.SignRsaIso9796d2Async, privateKey, Challenge).ConfigureAwait(false);
+        }
+
+
+        /// <summary>
+        /// The BouncyCastle provider's ISO/IEC 9796-2 recoverable verification observes the cancellation before it parses the key,
+        /// as its contract says: under an already-cancelled token it is refused as cancelled rather than answering a verdict.
+        /// </summary>
+        /// <returns>A task completing once the refusal is checked.</returns>
+        [TestMethod]
+        public async Task BouncyCastleRecoverableVerificationUnderCancelledTokenVerifiesNothing()
+        {
+            var keys = BouncyCastleKeyMaterialCreator.CreateRsa2048Keys(BaseMemoryPool.Shared);
+            using var publicKey = keys.PublicKey;
+            using var privateKey = keys.PrivateKey;
+            using var cancellation = new CancellationTokenSource();
+            await cancellation.CancelAsync().ConfigureAwait(false);
+
+            var cancelledToken = cancellation.Token;
+
+            _ = await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
+                await BouncyCastleRecoverableSignatureFunctions.VerifyRsaIso9796d2Async(
+                    Challenge, Payload, publicKey.AsReadOnlyMemory(), TimeProvider.System, null, cancelledToken).ConfigureAwait(false)).ConfigureAwait(false);
         }
 
 

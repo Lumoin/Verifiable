@@ -21,7 +21,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 /// <param name="FriendlyName">The template's human-readable name, or <see langword="null"/> when never set.</param>
 public sealed record CtapBioEnrollmentTemplateRecord(
     BioEnrollmentTemplateId TemplateId,
-    string? FriendlyName): IDisposable
+    string? FriendlyName) : IDisposable
 {
     /// <summary>
     /// Releases the template identifier this record owns — the record-disposal discipline

@@ -63,7 +63,7 @@ public abstract class CBAdESDetachedObjectDereferenceResult
 /// A successfully dereferenced detached data object.
 /// </summary>
 [DebuggerDisplay("CBAdESDetachedObjectDereferenceSuccess: {Content.Length} bytes")]
-public sealed class CBAdESDetachedObjectDereferenceSuccess: CBAdESDetachedObjectDereferenceResult
+public sealed class CBAdESDetachedObjectDereferenceSuccess : CBAdESDetachedObjectDereferenceResult
 {
     /// <summary>Initializes a new <see cref="CBAdESDetachedObjectDereferenceSuccess"/>.</summary>
     /// <param name="content">
@@ -95,7 +95,7 @@ public sealed class CBAdESDetachedObjectDereferenceSuccess: CBAdESDetachedObject
 /// from under a comparison.
 /// </remarks>
 [DebuggerDisplay("CBAdESDetachedObjectDereferenceFailure: {Reason}")]
-public sealed class CBAdESDetachedObjectDereferenceFailure: CBAdESDetachedObjectDereferenceResult, IEquatable<CBAdESDetachedObjectDereferenceFailure>
+public sealed class CBAdESDetachedObjectDereferenceFailure : CBAdESDetachedObjectDereferenceResult, IEquatable<CBAdESDetachedObjectDereferenceFailure>
 {
     /// <summary>Initializes a new <see cref="CBAdESDetachedObjectDereferenceFailure"/>.</summary>
     /// <param name="reason">A human-readable statement of why dereferencing failed.</param>
@@ -239,7 +239,7 @@ public delegate ValueTask<PooledMemory> CBAdESUnknownDetachedObjectMechanismDele
 /// <see cref="TimestampAcquisitionException"/>'s fail-closed creation-side shape rather than a parsed-content
 /// conclusion model.
 /// </summary>
-public sealed class CBAdESDetachedObjectDereferenceException: Exception
+public sealed class CBAdESDetachedObjectDereferenceException : Exception
 {
     /// <summary>
     /// Gets the URI-reference whose dereference failed, or <see langword="null"/> when this instance was

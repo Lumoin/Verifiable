@@ -22,7 +22,7 @@ public abstract record KeriSeal;
 /// </summary>
 /// <remarks>Seal count codes <c>-Q</c> / <c>--Q</c> (DigestSealSingles); field order <c>[d]</c>.</remarks>
 /// <param name="Digest">The cryptographic digest of the external data (field <c>d</c>).</param>
-public sealed record KeriDigestSeal(string Digest): KeriSeal;
+public sealed record KeriDigestSeal(string Digest) : KeriSeal;
 
 /// <summary>
 /// A Merkle tree root digest seal: the root (field <c>rd</c>) of a Merkle tree of digests of external data, a
@@ -30,7 +30,7 @@ public sealed record KeriDigestSeal(string Digest): KeriSeal;
 /// </summary>
 /// <remarks>Seal count codes <c>-R</c> / <c>--R</c> (MerkleRootSealSingles); field order <c>[rd]</c>.</remarks>
 /// <param name="RootDigest">The Merkle tree root digest (field <c>rd</c>).</param>
-public sealed record KeriMerkleRootSeal(string RootDigest): KeriSeal;
+public sealed record KeriMerkleRootSeal(string RootDigest) : KeriSeal;
 
 /// <summary>
 /// A source event seal: a commitment to an event (an issuance, delegation, or transaction event) whose associated
@@ -39,7 +39,7 @@ public sealed record KeriMerkleRootSeal(string RootDigest): KeriSeal;
 /// <remarks>Seal count codes <c>-S</c> / <c>--S</c> (SealSourceCouples); field order <c>[s, d]</c>.</remarks>
 /// <param name="SequenceNumber">The sequence number of the sealed source event (field <c>s</c>, decoded from hexadecimal).</param>
 /// <param name="Said">The SAID of the sealed source event (field <c>d</c>).</param>
-public sealed record KeriSourceEventSeal(long SequenceNumber, string Said): KeriSeal;
+public sealed record KeriSourceEventSeal(long SequenceNumber, string Said) : KeriSeal;
 
 /// <summary>
 /// A key event seal: a commitment to an event in another (external) event log, naming that log's AID explicitly,
@@ -49,7 +49,7 @@ public sealed record KeriSourceEventSeal(long SequenceNumber, string Said): Keri
 /// <param name="Prefix">The AID of the external event log (field <c>i</c>).</param>
 /// <param name="SequenceNumber">The sequence number of the sealed external event (field <c>s</c>, decoded from hexadecimal).</param>
 /// <param name="Said">The SAID of the sealed external event (field <c>d</c>).</param>
-public sealed record KeriKeyEventSeal(string Prefix, long SequenceNumber, string Said): KeriSeal;
+public sealed record KeriKeyEventSeal(string Prefix, long SequenceNumber, string Said) : KeriSeal;
 
 /// <summary>
 /// A latest establishment event seal: a commitment to the key state of the latest establishment event of an
@@ -57,7 +57,7 @@ public sealed record KeriKeyEventSeal(string Prefix, long SequenceNumber, string
 /// </summary>
 /// <remarks>Seal count codes <c>-U</c> / <c>--U</c> (SealSourceLastSingles); field order <c>[i]</c>.</remarks>
 /// <param name="Prefix">The AID of the external KEL whose latest establishment event is sealed (field <c>i</c>).</param>
-public sealed record KeriLatestEstablishmentEventSeal(string Prefix): KeriSeal;
+public sealed record KeriLatestEstablishmentEventSeal(string Prefix) : KeriSeal;
 
 /// <summary>
 /// A registrar backer seal: a commitment to the metadata SAD of a ledger registrar backer, required (with the
@@ -66,7 +66,7 @@ public sealed record KeriLatestEstablishmentEventSeal(string Prefix): KeriSeal;
 /// <remarks>Seal count codes <c>-V</c> / <c>--V</c> (BackerRegistrarSealCouples); field order <c>[bi, d]</c>.</remarks>
 /// <param name="BackerIdentifier">The non-transferable AID of the registrar backer (field <c>bi</c>).</param>
 /// <param name="Said">The SAID of the associated registrar backer metadata SAD (field <c>d</c>).</param>
-public sealed record KeriRegistrarBackerSeal(string BackerIdentifier, string Said): KeriSeal;
+public sealed record KeriRegistrarBackerSeal(string BackerIdentifier, string Said) : KeriSeal;
 
 /// <summary>
 /// A typed seal: a digest commitment (field <c>d</c>) to external data tagged with a versioned seal type (field
@@ -76,4 +76,4 @@ public sealed record KeriRegistrarBackerSeal(string BackerIdentifier, string Sai
 /// <remarks>Seal count codes <c>-W</c> / <c>--W</c> (TypedDigestSealCouples); field order <c>[t, d]</c>.</remarks>
 /// <param name="SealType">The versioned seal type, a qb64 text primitive of four type plus three version characters (field <c>t</c>).</param>
 /// <param name="Digest">The cryptographic digest of the external data (field <c>d</c>).</param>
-public sealed record KeriTypedSeal(string SealType, string Digest): KeriSeal;
+public sealed record KeriTypedSeal(string SealType, string Digest) : KeriSeal;

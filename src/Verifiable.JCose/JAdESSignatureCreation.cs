@@ -34,7 +34,7 @@ public abstract class JAdESSigningPayloadInput
 
 /// <summary>An attached JWS Payload (JA-4-07): the bytes both become the wire <c>payload</c> field and are what the Signing Input covers.</summary>
 [DebuggerDisplay("JAdESAttachedPayloadInput: {Payload.Length} bytes")]
-public sealed class JAdESAttachedPayloadInput: JAdESSigningPayloadInput
+public sealed class JAdESAttachedPayloadInput : JAdESSigningPayloadInput
 {
     /// <summary>Initializes a new <see cref="JAdESAttachedPayloadInput"/>.</summary>
     /// <param name="payload">The payload bytes. <strong>Borrowed</strong> view — the caller owns the underlying memory for the duration of the call.</param>
@@ -50,7 +50,7 @@ public sealed class JAdESAttachedPayloadInput: JAdESSigningPayloadInput
 
 /// <summary>A detached JWS Payload agreed out of band, without a <c>sigD</c> header parameter.</summary>
 [DebuggerDisplay("JAdESDetachedExternalPayloadInput: {Payload.Length} bytes")]
-public sealed class JAdESDetachedExternalPayloadInput: JAdESSigningPayloadInput
+public sealed class JAdESDetachedExternalPayloadInput : JAdESSigningPayloadInput
 {
     /// <summary>Initializes a new <see cref="JAdESDetachedExternalPayloadInput"/>.</summary>
     /// <param name="payload">The bytes the Signing Input covers. <strong>Borrowed</strong> view. The wire <c>payload</c> field is omitted.</param>
@@ -66,7 +66,7 @@ public sealed class JAdESDetachedExternalPayloadInput: JAdESSigningPayloadInput
 
 /// <summary>The <c>HttpHeaders</c> mechanism of <c>sigD</c> (clause 5.2.8.2): in-library canonicalization, no dereferencing.</summary>
 [DebuggerDisplay("JAdESDetachedHttpHeadersPayloadInput: {HeaderNames.Count} headers")]
-public sealed class JAdESDetachedHttpHeadersPayloadInput: JAdESSigningPayloadInput
+public sealed class JAdESDetachedHttpHeadersPayloadInput : JAdESSigningPayloadInput
 {
     /// <summary>Initializes a new <see cref="JAdESDetachedHttpHeadersPayloadInput"/>.</summary>
     /// <param name="headerNames">The <c>pars</c> member: lowercased HTTP header field names, in wire order (JA-5.2.8.2-04/-05).</param>
@@ -87,7 +87,7 @@ public sealed class JAdESDetachedHttpHeadersPayloadInput: JAdESSigningPayloadInp
 
 /// <summary>The <c>ObjectIdByURI</c> mechanism of <c>sigD</c> (clause 5.2.8.3.2): dereferenced, no digests.</summary>
 [DebuggerDisplay("JAdESDetachedObjectIdByUriPayloadInput: {References.Count} references")]
-public sealed class JAdESDetachedObjectIdByUriPayloadInput: JAdESSigningPayloadInput
+public sealed class JAdESDetachedObjectIdByUriPayloadInput : JAdESSigningPayloadInput
 {
     /// <summary>Initializes a new <see cref="JAdESDetachedObjectIdByUriPayloadInput"/>.</summary>
     /// <param name="references">The <c>pars</c> entries, in wire order (JA-5.2.8.1-16/-17).</param>
@@ -106,7 +106,7 @@ public sealed class JAdESDetachedObjectIdByUriPayloadInput: JAdESSigningPayloadI
 /// no digest travels in yet, because <see cref="JAdESSignatureCreation"/> computes it (JA-5.2.8.3.3-04).
 /// </summary>
 [DebuggerDisplay("JAdESDetachedObjectIdByUriHashPayloadInput: {HashAlgorithm}, {References.Count} references")]
-public sealed class JAdESDetachedObjectIdByUriHashPayloadInput: JAdESSigningPayloadInput
+public sealed class JAdESDetachedObjectIdByUriHashPayloadInput : JAdESSigningPayloadInput
 {
     /// <summary>Initializes a new <see cref="JAdESDetachedObjectIdByUriHashPayloadInput"/>.</summary>
     /// <param name="hashAlgorithm">The <c>hashM</c> value (JA-5.2.8.1-18/-19) — resolves through the registered digest delegate; only SHA-256/384/512 are supported.</param>
@@ -127,7 +127,7 @@ public sealed class JAdESDetachedObjectIdByUriHashPayloadInput: JAdESSigningPayl
 
 /// <summary>A <c>sigD</c> mechanism this document does not itself define — the open extension point JA-5.2.8.1-C1 reserves.</summary>
 [DebuggerDisplay("JAdESDetachedUnknownMechanismPayloadInput: {MechanismIdentifier}")]
-public sealed class JAdESDetachedUnknownMechanismPayloadInput: JAdESSigningPayloadInput
+public sealed class JAdESDetachedUnknownMechanismPayloadInput : JAdESSigningPayloadInput
 {
     /// <summary>Initializes a new <see cref="JAdESDetachedUnknownMechanismPayloadInput"/>.</summary>
     /// <param name="mechanismIdentifier">The <c>mId</c> value, verbatim.</param>
@@ -162,7 +162,7 @@ public sealed class JAdESDetachedUnknownMechanismPayloadInput: JAdESSigningPaylo
 /// of that argument transfers to this call and <see cref="Headers"/> shares owned members with it.
 /// </remarks>
 [DebuggerDisplay("JAdESSignatureCreationResult: alg={Headers.Algorithm}")]
-public sealed class JAdESSignatureCreationResult: IDisposable
+public sealed class JAdESSignatureCreationResult : IDisposable
 {
     private bool disposed;
 

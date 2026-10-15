@@ -84,6 +84,11 @@ internal sealed class CardSimulatorTerminalAuthenticationAccessControlTests
     }
 
 
+    /// <summary>
+    /// The chip grants EF.DG3 and EF.DG4 to a terminal that signs EXTERNAL AUTHENTICATE through a library private key injected
+    /// in place of a raw key - the seam a TPM-held key uses - its public point certified by the Document Verifier.
+    /// </summary>
+    /// <returns>A task completing once the reads are judged.</returns>
     [TestMethod]
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The terminal PrivateKey takes ownership of the BouncyCastle private-key memory and is disposed by its using declaration; all other carriers are disposed by using declarations.")]
     public async Task GrantsAccessWhenTheTerminalSignsWithAnInjectedLibraryKey()
@@ -98,10 +103,10 @@ internal sealed class CardSimulatorTerminalAuthenticationAccessControlTests
         using ECDsa cvcaKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa documentVerifierKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
-        using CardVerifiableCertificate trustAnchor = await CardVerifiableCertificateMinter.MintAsync(
+        using var trustAnchor = await CardVerifiableCertificateMinter.MintAsync(
             cvcaKey, cvcaKey, CvcaReference, CvcaReference, CvcaRole | ReadDataGroup3 | ReadDataGroup4, includeDomainParameters: true, Effective, Expiration, inheritedCurve: null, BaseMemoryPool.Shared, TerminalType.InspectionSystem, TestContext.CancellationToken).ConfigureAwait(false);
         Tag certificateCurve = trustAnchor.PublicKey.EllipticCurvePoint!.Tag;
-        using CardVerifiableCertificate documentVerifier = await CardVerifiableCertificateMinter.MintAsync(
+        using var documentVerifier = await CardVerifiableCertificateMinter.MintAsync(
             cvcaKey, documentVerifierKey, CvcaReference, DocumentVerifierReference, DocumentVerifierRole | ReadDataGroup3 | ReadDataGroup4, includeDomainParameters: false, Effective, Expiration, certificateCurve, BaseMemoryPool.Shared, TerminalType.InspectionSystem, TestContext.CancellationToken).ConfigureAwait(false);
 
         //The terminal key is created through the library on the cross-platform BouncyCastle backend (framework
@@ -115,7 +120,7 @@ internal sealed class CardSimulatorTerminalAuthenticationAccessControlTests
             static (scalar, state) => state.Generator(scalar, state.Curve, state.Pool, state.Token),
             (Generator: multiplyGenerator, Curve: CryptoTags.P256ExchangePublicKey, Pool: BaseMemoryPool.Shared, Token: TestContext.CancellationToken));
         using PrivateKey terminalKey = CryptographicKeyFactory.CreatePrivateKey(terminalKeys.PrivateKey, "terminal-p256", terminalKeys.PrivateKey.Tag);
-        using CardVerifiableCertificate terminal = await CardVerifiableCertificateMinter.MintAsync(
+        using var terminal = await CardVerifiableCertificateMinter.MintAsync(
             documentVerifierKey, terminalPublicPoint.AsReadOnlyMemory(), DocumentVerifierReference, TerminalReference, TerminalRole | ReadDataGroup3 | ReadDataGroup4, Effective, Expiration, certificateCurve, BaseMemoryPool.Shared, TerminalType.InspectionSystem, TestContext.CancellationToken).ConfigureAwait(false);
 
         using EncodedEcPoint chipStaticPublicKey = await multiplyGenerator(Convert.FromHexString(ChipStaticPrivateKey), chipCurve, BaseMemoryPool.Shared, TestContext.CancellationToken);
@@ -231,6 +236,11 @@ internal sealed class CardSimulatorTerminalAuthenticationAccessControlTests
     /// Terminal Authentication, and reads EF.DG3 and EF.DG4 over the re-keyed session — returning each read's
     /// status word and whether its content matched the personalised file.
     /// </summary>
+    /// <param name="cvcaAuthorization">The relative authorization the CVCA certificate carries.</param>
+    /// <param name="documentVerifierAuthorization">The relative authorization the Document Verifier certificate carries.</param>
+    /// <param name="terminalAuthorization">The relative authorization the terminal certificate carries.</param>
+    /// <param name="runTerminalAuthentication">Whether Terminal Authentication runs before the reads.</param>
+    /// <returns>Each read's status word and whether its content matched the personalised file.</returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The re-keyed session takes ownership of the Chip Authentication keys and is disposed via using; the Basic Access Control session and access keys are disposed in the using blocks.")]
     private async Task<AccessControlOutcome> RunAccessControlAsync(
         int cvcaAuthorization, int documentVerifierAuthorization, int terminalAuthorization, bool runTerminalAuthentication)
@@ -248,12 +258,12 @@ internal sealed class CardSimulatorTerminalAuthenticationAccessControlTests
         using ECDsa terminalKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         byte[] terminalPrivateKey = terminalKey.ExportParameters(includePrivateParameters: true).D!;
 
-        using CardVerifiableCertificate trustAnchor = await CardVerifiableCertificateMinter.MintAsync(
+        using var trustAnchor = await CardVerifiableCertificateMinter.MintAsync(
             cvcaKey, cvcaKey, CvcaReference, CvcaReference, (byte)cvcaAuthorization, includeDomainParameters: true, Effective, Expiration, inheritedCurve: null, BaseMemoryPool.Shared, TerminalType.InspectionSystem, TestContext.CancellationToken).ConfigureAwait(false);
         Tag certificateCurve = trustAnchor.PublicKey.EllipticCurvePoint!.Tag;
-        using CardVerifiableCertificate documentVerifier = await CardVerifiableCertificateMinter.MintAsync(
+        using var documentVerifier = await CardVerifiableCertificateMinter.MintAsync(
             cvcaKey, documentVerifierKey, CvcaReference, DocumentVerifierReference, (byte)documentVerifierAuthorization, includeDomainParameters: false, Effective, Expiration, certificateCurve, BaseMemoryPool.Shared, TerminalType.InspectionSystem, TestContext.CancellationToken).ConfigureAwait(false);
-        using CardVerifiableCertificate terminal = await CardVerifiableCertificateMinter.MintAsync(
+        using var terminal = await CardVerifiableCertificateMinter.MintAsync(
             documentVerifierKey, terminalKey, DocumentVerifierReference, TerminalReference, (byte)terminalAuthorization, includeDomainParameters: false, Effective, Expiration, certificateCurve, BaseMemoryPool.Shared, TerminalType.InspectionSystem, TestContext.CancellationToken).ConfigureAwait(false);
 
         using EncodedEcPoint chipStaticPublicKey = await multiplyGenerator(chipStaticPrivateKey, chipCurve, BaseMemoryPool.Shared, TestContext.CancellationToken);

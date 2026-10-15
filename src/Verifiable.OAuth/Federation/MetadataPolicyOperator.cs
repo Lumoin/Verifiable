@@ -19,7 +19,7 @@ namespace Verifiable.OAuth.Federation;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{Value,nq}")]
-public readonly struct MetadataPolicyOperator: IEquatable<MetadataPolicyOperator>
+public readonly struct MetadataPolicyOperator : IEquatable<MetadataPolicyOperator>
 {
     /// <summary>
     /// The operator's wire string. Canonical identity; equality and hashing

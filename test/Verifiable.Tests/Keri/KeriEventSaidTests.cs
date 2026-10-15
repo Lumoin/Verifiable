@@ -208,7 +208,7 @@ internal sealed class KeriEventSaidTests
 
 
     //A minted event's serialization, carried in a pooled buffer the test owns and disposes, with its SAID.
-    private sealed class MintedEvent: IDisposable
+    private sealed class MintedEvent : IDisposable
     {
         private IMemoryOwner<byte> Owner { get; }
         private int Length { get; }

@@ -13,7 +13,7 @@ namespace Verifiable.Security.Windows
     /// This can only limit exposure of secrets in memory if they are held for
     /// a longer time. See more at <see cref="SensitiveMemory"/> remarks.</remarks>
     [SupportedOSPlatform("windows")]
-    public sealed class EncryptedMemoryWindows: SensitiveMemory
+    public sealed class EncryptedMemoryWindows : SensitiveMemory
     {
         /// <summary>
         /// The entropy used to encrypt memory.

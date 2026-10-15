@@ -23,7 +23,7 @@ namespace Verifiable.Xml;
 /// <see cref="XAdESArchiveTimeStamp"/> — it is itself <see cref="IDisposable"/>, since
 /// <see cref="XAdESTimeStamp.TryRead"/> takes a caller-supplied custody list rather than owning one itself.
 /// </remarks>
-public sealed class XAdESSigAndRefsTimeStampV2: IDisposable
+public sealed class XAdESSigAndRefsTimeStampV2 : IDisposable
 {
     /// <summary>The document the property was read from. Not owned; the caller disposes it separately.</summary>
     public XmlNodeTable Table { get; }

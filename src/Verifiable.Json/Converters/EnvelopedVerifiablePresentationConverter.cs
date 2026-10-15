@@ -14,7 +14,7 @@ namespace Verifiable.Json.Converters;
 /// Presentations). The converter is faithful — it round-trips the members; the MUSTs are
 /// the producer's and consumer's to enforce.
 /// </summary>
-public class EnvelopedVerifiablePresentationConverter: JsonConverter<EnvelopedVerifiablePresentation>
+public class EnvelopedVerifiablePresentationConverter : JsonConverter<EnvelopedVerifiablePresentation>
 {
     /// <inheritdoc/>
     public override EnvelopedVerifiablePresentation Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)

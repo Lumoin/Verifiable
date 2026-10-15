@@ -17,7 +17,7 @@ namespace Verifiable.OAuth.Oid4Vp.Server;
 /// failure path inside the verification releases the resolution before throwing.
 /// </para>
 /// </remarks>
-public sealed record MdocVpVerificationResult: IDisposable
+public sealed record MdocVpVerificationResult : IDisposable
 {
     /// <summary>The parsed and cryptographically verified VP token contents.</summary>
     public required VpTokenParsed Parsed { get; init; }

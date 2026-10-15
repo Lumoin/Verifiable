@@ -27,7 +27,7 @@ public sealed record WebPlusDidBuildState(
     string MbPubKey,
     string Placeholder,
     string PlaceholderDid,
-    string ValidFrom): IBuilderState;
+    string ValidFrom) : IBuilderState;
 
 
 /// <summary>
@@ -55,7 +55,7 @@ public sealed record WebPlusDidBuildState(
 /// dependency — mirroring the seam style of <see cref="WebPlusDidResolver"/>.
 /// </para>
 /// </remarks>
-public sealed class WebPlusDidBuilder: Builder<DidDocument, WebPlusDidBuildState, WebPlusDidBuilder>
+public sealed class WebPlusDidBuilder : Builder<DidDocument, WebPlusDidBuildState, WebPlusDidBuilder>
 {
     /// <summary>The serializer producing a document's JCS canonical bytes (the wire form a self-hash commits to).</summary>
     private WebPlusDidDocumentSerializer Serializer { get; }

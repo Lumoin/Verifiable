@@ -14,7 +14,7 @@ namespace Verifiable.Fido2;
 /// caller of this type (attestation object/statement parsing, response decoding) that has no CTAP
 /// command-boundary status code to choose between.
 /// </remarks>
-public sealed class Fido2FormatException: Exception
+public sealed class Fido2FormatException : Exception
 {
     /// <summary>Gets the failure classification a CTAP command decode boundary maps to a status byte.</summary>
     public Fido2FormatFailureKind FailureKind { get; }

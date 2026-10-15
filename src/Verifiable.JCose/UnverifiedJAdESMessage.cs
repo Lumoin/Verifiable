@@ -16,7 +16,7 @@ namespace Verifiable.JCose;
 /// every other <c>Unverified*</c> type in this family.
 /// </remarks>
 [DebuggerDisplay("UnverifiedJAdESMessage: {Format}")]
-public sealed class UnverifiedJAdESMessage: IDisposable
+public sealed class UnverifiedJAdESMessage : IDisposable
 {
     private bool disposed;
 

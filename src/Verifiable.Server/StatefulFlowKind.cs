@@ -19,7 +19,7 @@ namespace Verifiable.Server;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("StatefulFlowKind Name={Name}")]
-public abstract class StatefulFlowKind: FlowKind
+public abstract class StatefulFlowKind : FlowKind
 {
     /// <summary>
     /// Creates a fresh PDA for a new flow session and returns its initial state

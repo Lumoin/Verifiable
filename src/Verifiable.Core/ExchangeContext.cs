@@ -37,7 +37,7 @@ namespace Verifiable.Core;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("ExchangeContext({Count} entries)")]
-public class ExchangeContext: Dictionary<string, object>, IEquatable<ExchangeContext>
+public class ExchangeContext : Dictionary<string, object>, IEquatable<ExchangeContext>
 {
     /// <summary>
     /// Creates an empty <see cref="ExchangeContext"/>.

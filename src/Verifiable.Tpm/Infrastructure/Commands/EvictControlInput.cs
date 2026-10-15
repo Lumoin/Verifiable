@@ -24,7 +24,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <param name="Auth">The provisioning hierarchy that authorizes the operation (owner or platform).</param>
 /// <param name="ObjectHandle">The transient object to persist, or the persistent handle to evict.</param>
 /// <param name="PersistentHandle">The persistent handle to assign or evict.</param>
-public readonly record struct EvictControlInput(TpmRh Auth, uint ObjectHandle, uint PersistentHandle): ITpmCommandInput
+public readonly record struct EvictControlInput(TpmRh Auth, uint ObjectHandle, uint PersistentHandle) : ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_EvictControl;

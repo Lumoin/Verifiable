@@ -14,7 +14,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// <strong>Ownership.</strong> An instance owns the two certificate-ring nodes; disposing it disposes them. The
 /// responder holds them and must not outlive it.
 /// </remarks>
-internal sealed record PreservationTimestampAuthority: IDisposable
+internal sealed record PreservationTimestampAuthority : IDisposable
 {
     /// <summary>Gets the root certification authority of the ring. Owned by this instance.</summary>
     public required X509ChainTestRingNode Root { get; init; }

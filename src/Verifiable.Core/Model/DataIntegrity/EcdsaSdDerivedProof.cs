@@ -53,7 +53,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// <seealso cref="EcdsaSd2023CryptosuiteInfo"/>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 [SuppressMessage("Performance", "CA1819:Properties should not return arrays", Justification = "Wire-format POCO representing parsed proof components.")]
-public sealed class EcdsaSdDerivedProof: IEquatable<EcdsaSdDerivedProof>
+public sealed class EcdsaSdDerivedProof : IEquatable<EcdsaSdDerivedProof>
 {
     /// <summary>
     /// Gets the base signature from the issuer.

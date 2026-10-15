@@ -27,7 +27,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// scalar parameter needs no ownership discipline at all and this command's sized one inherits the same
 /// non-owning contract.
 /// </param>
-public readonly record struct StirRandomInput(Tpm2bSensitiveData InData): ITpmCommandInput
+public readonly record struct StirRandomInput(Tpm2bSensitiveData InData) : ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_StirRandom;

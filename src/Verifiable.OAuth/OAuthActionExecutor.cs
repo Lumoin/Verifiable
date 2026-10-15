@@ -30,7 +30,7 @@ namespace Verifiable.OAuth;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("OAuthActionExecutor({Handlers.Count} handlers)")]
-public sealed class OAuthActionExecutor: WiringComponent
+public sealed class OAuthActionExecutor : WiringComponent
 {
     /// <summary>Handlers keyed by their concrete action type and adapted to the common action shape.</summary>
     private Dictionary<Type, Func<OAuthAction, ExchangeContext, CancellationToken, ValueTask<FlowInput>>> Handlers { get; set; } = [];

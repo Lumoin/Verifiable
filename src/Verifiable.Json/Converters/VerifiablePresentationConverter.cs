@@ -31,7 +31,7 @@ namespace Verifiable.Json.Converters;
 /// the member is written only for an embedded-secured instance.
 /// </para>
 /// </remarks>
-public class VerifiablePresentationConverter: JsonConverter<VerifiablePresentation>
+public class VerifiablePresentationConverter : JsonConverter<VerifiablePresentation>
 {
     private const string DataUrlScheme = "data:";
 

@@ -54,7 +54,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// <seealso cref="BbsDerivedProof"/>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 [SuppressMessage("Performance", "CA1819:Properties should not return arrays", Justification = "Wire-format POCO representing parsed proof components.")]
-public sealed class BbsBaseProof: IEquatable<BbsBaseProof>
+public sealed class BbsBaseProof : IEquatable<BbsBaseProof>
 {
     /// <summary>
     /// Gets the BBS signature created by the issuer's verification method private key.

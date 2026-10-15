@@ -36,7 +36,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class Tpm2bContextData: IDisposable
+public sealed class Tpm2bContextData : IDisposable
 {
     /// <summary>
     /// This library's implementation bound for the buffer payload, in octets: 65535, the <c>UINT16</c> size

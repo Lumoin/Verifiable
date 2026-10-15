@@ -1428,7 +1428,7 @@ internal sealed class TpmInHouseSimulatorKemTests
     /// <see cref="IObservable{T}"/> trace emits — the exact same public channel a replay journal or metrics
     /// subscriber would use, not a test-only hook into production code.
     /// </summary>
-    private sealed class LastStateObserver: IObserver<TraceEntry<TpmSimulatorState, TpmSimulatorInput>>
+    private sealed class LastStateObserver : IObserver<TraceEntry<TpmSimulatorState, TpmSimulatorInput>>
     {
         /// <summary>Gets the state after the most recently observed step, or <see langword="null"/> before the first one.</summary>
         public TpmSimulatorState? LastState { get; private set; }

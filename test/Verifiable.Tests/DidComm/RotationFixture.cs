@@ -24,7 +24,7 @@ namespace Verifiable.Tests.DidComm;
 /// Ed25519 new DID); a single authcrypt round trip proves the spec-MUST encrypted path wires the verify;
 /// and the signed path proves reference-impl parity.
 /// </summary>
-internal sealed class RotationFixture: IAsyncDisposable
+internal sealed class RotationFixture : IAsyncDisposable
 {
     //The protected-header serializer the JWE / authcrypt layer hands a Dictionary<string, object> to.
     private static JwtHeaderSerializer JweHeaderSerializer { get; } =

@@ -26,7 +26,7 @@ namespace Verifiable.JCose;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("GeneralJweMessage EncryptionAlgorithm={EncryptionAlgorithm} Recipients={Recipients.Count}")]
-public sealed class GeneralJweMessage: IDisposable
+public sealed class GeneralJweMessage : IDisposable
 {
     private bool disposed;
 

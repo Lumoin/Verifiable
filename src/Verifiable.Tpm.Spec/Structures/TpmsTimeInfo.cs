@@ -22,7 +22,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// <param name="Time">Time in milliseconds since the last <c>_TPM_Init</c> or <c>TPM2_Startup()</c>.</param>
 /// <param name="ClockInfo">The clock and reset state.</param>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public readonly record struct TpmsTimeInfo(ulong Time, TpmsClockInfo ClockInfo): ITpmWireType
+public readonly record struct TpmsTimeInfo(ulong Time, TpmsClockInfo ClockInfo) : ITpmWireType
 {
     /// <summary>
     /// The serialized size of this fixed-layout structure, in bytes.

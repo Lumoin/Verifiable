@@ -35,7 +35,7 @@ namespace Verifiable.JCose;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("JsonWebKey({Count} entries)")]
-public class JsonWebKey: Dictionary<string, object>, IEquatable<JsonWebKey>
+public class JsonWebKey : Dictionary<string, object>, IEquatable<JsonWebKey>
 {
     /// <summary>
     /// Creates an empty JSON Web Key.

@@ -85,7 +85,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// </remarks>
 /// <seealso cref="EcdsaSdBaseProof"/>
 /// <seealso cref="EcdsaSdDerivedProof"/>
-public sealed class EcdsaSd2023CryptosuiteInfo: CryptosuiteInfo
+public sealed class EcdsaSd2023CryptosuiteInfo : CryptosuiteInfo
 {
     private static IReadOnlyList<string> ContextsArray { get; } =
         new[] { "https://w3id.org/security/data-integrity/v2" }.AsReadOnly();

@@ -25,7 +25,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </remarks>
 /// <param name="PcrHandle">The register to reset (<c>pcrHandle</c>, TPMI_DH_PCR).</param>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public readonly record struct PcrResetInput(TpmiDhPcr PcrHandle): ITpmCommandInput
+public readonly record struct PcrResetInput(TpmiDhPcr PcrHandle) : ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_PCR_Reset;

@@ -182,7 +182,7 @@ public sealed record AsicDataObject
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class AsicContainerCreationResult: IDisposable
+public sealed class AsicContainerCreationResult : IDisposable
 {
     /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
     private bool disposed;

@@ -13,7 +13,7 @@ namespace Verifiable.Tpm.Spec.Attributes;
 /// </para>
 /// </remarks>
 [Flags]
-public enum TpmaObject: uint
+public enum TpmaObject : uint
 {
     /// <summary>
     /// FIXED_TPM (bit 1): SET (1) indicates the hierarchy of the object, as indicated by its Qualified Name, may not change.

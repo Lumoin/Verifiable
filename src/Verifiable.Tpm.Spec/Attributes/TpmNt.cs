@@ -15,7 +15,7 @@ namespace Verifiable.Tpm.Spec.Attributes;
 /// </remarks>
 /// 
 [SuppressMessage("Design", "CA1027:Mark enums with FlagsAttribute", Justification = "Enum values defined by TPM 2.0 specification.")]
-public enum TpmNt: uint
+public enum TpmNt : uint
 {
     /// <summary>
     /// TPM_NT_ORDINARY (0x0): Ordinary - opaque data; modified using TPM2_NV_Write().

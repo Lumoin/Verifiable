@@ -39,7 +39,7 @@ namespace Verifiable.Foundation;
 /// <seealso cref="TaggedMemory{T}"/>
 /// <seealso cref="SensitiveMemory"/>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class PooledMemory: SensitiveMemory
+public sealed class PooledMemory : SensitiveMemory
 {
     /// <summary>
     /// Initializes a new pooled memory carrier, transferring ownership of <paramref name="storage"/>.

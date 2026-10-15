@@ -84,7 +84,7 @@ public enum CAdESAugmentationFailureKind
 /// caller rather than an adversarial input to be classified and reported.
 /// </remarks>
 [DebuggerDisplay("CAdESAugmentationException({FailureKind}): {Message}")]
-public sealed class CAdESAugmentationException: Exception
+public sealed class CAdESAugmentationException : Exception
 {
     /// <summary>Gets what could not be done.</summary>
     public CAdESAugmentationFailureKind FailureKind { get; }

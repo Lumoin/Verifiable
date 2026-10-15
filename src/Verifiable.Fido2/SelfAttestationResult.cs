@@ -20,4 +20,4 @@ namespace Verifiable.Fido2;
 /// key to create the attestation signature.
 /// </para>
 /// </remarks>
-public sealed record SelfAttestationResult: AttestationResult;
+public sealed record SelfAttestationResult : AttestationResult;

@@ -35,7 +35,7 @@ namespace Verifiable.OAuth.Server;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("TokenProducerSet Count={Count}")]
-public sealed class TokenProducerSet: IReadOnlyList<TokenProducer>
+public sealed class TokenProducerSet : IReadOnlyList<TokenProducer>
 {
     private TokenProducer[] Producers { get; }
 

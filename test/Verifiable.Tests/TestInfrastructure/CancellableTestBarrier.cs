@@ -5,7 +5,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// <summary>
 /// Releases asynchronous contenders together or aborts an incomplete rendezvous when a participant reports a fault.
 /// </summary>
-internal sealed class CancellableTestBarrier: IAsyncDisposable
+internal sealed class CancellableTestBarrier : IAsyncDisposable
 {
     /// <summary>Counts arrivals atomically so the final contender releases all waiting requests.</summary>
     private int arrivedCount;

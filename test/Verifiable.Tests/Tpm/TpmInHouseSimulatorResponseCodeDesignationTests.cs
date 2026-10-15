@@ -3073,7 +3073,7 @@ internal sealed class TpmInHouseSimulatorResponseCodeDesignationTests
     /// <param name="objectNameOctets">The <c>objectName</c> field's actual octets.</param>
     /// <param name="declaredObjectNameSize">The size declared for <c>objectName</c>, independent of <paramref name="objectNameOctets"/>'s length.</param>
     private sealed class RawMakeCredentialInput(
-        uint handle, ReadOnlyMemory<byte> credentialOctets, int declaredCredentialSize, ReadOnlyMemory<byte> objectNameOctets, int declaredObjectNameSize): ITpmCommandInput
+        uint handle, ReadOnlyMemory<byte> credentialOctets, int declaredCredentialSize, ReadOnlyMemory<byte> objectNameOctets, int declaredObjectNameSize) : ITpmCommandInput
     {
         /// <summary>The <c>TPM2_MakeCredential()</c> command code.</summary>
         public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_MakeCredential;

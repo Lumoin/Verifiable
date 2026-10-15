@@ -259,7 +259,7 @@ internal sealed class FederationChainPropertyTests
 /// per-link chain-fetch + chain-validation helpers used by the property
 /// tests.
 /// </summary>
-internal sealed class FederationTopologyFixture: IAsyncDisposable
+internal sealed class FederationTopologyFixture : IAsyncDisposable
 {
     private TestHostShell Host { get; }
     private Uri VerifierEntityId { get; }

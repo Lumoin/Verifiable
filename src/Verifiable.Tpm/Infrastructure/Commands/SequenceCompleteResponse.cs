@@ -15,7 +15,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// (clause 20.7). Both carriers are owned by this response and released by <see cref="Dispose"/>.
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class SequenceCompleteResponse: IDisposable, ITpmWireType
+public sealed class SequenceCompleteResponse : IDisposable, ITpmWireType
 {
     /// <summary>Whether this instance has been disposed.</summary>
     private bool Disposed { get; set; }

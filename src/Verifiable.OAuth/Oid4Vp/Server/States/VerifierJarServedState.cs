@@ -19,7 +19,7 @@ namespace Verifiable.OAuth.Oid4Vp.Server.States;
 /// encrypted Authorization Response.
 /// </remarks>
 [DebuggerDisplay("VerifierJarServed FlowId={FlowId} ServedAt={ServedAt}")]
-public sealed record VerifierJarServedState: FlowState
+public sealed record VerifierJarServedState : FlowState
 {
     /// <summary>The UTC instant at which the JAR was served to the Wallet.</summary>
     public required DateTimeOffset ServedAt { get; init; }

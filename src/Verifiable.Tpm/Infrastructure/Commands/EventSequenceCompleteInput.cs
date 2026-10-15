@@ -31,7 +31,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class EventSequenceCompleteInput: ITpmCommandInput, IDisposable
+public sealed class EventSequenceCompleteInput : ITpmCommandInput, IDisposable
 {
     /// <summary>Whether this instance has been disposed.</summary>
     private bool Disposed { get; set; }

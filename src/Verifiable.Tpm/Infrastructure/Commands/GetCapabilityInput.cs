@@ -20,7 +20,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// Specification reference: TPM 2.0 Library Part 3, clause 30.2.
 /// </para>
 /// </remarks>
-public readonly struct GetCapabilityInput: ITpmCommandInput, IEquatable<GetCapabilityInput>
+public readonly struct GetCapabilityInput : ITpmCommandInput, IEquatable<GetCapabilityInput>
 {
     /// <summary>
     /// Gets the capability category to query.

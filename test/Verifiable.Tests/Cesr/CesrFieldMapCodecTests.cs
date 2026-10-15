@@ -486,7 +486,7 @@ internal sealed class CesrFieldMapCodecTests
 
 
     //An ASCII serialization carried in a pooled buffer the test owns and disposes.
-    private sealed class AsciiText: IDisposable
+    private sealed class AsciiText : IDisposable
     {
         private IMemoryOwner<byte> Owner { get; }
         private int Length { get; }

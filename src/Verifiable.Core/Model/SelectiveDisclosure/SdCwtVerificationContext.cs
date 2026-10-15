@@ -14,7 +14,7 @@ namespace Verifiable.Core.Model.SelectiveDisclosure;
 /// from it, such as the redacted payload) is valid only until disposal.
 /// </para>
 /// </remarks>
-public sealed class SdCwtVerificationContext: IDisposable
+public sealed class SdCwtVerificationContext : IDisposable
 {
     /// <summary>Whether the parsed message has already been disposed.</summary>
     private bool disposed;

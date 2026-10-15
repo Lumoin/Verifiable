@@ -15,7 +15,7 @@ namespace Verifiable.Tpm.Spec.Attributes;
 /// </para>
 /// </remarks>
 [Flags]
-public enum TpmaNv: uint
+public enum TpmaNv : uint
 {
     /// <summary>
     /// TPMA_NV_PPWRITE (bit 0): SET (1) indicates the Index data can be written or write-locked if Platform Authorization is provided.

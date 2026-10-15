@@ -22,7 +22,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class DecapsulateResponse: IDisposable, ITpmWireType
+public sealed class DecapsulateResponse : IDisposable, ITpmWireType
 {
     private bool Disposed { get; set; }
 

@@ -22,7 +22,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </remarks>
 /// <param name="NvIndex">The NV Index to delete.</param>
 /// <param name="Platform">The platform hierarchy handle — always <c>TPM_RH_PLATFORM</c>, the only value <c>TPMI_RH_PLATFORM</c> admits.</param>
-public readonly record struct NvUndefineSpaceSpecialInput(uint NvIndex, TpmRh Platform = TpmRh.TPM_RH_PLATFORM): ITpmCommandInput
+public readonly record struct NvUndefineSpaceSpecialInput(uint NvIndex, TpmRh Platform = TpmRh.TPM_RH_PLATFORM) : ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_NV_UndefineSpaceSpecial;

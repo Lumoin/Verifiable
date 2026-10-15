@@ -16,7 +16,7 @@ namespace Verifiable.Core.Model.Mdoc;
 /// issuer-side salts / COSE_Sign1 carriers and the device-side COSE carriers.
 /// </para>
 /// </remarks>
-public sealed class MdocParsedDeviceResponse: IDisposable
+public sealed class MdocParsedDeviceResponse : IDisposable
 {
     private bool disposed;
 

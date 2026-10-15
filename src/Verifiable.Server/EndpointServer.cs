@@ -33,7 +33,7 @@ namespace Verifiable.Server;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("EndpointServer Validated={IsValidated}")]
-public sealed class EndpointServer: IDisposable
+public sealed class EndpointServer : IDisposable
 {
     /// <summary>Protects admission counts, the alteration queue, and construction validation.</summary>
     private object AdmissionLock { get; } = new();

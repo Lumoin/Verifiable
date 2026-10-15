@@ -36,13 +36,18 @@ internal sealed class CardSimulatorTerminalAuthenticationTests
     private const string DocumentVerifierReference = "UTDVDE00001";
     private const string TerminalReference = "UTISDE00001";
 
+    /// <summary>The effective date every minted certificate carries unless a row names its own.</summary>
     private static DateOnly Effective { get; } = new(2024, 1, 1);
+    /// <summary>The expiration date every minted certificate carries unless a row names its own.</summary>
     private static DateOnly Expiration { get; } = new(2026, 1, 1);
 
 
+    /// <summary>The test framework's context, supplying cancellation for the minting and the verification.</summary>
     public required TestContext TestContext { get; set; }
 
 
+    /// <summary>The chip accepts a correctly signed, linked, role-narrowing Document Verifier and terminal chain presented under the Country Verifying Certification Authority it trusts.</summary>
+    /// <returns>A task completing once the chip's answer is judged.</returns>
     [TestMethod]
     public async Task VerifiesAPresentedDocumentVerifierAndTerminalChain()
     {
@@ -61,6 +66,8 @@ internal sealed class CardSimulatorTerminalAuthenticationTests
     }
 
 
+    /// <summary>The chip rejects a chain whose terminal certificate's signature does not verify under the Document Verifier's key.</summary>
+    /// <returns>A task completing once the chip's answer is judged.</returns>
     [TestMethod]
     public async Task RejectsAPresentedChainWithATamperedTerminalCertificate()
     {
@@ -72,7 +79,7 @@ internal sealed class CardSimulatorTerminalAuthenticationTests
         Tag curve = trustAnchor.PublicKey.EllipticCurvePoint!.Tag;
         using var documentVerifier = await MintDocumentVerifierAsync(cvcaKey, documentVerifierKey, CvcaReference, curve, TestContext.CancellationToken).ConfigureAwait(false);
         //The terminal certificate's signature is corrupted, so it does not verify against the Document Verifier key.
-        using CardVerifiableCertificate terminal = await CardVerifiableCertificateMinter.MintWithTamperedSignatureAsync(
+        using var terminal = await CardVerifiableCertificateMinter.MintWithTamperedSignatureAsync(
             documentVerifierKey, terminalKey, DocumentVerifierReference, TerminalReference, CardVerifiableCertificateMinter.TerminalRole, includeDomainParameters: false, Effective, Expiration, curve, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
 
         bool accepted = await PresentChainOverBacAsync(trustAnchor, [documentVerifier, terminal]);
@@ -81,6 +88,8 @@ internal sealed class CardSimulatorTerminalAuthenticationTests
     }
 
 
+    /// <summary>The chip rejects MSE:Set DST naming a certification authority it does not hold: the presented chain chains to another CVCA than the one it trusts.</summary>
+    /// <returns>A task completing once the chip's answer is judged.</returns>
     [TestMethod]
     public async Task RejectsAChainNotRootedInTheChipsTrustAnchor()
     {
@@ -99,6 +108,8 @@ internal sealed class CardSimulatorTerminalAuthenticationTests
     }
 
 
+    /// <summary>The chip rejects a terminal certificate the CVCA issued directly, though linked and validly signed: a CVCA issues Document Verifiers alone.</summary>
+    /// <returns>A task completing once the chip's answer is judged.</returns>
     [TestMethod]
     public async Task RejectsACvcaIssuingATerminalDirectly()
     {
@@ -108,7 +119,7 @@ internal sealed class CardSimulatorTerminalAuthenticationTests
         using var trustAnchor = await MintCvcaAsync(cvcaKey, CvcaReference, TestContext.CancellationToken).ConfigureAwait(false);
         Tag curve = trustAnchor.PublicKey.EllipticCurvePoint!.Tag;
         //Linked to and validly signed by the CVCA, but a terminal role: a CVCA may issue only Document Verifiers.
-        using CardVerifiableCertificate terminal = await CardVerifiableCertificateMinter.MintAsync(
+        using var terminal = await CardVerifiableCertificateMinter.MintAsync(
             cvcaKey, terminalKey, CvcaReference, TerminalReference, CardVerifiableCertificateMinter.TerminalRole, includeDomainParameters: false, Effective, Expiration, curve, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
 
         bool accepted = await PresentChainOverBacAsync(trustAnchor, [terminal]);
@@ -117,6 +128,8 @@ internal sealed class CardSimulatorTerminalAuthenticationTests
     }
 
 
+    /// <summary>The chip accepts a chain whose certificates were issued in sequence, each after its parent: under the default date it advances from the trust anchor's effective date rather than rejecting later certificates as not yet valid.</summary>
+    /// <returns>A task completing once the chip's answer is judged.</returns>
     [TestMethod]
     public async Task VerifiesAChainWithStaggeredValidityDatesUnderTheDefaultDate()
     {
@@ -127,12 +140,12 @@ internal sealed class CardSimulatorTerminalAuthenticationTests
         //A realistic chain: each certificate is issued after its parent, so the children's effective dates are
         //later than the trust anchor's. The chip starts from the trust anchor's effective date and advances.
         DateOnly expiration = new(2030, 1, 1);
-        using CardVerifiableCertificate trustAnchor = await CardVerifiableCertificateMinter.MintAsync(
+        using var trustAnchor = await CardVerifiableCertificateMinter.MintAsync(
             cvcaKey, cvcaKey, CvcaReference, CvcaReference, CardVerifiableCertificateMinter.CvcaRole, includeDomainParameters: true, new DateOnly(2023, 1, 1), expiration, inheritedCurve: null, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
         Tag curve = trustAnchor.PublicKey.EllipticCurvePoint!.Tag;
-        using CardVerifiableCertificate documentVerifier = await CardVerifiableCertificateMinter.MintAsync(
+        using var documentVerifier = await CardVerifiableCertificateMinter.MintAsync(
             cvcaKey, documentVerifierKey, CvcaReference, DocumentVerifierReference, CardVerifiableCertificateMinter.DocumentVerifierRole, includeDomainParameters: false, new DateOnly(2024, 6, 1), expiration, curve, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
-        using CardVerifiableCertificate terminal = await CardVerifiableCertificateMinter.MintAsync(
+        using var terminal = await CardVerifiableCertificateMinter.MintAsync(
             documentVerifierKey, terminalKey, DocumentVerifierReference, TerminalReference, CardVerifiableCertificateMinter.TerminalRole, includeDomainParameters: false, new DateOnly(2025, 6, 1), expiration, curve, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
 
         bool accepted = await PresentChainOverBacAsync(trustAnchor, [documentVerifier, terminal], cardDate: null);
@@ -141,6 +154,8 @@ internal sealed class CardSimulatorTerminalAuthenticationTests
     }
 
 
+    /// <summary>The chip rejects a terminal certificate that expired before the date verifying the Document Verifier advanced it to.</summary>
+    /// <returns>A task completing once the chip's answer is judged.</returns>
     [TestMethod]
     public async Task RejectsACertificateExpiredRelativeToTheAdvancingDate()
     {
@@ -150,12 +165,12 @@ internal sealed class CardSimulatorTerminalAuthenticationTests
 
         //Verifying the Document Verifier advances the chip's date to 2026; the terminal certificate expired in
         //2024, before that date, so the chip rejects it as expired.
-        using CardVerifiableCertificate trustAnchor = await CardVerifiableCertificateMinter.MintAsync(
+        using var trustAnchor = await CardVerifiableCertificateMinter.MintAsync(
             cvcaKey, cvcaKey, CvcaReference, CvcaReference, CardVerifiableCertificateMinter.CvcaRole, includeDomainParameters: true, new DateOnly(2023, 1, 1), new DateOnly(2030, 1, 1), inheritedCurve: null, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
         Tag curve = trustAnchor.PublicKey.EllipticCurvePoint!.Tag;
-        using CardVerifiableCertificate documentVerifier = await CardVerifiableCertificateMinter.MintAsync(
+        using var documentVerifier = await CardVerifiableCertificateMinter.MintAsync(
             cvcaKey, documentVerifierKey, CvcaReference, DocumentVerifierReference, CardVerifiableCertificateMinter.DocumentVerifierRole, includeDomainParameters: false, new DateOnly(2026, 1, 1), new DateOnly(2030, 1, 1), curve, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
-        using CardVerifiableCertificate terminal = await CardVerifiableCertificateMinter.MintAsync(
+        using var terminal = await CardVerifiableCertificateMinter.MintAsync(
             documentVerifierKey, terminalKey, DocumentVerifierReference, TerminalReference, CardVerifiableCertificateMinter.TerminalRole, includeDomainParameters: false, new DateOnly(2024, 1, 1), new DateOnly(2024, 6, 1), curve, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
 
         bool accepted = await PresentChainOverBacAsync(trustAnchor, [documentVerifier, terminal], cardDate: null);
@@ -213,14 +228,32 @@ internal sealed class CardSimulatorTerminalAuthenticationTests
 
 
     /// <summary>Mints the self-signed Country Verifying Certification Authority certificate (full domain parameters).</summary>
+    /// <param name="cvcaKey">The CVCA's key, which signs its own certificate.</param>
+    /// <param name="reference">The CVCA's reference, both its holder and its authority reference.</param>
+    /// <param name="cancellationToken">Cancels the signing.</param>
+    /// <returns>The certificate.</returns>
     private static ValueTask<CardVerifiableCertificate> MintCvcaAsync(ECDsa cvcaKey, string reference, CancellationToken cancellationToken) =>
         CardVerifiableCertificateMinter.MintAsync(cvcaKey, cvcaKey, reference, reference, CardVerifiableCertificateMinter.CvcaRole, includeDomainParameters: true, Effective, Expiration, inheritedCurve: null, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, cancellationToken);
 
+
     /// <summary>Mints a Document Verifier certificate under its issuer (inherited curve).</summary>
+    /// <param name="issuerKey">The issuer's key, which signs the certificate.</param>
+    /// <param name="documentVerifierKey">The Document Verifier's key, which the certificate carries.</param>
+    /// <param name="authorityReference">The issuer's reference.</param>
+    /// <param name="curve">The curve the certificate inherits from its issuer.</param>
+    /// <param name="cancellationToken">Cancels the signing.</param>
+    /// <returns>The certificate.</returns>
     private static ValueTask<CardVerifiableCertificate> MintDocumentVerifierAsync(ECDsa issuerKey, ECDsa documentVerifierKey, string authorityReference, Tag curve, CancellationToken cancellationToken) =>
         CardVerifiableCertificateMinter.MintAsync(issuerKey, documentVerifierKey, authorityReference, DocumentVerifierReference, CardVerifiableCertificateMinter.DocumentVerifierRole, includeDomainParameters: false, Effective, Expiration, curve, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, cancellationToken);
 
+
     /// <summary>Mints a terminal certificate under its issuer (inherited curve).</summary>
+    /// <param name="issuerKey">The issuer's key, which signs the certificate.</param>
+    /// <param name="terminalKey">The terminal's key, which the certificate carries.</param>
+    /// <param name="authorityReference">The issuer's reference.</param>
+    /// <param name="curve">The curve the certificate inherits from its issuer.</param>
+    /// <param name="cancellationToken">Cancels the signing.</param>
+    /// <returns>The certificate.</returns>
     private static ValueTask<CardVerifiableCertificate> MintTerminalAsync(ECDsa issuerKey, ECDsa terminalKey, string authorityReference, Tag curve, CancellationToken cancellationToken) =>
         CardVerifiableCertificateMinter.MintAsync(issuerKey, terminalKey, authorityReference, TerminalReference, CardVerifiableCertificateMinter.TerminalRole, includeDomainParameters: false, Effective, Expiration, curve, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, cancellationToken);
 }

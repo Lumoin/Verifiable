@@ -1164,7 +1164,7 @@ internal static class OcspTestFixtures
 /// </summary>
 /// <param name="Certificate">The minted certificate (public-only).</param>
 /// <param name="Key">The certificate's signing key.</param>
-internal sealed record MintedCertificate(X509Certificate2 Certificate, ECDsa Key): IDisposable
+internal sealed record MintedCertificate(X509Certificate2 Certificate, ECDsa Key) : IDisposable
 {
     /// <inheritdoc/>
     public void Dispose()

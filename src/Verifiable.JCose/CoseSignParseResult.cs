@@ -18,7 +18,7 @@ namespace Verifiable.JCose;
 /// dictionary, so the message itself is the byte-exact form a Sig_structure rebuild needs.
 /// </para>
 /// </remarks>
-public sealed class CoseSignParseResult: IDisposable
+public sealed class CoseSignParseResult : IDisposable
 {
     private bool disposed;
 

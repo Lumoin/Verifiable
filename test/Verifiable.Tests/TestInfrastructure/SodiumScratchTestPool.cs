@@ -14,7 +14,7 @@ namespace Verifiable.Tests.TestInfrastructure
     /// memory (guard pages, mlock, zero-on-free); a caller supplying a plain <see cref="BaseMemoryPool"/>'s
     /// Managed tier here would silently drop that protection while the secret key is live.
     /// </remarks>
-    internal sealed class SodiumScratchTestPool: MemoryPool<byte>
+    internal sealed class SodiumScratchTestPool : MemoryPool<byte>
     {
         /// <summary>
         /// The shared instance every test call site uses: the adapter holds no state of its own, so one

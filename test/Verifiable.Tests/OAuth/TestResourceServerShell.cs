@@ -45,7 +45,7 @@ namespace Verifiable.Tests.OAuth;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("TestResourceServerShell BaseAddress={HttpBaseAddress}")]
-internal sealed class TestResourceServerShell: IAsyncDisposable
+internal sealed class TestResourceServerShell : IAsyncDisposable
 {
     private global::Microsoft.AspNetCore.Builder.WebApplication? webApplication;
     private EndpointServer? metadataServer;

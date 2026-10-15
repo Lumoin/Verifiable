@@ -53,7 +53,7 @@ namespace Verifiable.Apdu.Ctap;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class CtapNfcResponder: IDisposable
+public sealed class CtapNfcResponder : IDisposable
 {
     /// <summary>The CTAP2-only Select-response version string (spec §11.3.3): never the CTAP2.3 version string itself, which appears only in <c>authenticatorGetInfo</c>.</summary>
     private static ReadOnlySpan<byte> SelectVersionString => "FIDO_2_0"u8;

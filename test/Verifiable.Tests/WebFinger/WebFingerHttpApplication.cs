@@ -230,7 +230,7 @@ internal sealed class WebFingerHttpApplication
 
 
     /// <summary>A minimal <see cref="IRegistrationRecord"/> carrying only the host-generic projection the dispatcher reads — no OAuth vocabulary.</summary>
-    private sealed record PlainRegistration: IRegistrationRecord
+    private sealed record PlainRegistration : IRegistrationRecord
     {
         /// <summary>The stable client identifier surfaced on dispatch telemetry.</summary>
         public required string ClientId { get; init; }
@@ -255,7 +255,7 @@ internal sealed class WebFingerHttpApplication
     /// method's HTTPS-only construction (a single explicit <c>Listen</c> call, no plaintext <c>UseUrls</c>),
     /// there is no plaintext HTTP listener on this node at all.
     /// </summary>
-    internal sealed class Host: IAsyncDisposable
+    internal sealed class Host : IAsyncDisposable
     {
         private WebApplication App { get; }
         private WebFingerHttpApplication Application { get; }

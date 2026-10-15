@@ -16,7 +16,7 @@ namespace Verifiable.Tpm.Spec.Attributes;
 /// </remarks>
 [Flags]
 [SuppressMessage("Usage", "CA2217:Do not mark enums with FlagsAttribute", Justification = "Enum values defined by TPM 2.0 specification.")]
-public enum TpmaLocality: byte
+public enum TpmaLocality : byte
 {
     /// <summary>TPM_LOC_ZERO (bit 0).</summary>
     TPM_LOC_ZERO = 0x01,

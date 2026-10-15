@@ -19,7 +19,7 @@ namespace Verifiable.Core.Model.Mdoc;
 /// so no disposal step is needed for it today.
 /// </para>
 /// </remarks>
-public sealed class MdocDocument: IDisposable
+public sealed class MdocDocument : IDisposable
 {
     private bool disposed;
 

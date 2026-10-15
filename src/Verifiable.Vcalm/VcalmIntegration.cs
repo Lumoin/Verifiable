@@ -24,7 +24,7 @@ namespace Verifiable.Vcalm;
 /// unwired OAuth seam fails.
 /// </para>
 /// </remarks>
-public sealed class VcalmIntegration: ServerIntegration
+public sealed class VcalmIntegration : ServerIntegration
 {
     /// <summary>
     /// The maximum request-body size, in bytes, the VCALM 1.0 endpoints accept before answering

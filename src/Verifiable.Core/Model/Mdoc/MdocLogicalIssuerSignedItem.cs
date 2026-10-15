@@ -34,7 +34,7 @@ namespace Verifiable.Core.Model.Mdoc;
 /// <see cref="MdocLogicalDocument"/>) after a successful signing call.
 /// </para>
 /// </remarks>
-public sealed class MdocLogicalIssuerSignedItem: IDisposable
+public sealed class MdocLogicalIssuerSignedItem : IDisposable
 {
     private bool disposed;
 

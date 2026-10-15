@@ -20,7 +20,7 @@ namespace Verifiable.Apdu;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class GetChallengeResponse: SensitiveMemory, IApduWireType
+public sealed class GetChallengeResponse : SensitiveMemory, IApduWireType
 {
     internal GetChallengeResponse(IMemoryOwner<byte> storage, int length)
         : base(storage, ApduTags.Response)

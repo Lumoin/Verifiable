@@ -755,7 +755,7 @@ internal static class TpmContextSerializer
     /// </summary>
     /// <param name="Owner">The rented storage; <see cref="EmptyMemoryOwner"/> for a zero-length key.</param>
     /// <param name="Length">The number of valid leading octets in <see cref="Owner"/>.</param>
-    private readonly record struct TpmContextOctets(IMemoryOwner<byte> Owner, int Length): IDisposable
+    private readonly record struct TpmContextOctets(IMemoryOwner<byte> Owner, int Length) : IDisposable
     {
         /// <summary>Gets the valid octets.</summary>
         public ReadOnlySpan<byte> Span => Owner.Memory.Span[..Length];

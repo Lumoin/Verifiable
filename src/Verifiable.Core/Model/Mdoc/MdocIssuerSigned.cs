@@ -28,7 +28,7 @@ namespace Verifiable.Core.Model.Mdoc;
 /// <see cref="IssuerAuth"/> to release its COSE_Sign1 wire-bytes carrier.
 /// </para>
 /// </remarks>
-public sealed class MdocIssuerSigned: IDisposable
+public sealed class MdocIssuerSigned : IDisposable
 {
     private bool disposed;
 

@@ -20,7 +20,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 /// <c>authenticatorGetAssertion</c> are the first commands that need one, mirroring
 /// <c>Verifiable.Tpm.Automata.TpmAction</c>'s role in <c>Verifiable.Tpm.Automata.TpmSimulator</c>.
 /// </remarks>
-public abstract record CtapAction: PdaAction;
+public abstract record CtapAction : PdaAction;
 
 /// <summary>
 /// Declares that the simulator must consult the injected <see cref="SimulateUserPresenceDelegate"/> for a
@@ -34,7 +34,7 @@ public abstract record CtapAction: PdaAction;
 /// action is ever declared, so re-declaring this SAME action across a poll needs no re-supplied
 /// continuation — mirroring <see cref="CtapBeginBioEnrollmentCaptureAction"/>'s own no-fields shape.
 /// </summary>
-public sealed record CtapCollectUserPresenceAction: CtapAction;
+public sealed record CtapCollectUserPresenceAction : CtapAction;
 
 /// <summary>
 /// Declares that the simulator must mint a fresh credential key pair before the next transition. Emitted
@@ -148,7 +148,7 @@ public sealed record CtapGenerateCredentialKeyAction(
     bool HmacSecretRequested,
     bool LargeBlobKeyRequested,
     ulong CreationSequence,
-    CtapMakeCredentialHmacSecretMcRequest? HmacSecretMc = null): CtapAction;
+    CtapMakeCredentialHmacSecretMcRequest? HmacSecretMc = null) : CtapAction;
 
 /// <summary>
 /// The resolved inputs <see cref="CtapGenerateCredentialKeyAction"/>'s effect needs to run the
@@ -258,7 +258,7 @@ public sealed record CtapSignAssertionAction(
     CtapRememberGetAssertionRequest? RememberOnCompletion,
     ReadOnlyMemory<byte>? LargeBlobKey,
     ulong CreationSequence,
-    CtapGetAssertionHmacSecretRequest? HmacSecret = null): CtapAction;
+    CtapGetAssertionHmacSecretRequest? HmacSecret = null) : CtapAction;
 
 /// <summary>
 /// The resolved inputs <see cref="CtapSignAssertionAction"/>'s effect needs to run CTAP 2.3 §12.7's
@@ -365,7 +365,7 @@ public sealed record CtapRememberGetAssertionRequest(
 /// </param>
 public sealed record CtapComputeKeyAgreementPublicKeyAction(
     CtapPinUvAuthProtocolId ProtocolId,
-    PublicKeyMemory OwnPublicKey): CtapAction;
+    PublicKeyMemory OwnPublicKey) : CtapAction;
 
 /// <summary>
 /// Declares that the simulator must run <c>setPIN</c>'s crypto sequence (CTAP 2.3 §6.5.5.5, lines
@@ -394,7 +394,7 @@ public sealed record CtapEstablishPinAction(
     CoseKey PeerKeyAgreement,
     ReadOnlyMemory<byte> PinUvAuthParam,
     ReadOnlyMemory<byte> NewPinEnc,
-    int MinPinCodePointLength): CtapAction;
+    int MinPinCodePointLength) : CtapAction;
 
 /// <summary>
 /// Declares that the simulator must run <c>changePIN</c>'s crypto sequence (CTAP 2.3 §6.5.5.6, lines
@@ -444,7 +444,7 @@ public sealed record CtapChangePinAction(
     ReadOnlyMemory<byte> PinHashEnc,
     DigestValue? CurrentStoredPin,
     int MinPinCodePointLength,
-    bool IsForcePinChangeRequired): CtapAction;
+    bool IsForcePinChangeRequired) : CtapAction;
 
 /// <summary>
 /// Declares that the simulator must run the shared <c>getPinToken</c>/
@@ -512,7 +512,7 @@ public sealed record CtapIssuePinTokenAction(
     string? PermissionsRpId,
     DateTimeOffset Now,
     bool IsForcePinChangeRequired,
-    byte ForcePinChangeDeniedStatusCode): CtapAction;
+    byte ForcePinChangeDeniedStatusCode) : CtapAction;
 
 /// <summary>
 /// The decoded-request context a <see cref="CtapVerifyPinUvAuthTokenAction"/>'s fold-back needs to
@@ -538,7 +538,7 @@ public abstract record CtapVerifyPinUvAuthTokenContinuation;
 /// before this verify action was declared, and threaded here so it survives the async verify round trip
 /// unchanged — never recomputed once the verify completes.
 /// </param>
-public sealed record CtapMakeCredentialVerifyContinuation(MakeCredentialRequested Requested, bool EnterpriseAttestationGranted): CtapVerifyPinUvAuthTokenContinuation;
+public sealed record CtapMakeCredentialVerifyContinuation(MakeCredentialRequested Requested, bool EnterpriseAttestationGranted) : CtapVerifyPinUvAuthTokenContinuation;
 
 /// <summary>
 /// Resumes an interrupted <c>authenticatorGetAssertion</c> once its presented <c>pinUvAuthParam</c>
@@ -547,7 +547,7 @@ public sealed record CtapMakeCredentialVerifyContinuation(MakeCredentialRequeste
 /// <param name="Requested">
 /// The original decoded request, borrowed unchanged from the input that declared the verify action.
 /// </param>
-public sealed record CtapGetAssertionVerifyContinuation(GetAssertionRequested Requested): CtapVerifyPinUvAuthTokenContinuation;
+public sealed record CtapGetAssertionVerifyContinuation(GetAssertionRequested Requested) : CtapVerifyPinUvAuthTokenContinuation;
 
 /// <summary>
 /// Resumes an interrupted <c>authenticatorConfig</c> once its presented <c>pinUvAuthParam</c> has been
@@ -556,7 +556,7 @@ public sealed record CtapGetAssertionVerifyContinuation(GetAssertionRequested Re
 /// <param name="Requested">
 /// The original decoded request, borrowed unchanged from the input that declared the verify action.
 /// </param>
-public sealed record CtapAuthenticatorConfigVerifyContinuation(AuthenticatorConfigRequested Requested): CtapVerifyPinUvAuthTokenContinuation;
+public sealed record CtapAuthenticatorConfigVerifyContinuation(AuthenticatorConfigRequested Requested) : CtapVerifyPinUvAuthTokenContinuation;
 
 /// <summary>
 /// Declares that the simulator must run CTAP 2.3's state-aware <c>verify</c> composition
@@ -588,7 +588,7 @@ public sealed record CtapVerifyPinUvAuthTokenAction(
     CtapPinUvAuthTokenState TokenState,
     DigestValue ClientDataHash,
     ReadOnlyMemory<byte> PinUvAuthParam,
-    CtapVerifyPinUvAuthTokenContinuation Continuation): CtapAction;
+    CtapVerifyPinUvAuthTokenContinuation Continuation) : CtapAction;
 
 /// <summary>
 /// Declares that the simulator must run CTAP 2.3's state-aware <c>verify</c> composition
@@ -625,7 +625,7 @@ public sealed record CtapVerifyAuthenticatorConfigTokenAction(
     int SubCommand,
     ReadOnlyMemory<byte> SubCommandParams,
     ReadOnlyMemory<byte> PinUvAuthParam,
-    CtapVerifyPinUvAuthTokenContinuation Continuation): CtapAction;
+    CtapVerifyPinUvAuthTokenContinuation Continuation) : CtapAction;
 
 /// <summary>
 /// Resumes an interrupted <c>authenticatorCredentialManagement</c> once its presented
@@ -634,7 +634,7 @@ public sealed record CtapVerifyAuthenticatorConfigTokenAction(
 /// <param name="Requested">
 /// The original decoded request, borrowed unchanged from the input that declared the verify action.
 /// </param>
-public sealed record CtapCredentialManagementVerifyContinuation(CredentialManagementRequested Requested): CtapVerifyPinUvAuthTokenContinuation;
+public sealed record CtapCredentialManagementVerifyContinuation(CredentialManagementRequested Requested) : CtapVerifyPinUvAuthTokenContinuation;
 
 /// <summary>
 /// Declares that the simulator must run CTAP 2.3's state-aware <c>verify</c> composition
@@ -670,7 +670,7 @@ public sealed record CtapVerifyCredentialManagementTokenAction(
     int SubCommand,
     ReadOnlyMemory<byte> SubCommandParams,
     ReadOnlyMemory<byte> PinUvAuthParam,
-    CtapVerifyPinUvAuthTokenContinuation Continuation): CtapAction;
+    CtapVerifyPinUvAuthTokenContinuation Continuation) : CtapAction;
 
 /// <summary>
 /// Resumes an interrupted <c>authenticatorBioEnrollment</c> once its presented <c>pinUvAuthParam</c> has
@@ -679,7 +679,7 @@ public sealed record CtapVerifyCredentialManagementTokenAction(
 /// <param name="Requested">
 /// The original decoded request, borrowed unchanged from the input that declared the verify action.
 /// </param>
-public sealed record CtapBioEnrollmentVerifyContinuation(BioEnrollmentRequested Requested): CtapVerifyPinUvAuthTokenContinuation;
+public sealed record CtapBioEnrollmentVerifyContinuation(BioEnrollmentRequested Requested) : CtapVerifyPinUvAuthTokenContinuation;
 
 /// <summary>
 /// Declares that the simulator must run CTAP 2.3's state-aware <c>verify</c> composition
@@ -721,7 +721,7 @@ public sealed record CtapVerifyBioEnrollmentTokenAction(
     int SubCommand,
     ReadOnlyMemory<byte> SubCommandParams,
     ReadOnlyMemory<byte> PinUvAuthParam,
-    CtapVerifyPinUvAuthTokenContinuation Continuation): CtapAction;
+    CtapVerifyPinUvAuthTokenContinuation Continuation) : CtapAction;
 
 /// <summary>
 /// Declares that the simulator must mint a fresh fingerprint template identifier and simulate the
@@ -735,7 +735,7 @@ public sealed record CtapVerifyBioEnrollmentTokenAction(
 /// simulator's own composition-time context, mirroring <see cref="CtapResetPinUvAuthTokensAction"/>'s
 /// no-fields shape.
 /// </summary>
-public sealed record CtapBeginBioEnrollmentCaptureAction: CtapAction;
+public sealed record CtapBeginBioEnrollmentCaptureAction : CtapAction;
 
 /// <summary>
 /// Declares that the simulator must simulate one more sample capture for the in-progress enrollment
@@ -746,7 +746,7 @@ public sealed record CtapBeginBioEnrollmentCaptureAction: CtapAction;
 /// already exists — folding the result back as a <see cref="BioEnrollmentSampleCaptured"/> input. Carries
 /// no fields, mirroring <see cref="CtapBeginBioEnrollmentCaptureAction"/>'s own shape.
 /// </summary>
-public sealed record CtapContinueBioEnrollmentCaptureAction: CtapAction;
+public sealed record CtapContinueBioEnrollmentCaptureAction : CtapAction;
 
 /// <summary>
 /// Declares that the simulator must compute one relying party's fresh <c>rpIDHash</c> before completing
@@ -764,7 +764,7 @@ public sealed record CtapContinueBioEnrollmentCaptureAction: CtapAction;
 /// response (line 7220); <see langword="null"/> for <c>enumerateRPsGetNextRP</c>, whose own response
 /// never reports it (line 7242's own field list omits it).
 /// </param>
-public sealed record CtapEmitCredentialManagementRpAction(string RpId, int? TotalRps): CtapAction;
+public sealed record CtapEmitCredentialManagementRpAction(string RpId, int? TotalRps) : CtapAction;
 
 /// <summary>
 /// Declares that the simulator must locate every resident credential whose relying party identifier's
@@ -786,7 +786,7 @@ public sealed record CtapLocateCredentialManagementCredentialsAction(
     ReadOnlyMemory<byte> RequestRpIdHash,
     ImmutableDictionary<string, CtapCredentialRecord> CredentialsByCredentialId,
     DateTimeOffset Now,
-    CtapPinUvAuthProtocolId AuthenticatingPinUvAuthProtocol): CtapAction;
+    CtapPinUvAuthProtocolId AuthenticatingPinUvAuthProtocol) : CtapAction;
 
 /// <summary>
 /// Declares that the simulator must mint a fresh <c>pinUvAuthToken</c> for BOTH PIN/UV auth protocols —
@@ -799,7 +799,7 @@ public sealed record CtapLocateCredentialManagementCredentialsAction(
 /// fresh token VALUES is the only piece of this step that needs entropy, hence the only piece routed
 /// through the effectful loop at all.
 /// </summary>
-public sealed record CtapResetPinUvAuthTokensAction: CtapAction;
+public sealed record CtapResetPinUvAuthTokensAction : CtapAction;
 
 /// <summary>
 /// Declares that the simulator must mint a fresh key-agreement key pair and a fresh
@@ -818,7 +818,7 @@ public sealed record CtapResetPinUvAuthTokensAction: CtapAction;
 /// different command entirely. This action mints BOTH key-agreement key pairs AND both tokens — a
 /// strict superset — for <c>authenticatorReset</c> alone.
 /// </remarks>
-public sealed record CtapFactoryResetKeyMaterialAction: CtapAction;
+public sealed record CtapFactoryResetKeyMaterialAction : CtapAction;
 
 /// <summary>
 /// The interrupted command context a <see cref="CtapPerformBuiltInUvAction"/>'s fold-back needs to
@@ -842,7 +842,7 @@ public abstract record CtapPerformBuiltInUvContinuation;
 /// before this built-in-UV action was declared, and threaded here so it survives the async gesture round
 /// trip unchanged — never recomputed once the gesture concludes.
 /// </param>
-public sealed record CtapMakeCredentialBuiltInUvContinuation(MakeCredentialRequested Requested, bool EnterpriseAttestationGranted): CtapPerformBuiltInUvContinuation;
+public sealed record CtapMakeCredentialBuiltInUvContinuation(MakeCredentialRequested Requested, bool EnterpriseAttestationGranted) : CtapPerformBuiltInUvContinuation;
 
 /// <summary>
 /// Resumes an interrupted <c>authenticatorGetAssertion</c> once its <c>options.uv = true</c> built-in
@@ -855,7 +855,7 @@ public sealed record CtapMakeCredentialBuiltInUvContinuation(MakeCredentialReque
 /// <c>userPresent</c> resolution happens before this attempt is declared, unlike <c>mc</c>'s, which is
 /// always <see langword="true"/> by this point.
 /// </param>
-public sealed record CtapGetAssertionBuiltInUvContinuation(GetAssertionRequested Requested, bool UserPresent): CtapPerformBuiltInUvContinuation;
+public sealed record CtapGetAssertionBuiltInUvContinuation(GetAssertionRequested Requested, bool UserPresent) : CtapPerformBuiltInUvContinuation;
 
 /// <summary>
 /// Declares that the simulator must run <c>performBuiltInUv(internalRetry)</c>'s attempt loop (CTAP 2.3
@@ -881,7 +881,7 @@ public sealed record CtapGetAssertionBuiltInUvContinuation(GetAssertionRequested
 public sealed record CtapPerformBuiltInUvAction(
     bool InternalRetry,
     int StartingUvRetries,
-    CtapPerformBuiltInUvContinuation Continuation): CtapAction;
+    CtapPerformBuiltInUvContinuation Continuation) : CtapAction;
 
 /// <summary>
 /// Declares that the simulator must run <c>getPinUvAuthTokenUsingUvWithPermissions</c>'s (<c>0x06</c>)
@@ -921,7 +921,7 @@ public sealed record CtapIssueUvTokenAction(
     string? PermissionsRpId,
     DateTimeOffset Now,
     bool InternalRetry,
-    int StartingUvRetries): CtapAction;
+    int StartingUvRetries) : CtapAction;
 
 /// <summary>
 /// Resumes an interrupted <c>authenticatorLargeBlobs</c> <c>set</c> once its presented
@@ -941,7 +941,7 @@ public sealed record CtapIssueUvTokenAction(
 /// before the gate ran — see <paramref name="ExpectedLength"/>'s identical carry-through reasoning.
 /// </param>
 public sealed record CtapLargeBlobsVerifyContinuation(
-    LargeBlobsRequested Requested, int ExpectedLength, int ExpectedNextOffset): CtapVerifyPinUvAuthTokenContinuation;
+    LargeBlobsRequested Requested, int ExpectedLength, int ExpectedNextOffset) : CtapVerifyPinUvAuthTokenContinuation;
 
 /// <summary>
 /// Declares that the simulator must run CTAP 2.3's state-aware <c>verify</c> composition
@@ -973,7 +973,7 @@ public sealed record CtapVerifyLargeBlobsTokenAction(
     uint Offset,
     ReadOnlyMemory<byte> Fragment,
     ReadOnlyMemory<byte> PinUvAuthParam,
-    CtapVerifyPinUvAuthTokenContinuation Continuation): CtapAction;
+    CtapVerifyPinUvAuthTokenContinuation Continuation) : CtapAction;
 
 /// <summary>
 /// Declares that the simulator must append <see cref="Fragment"/> into the pending serialized large-blob
@@ -1012,4 +1012,4 @@ public sealed record CtapCommitLargeBlobArrayAction(
     ReadOnlyMemory<byte> Fragment,
     int ExpectedLength,
     CtapPinUvAuthProtocolId? AuthenticatingPinUvAuthProtocol,
-    IMemoryOwner<byte>? ExistingPendingBuffer): CtapAction;
+    IMemoryOwner<byte>? ExistingPendingBuffer) : CtapAction;

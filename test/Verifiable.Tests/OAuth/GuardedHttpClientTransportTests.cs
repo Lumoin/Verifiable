@@ -123,7 +123,7 @@ internal sealed class GuardedHttpClientTransportTests
 
 
     /// <summary>An inner transport that must never be invoked on a denied target.</summary>
-    private sealed class ThrowingHandler: HttpMessageHandler
+    private sealed class ThrowingHandler : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken) =>
@@ -137,7 +137,7 @@ internal sealed class GuardedHttpClientTransportTests
     /// HttpResponseMessage transfers to the caller through the HttpMessageHandler pipeline,
     /// the standard shape for this override — the pipeline disposes it, not this method.
     /// </summary>
-    private sealed class StubOkHandler: HttpMessageHandler
+    private sealed class StubOkHandler : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken) =>

@@ -14,7 +14,7 @@ namespace Verifiable.JCose;
 /// Serialization is handled in <c>Verifiable.Json</c>.
 /// </remarks>
 [DebuggerDisplay("JwksDocument Keys={Keys.Length}")]
-public sealed class JwksDocument: IEquatable<JwksDocument>
+public sealed class JwksDocument : IEquatable<JwksDocument>
 {
     /// <summary>The array of JSON Web Keys in this set.</summary>
     public JsonWebKey[] Keys { get; init; } = [];

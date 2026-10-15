@@ -51,7 +51,7 @@ public abstract record AcdcRuleNode
 /// <param name="Uuid">The rule-group's UUID <c>u</c> (a high-entropy salty nonce), or <see langword="null"/> when absent; present only when <paramref name="Said"/> is present.</param>
 /// <param name="Legal">The rule-group's legal language <c>l</c>, or <see langword="null"/> when absent.</param>
 /// <param name="Members">The nested labeled rules and rule-groups, in their order of appearance; empty when the rule-group has no nested members.</param>
-public sealed record AcdcRuleGroup(string? Said, string? Uuid, string? Legal, IReadOnlyList<AcdcRuleMember> Members): AcdcRuleNode;
+public sealed record AcdcRuleGroup(string? Said, string? Uuid, string? Legal, IReadOnlyList<AcdcRuleMember> Members) : AcdcRuleNode;
 
 
 /// <summary>
@@ -66,7 +66,7 @@ public sealed record AcdcRuleGroup(string? Said, string? Uuid, string? Legal, IR
 /// <param name="Said">The rule's SAID <c>d</c>, or <see langword="null"/> when absent.</param>
 /// <param name="Uuid">The rule's UUID <c>u</c> (a high-entropy salty nonce), or <see langword="null"/> when absent; present only when <paramref name="Said"/> is present.</param>
 /// <param name="Legal">The rule's legal language <c>l</c>; required.</param>
-public sealed record AcdcRule(string? Said, string? Uuid, string Legal): AcdcRuleNode;
+public sealed record AcdcRule(string? Said, string? Uuid, string Legal) : AcdcRuleNode;
 
 
 /// <summary>
@@ -85,7 +85,7 @@ public sealed record AcdcRule(string? Said, string? Uuid, string Legal): AcdcRul
 /// this models the value without asserting which variant it is.
 /// </remarks>
 /// <param name="Value">The compact string value: either a block's SAID or a simple-compact rule's legal language, as the section's schema determines.</param>
-public sealed record AcdcCompactRuleNode(string Value): AcdcRuleNode;
+public sealed record AcdcCompactRuleNode(string Value) : AcdcRuleNode;
 
 
 /// <summary>

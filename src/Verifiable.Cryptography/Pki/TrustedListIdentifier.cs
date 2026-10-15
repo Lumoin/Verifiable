@@ -31,7 +31,7 @@ namespace Verifiable.Cryptography.Pki;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{Value,nq}")]
-public readonly struct TrustedListIdentifier: IEquatable<TrustedListIdentifier>
+public readonly struct TrustedListIdentifier : IEquatable<TrustedListIdentifier>
 {
     /// <summary>
     /// The absolute http or https URL value identifying the Trusted List. Canonical identity; equality and

@@ -14,7 +14,7 @@ namespace Verifiable.Core.Model.Did
     /// </remarks>
     [DebuggerDisplay("PublicKeyHex({Key,nq})")]
     [Obsolete("Use PublicKeyMultibase or PublicKeyJwk instead. Hexadecimal keys are not recommended for new implementations.")]
-    public class PublicKeyHex: KeyFormat
+    public class PublicKeyHex : KeyFormat
     {
         /// <summary>
         /// The hexadecimal-encoded public key string.

@@ -56,7 +56,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// <seealso cref="ParseBaseProofDelegate"/>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 [SuppressMessage("Performance", "CA1819:Properties should not return arrays", Justification = "Wire-format POCO representing parsed proof components.")]
-public sealed class EcdsaSdBaseProof: IEquatable<EcdsaSdBaseProof>
+public sealed class EcdsaSdBaseProof : IEquatable<EcdsaSdBaseProof>
 {
     /// <summary>
     /// Gets the base signature created by the issuer's verification method private key.

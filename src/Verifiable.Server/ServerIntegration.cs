@@ -29,7 +29,7 @@ namespace Verifiable.Server;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("ServerIntegration Validated={IsValidated}")]
-public class ServerIntegration: WiringComponent
+public class ServerIntegration : WiringComponent
 {
     /// <summary>Resolves the response for an absent tenant registration; protocol families can preserve their authentication refusal rules.</summary>
     /// <param name="tenantId">The resolved tenant whose record is absent.</param>

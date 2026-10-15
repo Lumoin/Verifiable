@@ -23,4 +23,4 @@ namespace Verifiable.OAuth.Federation;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("EntityConfiguration Iss=Sub={Issuer,nq}")]
-public sealed record EntityConfiguration: EntityStatement;
+public sealed record EntityConfiguration : EntityStatement;

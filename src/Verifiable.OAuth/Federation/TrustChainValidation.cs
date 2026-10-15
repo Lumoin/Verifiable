@@ -183,7 +183,7 @@ public static class TrustChainValidation
     /// exp/iat checks judge against the same <paramref name="validationTime"/> the delegate's own
     /// caller committed to, rather than a clock that advances mid-validation.
     /// </summary>
-    private sealed class FrozenTimeProvider(DateTimeOffset validationTime): TimeProvider
+    private sealed class FrozenTimeProvider(DateTimeOffset validationTime) : TimeProvider
     {
         /// <inheritdoc />
         public override DateTimeOffset GetUtcNow() => validationTime;

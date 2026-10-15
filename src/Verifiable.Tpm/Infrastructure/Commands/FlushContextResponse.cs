@@ -21,7 +21,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class FlushContextResponse: ITpmWireType
+public sealed class FlushContextResponse : ITpmWireType
 {
     /// <summary>
     /// Gets the singleton instance.

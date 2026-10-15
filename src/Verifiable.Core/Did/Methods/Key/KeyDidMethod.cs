@@ -45,7 +45,7 @@ namespace Verifiable.Core.Did.Methods.Key
     /// <see href="https://w3c-ccg.github.io/did-key-spec/">DID Key Specification</see>.
     /// </para>
     /// </remarks>
-    public record KeyDidMethod: GenericDidMethod
+    public record KeyDidMethod : GenericDidMethod
     {
         /// <summary>
         /// The prefix of <c>did:key</c> method, including suffix <c>':'</c>.

@@ -241,7 +241,7 @@ internal sealed class TpmEntropyProviderTests
         return TpmResult<TpmResponse>.Success(new TpmResponse(owner, TpmHeader.HeaderSize));
     }
 
-    private sealed class CollectingObserver(List<CryptoEvent> sink): IObserver<CryptoEvent>
+    private sealed class CollectingObserver(List<CryptoEvent> sink) : IObserver<CryptoEvent>
     {
         public void OnCompleted()
         {

@@ -21,7 +21,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </list>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class EcdhZGenInput: ITpmCommandInput, IDisposable
+public sealed class EcdhZGenInput : ITpmCommandInput, IDisposable
 {
     private bool Disposed { get; set; }
 

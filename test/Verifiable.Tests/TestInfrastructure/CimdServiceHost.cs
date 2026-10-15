@@ -28,7 +28,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// "MAY require developers to provide additional information about the client being developed"
 /// (CIMD-066) and is merely recorded, readable back via <see cref="DeveloperInfo"/>.
 /// </remarks>
-internal sealed class CimdServiceHost: IAsyncDisposable
+internal sealed class CimdServiceHost : IAsyncDisposable
 {
     private WebApplication App { get; }
 

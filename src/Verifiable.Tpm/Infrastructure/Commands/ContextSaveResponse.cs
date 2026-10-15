@@ -17,7 +17,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class ContextSaveResponse: ITpmWireType, IDisposable
+public sealed class ContextSaveResponse : ITpmWireType, IDisposable
 {
     /// <summary>Whether <see cref="Dispose"/> has already released the owned context.</summary>
     private bool disposed;

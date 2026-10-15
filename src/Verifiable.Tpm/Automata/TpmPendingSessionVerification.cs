@@ -207,7 +207,7 @@ public sealed record TpmCommandHmacVerified(
     Tpm2bDigest? AuditCpHash = null,
     TpmiShAuthSession AuditSession = default,
     TpmaSession AuditAttributes = default,
-    TpmiAlgHash AuditSessionAlg = default): TpmSimulatorInput;
+    TpmiAlgHash AuditSessionAlg = default) : TpmSimulatorInput;
 
 /// <summary>
 /// One already-verified session's material for framing a real per-session <c>TPM2_Unseal()</c> response entry

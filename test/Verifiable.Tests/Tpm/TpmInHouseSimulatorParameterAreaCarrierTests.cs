@@ -750,7 +750,7 @@ internal sealed class TpmInHouseSimulatorParameterAreaCarrierTests
     /// readable after the release. Its <see cref="Dispose"/> returns nothing anywhere.
     /// </summary>
     /// <param name="backing">The array the memory views.</param>
-    private sealed class TestOwnedMemory(byte[] backing): IMemoryOwner<byte>
+    private sealed class TestOwnedMemory(byte[] backing) : IMemoryOwner<byte>
     {
         /// <summary>Gets the array this owner hands out and the test reads back.</summary>
         private byte[] Backing { get; } = backing;
@@ -768,7 +768,7 @@ internal sealed class TpmInHouseSimulatorParameterAreaCarrierTests
     /// Collects the parameter-area carrier the command-HMAC verification was declared over and the one the
     /// decryption step fed back, copying each observation's octets while they are still readable.
     /// </summary>
-    private sealed class ParameterAreaObserver: IObserver<TraceEntry<TpmSimulatorState, TpmSimulatorInput>>
+    private sealed class ParameterAreaObserver : IObserver<TraceEntry<TpmSimulatorState, TpmSimulatorInput>>
     {
         /// <summary>Gets the carrier the command-HMAC verification action carried, or <see langword="null"/> if none was seen.</summary>
         public TpmParameterArea? VerifiedArea { get; private set; }

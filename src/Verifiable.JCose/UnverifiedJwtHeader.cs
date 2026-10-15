@@ -39,7 +39,7 @@ namespace Verifiable.JCose;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("UnverifiedJwtHeader({Count} parameters)")]
-public sealed class UnverifiedJwtHeader: JoseDictionary, IEquatable<UnverifiedJwtHeader>
+public sealed class UnverifiedJwtHeader : JoseDictionary, IEquatable<UnverifiedJwtHeader>
 {
     /// <summary>Creates an empty unverified JWT header.</summary>
     public UnverifiedJwtHeader() : base() { }

@@ -59,7 +59,7 @@ internal sealed class WebVhDidResolverResolvingTests
     public async Task ResolvesMintedGenesisLog()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         DidResolutionResult result = await ResolveAsync(log.Did, log.Lines).ConfigureAwait(false);
 
@@ -80,7 +80,7 @@ internal sealed class WebVhDidResolverResolvingTests
     public async Task AMaxAgeResponseReportsThatManySecondsOfStorableFreshness()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         var transport = new RoutingTransport(new Dictionary<string, (int, string?)>(StringComparer.Ordinal)
         {
@@ -106,7 +106,7 @@ internal sealed class WebVhDidResolverResolvingTests
     public async Task ANon200ResponseReportsNonStorableFreshness()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         var transport = new RoutingTransport(new Dictionary<string, (int, string?)>(StringComparer.Ordinal)
         {
@@ -153,7 +153,7 @@ internal sealed class WebVhDidResolverResolvingTests
     public async Task ResolveRejectsLogWhoseIdMatchesNoRequestedVersion()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         //Same SCID, different host: the served log is valid for its own id (example.com) but the requested DID
         //(evil.example.com) appears in no version's top-level id.
@@ -198,7 +198,7 @@ internal sealed class WebVhDidResolverResolvingTests
     public async Task DidLogHostRebindingToLoopbackIsBlockedAtConnectionTime()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         ValueTask<IReadOnlyList<IPAddress>> rebindToLoopback(string host, CancellationToken cancellationToken) =>
             ValueTask.FromResult<IReadOnlyList<IPAddress>>([IPAddress.Loopback]);
@@ -286,7 +286,7 @@ internal sealed class WebVhDidResolverResolvingTests
     public async Task TamperedProofFailsResolution()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         JsonObject entry = JsonNode.Parse(log.Lines[0])!.AsObject();
         JsonObject proof = (JsonObject)((JsonArray)entry["proof"]!)[0]!;
@@ -309,7 +309,7 @@ internal sealed class WebVhDidResolverResolvingTests
     public async Task ReportsNotFoundForMissingLog()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         var transport = new RoutingTransport(new Dictionary<string, (int, string?)>(StringComparer.Ordinal)
         {
@@ -331,7 +331,7 @@ internal sealed class WebVhDidResolverResolvingTests
     public async Task DispatchesDidWebVhThroughComposition()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         var transport = new RoutingTransport(new Dictionary<string, (int, string?)>(StringComparer.Ordinal)
         {
@@ -969,7 +969,7 @@ internal sealed class WebVhDidResolverResolvingTests
     public async Task ActiveDidMetadataCarriesDeactivatedFalse()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         DidResolutionResult result = await ResolveAsync(log.Did, log.Lines).ConfigureAwait(false);
 
@@ -1023,7 +1023,7 @@ internal sealed class WebVhDidResolverResolvingTests
     public async Task NonSha256EntryHashMultihashIsRejected()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         //Re-encode the genesis versionId's entryHash as a multihash with the SHA3-256 code (0x16) instead of
         //sha2-256 (0x12), preserving the 32-byte digest and the version number. The value would still be a
@@ -1054,7 +1054,7 @@ internal sealed class WebVhDidResolverResolvingTests
     public async Task ExpiredProofIsRejected()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         //Inject an 'expires' in the past into the proof. The signature still covers the proof options it was
         //minted over (without 'expires'), so the rejection is specifically the expiry gate, not a signature
@@ -1078,7 +1078,7 @@ internal sealed class WebVhDidResolverResolvingTests
     public async Task OversizedDidLogIsRejected()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         //A DID Log padded beyond the resolver's size bound (8 MiB) with trailing whitespace: the parser is never
         //reached, so the size guard alone rejects it.
@@ -1123,7 +1123,7 @@ internal sealed class WebVhDidResolverResolvingTests
     public async Task GenesisVersionIdNotVersionOneIsRejected()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         //Renumber the genesis versionId to "2-<entryHash>": the genesis MUST be version 1.
         JsonObject genesis = JsonNode.Parse(log.Lines[0])!.AsObject();
@@ -1146,7 +1146,7 @@ internal sealed class WebVhDidResolverResolvingTests
     public async Task WatcherUrlFallbackResolvesOnPrimaryNotFound()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         const string watcherUrl = "https://watcher.example/cache/did.jsonl";
 
@@ -1169,7 +1169,7 @@ internal sealed class WebVhDidResolverResolvingTests
     public async Task PrimaryNotFoundWithoutWatchersStaysNotFound()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         var transport = new RoutingTransport(new Dictionary<string, (int, string?)>(StringComparer.Ordinal)
         {
@@ -1192,7 +1192,7 @@ internal sealed class WebVhDidResolverResolvingTests
     public async Task TransportFailureNamesTheCauseWithoutTheExceptionMessage()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         const string DistinctiveTransportMarker = "wvh-transport-marker-4f21a9";
 
@@ -1227,7 +1227,7 @@ internal sealed class WebVhDidResolverResolvingTests
     public async Task DidLogFetchCancellationCarriedInsideTheTransportFaultPropagates(string cancellationShape, bool isCallerCancelled)
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
         using CancellationTokenSource caller = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
         DidMethodResolverDelegate resolver = BuildResolver(
             CarriedCancellationFixtures.CreateTransport(cancellationShape, isCallerCancelled ? caller : null));
@@ -1251,7 +1251,7 @@ internal sealed class WebVhDidResolverResolvingTests
     public async Task PolicyRefusalNamesTheCauseInTheDetail()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         static ValueTask<OutboundResponse> unreachedTransport(OutboundRequest request, ExchangeContext context, CancellationToken cancellationToken) =>
             throw new InvalidOperationException("The outbound-fetch policy MUST deny the DID Log host before any transport call.");
@@ -1277,7 +1277,7 @@ internal sealed class WebVhDidResolverResolvingTests
     public async Task UnsuccessfulStatusNamesTheStatusInTheDetail(int statusCode)
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         var transport = new RoutingTransport(new Dictionary<string, (int, string?)>(StringComparer.Ordinal)
         {
@@ -1303,7 +1303,7 @@ internal sealed class WebVhDidResolverResolvingTests
     public async Task AlternativeSourceFailureNamesThePrimaryCauseAndThatNoneYielded()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         const string watcherUrl = "https://watcher.example/cache/did.jsonl";
 
@@ -1464,7 +1464,7 @@ internal sealed class WebVhDidResolverResolvingTests
     public async Task ResolvedMetadataCarriesRicherFields()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         DidResolutionResult result = await ResolveAsync(log.Did, log.Lines).ConfigureAwait(false);
 
@@ -1492,7 +1492,7 @@ internal sealed class WebVhDidResolverResolvingTests
     public async Task ResolvedDocumentCarriesImplicitServices()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         DidResolutionResult result = await ResolveAsync(log.Did, log.Lines).ConfigureAwait(false);
 
@@ -1520,7 +1520,7 @@ internal sealed class WebVhDidResolverResolvingTests
     public async Task ImplicitServiceEndpointForPathDid()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync("example.com:dids:issuer", controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync("example.com:dids:issuer", controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         DidResolutionResult result = await ResolveAsync(log.Did, log.Lines).ConfigureAwait(false);
 

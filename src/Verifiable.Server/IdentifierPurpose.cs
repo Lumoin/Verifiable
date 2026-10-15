@@ -31,7 +31,7 @@ namespace Verifiable.Server;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{Urn,nq}")]
-public readonly struct IdentifierPurpose: IEquatable<IdentifierPurpose>
+public readonly struct IdentifierPurpose : IEquatable<IdentifierPurpose>
 {
     /// <summary>
     /// The URN-shaped string identifying this purpose. Canonical identity;

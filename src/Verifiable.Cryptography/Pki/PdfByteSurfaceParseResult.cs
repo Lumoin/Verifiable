@@ -31,7 +31,7 @@ namespace Verifiable.Cryptography.Pki;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("PdfByteSurfaceParseResult: {IsSuccess}, {SignatureDictionaries?.Count} signature(s)")]
-public sealed class PdfByteSurfaceParseResult: IDisposable
+public sealed class PdfByteSurfaceParseResult : IDisposable
 {
     private bool disposed;
 

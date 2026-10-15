@@ -31,7 +31,7 @@ public enum BiometricModality
 /// </para>
 /// </remarks>
 [DebuggerDisplay("BiometricDataBlock({Modality}, {Length} bytes)")]
-public sealed class BiometricDataBlock: SensitiveMemory
+public sealed class BiometricDataBlock : SensitiveMemory
 {
     /// <summary>
     /// Initialises a new <see cref="BiometricDataBlock"/> from owned record bytes.

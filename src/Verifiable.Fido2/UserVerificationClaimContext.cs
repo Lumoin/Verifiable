@@ -23,4 +23,4 @@ namespace Verifiable.Fido2;
 /// already tells the caller everything the flag would; observing it separately would be redundant.
 /// </remarks>
 [DebuggerDisplay("UserVerificationClaimContext(UserVerified={UserVerified})")]
-public sealed record UserVerificationClaimContext(bool UserVerified): ClaimContext;
+public sealed record UserVerificationClaimContext(bool UserVerified) : ClaimContext;

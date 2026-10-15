@@ -19,4 +19,4 @@ namespace Verifiable.OAuth;
 /// client-facing refusal is <c>VerifierPresentationRefused</c> / <c>Verifiable.OAuth.Server.VerifierFlowRefusal</c>.
 /// </remarks>
 [DebuggerDisplay("Fail Reason={Reason}")]
-public sealed record Fail(string Reason, DateTimeOffset FailedAt): FlowInput;
+public sealed record Fail(string Reason, DateTimeOffset FailedAt) : FlowInput;

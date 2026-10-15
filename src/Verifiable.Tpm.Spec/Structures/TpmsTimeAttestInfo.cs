@@ -26,7 +26,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// <param name="Time">The current TPM time and clock/reset state.</param>
 /// <param name="FirmwareVersion">A vendor-specific firmware version value.</param>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public readonly record struct TpmsTimeAttestInfo(TpmsTimeInfo Time, ulong FirmwareVersion): ITpmWireType
+public readonly record struct TpmsTimeAttestInfo(TpmsTimeInfo Time, ulong FirmwareVersion) : ITpmWireType
 {
     /// <summary>
     /// The serialized size of this fixed-layout structure, in bytes.

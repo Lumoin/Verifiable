@@ -21,7 +21,7 @@ public sealed record TpmAuthorizationSlot(
     TpmiShAuthSession SessionHandle,
     Tpm2bNonce NonceCaller,
     TpmaSession SessionAttributes,
-    Tpm2bAuth SuppliedHmac): IDisposable
+    Tpm2bAuth SuppliedHmac) : IDisposable
 {
     /// <summary>
     /// Gets whether the slot is a <c>TPM_RS_PW</c> password authorization, whose <see cref="SuppliedHmac"/> is
@@ -55,7 +55,7 @@ public sealed record TpmAuthorizationSlot(
 /// <param name="AuthorizingCount">How many leading slots authorize a handle — the command's own count of <c>@</c>-marked handles.</param>
 public sealed record TpmAuthorizationArea(
     ImmutableArray<TpmAuthorizationSlot> Slots,
-    int AuthorizingCount): IDisposable
+    int AuthorizingCount) : IDisposable
 {
     /// <summary>
     /// The most blocks an authorization area may hold (TPM 2.0 Library Part 1, clause 15.6.1).

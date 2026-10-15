@@ -227,7 +227,7 @@ internal readonly record struct RegisteredRelyingParty(string ClientId, Uri Back
 /// only per-RP state and the OP's published public key — never anything in-memory from
 /// the OP side.
 /// </summary>
-internal sealed class RelyingPartyReceiver: IAsyncDisposable
+internal sealed class RelyingPartyReceiver : IAsyncDisposable
 {
     /// <summary>The relative path the OP POSTs this RP's <c>logout_token</c> to.</summary>
     private const string BackChannelLogoutPath = "/backchannel-logout";

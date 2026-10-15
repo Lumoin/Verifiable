@@ -194,7 +194,7 @@ public delegate bool CBAdESIsCounterSignatureMaterialCompleteDelegate(CoseCounte
 /// <see cref="Verifiable.Cryptography.Pki.CAdESAugmentationException"/>'s shape exactly.
 /// </remarks>
 [DebuggerDisplay("CBAdESAugmentationException({FailureKind}): {Message}")]
-public sealed class CBAdESAugmentationException: Exception
+public sealed class CBAdESAugmentationException : Exception
 {
     /// <summary>Gets what could not be done.</summary>
     public CBAdESAugmentationFailureKind FailureKind { get; }
@@ -361,7 +361,7 @@ public abstract class CBAdESPayloadTimestampAcquisitionSource
 
 /// <summary>The attached-payload arm: the COSE Payload field is present, and <see cref="PayloadBytes"/> is its content.</summary>
 [DebuggerDisplay("CBAdESAttachedPayloadTimestampAcquisitionSource: {PayloadBytes.Length} bytes")]
-public sealed class CBAdESAttachedPayloadTimestampAcquisitionSource: CBAdESPayloadTimestampAcquisitionSource
+public sealed class CBAdESAttachedPayloadTimestampAcquisitionSource : CBAdESPayloadTimestampAcquisitionSource
 {
     /// <summary>Initializes a new <see cref="CBAdESAttachedPayloadTimestampAcquisitionSource"/>.</summary>
     /// <param name="payloadBytes">The COSE Payload field's content bytes. <strong>Borrowed</strong> view — the caller owns the underlying memory.</param>
@@ -377,7 +377,7 @@ public sealed class CBAdESAttachedPayloadTimestampAcquisitionSource: CBAdESPaylo
 
 /// <summary>The detached-and-unreferenced arm: the caller already holds the out-of-band detached COSE Payload bytes.</summary>
 [DebuggerDisplay("CBAdESDetachedPayloadTimestampAcquisitionSource: {PayloadBytes.Length} bytes")]
-public sealed class CBAdESDetachedPayloadTimestampAcquisitionSource: CBAdESPayloadTimestampAcquisitionSource
+public sealed class CBAdESDetachedPayloadTimestampAcquisitionSource : CBAdESPayloadTimestampAcquisitionSource
 {
     /// <summary>Initializes a new <see cref="CBAdESDetachedPayloadTimestampAcquisitionSource"/>.</summary>
     /// <param name="payloadBytes">The out-of-band detached COSE Payload bytes. <strong>Borrowed</strong> view — the caller owns the underlying memory.</param>
@@ -398,7 +398,7 @@ public sealed class CBAdESDetachedPayloadTimestampAcquisitionSource: CBAdESPaylo
 /// reconstruction path — to turn this arm into the processed bytes the imprint builder needs.
 /// </summary>
 [DebuggerDisplay("CBAdESSigDReferencedPayloadTimestampAcquisitionSource: {References.Count} reference(s)")]
-public sealed class CBAdESSigDReferencedPayloadTimestampAcquisitionSource: CBAdESPayloadTimestampAcquisitionSource
+public sealed class CBAdESSigDReferencedPayloadTimestampAcquisitionSource : CBAdESPayloadTimestampAcquisitionSource
 {
     /// <summary>Initializes a new <see cref="CBAdESSigDReferencedPayloadTimestampAcquisitionSource"/>.</summary>
     /// <param name="references">The <c>sigD.pars</c> URI-references, in wire order.</param>

@@ -30,7 +30,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </remarks>
 /// <param name="Auth">The lockout or platform hierarchy authorizing the change.</param>
 /// <param name="Disable">YES to SET <c>disableClear</c>, NO to CLEAR it.</param>
-public readonly record struct ClearControlInput(TpmRh Auth, TpmiYesNo Disable): ITpmCommandInput
+public readonly record struct ClearControlInput(TpmRh Auth, TpmiYesNo Disable) : ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_ClearControl;

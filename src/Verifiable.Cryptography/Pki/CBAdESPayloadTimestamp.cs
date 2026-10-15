@@ -46,7 +46,7 @@ namespace Verifiable.Cryptography.Pki;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("CBAdESPayloadTimestamp: {TimestampContainer}")]
-public sealed class CBAdESPayloadTimestamp: IDisposable
+public sealed class CBAdESPayloadTimestamp : IDisposable
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="CBAdESPayloadTimestamp"/> class. Ownership of

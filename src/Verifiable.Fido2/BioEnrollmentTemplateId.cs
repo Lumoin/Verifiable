@@ -35,7 +35,7 @@ namespace Verifiable.Fido2;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class BioEnrollmentTemplateId: SensitiveMemory, IEquatable<BioEnrollmentTemplateId>
+public sealed class BioEnrollmentTemplateId : SensitiveMemory, IEquatable<BioEnrollmentTemplateId>
 {
     /// <summary>
     /// Gets the length of the template identifier in bytes.

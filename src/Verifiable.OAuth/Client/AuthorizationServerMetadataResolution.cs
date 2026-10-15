@@ -16,7 +16,7 @@ public abstract class AuthorizationServerMetadataResolution
 
 
 /// <summary>A parsed document whose published issuer matches the requested identifier.</summary>
-public sealed class AuthorizationServerMetadataResolved: AuthorizationServerMetadataResolution
+public sealed class AuthorizationServerMetadataResolved : AuthorizationServerMetadataResolution
 {
     /// <summary>The parsed, issuer-matched document.</summary>
     public required AuthorizationServerMetadata Metadata { get; init; }
@@ -33,7 +33,7 @@ public sealed class AuthorizationServerMetadataResolved: AuthorizationServerMeta
 
 
 /// <summary>A readable document publishing a different issuer; its metadata must not be used.</summary>
-public sealed class AuthorizationServerMetadataIssuerMismatch: AuthorizationServerMetadataResolution
+public sealed class AuthorizationServerMetadataIssuerMismatch : AuthorizationServerMetadataResolution
 {
     /// <summary>The identifier the caller asked to resolve.</summary>
     public required Uri RequestedIssuer { get; init; }
@@ -47,7 +47,7 @@ public sealed class AuthorizationServerMetadataIssuerMismatch: AuthorizationServ
 
 
 /// <summary>The transport failed before returning a response.</summary>
-public sealed class AuthorizationServerMetadataUnreachable: AuthorizationServerMetadataResolution
+public sealed class AuthorizationServerMetadataUnreachable : AuthorizationServerMetadataResolution
 {
     /// <summary>
     /// The transport exception's concrete type. The application-supplied transport's failure
@@ -58,7 +58,7 @@ public sealed class AuthorizationServerMetadataUnreachable: AuthorizationServerM
 
 
 /// <summary>The terminal response did not have the required HTTP 200 status.</summary>
-public sealed class AuthorizationServerMetadataNotAnswered: AuthorizationServerMetadataResolution
+public sealed class AuthorizationServerMetadataNotAnswered : AuthorizationServerMetadataResolution
 {
     /// <summary>The status the server returned.</summary>
     public required int StatusCode { get; init; }
@@ -66,7 +66,7 @@ public sealed class AuthorizationServerMetadataNotAnswered: AuthorizationServerM
 
 
 /// <summary>The guarded fetch refused to follow a redirect.</summary>
-public sealed class AuthorizationServerMetadataRedirectRefused: AuthorizationServerMetadataResolution
+public sealed class AuthorizationServerMetadataRedirectRefused : AuthorizationServerMetadataResolution
 {
     /// <summary>The redirect response's status.</summary>
     public required int StatusCode { get; init; }
@@ -77,7 +77,7 @@ public sealed class AuthorizationServerMetadataRedirectRefused: AuthorizationSer
 
 
 /// <summary>The body exceeded the configured byte cap.</summary>
-public sealed class AuthorizationServerMetadataTooLarge: AuthorizationServerMetadataResolution
+public sealed class AuthorizationServerMetadataTooLarge : AuthorizationServerMetadataResolution
 {
     /// <summary>The configured maximum number of document bytes.</summary>
     public required long Limit { get; init; }
@@ -88,7 +88,7 @@ public sealed class AuthorizationServerMetadataTooLarge: AuthorizationServerMeta
 
 
 /// <summary>The parser could not decode a metadata document.</summary>
-public sealed class AuthorizationServerMetadataUnreadable: AuthorizationServerMetadataResolution
+public sealed class AuthorizationServerMetadataUnreadable : AuthorizationServerMetadataResolution
 {
     /// <summary>The parser's typed failure, including the member name when applicable.</summary>
     public required AuthorizationServerMetadataParseError Error { get; init; }
@@ -96,7 +96,7 @@ public sealed class AuthorizationServerMetadataUnreadable: AuthorizationServerMe
 
 
 /// <summary>The requested identifier failed RFC 8414 section 2 before any transport call.</summary>
-public sealed class AuthorizationServerMetadataInvalidIssuer: AuthorizationServerMetadataResolution
+public sealed class AuthorizationServerMetadataInvalidIssuer : AuthorizationServerMetadataResolution
 {
     /// <summary>The identifier that was refused.</summary>
     public required Uri Issuer { get; init; }
@@ -104,7 +104,7 @@ public sealed class AuthorizationServerMetadataInvalidIssuer: AuthorizationServe
 
 
 /// <summary>The initial metadata target was denied by the outbound-fetch policy.</summary>
-public sealed class AuthorizationServerMetadataPolicyDenied: AuthorizationServerMetadataResolution
+public sealed class AuthorizationServerMetadataPolicyDenied : AuthorizationServerMetadataResolution
 {
     /// <summary>The target the policy refused before contacting the transport.</summary>
     public required Uri Target { get; init; }
@@ -112,7 +112,7 @@ public sealed class AuthorizationServerMetadataPolicyDenied: AuthorizationServer
 
 
 /// <summary>The response did not declare application/json as required by RFC 8414 section 3.2.</summary>
-public sealed class AuthorizationServerMetadataUnsupportedMediaType: AuthorizationServerMetadataResolution
+public sealed class AuthorizationServerMetadataUnsupportedMediaType : AuthorizationServerMetadataResolution
 {
     /// <summary>The received Content-Type header, or null when absent.</summary>
     public required string? ContentType { get; init; }

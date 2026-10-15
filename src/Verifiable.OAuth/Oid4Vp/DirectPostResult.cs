@@ -13,7 +13,7 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// that URI to complete the cross-device handoff.
 /// </remarks>
 [DebuggerDisplay("DirectPostResult RedirectUri={RedirectUri}")]
-public sealed class DirectPostResult: IEquatable<DirectPostResult>
+public sealed class DirectPostResult : IEquatable<DirectPostResult>
 {
     /// <summary>
     /// The URI to redirect the user to after the Wallet has submitted the

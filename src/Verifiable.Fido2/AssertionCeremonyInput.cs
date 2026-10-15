@@ -35,7 +35,7 @@ namespace Verifiable.Fido2;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed record AssertionCeremonyInput: IDisposable
+public sealed record AssertionCeremonyInput : IDisposable
 {
     /// <summary>Guards against redundant disposal.</summary>
     private bool disposed;

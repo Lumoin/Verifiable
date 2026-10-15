@@ -1366,7 +1366,7 @@ public static class WebVhDidResolver
     /// comparison in one resolution is judged against the same committed resolution clock rather than a clock that
     /// advances mid-replay. The underlying provider's UTC instant is captured once at the start of each resolve.
     /// </summary>
-    private sealed class FrozenTimeProvider: TimeProvider
+    private sealed class FrozenTimeProvider : TimeProvider
     {
         /// <summary>The committed resolution instant returned for every <see cref="GetUtcNow"/> call.</summary>
         private DateTimeOffset Instant { get; }

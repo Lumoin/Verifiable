@@ -25,7 +25,7 @@ internal sealed class CborOptionsTests
     /// members ever runs in these tests: the refusal being proven happens inside
     /// <see cref="CborConverterCollection.Add"/>, before any read or write could reach the converter.
     /// </summary>
-    private sealed class Int32ProbeConverter: CborConverter<int>
+    private sealed class Int32ProbeConverter : CborConverter<int>
     {
         /// <summary>Writes the value as a CBOR integer.</summary>
         /// <param name="writer">The writer to emit into.</param>

@@ -366,7 +366,7 @@ internal sealed class FlattenedJweMessageTests
     //'using'. Dispose releases the recipient public key and, unless it was handed out (and so is
     //owned by the test's own 'using'), the recipient private key. SensitiveMemory.Dispose is
     //idempotent, so any overlap is harmless.
-    private sealed class AnoncryptSingleRecipient: IDisposable
+    private sealed class AnoncryptSingleRecipient : IDisposable
     {
         private PublicKeyMemory RecipientPublic { get; }
         private PrivateKeyMemory RecipientPrivate { get; }
@@ -426,7 +426,7 @@ internal sealed class FlattenedJweMessageTests
 
     //Carries a two-recipient anoncrypt message. The message is NOT owned here — the test disposes
     //it via its own 'using'. Dispose releases the two recipients' key material.
-    private sealed class TwoRecipientGeneral: IDisposable
+    private sealed class TwoRecipientGeneral : IDisposable
     {
         private PublicKeyMemory FirstPublic { get; }
         private PrivateKeyMemory FirstPrivate { get; }

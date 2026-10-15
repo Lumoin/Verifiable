@@ -20,14 +20,14 @@ public abstract record WebPlusUpdateRule;
 /// <c>{}</c> — updates are disallowed; no signature can satisfy it. Used as the deactivation tombstone
 /// (did:webplus Draft v0.4, Update Rules; Deactivate). WP-UR-2.
 /// </summary>
-public sealed record DisallowUpdateRule: WebPlusUpdateRule;
+public sealed record DisallowUpdateRule : WebPlusUpdateRule;
 
 
 /// <summary>
 /// <c>{"key":"&lt;MBPubKey&gt;"}</c> — satisfied by a valid signature from the named key. WP-UR-3.
 /// </summary>
 /// <param name="MbPubKey">The MBPubKey that must have produced a valid proof.</param>
-public sealed record KeyUpdateRule(string MbPubKey): WebPlusUpdateRule;
+public sealed record KeyUpdateRule(string MbPubKey) : WebPlusUpdateRule;
 
 
 /// <summary>
@@ -35,21 +35,21 @@ public sealed record KeyUpdateRule(string MbPubKey): WebPlusUpdateRule;
 /// given value (a pre-rotation commitment). WP-UR-4.
 /// </summary>
 /// <param name="MbHash">The MBHash a satisfying key must hash to.</param>
-public sealed record HashedKeyUpdateRule(string MbHash): WebPlusUpdateRule;
+public sealed record HashedKeyUpdateRule(string MbHash) : WebPlusUpdateRule;
 
 
 /// <summary>
 /// <c>{"any":[…]}</c> — satisfied if at least one sub-rule is satisfied. WP-UR-5.
 /// </summary>
 /// <param name="Rules">The sub-rules.</param>
-public sealed record AnyUpdateRule(ImmutableArray<WebPlusUpdateRule> Rules): WebPlusUpdateRule;
+public sealed record AnyUpdateRule(ImmutableArray<WebPlusUpdateRule> Rules) : WebPlusUpdateRule;
 
 
 /// <summary>
 /// <c>{"all":[…]}</c> — satisfied if every sub-rule is satisfied. WP-UR-6.
 /// </summary>
 /// <param name="Rules">The sub-rules.</param>
-public sealed record AllUpdateRule(ImmutableArray<WebPlusUpdateRule> Rules): WebPlusUpdateRule;
+public sealed record AllUpdateRule(ImmutableArray<WebPlusUpdateRule> Rules) : WebPlusUpdateRule;
 
 
 /// <summary>
@@ -58,7 +58,7 @@ public sealed record AllUpdateRule(ImmutableArray<WebPlusUpdateRule> Rules): Web
 /// </summary>
 /// <param name="Threshold">The minimum summed weight required.</param>
 /// <param name="Of">The weighted sub-rules.</param>
-public sealed record AtLeastUpdateRule(int Threshold, ImmutableArray<WeightedUpdateRule> Of): WebPlusUpdateRule;
+public sealed record AtLeastUpdateRule(int Threshold, ImmutableArray<WeightedUpdateRule> Of) : WebPlusUpdateRule;
 
 
 /// <summary>

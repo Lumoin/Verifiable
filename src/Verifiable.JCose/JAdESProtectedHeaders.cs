@@ -73,7 +73,7 @@ namespace Verifiable.JCose;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("JAdESProtectedHeaders: alg={Algorithm}, iat={IssuedAt}")]
-public sealed class JAdESProtectedHeaders: IDisposable
+public sealed class JAdESProtectedHeaders : IDisposable
 {
     /// <summary>
     /// Initializes a new <see cref="JAdESProtectedHeaders"/>. Ownership of every disposable member supplied

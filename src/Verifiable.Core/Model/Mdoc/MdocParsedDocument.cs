@@ -38,7 +38,7 @@ namespace Verifiable.Core.Model.Mdoc;
 /// why a verifier parse that owns both needs this distinct shape.
 /// </para>
 /// </remarks>
-public sealed class MdocParsedDocument: IDisposable
+public sealed class MdocParsedDocument : IDisposable
 {
     private bool disposed;
 

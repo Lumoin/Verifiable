@@ -28,7 +28,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// </remarks>
 [DebuggerDisplay("BbsHolderContext: {NonMandatoryStatements.Count} statements, {LabelMap.Count} labels")]
 [SuppressMessage("Performance", "CA1819:Properties should not return arrays", Justification = "Wire-format POCO representing parsed proof components.")]
-public sealed class BbsHolderProofContext: IDisposable
+public sealed class BbsHolderProofContext : IDisposable
 {
     /// <summary>
     /// The canonical N-Quad statements before HMAC relabeling.

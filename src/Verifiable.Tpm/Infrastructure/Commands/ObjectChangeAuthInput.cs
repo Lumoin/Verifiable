@@ -32,7 +32,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// the caller retains ownership across the call, the non-owning contract <see cref="StirRandomInput"/> keeps
 /// for its own sized parameter.
 /// </param>
-public readonly record struct ObjectChangeAuthInput(TpmiDhObject ObjectHandle, TpmiDhObject ParentHandle, Tpm2bAuth NewAuth): ITpmCommandInput
+public readonly record struct ObjectChangeAuthInput(TpmiDhObject ObjectHandle, TpmiDhObject ParentHandle, Tpm2bAuth NewAuth) : ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_ObjectChangeAuth;

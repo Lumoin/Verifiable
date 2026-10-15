@@ -35,7 +35,7 @@ namespace Verifiable.Fido2;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class CredentialId: SensitiveMemory, IEquatable<CredentialId>
+public sealed class CredentialId : SensitiveMemory, IEquatable<CredentialId>
 {
     /// <summary>
     /// The maximum length of a credential identifier in bytes.
@@ -122,7 +122,7 @@ public sealed class CredentialId: SensitiveMemory, IEquatable<CredentialId>
     /// An <see cref="IMemoryOwner{T}"/> over an always-empty <see cref="Memory{T}"/>, backing
     /// <see cref="CredentialId.EmptyMemoryOwner"/>.
     /// </summary>
-    private sealed class ZeroLengthMemoryOwner: IMemoryOwner<byte>
+    private sealed class ZeroLengthMemoryOwner : IMemoryOwner<byte>
     {
         /// <inheritdoc/>
         public Memory<byte> Memory => Memory<byte>.Empty;

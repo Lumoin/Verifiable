@@ -15,7 +15,7 @@ namespace Verifiable.Fido2.Ctap;
 /// authenticator-API layer rather than the transport layer.
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class CtapCommandException: Exception
+public sealed class CtapCommandException : Exception
 {
     /// <summary>
     /// Gets the CTAP2 status code the authenticator returned.

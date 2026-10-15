@@ -12,7 +12,7 @@ namespace Verifiable.Tpm.EventLog;
 /// Section 10.2.2 "TCG_PCR_EVENT2 Structure" for crypto-agile format).
 /// </para>
 /// </remarks>
-public sealed class TcgEvent: IEquatable<TcgEvent>
+public sealed class TcgEvent : IEquatable<TcgEvent>
 {
     /// <summary>
     /// Gets the index of the event in the log (0-based).

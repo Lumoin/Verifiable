@@ -54,7 +54,7 @@ namespace Verifiable.Cryptography.Pki;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("JAdESSignaturePolicyStore: {Content}")]
-public sealed class JAdESSignaturePolicyStore: IDisposable
+public sealed class JAdESSignaturePolicyStore : IDisposable
 {
     /// <summary>The <c>sigPolDoc</c> member's JSON key name (clause 5.3.3, Annex B.1 schema).</summary>
     public const string SigPolDocMemberName = "sigPolDoc";
@@ -135,7 +135,7 @@ public abstract class JAdESSignaturePolicyStoreContent
 /// </para>
 /// </remarks>
 [DebuggerDisplay("JAdESSignaturePolicyStoreDocument({Document.Length} bytes)")]
-public sealed class JAdESSignaturePolicyStoreDocument: JAdESSignaturePolicyStoreContent, IDisposable
+public sealed class JAdESSignaturePolicyStoreDocument : JAdESSignaturePolicyStoreContent, IDisposable
 {
     /// <summary>Initializes a new <see cref="JAdESSignaturePolicyStoreDocument"/>.</summary>
     public JAdESSignaturePolicyStoreDocument(PooledMemory document)
@@ -162,7 +162,7 @@ public sealed class JAdESSignaturePolicyStoreDocument: JAdESSignaturePolicyStore
 /// serialized header and the other built by a caller.
 /// </remarks>
 [DebuggerDisplay("JAdESSignaturePolicyStoreLocalUri: {Location}")]
-public sealed class JAdESSignaturePolicyStoreLocalUri: JAdESSignaturePolicyStoreContent, IEquatable<JAdESSignaturePolicyStoreLocalUri>
+public sealed class JAdESSignaturePolicyStoreLocalUri : JAdESSignaturePolicyStoreContent, IEquatable<JAdESSignaturePolicyStoreLocalUri>
 {
     /// <summary>Initializes a new <see cref="JAdESSignaturePolicyStoreLocalUri"/>.</summary>
     /// <param name="location">

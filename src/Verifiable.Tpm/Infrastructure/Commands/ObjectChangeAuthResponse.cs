@@ -18,7 +18,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class ObjectChangeAuthResponse: IDisposable, ITpmWireType
+public sealed class ObjectChangeAuthResponse : IDisposable, ITpmWireType
 {
     /// <summary>Whether <see cref="Dispose"/> has already released the owned private area.</summary>
     private bool Disposed { get; set; }

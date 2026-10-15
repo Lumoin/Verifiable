@@ -19,7 +19,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// deliberately not disposed: its two carrier-owning parts were placed into those two documents, which own them
 /// now.
 /// </remarks>
-internal sealed record EArkEvidencePackage: IDisposable
+internal sealed record EArkEvidencePackage : IDisposable
 {
     /// <summary>Gets the package as a value snapshot. Owned by this instance.</summary>
     public required EArkPackageSnapshot Snapshot { get; init; }

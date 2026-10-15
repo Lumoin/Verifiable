@@ -15,7 +15,7 @@ namespace Verifiable.JCose;
 /// present); <see cref="Dispose"/> disposes both.
 /// </remarks>
 [DebuggerDisplay("CBAdESVerifiedSignatureFacts: alg={Headers.Algorithm}")]
-public sealed class CBAdESVerifiedSignatureFacts: IDisposable
+public sealed class CBAdESVerifiedSignatureFacts : IDisposable
 {
     private bool disposed;
 
@@ -138,7 +138,7 @@ public sealed class CBAdESVerifiedSignatureFacts: IDisposable
 /// </para>
 /// </remarks>
 [DebuggerDisplay("CBAdESValidationResult: IsValid={IsValid}")]
-public sealed class CBAdESValidationResult: IDisposable
+public sealed class CBAdESValidationResult : IDisposable
 {
     /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
     private bool disposed;
@@ -349,7 +349,7 @@ public abstract class CBAdESValidationFailure
 /// same failure and compare equal. Equality is by value here so that a caller can compare a returned failure
 /// against the case it expected without reaching for a type test.
 /// </remarks>
-public sealed class CBAdESMalformedEncodingFailure: CBAdESValidationFailure, IEquatable<CBAdESMalformedEncodingFailure>
+public sealed class CBAdESMalformedEncodingFailure : CBAdESValidationFailure, IEquatable<CBAdESMalformedEncodingFailure>
 {
     /// <inheritdoc/>
     public override string Message => "The wire bytes do not decode as a well-formed CB-AdES COSE_Sign1 structure.";
@@ -391,7 +391,7 @@ public sealed class CBAdESMalformedEncodingFailure: CBAdESValidationFailure, IEq
 /// (<see cref="CBAdESHeaderRules.Check"/>) is violated.
 /// </summary>
 [DebuggerDisplay("CBAdESRuleViolationsFailure: {Violations.Count} violation(s)")]
-public sealed class CBAdESRuleViolationsFailure: CBAdESValidationFailure
+public sealed class CBAdESRuleViolationsFailure : CBAdESValidationFailure
 {
     /// <summary>Initializes a new <see cref="CBAdESRuleViolationsFailure"/>.</summary>
     /// <param name="violations">Every violation found, in rule-declaration order. Never empty.</param>
@@ -417,7 +417,7 @@ public sealed class CBAdESRuleViolationsFailure: CBAdESValidationFailure
 /// Nothing distinguishes one occurrence of this case from another — the signature simply did not verify — so
 /// instances of it are interchangeable and equality says so rather than reporting the accident of allocation.
 /// </remarks>
-public sealed class CBAdESSignatureInvalidFailure: CBAdESValidationFailure, IEquatable<CBAdESSignatureInvalidFailure>
+public sealed class CBAdESSignatureInvalidFailure : CBAdESValidationFailure, IEquatable<CBAdESSignatureInvalidFailure>
 {
     /// <inheritdoc/>
     public override string Message => "The COSE signature value does not verify over the resolved payload.";
@@ -469,7 +469,7 @@ public sealed class CBAdESSignatureInvalidFailure: CBAdESValidationFailure, IEqu
 /// ordinal comparison of <see cref="Reason"/>. Two failures reporting the same reason are the same finding.
 /// </remarks>
 [DebuggerDisplay("CBAdESSigningCertificateBindingFailure: {Reason}")]
-public sealed class CBAdESSigningCertificateBindingFailure: CBAdESValidationFailure, IEquatable<CBAdESSigningCertificateBindingFailure>
+public sealed class CBAdESSigningCertificateBindingFailure : CBAdESValidationFailure, IEquatable<CBAdESSigningCertificateBindingFailure>
 {
     /// <summary>Initializes a new <see cref="CBAdESSigningCertificateBindingFailure"/>.</summary>
     /// <param name="reason">What this binding could state about why the identity binding could not be established.</param>
@@ -528,7 +528,7 @@ public sealed class CBAdESSigningCertificateBindingFailure: CBAdESValidationFail
 /// reference, which is itself part of what the case states.
 /// </remarks>
 [DebuggerDisplay("CBAdESDetachedObjectUnresolvableFailure: {Reference}")]
-public sealed class CBAdESDetachedObjectUnresolvableFailure: CBAdESValidationFailure, IEquatable<CBAdESDetachedObjectUnresolvableFailure>
+public sealed class CBAdESDetachedObjectUnresolvableFailure : CBAdESValidationFailure, IEquatable<CBAdESDetachedObjectUnresolvableFailure>
 {
     /// <summary>Initializes a new <see cref="CBAdESDetachedObjectUnresolvableFailure"/>.</summary>
     /// <param name="reference">
@@ -602,7 +602,7 @@ public sealed class CBAdESDetachedObjectUnresolvableFailure: CBAdESValidationFai
 /// one finding.
 /// </remarks>
 [DebuggerDisplay("CBAdESDetachedObjectDigestMismatchFailure: {Reference}")]
-public sealed class CBAdESDetachedObjectDigestMismatchFailure: CBAdESValidationFailure, IEquatable<CBAdESDetachedObjectDigestMismatchFailure>
+public sealed class CBAdESDetachedObjectDigestMismatchFailure : CBAdESValidationFailure, IEquatable<CBAdESDetachedObjectDigestMismatchFailure>
 {
     /// <summary>Initializes a new <see cref="CBAdESDetachedObjectDigestMismatchFailure"/>.</summary>
     /// <param name="reference">The <c>pars</c> reference whose digest did not match.</param>

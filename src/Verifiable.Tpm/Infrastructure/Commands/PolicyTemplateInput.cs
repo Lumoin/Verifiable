@@ -26,7 +26,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <param name="TemplateHash">The digest of the bound object template, at most <see cref="Tpm2bDigest.MaxSize"/> octets. The caller owns the underlying memory.</param>
 /// <exception cref="ArgumentException"><paramref name="TemplateHash"/> is longer than <see cref="Tpm2bDigest.MaxSize"/>.</exception>
 [DebuggerDisplay("PolicyTemplateInput(Session=0x{PolicySession,h})")]
-public readonly record struct PolicyTemplateInput(uint PolicySession, ReadOnlyMemory<byte> TemplateHash): ITpmCommandInput
+public readonly record struct PolicyTemplateInput(uint PolicySession, ReadOnlyMemory<byte> TemplateHash) : ITpmCommandInput
 {
     /// <summary>
     /// Gets the digest of the bound object template, bounded at construction by

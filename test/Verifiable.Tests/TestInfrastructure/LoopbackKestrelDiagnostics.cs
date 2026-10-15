@@ -14,7 +14,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// names its reason in the run capture — and appends the line to <see cref="Captured"/>, the provider's
 /// own testable observation surface.
 /// </summary>
-internal sealed class LoopbackKestrelDiagnostics: ILoggerProvider
+internal sealed class LoopbackKestrelDiagnostics : ILoggerProvider
 {
     /// <summary>The number of most-recent lines <see cref="Captured"/> retains; older lines are evicted.</summary>
     private const int CapturedCapacity = 256;
@@ -83,7 +83,7 @@ internal sealed class LoopbackKestrelDiagnostics: ILoggerProvider
     /// <see cref="Console.Out"/>, and appends it to the owning provider's <see cref="Captured"/> ring.
     /// Below <see cref="LogLevel.Warning"/>, nothing is formatted, written, or captured.
     /// </summary>
-    private sealed class CapturingLogger: ILogger
+    private sealed class CapturingLogger : ILogger
     {
         /// <summary>The provider whose <see cref="Captured"/> ring this logger appends to.</summary>
         private LoopbackKestrelDiagnostics Owner { get; }

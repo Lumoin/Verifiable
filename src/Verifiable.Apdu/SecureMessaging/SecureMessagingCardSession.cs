@@ -20,7 +20,7 @@ namespace Verifiable.Apdu.SecureMessaging;
 /// symmetric delegates as the terminal session; this type owns no cryptography of its own.
 /// </para>
 /// </remarks>
-public sealed class SecureMessagingCardSession: IDisposable
+public sealed class SecureMessagingCardSession : IDisposable
 {
     /// <summary>The bit ISO 7816-4 sets in the class byte to mark a command as secure-messaged with a protected header.</summary>
     private const byte SecureMessagingClassBits = 0x0C;

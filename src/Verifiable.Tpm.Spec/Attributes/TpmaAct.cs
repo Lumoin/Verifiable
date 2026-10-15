@@ -16,7 +16,7 @@ namespace Verifiable.Tpm.Spec.Attributes;
 /// </para>
 /// </remarks>
 [Flags]
-public enum TpmaAct: uint
+public enum TpmaAct : uint
 {
     /// <summary>
     /// SIGNALED (bit 0): SET (1) indicates the ACT has signaled; CLEAR (0) indicates it has not signaled.

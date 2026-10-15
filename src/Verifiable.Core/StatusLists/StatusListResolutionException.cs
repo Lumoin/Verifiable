@@ -17,7 +17,7 @@ namespace Verifiable.Core.StatusLists;
 /// escaping as the resolver's own transport exception (a genuine, unclassified fault).
 /// </remarks>
 [SuppressMessage("Design", "CA1032:Implement standard exception constructors", Justification = "This exception always carries the Status List Token uri that could not be resolved; the parameterless and message-only constructors would violate that invariant.")]
-public sealed class StatusListResolutionException: StatusListValidationException
+public sealed class StatusListResolutionException : StatusListValidationException
 {
     /// <summary>The Status List Token <c>uri</c> the resolver could not obtain a verified token for.</summary>
     [SuppressMessage("Design", "CA1056:URI-like properties should not be strings", Justification = "The specification defines status_list.uri as a string claim value, the same type StatusListReference.Uri carries; System.Uri would round-trip it inexactly.")]

@@ -18,7 +18,7 @@ namespace Verifiable.OAuth.Oid4Vp.Server.States;
 /// <see cref="Verifiable.Foundation.Automata.NullAction.Instance"/>.
 /// </remarks>
 [DebuggerDisplay("VerifierParReceived FlowId={FlowId} ParHandle={ParHandle}")]
-public sealed record VerifierParReceivedState: FlowState
+public sealed record VerifierParReceivedState : FlowState
 {
     /// <summary>
     /// The PAR response carrying the generated <c>request_uri</c> and

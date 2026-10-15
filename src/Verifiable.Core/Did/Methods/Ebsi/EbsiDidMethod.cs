@@ -3,7 +3,7 @@ namespace Verifiable.Core.Did.Methods.Ebsi
     /// <summary>
     /// The <c>did:ebsi</c> DID method used by the European Blockchain Services Infrastructure.
     /// </summary>
-    public record EbsiDidMethod: GenericDidMethod
+    public record EbsiDidMethod : GenericDidMethod
     {
         /// <summary>
         /// The prefix of this particular DID method, including suffix <c>':'</c>.

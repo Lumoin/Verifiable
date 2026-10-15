@@ -20,7 +20,7 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("WalletMetadata AuthorizationEndpoint={AuthorizationEndpoint}")]
-public sealed class WalletMetadata: IEquatable<WalletMetadata>
+public sealed class WalletMetadata : IEquatable<WalletMetadata>
 {
     /// <summary>
     /// The authorization endpoint URI used to invoke the Wallet. May be a custom

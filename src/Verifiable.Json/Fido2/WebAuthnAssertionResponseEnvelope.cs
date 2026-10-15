@@ -23,7 +23,7 @@ namespace Verifiable.Json;
 /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-verifying-assertion">section 7.2, step 6</see>.
 /// </para>
 /// </remarks>
-public sealed class WebAuthnAssertionResponseEnvelope: IDisposable
+public sealed class WebAuthnAssertionResponseEnvelope : IDisposable
 {
     /// <summary>Guards against redundant disposal.</summary>
     private bool disposed;

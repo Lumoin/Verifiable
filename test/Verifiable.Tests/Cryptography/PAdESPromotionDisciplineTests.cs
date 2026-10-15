@@ -193,7 +193,7 @@ internal sealed class PAdESPromotionDisciplineTests
 
 
     /// <summary>A minted PAdES-B-B signature and everything that produced it, disposed together.</summary>
-    private sealed class Scenario: IDisposable
+    private sealed class Scenario : IDisposable
     {
         internal required X509ChainTestRingNode Root { get; init; }
 

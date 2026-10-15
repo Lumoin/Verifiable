@@ -19,7 +19,7 @@ namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 /// retry budget that was not genuinely recorded.
 /// </remarks>
 [SuppressMessage("Design", "CA1515:Consider making public types internal", Justification = "Staged composition-edge code: public by design so the boundary is already the future package's API boundary, per the promotability rules.")]
-public sealed class TpmNvPinRetriesCustodyException: Exception
+public sealed class TpmNvPinRetriesCustodyException : Exception
 {
     /// <summary>
     /// Initializes a new instance with no message.

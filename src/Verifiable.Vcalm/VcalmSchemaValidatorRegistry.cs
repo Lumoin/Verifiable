@@ -41,7 +41,7 @@ public delegate ValueTask<string?> ResolveVcalmSchemaDocumentDelegate(
 /// that declares a schema is the workflow author requiring the check, and an instance that cannot
 /// run it refuses the presentation rather than skipping the check.
 /// </remarks>
-public sealed class VcalmSchemaValidatorRegistry: WiringComponent
+public sealed class VcalmSchemaValidatorRegistry : WiringComponent
 {
     /// <summary>
     /// The <see href="https://www.w3.org/TR/vc-json-schema/">VC JSON Schema</see> mechanism type:

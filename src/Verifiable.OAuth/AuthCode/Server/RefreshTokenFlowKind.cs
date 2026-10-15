@@ -23,7 +23,7 @@ namespace Verifiable.OAuth.AuthCode.Server;
 /// route to the right tier.
 /// </para>
 /// </remarks>
-public sealed class RefreshTokenFlowKind: FlowKind
+public sealed class RefreshTokenFlowKind : FlowKind
 {
     /// <summary>The singleton instance.</summary>
     public static RefreshTokenFlowKind Instance { get; } = new();

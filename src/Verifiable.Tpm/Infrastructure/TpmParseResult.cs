@@ -4,7 +4,7 @@ namespace Verifiable.Tpm.Infrastructure;
 /// Result of parsing a TPM structure from bytes.
 /// </summary>
 /// <typeparam name="T">The type that was parsed.</typeparam>
-public readonly struct TpmParseResult<T>: IEquatable<TpmParseResult<T>>
+public readonly struct TpmParseResult<T> : IEquatable<TpmParseResult<T>>
 {
     /// <summary>
     /// Gets the parsed value.

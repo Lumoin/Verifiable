@@ -19,7 +19,7 @@ namespace Verifiable.Cesr.Streaming;
 /// (<see cref="Serialization"/> names which), to be deserialized by the consumer.
 /// </remarks>
 [SuppressMessage("Performance", "CA1815:Override equals and operator equals on value types", Justification = "This is a disposable owner of pooled memory, not a comparable value; equality is not meaningful.")]
-public readonly struct CesrToken: IDisposable
+public readonly struct CesrToken : IDisposable
 {
     private IMemoryOwner<byte>? BodyOwner { get; }
 

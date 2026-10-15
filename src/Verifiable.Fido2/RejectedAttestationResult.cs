@@ -18,4 +18,4 @@ namespace Verifiable.Fido2;
 /// than thrown.
 /// </remarks>
 [DebuggerDisplay("RejectedAttestationResult({Error.Code,nq})")]
-public sealed record RejectedAttestationResult(Fido2AttestationError Error): AttestationResult;
+public sealed record RejectedAttestationResult(Fido2AttestationError Error) : AttestationResult;

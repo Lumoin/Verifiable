@@ -22,7 +22,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// See TPM 2.0 Library Part 3, clause 28.4 - TPM2_FlushContext.
 /// </para>
 /// </remarks>
-public readonly record struct FlushContextInput: ITpmCommandInput
+public readonly record struct FlushContextInput : ITpmCommandInput
 {
     /// <summary>
     /// The handle to flush (session, transient object, or sequence).

@@ -18,4 +18,4 @@ namespace Verifiable.JCose;
 /// </para>
 /// </remarks>
 /// <param name="Value">The raw Flattened JSON JWS wire string.</param>
-public sealed record FlattenedJwsShape(string Value): JoseTokenShape;
+public sealed record FlattenedJwsShape(string Value) : JoseTokenShape;

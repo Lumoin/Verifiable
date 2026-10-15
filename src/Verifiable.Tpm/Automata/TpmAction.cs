@@ -17,7 +17,7 @@ namespace Verifiable.Tpm.Automata;
 /// <see cref="NullAction.Instance"/> in place. The first command that needs an effect is
 /// <c>TPM2_GetRandom()</c>, whose <see cref="TpmRngAction"/> asks the injected RNG backend for octets.
 /// </remarks>
-public abstract record TpmAction: PdaAction;
+public abstract record TpmAction : PdaAction;
 
 /// <summary>
 /// Declares that the simulator must draw <paramref name="ByteCount"/> random octets from its RNG
@@ -29,7 +29,7 @@ public abstract record TpmAction: PdaAction;
 /// The number of octets to produce, already clamped to the largest digest the simulated TPM can
 /// return (<see cref="TpmLifecycleTransitions.MaxRandomBytes"/>).
 /// </param>
-public sealed record TpmRngAction(int ByteCount): TpmAction;
+public sealed record TpmRngAction(int ByteCount) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must fold <see cref="InData"/> into its RNG reseed state before the next
@@ -42,7 +42,7 @@ public sealed record TpmRngAction(int ByteCount): TpmAction;
 /// <param name="CommandCode">The command being resumed — always <c>TPM_CC_StirRandom</c>, carried like every other action's command code for the uniform rejection/framing helpers.</param>
 /// <param name="InData">The additional input to fold (<c>TPM2B_SENSITIVE_DATA</c>, TPM 2.0 Library Part 2, clause 11.1.14, Table 170), bounded at 128 octets on the plaintext (Part 2, clause 11.1.13, Table 169). OWNED: TRANSFERRED from the request that declared this action (the plain form's parse, or the session form's recovered plaintext); the effect is its terminal owner on every path.</param>
 /// <param name="Request">The parsed request the resuming transition frames a response for — <see cref="TpmStirRandomRequested"/>, whether it arrived directly or as a no-authorization wrapper's <see cref="TpmNoAuthOverSessionsRequested.Inner"/> — threaded through unread by the effect itself.</param>
-public sealed record TpmStirRandomAction(TpmCcConstants CommandCode, Tpm2bSensitiveData InData, TpmSimulatorInput Request): TpmAction;
+public sealed record TpmStirRandomAction(TpmCcConstants CommandCode, Tpm2bSensitiveData InData, TpmSimulatorInput Request) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must generate an ECC signing key before the next transition. Emitted by the
@@ -78,7 +78,7 @@ public sealed record TpmCreateEccKeyAction(
     Tpm2bAuth UserAuth,
     Tpm2bData OutsideInfo,
     TpmlPcrSelection CreationPcr,
-    ImmutableArray<ReadOnlyMemory<byte>> CreationPcrValues): TpmAction;
+    ImmutableArray<ReadOnlyMemory<byte>> CreationPcrValues) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must generate an ECC KEM key before the next transition — the DHKEM
@@ -121,7 +121,7 @@ public sealed record TpmCreateEccKemKeyAction(
     Tpm2bAuth UserAuth,
     Tpm2bData OutsideInfo,
     TpmlPcrSelection CreationPcr,
-    ImmutableArray<ReadOnlyMemory<byte>> CreationPcrValues): TpmAction;
+    ImmutableArray<ReadOnlyMemory<byte>> CreationPcrValues) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must generate an RSA signing key before the next transition — the RSA
@@ -152,7 +152,7 @@ public sealed record TpmCreateRsaKeyAction(
     Tpm2bAuth UserAuth,
     Tpm2bData OutsideInfo,
     TpmlPcrSelection CreationPcr,
-    ImmutableArray<ReadOnlyMemory<byte>> CreationPcrValues): TpmAction;
+    ImmutableArray<ReadOnlyMemory<byte>> CreationPcrValues) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must sign a digest with a retained key before the next transition. Emitted
@@ -170,7 +170,7 @@ public sealed record TpmEccSignAction(
     Tpm2bDigest Digest,
     TpmiEccCurve Curve,
     TpmiAlgHash HashAlg,
-    TpmOverSessionsFraming? OverSessions = null): TpmAction;
+    TpmOverSessionsFraming? OverSessions = null) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must sign a digest with a retained RSA key before the next transition — the RSA
@@ -188,7 +188,7 @@ public sealed record TpmRsaSignAction(
     Tpm2bDigest Digest,
     TpmiAlgSigScheme Scheme,
     TpmiAlgHash HashAlg,
-    TpmOverSessionsFraming? OverSessions = null): TpmAction;
+    TpmOverSessionsFraming? OverSessions = null) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must recompute a caller-supplied <c>TPMT_TK_HASHCHECK</c> ticket's HMAC (equation
@@ -214,7 +214,7 @@ public sealed record TpmEccSignDigestWithTicketAction(
     Tpm2bDigest Digest,
     TpmiEccCurve Curve,
     TpmiAlgHash HashAlg,
-    TpmOverSessionsFraming? OverSessions = null): TpmAction;
+    TpmOverSessionsFraming? OverSessions = null) : TpmAction;
 
 /// <summary>
 /// The RSA counterpart of <see cref="TpmEccSignDigestWithTicketAction"/>: recompute the caller-supplied
@@ -235,7 +235,7 @@ public sealed record TpmRsaSignDigestWithTicketAction(
     Tpm2bDigest Digest,
     TpmiAlgSigScheme Scheme,
     TpmiAlgHash HashAlg,
-    TpmOverSessionsFraming? OverSessions = null): TpmAction;
+    TpmOverSessionsFraming? OverSessions = null) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must deep-copy a signing (or verifying) key's Name into a new sequence context
@@ -260,7 +260,7 @@ public sealed record TpmSequenceStartAction(
     TpmiAlgSigScheme Scheme,
     TpmiAlgHash HashAlg,
     Tpm2bAuth SequenceAuth,
-    TpmSequenceKind Kind): TpmAction;
+    TpmSequenceKind Kind) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must hash the accumulated message of an open signing sequence and sign the
@@ -287,7 +287,7 @@ public sealed record TpmEccSignSequenceAction(
     PrivateKeyMemory PrivateKey,
     TpmiEccCurve Curve,
     TpmiAlgHash HashAlg,
-    TpmOverSessionsFraming? OverSessions = null): TpmAction;
+    TpmOverSessionsFraming? OverSessions = null) : TpmAction;
 
 /// <summary>
 /// The RSA counterpart of <see cref="TpmEccSignSequenceAction"/>: hash the accumulated message and sign the
@@ -307,7 +307,7 @@ public sealed record TpmRsaSignSequenceAction(
     PrivateKeyMemory PrivateKey,
     TpmiAlgSigScheme Scheme,
     TpmiAlgHash HashAlg,
-    TpmOverSessionsFraming? OverSessions = null): TpmAction;
+    TpmOverSessionsFraming? OverSessions = null) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must digest a message — the accumulated segments of an open hash sequence
@@ -334,7 +334,7 @@ public sealed record TpmDigestAction(
     Tpm2bMaxBuffer TrailingBuffer,
     TpmiAlgHash HashAlg,
     TpmiRhHierarchy TicketHierarchy,
-    bool IsSafeToSign): TpmAction;
+    bool IsSafeToSign) : TpmAction;
 
 /// <summary>
 /// Declares the HMAC computation a <c>TPM2_HMAC()</c> or the HMAC arm of a <c>TPM2_SequenceComplete()</c> asks
@@ -375,7 +375,7 @@ public sealed record TpmHmacAction(
     Tpm2bMaxBuffer TrailingBuffer,
     TpmiAlgHash HashAlg,
     ReadOnlyMemory<byte> KeyBits,
-    TpmHmacResponseSession? ResponseSession = null): TpmAction;
+    TpmHmacResponseSession? ResponseSession = null) : TpmAction;
 
 /// <summary>
 /// Declares the sequence object a <c>TPM2_HMAC_Start()</c> opens: a KEYEDHASH HMAC sequence bound to a copy of
@@ -401,7 +401,7 @@ public sealed record TpmHmacSequenceStartAction(
     ReadOnlyMemory<byte> KeyBits,
     TpmiAlgHash HashAlg,
     Tpm2bAuth SequenceAuth,
-    TpmHmacResponseSession? ResponseSession = null): TpmAction;
+    TpmHmacResponseSession? ResponseSession = null) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must sign a digest with a loaded KEYEDHASH HMAC key before the next transition —
@@ -421,7 +421,7 @@ public sealed record TpmHmacSignAction(
     TpmiAlgHash HashAlg,
     ReadOnlyMemory<byte> KeyBits,
     Tpm2bDigest Digest,
-    TpmOverSessionsFraming? OverSessions = null): TpmAction;
+    TpmOverSessionsFraming? OverSessions = null) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must HMAC the accumulated message of an open signing sequence with a loaded
@@ -447,7 +447,7 @@ public sealed record TpmHmacSignSequenceAction(
     Tpm2bMaxBuffer TrailingBuffer,
     TpmiAlgHash HashAlg,
     ReadOnlyMemory<byte> KeyBits,
-    TpmOverSessionsFraming? OverSessions = null): TpmAction;
+    TpmOverSessionsFraming? OverSessions = null) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must recompute a digest's HMAC under a loaded KEYEDHASH HMAC key and
@@ -473,7 +473,7 @@ public sealed record TpmHmacVerifySignatureAction(
     ReadOnlyMemory<byte> KeyBits,
     Tpm2bDigest Digest,
     TpmtSignature Signature,
-    TpmiAlgHash HashAlg): TpmAction;
+    TpmiAlgHash HashAlg) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must recompute the HMAC of an open verification sequence's accumulated message
@@ -503,7 +503,7 @@ public sealed record TpmHmacVerifySequenceAction(
     ReadOnlyMemory<byte> KeyBits,
     TpmiAlgHash HashAlg,
     TpmtSignature Signature,
-    TpmOverSessionsFraming? OverSessions = null): TpmAction;
+    TpmOverSessionsFraming? OverSessions = null) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must extend a SHA-256 PCR register with every SHA-256 entry of a
@@ -520,7 +520,7 @@ public sealed record TpmHmacVerifySequenceAction(
 public sealed record TpmPcrExtendAction(
     TpmiDhPcr PcrHandle,
     ReadOnlyMemory<byte> CurrentValue,
-    TpmlDigestValues Digests): TpmAction;
+    TpmlDigestValues Digests) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must digest an event under every implemented hash algorithm and, when a register
@@ -544,7 +544,7 @@ public sealed record TpmPcrEventAction(
     ReadOnlyMemory<byte>? CurrentValue,
     ImmutableList<Tpm2bMaxBuffer> Segments,
     ReadOnlyMemory<byte> TrailingBlock,
-    IDisposable TrailingOwner): TpmAction;
+    IDisposable TrailingOwner) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must hash the accumulated message of an open verification sequence and verify it
@@ -579,7 +579,7 @@ public sealed record TpmEccVerifySequenceAction(
     TpmiEccCurve Curve,
     TpmiAlgHash HashAlg,
     TpmtSignature Signature,
-    TpmOverSessionsFraming? OverSessions = null): TpmAction;
+    TpmOverSessionsFraming? OverSessions = null) : TpmAction;
 
 /// <summary>
 /// The RSA counterpart of <see cref="TpmEccVerifySequenceAction"/>: verify the accumulated message's digest
@@ -608,7 +608,7 @@ public sealed record TpmRsaVerifySequenceAction(
     TpmiAlgSigScheme Scheme,
     TpmiAlgHash HashAlg,
     TpmtSignature Signature,
-    TpmOverSessionsFraming? OverSessions = null): TpmAction;
+    TpmOverSessionsFraming? OverSessions = null) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must provision an ECC restricted storage key before the next transition. Emitted
@@ -644,7 +644,7 @@ public sealed record TpmCreateStorageParentAction(
     Tpm2bAuth UserAuth,
     Tpm2bData OutsideInfo,
     TpmlPcrSelection CreationPcr,
-    ImmutableArray<ReadOnlyMemory<byte>> CreationPcrValues): TpmAction;
+    ImmutableArray<ReadOnlyMemory<byte>> CreationPcrValues) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must generate an RSA key before the next transition — the RSA counterpart of
@@ -682,7 +682,7 @@ public sealed record TpmCreateRsaStorageParentAction(
     Tpm2bAuth UserAuth,
     Tpm2bData OutsideInfo,
     TpmlPcrSelection CreationPcr,
-    ImmutableArray<ReadOnlyMemory<byte>> CreationPcrValues): TpmAction;
+    ImmutableArray<ReadOnlyMemory<byte>> CreationPcrValues) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must create a KEYEDHASH object — a sealed data object around caller-supplied
@@ -735,7 +735,7 @@ public sealed record TpmCreateKeyedHashAction(
     bool ShouldGenerateSensitiveBits,
     int GeneratedBitsLength,
     TpmaObject TemplateAttributes,
-    TpmsKeyedHashParms KeyedHashScheme): TpmAction;
+    TpmsKeyedHashParms KeyedHashScheme) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must compute a loaded object's Name before the next transition. Emitted by the
@@ -767,7 +767,7 @@ public sealed record TpmLoadObjectAction(
     Tpm2bPrivate PrivateBlob,
     Tpm2bDigest ParentSeedValue,
     TpmiAlgHash ParentNameAlg,
-    Tpm2bName ParentQualifiedName): TpmAction;
+    Tpm2bName ParentQualifiedName) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must run <c>TPM2_LoadExternal()</c>'s public/private key-pair consistency checks
@@ -787,7 +787,7 @@ public sealed record TpmLoadExternalAction(
     Tpm2bPublic InPublic,
     TpmiRhHierarchy Hierarchy,
     TpmiDhObject Handle,
-    TpmSimulatorInput Request): TpmAction;
+    TpmSimulatorInput Request) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must serialize, fingerprint, encrypt, and integrity-protect a
@@ -811,7 +811,7 @@ public sealed record TpmContextSaveAction(
     bool IsStClear,
     ulong TotalResetCount,
     uint ClearCount,
-    TpmSimulatorInput Request): TpmAction;
+    TpmSimulatorInput Request) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must decrypt, integrity-verify, and deserialize a <c>TPM2_ContextLoad()</c>
@@ -827,7 +827,7 @@ public sealed record TpmContextLoadAction(
     TpmsContext Context,
     ulong TotalResetCount,
     uint ClearCount,
-    TpmSimulatorInput Request): TpmAction;
+    TpmSimulatorInput Request) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must export a loaded sealed object's sensitive area under the duplication
@@ -863,7 +863,7 @@ public sealed record TpmDuplicateObjectAction(
     TpmiEccCurve NewParentCurve,
     ReadOnlyMemory<byte> NewParentPublicPoint,
     Tpm2bPublicKeyRsa NewParentModulus,
-    uint NewParentExponent): TpmAction;
+    uint NewParentExponent) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must rewrap a TPM-resident object's sensitive area under a new authorization
@@ -896,7 +896,7 @@ public sealed record TpmObjectChangeAuthAction(
     TpmiAlgHash ParentNameAlg,
     Tpm2bAuth NewAuth,
     ImmutableArray<TpmResponseSession> ResponseSessions,
-    TpmSimulatorInput Request): TpmAction;
+    TpmSimulatorInput Request) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must RSA-encrypt a message to a loaded key's public modulus before the next
@@ -918,7 +918,7 @@ public sealed record TpmRsaEncryptAction(
     TpmtRsaDecrypt SelectedScheme,
     Tpm2bPublicKeyRsa Message,
     Tpm2bData Label,
-    TpmSimulatorInput Request): TpmAction;
+    TpmSimulatorInput Request) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must RSA-decrypt a ciphertext with a loaded key's private exponent before the
@@ -940,7 +940,7 @@ public sealed record TpmRsaDecryptAction(
     Tpm2bPublicKeyRsa CipherText,
     Tpm2bData Label,
     TpmOverSessionsFraming? OverSessions,
-    TpmSimulatorInput Request): TpmAction;
+    TpmSimulatorInput Request) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must recover a duplicated object's sensitive area and re-wrap it under the
@@ -974,7 +974,7 @@ public sealed record TpmImportObjectAction(
     TpmiAlgPublic ParentKeyType,
     TpmiEccCurve ParentCurve,
     ReadOnlyMemory<byte> ParentPublicPoint,
-    PrivateKeyMemory ParentPrivateKey): TpmAction;
+    PrivateKeyMemory ParentPrivateKey) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must attest a loaded object before the next transition. Emitted by the
@@ -1012,7 +1012,7 @@ public sealed record TpmCertifyAction(
     TpmiAlgSigScheme SignatureScheme,
     TpmiAlgHash HashAlg,
     TpmsClockInfo ClockSnapshot,
-    ImmutableArray<TpmResponseSession> ResponseSessions = default): TpmAction;
+    ImmutableArray<TpmResponseSession> ResponseSessions = default) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must attest a loaded object before the next transition, signed with an RSA key —
@@ -1048,7 +1048,7 @@ public sealed record TpmRsaCertifyAction(
     TpmiAlgSigScheme Scheme,
     TpmiAlgHash HashAlg,
     TpmsClockInfo ClockSnapshot,
-    ImmutableArray<TpmResponseSession> ResponseSessions = default): TpmAction;
+    ImmutableArray<TpmResponseSession> ResponseSessions = default) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must quote a set of Platform Configuration Registers before the next transition.
@@ -1087,7 +1087,7 @@ public sealed record TpmQuoteAction(
     TpmlPcrSelection PcrSelection,
     ImmutableArray<ReadOnlyMemory<byte>> PcrValues,
     TpmsClockInfo ClockSnapshot,
-    ImmutableArray<TpmResponseSession> ResponseSessions = default): TpmAction;
+    ImmutableArray<TpmResponseSession> ResponseSessions = default) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must quote a set of Platform Configuration Registers before the next transition,
@@ -1124,7 +1124,7 @@ public sealed record TpmRsaQuoteAction(
     TpmlPcrSelection PcrSelection,
     ImmutableArray<ReadOnlyMemory<byte>> PcrValues,
     TpmsClockInfo ClockSnapshot,
-    ImmutableArray<TpmResponseSession> ResponseSessions = default): TpmAction;
+    ImmutableArray<TpmResponseSession> ResponseSessions = default) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must re-verify a creation ticket and, if it reproduces, attest the certified
@@ -1169,7 +1169,7 @@ public sealed record TpmCertifyCreationAction(
     TpmiAlgSigScheme SignatureScheme,
     TpmiAlgHash HashAlg,
     TpmsClockInfo ClockSnapshot,
-    ImmutableArray<TpmResponseSession> ResponseSessions = default): TpmAction;
+    ImmutableArray<TpmResponseSession> ResponseSessions = default) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must re-verify a creation ticket and, if it reproduces, attest the certified
@@ -1204,7 +1204,7 @@ public sealed record TpmRsaCertifyCreationAction(
     TpmiAlgSigScheme Scheme,
     TpmiAlgHash HashAlg,
     TpmsClockInfo ClockSnapshot,
-    ImmutableArray<TpmResponseSession> ResponseSessions = default): TpmAction;
+    ImmutableArray<TpmResponseSession> ResponseSessions = default) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must attest the current time before the next transition. Emitted by the
@@ -1240,7 +1240,7 @@ public sealed record TpmGetTimeAction(
     TpmiAlgHash HashAlg,
     ulong Time,
     TpmsClockInfo ClockSnapshot,
-    ImmutableArray<TpmResponseSession> ResponseSessions = default): TpmAction;
+    ImmutableArray<TpmResponseSession> ResponseSessions = default) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must attest the current time before the next transition, signed with an RSA
@@ -1267,7 +1267,7 @@ public sealed record TpmRsaGetTimeAction(
     TpmiAlgHash HashAlg,
     ulong Time,
     TpmsClockInfo ClockSnapshot,
-    ImmutableArray<TpmResponseSession> ResponseSessions = default): TpmAction;
+    ImmutableArray<TpmResponseSession> ResponseSessions = default) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must attest an audit session's digest and exclusive status before the next
@@ -1316,7 +1316,7 @@ public sealed record TpmSessionAuditAttestAction(
     bool IsExclusiveSession,
     Tpm2bDigest SessionDigest,
     TpmsClockInfo ClockInfo,
-    ImmutableArray<TpmResponseSession> ResponseSessions = default): TpmAction;
+    ImmutableArray<TpmResponseSession> ResponseSessions = default) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must attest an audit session's digest and exclusive status before the next
@@ -1346,7 +1346,7 @@ public sealed record TpmRsaSessionAuditAttestAction(
     bool IsExclusiveSession,
     Tpm2bDigest SessionDigest,
     TpmsClockInfo ClockInfo,
-    ImmutableArray<TpmResponseSession> ResponseSessions = default): TpmAction;
+    ImmutableArray<TpmResponseSession> ResponseSessions = default) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must attest an audit session's digest and exclusive status before the next
@@ -1367,7 +1367,7 @@ public sealed record TpmNullSignedSessionAuditAttestAction(
     bool IsExclusiveSession,
     Tpm2bDigest SessionDigest,
     TpmsClockInfo ClockInfo,
-    ImmutableArray<TpmResponseSession> ResponseSessions = default): TpmAction;
+    ImmutableArray<TpmResponseSession> ResponseSessions = default) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must attest an NV Index's contents before the next transition. Emitted by the
@@ -1429,7 +1429,7 @@ public sealed record TpmNvCertifyAction(
     ReadOnlyMemory<byte> NvContents,
     ushort Offset,
     TpmsClockInfo ClockSnapshot,
-    ImmutableArray<TpmResponseSession> ResponseSessions = default): TpmAction;
+    ImmutableArray<TpmResponseSession> ResponseSessions = default) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must attest an NV Index's contents before the next transition, signed with an RSA
@@ -1474,7 +1474,7 @@ public sealed record TpmRsaNvCertifyAction(
     ReadOnlyMemory<byte> NvContents,
     ushort Offset,
     TpmsClockInfo ClockSnapshot,
-    ImmutableArray<TpmResponseSession> ResponseSessions = default): TpmAction;
+    ImmutableArray<TpmResponseSession> ResponseSessions = default) : TpmAction;
 
 /// <summary>
 /// The POLICY/TRIAL-session-specific context threaded through the shared session-key-derivation ladder
@@ -1526,7 +1526,7 @@ public sealed record TpmStartHmacSessionAction(
     ReadOnlyMemory<byte> Salt,
     TpmPolicySessionKeyContext? PolicyContext = null,
     bool IsBoundEntityDaProtected = false,
-    bool IsBoundToLockout = false): TpmAction;
+    bool IsBoundToLockout = false) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must OAEP-decrypt a salted <c>TPM2_StartAuthSession()</c>'s <c>encryptedSalt</c>
@@ -1567,7 +1567,7 @@ public sealed record TpmRecoverRsaSessionSaltAction(
     TpmiAlgHash NameAlg,
     TpmPolicySessionKeyContext? PolicyContext = null,
     bool IsBoundEntityDaProtected = false,
-    bool IsBoundToLockout = false): TpmAction;
+    bool IsBoundToLockout = false) : TpmAction;
 
 /// <summary>
 /// The ECC counterpart of <see cref="TpmRecoverRsaSessionSaltAction"/>: recover a salted
@@ -1607,7 +1607,7 @@ public sealed record TpmRecoverEccSessionSaltAction(
     TpmiAlgHash NameAlg,
     TpmPolicySessionKeyContext? PolicyContext = null,
     bool IsBoundEntityDaProtected = false,
-    bool IsBoundToLockout = false): TpmAction;
+    bool IsBoundToLockout = false) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must verify one queued session's command HMAC before the next transition (TPM 2.0
@@ -1637,7 +1637,7 @@ public sealed record TpmVerifyCommandHmacAction(
     TpmParameterArea ParameterArea,
     TpmPendingSessionVerification Current,
     ImmutableArray<TpmPendingSessionVerification> Remaining,
-    TpmSimulatorInput NextRequest): TpmAction;
+    TpmSimulatorInput NextRequest) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must frame the <c>TPM2_Unseal()</c> response before the next transition. Emitted
@@ -1668,7 +1668,7 @@ public sealed record TpmUnsealDataAction(
     ImmutableArray<TpmUnsealResponseSession> HmacResponseSessions,
     bool HasPolicyPlaceholder,
     TpmiAlgHash PolicyPlaceholderAlg,
-    TpmaSession PolicyPlaceholderAttributes): TpmAction;
+    TpmaSession PolicyPlaceholderAttributes) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must wrap a credential secret for <c>TPM2_MakeCredential()</c> before the next
@@ -1693,7 +1693,7 @@ public sealed record TpmMakeCredentialAction(
     Tpm2bName ObjectName,
     ReadOnlyMemory<byte> CredentialKeyPublicPoint,
     TpmiEccCurve CredentialKeyCurve,
-    TpmiAlgHash NameAlg): TpmAction;
+    TpmiAlgHash NameAlg) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must recover a wrapped credential for <c>TPM2_ActivateCredential()</c> before the
@@ -1723,7 +1723,7 @@ public sealed record TpmActivateCredentialAction(
     PrivateKeyMemory CredentialKeyPrivateScalar,
     ReadOnlyMemory<byte> CredentialKeyPublicPoint,
     TpmiEccCurve CredentialKeyCurve,
-    TpmiAlgHash NameAlg): TpmAction;
+    TpmiAlgHash NameAlg) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must wrap a credential secret to an RSA credential key's public modulus via
@@ -1750,7 +1750,7 @@ public sealed record TpmRsaMakeCredentialAction(
     Tpm2bName ObjectName,
     Tpm2bPublicKeyRsa CredentialKeyModulus,
     uint CredentialKeyExponent,
-    TpmiAlgHash NameAlg): TpmAction;
+    TpmiAlgHash NameAlg) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must recover a credential secret transported by RSA-OAEP for
@@ -1780,7 +1780,7 @@ public sealed record TpmRsaActivateCredentialAction(
     Tpm2bEncryptedSecret Secret,
     Tpm2bName ActivateObjectName,
     PrivateKeyMemory CredentialKeyPrivateKey,
-    TpmiAlgHash NameAlg): TpmAction;
+    TpmiAlgHash NameAlg) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must compute an NV Index's Name before the next transition, so
@@ -1819,7 +1819,7 @@ public sealed record TpmComputeNvNameAction(
     ushort Operation,
     TpmiAlgHash PolicyHashAlgorithm,
     Tpm2bDigest CurrentPolicyDigest,
-    TpmPolicyDigestFold Fold): TpmAction;
+    TpmPolicyDigestFold Fold) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must marshal an NV Index's public area and compute its Name before the next
@@ -1839,7 +1839,7 @@ public sealed record TpmComputeNvPublicNameAction(
     TpmiAlgHash NameAlg,
     TpmaNv Attributes,
     Tpm2bDigest AuthPolicy,
-    ushort DataSize): TpmAction;
+    ushort DataSize) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must marshal an NV Index's public area and compute its Name before the next
@@ -1875,7 +1875,7 @@ public sealed record TpmComputeNvIndexNameAction(
     TpmaNv Attributes,
     Tpm2bDigest AuthPolicy,
     ushort DataSize,
-    TpmSimulatorInput Resume): TpmAction;
+    TpmSimulatorInput Resume) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must roll the authorizing session's nonceTPM and frame a real response session
@@ -1934,7 +1934,7 @@ public sealed record TpmFrameNvSessionResponseAction(
     Tpm2bNonce NonceCaller,
     TpmaSession SessionAttributes,
     TpmNvDataWindow? ReadWindow,
-    bool IsSuppliedHmacEmpty = false): TpmAction;
+    bool IsSuppliedHmacEmpty = false) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must fold a <c>TPM2_NV_Extend()</c> command's <c>data</c> into an Extend Index's
@@ -1956,7 +1956,7 @@ public sealed record TpmNvExtendAction(
     TpmiAlgHash NameAlg,
     ReadOnlyMemory<byte>? PreviousValue,
     Tpm2bMaxNvBuffer Data,
-    TpmSimulatorInput Resume): TpmAction;
+    TpmSimulatorInput Resume) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must verify a digest/signature pair against a loaded ECC key's public point and,
@@ -1989,7 +1989,7 @@ public sealed record TpmVerifySignatureAction(
     TpmiEccCurve Curve,
     Tpm2bDigest Digest,
     TpmtSignature Signature,
-    TpmiAlgHash HashAlg): TpmAction;
+    TpmiAlgHash HashAlg) : TpmAction;
 
 /// <summary>
 /// The RSA counterpart of <see cref="TpmVerifySignatureAction"/>: verify a digest/signature pair against a
@@ -2015,7 +2015,7 @@ public sealed record TpmRsaVerifySignatureAction(
     Tpm2bDigest Digest,
     TpmtSignature Signature,
     TpmiAlgSigScheme Scheme,
-    TpmiAlgHash HashAlg): TpmAction;
+    TpmiAlgHash HashAlg) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must verify a digest/signature pair against a loaded ECC key's public point for
@@ -2052,7 +2052,7 @@ public sealed record TpmVerifyDigestSignatureAction(
     TpmiEccCurve Curve,
     Tpm2bDigest Digest,
     TpmtSignature Signature,
-    TpmiAlgHash HashAlg): TpmAction;
+    TpmiAlgHash HashAlg) : TpmAction;
 
 /// <summary>
 /// The RSA counterpart of <see cref="TpmVerifyDigestSignatureAction"/>: verify a digest/signature pair against
@@ -2078,7 +2078,7 @@ public sealed record TpmRsaVerifyDigestSignatureAction(
     Tpm2bDigest Digest,
     TpmtSignature Signature,
     TpmiAlgSigScheme Scheme,
-    TpmiAlgHash HashAlg): TpmAction;
+    TpmiAlgHash HashAlg) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must recompute <c>TPM2_PolicySigned()</c>'s <c>aHash</c> and verify it against a
@@ -2126,7 +2126,7 @@ public sealed record TpmVerifyPolicySignedAction(
     TpmiRhHierarchy Hierarchy,
     ulong Timeout,
     uint TimeEpoch,
-    uint ResetCount): TpmAction;
+    uint ResetCount) : TpmAction;
 
 /// <summary>
 /// The RSA counterpart of <see cref="TpmVerifyPolicySignedAction"/>: recompute <c>TPM2_PolicySigned()</c>'s
@@ -2168,7 +2168,7 @@ public sealed record TpmRsaVerifyPolicySignedAction(
     TpmiRhHierarchy Hierarchy,
     ulong Timeout,
     uint TimeEpoch,
-    uint ResetCount): TpmAction;
+    uint ResetCount) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must recompute <c>TPM2_PolicyAuthorize()</c>'s <c>aHash</c> and re-verify
@@ -2204,7 +2204,7 @@ public sealed record TpmVerifyPolicyAuthorizeTicketAction(
     TpmiRhHierarchy CheckTicketHierarchy,
     TpmiAlgHash? CheckTicketMetadata,
     Tpm2bDigest CheckTicketDigest,
-    TpmiAlgHash PolicyHashAlgorithm): TpmAction;
+    TpmiAlgHash PolicyHashAlgorithm) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must recompute a <c>TPM2_PolicyTicket()</c> ticket per equation 12 (Part 2,
@@ -2246,7 +2246,7 @@ public sealed record TpmVerifyPolicyTicketAction(
     bool ExpiresOnReset,
     uint TimeEpoch,
     uint ResetCount,
-    TpmiAlgHash PolicyHashAlgorithm): TpmAction;
+    TpmiAlgHash PolicyHashAlgorithm) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must mint a real <c>TPMT_TK_AUTH{TPM_ST_AUTH_SECRET}</c> ticket per equation 12
@@ -2293,7 +2293,7 @@ public sealed record TpmMintPolicySecretTicketAction(
     bool ExpiresOnReset,
     uint TimeEpoch,
     uint ResetCount,
-    PolicySecretAuthorizingSession? AuthorizingSession = null): TpmAction;
+    PolicySecretAuthorizingSession? AuthorizingSession = null) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must advance a policy session's accumulated policyDigest before the next
@@ -2376,7 +2376,7 @@ public sealed record TpmFoldPolicyDigestAction(
     Tpm2bName ObjectName,
     Tpm2bName NewParentName,
     bool IsObjectIncluded,
-    Tpm2bName? OwnedNameTerm = null): TpmAction;
+    Tpm2bName? OwnedNameTerm = null) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must roll the authorizing session's nonceTPM and frame a real response session
@@ -2411,7 +2411,7 @@ public sealed record TpmFramePolicySecretSessionResponseAction(
     TpmaSession SessionAttributes,
     Tpm2bTimeout Timeout,
     TpmiRhHierarchy Hierarchy,
-    Tpm2bDigest? TicketDigest): TpmAction;
+    Tpm2bDigest? TicketDigest) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must decrypt (if a decrypt session is present) and decode <c>TPM2_Create()</c>'s
@@ -2458,7 +2458,7 @@ public sealed record TpmDecryptCreateSensitiveAction(
     SymmetricKeyMemory SessionKey,
     Tpm2bAuth EntityAuthValue,
     Tpm2bNonce NonceCaller,
-    Tpm2bNonce NonceTpm): TpmAction;
+    Tpm2bNonce NonceTpm) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must decrypt <c>TPM2_NV_DefineSpace()</c>'s <c>auth</c> first command parameter
@@ -2500,7 +2500,7 @@ public sealed record TpmDecryptNvDefineAuthAction(
     SymmetricKeyMemory SessionKey,
     Tpm2bAuth EntityAuthValue,
     Tpm2bNonce NonceCaller,
-    Tpm2bNonce NonceTpm): TpmAction;
+    Tpm2bNonce NonceTpm) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must decrypt <c>TPM2_NV_ChangeAuth()</c>'s <c>newAuth</c> first command parameter
@@ -2542,7 +2542,7 @@ public sealed record TpmDecryptNvChangeAuthAction(
     SymmetricKeyMemory SessionKey,
     Tpm2bAuth EntityAuthValue,
     Tpm2bNonce NonceCaller,
-    Tpm2bNonce NonceTpm): TpmAction;
+    Tpm2bNonce NonceTpm) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must roll each authorization-area session's nonceTPM and frame that session's
@@ -2581,7 +2581,7 @@ public sealed record TpmDecryptNvChangeAuthAction(
 /// <param name="ResponseSessions">Every session in the command's authorization area, in command-session order, each with the key material its own response entry needs.</param>
 public sealed record TpmFrameTwoSlotResponseAction(
     TpmCcConstants CommandCode,
-    ImmutableArray<TpmNvChangeAuthResponseSession> ResponseSessions): TpmAction;
+    ImmutableArray<TpmNvChangeAuthResponseSession> ResponseSessions) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must frame the <c>TPM2_Create()</c> response over sessions before the next
@@ -2643,7 +2643,7 @@ public sealed record TpmCreateKeyedHashOverSessionsAction(
     bool ShouldGenerateSensitiveBits,
     int GeneratedBitsLength,
     TpmaObject TemplateAttributes,
-    TpmsKeyedHashParms KeyedHashScheme): TpmAction;
+    TpmsKeyedHashParms KeyedHashScheme) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must decrypt <c>TPM2_HierarchyChangeAuth()</c>'s <c>newAuth</c> first command
@@ -2683,7 +2683,7 @@ public sealed record TpmDecryptHierarchyChangeAuthAction(
     SymmetricKeyMemory SessionKey,
     Tpm2bAuth EntityAuthValue,
     Tpm2bNonce NonceCaller,
-    Tpm2bNonce NonceTpm): TpmAction;
+    Tpm2bNonce NonceTpm) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must recover an attest command's <c>qualifyingData</c> first parameter in
@@ -2740,7 +2740,7 @@ public sealed record TpmDecryptAttestQualifyingDataAction(
     SymmetricKeyMemory SessionKey,
     Tpm2bAuth EntityAuthValue,
     Tpm2bNonce NonceCaller,
-    Tpm2bNonce NonceTpm): TpmAction;
+    Tpm2bNonce NonceTpm) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must decrypt the first command parameter of a session-authorized
@@ -2771,7 +2771,7 @@ public sealed record TpmDecryptKeyedHashParameterAction(
     SymmetricKeyMemory SessionKey,
     Tpm2bAuth EntityAuthValue,
     Tpm2bNonce NonceCaller,
-    Tpm2bNonce NonceTpm): TpmAction;
+    Tpm2bNonce NonceTpm) : TpmAction;
 
 /// <summary>
 /// The response framing a session-authorized command's effect performs once its work has succeeded (TPM 2.0
@@ -2840,7 +2840,7 @@ public sealed record TpmDecryptFirstParameterAction(
     SymmetricKeyMemory SessionKey,
     Tpm2bAuth EntityAuthValue,
     Tpm2bNonce NonceCaller,
-    Tpm2bNonce NonceTpm): TpmAction;
+    Tpm2bNonce NonceTpm) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must parse a no-authorization command's REAL inner request from its already
@@ -2857,7 +2857,7 @@ public sealed record TpmDecryptFirstParameterAction(
 /// <c>CompleteNoAuthOverSessions</c> unchanged.
 /// </summary>
 /// <param name="Wrapper">The verified no-authorization request whose real inner is parsed.</param>
-public sealed record TpmParseNoAuthInnerAction(TpmNoAuthOverSessionsRequested Wrapper): TpmAction;
+public sealed record TpmParseNoAuthInnerAction(TpmNoAuthOverSessionsRequested Wrapper) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must frame a session-authorized command's response over an EMPTY parameter area
@@ -2868,7 +2868,7 @@ public sealed record TpmParseNoAuthInnerAction(TpmNoAuthOverSessionsRequested Wr
 /// command HMAC was, and feeds the entries back as a <see cref="TpmResponseFramedOverSessions"/> input.
 /// </summary>
 /// <param name="Framing">The command code, every slot's response-entry material in command-session order, and no sequence to flush.</param>
-public sealed record TpmFrameOverSessionsResponseAction(TpmOverSessionsFraming Framing): TpmAction;
+public sealed record TpmFrameOverSessionsResponseAction(TpmOverSessionsFraming Framing) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must serialize a no-authorization command's plain, unauthorized-form terminal
@@ -2884,7 +2884,7 @@ public sealed record TpmFrameOverSessionsResponseAction(TpmOverSessionsFraming F
 /// </summary>
 /// <param name="Frame">The framing already built for the command's response, and whether it carries a response handle.</param>
 /// <param name="PlainIntent">The inner command's own successful plain terminal intent, whose octets past the header become the framed response's parameter area; the framing effect is its terminal owner.</param>
-public sealed record TpmFrameNoAuthSessionsAction(TpmPendingSessionFrame Frame, TpmResponseIntent PlainIntent): TpmAction;
+public sealed record TpmFrameNoAuthSessionsAction(TpmPendingSessionFrame Frame, TpmResponseIntent PlainIntent) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must draw a fresh storage primary seed from the injected random-number backend
@@ -2905,7 +2905,7 @@ public sealed record TpmFrameNoAuthSessionsAction(TpmPendingSessionFrame Frame, 
 /// <param name="Resume">The parsed <c>TPM2_Clear()</c> request to resume, deciding whether the response is header-only or session-framed.</param>
 public sealed record TpmGenerateStorageProofSeedAction(
     int SeedSize,
-    TpmSimulatorInput Resume): TpmAction;
+    TpmSimulatorInput Resume) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must deep-copy a transient object into its persistent instance for
@@ -2920,7 +2920,7 @@ public sealed record TpmGenerateStorageProofSeedAction(
 /// <param name="PersistentHandle">The persistent handle the copy is installed under.</param>
 public sealed record TpmPersistObjectAction(
     TransientKeyState Transient,
-    TpmiDhPersistent PersistentHandle): TpmAction;
+    TpmiDhPersistent PersistentHandle) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must run the ECC DHKEM encapsulation side of <c>TPM2_Encapsulate()</c> before
@@ -2948,7 +2948,7 @@ public sealed record TpmPersistObjectAction(
 public sealed record TpmEncapsulateAction(
     ReadOnlyMemory<byte> PublicPoint,
     TpmiEccCurve Curve,
-    TpmiAlgHash KdfHashAlg): TpmAction;
+    TpmiAlgHash KdfHashAlg) : TpmAction;
 
 /// <summary>
 /// Declares that the simulator must run the ECC DHKEM decapsulation side of <c>TPM2_Decapsulate()</c> before
@@ -2978,4 +2978,4 @@ public sealed record TpmDecapsulateAction(
     ReadOnlyMemory<byte> PublicPoint,
     TpmiEccCurve Curve,
     TpmiAlgHash KdfHashAlg,
-    Tpm2bKemCiphertext Ciphertext): TpmAction;
+    Tpm2bKemCiphertext Ciphertext) : TpmAction;

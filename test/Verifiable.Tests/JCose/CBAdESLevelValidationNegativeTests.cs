@@ -2262,7 +2262,7 @@ verifyThenCancel,
     /// <summary>The minted Root CA and Time-Stamping Authority nodes for one scenario, disposed together.</summary>
     /// <param name="Root">The Root CA node.</param>
     /// <param name="Authority">The Time-Stamping Authority node, issued by <see cref="Root"/>.</param>
-    private sealed record TsaFixture(X509ChainTestRingNode Root, X509ChainTestRingNode Authority): IDisposable
+    private sealed record TsaFixture(X509ChainTestRingNode Root, X509ChainTestRingNode Authority) : IDisposable
     {
         /// <inheritdoc/>
         public void Dispose()

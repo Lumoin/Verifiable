@@ -78,4 +78,4 @@ public sealed record ServerParReceived(
     DateTimeOffset ReceivedAt,
     IReadOnlyList<string>? TransactionData = null,
     JwtHeader? JarAdditionalHeaderClaims = null,
-    string? ResponseMode = null): FlowInput;
+    string? ResponseMode = null) : FlowInput;

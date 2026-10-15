@@ -10,4 +10,4 @@ namespace Verifiable.Vcalm.Exchange;
 /// <see cref="MatchPayload"/>).
 /// </summary>
 [DebuggerDisplay("VcalmExchangeIdMatchPayload ExchangeId={ExchangeId}")]
-public sealed record VcalmExchangeIdMatchPayload(string ExchangeId): MatchPayload;
+public sealed record VcalmExchangeIdMatchPayload(string ExchangeId) : MatchPayload;

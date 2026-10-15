@@ -927,7 +927,7 @@ internal sealed class TextHygieneTests
     /// can tell one reservation over a run of scalars from one reservation per scalar. It delegates every write to
     /// an inner <see cref="ArrayBufferWriter{T}"/> and adds no behavior beyond the count.
     /// </summary>
-    private sealed class CountingBufferWriter: IBufferWriter<char>
+    private sealed class CountingBufferWriter : IBufferWriter<char>
     {
         /// <summary>
         /// Gets the storage this counting writer hands out.

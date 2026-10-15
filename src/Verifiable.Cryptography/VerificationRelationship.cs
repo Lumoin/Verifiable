@@ -17,7 +17,7 @@ namespace Verifiable.Cryptography;
 /// relationship (or <see langword="null"/>).
 /// </remarks>
 [DebuggerDisplay("{VerificationRelationshipNames.GetName(this),nq}")]
-public readonly struct VerificationRelationship: IEquatable<VerificationRelationship>
+public readonly struct VerificationRelationship : IEquatable<VerificationRelationship>
 {
     /// <summary>Gets the numeric code for this verification relationship.</summary>
     public int Code { get; }

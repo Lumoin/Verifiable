@@ -61,7 +61,7 @@ internal sealed record XmlSignatureInteropCase(string Name, byte[] Document, Xml
 /// </remarks>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1515:Consider making public types internal",
     Justification = "CryptoConfig.AddAlgorithm requires a type visible from outside its declaring assembly (confirmed at runtime: 'Algorithms added to CryptoConfig must be accessible from outside their assembly'); nothing else in this project references the type by name.")]
-public sealed class RsaPkcs1Sha256SignatureDescription: SignatureDescription
+public sealed class RsaPkcs1Sha256SignatureDescription : SignatureDescription
 {
     /// <summary>Creates the description with the RSA/SHA-256/PKCS#1 formatter and deformatter algorithm names <see cref="CreateFormatter"/>/<see cref="CreateDeformatter"/> instantiate.</summary>
     public RsaPkcs1Sha256SignatureDescription()
@@ -120,7 +120,7 @@ public sealed class RsaPkcs1Sha256SignatureDescription: SignatureDescription
 /// </remarks>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1515:Consider making public types internal",
     Justification = "CryptoConfig.AddAlgorithm requires a type visible from outside its declaring assembly (confirmed at runtime: 'Algorithms added to CryptoConfig must be accessible from outside their assembly'); nothing else in this project references the type by name.")]
-public sealed class EcdsaSha256SignatureDescription: SignatureDescription
+public sealed class EcdsaSha256SignatureDescription : SignatureDescription
 {
     /// <summary>Creates the description, setting <see cref="SignatureDescription.KeyAlgorithm"/> so <see cref="SignedXml.CheckSignature()"/>'s own key-type check succeeds.</summary>
     public EcdsaSha256SignatureDescription()
@@ -156,7 +156,7 @@ public sealed class EcdsaSha256SignatureDescription: SignatureDescription
 
 
 /// <summary>The <see cref="ECDsa.SignHash(byte[])"/>-backed formatter <see cref="EcdsaSha256SignatureDescription"/> uses.</summary>
-internal sealed class EcdsaRawSignatureFormatter: AsymmetricSignatureFormatter
+internal sealed class EcdsaRawSignatureFormatter : AsymmetricSignatureFormatter
 {
     private ECDsa? key;
 
@@ -175,7 +175,7 @@ internal sealed class EcdsaRawSignatureFormatter: AsymmetricSignatureFormatter
 
 
 /// <summary>The <see cref="ECDsa.VerifyHash(byte[],byte[])"/>-backed deformatter <see cref="EcdsaSha256SignatureDescription"/> uses.</summary>
-internal sealed class EcdsaRawSignatureDeformatter: AsymmetricSignatureDeformatter
+internal sealed class EcdsaRawSignatureDeformatter : AsymmetricSignatureDeformatter
 {
     private ECDsa? key;
 

@@ -17,7 +17,7 @@ namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 /// for a snapshot-FORMAT failure on the CTAP side of this same seam.
 /// </remarks>
 [SuppressMessage("Design", "CA1515:Consider making public types internal", Justification = "Staged composition-edge code: public by design so the boundary is already the future package's API boundary, per the promotability rules.")]
-public sealed class TpmSealedStateCustodyException: Exception
+public sealed class TpmSealedStateCustodyException : Exception
 {
     /// <summary>
     /// Initializes a new instance with no message.

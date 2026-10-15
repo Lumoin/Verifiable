@@ -40,7 +40,7 @@ namespace Verifiable.Cryptography.Pki;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("CBAdESDetachedObjectEntry: {Reference}, Digest={Digest != null}")]
-public sealed class CBAdESDetachedObjectEntry: IDisposable
+public sealed class CBAdESDetachedObjectEntry : IDisposable
 {
     private bool disposed;
 
@@ -149,7 +149,7 @@ public sealed class CBAdESDetachedObjectEntry: IDisposable
 /// </para>
 /// </remarks>
 [DebuggerDisplay("CBAdESDetachedObjects: {MechanismIdentifier}, {DetachedObjects.Count} objects")]
-public sealed class CBAdESDetachedObjects: IDisposable
+public sealed class CBAdESDetachedObjects : IDisposable
 {
     private bool disposed;
 

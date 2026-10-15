@@ -42,7 +42,7 @@ namespace Verifiable.Core.Model.Did
     /// <see href="https://www.w3.org/TR/did-1.1/#key-types-and-formats">DID Core specification</see>.
     /// </para>
     /// </remarks>
-    public abstract class KeyFormat: IEquatable<KeyFormat>
+    public abstract class KeyFormat : IEquatable<KeyFormat>
     {
         /// <inheritdoc />
         [EditorBrowsable(EditorBrowsableState.Never)]

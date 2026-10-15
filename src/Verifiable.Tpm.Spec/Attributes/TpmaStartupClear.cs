@@ -12,7 +12,7 @@ namespace Verifiable.Tpm.Spec.Attributes;
 /// </para>
 /// </remarks>
 [Flags]
-public enum TpmaStartupClear: uint
+public enum TpmaStartupClear : uint
 {
     /// <summary>
     /// PH_ENABLE (bit 0): SET (1) indicates the platform hierarchy is enabled and platformAuth or platformPolicy may be used for authorization.

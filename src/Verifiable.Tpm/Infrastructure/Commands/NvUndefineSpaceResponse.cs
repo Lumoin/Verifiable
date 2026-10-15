@@ -7,7 +7,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <remarks>
 /// See TPM 2.0 Library Part 3, clause 31.4 (Table 248).
 /// </remarks>
-public sealed class NvUndefineSpaceResponse: ITpmWireType
+public sealed class NvUndefineSpaceResponse : ITpmWireType
 {
     /// <summary>
     /// The shared instance returned for a successful, parameterless response.

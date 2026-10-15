@@ -19,7 +19,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </remarks>
 /// <param name="Value">The raw byte value from the TPM.</param>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public readonly record struct TpmiYesNo(byte Value): ITpmWireType
+public readonly record struct TpmiYesNo(byte Value) : ITpmWireType
 {
     /// <summary>
     /// Gets whether the value represents YES (non-zero).

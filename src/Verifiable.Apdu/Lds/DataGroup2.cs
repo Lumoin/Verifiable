@@ -19,7 +19,7 @@ namespace Verifiable.Apdu.Lds;
 /// block, and the encoded image (JPEG or JPEG 2000). This type extracts the first face.
 /// </para>
 /// </remarks>
-public sealed class DataGroup2: IDisposable
+public sealed class DataGroup2 : IDisposable
 {
     /// <summary>The eMRTD elementary file identifier of EF.DG2.</summary>
     public const ushort FileIdentifier = 0x0102;

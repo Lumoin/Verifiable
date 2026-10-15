@@ -14,7 +14,7 @@ namespace Verifiable.Core.Model.Did
     /// about the encoding format.
     /// </remarks>
     [DebuggerDisplay("PublicKeyMultibase({Key,nq})")]
-    public class PublicKeyMultibase: KeyFormat
+    public class PublicKeyMultibase : KeyFormat
     {
         /// <summary>
         /// The multibase-encoded public key string.

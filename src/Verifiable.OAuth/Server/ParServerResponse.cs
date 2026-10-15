@@ -19,7 +19,7 @@ namespace Verifiable.OAuth.Server;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("ParServerResponse RequestUri={RequestUri} ExpiresIn={ExpiresIn}")]
-public sealed class ParServerResponse: IEquatable<ParServerResponse>
+public sealed class ParServerResponse : IEquatable<ParServerResponse>
 {
     /// <summary>
     /// The <c>request_uri</c> assigned by the server per RFC 9126 §2.2.

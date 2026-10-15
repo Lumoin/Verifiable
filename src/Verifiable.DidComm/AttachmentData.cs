@@ -14,7 +14,7 @@ namespace Verifiable.DidComm;
 /// them to allow access to the content. When the content is referenced via <see cref="Links"/>,
 /// <see cref="Hash"/> MUST be present as an integrity check.
 /// </remarks>
-public sealed class AttachmentData: IEquatable<AttachmentData>
+public sealed class AttachmentData : IEquatable<AttachmentData>
 {
     /// <summary>
     /// A JWS in detached content mode signing the attachment. The signature need not come from the

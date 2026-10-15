@@ -39,7 +39,7 @@ namespace Verifiable.Server;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("RequestFields({Count} keys)")]
-public sealed class RequestFields: IEquatable<RequestFields>
+public sealed class RequestFields : IEquatable<RequestFields>
 {
     /// <summary>The backing store: each key maps to the ordered list of values it carried.</summary>
     private Dictionary<string, List<string>> Values { get; }

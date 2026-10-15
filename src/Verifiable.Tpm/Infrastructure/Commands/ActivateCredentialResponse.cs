@@ -14,7 +14,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class ActivateCredentialResponse: IDisposable, ITpmWireType
+public sealed class ActivateCredentialResponse : IDisposable, ITpmWireType
 {
     private bool Disposed { get; set; }
 

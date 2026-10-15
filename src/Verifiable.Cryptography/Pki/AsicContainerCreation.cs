@@ -101,7 +101,7 @@ public enum AsicContainerCreationFailureKind
 /// refused by <see cref="TimestampAcquisition"/>.
 /// </remarks>
 [DebuggerDisplay("AsicContainerCreationException({FailureKind}): {Message}")]
-public sealed class AsicContainerCreationException: Exception
+public sealed class AsicContainerCreationException : Exception
 {
     /// <summary>Gets what could not be done.</summary>
     public AsicContainerCreationFailureKind FailureKind { get; }
@@ -416,7 +416,7 @@ public sealed record AsicContainerEvidenceRecordContext
 /// one call. It is internal because it is a composition detail, and the octets it holds for the data objects are
 /// borrowed views of the caller's own memory — only <see cref="ManifestDocument"/> is owned.
 /// </remarks>
-internal sealed class AsicContainerPlan: IDisposable
+internal sealed class AsicContainerPlan : IDisposable
 {
     /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
     private bool disposed;
@@ -499,7 +499,7 @@ internal sealed class AsicContainerPlan: IDisposable
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class AsicContainerSignaturePreparation: IDisposable
+public sealed class AsicContainerSignaturePreparation : IDisposable
 {
     /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
     private bool disposed;

@@ -22,7 +22,7 @@ namespace Verifiable.Cryptography.Aead;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("AeadMessage EncryptionAlgorithm={EncryptionAlgorithm} CiphertextLength={EncryptedBytes.Length}")]
-public sealed class AeadMessage: IDisposable
+public sealed class AeadMessage : IDisposable
 {
     private bool disposed;
 

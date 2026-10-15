@@ -204,7 +204,7 @@ public sealed record PolicySessionState(
     TpmPolicyCpHashKind CpHashKind = TpmPolicyCpHashKind.None,
     byte CommandLocality = 0,
     bool IsNvWrittenChecked = false,
-    bool IsNvWrittenRequired = false): IDisposable, IAuthSessionState
+    bool IsNvWrittenRequired = false) : IDisposable, IAuthSessionState
 {
     /// <summary>
     /// The <see cref="IAuthSessionState"/> reading of this session's handle, widened from

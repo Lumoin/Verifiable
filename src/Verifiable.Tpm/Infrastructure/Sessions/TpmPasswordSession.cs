@@ -26,7 +26,7 @@ namespace Verifiable.Tpm.Infrastructure.Sessions;
 /// Specification reference: TPM 2.0 Library Part 1, clause 16.6.
 /// </para>
 /// </remarks>
-public sealed class TpmPasswordSession: TpmSessionBase, IDisposable
+public sealed class TpmPasswordSession : TpmSessionBase, IDisposable
 {
     private Tpm2bAuth Password { get; }
     private bool disposed;

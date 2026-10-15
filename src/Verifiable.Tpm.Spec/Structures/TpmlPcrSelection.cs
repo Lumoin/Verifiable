@@ -29,7 +29,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class TpmlPcrSelection: ITpmWireType, IDisposable
+public sealed class TpmlPcrSelection : ITpmWireType, IDisposable
 {
     /// <summary>
     /// The greatest number of <see cref="TpmsPcrSelection"/> entries this list admits — the <c>HASH_COUNT</c>

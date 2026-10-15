@@ -729,7 +729,7 @@ internal sealed class XmlEvidenceRecordsTests
     /// The minting world every test of this class shares: a root certification authority and the Time-Stamping
     /// Authority under it that every token comes from.
     /// </summary>
-    private sealed class TimestampingWorld: IDisposable
+    private sealed class TimestampingWorld : IDisposable
     {
         /// <summary>The carriers this world minted, released in reverse order.</summary>
         private List<IDisposable> Owned { get; } = [];

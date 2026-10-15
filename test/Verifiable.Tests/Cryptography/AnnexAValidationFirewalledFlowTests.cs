@@ -225,7 +225,7 @@ internal sealed class AnnexAValidationFirewalledFlowTests
     /// The verifying party: it owns everything it built from the received octets and nothing else, and exposes
     /// the inputs and seams one run of the validation algorithm of clause 5 takes.
     /// </summary>
-    private sealed class ReconstructedVerifyingParty: IDisposable
+    private sealed class ReconstructedVerifyingParty : IDisposable
     {
         /// <summary>The carriers this party rented, released in reverse order.</summary>
         private List<IDisposable> Owned { get; } = [];

@@ -135,7 +135,7 @@ internal static class CryptoEventProvenance
     /// risk data corruption under concurrent delivery — the exact "Collection was modified" hazard also
     /// guarded against in two test-only observers that predated this type.
     /// </summary>
-    private sealed class Collector: IObserver<CryptoEvent>
+    private sealed class Collector : IObserver<CryptoEvent>
     {
         private ConcurrentQueue<CryptoEvent> Events { get; } = new();
 

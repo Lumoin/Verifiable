@@ -16,7 +16,7 @@ namespace Verifiable.Apdu.Pace;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("DynamicAuthenticationData({Length} bytes)")]
-public sealed class DynamicAuthenticationData: SensitiveMemory
+public sealed class DynamicAuthenticationData : SensitiveMemory
 {
     /// <summary>
     /// Initialises a new <see cref="DynamicAuthenticationData"/> from owned bytes.

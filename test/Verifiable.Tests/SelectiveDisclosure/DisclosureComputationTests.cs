@@ -29,7 +29,7 @@ internal sealed class DisclosureComputationTests
     /// fixed <see cref="TimeSpan"/> on every call, so a computation reading it twice observes a
     /// known, deterministic elapsed duration with no dependency on wall-clock timing.
     /// </summary>
-    private sealed class StepAdvancingTimeProvider: TimeProvider
+    private sealed class StepAdvancingTimeProvider : TimeProvider
     {
         private TimeSpan Step { get; }
         private long Ticks { get; set; }

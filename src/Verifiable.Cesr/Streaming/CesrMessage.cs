@@ -7,7 +7,7 @@ namespace Verifiable.Cesr.Streaming;
 /// group and any witness-signature or receipt groups. The message and every attachment hold pooled memory this
 /// instance owns; disposing it returns all of those buffers to their pools.
 /// </summary>
-public sealed class CesrMessage: IDisposable
+public sealed class CesrMessage : IDisposable
 {
     /// <summary>Whether the pooled buffers have already been returned, so a second dispose is a no-op.</summary>
     private bool disposed;

@@ -12,7 +12,7 @@ namespace Verifiable.DidComm;
 /// Attachments are carried in the <see cref="DidCommMessage.Attachments"/> list. Only
 /// <see cref="Data"/> is required; every other member is an optional hint.
 /// </remarks>
-public sealed class Attachment: IEquatable<Attachment>
+public sealed class Attachment : IEquatable<Attachment>
 {
     /// <summary>
     /// An identifier for the attachment, unique within the message, so it can be referenced (for

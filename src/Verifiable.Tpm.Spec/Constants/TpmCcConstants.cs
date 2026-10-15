@@ -19,7 +19,7 @@ namespace Verifiable.Tpm.Spec.Constants;
 /// </remarks>
 [SuppressMessage("Design", "CA1069:Enums values should not be duplicated", Justification = "This follows the TPM 2.0 specification.")]
 [SuppressMessage("Design", "CA1008:Enums should have zero value", Justification = "This follows the TPM 2.0 specification.")]
-public enum TpmCcConstants: uint
+public enum TpmCcConstants : uint
 {
     /// <summary>
     /// compile variable May decrease based on implementation.

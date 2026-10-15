@@ -41,7 +41,7 @@ namespace Verifiable.OAuth;
 /// </remarks>
 [DebuggerDisplay("OutgoingFormFields({Count} entries)")]
 [SuppressMessage("Design", "CA1710:Identifiers should have correct suffix", Justification = "OutgoingFormFields is the established, symmetric name for this type's inbound counterpart Verifiable.Server.RequestFields (which carries no collection-interface suffix either) — renaming to a Collection/Dictionary suffix would break that pairing and the many public delegate/API signatures already named around it across this library.")]
-public sealed class OutgoingFormFields: IReadOnlyCollection<KeyValuePair<string, string>>, IEquatable<OutgoingFormFields>
+public sealed class OutgoingFormFields : IReadOnlyCollection<KeyValuePair<string, string>>, IEquatable<OutgoingFormFields>
 {
     /// <summary>The backing store: an ordered list of key/value occurrences, preserving repeats.</summary>
     private List<KeyValuePair<string, string>> Entries { get; }

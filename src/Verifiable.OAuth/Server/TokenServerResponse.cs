@@ -19,7 +19,7 @@ namespace Verifiable.OAuth.Server;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("TokenServerResponse TokenType={TokenType} ExpiresIn={ExpiresIn}")]
-public sealed class TokenServerResponse: IEquatable<TokenServerResponse>
+public sealed class TokenServerResponse : IEquatable<TokenServerResponse>
 {
     /// <summary>The access token issued by the authorization server.</summary>
     public string AccessToken { get; init; } = string.Empty;

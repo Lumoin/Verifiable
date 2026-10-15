@@ -20,7 +20,7 @@ namespace Verifiable.Core.Resolvers;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("Error={Error.Type.AbsoluteUri,nq} ContentType={ContentType,nq}")]
-public sealed class DidDereferencingMetadata: IEquatable<DidDereferencingMetadata>
+public sealed class DidDereferencingMetadata : IEquatable<DidDereferencingMetadata>
 {
     /// <summary>
     /// The media type of the returned content stream. MUST be an ASCII string when present.

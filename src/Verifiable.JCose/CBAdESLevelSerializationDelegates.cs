@@ -43,7 +43,7 @@ public abstract record CBAdESImprintStructureContext
 /// literal <c>"Signature"</c>. A stateless marker; use <see cref="Instance"/> rather than constructing a new
 /// value.
 /// </summary>
-public sealed record CBAdESImprintCoseSignStructureContext: CBAdESImprintStructureContext
+public sealed record CBAdESImprintCoseSignStructureContext : CBAdESImprintStructureContext
 {
     /// <summary>Prevents external construction; use <see cref="Instance"/>.</summary>
     private CBAdESImprintCoseSignStructureContext()
@@ -62,7 +62,7 @@ public sealed record CBAdESImprintCoseSignStructureContext: CBAdESImprintStructu
 /// new value. <c>COSE_Sign1</c> has no signer layer distinct from the body layer, so a caller pairs this arm
 /// with a <see langword="null"/> signer-layer protected header.
 /// </summary>
-public sealed record CBAdESImprintCoseSign1StructureContext: CBAdESImprintStructureContext
+public sealed record CBAdESImprintCoseSign1StructureContext : CBAdESImprintStructureContext
 {
     /// <summary>Prevents external construction; use <see cref="Instance"/>.</summary>
     private CBAdESImprintCoseSign1StructureContext()
@@ -83,7 +83,7 @@ public sealed record CBAdESImprintCoseSign1StructureContext: CBAdESImprintStruct
 /// </summary>
 /// <remarks><see cref="ContextText"/> must not be null or empty.</remarks>
 [DebuggerDisplay("CBAdESImprintCountersignatureStructureContext: {ContextText}")]
-public sealed record CBAdESImprintCountersignatureStructureContext: CBAdESImprintStructureContext
+public sealed record CBAdESImprintCountersignatureStructureContext : CBAdESImprintStructureContext
 {
     /// <summary>
     /// Initializes a new <see cref="CBAdESImprintCountersignatureStructureContext"/>.
@@ -126,7 +126,7 @@ public abstract class CBAdESPayloadTimestampImprintSource
 /// present, and <see cref="PayloadBytes"/> is its content (CB-5.2.6-05).
 /// </summary>
 [DebuggerDisplay("CBAdESAttachedPayloadTimestampImprintSource: {PayloadBytes.Length} bytes")]
-public sealed class CBAdESAttachedPayloadTimestampImprintSource: CBAdESPayloadTimestampImprintSource
+public sealed class CBAdESAttachedPayloadTimestampImprintSource : CBAdESPayloadTimestampImprintSource
 {
     /// <summary>Initializes a new <see cref="CBAdESAttachedPayloadTimestampImprintSource"/>.</summary>
     /// <param name="payloadBytes">
@@ -152,7 +152,7 @@ public sealed class CBAdESAttachedPayloadTimestampImprintSource: CBAdESPayloadTi
 /// retrieved detached payload (CB-5.2.6-05; retrieval mechanism out of this document's scope).
 /// </summary>
 [DebuggerDisplay("CBAdESDetachedPayloadTimestampImprintSource: {PayloadBytes.Length} bytes")]
-public sealed class CBAdESDetachedPayloadTimestampImprintSource: CBAdESPayloadTimestampImprintSource
+public sealed class CBAdESDetachedPayloadTimestampImprintSource : CBAdESPayloadTimestampImprintSource
 {
     /// <summary>Initializes a new <see cref="CBAdESDetachedPayloadTimestampImprintSource"/>.</summary>
     /// <param name="payloadBytes">
@@ -184,7 +184,7 @@ public sealed class CBAdESDetachedPayloadTimestampImprintSource: CBAdESPayloadTi
 /// <see cref="ProcessedParBytes"/> must be non-empty (CB-5.2.8-06). Each element is a <strong>borrowed</strong> view.
 /// </remarks>
 [DebuggerDisplay("CBAdESSigDProcessedPayloadTimestampImprintSource: {ProcessedParBytes.Count} segments")]
-public sealed class CBAdESSigDProcessedPayloadTimestampImprintSource: CBAdESPayloadTimestampImprintSource
+public sealed class CBAdESSigDProcessedPayloadTimestampImprintSource : CBAdESPayloadTimestampImprintSource
 {
     /// <summary>
     /// Initializes a new <see cref="CBAdESSigDProcessedPayloadTimestampImprintSource"/>.

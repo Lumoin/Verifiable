@@ -15,7 +15,7 @@ namespace Verifiable.Tpm.Spec.Attributes;
 /// </para>
 /// </remarks>
 [Flags]
-public enum TpmaNvExp: ulong
+public enum TpmaNvExp : ulong
 {
     /// <summary>
     /// TPMA_EXTERNAL_NV_ENCRYPTION (bit 32): SET (1) indicates external NV index contents are encrypted; CLEAR (0) indicates not encrypted.

@@ -19,7 +19,7 @@ namespace Verifiable.Tpm.Spec.Attributes;
 /// </para>
 /// </remarks>
 [Flags]
-public enum TpmaX509KeyUsage: uint
+public enum TpmaX509KeyUsage : uint
 {
     /// <summary>
     /// DECIPHER_ONLY (bit 23): requires Attributes.DECRYPT set.

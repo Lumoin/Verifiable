@@ -20,7 +20,7 @@ namespace Verifiable.Fido2;
 /// <c>Verifiable.Json.PrfResultsJsonReader</c>, which hands them out in the library's disposable
 /// secret-memory carrier rather than through the claim/audit pipeline.
 /// </remarks>
-public sealed record PrfResultsPresentContext: ClaimContext
+public sealed record PrfResultsPresentContext : ClaimContext
 {
     /// <summary>Whether the decoded <c>prf</c> client extension output carried a <c>results</c> member.</summary>
     public required bool HasResults { get; init; }

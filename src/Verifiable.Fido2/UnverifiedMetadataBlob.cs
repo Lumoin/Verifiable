@@ -59,7 +59,7 @@ public sealed record UnverifiedMetadataBlobPayload(
     string? LegalHeader,
     long No,
     DateOnly NextUpdate,
-    IReadOnlyList<MetadataBlobPayloadEntry> Entries): IDisposable
+    IReadOnlyList<MetadataBlobPayloadEntry> Entries) : IDisposable
 {
     /// <summary>
     /// Determines whether this payload and <paramref name="other"/> report the same content. The
@@ -189,7 +189,7 @@ public sealed record UnverifiedMetadataBlob(
     IReadOnlyList<PkiCertificateMemory> X5c,
     ReadOnlyMemory<byte> SigningInput,
     ReadOnlyMemory<byte> Signature,
-    UnverifiedMetadataBlobPayload Payload): IDisposable
+    UnverifiedMetadataBlobPayload Payload) : IDisposable
 {
     /// <summary>
     /// Determines whether this BLOB and <paramref name="other"/> report the same content. The

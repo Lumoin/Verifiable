@@ -19,7 +19,7 @@ namespace Verifiable.OAuth.AuthCode.Server.States;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("ServerFlowFailed FlowId={FlowId} ErrorCode={ErrorCode}")]
-public sealed record ServerFlowFailedState: FlowState
+public sealed record ServerFlowFailedState : FlowState
 {
     /// <summary>
     /// The OAuth 2.0 error code for the wire response, e.g. <c>invalid_grant</c>,

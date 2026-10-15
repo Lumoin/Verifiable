@@ -31,7 +31,7 @@ namespace Verifiable.Core.Model.Did
     /// </para>
     /// </remarks>
     [DebuggerDisplay("Controller(Did = {Did})")]
-    public sealed class Controller: IEquatable<Controller>
+    public sealed class Controller : IEquatable<Controller>
     {
         /// <summary>
         /// The URL identifying the controller.

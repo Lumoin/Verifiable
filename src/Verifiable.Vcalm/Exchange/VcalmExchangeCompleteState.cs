@@ -19,7 +19,7 @@ namespace Verifiable.Vcalm.Exchange;
 /// completion was a redirect.
 /// </remarks>
 [DebuggerDisplay("VcalmExchangeCompleteState FlowId={FlowId} ExchangeId={ExchangeId}")]
-public sealed record VcalmExchangeCompleteState: FlowState
+public sealed record VcalmExchangeCompleteState : FlowState
 {
     /// <summary>The §3.6 <c>{localExchangeId}</c> the exchange is addressed by.</summary>
     public required string ExchangeId { get; init; }

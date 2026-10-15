@@ -11,7 +11,7 @@ namespace Verifiable.Tests.Serialization;
 [JsonSerializable(typeof(VerifiableCredential))]
 [JsonSerializable(typeof(DataIntegritySecuredCredential))]
 [JsonSerializable(typeof(VerifiablePresentation))]
-internal partial class VerifiableCredentialConverterTestsJsonContext: JsonSerializerContext { }
+internal partial class VerifiableCredentialConverterTestsJsonContext : JsonSerializerContext { }
 
 /// <summary>
 /// Tests for the hand-written <see cref="Verifiable.Json.Converters.VerifiableCredentialConverter"/>

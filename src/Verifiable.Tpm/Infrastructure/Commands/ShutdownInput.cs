@@ -10,7 +10,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// </remarks>
 /// <param name="ShutdownType">The shutdown type (<c>TPM_SU_CLEAR</c> or <c>TPM_SU_STATE</c>).</param>
-public readonly record struct ShutdownInput(TpmSuConstants ShutdownType): ITpmCommandInput
+public readonly record struct ShutdownInput(TpmSuConstants ShutdownType) : ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_Shutdown;

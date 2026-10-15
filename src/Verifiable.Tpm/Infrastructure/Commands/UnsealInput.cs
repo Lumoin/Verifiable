@@ -28,7 +28,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// Specification reference: TPM 2.0 Library Part 3, clause 12.7 (Table 30).
 /// </para>
 /// </remarks>
-public readonly record struct UnsealInput: ITpmCommandInput
+public readonly record struct UnsealInput : ITpmCommandInput
 {
     /// <summary>
     /// Gets the handle of the loaded sealed data object (Auth Index 1, Auth Role USER).

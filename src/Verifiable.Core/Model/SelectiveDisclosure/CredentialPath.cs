@@ -54,7 +54,7 @@ using JsonPointerType = Lumoin.Veritas.JsonPointer.JsonPointer;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{ToString()}")]
-public readonly struct CredentialPath: IEquatable<CredentialPath>, IComparable<CredentialPath>
+public readonly struct CredentialPath : IEquatable<CredentialPath>, IComparable<CredentialPath>
 {
     private JsonPointerType? RawJsonPointer { get; }
     private int? RawNQuadIndex { get; }

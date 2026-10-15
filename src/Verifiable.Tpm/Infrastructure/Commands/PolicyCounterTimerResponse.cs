@@ -7,7 +7,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <remarks>
 /// See TPM 2.0 Library Part 3, clause 23.10.
 /// </remarks>
-public sealed class PolicyCounterTimerResponse: ITpmWireType
+public sealed class PolicyCounterTimerResponse : ITpmWireType
 {
     /// <summary>
     /// The shared instance returned for a successful, parameterless response.

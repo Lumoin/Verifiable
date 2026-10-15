@@ -65,7 +65,7 @@ public sealed record CtapPinUvAuthTokenState(
     bool UserVerified,
     bool UserPresent,
     DateTimeOffset? BeginUsingAt,
-    DateTimeOffset? LastUsedAt): IDisposable
+    DateTimeOffset? LastUsedAt) : IDisposable
 {
     /// <summary>The <c>pinUvAuthToken</c> length this authenticator mints for both PIN/UV auth protocols.</summary>
     private const int TokenLength = 32;

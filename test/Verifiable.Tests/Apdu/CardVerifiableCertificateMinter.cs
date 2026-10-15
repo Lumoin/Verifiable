@@ -282,6 +282,7 @@ internal static class CardVerifiableCertificateMinter
         using var bodySignature = await SignBodyAsync(issuerKey, body, pool, cancellationToken).ConfigureAwait(false);
         var signatureLength = bodySignature.Length;
         var signature = bodySignature.Octets.Memory.Span[..signatureLength];
+
         if(tamperSignature)
         {
             signature[signatureLength - 1] ^= 0xFF;
@@ -325,6 +326,7 @@ internal static class CardVerifiableCertificateMinter
         var signingResult = await sign(privateKeyOwner.Memory, body, pool, null, cancellationToken).ConfigureAwait(false);
         using var signature = signingResult.Signature;
         var octets = pool.Rent(signature.Length);
+
         try
         {
             signature.AsReadOnlySpan().CopyTo(octets.Memory.Span);
@@ -346,11 +348,12 @@ internal static class CardVerifiableCertificateMinter
     /// </summary>
     /// <param name="Octets">The pooled octets holding the signature.</param>
     /// <param name="Length">How many of the octets the signature fills.</param>
-    private sealed record BodySignature(IMemoryOwner<byte> Octets, int Length): IDisposable
+    private sealed record BodySignature(IMemoryOwner<byte> Octets, int Length) : IDisposable
     {
         /// <summary>Returns the signature's octets to their pool.</summary>
         public void Dispose() => Octets.Dispose();
     }
+
 
     /// <summary>
     /// Writes the certificate body (7F4E): profile identifier, certification authority reference, public key,

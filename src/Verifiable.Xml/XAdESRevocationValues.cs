@@ -40,7 +40,7 @@ namespace Verifiable.Xml;
 /// across every decoded field.
 /// </para>
 /// </remarks>
-public sealed class XAdESRevocationValues: IDisposable
+public sealed class XAdESRevocationValues : IDisposable
 {
     /// <summary>
     /// The maximum number of <c>EncapsulatedCRLValue</c>/<c>EncapsulatedOCSPValue</c> entries

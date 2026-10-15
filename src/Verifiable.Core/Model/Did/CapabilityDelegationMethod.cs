@@ -60,7 +60,7 @@ namespace Verifiable.Core.Model.Did;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("CapabilityDelegationMethod(Id = {Id}, IsEmbedded = {IsEmbeddedVerification})")]
-public sealed class CapabilityDelegationMethod: VerificationMethodReference
+public sealed class CapabilityDelegationMethod : VerificationMethodReference
 {
     /// <summary>
     /// The verification purpose string as defined in W3C specifications.

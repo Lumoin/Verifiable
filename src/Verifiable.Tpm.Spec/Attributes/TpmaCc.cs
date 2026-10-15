@@ -24,7 +24,7 @@ namespace Verifiable.Tpm.Spec.Attributes;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public readonly struct TpmaCc: IEquatable<TpmaCc>
+public readonly struct TpmaCc : IEquatable<TpmaCc>
 {
     /// <summary>Mask of <c>commandIndex</c>, bits 15:0 — "indicates the command being selected" (TPM 2.0 Library Part 2, clause 8.9.3.1).</summary>
     private const uint CommandIndexMask = 0x0000FFFFu;

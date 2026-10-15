@@ -21,7 +21,7 @@ namespace Verifiable.Fido2;
 ///     cancellationToken: cancellationToken);
 /// </code>
 /// </example>
-public sealed class Fido2AssertionOptionsBuilder: Builder<PublicKeyCredentialRequestOptions, Fido2AssertionOptionsBuildState, Fido2AssertionOptionsBuilder>
+public sealed class Fido2AssertionOptionsBuilder : Builder<PublicKeyCredentialRequestOptions, Fido2AssertionOptionsBuildState, Fido2AssertionOptionsBuilder>
 {
     /// <summary>
     /// Initializes a new instance with the default request-options transformations registered.

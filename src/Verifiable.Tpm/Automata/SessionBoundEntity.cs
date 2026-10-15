@@ -45,7 +45,7 @@ namespace Verifiable.Tpm.Automata;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("SessionBoundEntity(IsBound={IsBound})")]
-public sealed class SessionBoundEntity: SensitiveMemory
+public sealed class SessionBoundEntity : SensitiveMemory
 {
     /// <summary>
     /// The recorded bind value's fixed size: a 2-octet Name-algorithm prefix plus the SHA-512 digest

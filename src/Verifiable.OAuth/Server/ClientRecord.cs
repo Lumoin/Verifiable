@@ -64,7 +64,7 @@ namespace Verifiable.OAuth.Server;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("ClientRecord ClientId={ClientId} TenantHandle={TenantHandle}")]
-public sealed record ClientRecord: IRegistrationRecord
+public sealed record ClientRecord : IRegistrationRecord
 {
     /// <summary>
     /// The host-generic capability projection. Forwards <see cref="AllowedCapabilities"/>

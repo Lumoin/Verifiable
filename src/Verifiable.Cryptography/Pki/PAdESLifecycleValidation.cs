@@ -39,7 +39,7 @@ public enum PAdESReachedLevel
 /// copy of the certificate the cryptographic verification ran under, taken because the borrowed original
 /// belongs to the validation run's resources and is released when the run's outcome disposes;
 /// <see cref="Dispose"/> releases the copy.</remarks>
-public sealed class PAdESVerifiedSignatureFacts: IDisposable
+public sealed class PAdESVerifiedSignatureFacts : IDisposable
 {
     private bool disposed;
 
@@ -75,7 +75,7 @@ public sealed class PAdESVerifiedSignatureFacts: IDisposable
 /// rather than inferred by the caller.
 /// </summary>
 [System.Diagnostics.DebuggerDisplay("PAdESLifecycleResult: {ReachedLevel}, {Indication}")]
-public sealed class PAdESLifecycleResult: IDisposable
+public sealed class PAdESLifecycleResult : IDisposable
 {
     private bool disposed;
 

@@ -31,7 +31,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <exception cref="ArgumentException"><paramref name="OperandB"/> is longer than <see cref="Tpm2bOperand.MaxSize"/>.</exception>
 [DebuggerDisplay("PolicyCounterTimerInput(Session=0x{PolicySession,h}, {Operation})")]
 public readonly record struct PolicyCounterTimerInput(
-    uint PolicySession, ReadOnlyMemory<byte> OperandB, ushort Offset, TpmEoConstants Operation): ITpmCommandInput
+    uint PolicySession, ReadOnlyMemory<byte> OperandB, ushort Offset, TpmEoConstants Operation) : ITpmCommandInput
 {
     /// <summary>
     /// Gets the value the live <c>TPMS_TIME_INFO</c> is compared against, bounded at construction by

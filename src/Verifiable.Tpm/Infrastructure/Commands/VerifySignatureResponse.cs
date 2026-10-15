@@ -11,7 +11,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// TPM2B_ATTEST, no TPMU_ATTEST union, and no TPMT_SIGNATURE in the response.
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class VerifySignatureResponse: IDisposable, ITpmWireType
+public sealed class VerifySignatureResponse : IDisposable, ITpmWireType
 {
     private bool Disposed { get; set; }
 

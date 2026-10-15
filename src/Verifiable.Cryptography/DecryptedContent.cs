@@ -19,7 +19,7 @@ namespace Verifiable.Cryptography;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class DecryptedContent: SensitiveMemory, IEquatable<DecryptedContent>
+public sealed class DecryptedContent : SensitiveMemory, IEquatable<DecryptedContent>
 {
     /// <summary>Gets the length of the decrypted content in bytes.</summary>
     public int Length => MemoryOwner.Memory.Length;

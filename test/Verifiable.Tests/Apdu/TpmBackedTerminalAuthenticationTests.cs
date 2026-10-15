@@ -57,6 +57,13 @@ internal sealed class TpmBackedTerminalAuthenticationTests
 
     public required TestContext TestContext { get; set; }
 
+
+    /// <summary>
+    /// The chip grants access to a terminal whose Terminal Authentication key is generated inside the in-house TPM and signs
+    /// EXTERNAL AUTHENTICATE through TPM2_Sign, the private scalar never leaving it, its exported public point certified by the
+    /// Document Verifier.
+    /// </summary>
+    /// <returns>A task completing once the chip's answer is judged.</returns>
     [TestMethod]
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The terminal PrivateKey takes ownership of the TPM handle memory and is disposed by its using declaration; all other carriers are disposed by using declarations.")]
     public async Task GrantsAccessWhenTheTerminalSignsWithAnInHouseTpmHeldKey()
@@ -99,12 +106,12 @@ internal sealed class TpmBackedTerminalAuthenticationTests
         using ECDsa cvcaKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa documentVerifierKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
-        using CardVerifiableCertificate trustAnchor = await CardVerifiableCertificateMinter.MintAsync(
+        using var trustAnchor = await CardVerifiableCertificateMinter.MintAsync(
             cvcaKey, cvcaKey, CvcaReference, CvcaReference, CardVerifiableCertificateMinter.CvcaRole, includeDomainParameters: true, Effective, Expiration, inheritedCurve: null, pool, TerminalType.InspectionSystem, TestContext.CancellationToken).ConfigureAwait(false);
         Tag certificateCurve = trustAnchor.PublicKey.EllipticCurvePoint!.Tag;
-        using CardVerifiableCertificate documentVerifier = await CardVerifiableCertificateMinter.MintAsync(
+        using var documentVerifier = await CardVerifiableCertificateMinter.MintAsync(
             cvcaKey, documentVerifierKey, CvcaReference, DocumentVerifierReference, CardVerifiableCertificateMinter.DocumentVerifierRole, includeDomainParameters: false, Effective, Expiration, certificateCurve, pool, TerminalType.InspectionSystem, TestContext.CancellationToken).ConfigureAwait(false);
-        using CardVerifiableCertificate terminal = await CardVerifiableCertificateMinter.MintAsync(
+        using var terminal = await CardVerifiableCertificateMinter.MintAsync(
             documentVerifierKey, terminalPublicPoint.AsReadOnlyMemory(), DocumentVerifierReference, TerminalReference, CardVerifiableCertificateMinter.TerminalRole, Effective, Expiration, certificateCurve, pool, TerminalType.InspectionSystem, TestContext.CancellationToken).ConfigureAwait(false);
 
         using EncodedEcPoint chipStaticPublicKey = await multiplyGenerator(Convert.FromHexString(ChipStaticPrivateKey), chipCurve, pool, TestContext.CancellationToken);

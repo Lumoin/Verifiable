@@ -11,7 +11,7 @@ namespace Verifiable.Tpm.Extensions.EventLog;
 /// The <see cref="Span"/> property provides access to the actual log data.
 /// </para>
 /// </remarks>
-public sealed class TcgEventLogData: IDisposable
+public sealed class TcgEventLogData : IDisposable
 {
     private IMemoryOwner<byte> MemoryOwner { get; }
     private bool disposed;

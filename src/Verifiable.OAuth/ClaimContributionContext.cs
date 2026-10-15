@@ -21,4 +21,4 @@ namespace Verifiable.OAuth;
 /// object — whatever the JWT serializer accepts for that claim shape.
 /// </param>
 [DebuggerDisplay("ClaimContributionContext Name={ClaimName,nq}")]
-public sealed record ClaimContributionContext(string ClaimName, object ClaimValue): ClaimContext;
+public sealed record ClaimContributionContext(string ClaimName, object ClaimValue) : ClaimContext;

@@ -25,7 +25,7 @@ internal sealed class CompositeClaimAssessorTests
     /// <summary>
     /// Example assessment context for AI/ML model metadata.
     /// </summary>
-    private sealed class MachineLearningClaimContext: AssessmentContext
+    private sealed class MachineLearningClaimContext : AssessmentContext
     {
         public string? ModelVersion { get; init; }
     }

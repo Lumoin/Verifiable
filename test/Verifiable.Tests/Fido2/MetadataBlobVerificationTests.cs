@@ -646,9 +646,9 @@ internal sealed class MetadataBlobVerificationTests
     private static async ValueTask<SignedBlob> BuildSignedBlobAsync(MdsPkiFixture fixture, string algorithm, long no, CancellationToken cancellationToken)
     {
         var aaguid = Guid.NewGuid();
-        string entryJson = MetadataBlobTestVectors.BuildEntryJson(aaguid: aaguid);
-        string headerJson = MetadataBlobTestVectors.BuildHeaderJson(algorithm, [fixture.SigningCertificate.RawData]);
-        string payloadJson = MetadataBlobTestVectors.BuildPayloadJson(no, FarNextUpdate, [entryJson]);
+        var entryJson = MetadataBlobTestVectors.BuildEntryJson(aaguid: aaguid);
+        var headerJson = MetadataBlobTestVectors.BuildHeaderJson(algorithm, [fixture.SigningCertificate.RawData]);
+        var payloadJson = MetadataBlobTestVectors.BuildPayloadJson(no, FarNextUpdate, [entryJson]);
         var blobBytes = await MetadataBlobTestVectors.BuildBlobBytesAsync(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256Async(fixture.SigningKey, data, cancellationToken)).ConfigureAwait(false);
 
         return new SignedBlob(blobBytes, aaguid);

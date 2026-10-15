@@ -719,7 +719,7 @@ internal sealed class Bbs2023ResolvingBindingTests
     /// <see cref="Bbs2023W3cVectorTests.BbsOperations"/> (spec-vector fixed keys) but for a freshly
     /// generated key pair and resolved-key verification.
     /// </summary>
-    internal sealed class ResolvingBbsOperations: IDisposable
+    internal sealed class ResolvingBbsOperations : IDisposable
     {
         private static BbsCiphersuite Ciphersuite { get; } = BbsCiphersuite.Bls12Curve381Sha256;
 

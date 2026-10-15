@@ -24,7 +24,7 @@ namespace Verifiable.DidComm;
 /// serializer and parser delegates.
 /// </para>
 /// </remarks>
-public sealed class DidCommMessage: IEquatable<DidCommMessage>
+public sealed class DidCommMessage : IEquatable<DidCommMessage>
 {
     /// <summary>
     /// REQUIRED. The message id, which MUST be unique to the sender across all messages they send.

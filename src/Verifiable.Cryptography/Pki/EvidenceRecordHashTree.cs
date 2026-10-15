@@ -138,7 +138,7 @@ public enum EvidenceRecordRootStatus
 /// DER, and clause 4.3 makes the membership failure a negative verification result, not an error.
 /// </remarks>
 [DebuggerDisplay("EvidenceRecordRootComputation({Status})")]
-public sealed class EvidenceRecordRootComputation: IDisposable
+public sealed class EvidenceRecordRootComputation : IDisposable
 {
     /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
     private bool disposed;
@@ -200,7 +200,7 @@ public sealed class EvidenceRecordRootComputation: IDisposable
 /// out views those digests. Disposing it invalidates them, so a caller encodes what it needs first.
 /// </remarks>
 [DebuggerDisplay("EvidenceRecordHashTreeBuild({ReducedHashtrees.Count} reduced hash trees)")]
-public sealed class EvidenceRecordHashTreeBuild: IDisposable
+public sealed class EvidenceRecordHashTreeBuild : IDisposable
 {
     /// <summary>Every digest this build computed, disposed as one.</summary>
     private List<DigestValue> OwnedDigests { get; }

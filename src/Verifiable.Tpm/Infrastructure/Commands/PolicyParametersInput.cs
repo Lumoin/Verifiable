@@ -27,7 +27,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <param name="ParametersHash">The digest of the command code and parameters the policy binds to, at most <see cref="Tpm2bDigest.MaxSize"/> octets. The caller owns the underlying memory.</param>
 /// <exception cref="ArgumentException"><paramref name="ParametersHash"/> is longer than <see cref="Tpm2bDigest.MaxSize"/>.</exception>
 [DebuggerDisplay("PolicyParametersInput(Session=0x{PolicySession,h})")]
-public readonly record struct PolicyParametersInput(uint PolicySession, ReadOnlyMemory<byte> ParametersHash): ITpmCommandInput
+public readonly record struct PolicyParametersInput(uint PolicySession, ReadOnlyMemory<byte> ParametersHash) : ITpmCommandInput
 {
     /// <summary>
     /// Gets the digest of the command code and parameters the policy binds to, bounded at construction by

@@ -50,7 +50,7 @@ namespace Verifiable.Cryptography;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class HmacValue: SensitiveMemory, IEquatable<HmacValue>
+public sealed class HmacValue : SensitiveMemory, IEquatable<HmacValue>
 {
     private Activity? HmacLifetime { get; }
 

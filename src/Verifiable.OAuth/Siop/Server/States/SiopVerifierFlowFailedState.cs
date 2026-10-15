@@ -9,7 +9,7 @@ namespace Verifiable.OAuth.Siop.Server.States;
 /// as the PDA's pre-initiation sentinel before the first request-preparation input.
 /// </summary>
 [DebuggerDisplay("SiopVerifierFlowFailedState FlowId={FlowId} Reason={Reason,nq}")]
-public sealed record SiopVerifierFlowFailedState: FlowState
+public sealed record SiopVerifierFlowFailedState : FlowState
 {
     /// <summary>Why the flow failed. Server-side logging only; never forwarded to the Wallet.</summary>
     public required string Reason { get; init; }

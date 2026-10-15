@@ -29,7 +29,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// retains ownership across the call, the same non-owning contract <see cref="RsaEncryptInput"/> keeps for its
 /// own carriers.
 /// </param>
-public readonly record struct ContextLoadInput(TpmsContext Context): ITpmCommandInput
+public readonly record struct ContextLoadInput(TpmsContext Context) : ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_ContextLoad;

@@ -397,7 +397,7 @@ public enum CAdESVerificationStatus
 /// surfaces the signer certificate and the optional signing time; the caller disposes it. On failure it owns
 /// nothing.
 /// </summary>
-public sealed class CAdESVerificationResult: IDisposable
+public sealed class CAdESVerificationResult : IDisposable
 {
     private CmsVerifiedContent? VerifiedContent { get; }
     private bool disposed;

@@ -33,7 +33,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <param name="IsObjectIncluded">Whether <paramref name="ObjectName"/> is folded into the policyDigest (YES), binding the policy to this object and new parent as a pair rather than to the new parent alone (NO).</param>
 /// <exception cref="ArgumentException"><paramref name="ObjectName"/> or <paramref name="NewParentName"/> is longer than <see cref="Tpm2bName.MaxSize"/>.</exception>
 [DebuggerDisplay("PolicyDuplicationSelectInput(Session=0x{PolicySession,h}, IncludeObject={IsObjectIncluded})")]
-public readonly record struct PolicyDuplicationSelectInput(uint PolicySession, ReadOnlyMemory<byte> ObjectName, ReadOnlyMemory<byte> NewParentName, bool IsObjectIncluded): ITpmCommandInput
+public readonly record struct PolicyDuplicationSelectInput(uint PolicySession, ReadOnlyMemory<byte> ObjectName, ReadOnlyMemory<byte> NewParentName, bool IsObjectIncluded) : ITpmCommandInput
 {
     /// <summary>
     /// Gets the Name of the object to be duplicated, bounded at construction by <see cref="Tpm2bName.MaxSize"/>.

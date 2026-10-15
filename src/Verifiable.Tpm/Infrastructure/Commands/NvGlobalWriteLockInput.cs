@@ -22,7 +22,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// </remarks>
 /// <param name="AuthHandle">The owner or platform hierarchy authorizing the global write lock.</param>
-public readonly record struct NvGlobalWriteLockInput(TpmRh AuthHandle): ITpmCommandInput
+public readonly record struct NvGlobalWriteLockInput(TpmRh AuthHandle) : ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_NV_GlobalWriteLock;

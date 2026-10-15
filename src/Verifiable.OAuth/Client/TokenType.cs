@@ -24,7 +24,7 @@ namespace Verifiable.OAuth.Client;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{TokenTypeNames.GetName(this),nq}")]
-public readonly struct TokenType: IEquatable<TokenType>
+public readonly struct TokenType : IEquatable<TokenType>
 {
     /// <summary>Gets the numeric code identifying this token type.</summary>
     public int Code { get; }

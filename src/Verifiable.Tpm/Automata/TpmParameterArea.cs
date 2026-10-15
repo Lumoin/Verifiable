@@ -40,7 +40,7 @@ namespace Verifiable.Tpm.Automata;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class TpmParameterArea: IDisposable
+public sealed class TpmParameterArea : IDisposable
 {
     /// <summary>
     /// The shared zero-length instance backing every parameter-free command and response.

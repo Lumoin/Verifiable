@@ -14,7 +14,7 @@ namespace Verifiable.Json.Converters;
 /// See <see href="https://www.rfc-editor.org/rfc/rfc9457">RFC 9457</see> and
 /// <see href="https://w3c.github.io/did-resolution/#errors">DID Resolution Errors</see>.
 /// </remarks>
-public class DidProblemDetailsConverter: JsonConverter<DidProblemDetails>
+public class DidProblemDetailsConverter : JsonConverter<DidProblemDetails>
 {
     /// <inheritdoc />
     public override bool CanConvert(Type typeToConvert)

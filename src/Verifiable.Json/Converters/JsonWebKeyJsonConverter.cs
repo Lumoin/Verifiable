@@ -23,7 +23,7 @@ namespace Verifiable.Json.Converters;
 /// <see cref="Utf8JsonReader.TryGetDateTime(out DateTime)"/> before falling back to a plain string,
 /// which this converter does not repeat.
 /// </remarks>
-public sealed class JsonWebKeyJsonConverter: JsonConverter<JsonWebKey>
+public sealed class JsonWebKeyJsonConverter : JsonConverter<JsonWebKey>
 {
     /// <summary>
     /// Reads a JSON object into a <see cref="JsonWebKey"/>. A member the library declares no typed

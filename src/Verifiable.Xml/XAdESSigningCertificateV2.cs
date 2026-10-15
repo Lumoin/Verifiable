@@ -20,7 +20,7 @@ namespace Verifiable.Xml;
 /// differently-shaped <c>IssuerSerial</c> constructs (e.g. inside <c>AuthorityKeyIdentifier</c>). NOTE 2 of
 /// clause 5.2.2 states it is only a hint; the binding proof is <see cref="CertDigest"/>, not this pair.
 /// </remarks>
-public readonly struct XAdESCertIdV2: IEquatable<XAdESCertIdV2>
+public readonly struct XAdESCertIdV2 : IEquatable<XAdESCertIdV2>
 {
     /// <summary>The table the value's spans read from.</summary>
     internal XmlNodeTable Table { get; }
@@ -195,7 +195,7 @@ public readonly struct XAdESCertIdV2: IEquatable<XAdESCertIdV2>
 /// <see cref="Certs"/> entry's decoded fields, the same shape <see cref="XmlManifest"/> uses for its own
 /// <c>Reference</c> children's decoded digest values.
 /// </remarks>
-public sealed class XAdESSigningCertificateV2: IDisposable
+public sealed class XAdESSigningCertificateV2 : IDisposable
 {
     /// <summary>
     /// The maximum number of <c>Cert</c> entries <see cref="TryReadCertIdListV2"/> accepts under one

@@ -1033,7 +1033,7 @@ internal sealed class VcalmIssuerEndpointTests
     /// Owns the issuer's Ed25519 signing key for the test's lifetime, disposed at cleanup; the host-material wrapper
     /// lets the cleanup loop dispose the host registration's material uniformly.
     /// </summary>
-    private sealed class IssuerKeyMaterial: IDisposable
+    private sealed class IssuerKeyMaterial : IDisposable
     {
         /// <summary>The host registration this instance wraps, or <see langword="null"/> for the issuer's own keys.</summary>
         private VerifierKeyMaterial? HostMaterial { get; }

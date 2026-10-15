@@ -35,7 +35,7 @@ namespace Verifiable.Core.Model.Credentials
     /// VC Data Model 2.0 §3.3 Presentations</see>.
     /// </para>
     /// </remarks>
-    public class VerifiablePresentation: IEquatable<VerifiablePresentation>
+    public class VerifiablePresentation : IEquatable<VerifiablePresentation>
     {
         /// <summary>
         /// The JSON-LD context that defines the terms used in this presentation.

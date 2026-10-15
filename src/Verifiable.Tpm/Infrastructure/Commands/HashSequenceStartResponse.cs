@@ -15,7 +15,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <c>TPM_RC_SEQUENCE</c> for it (clause 12.4).
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class HashSequenceStartResponse: ITpmWireType
+public sealed class HashSequenceStartResponse : ITpmWireType
 {
     /// <summary>The handle of the newly opened sequence context (<c>sequenceHandle</c>, TPMI_DH_OBJECT).</summary>
     public TpmiDhObject SequenceHandle { get; }

@@ -22,7 +22,7 @@ namespace Verifiable.OAuth.Server;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("AuthorizationServerCodecs Validated={IsValidated}")]
-public sealed class AuthorizationServerCodecs: WiringComponent
+public sealed class AuthorizationServerCodecs : WiringComponent
 {
     /// <summary>
     /// Base64url encoder delegate. Required. Used for PKCE code challenge

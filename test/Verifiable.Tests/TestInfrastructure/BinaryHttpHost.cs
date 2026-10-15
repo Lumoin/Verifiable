@@ -68,7 +68,7 @@ internal delegate Task<BinaryHttpResponse> BinaryHttpHandlerDelegate(
 /// <see cref="System.Net.Http.HttpClient"/> to <see cref="Certificate"/> via
 /// <see cref="LoopbackTls.CreatePinnedHttpClient(System.Security.Cryptography.X509Certificates.X509Certificate2, System.Uri?)"/>.
 /// </remarks>
-internal sealed class BinaryHttpHost: IAsyncDisposable
+internal sealed class BinaryHttpHost : IAsyncDisposable
 {
     private WebApplication App { get; }
 

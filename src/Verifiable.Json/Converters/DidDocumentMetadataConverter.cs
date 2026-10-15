@@ -15,7 +15,7 @@ namespace Verifiable.Json.Converters;
 /// <see cref="AdditionalDataJson"/>), and the bucket is flattened back at the object root on write — there is
 /// no nested <c>additionalData</c> member and no type discriminator.
 /// </remarks>
-public class DidDocumentMetadataConverter: JsonConverter<DidDocumentMetadata>
+public class DidDocumentMetadataConverter : JsonConverter<DidDocumentMetadata>
 {
     /// <inheritdoc />
     public override bool CanConvert(Type typeToConvert)

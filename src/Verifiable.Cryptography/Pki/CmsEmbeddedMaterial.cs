@@ -92,7 +92,7 @@ public enum CmsEmbeddedMaterialStatus
 /// allocation, so it is not disposed twice.
 /// </para>
 /// </remarks>
-public sealed class CmsEmbeddedMaterial: IDisposable
+public sealed class CmsEmbeddedMaterial : IDisposable
 {
     /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
     private bool disposed;

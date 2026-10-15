@@ -28,7 +28,7 @@ namespace Verifiable.OAuth;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("EphemeralEncryptionKeyPair PublicKeyJwk.Length={PublicKeyJwk.Length}")]
-public sealed class EphemeralEncryptionKeyPair: IDisposable, IEquatable<EphemeralEncryptionKeyPair>
+public sealed class EphemeralEncryptionKeyPair : IDisposable, IEquatable<EphemeralEncryptionKeyPair>
 {
     private bool disposed;
     private IMemoryOwner<byte> PrivateKeyOwner { get; }

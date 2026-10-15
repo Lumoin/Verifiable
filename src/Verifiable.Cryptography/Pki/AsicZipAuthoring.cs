@@ -181,7 +181,7 @@ public enum AsicZipAuthoringFailureKind
 /// caller rather than an adversarial input to be classified and reported.
 /// </remarks>
 [DebuggerDisplay("AsicZipAuthoringException({FailureKind}): {Message}")]
-public sealed class AsicZipAuthoringException: Exception
+public sealed class AsicZipAuthoringException : Exception
 {
     /// <summary>Gets what could not be done.</summary>
     public AsicZipAuthoringFailureKind FailureKind { get; }
@@ -817,7 +817,7 @@ public static class AsicZipAuthoring
     /// nothing reads it, so those members refuse rather than pretend.
     /// </para>
     /// </remarks>
-    private sealed class PooledZipWriter: Stream
+    private sealed class PooledZipWriter : Stream
     {
         /// <summary>The pool every buffer of this writer is rented from.</summary>
         private BaseMemoryPool Pool { get; }

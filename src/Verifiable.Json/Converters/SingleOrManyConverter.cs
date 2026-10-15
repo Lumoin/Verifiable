@@ -8,7 +8,7 @@ namespace Verifiable.Json.Converters
     /// <summary>
     /// A converter for array of <see cref="Controller"/> instances.
     /// </summary>
-    public class SingleOrArrayControllerConverter: JsonConverter<Controller[]>
+    public class SingleOrArrayControllerConverter : JsonConverter<Controller[]>
     {
         /// <summary>Returns <see langword="true"/> when <paramref name="typeToConvert"/> is <see cref="Controller"/>[].</summary>
         /// <param name="typeToConvert">The runtime type the serializer is about to (de)serialize.</param>

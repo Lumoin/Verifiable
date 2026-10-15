@@ -9,7 +9,7 @@ namespace Verifiable.Cryptography.Pki;
 /// </summary>
 /// <remarks>Ownership: owns every carrier it exposes; <see cref="Dispose"/> disposes all of them.</remarks>
 [DebuggerDisplay("PdfVriDictionary: {Certificates.Count} cert(s), {CertificateRevocationLists.Count} CRL(s), {OcspResponses.Count} OCSP(s)")]
-public sealed class PdfVriDictionary: IDisposable
+public sealed class PdfVriDictionary : IDisposable
 {
     private bool disposed;
 
@@ -87,7 +87,7 @@ public sealed class PdfVriDictionary: IDisposable
 /// </summary>
 /// <remarks>Ownership: owns every carrier it exposes, including every <see cref="PdfVriDictionary"/> in <see cref="VriEntries"/>; <see cref="Dispose"/> disposes all of them.</remarks>
 [DebuggerDisplay("PdfDssDictionary: {Certificates.Count} cert(s), {CertificateRevocationLists.Count} CRL(s), {OcspResponses.Count} OCSP(s), {VriEntries.Count} VRI entry/entries")]
-public sealed class PdfDssDictionary: IDisposable
+public sealed class PdfDssDictionary : IDisposable
 {
     private bool disposed;
 
@@ -164,7 +164,7 @@ public sealed class PdfDssDictionary: IDisposable
 /// structural failure, a well-formed document that simply carries no DSS, and a successfully decoded DSS.
 /// </summary>
 [DebuggerDisplay("PdfDssParseResult: {IsSuccess}, HasDss={HasDss}")]
-public sealed class PdfDssParseResult: IDisposable
+public sealed class PdfDssParseResult : IDisposable
 {
     private bool disposed;
 

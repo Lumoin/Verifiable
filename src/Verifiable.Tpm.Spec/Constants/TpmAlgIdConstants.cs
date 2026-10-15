@@ -13,7 +13,7 @@ namespace Verifiable.Tpm.Spec.Constants;
 /// </para>
 /// </remarks>
 [SuppressMessage("Design", "CA1069:Enums values should not be duplicated", Justification = "TPM 2.0 specification allows duplicate values for compatibility and other reasons.")]
-public enum TpmAlgIdConstants: ushort
+public enum TpmAlgIdConstants : ushort
 {
     /// <summary>
     /// should not occur

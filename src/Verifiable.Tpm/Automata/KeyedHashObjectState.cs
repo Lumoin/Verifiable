@@ -131,7 +131,7 @@ public sealed record KeyedHashObjectState(
     Tpm2bDigest SeedValue,
     Tpm2bPublic PublicArea,
     Tpm2bName QualifiedName,
-    bool IsPublicOnly): IDisposable
+    bool IsPublicOnly) : IDisposable
 {
     /// <summary>
     /// Gets a value indicating whether this object is dictionary-attack protected: an authorization failure

@@ -23,7 +23,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// </remarks>
 /// <param name="NvIndex">The handle of the NV Index whose public area and Name are read.</param>
-public readonly record struct NvReadPublicInput(uint NvIndex): ITpmCommandInput
+public readonly record struct NvReadPublicInput(uint NvIndex) : ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_NV_ReadPublic;

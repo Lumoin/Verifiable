@@ -19,7 +19,7 @@ namespace Verifiable.Cryptography;
 /// <see cref="KeyAgreement"/>'s trust in a decryption that already failed for a wrong sender identity.
 /// </remarks>
 [DebuggerDisplay("{ResolutionSourceNames.GetName(this),nq}")]
-public readonly struct ResolutionSource: IEquatable<ResolutionSource>
+public readonly struct ResolutionSource : IEquatable<ResolutionSource>
 {
     /// <summary>Gets the numeric code for this resolution source.</summary>
     public int Code { get; }

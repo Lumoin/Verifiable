@@ -28,7 +28,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// TPM 2.0 Library Part 3, clause 31.15 (Table 269/270).
 /// </para>
 /// </remarks>
-public sealed class NvChangeAuthInput: ITpmCommandInput, IDisposable
+public sealed class NvChangeAuthInput : ITpmCommandInput, IDisposable
 {
     private bool disposed;
 

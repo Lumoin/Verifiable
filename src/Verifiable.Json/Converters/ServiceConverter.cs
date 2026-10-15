@@ -40,7 +40,7 @@ namespace Verifiable.Json.Converters;
 /// options.Converters.Add(new ServiceConverter(mySelector));
 /// </code>
 /// </remarks>
-public class ServiceConverter: JsonConverter<Service>
+public class ServiceConverter : JsonConverter<Service>
 {
     private ServiceTypeSelector TypeSelector { get; }
 

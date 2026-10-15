@@ -144,7 +144,7 @@ public enum XmlEvidenceRecordRenewalKind
 /// <see href="https://www.rfc-editor.org/rfc/rfc6283#appendix-A">IETF RFC 6283</see>.
 /// </summary>
 [DebuggerDisplay("XmlEvidenceRecordArchiveTimeStampVerification({Status}, {RenewalKind}, {GenerationTime})")]
-public sealed class XmlEvidenceRecordArchiveTimeStampVerification: IDisposable
+public sealed class XmlEvidenceRecordArchiveTimeStampVerification : IDisposable
 {
     /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
     private bool disposed;
@@ -224,7 +224,7 @@ public sealed class XmlEvidenceRecordArchiveTimeStampVerification: IDisposable
 [DebuggerDisplay("XmlEvidenceRecordChainVerification({Status}, order {Order}, covers {CoversDataObjects})")]
 [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
     Justification = "An algorithm identifier is compared as written and reported as the document states it; System.Uri would normalise it.")]
-public sealed class XmlEvidenceRecordChainVerification: IDisposable
+public sealed class XmlEvidenceRecordChainVerification : IDisposable
 {
     /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
     private bool disposed;
@@ -305,7 +305,7 @@ public sealed class XmlEvidenceRecordChainVerification: IDisposable
 /// each member is to be validated at: the succeeding member's, and the present for the last.
 /// </remarks>
 [DebuggerDisplay("XmlEvidenceRecordVerification({Status}, {Chains.Count} chains)")]
-public sealed class XmlEvidenceRecordVerification: IDisposable
+public sealed class XmlEvidenceRecordVerification : IDisposable
 {
     /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
     private bool disposed;

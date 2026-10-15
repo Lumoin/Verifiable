@@ -51,7 +51,7 @@ namespace Verifiable.Xml;
 /// consumes.</item>
 /// </list>
 /// </remarks>
-public sealed class XAdESArchiveTimeStamp: IDisposable
+public sealed class XAdESArchiveTimeStamp : IDisposable
 {
     /// <summary>The document the property was read from. Not owned; the caller disposes it separately.</summary>
     public XmlNodeTable Table { get; }

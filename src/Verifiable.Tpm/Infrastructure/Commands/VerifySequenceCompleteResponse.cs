@@ -19,7 +19,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class VerifySequenceCompleteResponse: IDisposable, ITpmWireType
+public sealed class VerifySequenceCompleteResponse : IDisposable, ITpmWireType
 {
     /// <summary>Whether <see cref="Dispose"/> has already released <see cref="Validation"/>.</summary>
     private bool Disposed { get; set; }

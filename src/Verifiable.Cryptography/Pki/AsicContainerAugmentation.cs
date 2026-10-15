@@ -218,7 +218,7 @@ public enum AsicContainerAugmentationFailureKind
 /// container.
 /// </remarks>
 [DebuggerDisplay("AsicContainerAugmentationException({FailureKind}): {Message}")]
-public sealed class AsicContainerAugmentationException: Exception
+public sealed class AsicContainerAugmentationException : Exception
 {
     /// <summary>Gets what could not be done.</summary>
     public AsicContainerAugmentationFailureKind FailureKind { get; }
@@ -300,7 +300,7 @@ public abstract record AsicContainerAugmentationContext
 /// lowest of its signatures': raising one of two signatures raises nothing about the container.
 /// </remarks>
 [DebuggerDisplay("AsicContainerSignatureTimestampContext: {Container.Length} octets")]
-public sealed record AsicContainerSignatureTimestampContext: AsicContainerAugmentationContext
+public sealed record AsicContainerSignatureTimestampContext : AsicContainerAugmentationContext
 {
     /// <summary>Gets the algorithm every message imprint is computed under.</summary>
     public PkiDigestAlgorithm MessageImprintAlgorithm { get; init; } = PkiDigestAlgorithm.Sha256;
@@ -341,7 +341,7 @@ public sealed record AsicContainerSignatureTimestampContext: AsicContainerAugmen
 /// material every CAdES object it carries is given.
 /// </summary>
 [DebuggerDisplay("AsicContainerValidationDataContext: {Container.Length} octets")]
-public sealed record AsicContainerValidationDataContext: AsicContainerAugmentationContext
+public sealed record AsicContainerValidationDataContext : AsicContainerAugmentationContext
 {
     /// <summary>Gets the certificates and revocation information placed into every CAdES object the container carries.</summary>
     public required CAdESValidationMaterial ValidationMaterial { get; init; }
@@ -365,7 +365,7 @@ public sealed record AsicContainerValidationDataContext: AsicContainerAugmentati
 /// anything over the signed content.
 /// </remarks>
 [DebuggerDisplay("AsicContainerSignatureArchiveTimestampContext: {Container.Length} octets")]
-public sealed record AsicContainerSignatureArchiveTimestampContext: AsicContainerAugmentationContext
+public sealed record AsicContainerSignatureArchiveTimestampContext : AsicContainerAugmentationContext
 {
     /// <summary>Gets the algorithm every message imprint and hash index is computed under.</summary>
     public PkiDigestAlgorithm MessageImprintAlgorithm { get; init; } = PkiDigestAlgorithm.Sha256;
@@ -422,7 +422,7 @@ public sealed record AsicContainerSignatureArchiveTimestampContext: AsicContaine
 /// whose every object is protected needs both.
 /// </remarks>
 [DebuggerDisplay("AsicContainerArchiveTimestampContext: {Container.Length} octets")]
-public sealed record AsicContainerArchiveTimestampContext: AsicContainerAugmentationContext
+public sealed record AsicContainerArchiveTimestampContext : AsicContainerAugmentationContext
 {
     /// <summary>Gets the Time-Stamping Authority to contact, in whatever form the transport delegate understands.</summary>
     [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
@@ -487,7 +487,7 @@ public sealed record AsicContainerArchiveTimestampContext: AsicContainerAugmenta
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class AsicContainerAugmentationResult: IDisposable
+public sealed class AsicContainerAugmentationResult : IDisposable
 {
     /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
     private bool disposed;

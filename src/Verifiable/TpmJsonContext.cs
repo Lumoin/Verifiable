@@ -8,6 +8,6 @@ namespace Verifiable;
 /// </summary>
 [JsonSourceGenerationOptions(WriteIndented = true, PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(TpmInfo))]
-internal partial class TpmJsonContext: JsonSerializerContext
+internal partial class TpmJsonContext : JsonSerializerContext
 {
 }

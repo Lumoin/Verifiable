@@ -39,7 +39,7 @@ namespace Verifiable.Core.StatusLists;
 /// </code>
 /// </remarks>
 [DebuggerDisplay("StatusList[Bits={BitSize}, Capacity={Capacity}]")]
-public sealed class StatusList: IDisposable, IEquatable<StatusList>
+public sealed class StatusList : IDisposable, IEquatable<StatusList>
 {
     private IMemoryOwner<byte>? memoryOwner;
     private int ByteCount { get; }

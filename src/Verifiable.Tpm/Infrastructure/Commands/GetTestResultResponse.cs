@@ -23,7 +23,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class GetTestResultResponse: ITpmWireType, IDisposable
+public sealed class GetTestResultResponse : ITpmWireType, IDisposable
 {
     /// <summary>
     /// Whether <see cref="Dispose"/> has already released the owned <see cref="OutData"/> rental.

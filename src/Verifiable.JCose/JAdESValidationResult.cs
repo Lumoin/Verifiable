@@ -15,7 +15,7 @@ namespace Verifiable.JCose;
 /// present); <see cref="Dispose"/> disposes both.
 /// </remarks>
 [DebuggerDisplay("JAdESVerifiedSignatureFacts: alg={Headers.Algorithm}")]
-public sealed class JAdESVerifiedSignatureFacts: IDisposable
+public sealed class JAdESVerifiedSignatureFacts : IDisposable
 {
     private bool disposed;
 
@@ -110,7 +110,7 @@ public sealed class JAdESVerifiedSignatureFacts: IDisposable
 /// </para>
 /// </remarks>
 [DebuggerDisplay("JAdESValidationResult: IsValid={IsValid}")]
-public sealed class JAdESValidationResult: IDisposable
+public sealed class JAdESValidationResult : IDisposable
 {
     private bool disposed;
 
@@ -314,7 +314,7 @@ public abstract class JAdESValidationFailure
 /// decode. Equality reflects that, so a caller can compare against the case it expected instead of testing the
 /// type by hand.
 /// </remarks>
-public sealed class JAdESMalformedEncodingFailure: JAdESValidationFailure, IEquatable<JAdESMalformedEncodingFailure>
+public sealed class JAdESMalformedEncodingFailure : JAdESValidationFailure, IEquatable<JAdESMalformedEncodingFailure>
 {
     /// <inheritdoc/>
     public override string Message => "The wire bytes do not decode as a well-formed JAdES signature.";
@@ -356,7 +356,7 @@ public sealed class JAdESMalformedEncodingFailure: JAdESValidationFailure, IEqua
 /// is violated.
 /// </summary>
 [DebuggerDisplay("JAdESRuleViolationsFailure: {Violations.Count} violation(s)")]
-public sealed class JAdESRuleViolationsFailure: JAdESValidationFailure
+public sealed class JAdESRuleViolationsFailure : JAdESValidationFailure
 {
     /// <summary>Initializes a new <see cref="JAdESRuleViolationsFailure"/>.</summary>
     /// <param name="violations">Every violation found, in rule-declaration order. Never empty.</param>
@@ -381,7 +381,7 @@ public sealed class JAdESRuleViolationsFailure: JAdESValidationFailure
 /// The case is stateless — a signature either verified or it did not — so every instance of it says exactly
 /// the same thing and equality treats them as one.
 /// </remarks>
-public sealed class JAdESSignatureInvalidFailure: JAdESValidationFailure, IEquatable<JAdESSignatureInvalidFailure>
+public sealed class JAdESSignatureInvalidFailure : JAdESValidationFailure, IEquatable<JAdESSignatureInvalidFailure>
 {
     /// <inheritdoc/>
     public override string Message => "The JWS signature value does not verify over the resolved payload.";
@@ -432,7 +432,7 @@ public sealed class JAdESSignatureInvalidFailure: JAdESValidationFailure, IEquat
 /// ordinally — the text is a diagnostic to be matched exactly, not collated.
 /// </remarks>
 [DebuggerDisplay("JAdESSigningCertificateBindingFailure: {Reason}")]
-public sealed class JAdESSigningCertificateBindingFailure: JAdESValidationFailure, IEquatable<JAdESSigningCertificateBindingFailure>
+public sealed class JAdESSigningCertificateBindingFailure : JAdESValidationFailure, IEquatable<JAdESSigningCertificateBindingFailure>
 {
     /// <summary>Initializes a new <see cref="JAdESSigningCertificateBindingFailure"/>.</summary>
     /// <param name="reason">What this binding could state about why the identity binding could not be established.</param>
@@ -491,7 +491,7 @@ public sealed class JAdESSigningCertificateBindingFailure: JAdESValidationFailur
 /// statement from one that names it.
 /// </remarks>
 [DebuggerDisplay("JAdESDetachedObjectUnresolvableFailure: {Reference}")]
-public sealed class JAdESDetachedObjectUnresolvableFailure: JAdESValidationFailure, IEquatable<JAdESDetachedObjectUnresolvableFailure>
+public sealed class JAdESDetachedObjectUnresolvableFailure : JAdESValidationFailure, IEquatable<JAdESDetachedObjectUnresolvableFailure>
 {
     /// <summary>Initializes a new <see cref="JAdESDetachedObjectUnresolvableFailure"/>.</summary>
     /// <param name="reference">
@@ -563,7 +563,7 @@ public sealed class JAdESDetachedObjectUnresolvableFailure: JAdESValidationFailu
 /// ordinally against another's — the <c>pars</c> entry exactly as the signed header spells it.
 /// </remarks>
 [DebuggerDisplay("JAdESDetachedObjectDigestMismatchFailure: {Reference}")]
-public sealed class JAdESDetachedObjectDigestMismatchFailure: JAdESValidationFailure, IEquatable<JAdESDetachedObjectDigestMismatchFailure>
+public sealed class JAdESDetachedObjectDigestMismatchFailure : JAdESValidationFailure, IEquatable<JAdESDetachedObjectDigestMismatchFailure>
 {
     /// <summary>Initializes a new <see cref="JAdESDetachedObjectDigestMismatchFailure"/>.</summary>
     /// <param name="reference">The <c>pars</c> reference whose digest did not match.</param>

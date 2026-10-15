@@ -22,7 +22,7 @@ namespace Verifiable.Core.Model.Credentials;
 /// W3C Verifiable Credentials Data Model 2.0</see>.
 /// </para>
 /// </remarks>
-public struct CredentialBuildState: IEquatable<CredentialBuildState>, IBuilderState
+public struct CredentialBuildState : IEquatable<CredentialBuildState>, IBuilderState
 {
     /// <summary>
     /// Gets the issuer of the credential.

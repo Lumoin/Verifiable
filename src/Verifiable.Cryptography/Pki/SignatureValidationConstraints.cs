@@ -172,7 +172,7 @@ public abstract record CertificateMetadataConstraint
 /// Requires a certificate to assert at least one of a set of certificate policy object identifiers in its
 /// Certificate Policies extension (RFC 5280 §4.2.1.4).
 /// </summary>
-public sealed record RequiredCertificatePolicyConstraint: CertificateMetadataConstraint
+public sealed record RequiredCertificatePolicyConstraint : CertificateMetadataConstraint
 {
     /// <summary>The dotted-decimal certificate policy object identifiers, at least one of which the certificate has to assert.</summary>
     public required IReadOnlyList<string> PolicyOids { get; init; }
@@ -182,7 +182,7 @@ public sealed record RequiredCertificatePolicyConstraint: CertificateMetadataCon
 /// <summary>
 /// Requires a certificate's Key Usage extension (RFC 5280 §4.2.1.3) to match a set of bit assertions.
 /// </summary>
-public sealed record RequiredKeyUsageConstraint: CertificateMetadataConstraint
+public sealed record RequiredKeyUsageConstraint : CertificateMetadataConstraint
 {
     /// <summary>The bits and the values they have to hold; every assertion has to match.</summary>
     public required IReadOnlyList<KeyUsageBitAssertion> Bits { get; init; }
@@ -193,7 +193,7 @@ public sealed record RequiredKeyUsageConstraint: CertificateMetadataConstraint
 /// Requires a certificate's Extended Key Usage extension (RFC 5280 §4.2.1.12) to name at least one of a set of
 /// key purpose object identifiers.
 /// </summary>
-public sealed record RequiredExtendedKeyUsageConstraint: CertificateMetadataConstraint
+public sealed record RequiredExtendedKeyUsageConstraint : CertificateMetadataConstraint
 {
     /// <summary>The dotted-decimal key purpose object identifiers, at least one of which the certificate has to name.</summary>
     public required IReadOnlyList<string> KeyPurposeOids { get; init; }
@@ -203,7 +203,7 @@ public sealed record RequiredExtendedKeyUsageConstraint: CertificateMetadataCons
 /// <summary>
 /// Requires a certificate to carry a named extension, optionally requiring it to be marked critical.
 /// </summary>
-public sealed record RequiredCertificateExtensionConstraint: CertificateMetadataConstraint
+public sealed record RequiredCertificateExtensionConstraint : CertificateMetadataConstraint
 {
     /// <summary>The dotted-decimal object identifier of the extension the certificate has to carry.</summary>
     public required string ExtensionOid { get; init; }
@@ -216,7 +216,7 @@ public sealed record RequiredCertificateExtensionConstraint: CertificateMetadata
 /// <summary>
 /// Requires a certificate not to carry a named extension.
 /// </summary>
-public sealed record ForbiddenCertificateExtensionConstraint: CertificateMetadataConstraint
+public sealed record ForbiddenCertificateExtensionConstraint : CertificateMetadataConstraint
 {
     /// <summary>The dotted-decimal object identifier of the extension the certificate must not carry.</summary>
     public required string ExtensionOid { get; init; }

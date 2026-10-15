@@ -48,7 +48,7 @@ namespace Verifiable.Tests.OAuth;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("ResourceServerHttpApplication")]
-internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContext>
+internal sealed class ResourceServerHttpApplication : IHttpApplication<HttpContext>
 {
     private const string BearerScheme = "Bearer";
     private const string DpopScheme = "DPoP";

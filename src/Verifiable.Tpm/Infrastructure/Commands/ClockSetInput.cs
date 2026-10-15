@@ -22,7 +22,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </remarks>
 /// <param name="AuthHandle">The provisioning hierarchy authorizing the set.</param>
 /// <param name="NewTime">The requested new Clock setting, in milliseconds.</param>
-public readonly record struct ClockSetInput(TpmRh AuthHandle, ulong NewTime): ITpmCommandInput
+public readonly record struct ClockSetInput(TpmRh AuthHandle, ulong NewTime) : ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_ClockSet;

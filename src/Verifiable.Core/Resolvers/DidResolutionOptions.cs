@@ -12,7 +12,7 @@ namespace Verifiable.Core.Resolvers;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("Accept={Accept,nq} ExpandRelativeUrls={ExpandRelativeUrls} VersionId={VersionId,nq} VersionTime={VersionTime}")]
-public sealed class DidResolutionOptions: IEquatable<DidResolutionOptions>
+public sealed class DidResolutionOptions : IEquatable<DidResolutionOptions>
 {
     /// <summary>
     /// Empty options instance. Passing this is equivalent to passing no options.

@@ -42,7 +42,7 @@ namespace Verifiable.Cryptography.Context;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{PurposeNames.GetName(this),nq}")]
-public readonly struct Purpose: IEquatable<Purpose>
+public readonly struct Purpose : IEquatable<Purpose>
 {
     /// <summary>Gets the numeric code for this purpose.</summary>
     public int Code { get; }

@@ -19,7 +19,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </remarks>
 /// <param name="AuthHandle">The provisioning hierarchy that authorizes the removal (owner or platform).</param>
 /// <param name="NvIndex">The NV Index to undefine.</param>
-public readonly record struct NvUndefineSpaceInput(TpmRh AuthHandle, uint NvIndex): ITpmCommandInput
+public readonly record struct NvUndefineSpaceInput(TpmRh AuthHandle, uint NvIndex) : ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_NV_UndefineSpace;

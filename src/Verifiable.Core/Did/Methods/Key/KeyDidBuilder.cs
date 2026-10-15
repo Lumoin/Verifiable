@@ -90,7 +90,7 @@ namespace Verifiable.Core.Did.Methods.Key
     /// var didDocument = await builder.BuildAsync(keyInputs, cancellationToken: ct);
     /// </code>
     /// </example>
-    public sealed class KeyDidBuilder: Builder<DidDocument, KeyDidBuildState, KeyDidBuilder>
+    public sealed class KeyDidBuilder : Builder<DidDocument, KeyDidBuildState, KeyDidBuilder>
     {
         /// <summary>
         /// Gets or sets the fragment generator used to create fragment identifiers for verification methods.

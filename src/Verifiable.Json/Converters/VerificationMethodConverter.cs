@@ -77,7 +77,7 @@ namespace Verifiable.Json.Converters;
 ///     myWriter));
 /// </code>
 /// </remarks>
-public class VerificationMethodConverter: JsonConverter<VerificationMethod>
+public class VerificationMethodConverter : JsonConverter<VerificationMethod>
 {
     private static VerificationMethodTypeInfoFactoryDelegate DefaultTypeInfoFactory { get; } = typeName => typeName switch
     {

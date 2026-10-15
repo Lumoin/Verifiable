@@ -57,7 +57,7 @@ public sealed record MetadataBlob(
     IReadOnlyList<PkiCertificateMemory> X5c,
     ReadOnlyMemory<byte> SigningInput,
     ReadOnlyMemory<byte> Signature,
-    MetadataBlobPayload Payload): IDisposable
+    MetadataBlobPayload Payload) : IDisposable
 {
     /// <summary>
     /// Determines whether this BLOB and <paramref name="other"/> report the same content. The

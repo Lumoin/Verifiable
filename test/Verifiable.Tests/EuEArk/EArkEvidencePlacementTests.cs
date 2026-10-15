@@ -669,7 +669,7 @@ internal sealed class EArkEvidencePlacementTests
     /// <param name="Owner">The carrier owning the artifact's octets.</param>
     /// <param name="Facts">What a caller states about the artifact.</param>
     /// <param name="Octets">The artifact's octets, a view into <paramref name="Owner"/>.</param>
-    private sealed record MintedArtifact(IDisposable Owner, EArkEvidenceArtifactFacts Facts, ReadOnlyMemory<byte> Octets): IDisposable
+    private sealed record MintedArtifact(IDisposable Owner, EArkEvidenceArtifactFacts Facts, ReadOnlyMemory<byte> Octets) : IDisposable
     {
         /// <summary>Disposes the carrier owning the artifact's octets.</summary>
         public void Dispose() => Owner.Dispose();

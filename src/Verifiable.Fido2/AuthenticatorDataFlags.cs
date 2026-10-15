@@ -9,7 +9,7 @@ namespace Verifiable.Fido2;
 /// <see href="https://www.w3.org/TR/webauthn-3/#sctn-authenticator-data">W3C Web Authentication Level 3, section 6.1: Authenticator Data.</see>
 /// </remarks>
 [DebuggerDisplay("AuthenticatorDataFlags(UP={UserPresent} UV={UserVerified} BE={BackupEligible} BS={BackupState} AT={AttestedCredentialDataIncluded} ED={ExtensionDataIncluded})")]
-public readonly struct AuthenticatorDataFlags: IEquatable<AuthenticatorDataFlags>
+public readonly struct AuthenticatorDataFlags : IEquatable<AuthenticatorDataFlags>
 {
     /// <summary>
     /// The flags byte with no bits set.

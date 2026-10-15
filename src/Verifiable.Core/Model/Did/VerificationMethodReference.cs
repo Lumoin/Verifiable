@@ -55,7 +55,7 @@ namespace Verifiable.Core.Model.Did;
 /// </list>
 /// </remarks>
 [DebuggerDisplay("VerificationMethodReference(Id = {Id}, Purpose = {PurposeName}, IsEmbedded = {IsEmbeddedVerification})")]
-public abstract class VerificationMethodReference: IEquatable<VerificationMethodReference>
+public abstract class VerificationMethodReference : IEquatable<VerificationMethodReference>
 {
     /// <summary>
     /// Gets the URI reference to a verification method when not embedded.

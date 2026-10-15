@@ -19,7 +19,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class ContextLoadResponse: ITpmWireType
+public sealed class ContextLoadResponse : ITpmWireType
 {
     /// <summary>
     /// Gets the handle assigned to the reloaded resource — the saved handle itself for a session, or the

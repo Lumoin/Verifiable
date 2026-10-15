@@ -158,7 +158,7 @@ public static class PreservationDigestMethod
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
     Justification = "The digest method is a uniform resource name carried and compared as an exact character sequence and resolved by PreservationDigestMethod; System.Uri normalises escaping and case, which would let two spellings of different object identifiers compare equal.")]
-public sealed class PreservationDigestList: IDisposable
+public sealed class PreservationDigestList : IDisposable
 {
     /// <summary>
     /// The mandatory <c>DigestMethod</c> element — the digest algorithm, as the object-identifier uniform

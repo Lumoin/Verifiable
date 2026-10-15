@@ -26,7 +26,7 @@ namespace Verifiable.DidComm.ProblemReports;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("ProblemCode({Value})")]
-public sealed class ProblemCode: IEquatable<ProblemCode>
+public sealed class ProblemCode : IEquatable<ProblemCode>
 {
     //A problem code is a short dotted token sequence (sorter.scope.descriptor...); an attacker-supplied value
     //is length-bounded before Split so it cannot drive a large token-array allocation (DIDComm v2.1 §Problem

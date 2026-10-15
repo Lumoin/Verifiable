@@ -44,7 +44,7 @@ public delegate ValueTask<CtapCredentialKeyPair> CtapCredentialKeyGenerationDele
 /// <see cref="CtapCredentialRecord.CredentialKeyCustodyExport"/>'s own remarks for why this copy exists
 /// and why it cannot be produced later from <paramref name="PrivateKey"/> alone.
 /// </param>
-public sealed record CtapCredentialKeyPair(CoseKey PublicKey, PrivateKey PrivateKey, PooledMemory? CredentialKeyCustodyExport = null): IDisposable
+public sealed record CtapCredentialKeyPair(CoseKey PublicKey, PrivateKey PrivateKey, PooledMemory? CredentialKeyCustodyExport = null) : IDisposable
 {
     /// <summary>
     /// Releases the private key material and, when present, the custody-exportable key-material copy.

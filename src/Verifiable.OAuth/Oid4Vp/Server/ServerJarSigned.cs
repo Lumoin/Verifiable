@@ -24,7 +24,7 @@ namespace Verifiable.OAuth.Oid4Vp.Server;
 public sealed record ServerJarSigned(
     SignedJar Jar,
     string CompactJar,
-    DateTimeOffset ServedAt): FlowInput, IDisposable
+    DateTimeOffset ServedAt) : FlowInput, IDisposable
 {
     private bool disposed;
 

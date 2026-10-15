@@ -17,7 +17,7 @@ namespace Verifiable.Core.Validation;
 /// first entry was an inline definition rather than an IRI.
 /// </param>
 /// <param name="ExpectedIri">The IRI the caller required as the first entry.</param>
-public sealed record ContextFirstEntryClaimContext(string? FoundIri, string ExpectedIri): ClaimContext;
+public sealed record ContextFirstEntryClaimContext(string? FoundIri, string ExpectedIri) : ClaimContext;
 
 
 /// <summary>
@@ -30,7 +30,7 @@ public sealed record ContextFirstEntryClaimContext(string? FoundIri, string Expe
 /// <param name="OffendingIri">
 /// The offending entry's IRI, or <see langword="null"/> when the offending entry was not an IRI at all.
 /// </param>
-public sealed record ContextEntriesAreUrlsOrDefinitionsClaimContext(int? OffendingIndex, string? OffendingIri): ClaimContext;
+public sealed record ContextEntriesAreUrlsOrDefinitionsClaimContext(int? OffendingIndex, string? OffendingIri) : ClaimContext;
 
 
 /// <summary>
@@ -45,7 +45,7 @@ public sealed record ContextEntriesAreUrlsOrDefinitionsClaimContext(int? Offendi
 /// <see langword="true"/> when the offending entry was an inline definition the caller does not permit;
 /// <see langword="false"/> when it was an IRI absent from the allowlist.
 /// </param>
-public sealed record ContextKnownContextsClaimContext(int? OffendingIndex, string? OffendingIri, bool WasDisallowedDefinition): ClaimContext;
+public sealed record ContextKnownContextsClaimContext(int? OffendingIndex, string? OffendingIri, bool WasDisallowedDefinition) : ClaimContext;
 
 
 /// <summary>
@@ -54,7 +54,7 @@ public sealed record ContextKnownContextsClaimContext(int? OffendingIndex, strin
 /// </summary>
 /// <param name="FirstIndex">The zero-based index of the earlier of the two duplicate entries.</param>
 /// <param name="DuplicateIndex">The zero-based index of the later entry that duplicates <paramref name="FirstIndex"/>.</param>
-public sealed record ContextDuplicateEntryClaimContext(int FirstIndex, int DuplicateIndex): ClaimContext;
+public sealed record ContextDuplicateEntryClaimContext(int FirstIndex, int DuplicateIndex) : ClaimContext;
 
 
 /// <summary>
@@ -63,7 +63,7 @@ public sealed record ContextDuplicateEntryClaimContext(int FirstIndex, int Dupli
 /// </summary>
 /// <param name="FoundAt">The zero-based index at which <see cref="Context.UndefinedTerms20"/> was found.</param>
 /// <param name="LastIndex">The zero-based index of the context's last entry.</param>
-public sealed record ContextUndefinedTermsPositionClaimContext(int FoundAt, int LastIndex): ClaimContext;
+public sealed record ContextUndefinedTermsPositionClaimContext(int FoundAt, int LastIndex) : ClaimContext;
 
 
 /// <summary>
@@ -71,7 +71,7 @@ public sealed record ContextUndefinedTermsPositionClaimContext(int FoundAt, int 
 /// inline definition declares the disallowed <c>@vocab</c> keyword.
 /// </summary>
 /// <param name="OffendingIndex">The zero-based index of the first inline definition declaring <c>@vocab</c>.</param>
-public sealed record ContextVocabInDefinitionClaimContext(int OffendingIndex): ClaimContext;
+public sealed record ContextVocabInDefinitionClaimContext(int OffendingIndex) : ClaimContext;
 
 
 /// <summary>

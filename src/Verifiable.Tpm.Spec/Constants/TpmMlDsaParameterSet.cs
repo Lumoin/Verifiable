@@ -15,7 +15,7 @@ namespace Verifiable.Tpm.Spec.Constants;
 /// </para>
 /// </remarks>
 [SuppressMessage("Design", "CA1008:Enums should have zero value", Justification = "This follows the TPM 2.0 specification.")]
-public enum TpmMlDsaParameterSet: ushort
+public enum TpmMlDsaParameterSet : ushort
 {
     /// <summary>
     /// TPM_MLDSA_44: ML-DSA-44 parameter set (security category 2).

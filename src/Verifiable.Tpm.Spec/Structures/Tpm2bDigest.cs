@@ -39,7 +39,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class Tpm2bDigest: SensitiveMemory, ITpmWireType
+public sealed class Tpm2bDigest : SensitiveMemory, ITpmWireType
 {
     /// <summary>
     /// The largest digest a <c>TPM2B_DIGEST</c> buffer may carry: <c>sizeof(TPMU_HA)</c>, the widest member of
@@ -238,7 +238,7 @@ public sealed class Tpm2bDigest: SensitiveMemory, ITpmWireType
     /// reset. Its <see cref="IDisposable.Dispose"/> is a no-op, and <see cref="Tpm2bDigest.Dispose(bool)"/>
     /// recognises this owner so a holder's disposal never marks the shared instance unreadable.
     /// </remarks>
-    private sealed class ZeroDigestMemoryOwner: IMemoryOwner<byte>
+    private sealed class ZeroDigestMemoryOwner : IMemoryOwner<byte>
     {
         /// <summary>The shared run of zero octets this owner exposes.</summary>
         private byte[] Zeros { get; }

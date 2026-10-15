@@ -44,7 +44,7 @@ public delegate CBAdESSignParseResult ParseCBAdESSignDelegate(ReadOnlyMemory<byt
 /// byte-exactness discipline per signer.
 /// </remarks>
 [DebuggerDisplay("CBAdESSignerParseResult: {Signature}")]
-public sealed class CBAdESSignerParseResult: IDisposable
+public sealed class CBAdESSignerParseResult : IDisposable
 {
     private bool disposed;
 
@@ -148,7 +148,7 @@ public sealed class CBAdESSignerParseResult: IDisposable
 /// <c>[+ COSE_Signature]</c>).
 /// </para>
 /// </remarks>
-public sealed class CBAdESSignParseResult: IDisposable
+public sealed class CBAdESSignParseResult : IDisposable
 {
     private bool disposed;
 

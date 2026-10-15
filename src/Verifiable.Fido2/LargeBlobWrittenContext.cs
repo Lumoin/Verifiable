@@ -12,7 +12,7 @@ namespace Verifiable.Fido2;
 /// Level 3, section 10.1.5: Large blob storage extension (largeBlob)</see> — client extension
 /// output <c>written</c>, authentication-only.
 /// </remarks>
-public sealed record LargeBlobWrittenContext: ClaimContext
+public sealed record LargeBlobWrittenContext : ClaimContext
 {
     /// <summary>Whether the large-blob write succeeded.</summary>
     public required bool Written { get; init; }

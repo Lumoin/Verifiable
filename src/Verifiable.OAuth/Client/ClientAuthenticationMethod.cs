@@ -24,7 +24,7 @@ namespace Verifiable.OAuth.Client;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{ClientAuthenticationMethodNames.GetName(this),nq}")]
-public readonly struct ClientAuthenticationMethod: IEquatable<ClientAuthenticationMethod>
+public readonly struct ClientAuthenticationMethod : IEquatable<ClientAuthenticationMethod>
 {
     /// <summary>Gets the numeric code identifying this authentication method.</summary>
     public int Code { get; }

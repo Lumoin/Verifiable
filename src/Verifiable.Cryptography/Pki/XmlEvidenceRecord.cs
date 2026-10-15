@@ -17,7 +17,7 @@ namespace Verifiable.Cryptography.Pki;
 /// authenticity and integrity protection mechanism".
 /// </remarks>
 [DebuggerDisplay("XmlEvidenceRecordCryptographicInformation: {InformationType}, order {Order}, {Content.Length} octets")]
-public sealed class XmlEvidenceRecordCryptographicInformation: IDisposable
+public sealed class XmlEvidenceRecordCryptographicInformation : IDisposable
 {
     /// <summary>The <c>Order</c> attribute clause 3.1.3 makes required on every one of these elements.</summary>
     public required int Order { get; init; }
@@ -49,7 +49,7 @@ public sealed class XmlEvidenceRecordCryptographicInformation: IDisposable
 /// between them is where the element sits, which is what the property carrying it says.
 /// </remarks>
 [DebuggerDisplay("XmlEvidenceRecordInformation: order {Order}, type {InformationType}, {Content.Length} octets")]
-public sealed class XmlEvidenceRecordInformation: IDisposable
+public sealed class XmlEvidenceRecordInformation : IDisposable
 {
     /// <summary>
     /// The <c>Order</c> attribute, required on an <c>Attribute</c> element and absent from a
@@ -91,7 +91,7 @@ public sealed class XmlEvidenceRecordInformation: IDisposable
 /// </para>
 /// </remarks>
 [DebuggerDisplay("XmlEvidenceRecordTimeStamp: {TokenType}, {CryptographicInformation.Count} cryptographic information elements")]
-public sealed class XmlEvidenceRecordTimeStamp: IDisposable
+public sealed class XmlEvidenceRecordTimeStamp : IDisposable
 {
     /// <summary>The <c>Type</c> attribute of the <c>TimeStampToken</c> element, which clause 3.1.2 makes required.</summary>
     public required string TokenType { get; init; }
@@ -131,7 +131,7 @@ public sealed class XmlEvidenceRecordTimeStamp: IDisposable
 /// be checked on the encoded text, since base64 does not preserve order across every octet pattern.
 /// </remarks>
 [DebuggerDisplay("XmlEvidenceRecordSequence: order {Order}, {DigestValues.Count} values")]
-public sealed class XmlEvidenceRecordSequence: IDisposable
+public sealed class XmlEvidenceRecordSequence : IDisposable
 {
     /// <summary>The <c>Order</c> attribute clause 3.1.1's schema makes required, at least 1.</summary>
     public required int Order { get; init; }
@@ -157,7 +157,7 @@ public sealed class XmlEvidenceRecordSequence: IDisposable
 /// that binds the time-stamped value to the objects the Archive Time-Stamp protects.
 /// </summary>
 [DebuggerDisplay("XmlEvidenceRecordHashTree: {Sequences.Count} sequences")]
-public sealed class XmlEvidenceRecordHashTree: IDisposable
+public sealed class XmlEvidenceRecordHashTree : IDisposable
 {
     /// <summary>The <c>Sequence</c> elements in ascending <c>Order</c>. Owned by this instance.</summary>
     public required IReadOnlyList<XmlEvidenceRecordSequence> Sequences { get; init; }
@@ -179,7 +179,7 @@ public sealed class XmlEvidenceRecordHashTree: IDisposable
 /// <see href="https://www.rfc-editor.org/rfc/rfc6283#section-3.1">IETF RFC 6283</see>).
 /// </summary>
 [DebuggerDisplay("XmlEvidenceRecordArchiveTimeStamp: order {Order}, hash tree {HashTree != null}")]
-public sealed class XmlEvidenceRecordArchiveTimeStamp: IDisposable
+public sealed class XmlEvidenceRecordArchiveTimeStamp : IDisposable
 {
     /// <summary>The <c>Order</c> attribute clause 2.1 makes required, at least 1.</summary>
     public required int Order { get; init; }
@@ -236,7 +236,7 @@ public sealed class XmlEvidenceRecordArchiveTimeStamp: IDisposable
 [DebuggerDisplay("XmlEvidenceRecordArchiveTimeStampChain: order {Order}, {ArchiveTimeStamps.Count} archive time-stamps")]
 [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
     Justification = "An algorithm identifier is compared as written: RFC 6283 clause 4.1.1 and clause 4.1.2 identify an algorithm by the URI string, and System.Uri normalises case, escaping and default ports, which would make two identifiers that name different algorithms compare equal.")]
-public sealed class XmlEvidenceRecordArchiveTimeStampChain: IDisposable
+public sealed class XmlEvidenceRecordArchiveTimeStampChain : IDisposable
 {
     /// <summary>The <c>Order</c> attribute clause 4.1 makes required, at least 1.</summary>
     public required int Order { get; init; }
@@ -288,7 +288,7 @@ public sealed class XmlEvidenceRecordArchiveTimeStampChain: IDisposable
 /// </para>
 /// </remarks>
 [DebuggerDisplay("XmlEvidenceRecord: version {Version}, {Chains.Count} chains")]
-public sealed class XmlEvidenceRecord: IDisposable
+public sealed class XmlEvidenceRecord : IDisposable
 {
     /// <summary>
     /// The <c>Version</c> attribute clause 2.1 makes required. Clause 8's schema fixes it to

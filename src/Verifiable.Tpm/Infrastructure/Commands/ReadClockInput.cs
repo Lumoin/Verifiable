@@ -9,7 +9,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// the current <c>TPMS_TIME_INFO</c> — uncertified and unsigned, unlike <c>TPM2_GetTime()</c>.
 /// </para>
 /// </remarks>
-public readonly record struct ReadClockInput: ITpmCommandInput
+public readonly record struct ReadClockInput : ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_ReadClock;

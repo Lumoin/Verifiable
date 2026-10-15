@@ -16,7 +16,7 @@ namespace Verifiable.OAuth.Oid4Vp.Server.States;
 /// <see cref="Verifiable.OAuth.Oid4Vp.States.PresentationVerifiedState"/>.
 /// </remarks>
 [DebuggerDisplay("VerifierResponseReceived FlowId={FlowId} ReceivedAt={ReceivedAt}")]
-public sealed record VerifierResponseReceivedState: FlowState
+public sealed record VerifierResponseReceivedState : FlowState
 {
     /// <summary>
     /// The raw JWE compact serialization from the HTTP POST body.

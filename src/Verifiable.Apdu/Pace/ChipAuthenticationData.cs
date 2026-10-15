@@ -16,7 +16,7 @@ namespace Verifiable.Apdu.Pace;
 /// needed for the verification scalar multiplication.
 /// </remarks>
 [DebuggerDisplay("ChipAuthenticationData({Length} bytes)")]
-public sealed class ChipAuthenticationData: SensitiveMemory
+public sealed class ChipAuthenticationData : SensitiveMemory
 {
     /// <summary>
     /// Initialises a new <see cref="ChipAuthenticationData"/> from owned bytes.

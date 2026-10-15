@@ -49,21 +49,10 @@ internal static class WebVhTestLog
     }
 
 
-    /// <summary>Mints a single-entry (genesis-only) log signed by <paramref name="signer"/>, carrying none of the optional genesis inputs.</summary>
-    /// <param name="domain">The domain the DID is hosted under.</param>
-    /// <param name="signer">The controller whose key is the genesis update key and signs the entry.</param>
-    /// <param name="versionTime">The entry's <c>versionTime</c>.</param>
-    /// <param name="cancellationToken">Cancels the minting.</param>
-    /// <returns>The minted log.</returns>
-    public static Task<WebVhMintedLog> MintGenesisAsync(
-        string domain,
-        WebVhController signer,
-        string versionTime,
-        CancellationToken cancellationToken) =>
-        MintGenesisAsync(domain, signer, versionTime, WebVhGenesisOptions.None, cancellationToken);
-
-
-    /// <summary>Mints a single-entry (genesis-only) log signed by <paramref name="signer"/>, carrying the optional genesis inputs <paramref name="options"/> states.</summary>
+    /// <summary>
+    /// Mints a single-entry (genesis-only) log signed by <paramref name="signer"/>, carrying the optional genesis inputs
+    /// <paramref name="options"/> states - <see cref="WebVhGenesisOptions.None"/> for a genesis carrying none of them.
+    /// </summary>
     /// <param name="domain">The domain the DID is hosted under.</param>
     /// <param name="signer">The controller whose key is the genesis update key and signs the entry.</param>
     /// <param name="versionTime">The entry's <c>versionTime</c>.</param>
@@ -550,7 +539,7 @@ internal static class WebVhTestLog
 /// <c>updateKeys</c> list, the <c>did:key</c> verificationMethod its proofs reference, and the eddsa-jcs-2022
 /// signing used to produce each entry's proofValue.
 /// </summary>
-internal sealed class WebVhController: IDisposable
+internal sealed class WebVhController : IDisposable
 {
     private PublicKeyMemory PublicKeyMemory { get; }
     private PrivateKey PrivateKey { get; }

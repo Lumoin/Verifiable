@@ -26,7 +26,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <param name="CpHashA">The command parameter digest, at most <see cref="Tpm2bDigest.MaxSize"/> octets. The caller owns the underlying memory.</param>
 /// <exception cref="ArgumentException"><paramref name="CpHashA"/> is longer than <see cref="Tpm2bDigest.MaxSize"/>.</exception>
 [DebuggerDisplay("PolicyCpHashInput(Session=0x{PolicySession,h})")]
-public readonly record struct PolicyCpHashInput(uint PolicySession, ReadOnlyMemory<byte> CpHashA): ITpmCommandInput
+public readonly record struct PolicyCpHashInput(uint PolicySession, ReadOnlyMemory<byte> CpHashA) : ITpmCommandInput
 {
     /// <summary>
     /// Gets the command parameter digest the policy binds to, bounded at construction by

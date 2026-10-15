@@ -103,7 +103,7 @@ public enum AsicManifestParseStatus
 /// (and every digest and extension that manifest carries); the caller disposes it. On failure it owns nothing.
 /// </summary>
 [DebuggerDisplay("AsicManifestParseResult: {Status}")]
-public sealed class AsicManifestParseResult: IDisposable
+public sealed class AsicManifestParseResult : IDisposable
 {
     /// <summary>The parse outcome; <see cref="AsicManifestParseStatus.Valid"/> is the only success.</summary>
     public required AsicManifestParseStatus Status { get; init; }
@@ -241,7 +241,7 @@ public enum AsicManifestEncodeStatus
 /// disposes them. On failure it owns nothing.
 /// </summary>
 [DebuggerDisplay("AsicManifestEncodeResult: {Status}")]
-public sealed class AsicManifestEncodeResult: IDisposable
+public sealed class AsicManifestEncodeResult : IDisposable
 {
     /// <summary>The encoding outcome; <see cref="AsicManifestEncodeStatus.Encoded"/> is the only success.</summary>
     public required AsicManifestEncodeStatus Status { get; init; }

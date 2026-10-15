@@ -13,7 +13,7 @@ namespace Verifiable.Tpm.EventLog;
 /// </para>
 /// </remarks>
 [SuppressMessage("Design", "CA1008:Enums should have zero value", Justification = "These values from the TCG specification.")]
-public enum TcgEventLogError: uint
+public enum TcgEventLogError : uint
 {
     /// <summary>
     /// The log data is too small to contain a valid event.

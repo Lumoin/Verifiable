@@ -51,7 +51,7 @@ namespace Verifiable.Cryptography;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class Nonce: SensitiveMemory, IEquatable<Nonce>
+public sealed class Nonce : SensitiveMemory, IEquatable<Nonce>
 {
     private int useCount;
     private Activity? Lifetime { get; }

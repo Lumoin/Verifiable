@@ -20,7 +20,7 @@ namespace Verifiable.Apdu.Lds;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("ChipAuthenticationKey(KeyId={KeyId})")]
-public sealed class ChipAuthenticationKey: SensitiveMemory
+public sealed class ChipAuthenticationKey : SensitiveMemory
 {
     /// <summary>
     /// Initialises a new <see cref="ChipAuthenticationKey"/> from owned private-key bytes.

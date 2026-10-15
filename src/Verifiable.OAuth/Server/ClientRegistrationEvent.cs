@@ -47,11 +47,11 @@ public abstract record ClientRegistrationEvent
 /// The client-information response carries the credential under
 /// <see href="https://www.rfc-editor.org/rfc/rfc7592#section-3">RFC 7592 section 3</see>.
 /// </summary>
-public sealed record ClientRegistered: ClientRegistrationEvent;
+public sealed record ClientRegistered : ClientRegistrationEvent;
 
 
 /// <summary>A notification of a committed replacement, including its immutable prior projection.</summary>
-public sealed record ClientUpdated: ClientRegistrationEvent
+public sealed record ClientUpdated : ClientRegistrationEvent
 {
     /// <summary>The selected data and revision read before the conditional replacement.</summary>
     public required ClientRegistrationProjection Previous { get; init; }
@@ -63,7 +63,7 @@ public sealed record ClientUpdated: ClientRegistrationEvent
 /// is the atomically removed record's final revision plus one. Consumers retain that revision
 /// when removing cached data so delayed updates cannot repopulate the deleted entry.
 /// </summary>
-public sealed record ClientDeregistered: ClientRegistrationEvent
+public sealed record ClientDeregistered : ClientRegistrationEvent
 {
     /// <summary>The application-supplied reason, excluding credentials and request content.</summary>
     public required string Reason { get; init; }
@@ -75,7 +75,7 @@ public sealed record ClientDeregistered: ClientRegistrationEvent
 /// The application updates its synchronized registration and granted set, and its capability
 /// resolver reads that set on each request. Emission itself changes no registration or wiring.
 /// </summary>
-public sealed record CapabilityGranted: ClientRegistrationEvent
+public sealed record CapabilityGranted : ClientRegistrationEvent
 {
     /// <summary>The capability the application is asked to activate.</summary>
     public required CapabilityIdentifier Capability { get; init; }
@@ -87,7 +87,7 @@ public sealed record CapabilityGranted: ClientRegistrationEvent
 /// The application removes the capability from its synchronized granted set and ensures its
 /// resolver reads that set on subsequent requests. Observer delivery is best effort.
 /// </summary>
-public sealed record CapabilityRevoked: ClientRegistrationEvent
+public sealed record CapabilityRevoked : ClientRegistrationEvent
 {
     /// <summary>The capability the application is asked to deactivate.</summary>
     public required CapabilityIdentifier Capability { get; init; }
@@ -109,4 +109,4 @@ public sealed record CapabilityRevoked: ClientRegistrationEvent
 /// <param name="Event">The immutable notification whose observer failed.</param>
 /// <param name="Exception">The observer's exception, intended for protected application diagnostics.</param>
 public sealed record RegistrationObserverFailureStage(
-    ClientRegistrationEvent Event, Exception Exception): InspectionStage;
+    ClientRegistrationEvent Event, Exception Exception) : InspectionStage;

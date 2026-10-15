@@ -29,7 +29,7 @@ namespace Verifiable.Core.Model.Credentials;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("TermsOfUse(Id = {Id}, Type = {Type})")]
-public class TermsOfUse: IEquatable<TermsOfUse>
+public class TermsOfUse : IEquatable<TermsOfUse>
 {
     /// <summary>
     /// An optional identifier for the terms of use.

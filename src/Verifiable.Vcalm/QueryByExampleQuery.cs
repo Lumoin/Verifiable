@@ -15,7 +15,7 @@ namespace Verifiable.Vcalm;
 /// non-empty value additionally constrains the disclosed value.
 /// </remarks>
 [DebuggerDisplay("QueryByExample Group={Group}")]
-public sealed record QueryByExampleQuery: VcalmPresentationQuery
+public sealed record QueryByExampleQuery : VcalmPresentationQuery
 {
     /// <summary>The §3.4.2 <c>credentialQuery</c> single object carrying the example and acceptance constraints.</summary>
     public required QueryByExampleCredentialQuery CredentialQuery { get; init; }

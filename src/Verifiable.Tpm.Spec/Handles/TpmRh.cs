@@ -24,7 +24,7 @@ namespace Verifiable.Tpm.Spec.Handles;
 /// </remarks>
 [SuppressMessage("Design", "CA1008:Enums should have zero value", Justification = "This follows the TPM 2.0 specification.")]
 [SuppressMessage("Design", "CA1069:Enums values should not be duplicated", Justification = "This follows the TPM 2.0 specification.")]
-public enum TpmRh: uint
+public enum TpmRh : uint
 {
     /// <summary>
     /// TPM_RH_FIRST (0x4000_0000): First permanent handle value (same as TPM_RH_SRK).

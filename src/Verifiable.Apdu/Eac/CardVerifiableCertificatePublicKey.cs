@@ -20,7 +20,7 @@ namespace Verifiable.Apdu.Eac;
 /// certificate is parsed, and <see cref="IncludesDomainParameters"/> is <see langword="false"/>.
 /// </para>
 /// </remarks>
-public sealed class CardVerifiableCertificatePublicKey: IDisposable
+public sealed class CardVerifiableCertificatePublicKey : IDisposable
 {
     private bool disposed;
 

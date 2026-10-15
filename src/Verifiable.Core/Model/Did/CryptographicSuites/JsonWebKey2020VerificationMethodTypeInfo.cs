@@ -7,7 +7,7 @@ namespace Verifiable.Core.Model.Did.CryptographicSuites
     /// material format is a <see cref="PublicKeyJwk"/> and whose context carries the
     /// <c>jws-2020</c> security suite IRI.
     /// </summary>
-    public sealed class JsonWebKey2020VerificationMethodTypeInfo: VerificationMethodTypeInfo
+    public sealed class JsonWebKey2020VerificationMethodTypeInfo : VerificationMethodTypeInfo
     {
         private static ReadOnlyCollection<string> ContextsArray { get; } = new(["https://w3id.org/security/suites/jws-2020/v1"]);
 

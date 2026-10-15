@@ -16,7 +16,7 @@ namespace Verifiable.Apdu.SecureMessaging;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("ProtectedCommandApdu({Length} bytes)")]
-public sealed class ProtectedCommandApdu: SensitiveMemory
+public sealed class ProtectedCommandApdu : SensitiveMemory
 {
     /// <summary>
     /// Initialises a new <see cref="ProtectedCommandApdu"/> from owned wire bytes.

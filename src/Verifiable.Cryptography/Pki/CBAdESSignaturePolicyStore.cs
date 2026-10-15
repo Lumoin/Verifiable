@@ -59,7 +59,7 @@ namespace Verifiable.Cryptography.Pki;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("CBAdESSignaturePolicyStore: {Content}")]
-public sealed class CBAdESSignaturePolicyStore: IEquatable<CBAdESSignaturePolicyStore>
+public sealed class CBAdESSignaturePolicyStore : IEquatable<CBAdESSignaturePolicyStore>
 {
     /// <summary>The <c>docOrLocalUri</c> member's map key, within <c>sigPSt</c> (Table 9, clause 5.3.2).</summary>
     public const int DocOrLocalUriKey = 1;
@@ -175,7 +175,7 @@ public abstract class CBAdESSignaturePolicyStoreContent
 /// a borrowed view, never disposed, so the comparison is always safe to perform.
 /// </remarks>
 [DebuggerDisplay("CBAdESSignaturePolicyStoreDocument({Document.Length} bytes)")]
-public sealed class CBAdESSignaturePolicyStoreDocument: CBAdESSignaturePolicyStoreContent, IEquatable<CBAdESSignaturePolicyStoreDocument>
+public sealed class CBAdESSignaturePolicyStoreDocument : CBAdESSignaturePolicyStoreContent, IEquatable<CBAdESSignaturePolicyStoreDocument>
 {
     /// <summary>Initializes a new <see cref="CBAdESSignaturePolicyStoreDocument"/>.</summary>
     /// <param name="document">
@@ -243,7 +243,7 @@ public sealed class CBAdESSignaturePolicyStoreDocument: CBAdESSignaturePolicySto
 /// the same arm however each was constructed.
 /// </remarks>
 [DebuggerDisplay("CBAdESSignaturePolicyStoreLocalUri: {Location}")]
-public sealed class CBAdESSignaturePolicyStoreLocalUri: CBAdESSignaturePolicyStoreContent, IEquatable<CBAdESSignaturePolicyStoreLocalUri>
+public sealed class CBAdESSignaturePolicyStoreLocalUri : CBAdESSignaturePolicyStoreContent, IEquatable<CBAdESSignaturePolicyStoreLocalUri>
 {
     /// <summary>Initializes a new <see cref="CBAdESSignaturePolicyStoreLocalUri"/>.</summary>
     /// <param name="location">

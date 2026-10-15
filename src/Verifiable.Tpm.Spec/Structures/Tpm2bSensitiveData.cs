@@ -38,7 +38,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class Tpm2bSensitiveData: SensitiveMemory, ITpmWireType
+public sealed class Tpm2bSensitiveData : SensitiveMemory, ITpmWireType
 {
     /// <summary>
     /// The largest sensitive-data buffer a <c>TPM2B_SENSITIVE_DATA</c> may carry: <c>MAX_SYM_DATA</c>, 128

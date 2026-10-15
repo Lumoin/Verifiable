@@ -25,7 +25,7 @@ namespace Verifiable.Vcalm.Exchange;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("VcalmExchangeActiveState FlowId={FlowId} ExchangeId={ExchangeId} Step={StepName}")]
-public sealed record VcalmExchangeActiveState: FlowState
+public sealed record VcalmExchangeActiveState : FlowState
 {
     /// <summary>The §3.6 <c>{localExchangeId}</c> the exchange is addressed by.</summary>
     public required string ExchangeId { get; init; }

@@ -450,7 +450,7 @@ internal sealed class EvidenceRecordSignatureValidationTests
     /// Authority, a signer whose certificate expires before the validation time, the CAdES-B-B signature, and the
     /// Evidence Record taken over that signature's octets while the certificate was still valid.
     /// </summary>
-    private sealed class EvidenceRecordValidationWorld: IDisposable
+    private sealed class EvidenceRecordValidationWorld : IDisposable
     {
         /// <summary>The carriers this world rented, released in reverse order.</summary>
         private List<IDisposable> Owned { get; } = [];

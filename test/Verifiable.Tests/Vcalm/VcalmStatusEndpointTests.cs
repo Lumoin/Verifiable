@@ -1465,7 +1465,7 @@ internal sealed class VcalmStatusEndpointTests
     /// Owns the status service's Ed25519 signing key for the test's lifetime; disposed at cleanup. The
     /// host-material wrapper lets the cleanup loop dispose the RegisterClient material uniformly.
     /// </summary>
-    private sealed class StatusKeyMaterial: IDisposable
+    private sealed class StatusKeyMaterial : IDisposable
     {
         /// <summary>The host registration owning the keys, or <see langword="null"/> when this instance owns them.</summary>
         private VerifierKeyMaterial? HostMaterial { get; }

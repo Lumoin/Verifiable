@@ -26,7 +26,7 @@ namespace Verifiable.Core.Model.Federation;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{Value,nq}")]
-public readonly struct EntityIdentifier: IEquatable<EntityIdentifier>
+public readonly struct EntityIdentifier : IEquatable<EntityIdentifier>
 {
     /// <summary>
     /// The absolute-URL value identifying this entity. Canonical identity;

@@ -31,7 +31,7 @@ public abstract class CountersignTarget
 /// <c>COSE_Sign</c> message, or a full countersignature itself being countersigned (RFC 9338
 /// §3.1: "the countersignature can itself be countersigned").
 /// </summary>
-public sealed class CoseSignatureCountersignTarget: CountersignTarget
+public sealed class CoseSignatureCountersignTarget : CountersignTarget
 {
     /// <summary>Initializes a new <see cref="CoseSignatureCountersignTarget"/>.</summary>
     /// <param name="protectedHeader">
@@ -73,7 +73,7 @@ public sealed class CoseSignatureCountersignTarget: CountersignTarget
 /// <summary>
 /// A <c>COSE_Sign1</c> countersign target.
 /// </summary>
-public sealed class CoseSign1CountersignTarget: CountersignTarget
+public sealed class CoseSign1CountersignTarget : CountersignTarget
 {
     /// <summary>Initializes a new <see cref="CoseSign1CountersignTarget"/>.</summary>
     /// <param name="protectedHeader">

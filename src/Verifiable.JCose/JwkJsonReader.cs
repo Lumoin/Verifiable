@@ -1534,7 +1534,7 @@ public static class JwkJsonReader
 
 
     /// <summary>The phases <see cref="IsWellFormedJsonDocument"/> cycles an open object frame through.</summary>
-    private enum ObjectPhase: byte
+    private enum ObjectPhase : byte
     {
         /// <summary>Just past <c>{</c>: a member name or the closing <c>}</c> (empty object) is next.</summary>
         ExpectKeyOrClose,
@@ -1554,7 +1554,7 @@ public static class JwkJsonReader
 
 
     /// <summary>The phases <see cref="IsWellFormedJsonDocument"/> cycles an open array frame through.</summary>
-    private enum ArrayPhase: byte
+    private enum ArrayPhase : byte
     {
         /// <summary>Just past <c>[</c>: an element or the closing <c>]</c> (empty array) is next.</summary>
         ExpectValueOrClose,

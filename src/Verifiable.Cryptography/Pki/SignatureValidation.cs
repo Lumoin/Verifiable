@@ -75,7 +75,7 @@ public sealed record SignatureValidationCapabilities
 /// </para>
 /// </remarks>
 [DebuggerDisplay("SignatureValidationOutcome: {Conclusion.Indication}")]
-public sealed class SignatureValidationOutcome: IDisposable
+public sealed class SignatureValidationOutcome : IDisposable
 {
     /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
     private bool disposed;

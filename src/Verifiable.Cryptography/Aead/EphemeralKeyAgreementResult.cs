@@ -26,7 +26,7 @@ namespace Verifiable.Cryptography.Aead;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("EphemeralKeyAgreementResult Curve={EphemeralPublicKey.Tag}")]
-public sealed class EphemeralKeyAgreementResult: IDisposable
+public sealed class EphemeralKeyAgreementResult : IDisposable
 {
     private bool disposed;
 

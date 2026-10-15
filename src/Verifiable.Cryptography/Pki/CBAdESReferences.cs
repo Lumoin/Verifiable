@@ -59,7 +59,7 @@ namespace Verifiable.Cryptography.Pki;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("CBAdESReferences(CertificateReferences={CertificateReferences?.Count}, RevocationReferences={RevocationReferences != null})")]
-public sealed class CBAdESReferences: IDisposable
+public sealed class CBAdESReferences : IDisposable
 {
     /// <summary>The <c>xRefs</c> member's map key (Table A.1, Annex A.1.1).</summary>
     public const int CertificateReferencesKey = 1;
@@ -185,7 +185,7 @@ public sealed class CBAdESReferences: IDisposable
 /// </para>
 /// </remarks>
 [DebuggerDisplay("CBAdESCertificateReference: {Thumbprint}")]
-public sealed class CBAdESCertificateReference: IDisposable
+public sealed class CBAdESCertificateReference : IDisposable
 {
     /// <summary>The <c>x5t</c> member's map key (Table A.1, Annex A.1.1, <c>CertId</c>).</summary>
     public const int ThumbprintKey = 1;
@@ -276,7 +276,7 @@ public abstract class CBAdESCertificateReferenceKeyIdentifier
 /// <c>kid</c> integer are the same key identifier no matter which decode produced them.
 /// </remarks>
 [DebuggerDisplay("CBAdESCertificateReferenceKeyIdentifierInteger: {Value}")]
-public sealed class CBAdESCertificateReferenceKeyIdentifierInteger: CBAdESCertificateReferenceKeyIdentifier, IEquatable<CBAdESCertificateReferenceKeyIdentifierInteger>
+public sealed class CBAdESCertificateReferenceKeyIdentifierInteger : CBAdESCertificateReferenceKeyIdentifier, IEquatable<CBAdESCertificateReferenceKeyIdentifierInteger>
 {
     /// <summary>Initializes a new <see cref="CBAdESCertificateReferenceKeyIdentifierInteger"/>.</summary>
     /// <param name="value">The integer key identifier.</param>
@@ -327,7 +327,7 @@ public sealed class CBAdESCertificateReferenceKeyIdentifierInteger: CBAdESCertif
 /// fixes byte for byte, never a phrase to collate.
 /// </remarks>
 [DebuggerDisplay("CBAdESCertificateReferenceKeyIdentifierText: {Value}")]
-public sealed class CBAdESCertificateReferenceKeyIdentifierText: CBAdESCertificateReferenceKeyIdentifier, IEquatable<CBAdESCertificateReferenceKeyIdentifierText>
+public sealed class CBAdESCertificateReferenceKeyIdentifierText : CBAdESCertificateReferenceKeyIdentifier, IEquatable<CBAdESCertificateReferenceKeyIdentifierText>
 {
     /// <summary>Initializes a new <see cref="CBAdESCertificateReferenceKeyIdentifierText"/>.</summary>
     /// <param name="value">The textual key identifier.</param>
@@ -384,7 +384,7 @@ public sealed class CBAdESCertificateReferenceKeyIdentifierText: CBAdESCertifica
 /// constructor remarks) and never disposed, so the comparison is always safe.
 /// </remarks>
 [DebuggerDisplay("CBAdESCertificateReferenceKeyIdentifierBytes: {Value.Length} bytes")]
-public sealed class CBAdESCertificateReferenceKeyIdentifierBytes: CBAdESCertificateReferenceKeyIdentifier, IEquatable<CBAdESCertificateReferenceKeyIdentifierBytes>
+public sealed class CBAdESCertificateReferenceKeyIdentifierBytes : CBAdESCertificateReferenceKeyIdentifier, IEquatable<CBAdESCertificateReferenceKeyIdentifierBytes>
 {
     /// <summary>Initializes a new <see cref="CBAdESCertificateReferenceKeyIdentifierBytes"/>.</summary>
     /// <param name="value">
@@ -472,7 +472,7 @@ public sealed class CBAdESCertificateReferenceKeyIdentifierBytes: CBAdESCertific
 /// </para>
 /// </remarks>
 [DebuggerDisplay("CBAdESRevocationReferences(Crl={CrlReferences?.Count}, Ocsp={OcspReferences?.Count}, Other={OtherReferences?.Count})")]
-public sealed class CBAdESRevocationReferences: IDisposable
+public sealed class CBAdESRevocationReferences : IDisposable
 {
     /// <summary>The <c>crlRefs</c> member's map key (Table A.1, Annex A.1.1, <c>rRefs</c>).</summary>
     public const int CrlReferencesKey = 1;
@@ -624,7 +624,7 @@ public sealed class CBAdESRevocationReferences: IDisposable
 /// </para>
 /// </remarks>
 [DebuggerDisplay("CBAdESCrlReference: HashAlgorithm={HashAlgorithm}")]
-public sealed class CBAdESCrlReference: IDisposable
+public sealed class CBAdESCrlReference : IDisposable
 {
     /// <summary>The <c>digAlgVal</c> member's map key (Table A.1, Annex A.1.1, <c>CRLRef</c>).</summary>
     public const int DigAlgValKey = 1;
@@ -796,7 +796,7 @@ public sealed class CBAdESCrlIdentifier
 /// </para>
 /// </remarks>
 [DebuggerDisplay("CBAdESOcspReference: HashAlgorithm={HashAlgorithm}")]
-public sealed class CBAdESOcspReference: IDisposable
+public sealed class CBAdESOcspReference : IDisposable
 {
     /// <summary>The <c>digAlgVal</c> member's map key (Table A.1, Annex A.1.1, <c>OCSPRef</c>).</summary>
     public const int DigAlgValKey = 1;
@@ -906,7 +906,7 @@ public sealed class CBAdESOcspReference: IDisposable
 /// </para>
 /// </remarks>
 [DebuggerDisplay("CBAdESOcspIdentifier: {Responder}, ProducedAt={ProducedAt}")]
-public sealed class CBAdESOcspIdentifier: IEquatable<CBAdESOcspIdentifier>
+public sealed class CBAdESOcspIdentifier : IEquatable<CBAdESOcspIdentifier>
 {
     /// <summary>The <c>responderChoice</c> member's map key (Table A.1, Annex A.1.1, <c>OCSPId</c>).</summary>
     public const int ResponderKey = 1;
@@ -1032,7 +1032,7 @@ public abstract class CBAdESOcspResponderIdentifier
 /// borrowed view, never disposed, so the comparison never reaches past memory this instance does not own.
 /// </remarks>
 [DebuggerDisplay("CBAdESOcspResponderIdentifierByName: {Name.Length} bytes")]
-public sealed class CBAdESOcspResponderIdentifierByName: CBAdESOcspResponderIdentifier, IEquatable<CBAdESOcspResponderIdentifierByName>
+public sealed class CBAdESOcspResponderIdentifierByName : CBAdESOcspResponderIdentifier, IEquatable<CBAdESOcspResponderIdentifierByName>
 {
     /// <summary>Initializes a new <see cref="CBAdESOcspResponderIdentifierByName"/>.</summary>
     /// <param name="name">
@@ -1109,7 +1109,7 @@ public sealed class CBAdESOcspResponderIdentifierByName: CBAdESOcspResponderIden
 /// </para>
 /// </remarks>
 [DebuggerDisplay("CBAdESOcspResponderIdentifierByKey: {KeyDigest.Length} bytes")]
-public sealed class CBAdESOcspResponderIdentifierByKey: CBAdESOcspResponderIdentifier, IEquatable<CBAdESOcspResponderIdentifierByKey>
+public sealed class CBAdESOcspResponderIdentifierByKey : CBAdESOcspResponderIdentifier, IEquatable<CBAdESOcspResponderIdentifierByKey>
 {
     /// <summary>Initializes a new <see cref="CBAdESOcspResponderIdentifierByKey"/>.</summary>
     /// <param name="keyDigest">

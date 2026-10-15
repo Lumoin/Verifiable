@@ -21,7 +21,7 @@ namespace Verifiable.OAuth.Server;
 /// <c>FlowKind.JtiReplay</c>.
 /// </para>
 /// </remarks>
-public sealed class JtiReplayFlowKind: FlowKind
+public sealed class JtiReplayFlowKind : FlowKind
 {
     /// <summary>The singleton instance.</summary>
     public static JtiReplayFlowKind Instance { get; } = new();

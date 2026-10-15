@@ -12,7 +12,7 @@ namespace Verifiable.Vcalm;
 /// <see cref="IsHolderAccepted"/> predicate.
 /// </summary>
 [DebuggerDisplay("DidAuthentication Methods={AcceptedMethods.Length} Group={Group}")]
-public sealed record DidAuthenticationQuery: VcalmPresentationQuery
+public sealed record DidAuthenticationQuery : VcalmPresentationQuery
 {
     /// <summary>
     /// The §3.4.3 <c>acceptedMethods</c> — DID-method names the verifier accepts (e.g. <c>key</c>,

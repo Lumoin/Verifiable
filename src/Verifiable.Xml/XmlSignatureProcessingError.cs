@@ -16,7 +16,7 @@ namespace Verifiable.Xml;
 /// reading surface, not the reference-processing surface, determines.
 /// </remarks>
 /// <seealso cref="XmlSignatureProcessingFailure"/>
-public readonly struct XmlSignatureProcessingError: IEquatable<XmlSignatureProcessingError>
+public readonly struct XmlSignatureProcessingError : IEquatable<XmlSignatureProcessingError>
 {
     /// <summary>
     /// The reason reference processing was refused.

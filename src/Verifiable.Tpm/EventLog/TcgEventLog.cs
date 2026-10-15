@@ -15,7 +15,7 @@ namespace Verifiable.Tpm.EventLog;
 /// the log format version and lists the digest algorithms used (Section 10.2.1.1).
 /// </para>
 /// </remarks>
-public sealed class TcgEventLog: IEquatable<TcgEventLog>
+public sealed class TcgEventLog : IEquatable<TcgEventLog>
 {
     /// <summary>
     /// Gets the specification version string (e.g., "Spec ID Event03").

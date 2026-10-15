@@ -29,7 +29,7 @@ namespace Verifiable.Xml;
 /// each array is held sorted ascending without duplicates, so two compositions denoting the same node-set
 /// are equal regardless of composition order or repetition.
 /// </remarks>
-public readonly struct XmlNodeSet: IEquatable<XmlNodeSet>
+public readonly struct XmlNodeSet : IEquatable<XmlNodeSet>
 {
     /// <summary>The table the set marks nodes of; <see langword="null"/> for a default-constructed set.</summary>
     internal XmlNodeTable? Table { get; }

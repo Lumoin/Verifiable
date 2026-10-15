@@ -23,7 +23,7 @@ namespace Verifiable.WebFinger;
 /// <c>Verifiable.Server</c>.
 /// </para>
 /// </remarks>
-public sealed class WebFingerIntegration: ServerIntegration
+public sealed class WebFingerIntegration : ServerIntegration
 {
     /// <summary>
     /// Resolves a query target to a <see cref="JsonResourceDescriptor"/>. Required — when unwired, the

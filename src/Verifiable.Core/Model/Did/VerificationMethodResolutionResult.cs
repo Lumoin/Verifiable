@@ -25,7 +25,7 @@ public delegate ValueTask<VerificationMethod?> ExternalVerificationMethodResolve
 /// whether the method was found locally or externally, and what the original reference was.
 /// </summary>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public readonly struct VerificationMethodResolutionResult: IEquatable<VerificationMethodResolutionResult>
+public readonly struct VerificationMethodResolutionResult : IEquatable<VerificationMethodResolutionResult>
 {
     /// <summary>
     /// The resolved verification method, or null if resolution failed.

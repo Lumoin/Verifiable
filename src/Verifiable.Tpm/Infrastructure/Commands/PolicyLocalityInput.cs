@@ -24,7 +24,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <param name="PolicySession">The policy session handle.</param>
 /// <param name="Locality">The set of localities the policy admits (TPM 2.0 Library Part 2, clause 8.5, Table 39).</param>
 [DebuggerDisplay("PolicyLocalityInput(Session=0x{PolicySession,h}, {Locality})")]
-public readonly record struct PolicyLocalityInput(uint PolicySession, TpmaLocality Locality): ITpmCommandInput
+public readonly record struct PolicyLocalityInput(uint PolicySession, TpmaLocality Locality) : ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_PolicyLocality;

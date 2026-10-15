@@ -6,7 +6,7 @@ namespace Verifiable.OAuth.Federation;
 /// <see cref="ClaimContext"/> attached to a 1173 Failure when a trust
 /// mark's delegation chain does not validate.
 /// </summary>
-public sealed record TrustMarkDelegationFailureContext: ClaimContext
+public sealed record TrustMarkDelegationFailureContext : ClaimContext
 {
     /// <summary>The trust mark identifier under evaluation.</summary>
     public required string MarkId { get; init; }

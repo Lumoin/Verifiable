@@ -22,7 +22,7 @@ namespace Verifiable.Xml;
 /// <see cref="SigPolicyHash"/>'s digest octets), so — like <see cref="XAdESSigningCertificateV2"/> — it is
 /// itself <see cref="IDisposable"/>.
 /// </remarks>
-public sealed class XAdESSignaturePolicyId: IDisposable
+public sealed class XAdESSignaturePolicyId : IDisposable
 {
     /// <summary>The document the property was read from. Not owned; the caller disposes it separately.</summary>
     public XmlNodeTable Table { get; }
@@ -361,7 +361,7 @@ public enum XAdESSignaturePolicyIdentifierChoice
 /// content — so this type is itself <see cref="IDisposable"/>, delegating to that value's own
 /// <see cref="XAdESSignaturePolicyId.Dispose"/>.
 /// </remarks>
-public sealed class XAdESSignaturePolicyIdentifier: IDisposable
+public sealed class XAdESSignaturePolicyIdentifier : IDisposable
 {
     /// <summary>The document the property was read from. Not owned; the caller disposes it separately.</summary>
     public XmlNodeTable Table { get; }

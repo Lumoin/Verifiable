@@ -31,7 +31,7 @@ public enum BitstringStatusListErrorType
 /// <see cref="BitstringStatusListErrorType"/> so callers can map it to an RFC 9457 problem detail.
 /// </summary>
 [SuppressMessage("Design", "CA1032:Implement standard exception constructors", Justification = "This exception always carries a BitstringStatusListErrorType; the parameterless and message-only constructors would violate that invariant.")]
-public sealed class BitstringStatusListException: Exception
+public sealed class BitstringStatusListException : Exception
 {
     /// <summary>
     /// Gets the category of the failure.

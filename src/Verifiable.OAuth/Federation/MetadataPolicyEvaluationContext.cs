@@ -13,7 +13,7 @@ namespace Verifiable.OAuth.Federation;
 /// enumerating every conflict, mirroring the structural-parse-first
 /// pattern used elsewhere in Federation.
 /// </remarks>
-public sealed record MetadataPolicyEvaluationContext: ClaimContext
+public sealed record MetadataPolicyEvaluationContext : ClaimContext
 {
     /// <summary>The entity type whose policy contained the violation.</summary>
     public required EntityTypeIdentifier EntityType { get; init; }

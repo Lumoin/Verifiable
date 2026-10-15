@@ -11,7 +11,7 @@ namespace Verifiable.Xml;
 /// validation, mirroring <see cref="XAdESInclude"/>'s own posture — but never resolved: see
 /// <see cref="RefuseVerification"/>.
 /// </summary>
-public readonly struct XAdESQualifyingPropertiesReference: IEquatable<XAdESQualifyingPropertiesReference>
+public readonly struct XAdESQualifyingPropertiesReference : IEquatable<XAdESQualifyingPropertiesReference>
 {
     /// <summary>The table the reference's spans read from.</summary>
     internal XmlNodeTable Table { get; }

@@ -21,7 +21,7 @@ namespace Verifiable.JCose;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("AeadGeneralMessage EncryptionAlgorithm={EncryptionAlgorithm} Recipients={Recipients.Count}")]
-public sealed class AeadGeneralMessage: IDisposable
+public sealed class AeadGeneralMessage : IDisposable
 {
     private bool disposed;
 

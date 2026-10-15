@@ -30,7 +30,7 @@ public enum XAdESTimeStampEntryKind
 /// time-stamp format, and clause 6.3 restricts baseline time-stamp containers to RFC 3161 tokens only, so
 /// <c>XMLTimeStamp</c> has no verification-side interpretation here regardless.
 /// </summary>
-public readonly struct XAdESTimeStampEntry: IEquatable<XAdESTimeStampEntry>
+public readonly struct XAdESTimeStampEntry : IEquatable<XAdESTimeStampEntry>
 {
     /// <summary>Which arm of the choice this entry holds.</summary>
     public XAdESTimeStampEntryKind Kind { get; }

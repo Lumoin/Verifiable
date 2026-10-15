@@ -55,7 +55,7 @@ namespace Verifiable.Tpm.Automata;
 /// </remarks>
 /// <seealso cref="TpmVirtualDevice"/>
 /// <seealso cref="TpmDevice"/>
-public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmSimulatorInput>>, IDisposable
+public sealed class TpmSimulator : IObservable<TraceEntry<TpmSimulatorState, TpmSimulatorInput>>, IDisposable
 {
     /// <summary>The live automaton holding this TPM's state of record.</summary>
     private PushdownAutomaton<TpmSimulatorState, TpmSimulatorInput, TpmSimulatorStackSymbol> Automaton { get; }

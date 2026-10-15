@@ -24,7 +24,7 @@ namespace Verifiable.Cryptography.Pki;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public readonly struct AuthorityKeyIdentifier: IEquatable<AuthorityKeyIdentifier>
+public readonly struct AuthorityKeyIdentifier : IEquatable<AuthorityKeyIdentifier>
 {
     /// <summary>
     /// The AuthorityKeyIdentifier extension's <c>keyIdentifier</c> OCTET STRING contents

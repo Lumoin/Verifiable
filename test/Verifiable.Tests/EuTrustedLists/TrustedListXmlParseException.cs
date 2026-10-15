@@ -15,7 +15,7 @@ namespace Verifiable.Cryptography.Pki.Xml;
 /// every call.
 /// </remarks>
 [SuppressMessage("Design", "CA1515:Consider making public types internal", Justification = "Staged composition-edge code: public by design so the boundary is already the future package's API boundary, per the promotability rules.")]
-public sealed class TrustedListXmlParseException: Exception
+public sealed class TrustedListXmlParseException : Exception
 {
     /// <summary>
     /// The <see cref="TrustedListParseStatus"/> this failure maps to. Defaults to

@@ -22,7 +22,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class SignSequenceStartResponse: ITpmWireType
+public sealed class SignSequenceStartResponse : ITpmWireType
 {
     /// <summary>
     /// Gets the handle of the newly opened signing sequence.

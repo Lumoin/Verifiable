@@ -21,7 +21,7 @@ namespace Verifiable.Core.Did.Methods.Key
     /// cryptographic suite.
     /// </para>
     /// </remarks>
-    public struct KeyDidBuildState: IEquatable<KeyDidBuildState>, IBuilderState
+    public struct KeyDidBuildState : IEquatable<KeyDidBuildState>, IBuilderState
     {
         /// <summary>
         /// Gets the Base58-encoded primary public key that forms the identifier portion of the <c>did:key</c>.

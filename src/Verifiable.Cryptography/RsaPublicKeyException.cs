@@ -17,7 +17,7 @@ public enum RsaPublicKeyFailureKind
 
 
 /// <summary>An RSA public-key conversion refusal with a typed reason.</summary>
-public sealed class RsaPublicKeyException: CryptographicException
+public sealed class RsaPublicKeyException : CryptographicException
 {
     /// <summary>Gets the reason the public key was refused.</summary>
     public RsaPublicKeyFailureKind FailureKind { get; }

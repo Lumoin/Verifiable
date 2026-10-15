@@ -21,7 +21,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1819:Properties should not return arrays", Justification = "Wire-format POCO representing parsed proof components.")]
-public sealed class Bbs2023DerivedProofValue: IDisposable
+public sealed class Bbs2023DerivedProofValue : IDisposable
 {
     /// <summary>
     /// Gets the BBS proof over the disclosed messages.

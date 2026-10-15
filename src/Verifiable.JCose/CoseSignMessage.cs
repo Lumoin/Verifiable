@@ -42,7 +42,7 @@ namespace Verifiable.JCose;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("CoseSignMessage: Payload={Payload.Length} bytes, Signatures={Signatures.Count}")]
-public sealed class CoseSignMessage: IEquatable<CoseSignMessage>, IDisposable
+public sealed class CoseSignMessage : IEquatable<CoseSignMessage>, IDisposable
 {
     private bool disposed;
 

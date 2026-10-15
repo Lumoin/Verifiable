@@ -62,7 +62,7 @@ namespace Verifiable.JCose;
 /// across types is harmless) but leaves typed equality to the leaves.
 /// </para>
 /// </remarks>
-public abstract class JoseDictionary: Dictionary<string, object>
+public abstract class JoseDictionary : Dictionary<string, object>
 {
     /// <summary>
     /// Creates an empty JOSE dictionary.

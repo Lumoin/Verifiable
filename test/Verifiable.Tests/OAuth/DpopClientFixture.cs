@@ -13,7 +13,7 @@ namespace Verifiable.Tests.OAuth;
 /// lifetime control.
 /// </summary>
 [DebuggerDisplay("DpopClientFixture")]
-internal sealed class DpopClientFixture: IDisposable
+internal sealed class DpopClientFixture : IDisposable
 {
     private bool disposed;
 

@@ -44,7 +44,7 @@ namespace Verifiable.Core.Model.DataIntegrity
     /// EdDSA Cryptosuites §3.2 eddsa-jcs-2022</see>.
     /// </para>
     /// </remarks>
-    public sealed class EddsaJcs2022CryptosuiteInfo: CryptosuiteInfo
+    public sealed class EddsaJcs2022CryptosuiteInfo : CryptosuiteInfo
     {
         private static IReadOnlyList<string> ContextsArray { get; } =
             new[] { "https://w3id.org/security/data-integrity/v2" }.AsReadOnly();

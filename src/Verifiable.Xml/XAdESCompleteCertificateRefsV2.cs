@@ -43,7 +43,7 @@ namespace Verifiable.Xml;
 /// fields.
 /// </para>
 /// </remarks>
-public sealed class XAdESCompleteCertificateRefsV2: IDisposable
+public sealed class XAdESCompleteCertificateRefsV2 : IDisposable
 {
     /// <summary>The document the property was read from. Not owned; the caller disposes it separately.</summary>
     public XmlNodeTable Table { get; }

@@ -34,7 +34,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </param>
 /// <param name="InScheme">The padding scheme to apply if the key's own scheme is <c>TPM_ALG_NULL</c>.</param>
 /// <param name="Label">The label whose association with the message is to be verified. BORROWS the caller's carrier, exactly as <see cref="CipherText"/> does.</param>
-public readonly record struct RsaDecryptInput(TpmiDhObject KeyHandle, Tpm2bPublicKeyRsa CipherText, TpmtRsaDecrypt InScheme, Tpm2bData Label): ITpmCommandInput
+public readonly record struct RsaDecryptInput(TpmiDhObject KeyHandle, Tpm2bPublicKeyRsa CipherText, TpmtRsaDecrypt InScheme, Tpm2bData Label) : ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_RSA_Decrypt;

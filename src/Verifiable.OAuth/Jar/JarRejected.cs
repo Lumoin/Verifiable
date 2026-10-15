@@ -17,4 +17,4 @@ namespace Verifiable.OAuth.Jar;
 [DebuggerDisplay("JarRejected ErrorCode={ErrorCode} Reason={Reason}")]
 public sealed record JarRejected(
     string ErrorCode,
-    string Reason): JarVerificationResult;
+    string Reason) : JarVerificationResult;

@@ -704,7 +704,7 @@ internal sealed class CAdESParallelSignatureTests
     /// union has something to unite, the third sharing the first's so the no-duplicate leg has something to
     /// skip.
     /// </summary>
-    internal sealed class ParallelSignatureScenario: IDisposable
+    internal sealed class ParallelSignatureScenario : IDisposable
     {
         /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
         private bool disposed;

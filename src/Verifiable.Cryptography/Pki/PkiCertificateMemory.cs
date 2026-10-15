@@ -37,7 +37,7 @@ namespace Verifiable.Cryptography.Pki;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class PkiCertificateMemory: SensitiveMemory, IEquatable<PkiCertificateMemory>
+public sealed class PkiCertificateMemory : SensitiveMemory, IEquatable<PkiCertificateMemory>
 {
     /// <summary>
     /// The number of bytes in the DER-encoded object.

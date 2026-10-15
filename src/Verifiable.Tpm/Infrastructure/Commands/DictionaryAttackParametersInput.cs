@@ -31,7 +31,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <param name="NewRecoveryTime">The new self-heal interval, in seconds; zero disables dictionary-attack protection.</param>
 /// <param name="NewLockoutRecovery">The new lockoutAuth recovery wait, in seconds; zero means only a TPM Reset re-arms lockoutAuth.</param>
 public readonly record struct DictionaryAttackParametersInput(
-    TpmRh LockHandle, uint NewMaxTries, uint NewRecoveryTime, uint NewLockoutRecovery): ITpmCommandInput
+    TpmRh LockHandle, uint NewMaxTries, uint NewRecoveryTime, uint NewLockoutRecovery) : ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_DictionaryAttackParameters;

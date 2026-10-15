@@ -36,7 +36,7 @@ namespace Verifiable.Cryptography.Pki;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class CmsAttribute: SensitiveMemory, IEquatable<CmsAttribute>
+public sealed class CmsAttribute : SensitiveMemory, IEquatable<CmsAttribute>
 {
     /// <summary>
     /// The largest number of <c>AttributeValue</c> instances one attribute may be built with. The syntax

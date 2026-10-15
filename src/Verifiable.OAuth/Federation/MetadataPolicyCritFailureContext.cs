@@ -13,7 +13,7 @@ namespace Verifiable.OAuth.Federation;
 /// see the full set of operators the deployment would need to teach the
 /// receiver about before the chain can be honoured.
 /// </remarks>
-public sealed record MetadataPolicyCritFailureContext: ClaimContext
+public sealed record MetadataPolicyCritFailureContext : ClaimContext
 {
     /// <summary>
     /// The operators listed in some statement's <c>metadata_policy_crit</c>

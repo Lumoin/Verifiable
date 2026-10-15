@@ -275,7 +275,7 @@ internal sealed class PAdESDocTimeStampTests
 
 
     /// <summary>Mints the Time-Stamping Authority identity and the unsigned base PDF one <see cref="PAdESDocTimeStampRequest"/> is built against.</summary>
-    private sealed class DocTimeStampScenario: IDisposable
+    private sealed class DocTimeStampScenario : IDisposable
     {
         internal required X509ChainTestRingNode Root { get; init; }
 

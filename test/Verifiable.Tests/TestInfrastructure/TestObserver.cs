@@ -20,7 +20,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// multiple times.
 /// </para>
 /// </remarks>
-internal sealed class TestObserver<T>: IObserver<T>
+internal sealed class TestObserver<T> : IObserver<T>
 {
     /// <summary>
     /// A field, not a property: a lock target must be one instance that no accessor can re-mint.

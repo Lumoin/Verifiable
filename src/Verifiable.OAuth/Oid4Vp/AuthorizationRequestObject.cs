@@ -47,7 +47,7 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("AuthorizationRequestObject ClientId={ClientId} ResponseMode={ResponseMode}")]
-public sealed class AuthorizationRequestObject: IEquatable<AuthorizationRequestObject>
+public sealed class AuthorizationRequestObject : IEquatable<AuthorizationRequestObject>
 {
     /// <summary>
     /// The verifier's client identifier. REQUIRED.

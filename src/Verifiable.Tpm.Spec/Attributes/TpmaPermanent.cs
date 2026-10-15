@@ -16,7 +16,7 @@ namespace Verifiable.Tpm.Spec.Attributes;
 /// </para>
 /// </remarks>
 [Flags]
-public enum TpmaPermanent: uint
+public enum TpmaPermanent : uint
 {
     /// <summary>
     /// OWNER_AUTH_SET (bit 0): SET (1) indicates TPM2_HierarchyChangeAuth() with ownerAuth has been executed since the last TPM2_Clear().

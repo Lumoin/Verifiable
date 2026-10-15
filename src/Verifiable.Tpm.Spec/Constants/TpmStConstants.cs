@@ -11,7 +11,7 @@ namespace Verifiable.Tpm.Spec.Constants;
 /// </para>
 /// </remarks>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1008:Enums should have zero value", Justification = "Specifica")]
-public enum TpmStConstants: ushort
+public enum TpmStConstants : ushort
 {
     /// <summary>
     /// tag value for a response; used when there is an error in the tag. This is also the value returned from a TPM 1.2 when an error occurs. This value is used in this specification because an error in the command tag may prevent determination of the family. When this tag is used in the response, the response code will be TPM_RC_BAD_TAG (0x001E), which has the same numeric value as the TPM 1.2 response code for TPM_BADTAG. Note: In a previously published version of this specification, TPM_RC_BAD_TAG was incorrectly assigned a value of 0x030 instead of 30 (0x01e). Some implementations my return the old value instead of the new value. .

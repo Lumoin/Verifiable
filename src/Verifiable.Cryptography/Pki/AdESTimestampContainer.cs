@@ -65,7 +65,7 @@ namespace Verifiable.Cryptography.Pki;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("AdESTimestampContainer({TstTokens.Count} tokens)")]
-public sealed class AdESTimestampContainer: IDisposable
+public sealed class AdESTimestampContainer : IDisposable
 {
     /// <summary>
     /// Initializes a new <see cref="AdESTimestampContainer"/>.

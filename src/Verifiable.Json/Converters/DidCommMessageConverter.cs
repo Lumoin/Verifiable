@@ -41,7 +41,7 @@ namespace Verifiable.Json.Converters;
 /// shape) is applied above this converter by <see cref="Verifiable.DidComm.DidCommPlaintextExtensions.UnpackPlaintext(Verifiable.DidComm.DidCommPlaintextMessage, Verifiable.DidComm.DidCommMessageParser)"/>.
 /// </para>
 /// </remarks>
-public sealed class DidCommMessageConverter: JsonConverter<DidCommMessage>
+public sealed class DidCommMessageConverter : JsonConverter<DidCommMessage>
 {
     /// <inheritdoc/>
     public override DidCommMessage Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)

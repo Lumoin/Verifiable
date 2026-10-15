@@ -22,7 +22,7 @@ namespace Verifiable.Tpm.Spec.Handles;
 /// </para>
 /// </remarks>
 [SuppressMessage("Design", "CA1069:Enums values should not be duplicated", Justification = "TPM 2.0 specification allows duplicate values for compatibility and other reasons.")]
-public enum TpmHt: byte
+public enum TpmHt : byte
 {
     /// <summary>
     /// TPM_HT_PCR (0x00): Platform Configuration Registers (PCR).

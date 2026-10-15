@@ -22,7 +22,7 @@ namespace Verifiable.Fido2;
 /// <c>System.Text.Json</c>-allocated array instead), so this follows
 /// <see cref="ExtensionOutputProcessingRequest"/>'s own non-owning convention directly.
 /// </remarks>
-public sealed record HmacSecretEncryptedOutputContext: ClaimContext
+public sealed record HmacSecretEncryptedOutputContext : ClaimContext
 {
     /// <summary>The decoded, still-encrypted <c>hmac-secret</c>/<c>hmac-secret-mc</c> output bytes.</summary>
     public required ReadOnlyMemory<byte> EncryptedOutput { get; init; }

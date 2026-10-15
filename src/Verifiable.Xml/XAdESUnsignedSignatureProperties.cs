@@ -54,7 +54,7 @@ public enum XAdESUnsignedSignaturePropertyName
 /// (a current v1.4.1-namespace Annex A property, or genuinely foreign content); its identity is still fully
 /// recoverable from <see cref="ElementIndex"/> through <see cref="XmlNodeTable"/>.
 /// </summary>
-public readonly struct XAdESUnsignedSignaturePropertyEntry: IEquatable<XAdESUnsignedSignaturePropertyEntry>
+public readonly struct XAdESUnsignedSignaturePropertyEntry : IEquatable<XAdESUnsignedSignaturePropertyEntry>
 {
     /// <summary>The property element's own index.</summary>
     public int ElementIndex { get; }
@@ -121,7 +121,7 @@ public readonly struct XAdESUnsignedSignaturePropertyEntry: IEquatable<XAdESUnsi
 /// Carries no owned pooled content of its own — every entry is a plain (element index, name) pair over
 /// <see cref="Table"/> — so no <see cref="IDisposable"/> surface is needed.
 /// </remarks>
-public readonly struct XAdESUnsignedSignatureProperties: IEquatable<XAdESUnsignedSignatureProperties>
+public readonly struct XAdESUnsignedSignatureProperties : IEquatable<XAdESUnsignedSignatureProperties>
 {
     /// <summary>
     /// The maximum number of children <see cref="TryRead"/> accepts under one <c>UnsignedSignatureProperties</c>

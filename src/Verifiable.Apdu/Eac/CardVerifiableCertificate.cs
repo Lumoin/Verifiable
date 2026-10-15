@@ -32,7 +32,7 @@ namespace Verifiable.Apdu.Eac;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("CVC({CertificationAuthorityReference} -> {CertificateHolderReference})")]
-public sealed class CardVerifiableCertificate: SensitiveMemory
+public sealed class CardVerifiableCertificate : SensitiveMemory
 {
     private const int CertificateTag = 0x7F21;
     private const int CertificateBodyTag = 0x7F4E;

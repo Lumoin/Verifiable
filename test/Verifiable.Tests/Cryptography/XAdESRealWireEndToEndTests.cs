@@ -83,7 +83,7 @@ internal sealed class XAdESRealWireEndToEndTests
 
 
     /// <summary>The signing/time-stamping material one test's ladder is minted under. Disposed by the caller.</summary>
-    private sealed class Materials: IDisposable
+    private sealed class Materials : IDisposable
     {
         public required X509ChainTestRingNode Root { get; init; }
 

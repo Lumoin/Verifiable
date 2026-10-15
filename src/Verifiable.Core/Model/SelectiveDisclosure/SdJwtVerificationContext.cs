@@ -14,7 +14,7 @@ namespace Verifiable.Core.Model.SelectiveDisclosure;
 /// claims set as UTF-8 JSON) is valid only until disposal.
 /// </para>
 /// </remarks>
-public sealed class SdJwtVerificationContext: IDisposable
+public sealed class SdJwtVerificationContext : IDisposable
 {
     /// <summary>The pooled buffer holding the decoded redacted payload, owned by this context.</summary>
     private IMemoryOwner<byte> PayloadOwner { get; }

@@ -28,7 +28,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class GetTimeInput: ITpmCommandInput, IDisposable
+public sealed class GetTimeInput : ITpmCommandInput, IDisposable
 {
     private bool Disposed { get; set; }
 

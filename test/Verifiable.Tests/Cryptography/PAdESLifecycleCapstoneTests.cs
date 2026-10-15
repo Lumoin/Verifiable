@@ -432,7 +432,7 @@ internal sealed class PAdESLifecycleCapstoneTests
 
 
     /// <summary>Everything the capstone's own three tests share: the minted world, disposed together once.</summary>
-    private sealed class CapstoneWorld: IDisposable
+    private sealed class CapstoneWorld : IDisposable
     {
         public required X509ChainTestRingNode Root { get; init; }
 

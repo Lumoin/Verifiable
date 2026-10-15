@@ -26,7 +26,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class LoadExternalResponse: ITpmWireType, IDisposable
+public sealed class LoadExternalResponse : ITpmWireType, IDisposable
 {
     /// <summary>Whether <see cref="Dispose"/> has already released the owned Name carrier.</summary>
     private bool disposed;

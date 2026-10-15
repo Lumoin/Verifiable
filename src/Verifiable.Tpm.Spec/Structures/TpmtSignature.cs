@@ -47,7 +47,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class TpmtSignature: ITpmWireType, IDisposable
+public sealed class TpmtSignature : ITpmWireType, IDisposable
 {
     private bool disposed;
 

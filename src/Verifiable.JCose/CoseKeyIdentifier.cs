@@ -21,7 +21,7 @@ namespace Verifiable.JCose;
 /// value", matching the "same value" equality the COSE label union (<see cref="CoseHeaderLabel"/>) documents.</para>
 /// </remarks>
 [DebuggerDisplay("CoseKeyIdentifier: {Value.Length} bytes")]
-public sealed class CoseKeyIdentifier: IEquatable<CoseKeyIdentifier>
+public sealed class CoseKeyIdentifier : IEquatable<CoseKeyIdentifier>
 {
     /// <summary>Initializes a borrowed-view carrier over <paramref name="value"/>'s bytes.</summary>
     /// <param name="value">The opaque <c>kid</c> octets; borrowed, never copied.</param>

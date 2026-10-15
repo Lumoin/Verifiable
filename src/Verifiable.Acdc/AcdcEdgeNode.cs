@@ -64,7 +64,7 @@ public abstract record AcdcEdgeNode
 /// <param name="Operator">The m-ary operator <c>o</c> over the members, or <see langword="null"/> when absent (the default <c>AND</c> applies).</param>
 /// <param name="Weight">The edge-group's weight <c>w</c>, or <see langword="null"/> when absent; always absent for the top-level edge-group.</param>
 /// <param name="Members">The nested labeled edges and edge-groups, in their order of appearance; empty when the edge-group has no nested members.</param>
-public sealed record AcdcEdgeGroup(string? Said, string? Uuid, string? Operator, string? Weight, IReadOnlyList<AcdcEdgeMember> Members): AcdcEdgeNode;
+public sealed record AcdcEdgeGroup(string? Said, string? Uuid, string? Operator, string? Weight, IReadOnlyList<AcdcEdgeMember> Members) : AcdcEdgeNode;
 
 
 /// <summary>
@@ -88,7 +88,7 @@ public sealed record AcdcEdgeGroup(string? Said, string? Uuid, string? Operator,
 /// <param name="Operators">The unary operators <c>o</c> in order, or <see langword="null"/> when absent; a single operator is carried as a one-element list.</param>
 /// <param name="Weight">The edge's weight <c>w</c>, or <see langword="null"/> when absent.</param>
 /// <param name="Properties">The edge's non-reserved labeled property fields, in order, or <see langword="null"/> when the edge has none.</param>
-public sealed record AcdcEdge(string? Said, string? Uuid, string Node, string? Schema, IReadOnlyList<string>? Operators, string? Weight, MessageFieldMap? Properties): AcdcEdgeNode;
+public sealed record AcdcEdge(string? Said, string? Uuid, string Node, string? Schema, IReadOnlyList<string>? Operators, string? Weight, MessageFieldMap? Properties) : AcdcEdgeNode;
 
 
 /// <summary>
@@ -107,7 +107,7 @@ public sealed record AcdcEdge(string? Said, string? Uuid, string Node, string? S
 /// section, this models the value without asserting which variant it is.
 /// </remarks>
 /// <param name="Value">The compact string value: either an edge block's SAID or a simple-compact edge's far-node SAID, as the section's schema determines.</param>
-public sealed record AcdcCompactEdgeNode(string Value): AcdcEdgeNode;
+public sealed record AcdcCompactEdgeNode(string Value) : AcdcEdgeNode;
 
 
 /// <summary>

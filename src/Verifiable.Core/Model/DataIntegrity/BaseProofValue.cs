@@ -18,7 +18,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1819:Properties should not return arrays", Justification = "Wire-format POCO representing parsed proof components.")]
-public sealed class BaseProofValue: IDisposable
+public sealed class BaseProofValue : IDisposable
 {
     /// <summary>
     /// Gets the issuer's base signature.

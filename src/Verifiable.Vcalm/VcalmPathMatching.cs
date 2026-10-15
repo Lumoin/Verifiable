@@ -140,4 +140,4 @@ public static class VcalmPathMatching
 /// from the request path, for the handler to read.
 /// </summary>
 /// <param name="ItemId">The URL-escaped trailing id segment.</param>
-public sealed record VcalmCollectionItemMatchPayload(string ItemId): MatchPayload;
+public sealed record VcalmCollectionItemMatchPayload(string ItemId) : MatchPayload;

@@ -23,7 +23,7 @@ namespace Verifiable.Keri;
 /// later slice.
 /// </para>
 /// </remarks>
-public sealed class KeriThreshold: IEquatable<KeriThreshold>
+public sealed class KeriThreshold : IEquatable<KeriThreshold>
 {
     private int UnweightedCount { get; }
     private Fraction[][]? Clauses { get; }
@@ -367,7 +367,7 @@ public sealed class KeriThreshold: IEquatable<KeriThreshold>
     /// bounded (<see cref="MaxDenominatorBitLength"/>): no legitimate fractional-weight policy needs a combined
     /// denominator that large, and one that exceeds it is rejected rather than evaluated.
     /// </summary>
-    private readonly struct Fraction: IEquatable<Fraction>
+    private readonly struct Fraction : IEquatable<Fraction>
     {
         /// <summary>
         /// The maximum bit length of a weight's reduced denominator — and so of the running denominator a clause

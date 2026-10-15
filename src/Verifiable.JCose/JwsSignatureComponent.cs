@@ -10,7 +10,7 @@ namespace Verifiable.JCose;
 /// Owns the signature memory and must be disposed to return memory to the pool.
 /// </summary>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class JwsSignatureComponent: IEquatable<JwsSignatureComponent>, IDisposable
+public sealed class JwsSignatureComponent : IEquatable<JwsSignatureComponent>, IDisposable
 {
     private bool disposed;
 

@@ -36,7 +36,7 @@ namespace Verifiable.Json.StatusList;
 /// See <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-21#section-5.1">Token Status List, Section 5.1</see>.
 /// </para>
 /// </remarks>
-public sealed class StatusListTokenJsonConverter: JsonConverter<StatusListToken>
+public sealed class StatusListTokenJsonConverter : JsonConverter<StatusListToken>
 {
     /// <summary>The nested converter for the <c>status_list</c> member's Status List.</summary>
     private StatusListJsonConverter StatusListConverter { get; }

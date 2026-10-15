@@ -14,7 +14,7 @@ namespace Verifiable.Xml;
 /// <see cref="XmlReadError"/> idiom carried forward for the structural signature model.
 /// </remarks>
 /// <seealso cref="XmlSignatureReadFailure"/>
-public readonly struct XmlSignatureReadError: IEquatable<XmlSignatureReadError>
+public readonly struct XmlSignatureReadError : IEquatable<XmlSignatureReadError>
 {
     /// <summary>
     /// The reason the structural read was refused.

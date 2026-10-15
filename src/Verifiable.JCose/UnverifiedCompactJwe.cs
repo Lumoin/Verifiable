@@ -58,7 +58,7 @@ namespace Verifiable.JCose;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("UnverifiedCompactJwe({Header.Count} header parameters)")]
-public sealed class UnverifiedCompactJwe: IEquatable<UnverifiedCompactJwe>
+public sealed class UnverifiedCompactJwe : IEquatable<UnverifiedCompactJwe>
 {
     /// <summary>
     /// The original compact-form JWE wire string. Length-bounded only by

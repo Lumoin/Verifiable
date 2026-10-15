@@ -130,7 +130,7 @@ public sealed class AtsHashIndexCoverage
 /// its own, so ownership never forks.
 /// </remarks>
 [DebuggerDisplay("ArchiveTimestampCoverage: {Status}")]
-public sealed class ArchiveTimestampCoverage: IDisposable
+public sealed class ArchiveTimestampCoverage : IDisposable
 {
     /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
     private bool disposed;
@@ -1261,7 +1261,7 @@ public static class ArchiveTimestampV3
     /// The recomputed hash values of everything the three hash-index lists of clause 5.5.2 index, held together
     /// so that one <c>using</c> releases every digest whether the computation completed or failed part way.
     /// </summary>
-    private sealed class MaterialDigests: IDisposable
+    private sealed class MaterialDigests : IDisposable
     {
         /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
         private bool disposed;

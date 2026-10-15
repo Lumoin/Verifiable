@@ -33,7 +33,7 @@ namespace Verifiable.Fido2;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("AuthenticatorData(Flags={Flags}, SignCount={SignCount}, AttestedCredentialData={AttestedCredentialData is not null})")]
-public sealed class AuthenticatorData: IDisposable, IEquatable<AuthenticatorData>
+public sealed class AuthenticatorData : IDisposable, IEquatable<AuthenticatorData>
 {
     /// <summary>Guards against redundant disposal.</summary>
     private bool disposed;

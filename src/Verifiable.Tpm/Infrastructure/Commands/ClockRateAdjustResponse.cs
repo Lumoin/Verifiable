@@ -8,7 +8,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// See <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
 /// Specification</see>, Part 3, clause 29.3 (Table 237).
 /// </remarks>
-public sealed class ClockRateAdjustResponse: ITpmWireType
+public sealed class ClockRateAdjustResponse : ITpmWireType
 {
     /// <summary>
     /// The shared instance returned for a successful, parameterless response.

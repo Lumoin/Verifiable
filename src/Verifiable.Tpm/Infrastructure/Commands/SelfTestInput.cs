@@ -13,7 +13,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <see langword="true"/> to test all algorithms and functional blocks; <see langword="false"/> to
 /// test only those not yet tested.
 /// </param>
-public readonly record struct SelfTestInput(bool IsFullTest): ITpmCommandInput
+public readonly record struct SelfTestInput(bool IsFullTest) : ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_SelfTest;

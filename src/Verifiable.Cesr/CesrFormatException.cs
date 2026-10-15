@@ -4,7 +4,7 @@ namespace Verifiable.Cesr;
 /// The exception thrown when CESR-encoded material is malformed: an unknown code, a wrong size, non-zero
 /// pad or lead bits, or any other violation of the encoding scheme.
 /// </summary>
-public sealed class CesrFormatException: Exception
+public sealed class CesrFormatException : Exception
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="CesrFormatException"/> class.

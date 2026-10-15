@@ -43,7 +43,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// </remarks>
 [DebuggerDisplay("BaseProof: {ProofValue.Substring(0, Math.Min(20, ProofValue.Length))}..., Statements: {SignedStatements.Count}")]
 [SuppressMessage("Performance", "CA1819:Properties should not return arrays", Justification = "Wire-format POCO representing parsed proof components.")]
-public sealed class BaseProofResult: IDisposable
+public sealed class BaseProofResult : IDisposable
 {
     /// <summary>
     /// The canonical N-Quad statements of the proof options.

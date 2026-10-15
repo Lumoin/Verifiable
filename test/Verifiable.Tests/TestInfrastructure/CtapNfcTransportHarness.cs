@@ -19,7 +19,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// verbatim, so this harness's only job is the composition wiring plus the one-time
 /// <c>SELECT</c> the FIDO applet needs before any CTAP2 command can be exchanged.
 /// </remarks>
-internal sealed class CtapNfcTransportHarness: IDisposable
+internal sealed class CtapNfcTransportHarness : IDisposable
 {
     /// <summary>The NFC responder bridging the simulator's transceive method to the APDU device.</summary>
     private CtapNfcResponder Responder { get; }

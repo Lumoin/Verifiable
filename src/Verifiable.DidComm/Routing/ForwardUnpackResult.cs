@@ -70,7 +70,7 @@ public enum ForwardUnpackError
 /// has been transmitted.
 /// </para>
 /// </remarks>
-public sealed class ForwardUnpackResult: IDisposable
+public sealed class ForwardUnpackResult : IDisposable
 {
     private ForwardUnpackResult(bool isForwarded, string? next, DidCommEncryptedMessage? forwardedMessage, ForwardUnpackError error)
     {

@@ -20,7 +20,7 @@ namespace Verifiable.Core.Resolvers;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("Deactivated={Deactivated} VersionId={VersionId,nq} Created={Created} Updated={Updated}")]
-public class DidDocumentMetadata: IEquatable<DidDocumentMetadata>
+public class DidDocumentMetadata : IEquatable<DidDocumentMetadata>
 {
     /// <summary>
     /// Empty metadata instance for convenience.

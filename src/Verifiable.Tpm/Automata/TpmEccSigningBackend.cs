@@ -160,7 +160,7 @@ public sealed record TpmEccSigningBackend(
 /// </summary>
 /// <param name="PrivateScalar">The generated private scalar, unsigned big-endian at the curve field width.</param>
 /// <param name="PublicPoint">The generated public point, SEC1 uncompressed (<c>0x04 ‖ X ‖ Y</c>).</param>
-public sealed record TpmGeneratedEccKey(PrivateKeyMemory PrivateScalar, EncodedEcPoint PublicPoint): IDisposable
+public sealed record TpmGeneratedEccKey(PrivateKeyMemory PrivateScalar, EncodedEcPoint PublicPoint) : IDisposable
 {
     /// <summary>
     /// Releases the key material backing the scalar and the public point.

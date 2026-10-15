@@ -131,7 +131,7 @@ public enum AsicManifestNamingFailureKind
 /// The generator-side fault of deriving a container file name.
 /// </summary>
 [DebuggerDisplay("AsicManifestNamingException({FailureKind}): {Message}")]
-public sealed class AsicManifestNamingException: Exception
+public sealed class AsicManifestNamingException : Exception
 {
     /// <summary>Gets what could not be done.</summary>
     public AsicManifestNamingFailureKind FailureKind { get; }

@@ -14,7 +14,7 @@ namespace Verifiable.Cryptography.Pki;
 /// matched against the response.
 /// </summary>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class TimestampRequestContent: IDisposable
+public sealed class TimestampRequestContent : IDisposable
 {
     /// <summary>Gets the DER-encoded <c>TimeStampReq</c>, tagged <see cref="PkiCertificateTags.TimestampRequest"/>. Owned by this instance.</summary>
     public PkiCertificateMemory Request { get; }

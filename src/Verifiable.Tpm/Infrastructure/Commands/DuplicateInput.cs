@@ -25,7 +25,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// DUP-role policy session.
 /// </para>
 /// </remarks>
-public sealed class DuplicateInput: ITpmCommandInput
+public sealed class DuplicateInput : ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_Duplicate;

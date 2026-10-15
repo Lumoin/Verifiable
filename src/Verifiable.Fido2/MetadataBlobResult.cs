@@ -46,7 +46,7 @@ public abstract record MetadataBlobResult
 /// (<see cref="MetadataBlobRevocationPolicy.NotChecked"/>) rather than assuming one or the other.
 /// </param>
 [DebuggerDisplay("VerifiedMetadataBlobResult(No={Blob.Payload.No}, RevocationPolicy={RevocationPolicy})")]
-public sealed record VerifiedMetadataBlobResult(MetadataBlob Blob, MetadataBlobRevocationPolicy RevocationPolicy): MetadataBlobResult;
+public sealed record VerifiedMetadataBlobResult(MetadataBlob Blob, MetadataBlobRevocationPolicy RevocationPolicy) : MetadataBlobResult;
 
 
 /// <summary>
@@ -63,7 +63,7 @@ public sealed record VerifiedMetadataBlobResult(MetadataBlob Blob, MetadataBlobR
 /// is reported as a result rather than thrown.
 /// </remarks>
 [DebuggerDisplay("RejectedMetadataBlobResult({Error.Code,nq})")]
-public sealed record RejectedMetadataBlobResult(Fido2MetadataError Error): MetadataBlobResult;
+public sealed record RejectedMetadataBlobResult(Fido2MetadataError Error) : MetadataBlobResult;
 
 
 /// <summary>
@@ -87,4 +87,4 @@ public sealed record RejectedMetadataBlobResult(Fido2MetadataError Error): Metad
 /// delegate would have performed; the closed sum's third case makes that distinction unskippable.
 /// </remarks>
 [DebuggerDisplay("MetadataBlobStoreUnavailableResult({Error.Code,nq})")]
-public sealed record MetadataBlobStoreUnavailableResult(Fido2MetadataError Error): MetadataBlobResult;
+public sealed record MetadataBlobStoreUnavailableResult(Fido2MetadataError Error) : MetadataBlobResult;

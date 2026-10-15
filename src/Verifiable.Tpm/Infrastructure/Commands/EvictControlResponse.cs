@@ -7,7 +7,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <remarks>
 /// See TPM 2.0 Library Part 3, clause 28.5 (Table 231).
 /// </remarks>
-public sealed class EvictControlResponse: ITpmWireType
+public sealed class EvictControlResponse : ITpmWireType
 {
     /// <summary>
     /// The shared instance returned for a successful, parameterless response.

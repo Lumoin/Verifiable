@@ -143,7 +143,7 @@ public enum EArkProvenanceAnchorVerificationStatus
 /// <strong>Ownership.</strong> An instance owns every <see cref="Verifications"/> entry; the caller disposes it.
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class EArkProvenanceAnchorVerification: IDisposable
+public sealed class EArkProvenanceAnchorVerification : IDisposable
 {
     /// <summary>Gets what the verification concluded.</summary>
     public required EArkProvenanceAnchorVerificationStatus Status { get; init; }

@@ -32,7 +32,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class TpmtTkAuth: IDisposable, ITpmWireType
+public sealed class TpmtTkAuth : IDisposable, ITpmWireType
 {
     /// <summary>
     /// The shared NULL Auth Ticket instance (TPM_ST_AUTH_SIGNED, TPM_RH_NULL, empty digest); it owns no pooled

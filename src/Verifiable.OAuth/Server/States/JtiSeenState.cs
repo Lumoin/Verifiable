@@ -15,7 +15,7 @@ namespace Verifiable.OAuth.Server.States;
 /// the window expire naturally.
 /// </remarks>
 [DebuggerDisplay("JtiSeenState Purpose={Purpose} Issuer={Issuer,nq} Target={Target,nq} Jti={Jti,nq} SeenAt={SeenAt}")]
-public sealed record JtiSeenState: FlowState
+public sealed record JtiSeenState : FlowState
 {
     /// <summary>The kind of object the <c>jti</c> identifies.</summary>
     public required JtiReplayPurpose Purpose { get; init; }

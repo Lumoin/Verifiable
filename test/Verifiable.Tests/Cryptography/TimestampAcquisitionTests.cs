@@ -512,7 +512,7 @@ internal sealed class TimestampAcquisitionTests
 
 
     /// <summary>The minted Root CA and Time-Stamping Authority nodes for a scenario, disposed together.</summary>
-    private sealed record TsaScenario(X509ChainTestRingNode Root, X509ChainTestRingNode Authority): IDisposable
+    private sealed record TsaScenario(X509ChainTestRingNode Root, X509ChainTestRingNode Authority) : IDisposable
     {
         /// <inheritdoc/>
         public void Dispose()
@@ -530,7 +530,7 @@ internal sealed class TimestampAcquisitionTests
 /// per-test state, per the codebase's no-closure-capture convention for callback seams (mirroring
 /// <c>MapBackedOcspResponder</c>). A <see langword="null"/> response simulates an unreachable authority.
 /// </summary>
-internal sealed class FixedTimestampResponder: IDisposable
+internal sealed class FixedTimestampResponder : IDisposable
 {
     /// <summary>The prepared response, or <see langword="null"/> to simulate an unreachable authority.</summary>
     private PkiCertificateMemory? Response { get; }

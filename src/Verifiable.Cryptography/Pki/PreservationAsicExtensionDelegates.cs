@@ -83,7 +83,7 @@ public enum PreservationAsicExtensionEncodeStatus
 /// nothing.
 /// </summary>
 [DebuggerDisplay("PreservationAsicExtensionEncodeResult: {Status}")]
-public sealed class PreservationAsicExtensionEncodeResult: IDisposable
+public sealed class PreservationAsicExtensionEncodeResult : IDisposable
 {
     /// <summary>The encoding outcome; <see cref="PreservationAsicExtensionEncodeStatus.Encoded"/> is the only success.</summary>
     public required PreservationAsicExtensionEncodeStatus Status { get; init; }
@@ -234,7 +234,7 @@ public enum PreservationAsicExtensionParseStatus
 /// anything the payload owns; the caller disposes it. On failure it owns nothing.
 /// </summary>
 [DebuggerDisplay("PreservationAsicExtensionParseResult: {Status}")]
-public sealed class PreservationAsicExtensionParseResult: IDisposable
+public sealed class PreservationAsicExtensionParseResult : IDisposable
 {
     /// <summary>The parse outcome; <see cref="PreservationAsicExtensionParseStatus.Valid"/> is the only success.</summary>
     public required PreservationAsicExtensionParseStatus Status { get; init; }

@@ -26,7 +26,7 @@ namespace Verifiable.Cryptography;
 /// protocol reader meet on: the leaf produces it and the reader consumes it, while neither references the other.
 /// </para>
 /// </remarks>
-public sealed class MessageFieldMap: OrderedDictionary<string, object?>
+public sealed class MessageFieldMap : OrderedDictionary<string, object?>
 {
     /// <summary>
     /// Creates an empty message field map.

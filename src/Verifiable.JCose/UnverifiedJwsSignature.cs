@@ -25,7 +25,7 @@ namespace Verifiable.JCose;
 /// </list>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class UnverifiedJwsSignature: IDisposable, IEquatable<UnverifiedJwsSignature>
+public sealed class UnverifiedJwsSignature : IDisposable, IEquatable<UnverifiedJwsSignature>
 {
     private bool disposed;
 

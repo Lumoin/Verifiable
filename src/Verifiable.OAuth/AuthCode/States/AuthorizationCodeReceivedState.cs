@@ -10,7 +10,7 @@ namespace Verifiable.OAuth.AuthCode.States;
 /// <remarks>
 /// Transitions to <see cref="TokenReceivedState"/> after a successful token exchange.
 /// </remarks>
-public sealed record AuthorizationCodeReceivedState: FlowState
+public sealed record AuthorizationCodeReceivedState : FlowState
 {
     /// <summary>
     /// The authorization code from the redirect. Single-use; must not be logged.

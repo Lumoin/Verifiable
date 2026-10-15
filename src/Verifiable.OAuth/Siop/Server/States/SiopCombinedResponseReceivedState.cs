@@ -15,7 +15,7 @@ namespace Verifiable.OAuth.Siop.Server.States;
 /// <see cref="SiopResponseReceivedState"/>, which carries only the id_token.
 /// </summary>
 [DebuggerDisplay("SiopCombinedResponseReceivedState FlowId={FlowId} ReceivedAt={ReceivedAt}")]
-public sealed record SiopCombinedResponseReceivedState: FlowState
+public sealed record SiopCombinedResponseReceivedState : FlowState
 {
     /// <summary>The compact Self-Issued ID Token the Wallet POSTed. Preserved for audit and replay detection.</summary>
     public required string IdToken { get; init; }

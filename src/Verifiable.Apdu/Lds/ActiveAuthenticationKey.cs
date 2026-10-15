@@ -17,7 +17,7 @@ namespace Verifiable.Apdu.Lds;
 /// retains ownership and disposes it.
 /// </para>
 /// </remarks>
-public sealed class ActiveAuthenticationKey: SensitiveMemory
+public sealed class ActiveAuthenticationKey : SensitiveMemory
 {
     /// <summary>
     /// Initialises a new <see cref="ActiveAuthenticationKey"/> from owned private-key bytes.

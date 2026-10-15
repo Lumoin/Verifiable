@@ -9,7 +9,7 @@ namespace Verifiable.Core.Resolvers;
 /// values by constructing an instance with an integer identifier.
 /// </para>
 /// </remarks>
-public readonly struct DidResolutionKind: IEquatable<DidResolutionKind>
+public readonly struct DidResolutionKind : IEquatable<DidResolutionKind>
 {
     private int Value { get; }
 

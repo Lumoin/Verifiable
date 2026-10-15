@@ -9,7 +9,7 @@ namespace Verifiable.Json.Converters.Dcql;
 /// Converts a <see cref="TrustedAuthoritiesQuery"/> to and from JSON, mapping
 /// the trusted authorities query properties from their snake_case JSON representation.
 /// </summary>
-public sealed class TrustedAuthoritiesQueryConverter: JsonConverter<TrustedAuthoritiesQuery>
+public sealed class TrustedAuthoritiesQueryConverter : JsonConverter<TrustedAuthoritiesQuery>
 {
     /// <inheritdoc/>
     [return: NotNull]

@@ -103,7 +103,7 @@ public sealed record WebVhWitnessProofEntry
 /// MUST NOT be used after <see cref="Dispose"/>.
 /// </para>
 /// </remarks>
-public sealed class WebVhWitnessFile: IDisposable
+public sealed class WebVhWitnessFile : IDisposable
 {
     private IMemoryOwner<byte> ContentOwner { get; }
     private int ContentLength { get; }

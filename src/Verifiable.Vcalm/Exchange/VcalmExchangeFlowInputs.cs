@@ -8,7 +8,7 @@ namespace Verifiable.Vcalm.Exchange;
 /// endpoint minted the <c>{localExchangeId}</c> and fixed the exchange's <c>expires</c>. Drives the
 /// sentinel to <see cref="VcalmExchangePendingState"/>.
 /// </summary>
-public sealed record VcalmExchangeCreated: FlowInput
+public sealed record VcalmExchangeCreated : FlowInput
 {
     /// <summary>The internal flow identifier.</summary>
     public required string FlowId { get; init; }
@@ -36,7 +36,7 @@ public sealed record VcalmExchangeCreated: FlowInput
 /// request bound to a fresh <see cref="Challenge"/> / <see cref="Domain"/>. Drives
 /// <see cref="VcalmExchangePendingState"/> to <see cref="VcalmExchangeActiveState"/>.
 /// </summary>
-public sealed record VcalmExchangePresentationRequested: FlowInput
+public sealed record VcalmExchangePresentationRequested : FlowInput
 {
     /// <summary>The §3.6.6 <c>step</c> the issued request belongs to.</summary>
     public required string StepName { get; init; }
@@ -78,7 +78,7 @@ public sealed record VcalmExchangePresentationRequested: FlowInput
 /// fail-closed property per-step: each presentation-requesting step verifies only against its own
 /// challenge, never a prior step's.
 /// </summary>
-public sealed record VcalmExchangeAdvancedToPresentation: FlowInput
+public sealed record VcalmExchangeAdvancedToPresentation : FlowInput
 {
     /// <summary>The §3.6.6 <c>step</c> the engine advanced to — the next step now requesting a presentation.</summary>
     public required string StepName { get; init; }
@@ -114,7 +114,7 @@ public sealed record VcalmExchangeAdvancedToPresentation: FlowInput
 /// path), so this PURE input carries only the verdict and the verbatim presentation JSON. Drives
 /// <see cref="VcalmExchangeActiveState"/> to terminal <see cref="VcalmExchangeCompleteState"/>.
 /// </summary>
-public sealed record VcalmExchangePresentationVerified: FlowInput
+public sealed record VcalmExchangePresentationVerified : FlowInput
 {
     /// <summary>The §3.6.6 <c>step</c> the verified presentation was accepted at (the final step of the exchange).</summary>
     public required string StepName { get; init; }
@@ -142,7 +142,7 @@ public sealed record VcalmExchangePresentationVerified: FlowInput
 /// <see cref="VcalmExchangePendingState"/> (or <see cref="VcalmExchangeActiveState"/>) to terminal
 /// <see cref="VcalmExchangeCompleteState"/>.
 /// </summary>
-public sealed record VcalmExchangeCompleted: FlowInput
+public sealed record VcalmExchangeCompleted : FlowInput
 {
     /// <summary>The §3.6 <c>redirectUrl</c> the completion carried, or <see langword="null"/> for an empty-reply completion.</summary>
     [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
@@ -169,7 +169,7 @@ public sealed record VcalmExchangeCompleted: FlowInput
 /// domain, or the message otherwise cannot advance the exchange. Drives any non-terminal exchange
 /// state to terminal <see cref="VcalmExchangeInvalidState"/> (§3.6 4xx + ProblemDetails).
 /// </summary>
-public sealed record VcalmExchangeRejected: FlowInput
+public sealed record VcalmExchangeRejected : FlowInput
 {
     /// <summary>The §3.6.6 <c>step</c> the failing message was presented at, or <see langword="null"/>.</summary>
     public string? StepName { get; init; }

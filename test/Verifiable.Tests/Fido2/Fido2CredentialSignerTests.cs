@@ -360,7 +360,7 @@ internal sealed class Fido2CredentialSignerTests
     /// A freshly minted credential key pair, its stored COSE public-key view, and the COSE algorithm it
     /// signs for — bundled so a test can dispose the underlying key material in one place.
     /// </summary>
-    internal sealed class CredentialFixture(PublicKeyMemory publicKeyMemory, PrivateKey credentialKey, CoseKey credentialPublicKey, int coseAlgorithm): IDisposable
+    internal sealed class CredentialFixture(PublicKeyMemory publicKeyMemory, PrivateKey credentialKey, CoseKey credentialPublicKey, int coseAlgorithm) : IDisposable
     {
         /// <summary>The credential's public key memory, kept for the independent-oracle cross-check.</summary>
         public PublicKeyMemory PublicKeyMemory { get; } = publicKeyMemory;

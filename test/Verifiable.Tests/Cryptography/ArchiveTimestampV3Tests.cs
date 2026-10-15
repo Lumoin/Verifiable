@@ -914,7 +914,7 @@ internal sealed class ArchiveTimestampV3Tests
     /// <summary>The minted Root CA and Time-Stamping Authority nodes for a scenario, disposed together.</summary>
     /// <param name="Root">The root certification authority.</param>
     /// <param name="Authority">The time-stamping authority whose key signs the tokens.</param>
-    private sealed record TsaScenario(X509ChainTestRingNode Root, X509ChainTestRingNode Authority): IDisposable
+    private sealed record TsaScenario(X509ChainTestRingNode Root, X509ChainTestRingNode Authority) : IDisposable
     {
         /// <inheritdoc/>
         public void Dispose()
@@ -937,7 +937,7 @@ internal sealed class ArchiveTimestampV3Tests
         CmsSignedData Signature,
         PkiCertificateMemory Token,
         AtsHashIndexV3 HashIndex,
-        SignedContentMemory ImprintInput): IDisposable
+        SignedContentMemory ImprintInput) : IDisposable
     {
         /// <inheritdoc/>
         public void Dispose()

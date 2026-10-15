@@ -35,7 +35,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class Tpm2bName: IDisposable, ITpmWireType
+public sealed class Tpm2bName : IDisposable, ITpmWireType
 {
     /// <summary>
     /// Maximum size of a Name (algorithm ID + largest digest).

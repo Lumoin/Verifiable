@@ -27,7 +27,7 @@ namespace Verifiable.Json.Converters;
 /// must handle instantiation based on contextual information like <c>proofPurpose</c>.
 /// </para>
 /// </remarks>
-public class VerificationMethodReferenceConverterFactory: JsonConverterFactory
+public class VerificationMethodReferenceConverterFactory : JsonConverterFactory
 {
     private VerificationMethodConverter VmConverter { get; }
 
@@ -104,7 +104,7 @@ public class VerificationMethodReferenceConverterFactory: JsonConverterFactory
 /// property name determines the purpose (e.g., <c>authentication</c>, <c>assertionMethod</c>).
 /// </para>
 /// </remarks>
-public class VerificationMethodReferenceConverter<T>: JsonConverter<T> where T : VerificationMethodReference
+public class VerificationMethodReferenceConverter<T> : JsonConverter<T> where T : VerificationMethodReference
 {
     private VerificationMethodConverter VmConverter { get; }
 

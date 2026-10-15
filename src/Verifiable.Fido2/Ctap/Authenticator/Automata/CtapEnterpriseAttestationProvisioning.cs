@@ -54,7 +54,7 @@ public sealed record CtapEnterpriseAttestationProvisioning(
     PrivateKey AttestationKey,
     IReadOnlyList<PkiCertificateMemory> X5c,
     int Algorithm,
-    IReadOnlyList<string> PreConfiguredRpIds): IDisposable
+    IReadOnlyList<string> PreConfiguredRpIds) : IDisposable
 {
     /// <summary>
     /// Releases <see cref="AttestationKey"/> and every entry of <see cref="X5c"/> this record owns.

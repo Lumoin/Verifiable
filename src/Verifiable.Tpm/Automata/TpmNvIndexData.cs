@@ -53,7 +53,7 @@ namespace Verifiable.Tpm.Automata;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class TpmNvIndexData: IDisposable
+public sealed class TpmNvIndexData : IDisposable
 {
     /// <summary>
     /// The shared zero-capacity instance backing every Index defined with a <c>dataSize</c> of zero.

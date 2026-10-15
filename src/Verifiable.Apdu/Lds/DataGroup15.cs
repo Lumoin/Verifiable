@@ -35,7 +35,7 @@ public enum ActiveAuthenticationKeyType
 /// <see cref="RsaPublicKey"/>.
 /// </para>
 /// </remarks>
-public sealed class DataGroup15: IDisposable
+public sealed class DataGroup15 : IDisposable
 {
     /// <summary>The eMRTD elementary file identifier of EF.DG15.</summary>
     public const ushort FileIdentifier = 0x010F;

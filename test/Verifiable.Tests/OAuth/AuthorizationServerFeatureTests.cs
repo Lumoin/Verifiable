@@ -2257,7 +2257,7 @@ internal sealed class AuthorizationServerFeatureTests
 
 
     //Helper observer that collects all events into a list for assertion.
-    private sealed class CollectingObserver<T>(List<T> collected): IObserver<T>
+    private sealed class CollectingObserver<T>(List<T> collected) : IObserver<T>
     {
         public void OnNext(T value)
         {

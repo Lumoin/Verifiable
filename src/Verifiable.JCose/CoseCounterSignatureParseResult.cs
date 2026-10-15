@@ -11,7 +11,7 @@ namespace Verifiable.JCose;
 /// <c>CoseSerialization.ParseCounterSignatureHeaderValue</c> funnels into <see cref="Failure"/>.
 /// A caller checks <see cref="IsSuccess"/> before touching <see cref="CounterSignature"/>.
 /// </remarks>
-public sealed class CoseCounterSignatureParseResult: IDisposable
+public sealed class CoseCounterSignatureParseResult : IDisposable
 {
     private bool disposed;
 

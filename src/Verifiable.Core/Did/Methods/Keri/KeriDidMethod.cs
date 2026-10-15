@@ -5,7 +5,7 @@ namespace Verifiable.Core.Did.Methods.Keri
     /// </summary>
     /// <remarks>Authoritative definition at <see href="https://weboftrust.github.io/ietf-did-keri/draft-pfeairheller-did-keri.html#section-3.1">
     /// The 3. did:keri Format: 3.1 Method Name</see>.</remarks>
-    public record KeriDidMethod: GenericDidMethod
+    public record KeriDidMethod : GenericDidMethod
     {
         /// <summary>Constructs the identifier from its full DID string.</summary>
         /// <param name="didString">The DID string; must start with <c>did:keri:</c>.</param>

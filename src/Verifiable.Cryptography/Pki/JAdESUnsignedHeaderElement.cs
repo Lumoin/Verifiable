@@ -82,7 +82,7 @@ public abstract class JAdESUnsignedValue<TValue>
 /// </summary>
 /// <typeparam name="TValue">The decoded semantic shape this element also carries under clear-JSON incorporation.</typeparam>
 [DebuggerDisplay("JAdESOpaqueUnsignedValue({WireText.Length} bytes)")]
-public sealed class JAdESOpaqueUnsignedValue<TValue>: JAdESUnsignedValue<TValue>, IDisposable
+public sealed class JAdESOpaqueUnsignedValue<TValue> : JAdESUnsignedValue<TValue>, IDisposable
 {
     /// <summary>Initializes a new <see cref="JAdESOpaqueUnsignedValue{TValue}"/>.</summary>
     /// <param name="wireText">
@@ -132,7 +132,7 @@ public sealed class JAdESOpaqueUnsignedValue<TValue>: JAdESUnsignedValue<TValue>
 /// </summary>
 /// <typeparam name="TValue">The decoded semantic shape.</typeparam>
 [DebuggerDisplay("JAdESClearUnsignedValue: {Value}")]
-public sealed class JAdESClearUnsignedValue<TValue>: JAdESUnsignedValue<TValue>, IDisposable
+public sealed class JAdESClearUnsignedValue<TValue> : JAdESUnsignedValue<TValue>, IDisposable
 {
     /// <summary>Initializes a new <see cref="JAdESClearUnsignedValue{TValue}"/>.</summary>
     /// <param name="value">The decoded value. <strong>Owned</strong> when it implements <see cref="IDisposable"/>.</param>
@@ -282,7 +282,7 @@ public abstract class JAdESUnsignedHeaderElement
 /// <see cref="JAdESUnsignedValue{TValue}"/>.
 /// </summary>
 [DebuggerDisplay("JAdESUnsignedHeaderElementSignaturePolicyStore: {Carriage}")]
-public sealed class JAdESUnsignedHeaderElementSignaturePolicyStore: JAdESUnsignedHeaderElement, IDisposable
+public sealed class JAdESUnsignedHeaderElementSignaturePolicyStore : JAdESUnsignedHeaderElement, IDisposable
 {
     /// <summary>Initializes a new <see cref="JAdESUnsignedHeaderElementSignaturePolicyStore"/>.</summary>
     /// <param name="carriage">The dual-mode carriage: opaque wire text, or the decoded signature-policy store.</param>
@@ -318,7 +318,7 @@ public sealed class JAdESUnsignedHeaderElementSignaturePolicyStore: JAdESUnsigne
 /// for why this arm has no <see cref="JAdESUnsignedValue{TValue}"/> duality of its own.
 /// </summary>
 [DebuggerDisplay("JAdESUnsignedHeaderElementCounterSignature({WireText.Length} bytes)")]
-public sealed class JAdESUnsignedHeaderElementCounterSignature: JAdESUnsignedHeaderElement, IDisposable
+public sealed class JAdESUnsignedHeaderElementCounterSignature : JAdESUnsignedHeaderElement, IDisposable
 {
     /// <summary>Initializes a new <see cref="JAdESUnsignedHeaderElementCounterSignature"/>.</summary>
     /// <param name="wireText">
@@ -361,7 +361,7 @@ public sealed class JAdESUnsignedHeaderElementCounterSignature: JAdESUnsignedHea
 /// an opaque-mode carriage is not decoded, so nothing to check.
 /// </remarks>
 [DebuggerDisplay("JAdESUnsignedHeaderElementSignatureTimestamp: {Carriage}")]
-public sealed class JAdESUnsignedHeaderElementSignatureTimestamp: JAdESUnsignedHeaderElement, IDisposable
+public sealed class JAdESUnsignedHeaderElementSignatureTimestamp : JAdESUnsignedHeaderElement, IDisposable
 {
     /// <summary>
     /// Initializes a new <see cref="JAdESUnsignedHeaderElementSignatureTimestamp"/>.
@@ -413,7 +413,7 @@ public sealed class JAdESUnsignedHeaderElementSignatureTimestamp: JAdESUnsignedH
 /// <see cref="JAdESUnsignedValue{TValue}"/>.
 /// </summary>
 [DebuggerDisplay("JAdESUnsignedHeaderElementCertificateValues: {Carriage}")]
-public sealed class JAdESUnsignedHeaderElementCertificateValues: JAdESUnsignedHeaderElement, IDisposable
+public sealed class JAdESUnsignedHeaderElementCertificateValues : JAdESUnsignedHeaderElement, IDisposable
 {
     /// <summary>Initializes a new <see cref="JAdESUnsignedHeaderElementCertificateValues"/>.</summary>
     /// <param name="carriage">The dual-mode carriage: opaque wire text, or the decoded certificate values.</param>
@@ -448,7 +448,7 @@ public sealed class JAdESUnsignedHeaderElementCertificateValues: JAdESUnsignedHe
 /// <see cref="JAdESUnsignedValue{TValue}"/>.
 /// </summary>
 [DebuggerDisplay("JAdESUnsignedHeaderElementRevocationValues: {Carriage}")]
-public sealed class JAdESUnsignedHeaderElementRevocationValues: JAdESUnsignedHeaderElement, IDisposable
+public sealed class JAdESUnsignedHeaderElementRevocationValues : JAdESUnsignedHeaderElement, IDisposable
 {
     /// <summary>Initializes a new <see cref="JAdESUnsignedHeaderElementRevocationValues"/>.</summary>
     /// <param name="carriage">The dual-mode carriage: opaque wire text, or the decoded revocation values.</param>
@@ -486,7 +486,7 @@ public sealed class JAdESUnsignedHeaderElementRevocationValues: JAdESUnsignedHea
 /// what distinguishes it from <see cref="JAdESUnsignedHeaderElementCertificateValues"/>.
 /// </summary>
 [DebuggerDisplay("JAdESUnsignedHeaderElementAttributeCertificateValues: {Carriage}")]
-public sealed class JAdESUnsignedHeaderElementAttributeCertificateValues: JAdESUnsignedHeaderElement, IDisposable
+public sealed class JAdESUnsignedHeaderElementAttributeCertificateValues : JAdESUnsignedHeaderElement, IDisposable
 {
     /// <summary>Initializes a new <see cref="JAdESUnsignedHeaderElementAttributeCertificateValues"/>.</summary>
     /// <param name="carriage">The dual-mode carriage: opaque wire text, or the decoded certificate values.</param>
@@ -523,7 +523,7 @@ public sealed class JAdESUnsignedHeaderElementAttributeCertificateValues: JAdESU
 /// <c>"arVals": {"$ref": "#/definitions/rVals"}</c>).
 /// </summary>
 [DebuggerDisplay("JAdESUnsignedHeaderElementAttributeRevocationValues: {Carriage}")]
-public sealed class JAdESUnsignedHeaderElementAttributeRevocationValues: JAdESUnsignedHeaderElement, IDisposable
+public sealed class JAdESUnsignedHeaderElementAttributeRevocationValues : JAdESUnsignedHeaderElement, IDisposable
 {
     /// <summary>Initializes a new <see cref="JAdESUnsignedHeaderElementAttributeRevocationValues"/>.</summary>
     /// <param name="carriage">The dual-mode carriage: opaque wire text, or the decoded revocation values.</param>
@@ -559,7 +559,7 @@ public sealed class JAdESUnsignedHeaderElementAttributeRevocationValues: JAdESUn
 /// <see cref="JAdESUnsignedValue{TValue}"/>.
 /// </summary>
 [DebuggerDisplay("JAdESUnsignedHeaderElementAnyValidationData: {Carriage}")]
-public sealed class JAdESUnsignedHeaderElementAnyValidationData: JAdESUnsignedHeaderElement, IDisposable
+public sealed class JAdESUnsignedHeaderElementAnyValidationData : JAdESUnsignedHeaderElement, IDisposable
 {
     /// <summary>Initializes a new <see cref="JAdESUnsignedHeaderElementAnyValidationData"/>.</summary>
     /// <param name="carriage">The dual-mode carriage: opaque wire text, or the decoded validation data.</param>
@@ -596,7 +596,7 @@ public sealed class JAdESUnsignedHeaderElementAnyValidationData: JAdESUnsignedHe
 /// <c>anyValData</c> uses (Annex B.1 schema <c>"tstVD": {"$ref": "#/definitions/validationVals"}</c>).
 /// </summary>
 [DebuggerDisplay("JAdESUnsignedHeaderElementTimestampValidationData: {Carriage}")]
-public sealed class JAdESUnsignedHeaderElementTimestampValidationData: JAdESUnsignedHeaderElement, IDisposable
+public sealed class JAdESUnsignedHeaderElementTimestampValidationData : JAdESUnsignedHeaderElement, IDisposable
 {
     /// <summary>Initializes a new <see cref="JAdESUnsignedHeaderElementTimestampValidationData"/>.</summary>
     /// <param name="carriage">The dual-mode carriage: opaque wire text, or the decoded validation data.</param>
@@ -640,7 +640,7 @@ public sealed class JAdESUnsignedHeaderElementTimestampValidationData: JAdESUnsi
 /// enforce it once an instance of this type is placed in a container.
 /// </remarks>
 [DebuggerDisplay("JAdESUnsignedHeaderElementArchiveTimestamp: {Carriage}")]
-public sealed class JAdESUnsignedHeaderElementArchiveTimestamp: JAdESUnsignedHeaderElement, IDisposable
+public sealed class JAdESUnsignedHeaderElementArchiveTimestamp : JAdESUnsignedHeaderElement, IDisposable
 {
     /// <summary>Initializes a new <see cref="JAdESUnsignedHeaderElementArchiveTimestamp"/>.</summary>
     /// <param name="carriage">The dual-mode carriage: opaque wire text, or the decoded time-stamp container.</param>
@@ -677,7 +677,7 @@ public sealed class JAdESUnsignedHeaderElementArchiveTimestamp: JAdESUnsignedHea
 /// longer covered by the unknown-arm exemption.
 /// </summary>
 [DebuggerDisplay("JAdESUnsignedHeaderElementCertificateReferences: {Carriage}")]
-public sealed class JAdESUnsignedHeaderElementCertificateReferences: JAdESUnsignedHeaderElement, IDisposable
+public sealed class JAdESUnsignedHeaderElementCertificateReferences : JAdESUnsignedHeaderElement, IDisposable
 {
     /// <summary>Initializes a new <see cref="JAdESUnsignedHeaderElementCertificateReferences"/>.</summary>
     /// <param name="carriage">The dual-mode carriage: opaque wire text, or the decoded certificate references.</param>
@@ -712,7 +712,7 @@ public sealed class JAdESUnsignedHeaderElementCertificateReferences: JAdESUnsign
 /// <see cref="JAdESUnsignedValue{TValue}"/>, first-class.
 /// </summary>
 [DebuggerDisplay("JAdESUnsignedHeaderElementRevocationReferences: {Carriage}")]
-public sealed class JAdESUnsignedHeaderElementRevocationReferences: JAdESUnsignedHeaderElement, IDisposable
+public sealed class JAdESUnsignedHeaderElementRevocationReferences : JAdESUnsignedHeaderElement, IDisposable
 {
     /// <summary>Initializes a new <see cref="JAdESUnsignedHeaderElementRevocationReferences"/>.</summary>
     /// <param name="carriage">The dual-mode carriage: opaque wire text, or the decoded revocation references.</param>
@@ -749,7 +749,7 @@ public sealed class JAdESUnsignedHeaderElementRevocationReferences: JAdESUnsigne
 /// <c>xRefs</c> uses (Annex A.1.3 schema <c>"axRefs": {"$ref": "#/definitions/x5Ids"}</c>).
 /// </summary>
 [DebuggerDisplay("JAdESUnsignedHeaderElementAttributeCertificateReferences: {Carriage}")]
-public sealed class JAdESUnsignedHeaderElementAttributeCertificateReferences: JAdESUnsignedHeaderElement, IDisposable
+public sealed class JAdESUnsignedHeaderElementAttributeCertificateReferences : JAdESUnsignedHeaderElement, IDisposable
 {
     /// <summary>Initializes a new <see cref="JAdESUnsignedHeaderElementAttributeCertificateReferences"/>.</summary>
     /// <param name="carriage">The dual-mode carriage: opaque wire text, or the decoded certificate references.</param>
@@ -786,7 +786,7 @@ public sealed class JAdESUnsignedHeaderElementAttributeCertificateReferences: JA
 /// <c>rRefs</c> uses (Annex A.1.4 schema <c>"arRefs": {"$ref": "#/definitions/rRefs"}</c>).
 /// </summary>
 [DebuggerDisplay("JAdESUnsignedHeaderElementAttributeRevocationReferences: {Carriage}")]
-public sealed class JAdESUnsignedHeaderElementAttributeRevocationReferences: JAdESUnsignedHeaderElement, IDisposable
+public sealed class JAdESUnsignedHeaderElementAttributeRevocationReferences : JAdESUnsignedHeaderElement, IDisposable
 {
     /// <summary>Initializes a new <see cref="JAdESUnsignedHeaderElementAttributeRevocationReferences"/>.</summary>
     /// <param name="carriage">The dual-mode carriage: opaque wire text, or the decoded revocation references.</param>
@@ -830,7 +830,7 @@ public sealed class JAdESUnsignedHeaderElementAttributeRevocationReferences: JAd
 /// container-level enforcement point <see cref="JAdESUnsignedHeaderElementArchiveTimestamp"/> already uses.
 /// </remarks>
 [DebuggerDisplay("JAdESUnsignedHeaderElementSignatureAndReferencesTimestamp: {Carriage}")]
-public sealed class JAdESUnsignedHeaderElementSignatureAndReferencesTimestamp: JAdESUnsignedHeaderElement, IDisposable
+public sealed class JAdESUnsignedHeaderElementSignatureAndReferencesTimestamp : JAdESUnsignedHeaderElement, IDisposable
 {
     /// <summary>Initializes a new <see cref="JAdESUnsignedHeaderElementSignatureAndReferencesTimestamp"/>.</summary>
     /// <param name="carriage">The dual-mode carriage: opaque wire text, or the decoded time-stamp container.</param>
@@ -871,7 +871,7 @@ public sealed class JAdESUnsignedHeaderElementSignatureAndReferencesTimestamp: J
 /// <see cref="JAdESUnsignedHeaderElementSignatureAndReferencesTimestamp"/>'s identical remark.
 /// </remarks>
 [DebuggerDisplay("JAdESUnsignedHeaderElementReferencesTimestamp: {Carriage}")]
-public sealed class JAdESUnsignedHeaderElementReferencesTimestamp: JAdESUnsignedHeaderElement, IDisposable
+public sealed class JAdESUnsignedHeaderElementReferencesTimestamp : JAdESUnsignedHeaderElement, IDisposable
 {
     /// <summary>Initializes a new <see cref="JAdESUnsignedHeaderElementReferencesTimestamp"/>.</summary>
     /// <param name="carriage">The dual-mode carriage: opaque wire text, or the decoded time-stamp container.</param>
@@ -908,7 +908,7 @@ public sealed class JAdESUnsignedHeaderElementReferencesTimestamp: JAdESUnsigned
 /// <see cref="JAdESUnsignedHeaderElement"/>.
 /// </summary>
 [DebuggerDisplay("JAdESUnsignedHeaderElementUnknown: {Kind}, {WireText.Length} bytes")]
-public sealed class JAdESUnsignedHeaderElementUnknown: JAdESUnsignedHeaderElement, IDisposable
+public sealed class JAdESUnsignedHeaderElementUnknown : JAdESUnsignedHeaderElement, IDisposable
 {
     /// <summary>
     /// Initializes a new <see cref="JAdESUnsignedHeaderElementUnknown"/>.

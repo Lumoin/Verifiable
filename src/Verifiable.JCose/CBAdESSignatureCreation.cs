@@ -52,7 +52,7 @@ public abstract class CBAdESSigningPayloadInput
 /// Sig_structure covers.
 /// </summary>
 [DebuggerDisplay("CBAdESAttachedPayloadInput: {Payload.Length} bytes")]
-public sealed class CBAdESAttachedPayloadInput: CBAdESSigningPayloadInput
+public sealed class CBAdESAttachedPayloadInput : CBAdESSigningPayloadInput
 {
     /// <summary>Initializes a new <see cref="CBAdESAttachedPayloadInput"/>.</summary>
     /// <param name="payload">
@@ -78,7 +78,7 @@ public sealed class CBAdESAttachedPayloadInput: CBAdESSigningPayloadInput
 /// detached payload — CB-5.2.8-04).
 /// </summary>
 [DebuggerDisplay("CBAdESDetachedExternalPayloadInput: {Payload.Length} bytes")]
-public sealed class CBAdESDetachedExternalPayloadInput: CBAdESSigningPayloadInput
+public sealed class CBAdESDetachedExternalPayloadInput : CBAdESSigningPayloadInput
 {
     /// <summary>Initializes a new <see cref="CBAdESDetachedExternalPayloadInput"/>.</summary>
     /// <param name="payload">
@@ -110,7 +110,7 @@ public sealed class CBAdESDetachedExternalPayloadInput: CBAdESSigningPayloadInpu
 /// resolving this arm.
 /// </summary>
 [DebuggerDisplay("CBAdESDetachedSigDPayloadInput: {MechanismIdentifier}, {References.Count} reference(s)")]
-public sealed class CBAdESDetachedSigDPayloadInput: CBAdESSigningPayloadInput
+public sealed class CBAdESDetachedSigDPayloadInput : CBAdESSigningPayloadInput
 {
     /// <summary>Initializes a new <see cref="CBAdESDetachedSigDPayloadInput"/>.</summary>
     /// <param name="mechanismIdentifier">
@@ -165,7 +165,7 @@ public sealed class CBAdESDetachedSigDPayloadInput: CBAdESSigningPayloadInput
 /// this call, and <see cref="Headers"/> may share owned members with it.
 /// </remarks>
 [DebuggerDisplay("CBAdESSignatureCreationResult: alg={Headers.Algorithm}")]
-public sealed class CBAdESSignatureCreationResult: IDisposable
+public sealed class CBAdESSignatureCreationResult : IDisposable
 {
     private bool disposed;
 
@@ -263,7 +263,7 @@ public sealed class CBAdESCoseSignSignerInput
 /// <see cref="SignerHeaders"/>; <see cref="Dispose"/> disposes all of them.
 /// </remarks>
 [DebuggerDisplay("CBAdESCoseSignSignatureCreationResult: signers={SignerHeaders.Count}")]
-public sealed class CBAdESCoseSignSignatureCreationResult: IDisposable
+public sealed class CBAdESCoseSignSignatureCreationResult : IDisposable
 {
     private bool disposed;
 

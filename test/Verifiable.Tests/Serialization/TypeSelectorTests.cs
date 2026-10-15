@@ -11,7 +11,7 @@ namespace Verifiable.Tests.Serialization;
 [JsonSerializable(typeof(Service[]))]
 [JsonSerializable(typeof(TypeSelectorTests.TestIdentityResolverService))]
 [JsonSerializable(typeof(TypeSelectorTests.TestBlockchainVerificationMethod))]
-internal partial class TypeSelectorTestsJsonContext: JsonSerializerContext { }
+internal partial class TypeSelectorTestsJsonContext : JsonSerializerContext { }
 
 /// <summary>
 /// Tests for the unified type selector pattern across <see cref="ServiceConverter"/>,
@@ -24,7 +24,7 @@ internal sealed class TypeSelectorTests
     /// A test service subclass representing a UNTP Identity Resolver service.
     /// Downstream libraries would define this; here it proves the extensibility mechanism.
     /// </summary>
-    internal class TestIdentityResolverService: Service
+    internal class TestIdentityResolverService : Service
     {
         /// <summary>
         /// The supported link types for this identity resolver.
@@ -37,7 +37,7 @@ internal sealed class TypeSelectorTests
     /// Proves that CID 1.1 "MAY include additional properties" works through the
     /// converter pipeline.
     /// </summary>
-    internal class TestBlockchainVerificationMethod: VerificationMethod
+    internal class TestBlockchainVerificationMethod : VerificationMethod
     {
         /// <summary>
         /// The blockchain account identifier per CAIP-10.

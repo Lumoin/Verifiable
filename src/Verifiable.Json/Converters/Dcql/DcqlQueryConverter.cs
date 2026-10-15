@@ -9,7 +9,7 @@ namespace Verifiable.Json.Converters.Dcql;
 /// Converts a <see cref="DcqlQuery"/> to and from JSON using the snake_case
 /// property naming convention defined by the DCQL specification.
 /// </summary>
-public sealed class DcqlQueryConverter: JsonConverter<DcqlQuery>
+public sealed class DcqlQueryConverter : JsonConverter<DcqlQuery>
 {
     /// <inheritdoc/>
     [return: NotNull]

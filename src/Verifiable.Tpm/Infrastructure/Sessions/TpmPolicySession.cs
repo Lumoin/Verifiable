@@ -38,7 +38,7 @@ namespace Verifiable.Tpm.Infrastructure.Sessions;
 /// or the cleartext password (<see cref="ForSessionWithPassword"/>).
 /// </para>
 /// </remarks>
-public sealed class TpmPolicySession: TpmSessionBase, IDisposable
+public sealed class TpmPolicySession : TpmSessionBase, IDisposable
 {
     private TpmAlgIdConstants SessionAlg { get; }
     private int DigestSize { get; }

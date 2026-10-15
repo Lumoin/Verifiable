@@ -24,7 +24,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// <see cref="System.Net.Http.HttpClient"/> to <see cref="Certificate"/> via
 /// <see cref="LoopbackTls.CreatePinnedHttpClient(X509Certificate2, Uri?)"/>.
 /// </remarks>
-internal sealed class StaticContentHost: IAsyncDisposable
+internal sealed class StaticContentHost : IAsyncDisposable
 {
     private WebApplication App { get; }
 

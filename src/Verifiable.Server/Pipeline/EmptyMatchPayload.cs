@@ -18,4 +18,4 @@ namespace Verifiable.Server.Pipeline;
 /// <see langword="null"/> otherwise.
 /// </para>
 /// </remarks>
-internal sealed record EmptyMatchPayload: MatchPayload;
+internal sealed record EmptyMatchPayload : MatchPayload;

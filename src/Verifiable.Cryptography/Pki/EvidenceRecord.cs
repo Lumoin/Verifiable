@@ -215,7 +215,7 @@ public sealed record EvidenceRecordArchiveTimeStampSequence
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class EvidenceRecord: SensitiveMemory, IEquatable<EvidenceRecord>
+public sealed class EvidenceRecord : SensitiveMemory, IEquatable<EvidenceRecord>
 {
     /// <summary>
     /// The largest number of <c>AlgorithmIdentifier</c> values the <c>digestAlgorithms</c> field is read with.

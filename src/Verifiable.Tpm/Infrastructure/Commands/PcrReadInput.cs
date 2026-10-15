@@ -18,7 +18,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// Specification reference: TPM 2.0 Library Part 3, clause 22.4.
 /// </para>
 /// </remarks>
-public sealed class PcrReadInput: ITpmCommandInput, IDisposable
+public sealed class PcrReadInput : ITpmCommandInput, IDisposable
 {
     private TpmlPcrSelection PcrSelection { get; }
     private bool disposed;

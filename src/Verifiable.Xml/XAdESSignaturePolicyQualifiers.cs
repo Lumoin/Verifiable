@@ -17,7 +17,7 @@ namespace Verifiable.Xml;
 /// no owned pooled content of its own — every field is a span computed from <see cref="Table"/> — so no
 /// <see cref="IDisposable"/> surface is needed.
 /// </remarks>
-public readonly struct XAdESSPUserNotice: IEquatable<XAdESSPUserNotice>
+public readonly struct XAdESSPUserNotice : IEquatable<XAdESSPUserNotice>
 {
     /// <summary>The table the qualifier's spans read from.</summary>
     internal XmlNodeTable Table { get; }
@@ -339,7 +339,7 @@ public enum XAdESSigPolicyQualifierKind
 /// <see cref="Table"/>, a nested <see cref="XAdESSPUserNotice"/>/<see cref="XAdESObjectIdentifier"/>, or an
 /// <see cref="XAdESUnmodeledContent"/> — so no <see cref="IDisposable"/> surface is needed.
 /// </remarks>
-public readonly struct XAdESSigPolicyQualifierEntry: IEquatable<XAdESSigPolicyQualifierEntry>
+public readonly struct XAdESSigPolicyQualifierEntry : IEquatable<XAdESSigPolicyQualifierEntry>
 {
     /// <summary>The table the entry's spans read from.</summary>
     internal XmlNodeTable Table { get; }

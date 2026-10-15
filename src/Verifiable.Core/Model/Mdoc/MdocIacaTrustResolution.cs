@@ -53,7 +53,7 @@ public enum MdocIacaTrustFailureReason
 /// caller owns it — disposing the resolution disposes the key.
 /// </para>
 /// </remarks>
-public sealed class MdocIacaTrustResolution: IDisposable
+public sealed class MdocIacaTrustResolution : IDisposable
 {
     private bool disposed;
 

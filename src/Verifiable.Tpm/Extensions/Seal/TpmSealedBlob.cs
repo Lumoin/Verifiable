@@ -25,7 +25,7 @@ namespace Verifiable.Tpm.Extensions.Seal;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class TpmSealedBlob: IDisposable
+public sealed class TpmSealedBlob : IDisposable
 {
     private bool disposed;
 

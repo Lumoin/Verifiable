@@ -19,7 +19,7 @@ namespace Verifiable.OAuth;
 /// <c>JwsSerialization.SerializeCompact</c> on the underlying <see cref="Message"/>.
 /// </para>
 /// </remarks>
-public sealed class SignedJar: IDisposable
+public sealed class SignedJar : IDisposable
 {
     private bool disposed;
 

@@ -1389,7 +1389,7 @@ internal sealed class TpmInHouseSimulatorSignDigestSessionTests
     /// <param name="keyHandle">The <c>@keyHandle</c> handle value.</param>
     /// <param name="context">The <c>context</c> octets, marshaled verbatim as a TPM2B.</param>
     /// <param name="digest">The <c>digest</c> octets.</param>
-    private sealed class SignDigestWithContextInput(uint keyHandle, ReadOnlyMemory<byte> context, ReadOnlyMemory<byte> digest): ITpmCommandInput
+    private sealed class SignDigestWithContextInput(uint keyHandle, ReadOnlyMemory<byte> context, ReadOnlyMemory<byte> digest) : ITpmCommandInput
     {
         /// <summary>The <c>TPM2_SignDigest()</c> command code.</summary>
         public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_SignDigest;

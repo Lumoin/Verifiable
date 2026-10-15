@@ -128,7 +128,7 @@ public sealed record OAuthProtocolError(
     string ErrorCode,
     DecisionSupport Support,
     string? ErrorDescription = null,
-    Uri? ErrorUri = null): OAuthParseError(Support);
+    Uri? ErrorUri = null) : OAuthParseError(Support);
 
 
 /// <summary>
@@ -143,7 +143,7 @@ public sealed record OAuthProtocolError(
 /// </remarks>
 public sealed record OAuthMalformedResponse(
     string Body,
-    DecisionSupport Support): OAuthParseError(Support);
+    DecisionSupport Support) : OAuthParseError(Support);
 
 
 /// <summary>
@@ -159,7 +159,7 @@ public sealed record OAuthInvalidFieldValue(
     string FieldName,
     string ReceivedValue,
     string Reason,
-    DecisionSupport Support): OAuthParseError(Support);
+    DecisionSupport Support) : OAuthParseError(Support);
 
 
 /// <summary>
@@ -174,7 +174,7 @@ public sealed record OAuthInvalidFieldValue(
 /// <param name="Support">Guidance for the calling application.</param>
 public sealed record OAuthAuthorizationServerMetadataUnresolved(
     AuthorizationServerMetadataResolution Resolution,
-    DecisionSupport Support): OAuthParseError(Support);
+    DecisionSupport Support) : OAuthParseError(Support);
 
 
 /// <summary>
@@ -192,7 +192,7 @@ public sealed record OAuthAuthorizationServerMetadataUnresolved(
 public sealed record OAuthOutboundFetchPolicyDenied(
     Uri Endpoint,
     string DenyReason,
-    DecisionSupport Support): OAuthParseError(Support);
+    DecisionSupport Support) : OAuthParseError(Support);
 
 
 /// <summary>
@@ -209,4 +209,4 @@ public sealed record OAuthOutboundFetchPolicyDenied(
 /// <param name="Support">Guidance for the calling application.</param>
 public sealed record OAuthClientAssertionRefused(
     ClientAssertionCredentialRefusal Refusal,
-    DecisionSupport Support): OAuthParseError(Support);
+    DecisionSupport Support) : OAuthParseError(Support);

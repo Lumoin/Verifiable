@@ -68,7 +68,7 @@ namespace Verifiable.Cryptography;
 /// when no OTel listener is active.
 /// </param>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class Salt(IMemoryOwner<byte> sensitiveMemory, Tag tag, Activity? lifetime = null): SensitiveMemory(sensitiveMemory, tag, lifetime), IEquatable<Salt>
+public sealed class Salt(IMemoryOwner<byte> sensitiveMemory, Tag tag, Activity? lifetime = null) : SensitiveMemory(sensitiveMemory, tag, lifetime), IEquatable<Salt>
 {
     /// <summary>Gets the length of the salt in bytes.</summary>
     public int Length => MemoryOwner.Memory.Length;

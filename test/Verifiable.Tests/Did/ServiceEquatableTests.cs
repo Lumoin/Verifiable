@@ -12,7 +12,7 @@ namespace Verifiable.Tests.Did;
 internal sealed class ServiceEquatableTests
 {
     /// <summary>A <see cref="Service"/> subtype with no additional identity members.</summary>
-    private sealed class DerivedService: Service
+    private sealed class DerivedService : Service
     {
     }
 

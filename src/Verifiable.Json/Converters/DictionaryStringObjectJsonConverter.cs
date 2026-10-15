@@ -30,7 +30,7 @@ namespace Verifiable.Json.Converters
     /// on the enclosing options instance.
     /// </para>
     /// </remarks>
-    public sealed class DictionaryStringObjectJsonConverter: JsonConverter<Dictionary<string, object>>
+    public sealed class DictionaryStringObjectJsonConverter : JsonConverter<Dictionary<string, object>>
     {
         private IJsonTypeInfoResolver Resolver { get; }
 

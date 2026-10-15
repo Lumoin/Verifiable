@@ -9,7 +9,7 @@ namespace Verifiable.Json.Converters.Dcql;
 /// Converts a <see cref="CredentialQueryMeta"/> to and from JSON, handling
 /// the format-specific metadata properties from their snake_case JSON representation.
 /// </summary>
-public sealed class CredentialQueryMetaConverter: JsonConverter<CredentialQueryMeta>
+public sealed class CredentialQueryMetaConverter : JsonConverter<CredentialQueryMeta>
 {
     /// <inheritdoc/>
     [return: NotNull]

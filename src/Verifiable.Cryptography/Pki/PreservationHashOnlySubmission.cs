@@ -79,7 +79,7 @@ public sealed record PreservationGoalTreatment(
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
     Justification = "The hash function identifier is the object-identifier uniform resource name PreservationDigestMethod writes and reads as an exact character sequence; System.Uri normalises escaping and case, which would let two spellings of different object identifiers compare equal.")]
-public sealed class PreservationHashOnlySubmission: IDisposable
+public sealed class PreservationHashOnlySubmission : IDisposable
 {
     /// <summary>
     /// The identifier of the hash function the submitted values were computed with, in the object-identifier

@@ -11,4 +11,4 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// <param name="ComposedAt">The UTC instant at which the body was composed.</param>
 public sealed record ParBodyComposed(
     string EncodedBody,
-    DateTimeOffset ComposedAt): FlowInput;
+    DateTimeOffset ComposedAt) : FlowInput;

@@ -11,7 +11,7 @@ namespace Verifiable.Xml;
 /// (Second Edition)</see>: ordered <c>ds:CryptoBinary</c> fields, each decoded to its octets, with the
 /// section's optional-pair constraints on <c>(P,Q)</c> and <c>(Seed,PgenCounter)</c> enforced structurally.
 /// </summary>
-public readonly struct XmlDsaKeyValue: IEquatable<XmlDsaKeyValue>
+public readonly struct XmlDsaKeyValue : IEquatable<XmlDsaKeyValue>
 {
     /// <summary>The <c>DSAKeyValue</c> element's own index.</summary>
     public int ElementIndex { get; }
@@ -205,7 +205,7 @@ public readonly struct XmlDsaKeyValue: IEquatable<XmlDsaKeyValue>
 /// The <c>RSAKeyValue</c> shape of section 4.4.2.2: the ordered <c>Modulus</c> then <c>Exponent</c>
 /// <c>ds:CryptoBinary</c> fields, each decoded to its octets.
 /// </summary>
-public readonly struct XmlRsaKeyValue: IEquatable<XmlRsaKeyValue>
+public readonly struct XmlRsaKeyValue : IEquatable<XmlRsaKeyValue>
 {
     /// <summary>The <c>RSAKeyValue</c> element's own index.</summary>
     public int ElementIndex { get; }
@@ -324,7 +324,7 @@ public enum XmlKeyValueKind
 /// One <c>ds:KeyValue</c> element: its single <c>DSAKeyValue</c>, <c>RSAKeyValue</c> or foreign-namespace
 /// child, per section 4.4.2.
 /// </summary>
-public readonly struct XmlKeyValue: IEquatable<XmlKeyValue>
+public readonly struct XmlKeyValue : IEquatable<XmlKeyValue>
 {
     /// <summary>The <c>KeyValue</c> element's own index.</summary>
     public int ElementIndex { get; }
@@ -455,7 +455,7 @@ public readonly struct XmlKeyValue: IEquatable<XmlKeyValue>
 /// <c>Transforms</c> child, per section 4.4.3. The referenced key material is never fetched — the section
 /// 4.3.3.2 dereferencing model this element reuses is a caller concern.
 /// </summary>
-public readonly struct XmlRetrievalMethod: IEquatable<XmlRetrievalMethod>
+public readonly struct XmlRetrievalMethod : IEquatable<XmlRetrievalMethod>
 {
     /// <summary>The table the method's spans read from.</summary>
     internal XmlNodeTable Table { get; }
@@ -609,7 +609,7 @@ public enum XmlX509DataMemberKind
 /// <c>X509Certificate</c>'s DER bytes among them), an <c>X509SubjectName</c> (a span), or a foreign-namespace
 /// element.
 /// </summary>
-public readonly struct XmlX509DataMember: IEquatable<XmlX509DataMember>
+public readonly struct XmlX509DataMember : IEquatable<XmlX509DataMember>
 {
     /// <summary>The table the member's spans read from.</summary>
     internal XmlNodeTable Table { get; }
@@ -788,7 +788,7 @@ public readonly struct XmlX509DataMember: IEquatable<XmlX509DataMember>
 /// One <c>ds:PGPData</c> element: its optional <c>PGPKeyID</c> and <c>PGPKeyPacket</c> fields, each decoded
 /// to octets, per section 4.4.5 — at least one of the two is required.
 /// </summary>
-public readonly struct XmlPgpData: IEquatable<XmlPgpData>
+public readonly struct XmlPgpData : IEquatable<XmlPgpData>
 {
     /// <summary>The <c>PGPData</c> element's own index.</summary>
     public int ElementIndex { get; }
@@ -908,7 +908,7 @@ public readonly struct XmlPgpData: IEquatable<XmlPgpData>
 /// One <c>ds:SPKIData</c> element: its one-or-more <c>SPKISexp</c> fields, each decoded to octets, per
 /// section 4.4.6.
 /// </summary>
-public readonly struct XmlSpkiData: IEquatable<XmlSpkiData>
+public readonly struct XmlSpkiData : IEquatable<XmlSpkiData>
 {
     /// <summary>The <c>SPKIData</c> element's own index.</summary>
     public int ElementIndex { get; }
@@ -1029,7 +1029,7 @@ public enum XmlKeyInfoChildKind
 /// permits any number of any of them in any order ("multiple declarations within <c>KeyInfo</c> refer to
 /// the same key"), so nothing here enforces cardinality or order among children of different kinds.
 /// </summary>
-public readonly struct XmlKeyInfoChild: IEquatable<XmlKeyInfoChild>
+public readonly struct XmlKeyInfoChild : IEquatable<XmlKeyInfoChild>
 {
     /// <summary>The table the child's spans read from.</summary>
     internal XmlNodeTable Table { get; }
@@ -1255,7 +1255,7 @@ public readonly struct XmlKeyInfoChild: IEquatable<XmlKeyInfoChild>
 /// One <c>ds:KeyInfo</c> element: its optional <c>Id</c> attribute and its one-or-more children, per
 /// section 4.4.
 /// </summary>
-public readonly struct XmlKeyInfo: IEquatable<XmlKeyInfo>
+public readonly struct XmlKeyInfo : IEquatable<XmlKeyInfo>
 {
     /// <summary>The table the info's spans read from.</summary>
     internal XmlNodeTable Table { get; }

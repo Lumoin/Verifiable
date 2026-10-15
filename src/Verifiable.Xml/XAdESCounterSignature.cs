@@ -30,7 +30,7 @@ namespace Verifiable.Xml;
 /// their own.
 /// </para>
 /// </remarks>
-public sealed class XAdESCounterSignature: IDisposable
+public sealed class XAdESCounterSignature : IDisposable
 {
     /// <summary>The document the property was read from. Not owned; the caller disposes it separately.</summary>
     public XmlNodeTable Table { get; }

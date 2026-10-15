@@ -26,7 +26,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// it. Disposing this disposes the token (and therefore every disclosure and salt it owns).
 /// </para>
 /// </remarks>
-internal sealed class NestedSdJwtVcCredential: IDisposable
+internal sealed class NestedSdJwtVcCredential : IDisposable
 {
     /// <summary>The compact SD-JWT: the issuer-signed JWS followed by every disclosure, tilde-separated.</summary>
     public string CompactSdJwt { get; }

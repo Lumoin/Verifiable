@@ -14,7 +14,7 @@ namespace Verifiable.Xml;
 /// <see cref="XAdESOtherTimeStamp"/>'s <c>OtherTimeStampType</c> (clause 5.1.4.5) carries one-or-more of, each
 /// identifying one external data object's digest by reference (XA-5.1.4.5-4).
 /// </summary>
-public readonly struct XAdESReferenceInfo: IEquatable<XAdESReferenceInfo>
+public readonly struct XAdESReferenceInfo : IEquatable<XAdESReferenceInfo>
 {
     /// <summary>The table the info's spans read from.</summary>
     internal XmlNodeTable Table { get; }

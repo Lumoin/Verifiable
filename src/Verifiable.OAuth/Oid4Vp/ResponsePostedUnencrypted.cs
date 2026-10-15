@@ -25,4 +25,4 @@ namespace Verifiable.OAuth.Oid4Vp;
 [DebuggerDisplay("ResponsePostedUnencrypted ReceivedAt={ReceivedAt}")]
 public sealed record ResponsePostedUnencrypted(
     string VpTokenJson,
-    DateTimeOffset ReceivedAt): FlowInput;
+    DateTimeOffset ReceivedAt) : FlowInput;

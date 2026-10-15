@@ -32,7 +32,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class GetSessionAuditDigestInput: ITpmCommandInput, IDisposable
+public sealed class GetSessionAuditDigestInput : ITpmCommandInput, IDisposable
 {
     /// <summary>
     /// Whether <see cref="Dispose"/> has already released <see cref="QualifyingDataOwner"/>.

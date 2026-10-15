@@ -44,7 +44,7 @@ public enum XAdESObjectIdentifierQualifier
 /// recommendation about which mechanism an issuer chooses, not a shape one instance's wire content could ever
 /// violate.
 /// </remarks>
-public readonly struct XAdESObjectIdentifier: IEquatable<XAdESObjectIdentifier>
+public readonly struct XAdESObjectIdentifier : IEquatable<XAdESObjectIdentifier>
 {
     /// <summary>The table the identifier's spans read from.</summary>
     internal XmlNodeTable Table { get; }

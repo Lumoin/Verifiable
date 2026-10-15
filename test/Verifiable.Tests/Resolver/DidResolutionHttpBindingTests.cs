@@ -71,7 +71,7 @@ internal sealed class DidResolutionHttpBindingTests
     public async Task WebVhResolutionResultEnvelopeIsReturned()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         await using DidResolutionHttpHost host = await StartHostAsync(BuildWebVhResolver(LogRoutes(log))).ConfigureAwait(false);
 
@@ -98,7 +98,7 @@ internal sealed class DidResolutionHttpBindingTests
     public async Task WebVhBareAcceptReturnsOnlyDocument()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         await using DidResolutionHttpHost host = await StartHostAsync(BuildWebVhResolver(LogRoutes(log))).ConfigureAwait(false);
 
@@ -131,7 +131,7 @@ internal sealed class DidResolutionHttpBindingTests
     public async Task WebVhAcceptQZeroExcludesEnvelope()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         await using DidResolutionHttpHost host = await StartHostAsync(BuildWebVhResolver(LogRoutes(log))).ConfigureAwait(false);
 
@@ -158,7 +158,7 @@ internal sealed class DidResolutionHttpBindingTests
     public async Task WebVhUnsatisfiableAcceptIs406()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         await using DidResolutionHttpHost host = await StartHostAsync(BuildWebVhResolver(LogRoutes(log))).ConfigureAwait(false);
 
@@ -176,7 +176,7 @@ internal sealed class DidResolutionHttpBindingTests
     public async Task WebVhNonexistentIsNotFound()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         //The composed resolver knows the method but the log is served as a 404, so resolution fails NOT_FOUND.
         var routes = new Dictionary<string, (int, byte[]?, string?)>(StringComparer.Ordinal)
@@ -358,7 +358,7 @@ internal sealed class DidResolutionHttpBindingTests
     public async Task WebVhBareAcceptPathReturnsFileItself()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         byte[] served = Encoding.UTF8.GetBytes("{\"issuers\":[]}");
         var routes = LogRoutes(log);
@@ -569,7 +569,7 @@ internal sealed class DidResolutionHttpBindingTests
     //the DID-resolution skin behind a pinned ephemeral certificate. The same slim-builder bootstrap as
     //TestHostShell.StartHttpHostAsync, kept standalone here so the resolution binding test owns its
     //lifecycle.
-    private sealed class DidResolutionHttpHost: IAsyncDisposable
+    private sealed class DidResolutionHttpHost : IAsyncDisposable
     {
         private WebApplication App { get; }
         private X509Certificate2 Certificate { get; }

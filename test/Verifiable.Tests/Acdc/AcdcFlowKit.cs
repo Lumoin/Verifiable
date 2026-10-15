@@ -54,7 +54,7 @@ internal static class AcdcFlowKit
     /// <param name="Said">The event's SAID.</param>
     /// <param name="SignerKeyQb64">The signer's qualified public key.</param>
     /// <param name="Signature">The signature over the serialization.</param>
-    internal sealed record SignedEvent(IMemoryOwner<byte> Owner, int Length, string Said, string SignerKeyQb64, Signature Signature): IDisposable
+    internal sealed record SignedEvent(IMemoryOwner<byte> Owner, int Length, string Said, string SignerKeyQb64, Signature Signature) : IDisposable
     {
         /// <summary>The event's serialization bytes.</summary>
         public ReadOnlyMemory<byte> Serialization => Owner.Memory[..Length];
@@ -73,7 +73,7 @@ internal static class AcdcFlowKit
     /// <param name="Length">The number of serialization bytes.</param>
     /// <param name="Said">The credential's top-level SAID.</param>
     /// <param name="Issuer">The credential's Issuer AID.</param>
-    internal sealed record MintedAcdc(IMemoryOwner<byte> Owner, int Length, string Said, string Issuer): IDisposable
+    internal sealed record MintedAcdc(IMemoryOwner<byte> Owner, int Length, string Said, string Issuer) : IDisposable
     {
         /// <summary>The credential's serialization bytes.</summary>
         public ReadOnlyMemory<byte> Serialization => Owner.Memory[..Length];
@@ -121,7 +121,7 @@ internal static class AcdcFlowKit
     /// <param name="Route">The message's route (<c>r</c>): the exchange step it performs.</param>
     /// <param name="Sender">The message's sender AID (<c>i</c>).</param>
     /// <param name="Prior">The prior message's SAID (<c>p</c>) this message chains to, or empty when it initiates the exchange.</param>
-    internal sealed record ExchangeMessage(IMemoryOwner<byte> Owner, int Length, string Said, string Route, string Sender, string Prior): IDisposable
+    internal sealed record ExchangeMessage(IMemoryOwner<byte> Owner, int Length, string Said, string Route, string Sender, string Prior) : IDisposable
     {
         /// <summary>The message's serialization bytes.</summary>
         public ReadOnlyMemory<byte> Serialization => Owner.Memory[..Length];
@@ -135,7 +135,7 @@ internal static class AcdcFlowKit
     /// <param name="Owner">The pooled buffer holding the serialization.</param>
     /// <param name="Length">The number of serialization bytes.</param>
     /// <param name="Said">The registry event's SAID.</param>
-    internal sealed record RegistryEvent(IMemoryOwner<byte> Owner, int Length, string Said): IDisposable
+    internal sealed record RegistryEvent(IMemoryOwner<byte> Owner, int Length, string Said) : IDisposable
     {
         /// <summary>The registry event's serialization bytes.</summary>
         public ReadOnlyMemory<byte> Serialization => Owner.Memory[..Length];

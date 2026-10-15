@@ -27,7 +27,7 @@ namespace Verifiable.Apdu;
 /// </code>
 /// </remarks>
 [DebuggerDisplay("{InstructionCodeNames.GetName(this),nq}")]
-public readonly struct InstructionCode: IEquatable<InstructionCode>
+public readonly struct InstructionCode : IEquatable<InstructionCode>
 {
     /// <summary>Gets the raw byte value of this instruction code.</summary>
     public byte Code { get; }

@@ -487,7 +487,7 @@ internal sealed class OcspRevocationCheckerTests
         MintedCertificate Root,
         MintedCertificate Leaf,
         PkiCertificateMemory Certificate,
-        PkiCertificateMemory Issuer): IDisposable
+        PkiCertificateMemory Issuer) : IDisposable
     {
         /// <inheritdoc/>
         public void Dispose()
@@ -517,7 +517,7 @@ internal sealed class OcspRevocationCheckerTests
         PkiCertificateMemory IntermediateCarrier,
         PkiCertificateMemory RootCarrier,
         string IntermediateResponderUri,
-        string LeafResponderUri): IDisposable
+        string LeafResponderUri) : IDisposable
     {
         /// <inheritdoc/>
         public void Dispose()
@@ -539,7 +539,7 @@ internal sealed class OcspRevocationCheckerTests
 /// per-test state, per the codebase's no-closure-capture convention for callback seams. A missing map entry,
 /// or one mapped to <see langword="null"/>, simulates an unreachable responder.
 /// </summary>
-internal sealed class MapBackedOcspResponder: IDisposable
+internal sealed class MapBackedOcspResponder : IDisposable
 {
     /// <summary>The prepared responder-URI-to-response map; a <see langword="null"/> value simulates an unreachable responder.</summary>
     private IReadOnlyDictionary<string, PkiCertificateMemory?> ResponsesByUri { get; }

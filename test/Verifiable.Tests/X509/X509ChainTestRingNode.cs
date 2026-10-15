@@ -10,7 +10,7 @@ namespace Verifiable.Tests.X509;
 /// Federation side. Owns both <see cref="X509Certificate2"/> and the
 /// underlying <see cref="ECDsa"/>; disposal cascades.
 /// </summary>
-internal sealed class X509ChainTestRingNode: IDisposable
+internal sealed class X509ChainTestRingNode : IDisposable
 {
     /// <summary>The role this node plays in the chain.</summary>
     public X509ChainNodeRole Role { get; }

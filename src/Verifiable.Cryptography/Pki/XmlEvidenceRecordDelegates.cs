@@ -112,7 +112,7 @@ public enum XmlEvidenceRecordParseStatus
 /// owns nothing.
 /// </summary>
 [DebuggerDisplay("XmlEvidenceRecordParseResult: {Status}")]
-public sealed class XmlEvidenceRecordParseResult: IDisposable
+public sealed class XmlEvidenceRecordParseResult : IDisposable
 {
     /// <summary>The parse outcome; <see cref="XmlEvidenceRecordParseStatus.Valid"/> is the only success.</summary>
     public required XmlEvidenceRecordParseStatus Status { get; init; }
@@ -290,7 +290,7 @@ public enum XmlEvidenceRecordCanonicalizationStatus
 /// the caller disposes them. On failure it owns nothing.
 /// </summary>
 [DebuggerDisplay("XmlEvidenceRecordCanonicalizationResult: {Status}")]
-public sealed class XmlEvidenceRecordCanonicalizationResult: IDisposable
+public sealed class XmlEvidenceRecordCanonicalizationResult : IDisposable
 {
     /// <summary>The outcome; <see cref="XmlEvidenceRecordCanonicalizationStatus.Canonicalized"/> is the only success.</summary>
     public required XmlEvidenceRecordCanonicalizationStatus Status { get; init; }
@@ -440,7 +440,7 @@ public enum XmlEvidenceRecordWriteStatus
 /// caller disposes them. On failure it owns nothing.
 /// </summary>
 [DebuggerDisplay("XmlEvidenceRecordWriteResult: {Status}")]
-public sealed class XmlEvidenceRecordWriteResult: IDisposable
+public sealed class XmlEvidenceRecordWriteResult : IDisposable
 {
     /// <summary>Whether ownership of <see cref="Document"/> has been transferred out by <see cref="TakeDocument"/>.</summary>
     private bool taken;

@@ -17,7 +17,7 @@ namespace Verifiable.Core.Did.Methods.WebPlus;
 /// field). Method-polymorphic deserialization materializes a received <c>did:webplus</c> document as this type;
 /// the verifier validates it through <see cref="WebPlusDataModelValidation"/> over the received wire bytes.
 /// </remarks>
-public sealed class WebPlusDidDocument: DidDocument
+public sealed class WebPlusDidDocument : DidDocument
 {
     /// <summary>The <c>selfHash</c> field (an MBHash self-hash), or <see langword="null"/> when absent or not a string.</summary>
     public string? SelfHash { get; set; }

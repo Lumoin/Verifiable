@@ -47,7 +47,7 @@ namespace Verifiable.Core.Model.Common
     /// See <see href="https://www.w3.org/TR/json-ld11/#the-context">JSON-LD 1.1 §3.1 The Context</see>.
     /// </para>
     /// </remarks>
-    public sealed class Context: IEquatable<Context>
+    public sealed class Context : IEquatable<Context>
     {
         /// <summary>
         /// Controlled Identifiers v1.0 context URI.

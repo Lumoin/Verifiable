@@ -34,7 +34,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class Tpm2bMaxNvBuffer: IDisposable
+public sealed class Tpm2bMaxNvBuffer : IDisposable
 {
     /// <summary>
     /// This library's implementation bound for the NV buffer payload, in octets (Part 2, Table 97:

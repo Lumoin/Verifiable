@@ -111,7 +111,7 @@ public delegate ValueTask<TpmResult<TpmResponse>> TpmSubmitHandler(
 /// </remarks>
 /// <seealso cref="TpmRecorder"/>
 /// <seealso cref="TpmVirtualDevice"/>
-public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
+public sealed partial class TpmDevice : IDisposable, IObservable<TpmExchange>
 {
     /// <summary>
     /// The kernel resource manager device path. Preferred over <c>/dev/tpm0</c> because the
@@ -763,7 +763,7 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
     }
 
 
-    private sealed class Unsubscriber(TpmDevice device, IObserver<TpmExchange> observer): IDisposable
+    private sealed class Unsubscriber(TpmDevice device, IObserver<TpmExchange> observer) : IDisposable
     {
         public void Dispose() => device.Unsubscribe(observer);
     }

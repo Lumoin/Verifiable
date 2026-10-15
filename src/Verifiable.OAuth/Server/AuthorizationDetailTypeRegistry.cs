@@ -91,7 +91,7 @@ public sealed record AuthorizationDetailHandler
 /// <c>authorization_details_types_supported</c> (RFC 9396 §10).
 /// </remarks>
 [DebuggerDisplay("AuthorizationDetailTypeRegistry({Handlers.Count} types)")]
-public sealed class AuthorizationDetailTypeRegistry: WiringComponent
+public sealed class AuthorizationDetailTypeRegistry : WiringComponent
 {
     /// <summary>Handlers keyed by the RFC 9396 §2 type value, compared ordinally under §12.</summary>
     private Dictionary<string, AuthorizationDetailHandler> Handlers { get; set; } = new(StringComparer.Ordinal);

@@ -34,7 +34,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class TpmlHandle: ITpmWireType
+public sealed class TpmlHandle : ITpmWireType
 {
     private static TpmlHandle EmptyInstance { get; } = new(ImmutableArray<TpmHandle>.Empty);
 

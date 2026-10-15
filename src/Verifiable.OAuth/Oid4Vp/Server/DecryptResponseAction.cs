@@ -55,4 +55,4 @@ public sealed record DecryptResponseAction(
     TransactionNonce Nonce,
     IReadOnlyList<string> AllowedEncAlgorithms,
     IReadOnlyList<CredentialQuery> CredentialQueries,
-    IReadOnlyList<string>? TransactionData = null): OAuthAction;
+    IReadOnlyList<string>? TransactionData = null) : OAuthAction;

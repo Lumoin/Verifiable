@@ -356,7 +356,7 @@ public readonly record struct PreservationAsicExtensionCriticality(
 /// holds a preservation object — and disposing a payload disposes what it owns.
 /// </para>
 /// </remarks>
-public abstract class PreservationAsicExtensionPayload: IDisposable
+public abstract class PreservationAsicExtensionPayload : IDisposable
 {
     /// <summary>Restricts the cases to those declared in this assembly, making this a closed hierarchy.</summary>
     private protected PreservationAsicExtensionPayload()
@@ -407,7 +407,7 @@ public abstract class PreservationAsicExtensionPayload: IDisposable
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class PreservationContainerIdExtension: PreservationAsicExtensionPayload, IEquatable<PreservationContainerIdExtension>
+public sealed class PreservationContainerIdExtension : PreservationAsicExtensionPayload, IEquatable<PreservationContainerIdExtension>
 {
     /// <inheritdoc/>
     public override PreservationAsicExtensionKind Kind => PreservationAsicExtensionKind.ContainerId;
@@ -485,7 +485,7 @@ public sealed class PreservationContainerIdExtension: PreservationAsicExtensionP
 /// </para>
 /// </remarks>
 [DebuggerDisplay("PreservationPeriodExtension: {Period}")]
-public sealed class PreservationPeriodExtension: PreservationAsicExtensionPayload, IEquatable<PreservationPeriodExtension>
+public sealed class PreservationPeriodExtension : PreservationAsicExtensionPayload, IEquatable<PreservationPeriodExtension>
 {
     /// <inheritdoc/>
     public override PreservationAsicExtensionKind Kind => PreservationAsicExtensionKind.PreservationPeriod;
@@ -554,7 +554,7 @@ public sealed class PreservationPeriodExtension: PreservationAsicExtensionPayloa
 /// </para>
 /// </remarks>
 [DebuggerDisplay("PreservationSubmitterExtension: {Submitter}")]
-public sealed class PreservationSubmitterExtension: PreservationAsicExtensionPayload, IEquatable<PreservationSubmitterExtension>
+public sealed class PreservationSubmitterExtension : PreservationAsicExtensionPayload, IEquatable<PreservationSubmitterExtension>
 {
     /// <inheritdoc/>
     public override PreservationAsicExtensionKind Kind => PreservationAsicExtensionKind.PreservationSubmitter;
@@ -624,7 +624,7 @@ public sealed class PreservationSubmitterExtension: PreservationAsicExtensionPay
 [DebuggerDisplay("IsUpdatedVersionOfExtension: {Reference}")]
 [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
     Justification = "The element's schema type is anyURI and the value is carried and compared as the exact character sequence the producer wrote; System.Uri normalises case and escaping, which would make two references naming different containers compare equal. Nothing here is dereferenced.")]
-public sealed class PreservationIsUpdatedVersionOfExtension: PreservationAsicExtensionPayload, IEquatable<PreservationIsUpdatedVersionOfExtension>
+public sealed class PreservationIsUpdatedVersionOfExtension : PreservationAsicExtensionPayload, IEquatable<PreservationIsUpdatedVersionOfExtension>
 {
     /// <inheritdoc/>
     public override PreservationAsicExtensionKind Kind => PreservationAsicExtensionKind.IsUpdatedVersionOf;
@@ -702,7 +702,7 @@ public sealed class PreservationIsUpdatedVersionOfExtension: PreservationAsicExt
 [DebuggerDisplay("CanonicalizationMethodExtension: {Algorithm}")]
 [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
     Justification = "An algorithm identifier is compared as an exact character sequence against a registry; System.Uri normalises case and escaping, which would make two identifiers naming different algorithms compare equal.")]
-public sealed class PreservationCanonicalizationMethodExtension: PreservationAsicExtensionPayload, IEquatable<PreservationCanonicalizationMethodExtension>
+public sealed class PreservationCanonicalizationMethodExtension : PreservationAsicExtensionPayload, IEquatable<PreservationCanonicalizationMethodExtension>
 {
     /// <inheritdoc/>
     public override PreservationAsicExtensionKind Kind => PreservationAsicExtensionKind.CanonicalizationMethod;
@@ -769,7 +769,7 @@ public sealed class PreservationCanonicalizationMethodExtension: PreservationAsi
 /// <para><strong>Ownership.</strong> This payload owns <see cref="Report"/>; disposing it disposes the report.</para>
 /// </remarks>
 [DebuggerDisplay("ValidationReportExtension: {Report.Content.Length} octets")]
-public sealed class PreservationValidationReportExtension: PreservationAsicExtensionPayload
+public sealed class PreservationValidationReportExtension : PreservationAsicExtensionPayload
 {
     /// <inheritdoc/>
     public override PreservationAsicExtensionKind Kind => PreservationAsicExtensionKind.ValidationReport;
@@ -809,7 +809,7 @@ public sealed class PreservationValidationReportExtension: PreservationAsicExten
 [DebuggerDisplay("IsMetaDataOfExtension: {Reference}")]
 [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
     Justification = "The element's schema type is anyURI and the value is carried and compared as the exact character sequence the producer wrote; System.Uri normalises case and escaping, which would make two references naming different data objects compare equal. Nothing here is dereferenced.")]
-public sealed class PreservationIsMetaDataOfExtension: PreservationAsicExtensionPayload, IEquatable<PreservationIsMetaDataOfExtension>
+public sealed class PreservationIsMetaDataOfExtension : PreservationAsicExtensionPayload, IEquatable<PreservationIsMetaDataOfExtension>
 {
     /// <inheritdoc/>
     public override PreservationAsicExtensionKind Kind => PreservationAsicExtensionKind.IsMetaDataOf;

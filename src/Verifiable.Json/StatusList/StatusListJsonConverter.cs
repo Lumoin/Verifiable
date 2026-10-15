@@ -20,7 +20,7 @@ namespace Verifiable.Json.StatusList;
 /// }
 /// </code>
 /// </remarks>
-public sealed class StatusListJsonConverter: JsonConverter<Core.StatusLists.StatusList>
+public sealed class StatusListJsonConverter : JsonConverter<Core.StatusLists.StatusList>
 {
     private BaseMemoryPool Pool { get; }
 
@@ -161,7 +161,7 @@ public sealed class StatusListJsonConverter: JsonConverter<Core.StatusLists.Stat
 /// <summary>
 /// System.Text.Json converter for <see cref="StatusListReference"/> values.
 /// </summary>
-public sealed class StatusListReferenceJsonConverter: JsonConverter<StatusListReference>
+public sealed class StatusListReferenceJsonConverter : JsonConverter<StatusListReference>
 {
     /// <inheritdoc/>
     public override StatusListReference Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
@@ -249,7 +249,7 @@ public sealed class StatusListReferenceJsonConverter: JsonConverter<StatusListRe
 /// mechanism's name would silently change the issuer's statement.
 /// </para>
 /// </remarks>
-public sealed class StatusClaimJsonConverter: JsonConverter<StatusClaim>
+public sealed class StatusClaimJsonConverter : JsonConverter<StatusClaim>
 {
     /// <summary>The nested <c>status_list</c> value's own converter, per Section 6.2.</summary>
     private StatusListReferenceJsonConverter ReferenceConverter { get; } = new();
@@ -349,7 +349,7 @@ public sealed class StatusClaimJsonConverter: JsonConverter<StatusClaim>
 /// <summary>
 /// System.Text.Json converter for <see cref="StatusListAggregation"/> values.
 /// </summary>
-public sealed class StatusListAggregationJsonConverter: JsonConverter<StatusListAggregation>
+public sealed class StatusListAggregationJsonConverter : JsonConverter<StatusListAggregation>
 {
     /// <inheritdoc/>
     public override StatusListAggregation Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)

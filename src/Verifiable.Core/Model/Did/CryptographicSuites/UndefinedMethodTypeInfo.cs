@@ -7,7 +7,7 @@ namespace Verifiable.Core.Model.Did.CryptographicSuites
     /// registered <see cref="VerificationMethodTypeInfo"/>, so key material can still be carried without the
     /// resolver refusing the document outright.
     /// </summary>
-    public sealed class UndefinedMethodTypeInfo: VerificationMethodTypeInfo
+    public sealed class UndefinedMethodTypeInfo : VerificationMethodTypeInfo
     {
         private static string[] ContextsArray { get; } = ["Undefined"];
 

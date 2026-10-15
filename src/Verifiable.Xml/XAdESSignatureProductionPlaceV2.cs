@@ -23,7 +23,7 @@ namespace Verifiable.Xml;
 /// project-wide, the same V1→V2 pattern <see cref="XAdESSigningCertificateV2"/> and <see cref="XAdESSignerRoleV2"/>
 /// each follow for their own clauses.
 /// </remarks>
-public readonly struct XAdESSignatureProductionPlaceV2: IEquatable<XAdESSignatureProductionPlaceV2>
+public readonly struct XAdESSignatureProductionPlaceV2 : IEquatable<XAdESSignatureProductionPlaceV2>
 {
     /// <summary>The table the property's spans read from.</summary>
     internal XmlNodeTable Table { get; }

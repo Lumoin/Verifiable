@@ -99,7 +99,7 @@ namespace Verifiable.Tests.TestInfrastructure
     /// On other platforms, the test is marked as inconclusive.
     /// </summary>
     [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
-    internal sealed class RunOnlyOnPlatformTestMethodAttribute: TestMethodAttribute
+    internal sealed class RunOnlyOnPlatformTestMethodAttribute : TestMethodAttribute
     {
         /// <summary>
         /// Gets the array of platforms supported by the application.
@@ -166,7 +166,7 @@ namespace Verifiable.Tests.TestInfrastructure
     /// Useful for tests that require hardware or resources not available in CI.
     /// </summary>
     [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
-    internal sealed class SkipOnCiTestMethodAttribute: TestMethodAttribute
+    internal sealed class SkipOnCiTestMethodAttribute : TestMethodAttribute
     {
         /// <summary>
         /// Gets the reason associated with the current state or action.
@@ -252,7 +252,7 @@ namespace Verifiable.Tests.TestInfrastructure
     [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
     internal sealed class SkipOnMacOSTestMethodAttribute(
         [CallerFilePath] string callerFilePath = "",
-        [CallerLineNumber] int callerLineNumber = -1): TestMethodAttribute(callerFilePath, callerLineNumber)
+        [CallerLineNumber] int callerLineNumber = -1) : TestMethodAttribute(callerFilePath, callerLineNumber)
     {
         private const string DefaultReason = "This test is not supported on macOS.";
 
@@ -302,7 +302,7 @@ namespace Verifiable.Tests.TestInfrastructure
     /// The test is skipped if not on a supported platform OR if running in CI.
     /// </summary>
     [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
-    internal sealed class RunOnlyOnPlatformSkipOnCiTestMethodAttribute: TestMethodAttribute
+    internal sealed class RunOnlyOnPlatformSkipOnCiTestMethodAttribute : TestMethodAttribute
     {
         /// <summary>
         /// Gets the array of platforms supported by the application.
@@ -396,7 +396,7 @@ namespace Verifiable.Tests.TestInfrastructure
     /// Use with <see cref="TestConditions"/> methods.
     /// </summary>
     [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
-    internal sealed class IgnoreIfAttribute: Attribute, ITestDataSource
+    internal sealed class IgnoreIfAttribute : Attribute, ITestDataSource
     {
         /// <summary>
         /// Gets the condition function that determines whether the test should be ignored.

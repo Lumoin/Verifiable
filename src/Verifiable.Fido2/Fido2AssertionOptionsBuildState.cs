@@ -11,7 +11,7 @@ namespace Verifiable.Fido2;
 /// See <see cref="Fido2RegistrationOptionsBuildState"/>'s type-level remarks — the same shape and
 /// equality conventions apply here.
 /// </remarks>
-public readonly struct Fido2AssertionOptionsBuildState: IEquatable<Fido2AssertionOptionsBuildState>, IBuilderState
+public readonly struct Fido2AssertionOptionsBuildState : IEquatable<Fido2AssertionOptionsBuildState>, IBuilderState
 {
     /// <summary>The relying party identifier this assertion is scoped to. See <see cref="PublicKeyCredentialRequestOptions.RpId"/>.</summary>
     public required string RpId { get; init; }

@@ -15,7 +15,7 @@ namespace Verifiable.Tpm.Spec.Attributes;
 /// </para>
 /// </remarks>
 [Flags]
-public enum TpmaMemory: uint
+public enum TpmaMemory : uint
 {
     /// <summary>
     /// SHARED_RAM (bit 0): SET (1) indicates RAM used for authorization session contexts is shared with transient objects; CLEAR (0) indicates not shared.

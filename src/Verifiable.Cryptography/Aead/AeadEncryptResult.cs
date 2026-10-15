@@ -14,7 +14,7 @@ namespace Verifiable.Cryptography.Aead;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("AeadEncryptResult CiphertextLength={Ciphertext.Length}")]
-public sealed class AeadEncryptResult: IDisposable
+public sealed class AeadEncryptResult : IDisposable
 {
     private bool disposed;
 

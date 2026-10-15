@@ -35,7 +35,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <exception cref="ArgumentException"><paramref name="OperandB"/> is longer than <see cref="Tpm2bOperand.MaxSize"/>.</exception>
 [DebuggerDisplay("PolicyNvInput(Index=0x{NvIndex,h}, Session=0x{PolicySession,h}, {Operation})")]
 public readonly record struct PolicyNvInput(
-    uint AuthHandle, uint NvIndex, uint PolicySession, ReadOnlyMemory<byte> OperandB, ushort Offset, TpmEoConstants Operation): ITpmCommandInput
+    uint AuthHandle, uint NvIndex, uint PolicySession, ReadOnlyMemory<byte> OperandB, ushort Offset, TpmEoConstants Operation) : ITpmCommandInput
 {
     /// <summary>
     /// Gets the value the NV data is compared against, bounded at construction by

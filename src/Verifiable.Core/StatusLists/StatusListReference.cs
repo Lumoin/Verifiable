@@ -31,7 +31,7 @@ namespace Verifiable.Core.StatusLists;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("StatusListReference[idx={Index}, uri={Uri}]")]
-public readonly struct StatusListReference: IEquatable<StatusListReference>
+public readonly struct StatusListReference : IEquatable<StatusListReference>
 {
     /// <summary>
     /// Gets the zero-based index within the Status List.

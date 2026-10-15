@@ -28,7 +28,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class Tpm2bPrivateKeyRsa: SensitiveMemory, ITpmWireType
+public sealed class Tpm2bPrivateKeyRsa : SensitiveMemory, ITpmWireType
 {
     /// <summary>
     /// The largest prime factor a <c>TPM2B_PRIVATE_KEY_RSA</c> buffer may carry: <c>RSA_PRIVATE_SIZE</c>, half

@@ -231,7 +231,7 @@ public sealed class EArkEvidencePlacementContext
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class EArkEvidencePlacementResult: IDisposable
+public sealed class EArkEvidencePlacementResult : IDisposable
 {
     /// <summary>Gets the manifest file entry naming the artifact, with its recomputable digest. Owned by this instance until placed.</summary>
     public required MetsFile FileEntry { get; init; }

@@ -25,7 +25,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class TpmsSensitiveCreate: IDisposable
+public sealed class TpmsSensitiveCreate : IDisposable
 {
     private bool disposed;
 

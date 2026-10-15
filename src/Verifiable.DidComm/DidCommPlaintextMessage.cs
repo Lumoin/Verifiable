@@ -27,7 +27,7 @@ namespace Verifiable.DidComm;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class DidCommPlaintextMessage: SensitiveMemory, IEquatable<DidCommPlaintextMessage>
+public sealed class DidCommPlaintextMessage : SensitiveMemory, IEquatable<DidCommPlaintextMessage>
 {
     /// <summary>
     /// Initializes a new <see cref="DidCommPlaintextMessage"/> from owned wire bytes.

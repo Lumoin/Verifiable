@@ -90,6 +90,11 @@ internal sealed class CardSimulatorRsaTerminalAuthenticationTests
     }
 
 
+    /// <summary>
+    /// The chip accepts a wholly RSA chain - the CVCA it trusts, the Document Verifier and the terminal, each RSA-signed by its
+    /// RSA issuer - and an RSA EXTERNAL AUTHENTICATE signature, every certificate exceeding the short-Lc limit.
+    /// </summary>
+    /// <returns>A task completing once the chip's answer is judged.</returns>
     [TestMethod]
     public async Task AuthenticatesAFullRsaCertificateChain()
     {
@@ -103,11 +108,11 @@ internal sealed class CardSimulatorRsaTerminalAuthenticationTests
         //A wholly RSA chain: the CVCA the chip trusts, the Document Verifier, and the terminal are all RSA, so
         //the chip verifies each PSO:Verify Certificate through the RSA issuer path and the EXTERNAL AUTHENTICATE
         //through the RSA terminal path. Every certificate exceeds the short-Lc limit, exercising extended Lc.
-        using CardVerifiableCertificate trustAnchor = await CardVerifiableCertificateMinter.MintAsync(
+        using var trustAnchor = await CardVerifiableCertificateMinter.MintAsync(
             cvcaKey, cvcaKey, CvcaReference, CvcaReference, CardVerifiableCertificateMinter.CvcaRole, Effective, Expiration, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
-        using CardVerifiableCertificate documentVerifier = await CardVerifiableCertificateMinter.MintAsync(
+        using var documentVerifier = await CardVerifiableCertificateMinter.MintAsync(
             cvcaKey, documentVerifierKey, CvcaReference, DocumentVerifierReference, CardVerifiableCertificateMinter.DocumentVerifierRole, Effective, Expiration, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
-        using CardVerifiableCertificate terminal = await CardVerifiableCertificateMinter.MintAsync(
+        using var terminal = await CardVerifiableCertificateMinter.MintAsync(
             documentVerifierKey, terminalKey, DocumentVerifierReference, TerminalReference, CardVerifiableCertificateMinter.TerminalRole, Effective, Expiration, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
 
         bool accepted = await DriveTerminalAuthenticationAsync(trustAnchor, [documentVerifier, terminal], terminalKey.ExportRSAPrivateKey());
@@ -122,6 +127,9 @@ internal sealed class CardSimulatorRsaTerminalAuthenticationTests
     /// Terminal Authentication, signing the EXTERNAL AUTHENTICATE with <paramref name="signingKey"/>'s RSA
     /// private key. Returns whether the chip accepted it.
     /// </summary>
+    /// <param name="certificateKey">The RSA key the terminal certificate carries as its subject key.</param>
+    /// <param name="signingKey">The RSA key the terminal signs EXTERNAL AUTHENTICATE with.</param>
+    /// <returns>Whether the chip accepted the terminal's authentication.</returns>
     private async Task<bool> RunRsaTerminalAuthenticationAsync(RSA certificateKey, RSA signingKey)
     {
         //Minted with the framework ECDSA implementation: CardVerifiableCertificateMinter (an independent CVC
@@ -129,13 +137,13 @@ internal sealed class CardSimulatorRsaTerminalAuthenticationTests
         using ECDsa cvcaKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa documentVerifierKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
-        using CardVerifiableCertificate trustAnchor = await CardVerifiableCertificateMinter.MintAsync(
+        using var trustAnchor = await CardVerifiableCertificateMinter.MintAsync(
             cvcaKey, cvcaKey, CvcaReference, CvcaReference, CardVerifiableCertificateMinter.CvcaRole, includeDomainParameters: true, Effective, Expiration, inheritedCurve: null, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
         Tag certificateCurve = trustAnchor.PublicKey.EllipticCurvePoint!.Tag;
-        using CardVerifiableCertificate documentVerifier = await CardVerifiableCertificateMinter.MintAsync(
+        using var documentVerifier = await CardVerifiableCertificateMinter.MintAsync(
             cvcaKey, documentVerifierKey, CvcaReference, DocumentVerifierReference, CardVerifiableCertificateMinter.DocumentVerifierRole, includeDomainParameters: false, Effective, Expiration, certificateCurve, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
         //The terminal certificate carries an RSA subject key but is signed by the Document Verifier with ECDSA.
-        using CardVerifiableCertificate terminal = await CardVerifiableCertificateMinter.MintAsync(
+        using var terminal = await CardVerifiableCertificateMinter.MintAsync(
             documentVerifierKey, certificateKey, DocumentVerifierReference, TerminalReference, CardVerifiableCertificateMinter.TerminalRole, Effective, Expiration, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
 
         return await DriveTerminalAuthenticationAsync(trustAnchor, [documentVerifier, terminal], signingKey.ExportRSAPrivateKey());

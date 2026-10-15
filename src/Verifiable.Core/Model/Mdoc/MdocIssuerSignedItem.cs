@@ -39,7 +39,7 @@ namespace Verifiable.Core.Model.Mdoc;
 /// Verifiers hash these bytes verbatim against the MSO commitment.
 /// </para>
 /// </remarks>
-public sealed class MdocIssuerSignedItem: IDisposable
+public sealed class MdocIssuerSignedItem : IDisposable
 {
     private bool disposed;
 

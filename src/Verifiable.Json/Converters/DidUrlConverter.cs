@@ -20,7 +20,7 @@ namespace Verifiable.Json.Converters;
 /// collection alongside other DID-related converters.
 /// </para>
 /// </remarks>
-public sealed class DidUrlConverter: JsonConverter<DidUrl>
+public sealed class DidUrlConverter : JsonConverter<DidUrl>
 {
     /// <inheritdoc />
     public override DidUrl? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)

@@ -142,7 +142,7 @@ public enum TimestampTokenInfoStatus
 /// </para>
 /// </remarks>
 [DebuggerDisplay("TimestampTokenInfo: {Status}, generated {GenerationTime}")]
-public sealed class TimestampTokenInfo: IDisposable
+public sealed class TimestampTokenInfo : IDisposable
 {
     /// <summary>The pooled message-imprint carrier this instance owns, or <see langword="null"/> when the read failed.</summary>
     private DigestValue? Imprint { get; }

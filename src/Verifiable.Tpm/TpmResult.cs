@@ -49,14 +49,14 @@ namespace Verifiable.Tpm;
 /// <typeparam name="T">The type of the success value.</typeparam>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 [SuppressMessage("Design", "CA1000:Do not declare static members on generic types", Justification = "This design is intentional to provide type-specific static members.")]
-public readonly struct TpmResult<T>: IEquatable<TpmResult<T>>
+public readonly struct TpmResult<T> : IEquatable<TpmResult<T>>
 {
     private T? SuccessValue { get; }
     private TpmRcConstants TpmResponseCode { get; }
     private uint RawTransportErrorCode { get; }
     private ResultKind Kind { get; }
 
-    private enum ResultKind: byte
+    private enum ResultKind : byte
     {
         Success,
         TpmError,

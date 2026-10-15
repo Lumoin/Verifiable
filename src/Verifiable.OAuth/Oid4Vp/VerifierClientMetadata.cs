@@ -26,7 +26,7 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("VerifierClientMetadata ClientId={ClientId}")]
-public sealed class VerifierClientMetadata: IEquatable<VerifierClientMetadata>
+public sealed class VerifierClientMetadata : IEquatable<VerifierClientMetadata>
 {
     /// <summary>
     /// The verifier's client identifier. Matches the <c>client_id</c> in the

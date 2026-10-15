@@ -7,7 +7,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <remarks>
 /// See TPM 2.0 Library Part 3, clause 23.15, Table 169.
 /// </remarks>
-public sealed class PolicyDuplicationSelectResponse: ITpmWireType
+public sealed class PolicyDuplicationSelectResponse : ITpmWireType
 {
     /// <summary>
     /// The shared instance returned for a successful, parameterless response.

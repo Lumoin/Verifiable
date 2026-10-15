@@ -41,7 +41,7 @@ namespace Verifiable.Tpm.Spec.Attributes;
 /// </para>
 /// </remarks>
 [Flags]
-public enum TpmaModes: uint
+public enum TpmaModes : uint
 {
     /// <summary>
     /// FIPS_140_2:

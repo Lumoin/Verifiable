@@ -25,7 +25,7 @@ namespace Verifiable.Core.Model.Credentials;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("CredentialSubject(Id = {Id})")]
-public class CredentialSubject: IEquatable<CredentialSubject>
+public class CredentialSubject : IEquatable<CredentialSubject>
 {
     /// <summary>
     /// An optional identifier for the credential subject.

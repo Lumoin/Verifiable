@@ -14,7 +14,7 @@ namespace Verifiable.Tpm.Spec.Constants;
 /// </remarks>
 
 [SuppressMessage("Design", "CA1027:Mark enums with FlagsAttribute", Justification = "This is specified in the TPM 2.0 Library Specification.")]
-public enum TpmEccCurveConstants: ushort
+public enum TpmEccCurveConstants : ushort
 {
     /// <summary>
     /// (no comment text in extracted table)

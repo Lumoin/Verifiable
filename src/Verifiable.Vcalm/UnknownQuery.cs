@@ -14,7 +14,7 @@ namespace Verifiable.Vcalm;
 /// The raw entry JSON is preserved so a downstream extension handler can interpret it.
 /// </remarks>
 [DebuggerDisplay("UnknownQuery Type={Type} Group={Group}")]
-public sealed record UnknownQuery: VcalmPresentationQuery
+public sealed record UnknownQuery : VcalmPresentationQuery
 {
     /// <summary>The verbatim JSON of the unrecognized query entry, for a downstream extension handler.</summary>
     public required string RawJson { get; init; }

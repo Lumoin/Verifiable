@@ -23,7 +23,7 @@ namespace Verifiable.Core.Model.Mdoc;
 /// <see cref="DeviceAuthenticationBytes"/> carries on success.
 /// </para>
 /// </remarks>
-public sealed class MdocDeviceSignedVerificationContext: IDisposable
+public sealed class MdocDeviceSignedVerificationContext : IDisposable
 {
     private bool disposed;
 

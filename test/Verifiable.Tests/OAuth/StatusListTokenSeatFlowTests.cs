@@ -1588,7 +1588,7 @@ internal sealed class StatusListTokenSeatFlowTests
     /// <param name="inner">The resolver whose answers are recorded and re-stamped.</param>
     /// <param name="resolvedAtShift">How far back the reported resolution instant is moved.</param>
     private sealed class RecordedStatusListResolution(
-        ResolveVerifiedStatusListTokenDelegate inner, TimeSpan resolvedAtShift): IDisposable
+        ResolveVerifiedStatusListTokenDelegate inner, TimeSpan resolvedAtShift) : IDisposable
     {
         /// <summary>The tokens this decorator has seen, each owning a pooled Status List it must release.</summary>
         private List<StatusListToken> ResolvedTokens { get; } = [];

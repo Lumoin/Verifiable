@@ -24,7 +24,7 @@ namespace Verifiable.OAuth.Oid4Vp.Server.States;
 /// signing is dispatched by the endpoint handler, not auto-produced.
 /// </remarks>
 [DebuggerDisplay("VerifierWalletPostReceived FlowId={FlowId} WalletNonce={WalletNonce}")]
-public sealed record VerifierWalletPostReceivedState: FlowState
+public sealed record VerifierWalletPostReceivedState : FlowState
 {
     /// <summary>The PAR response carrying <c>request_uri</c> and <c>expires_in</c>.</summary>
     public required ParResponse Par { get; init; }

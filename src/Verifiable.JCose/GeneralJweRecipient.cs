@@ -20,7 +20,7 @@ namespace Verifiable.JCose;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("GeneralJweRecipient KeyId={KeyId}")]
-public sealed class GeneralJweRecipient: IDisposable
+public sealed class GeneralJweRecipient : IDisposable
 {
     private bool disposed;
 

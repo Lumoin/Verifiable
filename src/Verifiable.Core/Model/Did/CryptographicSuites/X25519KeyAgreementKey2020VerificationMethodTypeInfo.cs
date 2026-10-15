@@ -6,7 +6,7 @@ namespace Verifiable.Core.Model.Did.CryptographicSuites
     /// <see href="https://w3c-ccg.github.io/lds-jws2020/#x25519keyagreementkey2020">the
     /// Linked Data Cryptographic Suite Registry's x25519-2020 suite</see>.
     /// </summary>
-    public sealed class X25519KeyAgreementKey2020VerificationMethodTypeInfo: VerificationMethodTypeInfo
+    public sealed class X25519KeyAgreementKey2020VerificationMethodTypeInfo : VerificationMethodTypeInfo
     {
         /// <summary>
         /// The singleton <c>X25519KeyAgreementKey2020</c> type info, carrying the type name,

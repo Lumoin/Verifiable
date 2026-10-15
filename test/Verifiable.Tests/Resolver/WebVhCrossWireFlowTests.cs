@@ -213,7 +213,7 @@ internal sealed class WebVhCrossWireFlowTests
         //Mint a valid DID at node A's host but DO NOT publish its log: every path 404s over the socket.
         string domain = $"localhost%3A{port}";
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(nodeA.Certificate);
         DidResolver composed = BuildCrossWireResolver(httpClient, nodeA.BaseAddress);
@@ -482,7 +482,7 @@ internal sealed class WebVhCrossWireFlowTests
         string domain = $"localhost%3A{port}";
 
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         nodeA.Publish("/.well-known/did.jsonl", Encoding.UTF8.GetBytes(string.Join('\n', log.Lines)), "application/jsonl");
 
@@ -600,7 +600,7 @@ transport,
     //An in-process HTTPS listener bound to the loopback socket on an OS-assigned ephemeral port with a fresh
     //self-signed leaf certificate, serving published static content by path and recording every requested path
     //so the test can prove a hop crossed the wire. This is node A — the publisher half of the cross-wire flow.
-    private sealed class StaticContentHttpHost: IAsyncDisposable
+    private sealed class StaticContentHttpHost : IAsyncDisposable
     {
         private WebApplication App { get; }
 
@@ -665,7 +665,7 @@ transport,
 
     //The IHttpApplication skin serving GET {path} from a published-content map: 404 for an unknown path, 405 for
     //a non-GET method. Every requested path is recorded so the cross-wire assertions can prove the socket was hit.
-    private sealed class StaticContentApplication: IHttpApplication<HttpContext>
+    private sealed class StaticContentApplication : IHttpApplication<HttpContext>
     {
         private ConcurrentDictionary<string, (byte[] Body, string ContentType)> Content { get; } = new(StringComparer.Ordinal);
         private ConcurrentDictionary<string, int> RequestCounts { get; } = new(StringComparer.Ordinal);

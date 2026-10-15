@@ -19,7 +19,7 @@ namespace Verifiable.Xml;
 /// so <see cref="TryRead"/> does not itself check the wrapping element's local name — the caller has already
 /// recognized it, the posture every other multiply-instantiated auxiliary type in this leaf takes.
 /// </summary>
-public readonly struct XAdESTimeStamp: IEquatable<XAdESTimeStamp>
+public readonly struct XAdESTimeStamp : IEquatable<XAdESTimeStamp>
 {
     /// <summary>
     /// The maximum number of <c>Include</c> children <see cref="TryRead"/> accepts under one time-stamp

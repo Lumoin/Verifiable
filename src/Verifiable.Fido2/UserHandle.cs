@@ -45,7 +45,7 @@ namespace Verifiable.Fido2;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class UserHandle: SensitiveMemory, IEquatable<UserHandle>
+public sealed class UserHandle : SensitiveMemory, IEquatable<UserHandle>
 {
     /// <summary>
     /// The maximum length of a user handle in bytes.
@@ -133,7 +133,7 @@ public sealed class UserHandle: SensitiveMemory, IEquatable<UserHandle>
     /// An <see cref="IMemoryOwner{T}"/> over an always-empty <see cref="Memory{T}"/>, backing
     /// <see cref="UserHandle.EmptyMemoryOwner"/>.
     /// </summary>
-    private sealed class ZeroLengthMemoryOwner: IMemoryOwner<byte>
+    private sealed class ZeroLengthMemoryOwner : IMemoryOwner<byte>
     {
         /// <inheritdoc/>
         public Memory<byte> Memory => Memory<byte>.Empty;

@@ -23,7 +23,7 @@ namespace Verifiable.Tests.Fido2;
 /// <param name="AuthenticatorData">The raw <c>authData</c> wire bytes.</param>
 /// <param name="ClientDataJson">The raw, UTF-8-encoded <c>clientDataJSON</c> wire bytes.</param>
 /// <param name="Signature">The detached assertion signature, computed independently of the verifier under test.</param>
-internal sealed record MintedAssertion(byte[] AuthenticatorData, byte[] ClientDataJson, Signature Signature): IDisposable
+internal sealed record MintedAssertion(byte[] AuthenticatorData, byte[] ClientDataJson, Signature Signature) : IDisposable
 {
     /// <summary>Releases the pooled <see cref="Signature"/> carrier.</summary>
     public void Dispose() => Signature.Dispose();
@@ -61,7 +61,7 @@ internal sealed record MintedAssertion(byte[] AuthenticatorData, byte[] ClientDa
 /// so the minted wire value is the spec-conformant one <see cref="Fido2AssertionVerifier"/> expects.
 /// </para>
 /// </remarks>
-internal sealed class Fido2AssertionOracle: IDisposable
+internal sealed class Fido2AssertionOracle : IDisposable
 {
     /// <summary>The credential key pair minting and verification is exercised against.</summary>
     private PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> KeyMaterial { get; }

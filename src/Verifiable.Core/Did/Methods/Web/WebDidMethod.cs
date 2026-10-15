@@ -4,7 +4,7 @@ namespace Verifiable.Core.Did.Methods.Web;
 /// The <c>did:web</c> DID method: a DID resolved by fetching a DID document over HTTPS from the
 /// host and path the DID string encodes.
 /// </summary>
-public record WebDidMethod: GenericDidMethod
+public record WebDidMethod : GenericDidMethod
 {
     /// <summary>
     /// The prefix of <c>did:web</c> method, including suffix <c>':'</c>.

@@ -1464,7 +1464,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
     /// (nonce rolling, the command HMAC, response verification) delegates to the wrapped session unchanged, so
     /// the command HMAC is still computed for real, over whatever bytes actually went out.
     /// </summary>
-    private sealed class SkipEncryptionHmacSession: TpmSessionBase, IDisposable
+    private sealed class SkipEncryptionHmacSession : TpmSessionBase, IDisposable
     {
         /// <summary>The wrapped, production session every other concern delegates to.</summary>
         private TpmSession Inner { get; }

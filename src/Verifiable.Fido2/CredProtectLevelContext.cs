@@ -14,7 +14,7 @@ namespace Verifiable.Fido2;
 /// {1, 2, 3}; the CBOR <c>credProtect</c> extension processor only attaches this context on a registered
 /// level, reporting <see cref="ClaimOutcome.Failure"/> with no context for an out-of-set value.
 /// </remarks>
-public sealed record CredProtectLevelContext: ClaimContext
+public sealed record CredProtectLevelContext : ClaimContext
 {
     /// <summary>The decoded <c>credProtect</c> level the authenticator set for the created credential.</summary>
     public required int Level { get; init; }

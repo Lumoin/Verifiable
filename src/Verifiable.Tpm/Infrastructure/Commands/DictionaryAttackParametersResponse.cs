@@ -7,7 +7,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <remarks>
 /// See TPM 2.0 Library Part 3, clause 25.3 (Table 213).
 /// </remarks>
-public sealed class DictionaryAttackParametersResponse: ITpmWireType
+public sealed class DictionaryAttackParametersResponse : ITpmWireType
 {
     /// <summary>
     /// The shared instance returned for a successful, parameterless response.

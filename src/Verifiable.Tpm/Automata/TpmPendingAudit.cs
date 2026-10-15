@@ -53,7 +53,7 @@ public sealed record TpmPendingAudit(
     Tpm2bDigest CpHash,
     Tpm2bDigest CurrentDigest,
     bool IsFirstUseOrReset,
-    bool IsExclusiveAtEnd): IDisposable
+    bool IsExclusiveAtEnd) : IDisposable
 {
     /// <summary>
     /// Releases the OWNED <see cref="CpHash"/> carrier. <see cref="CurrentDigest"/> is BORROWED and is never

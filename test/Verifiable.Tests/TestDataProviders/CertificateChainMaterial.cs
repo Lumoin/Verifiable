@@ -24,7 +24,7 @@ internal sealed record CertificateChainMaterial(
     PkiCertificateMemory CaDerBytes,
     PkiCertificateMemory LeafDerBytes,
     PrivateKeyMemory LeafSigningKey,
-    string DnsName): IDisposable
+    string DnsName) : IDisposable
 {
     private bool disposed;
 

@@ -16,52 +16,52 @@ namespace Verifiable.Tests.Credentials;
 internal sealed class CredentialModelExactTypeEqualityTests
 {
     /// <summary>A <see cref="VerifiableCredential"/> subtype with no additional identity members.</summary>
-    private sealed class DerivedVerifiableCredential: VerifiableCredential
+    private sealed class DerivedVerifiableCredential : VerifiableCredential
     {
     }
 
     /// <summary>A <see cref="VerifiablePresentation"/> subtype with no additional identity members.</summary>
-    private sealed class DerivedVerifiablePresentation: VerifiablePresentation
+    private sealed class DerivedVerifiablePresentation : VerifiablePresentation
     {
     }
 
     /// <summary>A <see cref="CredentialSchema"/> subtype with no additional identity members.</summary>
-    private sealed class DerivedCredentialSchema: CredentialSchema
+    private sealed class DerivedCredentialSchema : CredentialSchema
     {
     }
 
     /// <summary>A <see cref="CredentialStatus"/> subtype with no additional identity members.</summary>
-    private sealed class DerivedCredentialStatus: CredentialStatus
+    private sealed class DerivedCredentialStatus : CredentialStatus
     {
     }
 
     /// <summary>A <see cref="CredentialSubject"/> subtype with no additional identity members.</summary>
-    private sealed class DerivedCredentialSubject: CredentialSubject
+    private sealed class DerivedCredentialSubject : CredentialSubject
     {
     }
 
     /// <summary>An <see cref="Evidence"/> subtype with no additional identity members.</summary>
-    private sealed class DerivedEvidence: Evidence
+    private sealed class DerivedEvidence : Evidence
     {
     }
 
     /// <summary>An <see cref="Issuer"/> subtype with no additional identity members.</summary>
-    private sealed class DerivedIssuer: Issuer
+    private sealed class DerivedIssuer : Issuer
     {
     }
 
     /// <summary>A <see cref="RefreshService"/> subtype with no additional identity members.</summary>
-    private sealed class DerivedRefreshService: RefreshService
+    private sealed class DerivedRefreshService : RefreshService
     {
     }
 
     /// <summary>A <see cref="RelatedResource"/> subtype with no additional identity members.</summary>
-    private sealed class DerivedRelatedResource: RelatedResource
+    private sealed class DerivedRelatedResource : RelatedResource
     {
     }
 
     /// <summary>A <see cref="TermsOfUse"/> subtype with no additional identity members.</summary>
-    private sealed class DerivedTermsOfUse: TermsOfUse
+    private sealed class DerivedTermsOfUse : TermsOfUse
     {
     }
 
@@ -71,7 +71,7 @@ internal sealed class CredentialModelExactTypeEqualityTests
     /// equality shape as the other thirteen types tested here and no DID-scoped equatable test class exists
     /// to host it instead.
     /// </summary>
-    private sealed class DerivedDidDocumentMetadata: DidDocumentMetadata
+    private sealed class DerivedDidDocumentMetadata : DidDocumentMetadata
     {
     }
 

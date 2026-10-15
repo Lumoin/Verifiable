@@ -29,7 +29,7 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{Value,nq}")]
-public readonly struct ClientIdPrefix: IEquatable<ClientIdPrefix>
+public readonly struct ClientIdPrefix : IEquatable<ClientIdPrefix>
 {
     /// <summary>
     /// The prefix value (without trailing colon). Canonical identity;

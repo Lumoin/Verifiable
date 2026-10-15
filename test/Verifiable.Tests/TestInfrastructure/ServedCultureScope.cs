@@ -19,7 +19,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// <see cref="TraceTreeCapture"/>'s remarks give for its own consumers (an <see cref="System.Diagnostics.ActivityListener"/>,
 /// also process-wide).
 /// </summary>
-internal sealed class ServedCultureScope: IDisposable
+internal sealed class ServedCultureScope : IDisposable
 {
     /// <summary>
     /// The default thread culture recorded before this scope changed it, <see langword="null"/> when

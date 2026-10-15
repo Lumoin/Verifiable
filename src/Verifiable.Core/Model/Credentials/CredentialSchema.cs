@@ -24,7 +24,7 @@ namespace Verifiable.Core.Model.Credentials;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("CredentialSchema(Id = {Id}, Type = {Type})")]
-public class CredentialSchema: IEquatable<CredentialSchema>
+public class CredentialSchema : IEquatable<CredentialSchema>
 {
     /// <summary>
     /// A URL identifying the schema.

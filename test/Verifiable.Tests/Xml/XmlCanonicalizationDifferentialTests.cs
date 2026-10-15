@@ -636,7 +636,7 @@ internal sealed class XmlCanonicalizationDifferentialTests
     /// An <see cref="XmlNodeList"/> over a materialized node list, the input shape the platform
     /// transforms take for document subsets.
     /// </summary>
-    private sealed class MaterializedNodeList: XmlNodeList
+    private sealed class MaterializedNodeList : XmlNodeList
     {
         private List<XmlNode> Nodes { get; }
 

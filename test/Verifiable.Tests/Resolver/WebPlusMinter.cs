@@ -325,7 +325,7 @@ internal static class WebPlusMinter
 /// equals the did:key method id) used both as an <c>updateRules</c> <c>key</c> value and as a proof <c>kid</c>,
 /// and the Ed25519 signing that produces each detached-JWS proof signature.
 /// </summary>
-internal sealed class WebPlusController: IDisposable
+internal sealed class WebPlusController : IDisposable
 {
     /// <summary>The controller's public key material, used to build the document's verification method (disposed with the controller).</summary>
     public PublicKeyMemory PublicKey { get; }

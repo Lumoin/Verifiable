@@ -55,7 +55,7 @@ namespace Verifiable.Core;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("TenantId Length={Value.Length}")]
-public readonly struct TenantId: IEquatable<TenantId>
+public readonly struct TenantId : IEquatable<TenantId>
 {
     /// <summary>
     /// The raw identifier value. Opaque to the library; meaningful to the

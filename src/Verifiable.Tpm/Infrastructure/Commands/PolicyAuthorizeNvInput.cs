@@ -27,7 +27,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <param name="NvIndex">The NV Index whose held authPolicy authorizes the session.</param>
 /// <param name="PolicySession">The policy session handle.</param>
 [DebuggerDisplay("PolicyAuthorizeNvInput(Index=0x{NvIndex,h}, Session=0x{PolicySession,h})")]
-public readonly record struct PolicyAuthorizeNvInput(uint AuthHandle, uint NvIndex, uint PolicySession): ITpmCommandInput
+public readonly record struct PolicyAuthorizeNvInput(uint AuthHandle, uint NvIndex, uint PolicySession) : ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_PolicyAuthorizeNV;

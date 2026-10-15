@@ -58,7 +58,7 @@ internal sealed class Fido2ObservedWorkloadEventTests
     /// shared stream increased and this observer's prior <c>List&lt;CryptoEvent&gt;</c> started failing
     /// intermittently under the 32-way parallel run).
     /// </summary>
-    private sealed class CollectingObserver(ConcurrentQueue<CryptoEvent> sink): IObserver<CryptoEvent>
+    private sealed class CollectingObserver(ConcurrentQueue<CryptoEvent> sink) : IObserver<CryptoEvent>
     {
         /// <summary>No-op: this test observer never unsubscribes via completion.</summary>
         public void OnCompleted()

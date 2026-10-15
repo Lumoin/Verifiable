@@ -65,7 +65,7 @@ namespace Verifiable.Cryptography.EventLogs;
 /// </remarks>
 /// <typeparam name="TOperation">The domain operation type carried by this entry.</typeparam>
 /// <typeparam name="TProof">The proof type carried by this entry.</typeparam>
-public sealed class LogEntry<TOperation, TProof>: IEquatable<LogEntry<TOperation, TProof>>
+public sealed class LogEntry<TOperation, TProof> : IEquatable<LogEntry<TOperation, TProof>>
 {
     /// <summary>
     /// Gets the zero-based position of this entry in the log.

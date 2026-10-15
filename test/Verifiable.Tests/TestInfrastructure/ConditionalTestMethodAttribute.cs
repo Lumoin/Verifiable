@@ -31,7 +31,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// </remarks>
 /// <seealso cref="BaseSkipAttribute"/>
 /// <seealso cref="ConditionalTestClassAttribute"/>
-internal sealed class ConditionalTestMethodAttribute: TestMethodAttribute
+internal sealed class ConditionalTestMethodAttribute : TestMethodAttribute
 {
     /// <summary>
     /// Gets the file path of the source file that contains the method that called this property.

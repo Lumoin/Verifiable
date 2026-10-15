@@ -11,7 +11,7 @@ namespace Verifiable.Vcalm;
 /// <see cref="Verifiable.Core.Dcql.DcqlEvaluator"/> rather than a VCALM-specific matcher.
 /// </summary>
 [DebuggerDisplay("DigitalCredentialQueryLanguage Group={Group}")]
-public sealed record DigitalCredentialQueryLanguageQuery: VcalmPresentationQuery
+public sealed record DigitalCredentialQueryLanguageQuery : VcalmPresentationQuery
 {
     /// <summary>The carried DCQL query — the <c>Verifiable.Core</c> model, mapped not reimplemented.</summary>
     public required DcqlQuery Query { get; init; }

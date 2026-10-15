@@ -16,7 +16,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class VerifyDigestSignatureResponse: IDisposable, ITpmWireType
+public sealed class VerifyDigestSignatureResponse : IDisposable, ITpmWireType
 {
     private bool Disposed { get; set; }
 

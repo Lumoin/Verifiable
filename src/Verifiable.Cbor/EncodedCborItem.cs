@@ -58,7 +58,7 @@ namespace Verifiable.Cbor;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("EncodedCborItem WireBytes={WireBytes.Length} InnerBytes={InnerBytes.Length}")]
-public readonly struct EncodedCborItem: IEquatable<EncodedCborItem>
+public readonly struct EncodedCborItem : IEquatable<EncodedCborItem>
 {
     /// <summary>The CBOR tag number for "Encoded CBOR data item" per RFC 8949 §3.4.5.1.</summary>
     public const ulong TagNumber = 24;

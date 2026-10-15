@@ -48,7 +48,7 @@ namespace Verifiable.Cryptography;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("SymmetricKeyMemory Purpose={Tag.Get<Verifiable.Cryptography.Context.Purpose>()}")]
-public class SymmetricKeyMemory: SensitiveMemory
+public class SymmetricKeyMemory : SensitiveMemory
 {
     /// <summary>
     /// Initialises a new <see cref="SymmetricKeyMemory"/> from owned memory.

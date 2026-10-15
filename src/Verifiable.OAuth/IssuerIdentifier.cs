@@ -10,7 +10,7 @@ namespace Verifiable.OAuth;
 /// RFC 9207 section 2.4's ordinal comparison of that spelling, without URI normalization.
 /// </summary>
 [DebuggerDisplay("IssuerIdentifier {OriginalString,nq}")]
-public sealed class IssuerIdentifier: IEquatable<IssuerIdentifier>
+public sealed class IssuerIdentifier : IEquatable<IssuerIdentifier>
 {
     /// <summary>The accepted issuer exactly as supplied to <see cref="Parse"/>.</summary>
     public string OriginalString { get; }

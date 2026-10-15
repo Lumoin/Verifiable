@@ -33,4 +33,4 @@ namespace Verifiable.JCose;
 /// state semantics.
 /// </param>
 [DebuggerDisplay("JweShape Header={Token.Header.Count}")]
-public sealed record JweShape(UnverifiedCompactJwe Token): JoseTokenShape;
+public sealed record JweShape(UnverifiedCompactJwe Token) : JoseTokenShape;

@@ -32,7 +32,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </list>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class SignSequenceStartInput: ITpmCommandInput, IDisposable
+public sealed class SignSequenceStartInput : ITpmCommandInput, IDisposable
 {
     private bool Disposed { get; set; }
 

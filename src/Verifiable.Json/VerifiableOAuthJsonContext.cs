@@ -35,6 +35,6 @@ namespace Verifiable.Json;
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
-internal partial class VerifiableOAuthJsonContext: JsonSerializerContext
+internal partial class VerifiableOAuthJsonContext : JsonSerializerContext
 {
 }

@@ -8,7 +8,7 @@ namespace Verifiable.OAuth.AuthCode.Server;
 /// <summary>
 /// Discriminated union base for inputs to the server-side Authorization Code flow PDA.
 /// </summary>
-public abstract record AuthCodeServerFlowInput: FlowInput;
+public abstract record AuthCodeServerFlowInput : FlowInput;
 
 
 /// <summary>
@@ -81,7 +81,7 @@ public sealed record ServerParValidated(
     string? AuthorizationDetails = null,
     string? ResponseMode = null,
     string? IssuerState = null,
-    string? Resource = null): AuthCodeServerFlowInput;
+    string? Resource = null) : AuthCodeServerFlowInput;
 
 
 /// <summary>
@@ -127,7 +127,7 @@ public sealed record ServerAuthorizeCompleted(
     DateTimeOffset CompletedAt,
     DateTimeOffset ExpiresAt,
     string? SessionId = null,
-    string? Acr = null): AuthCodeServerFlowInput;
+    string? Acr = null) : AuthCodeServerFlowInput;
 
 
 /// <summary>
@@ -163,7 +163,7 @@ public sealed record ServerAuthorizeCompleted(
 public sealed record ServerTokenExchangeSucceeded(
     IssuedTokenAuditSet IssuedTokens,
     DateTimeOffset IssuedAt,
-    DateTimeOffset ExpiresAt): AuthCodeServerFlowInput
+    DateTimeOffset ExpiresAt) : AuthCodeServerFlowInput
 {
     /// <summary>
     /// The RFC 7800 confirmation method established at the token endpoint,
@@ -232,7 +232,7 @@ public sealed record ServerTokenExchangeSucceeded(
 /// <param name="RevokedAt">The UTC instant the replay was detected and revocation ran.</param>
 [DebuggerDisplay("ServerAuthorizationCodeReplayDetected RevokedAt={RevokedAt}")]
 public sealed record ServerAuthorizationCodeReplayDetected(
-    DateTimeOffset RevokedAt): AuthCodeServerFlowInput;
+    DateTimeOffset RevokedAt) : AuthCodeServerFlowInput;
 
 
 /// <summary>
@@ -246,7 +246,7 @@ public sealed record ServerAuthorizationCodeReplayDetected(
 /// <param name="RevokedAt">The server UTC instant the valid reuse triggered revocation.</param>
 [DebuggerDisplay("ServerRefreshTokenReuseDetected RevokedAt={RevokedAt}")]
 public sealed record ServerRefreshTokenReuseDetected(
-    DateTimeOffset RevokedAt): AuthCodeServerFlowInput;
+    DateTimeOffset RevokedAt) : AuthCodeServerFlowInput;
 
 
 /// <summary>
@@ -260,7 +260,7 @@ public sealed record ServerRefreshTokenReuseDetected(
 public sealed record ServerFail(
     string ErrorCode,
     string Reason,
-    DateTimeOffset FailedAt): AuthCodeServerFlowInput;
+    DateTimeOffset FailedAt) : AuthCodeServerFlowInput;
 
 
 /// <summary>
@@ -350,4 +350,4 @@ public sealed record ServerDirectAuthorizeCompleted(
     string? AuthorizationDetails = null,
     string? ResponseMode = null,
     string? IssuerState = null,
-    string? Resource = null): AuthCodeServerFlowInput;
+    string? Resource = null) : AuthCodeServerFlowInput;

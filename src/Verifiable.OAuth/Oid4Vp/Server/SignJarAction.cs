@@ -77,4 +77,4 @@ public sealed record SignJarAction(
     JwtHeader? AdditionalHeaderClaims = null,
     string? ResponseMode = null,
     string? WalletEncryptionJwksJson = null,
-    string? JarEncryptionEnc = null): OAuthAction;
+    string? JarEncryptionEnc = null) : OAuthAction;

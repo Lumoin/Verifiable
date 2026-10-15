@@ -54,7 +54,7 @@ namespace Verifiable.Foundation.Automata;
 /// <typeparam name="TInput">The input type. Each call to <see cref="StepAsync"/> consumes one input.</typeparam>
 /// <typeparam name="TStackSymbol">The stack symbol type.</typeparam>
 [DebuggerDisplay("RunId={RunId}, State={CurrentState}, Depth={StackDepth}, Step={StepCount}, Prev={PreviousLabel}")]
-public sealed class PushdownAutomaton<TState, TInput, TStackSymbol>: IObservable<TraceEntry<TState, TInput>>
+public sealed class PushdownAutomaton<TState, TInput, TStackSymbol> : IObservable<TraceEntry<TState, TInput>>
 {
     private Stack<TStackSymbol> Stack { get; }
     private List<IObserver<TraceEntry<TState, TInput>>> Observers { get; } = [];
@@ -352,7 +352,7 @@ public sealed class PushdownAutomaton<TState, TInput, TStackSymbol>: IObservable
 
     private sealed class Unsubscriber(
         List<IObserver<TraceEntry<TState, TInput>>> observers,
-        IObserver<TraceEntry<TState, TInput>> observer): IDisposable
+        IObserver<TraceEntry<TState, TInput>> observer) : IDisposable
     {
         public void Dispose()
         {

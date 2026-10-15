@@ -24,7 +24,7 @@ namespace Verifiable.Core.Model.Credentials;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("RelatedResource(Id = {Id}, MediaType = {MediaType})")]
-public class RelatedResource: IEquatable<RelatedResource>
+public class RelatedResource : IEquatable<RelatedResource>
 {
     /// <summary>
     /// The URL of the related resource.

@@ -21,4 +21,4 @@ public sealed record CodeReceived(
     string Code,
     string State,
     string IssuerId,
-    DateTimeOffset ReceivedAt): FlowInput;
+    DateTimeOffset ReceivedAt) : FlowInput;

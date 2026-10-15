@@ -26,7 +26,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class TpmsSessionAuditInfo: ITpmWireType, IDisposable
+public sealed class TpmsSessionAuditInfo : ITpmWireType, IDisposable
 {
     /// <summary>
     /// Whether <see cref="Dispose"/> has already released <see cref="SessionDigest"/>.

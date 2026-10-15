@@ -42,7 +42,7 @@ namespace Verifiable.OAuth;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("OAuthFormEncodedFields Count={Fields.Count}")]
-public readonly struct OAuthFormEncodedFields: IEquatable<OAuthFormEncodedFields>
+public readonly struct OAuthFormEncodedFields : IEquatable<OAuthFormEncodedFields>
 {
     private IReadOnlyDictionary<string, string>? RawFields { get; }
 

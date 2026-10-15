@@ -100,7 +100,7 @@ public class CredentialSubjectInput
 ///     cancellationToken: cancellationToken);
 /// </code>
 /// </example>
-public sealed class CredentialBuilder: Builder<VerifiableCredential, CredentialBuildState, CredentialBuilder>
+public sealed class CredentialBuilder : Builder<VerifiableCredential, CredentialBuildState, CredentialBuilder>
 #pragma warning restore RS0030 // Do not use banned APIs
 {
     /// <summary>

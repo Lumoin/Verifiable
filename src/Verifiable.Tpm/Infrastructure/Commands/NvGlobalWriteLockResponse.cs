@@ -8,7 +8,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// See <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
 /// Specification</see>, Part 3, clause 31.12 (Table 264).
 /// </remarks>
-public sealed class NvGlobalWriteLockResponse: ITpmWireType
+public sealed class NvGlobalWriteLockResponse : ITpmWireType
 {
     /// <summary>
     /// The shared instance returned for a successful, parameterless response.

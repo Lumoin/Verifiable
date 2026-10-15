@@ -168,7 +168,7 @@ public sealed record EvidenceRecordHashTreeRenewalContext
 /// proved — clause 5.2 renews the protection, it does not invalidate what came before.
 /// </remarks>
 [DebuggerDisplay("EvidenceRecordRenewal({Kind}, {EvidenceRecords.Count} records, archived {ArchiveTime})")]
-public sealed class EvidenceRecordRenewal: IDisposable
+public sealed class EvidenceRecordRenewal : IDisposable
 {
     /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
     private bool disposed;

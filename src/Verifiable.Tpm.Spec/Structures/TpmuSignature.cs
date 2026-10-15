@@ -26,7 +26,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class TpmuSignature: IDisposable
+public sealed class TpmuSignature : IDisposable
 {
     private bool disposed;
 

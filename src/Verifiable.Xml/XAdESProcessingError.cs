@@ -26,7 +26,7 @@ namespace Verifiable.Xml;
 /// surfaces and can fail by delegating to any of them.
 /// </remarks>
 /// <seealso cref="XAdESProcessingFailure"/>
-public readonly struct XAdESProcessingError: IEquatable<XAdESProcessingError>
+public readonly struct XAdESProcessingError : IEquatable<XAdESProcessingError>
 {
     /// <summary>
     /// The reason the processing operation was refused.

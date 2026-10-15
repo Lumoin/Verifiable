@@ -71,7 +71,7 @@ public sealed record NvIndexState(
     ushort DataSize,
     TpmNvIndexData Data,
     TpmiAlgHash NameAlg,
-    Tpm2bDigest AuthPolicy): IDisposable
+    Tpm2bDigest AuthPolicy) : IDisposable
 {
     /// <summary>
     /// The size in octets of <c>TPMS_NV_PIN_COUNTER_PARAMETERS</c> (pinCount + pinLimit, each a

@@ -22,7 +22,7 @@ namespace Verifiable.Xml;
 /// child a <c>Transform</c> carries — an algorithm parameter this leaf does not recognize — is tolerated
 /// and left unmodeled, per the choice content model section 4.3.3.4 declares.
 /// </remarks>
-public readonly struct XmlTransform: IEquatable<XmlTransform>
+public readonly struct XmlTransform : IEquatable<XmlTransform>
 {
     /// <summary>The table the transform's spans read from.</summary>
     internal XmlNodeTable Table { get; }
@@ -262,7 +262,7 @@ public readonly struct XmlTransform: IEquatable<XmlTransform>
 /// <see href="https://www.w3.org/TR/2008/REC-xmldsig-core-20080610/">XML Signature Syntax and Processing
 /// (Second Edition)</see>.
 /// </summary>
-public readonly struct XmlReference: IEquatable<XmlReference>
+public readonly struct XmlReference : IEquatable<XmlReference>
 {
     /// <summary>The table the reference's spans read from.</summary>
     internal XmlNodeTable Table { get; }

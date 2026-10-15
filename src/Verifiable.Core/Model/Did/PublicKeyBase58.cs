@@ -15,7 +15,7 @@ namespace Verifiable.Core.Model.Did
     /// </remarks>
     [DebuggerDisplay("PublicKeyBase58({Key,nq})")]
     [Obsolete("Use PublicKeyMultibase instead, as it is more versatile and widely supported in DID contexts.")]
-    public class PublicKeyBase58: KeyFormat
+    public class PublicKeyBase58 : KeyFormat
     {
         /// <summary>
         /// The Base58-encoded public key string.

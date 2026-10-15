@@ -56,7 +56,7 @@ namespace Verifiable.Tests.TestDataProviders
     /// <summary>
     /// ES test data class.
     /// </summary>
-    internal class ESTestData: BaseJwtTestData
+    internal class ESTestData : BaseJwtTestData
     {
         public ESTestData(Dictionary<string, object> header, Dictionary<string, object> payload, string crossCheckJwt, string publicKeyKeyInPem, string privateKeyInPem) :
             base(header, payload, crossCheckJwt, publicKeyKeyInPem, privateKeyInPem)
@@ -71,14 +71,14 @@ namespace Verifiable.Tests.TestDataProviders
         Dictionary<string, object> payload,
         string crossCheckJwt,
         string publicKeyKeyInPem,
-        string privateKeyInPem): BaseJwtTestData(header, payload, crossCheckJwt, publicKeyKeyInPem, privateKeyInPem)
+        string privateKeyInPem) : BaseJwtTestData(header, payload, crossCheckJwt, publicKeyKeyInPem, privateKeyInPem)
     {
     }
 
     /// <summary>
     /// RSA PS test data class.
     /// </summary>
-    internal class RsaPSTestData: BaseJwtTestData
+    internal class RsaPSTestData : BaseJwtTestData
     {
         public RsaPSTestData(Dictionary<string, object> header, Dictionary<string, object> payload, string crossCheckJwt, string publicKeyKeyInPem, string privateKeyInPem)
             : base(header, payload, crossCheckJwt, publicKeyKeyInPem, privateKeyInPem) { }
@@ -87,7 +87,7 @@ namespace Verifiable.Tests.TestDataProviders
     /// <summary>
     /// HS test data class for symmetric keys.
     /// </summary>
-    internal class HsTestData: BaseJwtTestData
+    internal class HsTestData : BaseJwtTestData
     {
         public HsTestData(Dictionary<string, object> header, Dictionary<string, object> payload, string crossCheckJwt, string privateKey) :
             base(header, payload, crossCheckJwt, privateKey, privateKey)

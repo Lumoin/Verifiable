@@ -22,7 +22,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// caller-supplied buffers beyond the disposal it performs.
 /// </para>
 /// </remarks>
-public sealed class NvDefineSpaceInput: ITpmCommandInput, IDisposable
+public sealed class NvDefineSpaceInput : ITpmCommandInput, IDisposable
 {
     private bool disposed;
 

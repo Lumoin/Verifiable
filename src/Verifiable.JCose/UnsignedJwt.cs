@@ -31,7 +31,7 @@ namespace Verifiable.JCose;
 /// </code>
 /// </remarks>
 [DebuggerDisplay("UnsignedJwt(Header: {Header.Count} entries, Payload: {Payload.Count} claims)")]
-public sealed class UnsignedJwt: IEquatable<UnsignedJwt>
+public sealed class UnsignedJwt : IEquatable<UnsignedJwt>
 {
     /// <summary>
     /// The JWT protected header.

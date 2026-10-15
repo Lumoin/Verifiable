@@ -34,7 +34,7 @@ public enum OcspCertIdDigestAlgorithm
 /// request carries one, the nonce (RFC 9654 §2.1) it must be matched against on the response.
 /// </summary>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class OcspRequestContent: IDisposable
+public sealed class OcspRequestContent : IDisposable
 {
     /// <summary>Gets the DER-encoded <c>OCSPRequest</c>, tagged <see cref="PkiCertificateTags.OcspRequest"/>. Owned by this instance.</summary>
     public PkiCertificateMemory Request { get; }

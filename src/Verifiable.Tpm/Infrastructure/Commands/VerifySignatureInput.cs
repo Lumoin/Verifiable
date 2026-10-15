@@ -24,7 +24,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </list>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class VerifySignatureInput: ITpmCommandInput, IDisposable
+public sealed class VerifySignatureInput : ITpmCommandInput, IDisposable
 {
     private bool Disposed { get; set; }
 

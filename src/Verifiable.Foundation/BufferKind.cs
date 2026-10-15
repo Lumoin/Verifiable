@@ -93,7 +93,7 @@ namespace Verifiable.Foundation;
 /// <seealso cref="Tag"/>
 /// <seealso cref="BufferTags"/>
 [DebuggerDisplay("{BufferKindNames.GetName(this),nq}")]
-public readonly struct BufferKind: IEquatable<BufferKind>
+public readonly struct BufferKind : IEquatable<BufferKind>
 {
     /// <summary>
     /// Gets the numeric code for this buffer kind.

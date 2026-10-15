@@ -50,7 +50,7 @@ public enum PreservationContentForm
 /// <para><strong>Ownership.</strong> An instance owns <see cref="Content"/>; whoever holds the element disposes it.</para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class PreservationOpaqueElement: IDisposable
+public sealed class PreservationOpaqueElement : IDisposable
 {
     /// <summary>The octets the carrying syntax stated for this sub-component, exactly as they arrived.</summary>
     public required PooledMemory Content { get; init; }
@@ -103,7 +103,7 @@ public sealed class PreservationOpaqueElement: IDisposable
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
     Justification = "A format identifier is compared as an exact character sequence against the vocabulary of PreservationFormatWellKnown; System.Uri normalises case and escaping, which would make two identifiers naming different formats compare equal.")]
-public sealed class PreservationObject: IDisposable
+public sealed class PreservationObject : IDisposable
 {
     /// <summary>The octets of the value choice — the object itself.</summary>
     public required PooledMemory Content { get; init; }
@@ -156,7 +156,7 @@ public sealed class PreservationObject: IDisposable
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
     Justification = "A format identifier is compared as an exact character sequence against the vocabulary of PreservationFormatWellKnown; System.Uri normalises case and escaping, which would make two identifiers naming different formats compare equal.")]
-public sealed class PreservationEvidence: IDisposable
+public sealed class PreservationEvidence : IDisposable
 {
     /// <summary>The octets of the inherited value choice — the evidence itself.</summary>
     public required PooledMemory Content { get; init; }
@@ -455,7 +455,7 @@ public sealed record PreservationValidityPeriod
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
     Justification = "Profile, scheme and goal identifiers are compared as exact character sequences against the vocabulary of PreservationWellKnown; System.Uri normalises case, escaping and trailing separators, which would make two identifiers that name different profiles compare equal.")]
-public sealed class PreservationProfile: IDisposable
+public sealed class PreservationProfile : IDisposable
 {
     /// <summary>The mandatory <c>ProfileIdentifier</c> element — the identifier a request names this profile by.</summary>
     public required string ProfileIdentifier { get; init; }

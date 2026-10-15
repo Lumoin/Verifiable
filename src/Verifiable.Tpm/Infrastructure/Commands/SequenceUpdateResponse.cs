@@ -19,7 +19,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class SequenceUpdateResponse: ITpmWireType
+public sealed class SequenceUpdateResponse : ITpmWireType
 {
     /// <summary>
     /// Gets the singleton instance.

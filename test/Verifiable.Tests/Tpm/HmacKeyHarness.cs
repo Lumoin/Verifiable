@@ -302,7 +302,7 @@ internal static class HmacKeyHarness
     /// area, both outliving the Create/Load responses that produced them. The caller disposes this to release the
     /// Name and, when present, the public area.
     /// </summary>
-    internal sealed class LoadedHmacKey: IDisposable
+    internal sealed class LoadedHmacKey : IDisposable
     {
         /// <summary>Whether the Name and public-area clones this instance owns have already been released.</summary>
         private bool isDisposed;
@@ -880,7 +880,7 @@ internal static class HmacKeyHarness
     /// <param name="userAuth">The authorization value marshaled into <c>inSensitive</c>.</param>
     /// <param name="data">The sensitive data marshaled into <c>inSensitive</c>, unbounded.</param>
     /// <param name="template">The public template — borrowed; the caller owns and disposes it.</param>
-    internal sealed class RawSensitiveCreateInput(uint parentHandle, ReadOnlyMemory<byte> userAuth, ReadOnlyMemory<byte> data, Tpm2bPublic template): ITpmCommandInput
+    internal sealed class RawSensitiveCreateInput(uint parentHandle, ReadOnlyMemory<byte> userAuth, ReadOnlyMemory<byte> data, Tpm2bPublic template) : ITpmCommandInput
     {
         /// <summary>The <c>TPM2_Create()</c> command code.</summary>
         public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_Create;

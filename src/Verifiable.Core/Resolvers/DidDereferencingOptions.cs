@@ -11,7 +11,7 @@ namespace Verifiable.Core.Resolvers;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("Accept={Accept,nq} VerificationRelationship={VerificationRelationship,nq}")]
-public sealed class DidDereferencingOptions: IEquatable<DidDereferencingOptions>
+public sealed class DidDereferencingOptions : IEquatable<DidDereferencingOptions>
 {
     /// <summary>
     /// Empty options instance. Passing this is equivalent to passing no options.

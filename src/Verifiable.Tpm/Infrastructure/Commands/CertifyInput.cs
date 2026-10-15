@@ -29,7 +29,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class CertifyInput: ITpmCommandInput, IDisposable
+public sealed class CertifyInput : ITpmCommandInput, IDisposable
 {
     private bool Disposed { get; set; }
 

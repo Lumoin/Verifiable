@@ -36,7 +36,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </list>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class PolicyTicketInput: ITpmCommandInput, IDisposable
+public sealed class PolicyTicketInput : ITpmCommandInput, IDisposable
 {
     private bool disposed;
 

@@ -31,7 +31,7 @@ namespace Verifiable.OAuth.AuthCode;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("AuthCodeRequestObject ClientId={ClientId} ResponseType={ResponseType}")]
-public sealed class AuthCodeRequestObject: IEquatable<AuthCodeRequestObject>
+public sealed class AuthCodeRequestObject : IEquatable<AuthCodeRequestObject>
 {
     /// <summary>
     /// The OAuth client identifier. REQUIRED per RFC 9101 §4.

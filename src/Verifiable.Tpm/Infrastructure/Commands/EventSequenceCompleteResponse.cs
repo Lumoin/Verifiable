@@ -12,7 +12,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// response and released by <see cref="Dispose"/>.
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class EventSequenceCompleteResponse: IDisposable, ITpmWireType
+public sealed class EventSequenceCompleteResponse : IDisposable, ITpmWireType
 {
     /// <summary>Whether this instance has been disposed.</summary>
     private bool Disposed { get; set; }

@@ -63,7 +63,7 @@ namespace Verifiable.Core.Model.Did;
 /// </list>
 /// </remarks>
 [DebuggerDisplay("AssertionMethod(Id = {Id}, IsEmbedded = {IsEmbeddedVerification})")]
-public sealed class AssertionMethod: VerificationMethodReference
+public sealed class AssertionMethod : VerificationMethodReference
 {
     /// <summary>
     /// The verification purpose string as defined in W3C specifications.

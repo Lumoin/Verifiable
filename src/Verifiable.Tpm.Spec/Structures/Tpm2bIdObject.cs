@@ -27,7 +27,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class Tpm2bIdObject: IDisposable
+public sealed class Tpm2bIdObject : IDisposable
 {
     /// <summary>
     /// Maximum size of the credential blob: a TPMS_ID_OBJECT is two TPM2B_DIGEST values (an integrity HMAC and

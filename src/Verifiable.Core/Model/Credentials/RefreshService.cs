@@ -25,7 +25,7 @@ namespace Verifiable.Core.Model.Credentials;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("RefreshService(Id = {Id}, Type = {Type})")]
-public class RefreshService: IEquatable<RefreshService>
+public class RefreshService : IEquatable<RefreshService>
 {
     /// <summary>
     /// The URL of the refresh service endpoint.

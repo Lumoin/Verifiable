@@ -11,7 +11,7 @@ namespace Verifiable.Xml;
 /// reads what it recognizes" shape <see cref="XmlSignatureObject.ContentNodeIndices"/> uses, appropriate to
 /// this element's own <c>##other</c> extension-point content model.
 /// </summary>
-public readonly struct XmlSignatureProperty: IEquatable<XmlSignatureProperty>
+public readonly struct XmlSignatureProperty : IEquatable<XmlSignatureProperty>
 {
     /// <summary>The table the property's spans read from.</summary>
     internal XmlNodeTable Table { get; }
@@ -110,7 +110,7 @@ public readonly struct XmlSignatureProperty: IEquatable<XmlSignatureProperty>
 /// One <c>ds:SignatureProperties</c> element: its optional <c>Id</c> attribute and its one-or-more
 /// <c>SignatureProperty</c> children, per section 5.2.
 /// </summary>
-public readonly struct XmlSignatureProperties: IEquatable<XmlSignatureProperties>
+public readonly struct XmlSignatureProperties : IEquatable<XmlSignatureProperties>
 {
     /// <summary>The table the properties' spans read from.</summary>
     internal XmlNodeTable Table { get; }

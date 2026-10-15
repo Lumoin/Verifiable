@@ -16,4 +16,4 @@ public sealed record JarVerified(
     IReadOnlyDictionary<string, object> Claims,
     DateTimeOffset Iat,
     DateTimeOffset Nbf,
-    DateTimeOffset Exp): JarVerificationResult;
+    DateTimeOffset Exp) : JarVerificationResult;

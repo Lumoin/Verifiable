@@ -15,7 +15,7 @@ namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 /// was called from fails outright, never with a silently non-advanced or unminted counter.
 /// </remarks>
 [SuppressMessage("Design", "CA1515:Consider making public types internal", Justification = "Staged composition-edge code: public by design so the boundary is already the future package's API boundary, per the promotability rules.")]
-public sealed class TpmNvSignatureCounterCustodyException: Exception
+public sealed class TpmNvSignatureCounterCustodyException : Exception
 {
     /// <summary>
     /// Initializes a new instance with no message.

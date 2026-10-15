@@ -23,7 +23,7 @@ namespace Verifiable.OAuth.Oid4Vp;
 public sealed record VerificationSucceeded(
     IReadOnlyDictionary<CredentialQueryId, VpCredentialClaims> Credentials,
     DateTimeOffset VerifiedAt,
-    Uri? RedirectUri = null): FlowInput
+    Uri? RedirectUri = null) : FlowInput
 {
     /// <summary>
     /// The IETF Token Status List outcomes for the presented credentials, keyed by DCQL credential

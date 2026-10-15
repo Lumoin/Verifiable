@@ -38,19 +38,19 @@ public abstract class StackAction<TStackSymbol>
     public static StackAction<TStackSymbol> Replace(TStackSymbol symbol) => new ReplaceAction(symbol);
 
     [DebuggerDisplay("None")]
-    private sealed class NoneAction: StackAction<TStackSymbol> { }
+    private sealed class NoneAction : StackAction<TStackSymbol> { }
 
     [DebuggerDisplay("Push({Symbol})")]
-    private sealed class PushAction(TStackSymbol symbol): StackAction<TStackSymbol>
+    private sealed class PushAction(TStackSymbol symbol) : StackAction<TStackSymbol>
     {
         public TStackSymbol Symbol { get; } = symbol;
     }
 
     [DebuggerDisplay("Pop")]
-    private sealed class PopAction: StackAction<TStackSymbol> { }
+    private sealed class PopAction : StackAction<TStackSymbol> { }
 
     [DebuggerDisplay("Replace({Symbol})")]
-    private sealed class ReplaceAction(TStackSymbol symbol): StackAction<TStackSymbol>
+    private sealed class ReplaceAction(TStackSymbol symbol) : StackAction<TStackSymbol>
     {
         public TStackSymbol Symbol { get; } = symbol;
     }

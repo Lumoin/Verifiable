@@ -37,7 +37,7 @@ namespace Verifiable.Server;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("EndpointBuilderSet Count={Count}")]
-public sealed class EndpointBuilderSet: IReadOnlyList<EndpointBuilderDelegate>
+public sealed class EndpointBuilderSet : IReadOnlyList<EndpointBuilderDelegate>
 {
     /// <summary>The ordered snapshot copied by the constructor so caller array edits cannot change membership.</summary>
     private EndpointBuilderDelegate[] Builders { get; }

@@ -26,7 +26,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("DataIntegrityProof(Cryptosuite = {Cryptosuite?.CryptosuiteName}, Purpose = {ProofPurpose})")]
-public sealed class DataIntegrityProof: IEquatable<DataIntegrityProof>
+public sealed class DataIntegrityProof : IEquatable<DataIntegrityProof>
 {
     /// <summary>
     /// The proof type identifier value for Data Integrity proofs.

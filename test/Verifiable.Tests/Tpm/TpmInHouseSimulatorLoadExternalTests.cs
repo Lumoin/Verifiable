@@ -1581,7 +1581,7 @@ internal sealed class TpmInHouseSimulatorLoadExternalTests
     }
 
     /// <summary>A P-256 key pair minted by the framework, its coordinates and scalar padded to the field width.</summary>
-    private sealed class EccKeyMaterial: IDisposable
+    private sealed class EccKeyMaterial : IDisposable
     {
         /// <summary>Gets the framework key, the off-TPM signing and verifying oracle.</summary>
         public ECDsa Key { get; }
@@ -1619,7 +1619,7 @@ internal sealed class TpmInHouseSimulatorLoadExternalTests
     }
 
     /// <summary>An RSA-2048 key pair minted by the framework, its modulus and first prime exported.</summary>
-    private sealed class RsaKeyMaterial: IDisposable
+    private sealed class RsaKeyMaterial : IDisposable
     {
         /// <summary>Gets the framework key, the off-TPM signing and verifying oracle.</summary>
         public RSA Key { get; }

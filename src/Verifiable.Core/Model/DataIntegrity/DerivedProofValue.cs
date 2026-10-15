@@ -15,7 +15,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// VC Data Integrity ECDSA Cryptosuites: parseDerivedProofValue</see>.
 /// </para>
 /// </remarks>
-public sealed class DerivedProofValue: IDisposable
+public sealed class DerivedProofValue : IDisposable
 {
     /// <summary>
     /// Gets the issuer's base signature.

@@ -16,7 +16,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </list>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class GetSessionAuditDigestResponse: IDisposable, ITpmWireType
+public sealed class GetSessionAuditDigestResponse : IDisposable, ITpmWireType
 {
     /// <summary>
     /// Whether <see cref="Dispose"/> has already released <see cref="AuditInfo"/> and <see cref="Signature"/>.

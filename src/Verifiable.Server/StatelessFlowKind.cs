@@ -26,7 +26,7 @@ namespace Verifiable.Server;
 /// <see cref="Instance"/>.
 /// </para>
 /// </remarks>
-public sealed class StatelessFlowKind: FlowKind
+public sealed class StatelessFlowKind : FlowKind
 {
     /// <summary>The singleton instance.</summary>
     public static StatelessFlowKind Instance { get; } = new();

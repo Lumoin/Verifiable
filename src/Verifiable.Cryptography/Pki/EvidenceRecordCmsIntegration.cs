@@ -122,7 +122,7 @@ public enum EvidenceRecordCmsVerificationStatus
 /// What a verifier concluded about one Evidence Record a CMS object carries.
 /// </summary>
 [DebuggerDisplay("EvidenceRecordCmsRecordVerification({Status}, position {ChronologicalPosition}, over {ProvedViewEvidenceRecordCount} records)")]
-public sealed class EvidenceRecordCmsRecordVerification: IDisposable
+public sealed class EvidenceRecordCmsRecordVerification : IDisposable
 {
     /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
     private bool disposed;
@@ -203,7 +203,7 @@ public sealed class EvidenceRecordCmsRecordVerification: IDisposable
 /// What a verifier concluded about every Evidence Record a CMS object carries.
 /// </summary>
 [DebuggerDisplay("EvidenceRecordCmsVerification({Status}, {EvidenceRecords.Count} records)")]
-public sealed class EvidenceRecordCmsVerification: IDisposable
+public sealed class EvidenceRecordCmsVerification : IDisposable
 {
     /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
     private bool disposed;

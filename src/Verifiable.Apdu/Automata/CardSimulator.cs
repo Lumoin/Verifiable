@@ -51,7 +51,7 @@ namespace Verifiable.Apdu.Automata;
 /// <seealso cref="VirtualCard"/>
 /// <seealso cref="ApduDevice"/>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, CardSimulatorInput>>, IDisposable
+public sealed class CardSimulator : IObservable<TraceEntry<CardSimulatorState, CardSimulatorInput>>, IDisposable
 {
     /// <summary>The SELECT P1 value selecting an elementary file by its file identifier (ISO/IEC 7816-4).</summary>
     private const byte SelectByFileIdentifier = 0x02;

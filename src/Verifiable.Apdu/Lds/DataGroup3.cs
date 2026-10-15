@@ -16,7 +16,7 @@ namespace Verifiable.Apdu.Lds;
 /// concern.
 /// </para>
 /// </remarks>
-public sealed class DataGroup3: IDisposable
+public sealed class DataGroup3 : IDisposable
 {
     /// <summary>The eMRTD elementary file identifier of EF.DG3.</summary>
     public const ushort FileIdentifier = 0x0103;

@@ -754,7 +754,7 @@ internal sealed class CAdESCountersignatureTests
     /// its own distinctly named self-signed certificate, plus a Root CA and Time-Stamping Authority for the legacy
     /// archive-time-stamp fixture the lockdown test needs.
     /// </summary>
-    internal sealed class CountersignatureScenario: IDisposable
+    internal sealed class CountersignatureScenario : IDisposable
     {
         /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
         private bool disposed;

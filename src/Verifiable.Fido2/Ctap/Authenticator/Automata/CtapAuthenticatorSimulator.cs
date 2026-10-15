@@ -104,7 +104,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthenticatorState, CtapAuthenticatorInput>>, IDisposable
+public sealed class CtapAuthenticatorSimulator : IObservable<TraceEntry<CtapAuthenticatorState, CtapAuthenticatorInput>>, IDisposable
 {
     /// <summary>The length in bytes of an AAGUID, drawn from the entropy provider at construction.</summary>
     private const int AaguidLength = 16;
@@ -2708,7 +2708,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
     /// rented (possibly over-allocated) buffer, exposing only the requested length while still
     /// disposing the whole underlying rental.
     /// </summary>
-    private sealed class SlicedMemoryOwner: IMemoryOwner<byte>
+    private sealed class SlicedMemoryOwner : IMemoryOwner<byte>
     {
         /// <summary>The wrapped pool rental, disposed in full by <see cref="Dispose"/> regardless of the exposed <see cref="Memory"/> length.</summary>
         private IMemoryOwner<byte> Inner { get; }

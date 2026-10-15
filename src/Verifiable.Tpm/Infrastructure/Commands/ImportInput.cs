@@ -31,7 +31,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class ImportInput: ITpmCommandInput, IDisposable
+public sealed class ImportInput : ITpmCommandInput, IDisposable
 {
     private bool Disposed { get; set; }
 

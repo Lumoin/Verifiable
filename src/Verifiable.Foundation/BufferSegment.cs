@@ -26,7 +26,7 @@ namespace Verifiable.Foundation;
 /// //Pass the stitched sequence to any span/sequence consumer (hashing, parsing, ...).
 /// </code>
 /// </remarks>
-public sealed class BufferSegment: ReadOnlySequenceSegment<byte>
+public sealed class BufferSegment : ReadOnlySequenceSegment<byte>
 {
     /// <summary>
     /// Initialises a new <see cref="BufferSegment"/> as the head of a chain.

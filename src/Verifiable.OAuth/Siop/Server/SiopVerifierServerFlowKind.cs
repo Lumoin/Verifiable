@@ -12,7 +12,7 @@ namespace Verifiable.OAuth.Siop.Server;
 /// action) rather than inside a PDA transition, keeping the automaton pure and deterministic —
 /// the same effect-channeling the OID4VP verifier flow uses.
 /// </remarks>
-public sealed class SiopVerifierServerFlowKind: StatefulFlowKind
+public sealed class SiopVerifierServerFlowKind : StatefulFlowKind
 {
     /// <summary>The singleton instance.</summary>
     public static SiopVerifierServerFlowKind Instance { get; } = new();

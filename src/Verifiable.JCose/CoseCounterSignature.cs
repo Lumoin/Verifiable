@@ -20,7 +20,7 @@ namespace Verifiable.JCose;
 /// rather than one type with an optional-headers flag, so the shape a caller holds already
 /// states which of the two it is.
 /// </remarks>
-public abstract class CoseCounterSignature: IDisposable
+public abstract class CoseCounterSignature : IDisposable
 {
     /// <summary>Restricts direct subtyping to the sibling classes declared in this file.</summary>
     private protected CoseCounterSignature()
@@ -69,7 +69,7 @@ public abstract class CoseCounterSignature: IDisposable
 /// </para>
 /// </remarks>
 [DebuggerDisplay("CounterSignatureV2: {Component}")]
-public sealed class CounterSignatureV2: CoseCounterSignature, IEquatable<CounterSignatureV2>
+public sealed class CounterSignatureV2 : CoseCounterSignature, IEquatable<CounterSignatureV2>
 {
     private bool disposed;
 
@@ -155,7 +155,7 @@ public sealed class CounterSignatureV2: CoseCounterSignature, IEquatable<Counter
 /// <strong>Ownership:</strong> owns <see cref="Value"/>; disposing this instance disposes it.
 /// </remarks>
 [DebuggerDisplay("CounterSignature0V2: {Value}")]
-public sealed class CounterSignature0V2: CoseCounterSignature, IEquatable<CounterSignature0V2>
+public sealed class CounterSignature0V2 : CoseCounterSignature, IEquatable<CounterSignature0V2>
 {
     private bool disposed;
 
@@ -232,7 +232,7 @@ public sealed class CounterSignature0V2: CoseCounterSignature, IEquatable<Counte
 /// this instance disposes each.
 /// </remarks>
 [DebuggerDisplay("CounterSignatureV2Sequence: {Countersignatures.Count} elements")]
-public sealed class CounterSignatureV2Sequence: CoseCounterSignature, IEquatable<CounterSignatureV2Sequence>
+public sealed class CounterSignatureV2Sequence : CoseCounterSignature, IEquatable<CounterSignatureV2Sequence>
 {
     private bool disposed;
 

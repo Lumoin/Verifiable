@@ -8,7 +8,7 @@ namespace Verifiable.Tests.TestInfrastructure
     /// An attribute to retrieve files with the given glob pattern.
     /// </summary>
     [AttributeUsage(AttributeTargets.Method)]
-    internal sealed class FilesDataAttribute: Attribute, ITestDataSource
+    internal sealed class FilesDataAttribute : Attribute, ITestDataSource
     {
         /// <summary>
         /// The directory to search for files.

@@ -17,7 +17,7 @@ namespace Verifiable.Apdu.Lds;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("RsaPublicKey({Length} bytes)")]
-public sealed class RsaPublicKey: SensitiveMemory
+public sealed class RsaPublicKey : SensitiveMemory
 {
     /// <summary>
     /// Initialises a new <see cref="RsaPublicKey"/> from owned DER <c>RSAPublicKey</c> bytes.

@@ -25,7 +25,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// </remarks>
 /// <param name="Parameters">The algorithm parameters to validate.</param>
-public readonly record struct TestParmsInput(TpmtPublicParms Parameters): ITpmCommandInput
+public readonly record struct TestParmsInput(TpmtPublicParms Parameters) : ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_TestParms;

@@ -64,7 +64,7 @@ internal enum AnnexAValidationExample
 /// not dispose anything it reaches through this object.
 /// </para>
 /// </remarks>
-internal sealed class AnnexAValidationScenario: IDisposable
+internal sealed class AnnexAValidationScenario : IDisposable
 {
     /// <summary>The content every signature in these worlds covers.</summary>
     private static ReadOnlyMemory<byte> ExampleContent { get; } = new("the Annex A validation example content"u8.ToArray());

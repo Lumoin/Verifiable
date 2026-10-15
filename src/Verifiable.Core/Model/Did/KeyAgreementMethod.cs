@@ -65,7 +65,7 @@ namespace Verifiable.Core.Model.Did;
 /// </list>
 /// </remarks>
 [DebuggerDisplay("KeyAgreementMethod(Id = {Id}, IsEmbedded = {IsEmbeddedVerification})")]
-public sealed class KeyAgreementMethod: VerificationMethodReference
+public sealed class KeyAgreementMethod : VerificationMethodReference
 {
     /// <summary>
     /// The verification purpose string as defined in W3C specifications.

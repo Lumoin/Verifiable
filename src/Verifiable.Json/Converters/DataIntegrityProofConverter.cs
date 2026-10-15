@@ -24,7 +24,7 @@ namespace Verifiable.Json.Converters;
 /// See <see href="https://www.w3.org/TR/vc-data-integrity/#proofs">VC Data Integrity §4 Proofs</see>.
 /// </para>
 /// </remarks>
-public class DataIntegrityProofConverter: JsonConverter<DataIntegrityProof>
+public class DataIntegrityProofConverter : JsonConverter<DataIntegrityProof>
 {
     /// <summary>
     /// Resolves a proof's <c>cryptosuite</c> name to its <see cref="CryptosuiteInfo"/>; a name the factory does not

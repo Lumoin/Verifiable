@@ -159,7 +159,7 @@ public readonly record struct PremisStorage(PremisContentLocation? ContentLocati
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class PremisObjectCharacteristics: IDisposable
+public sealed class PremisObjectCharacteristics : IDisposable
 {
     /// <summary>The <c>fixity</c> elements (<c>PM33</c>–<c>PM36</c>). The instance owns them.</summary>
     public IReadOnlyList<EArkFixity> Fixities { get; init; } = [];
@@ -256,7 +256,7 @@ public sealed class PremisRelationship
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class PremisObject: IDisposable
+public sealed class PremisObject : IDisposable
 {
     /// <summary>
     /// The <c>@xsi:type</c> attribute (<c>PM2</c>, <c>PM14</c>, <c>PM28</c>): which category of object this is.
@@ -591,7 +591,7 @@ public sealed class PremisRightsStatement
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class PremisDocument: IDisposable
+public sealed class PremisDocument : IDisposable
 {
     /// <summary>
     /// The <c>@version</c> attribute (<c>PM1</c>), which the specification fixes to

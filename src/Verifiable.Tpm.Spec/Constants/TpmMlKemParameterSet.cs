@@ -16,7 +16,7 @@ namespace Verifiable.Tpm.Spec.Constants;
 /// </remarks>
 [SuppressMessage("Design", "CA1008:Enums should have zero value", Justification = "This follows the TPM 2.0 specification.")]
 [SuppressMessage("Design", "CA1028:Enum Storage should be Int32", Justification = "This follows the TPM 2.0 specification.")]
-public enum TpmMlKemParameterSet: ushort
+public enum TpmMlKemParameterSet : ushort
 {
     /// <summary>
     /// TPM_MLKEM_512: ML-KEM-512 parameter set (security category 1).

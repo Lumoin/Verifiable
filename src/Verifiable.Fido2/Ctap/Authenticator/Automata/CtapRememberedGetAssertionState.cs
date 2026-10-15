@@ -83,7 +83,7 @@ public sealed record CtapRememberedGetAssertionState(
     int CredentialCounter,
     DateTimeOffset LastActivityAt,
     CtapPinUvAuthProtocolId? AuthenticatingPinUvAuthProtocol,
-    bool LargeBlobKeyRequested): IDisposable
+    bool LargeBlobKeyRequested) : IDisposable
 {
     /// <summary>
     /// Releases the independently pooled <see cref="ClientDataHash"/> copy this record owns. The

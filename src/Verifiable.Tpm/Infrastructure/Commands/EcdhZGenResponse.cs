@@ -18,7 +18,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </list>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class EcdhZGenResponse: IDisposable, ITpmWireType
+public sealed class EcdhZGenResponse : IDisposable, ITpmWireType
 {
     private bool Disposed { get; set; }
 

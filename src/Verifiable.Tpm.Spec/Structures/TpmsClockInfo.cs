@@ -31,7 +31,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// <param name="RestartCount">Number of TPM Restarts or Resumes since the last TPM Reset.</param>
 /// <param name="Safe">Whether <paramref name="Clock"/> is guaranteed not to have decreased.</param>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public readonly record struct TpmsClockInfo(ulong Clock, uint ResetCount, uint RestartCount, TpmiYesNo Safe): ITpmWireType
+public readonly record struct TpmsClockInfo(ulong Clock, uint ResetCount, uint RestartCount, TpmiYesNo Safe) : ITpmWireType
 {
     /// <summary>
     /// The serialized size of this fixed-layout structure, in bytes.

@@ -25,7 +25,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("VerifierContext: {DisclosedStatements.Count} disclosed statements")]
-public sealed class VerifierProofContext: IDisposable
+public sealed class VerifierProofContext : IDisposable
 {
     /// <summary>
     /// The issuer's base signature.

@@ -1450,7 +1450,7 @@ internal sealed class CAdESSignatureAugmentationTests
     /// signer whose key material comes from the repository's test-key creator, and the CAdES-B-B signature the
     /// shipped creation surface produced with it.
     /// </summary>
-    private sealed class AugmentationScenario: IDisposable
+    private sealed class AugmentationScenario : IDisposable
     {
         /// <summary>Gets the Root CA the authority is issued by.</summary>
         internal required X509ChainTestRingNode Root { get; init; }

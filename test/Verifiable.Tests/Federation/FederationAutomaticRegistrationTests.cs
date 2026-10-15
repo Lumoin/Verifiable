@@ -475,7 +475,7 @@ internal sealed class FederationAutomaticRegistrationTests
         EntityIdentifier subject,
         EntityIdentifier anchor,
         IReadOnlyList<string> compactJwsByPosition,
-        ValidateTrustChainAsyncDelegate validateChain): IDisposable
+        ValidateTrustChainAsyncDelegate validateChain) : IDisposable
     {
         public EntityIdentifier Subject { get; } = subject;
 
@@ -553,7 +553,7 @@ internal sealed class FederationAutomaticRegistrationTests
         EntityIdentifier subject,
         EntityIdentifier anchor,
         IReadOnlyList<string> compactJwsByPosition,
-        ValidateTrustChainAsyncDelegate validateChain): IDisposable
+        ValidateTrustChainAsyncDelegate validateChain) : IDisposable
     {
         public EntityIdentifier Subject { get; } = subject;
 

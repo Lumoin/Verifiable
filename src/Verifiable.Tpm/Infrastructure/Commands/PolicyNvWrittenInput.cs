@@ -24,7 +24,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <param name="PolicySession">The policy session handle.</param>
 /// <param name="IsWrittenSet"><see langword="true"/> to require TPMA_NV_WRITTEN SET (YES); <see langword="false"/> to require it CLEAR (NO).</param>
 [DebuggerDisplay("PolicyNvWrittenInput(Session=0x{PolicySession,h}, IsWrittenSet={IsWrittenSet})")]
-public readonly record struct PolicyNvWrittenInput(uint PolicySession, bool IsWrittenSet): ITpmCommandInput
+public readonly record struct PolicyNvWrittenInput(uint PolicySession, bool IsWrittenSet) : ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_PolicyNvWritten;

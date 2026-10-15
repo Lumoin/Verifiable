@@ -45,7 +45,7 @@ namespace Verifiable.Cryptography.Pki;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("CBAdESSignatureTimestamp: {TimestampContainer}")]
-public sealed class CBAdESSignatureTimestamp: IDisposable
+public sealed class CBAdESSignatureTimestamp : IDisposable
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="CBAdESSignatureTimestamp"/> class. Ownership of

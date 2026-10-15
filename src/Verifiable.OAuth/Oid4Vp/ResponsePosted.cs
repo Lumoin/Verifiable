@@ -17,4 +17,4 @@ namespace Verifiable.OAuth.Oid4Vp;
 [DebuggerDisplay("ResponsePosted ReceivedAt={ReceivedAt}")]
 public sealed record ResponsePosted(
     string EncryptedResponseJwt,
-    DateTimeOffset ReceivedAt): FlowInput;
+    DateTimeOffset ReceivedAt) : FlowInput;

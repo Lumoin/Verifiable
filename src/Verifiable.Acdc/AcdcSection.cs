@@ -41,11 +41,11 @@ public abstract record AcdcSection
 /// block.
 /// </summary>
 /// <param name="Said">The section's SAID.</param>
-public sealed record CompactAcdcSection(string Said): AcdcSection;
+public sealed record CompactAcdcSection(string Said) : AcdcSection;
 
 
 /// <summary>
 /// The expanded form of an ACDC section: the section's detail field map.
 /// </summary>
 /// <param name="Detail">The section's expanded detail block, an order-preserving field map.</param>
-public sealed record ExpandedAcdcSection(MessageFieldMap Detail): AcdcSection;
+public sealed record ExpandedAcdcSection(MessageFieldMap Detail) : AcdcSection;

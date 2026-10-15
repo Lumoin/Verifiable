@@ -113,7 +113,7 @@ internal sealed class FederationHttpClientTransportTests
     /// Handler that returns a fixed compact JWS body with the
     /// trust-mark-friendly entity-statement media type for any GET.
     /// </summary>
-    private sealed class CannedJwsHandler: HttpMessageHandler
+    private sealed class CannedJwsHandler : HttpMessageHandler
     {
         private string CompactJws { get; }
 
@@ -141,7 +141,7 @@ internal sealed class FederationHttpClientTransportTests
     }
 
 
-    private sealed class NotFoundHandler: HttpMessageHandler
+    private sealed class NotFoundHandler : HttpMessageHandler
     {
         //Ownership of the returned HttpResponseMessage transfers to the caller
         //through the HttpMessageHandler pipeline, the standard shape for this
@@ -159,7 +159,7 @@ internal sealed class FederationHttpClientTransportTests
     /// counts how many requests it received — used to prove the guarded fetch
     /// blocks a redirect to an internal address before contacting it.
     /// </summary>
-    private sealed class RedirectHandler: HttpMessageHandler
+    private sealed class RedirectHandler : HttpMessageHandler
     {
         private Uri Location { get; }
 

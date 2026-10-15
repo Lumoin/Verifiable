@@ -12,7 +12,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// a codec like every other, and since it carries nothing a single instance serves every response.
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class PcrExtendResponse: ITpmWireType
+public sealed class PcrExtendResponse : ITpmWireType
 {
     /// <summary>
     /// Gets the singleton instance every parse returns.

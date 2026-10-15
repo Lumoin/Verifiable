@@ -22,7 +22,7 @@ namespace Verifiable.Cryptography.Pki;
 /// only the array's non-emptiness.
 /// </remarks>
 [DebuggerDisplay("JAdESCertificateReferenceCollection({Items.Count} items)")]
-public sealed class JAdESCertificateReferenceCollection: IDisposable
+public sealed class JAdESCertificateReferenceCollection : IDisposable
 {
     /// <summary>
     /// Initializes a new <see cref="JAdESCertificateReferenceCollection"/>. Ownership of every entry in
@@ -77,7 +77,7 @@ public sealed class JAdESCertificateReferenceCollection: IDisposable
 /// <see cref="JAdESRevocationValues"/>'s own at-least-one-member invariant.
 /// </remarks>
 [DebuggerDisplay("JAdESRevocationReferenceCollection(Crl={CrlReferences.Count}, Ocsp={OcspReferences.Count}, Other={OtherReferences.Count})")]
-public sealed class JAdESRevocationReferenceCollection: IDisposable
+public sealed class JAdESRevocationReferenceCollection : IDisposable
 {
     /// <summary>
     /// Initializes a new <see cref="JAdESRevocationReferenceCollection"/>. Ownership of every entry in

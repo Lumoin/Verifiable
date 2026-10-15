@@ -18,7 +18,7 @@ namespace Verifiable.Xml;
 /// Carries no owned pooled content of its own — every entry is a plain node-index list over
 /// <see cref="Table"/> — so no <see cref="IDisposable"/> surface is needed.
 /// </remarks>
-public readonly struct XAdESUnsignedDataObjectProperties: IEquatable<XAdESUnsignedDataObjectProperties>
+public readonly struct XAdESUnsignedDataObjectProperties : IEquatable<XAdESUnsignedDataObjectProperties>
 {
     /// <summary>The table the properties' spans read from.</summary>
     internal XmlNodeTable Table { get; }

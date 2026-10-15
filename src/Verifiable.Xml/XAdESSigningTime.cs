@@ -15,7 +15,7 @@ namespace Verifiable.Xml;
 /// <see cref="XAdESDateTime"/> — so no <see cref="IDisposable"/> surface is needed, the same posture
 /// <see cref="XAdESObjectIdentifier"/> takes.
 /// </remarks>
-public readonly struct XAdESSigningTime: IEquatable<XAdESSigningTime>
+public readonly struct XAdESSigningTime : IEquatable<XAdESSigningTime>
 {
     /// <summary>The table the value reads from.</summary>
     internal XmlNodeTable Table { get; }

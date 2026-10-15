@@ -77,7 +77,7 @@ namespace Verifiable.Foundation;
 /// <seealso cref="BufferTags"/>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 #pragma warning restore RS0030 // Do not use banned APIs
-public readonly struct TaggedMemory<T>: IEquatable<TaggedMemory<T>>
+public readonly struct TaggedMemory<T> : IEquatable<TaggedMemory<T>>
 {
     /// <summary>
     /// The underlying memory buffer.

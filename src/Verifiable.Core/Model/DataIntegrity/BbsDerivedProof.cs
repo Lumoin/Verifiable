@@ -52,7 +52,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// <seealso cref="BbsBaseProof"/>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 [SuppressMessage("Performance", "CA1819:Properties should not return arrays", Justification = "Wire-format POCO representing parsed proof components.")]
-public sealed class BbsDerivedProof: IEquatable<BbsDerivedProof>
+public sealed class BbsDerivedProof : IEquatable<BbsDerivedProof>
 {
     /// <summary>
     /// Gets the BBS proof over the disclosed messages.

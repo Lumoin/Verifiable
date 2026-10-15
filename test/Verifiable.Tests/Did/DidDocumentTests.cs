@@ -15,7 +15,7 @@ namespace Verifiable.Tests.Did;
 [JsonSerializable(typeof(SocialWebInboxService))]
 [JsonSerializable(typeof(VerifiableCredentialService))]
 [JsonSerializable(typeof(SpamCost))]
-internal partial class DidDocumentTestsJsonContext: JsonSerializerContext { }
+internal partial class DidDocumentTestsJsonContext : JsonSerializerContext { }
 
 /// <summary>
 /// General DID tests.

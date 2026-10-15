@@ -23,7 +23,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class GetRandomResponse: ITpmWireType, IDisposable
+public sealed class GetRandomResponse : ITpmWireType, IDisposable
 {
     private bool disposed;
 

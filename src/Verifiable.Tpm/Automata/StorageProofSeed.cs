@@ -27,7 +27,7 @@ namespace Verifiable.Tpm.Automata;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("StorageProofSeed(IsGenerated={IsGenerated})")]
-public sealed class StorageProofSeed: SensitiveMemory
+public sealed class StorageProofSeed : SensitiveMemory
 {
     /// <summary>
     /// The shared not-yet-generated seed, held from construction until <c>TPM2_Clear()</c> generates

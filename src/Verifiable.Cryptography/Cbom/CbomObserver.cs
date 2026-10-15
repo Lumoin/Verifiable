@@ -19,7 +19,7 @@ namespace Verifiable.Cryptography.Cbom;
 /// cooperation from the cryptographic backends.
 /// </para>
 /// </remarks>
-public sealed class CbomObserver: IDisposable
+public sealed class CbomObserver : IDisposable
 {
     private ActivityListener Listener { get; }
     private ConcurrentQueue<Activity> Captured { get; } = new();

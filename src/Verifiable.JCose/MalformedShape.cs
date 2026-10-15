@@ -28,4 +28,4 @@ namespace Verifiable.JCose;
 /// logging and metrics.
 /// </param>
 [DebuggerDisplay("MalformedShape Reason={Reason,nq}")]
-public sealed record MalformedShape(string Reason): JoseTokenShape;
+public sealed record MalformedShape(string Reason) : JoseTokenShape;

@@ -9,7 +9,7 @@ namespace Verifiable.Xml;
 /// <c>QualifyingProperties</c> was found, and every indirectly-incorporated <c>QualifyingPropertiesReference</c>
 /// present, per clause 4.4.1.
 /// </summary>
-public readonly struct XAdESQualifyingPropertiesDiscoveryResult: IEquatable<XAdESQualifyingPropertiesDiscoveryResult>
+public readonly struct XAdESQualifyingPropertiesDiscoveryResult : IEquatable<XAdESQualifyingPropertiesDiscoveryResult>
 {
     /// <summary>Whether a directly-incorporated <c>QualifyingProperties</c> element was found.</summary>
     public bool HasQualifyingProperties { get; }

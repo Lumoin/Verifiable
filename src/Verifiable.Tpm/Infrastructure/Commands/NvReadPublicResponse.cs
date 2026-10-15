@@ -32,7 +32,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class NvReadPublicResponse: IDisposable, ITpmWireType
+public sealed class NvReadPublicResponse : IDisposable, ITpmWireType
 {
     private bool Disposed { get; set; }
 

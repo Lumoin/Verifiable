@@ -20,7 +20,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class DuplicateResponse: IDisposable, ITpmWireType
+public sealed class DuplicateResponse : IDisposable, ITpmWireType
 {
     private bool Disposed { get; set; }
 

@@ -18,4 +18,4 @@ namespace Verifiable.JCose;
 /// </para>
 /// </remarks>
 /// <param name="Value">The raw General JSON JWS wire string.</param>
-public sealed record GeneralJwsShape(string Value): JoseTokenShape;
+public sealed record GeneralJwsShape(string Value) : JoseTokenShape;

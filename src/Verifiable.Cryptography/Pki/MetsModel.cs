@@ -121,7 +121,7 @@ public sealed class MetsHeader
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
     Justification = "Clause 5.1 admits either an RFC 3986 URI or a path relative to the package root, and System.Uri cannot hold a relative reference without a base. The value is carried exactly as written — it is part of the octets a fixity value over the document commits to — and resolved by the package layer.")]
-public sealed class MetsMetadataReference: IDisposable
+public sealed class MetsMetadataReference : IDisposable
 {
     /// <summary>The <c>@LOCTYPE</c> attribute, which <c>CSIP22</c>/<c>CSIP36</c>/<c>CSIP49</c> fix to <see cref="MetsWellKnown.UrlLocatorType"/>.</summary>
     public required string LocatorType { get; init; }
@@ -196,7 +196,7 @@ public sealed class MetsMetadataReference: IDisposable
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class MetsDescriptiveMetadataSection: IDisposable
+public sealed class MetsDescriptiveMetadataSection : IDisposable
 {
     /// <summary>The <c>@ID</c> attribute (<c>CSIP18</c>), which clause 5.1 requires to be an XML <c>NCName</c>.</summary>
     public required string Id { get; init; }
@@ -245,7 +245,7 @@ public sealed class MetsDescriptiveMetadataSection: IDisposable
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class MetsAdministrativeMetadataSection: IDisposable
+public sealed class MetsAdministrativeMetadataSection : IDisposable
 {
     /// <summary>The <c>@ID</c> attribute (<c>CSIP33</c>/<c>CSIP46</c>), which clause 5.1 requires to be an XML <c>NCName</c>.</summary>
     public required string Id { get; init; }
@@ -283,7 +283,7 @@ public sealed class MetsAdministrativeMetadataSection: IDisposable
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class MetsAdministrativeMetadata: IDisposable
+public sealed class MetsAdministrativeMetadata : IDisposable
 {
     /// <summary>The <c>digiprovMD</c> elements (<c>CSIP32</c>, <c>0..n</c>).</summary>
     public IReadOnlyList<MetsAdministrativeMetadataSection> DigitalProvenanceSections { get; init; } = [];
@@ -349,7 +349,7 @@ public readonly record struct MetsFileLocator(string LocatorType, string LinkTyp
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class MetsFile: IDisposable
+public sealed class MetsFile : IDisposable
 {
     /// <summary>The <c>@ID</c> attribute (<c>CSIP67</c>), which clause 5.1 requires to be an XML <c>NCName</c> and which a <c>fptr/@FILEID</c> points at.</summary>
     public required string Id { get; init; }
@@ -407,7 +407,7 @@ public sealed class MetsFile: IDisposable
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class MetsFileGroup: IDisposable
+public sealed class MetsFileGroup : IDisposable
 {
     /// <summary>The <c>@ID</c> attribute (<c>CSIP65</c>), which clause 5.1 requires to be an XML <c>NCName</c> and which a <c>fptr/@FILEID</c> may point at.</summary>
     public required string Id { get; init; }
@@ -459,7 +459,7 @@ public sealed class MetsFileGroup: IDisposable
 /// disposes them.
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class MetsFileSection: IDisposable
+public sealed class MetsFileSection : IDisposable
 {
     /// <summary>The <c>@ID</c> attribute (<c>CSIP59</c>), which clause 5.1 requires to be an XML <c>NCName</c>.</summary>
     public required string Id { get; init; }
@@ -660,7 +660,7 @@ public sealed record MetsStructuralMap
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
     Justification = "CSIP6 and AIPM2 fix an exact attribute value that a conformance test compares character by character; System.Uri normalises case, escaping and default ports, which would make a document that fails the test compare equal to one that passes.")]
-public sealed class MetsDocument: IDisposable
+public sealed class MetsDocument : IDisposable
 {
     /// <summary>
     /// The <c>@OBJID</c> attribute (<c>CSIP1</c>): the package's identifier, which is also the name its root

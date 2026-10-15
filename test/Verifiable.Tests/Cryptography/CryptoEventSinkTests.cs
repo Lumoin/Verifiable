@@ -142,7 +142,7 @@ internal sealed class CryptoEventSinkTests
     /// An <see cref="IObserver{T}"/> whose <see cref="OnNext"/> always throws, tracking whether it was
     /// invoked so a test can assert isolation without depending on the exception having escaped.
     /// </summary>
-    private sealed class ThrowingObserver: IObserver<CryptoEvent>
+    private sealed class ThrowingObserver : IObserver<CryptoEvent>
     {
         /// <summary><see langword="true"/> once <see cref="OnNext"/> has been called at least once.</summary>
         public bool WasInvoked { get; private set; }

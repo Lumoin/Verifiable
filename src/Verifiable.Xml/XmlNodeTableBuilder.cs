@@ -14,7 +14,7 @@ namespace Verifiable.Xml;
 /// <see href="https://www.w3.org/TR/2009/REC-xml-names-20091208/">Namespaces in XML 1.0 (Third Edition)</see>
 /// in full. Every buffer is rented from the caller-supplied pool.
 /// </summary>
-internal sealed class XmlNodeTableBuilder: IDisposable
+internal sealed class XmlNodeTableBuilder : IDisposable
 {
     /// <summary>The FNV-1a 64-bit offset basis.</summary>
     private const ulong FnvOffsetBasis = 14695981039346656037UL;

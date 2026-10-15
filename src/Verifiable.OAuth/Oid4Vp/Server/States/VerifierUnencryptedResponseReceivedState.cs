@@ -18,7 +18,7 @@ namespace Verifiable.OAuth.Oid4Vp.Server.States;
 /// <see cref="Verifiable.OAuth.Oid4Vp.States.PresentationVerifiedState"/>.
 /// </remarks>
 [DebuggerDisplay("VerifierUnencryptedResponseReceived FlowId={FlowId} ReceivedAt={ReceivedAt}")]
-public sealed record VerifierUnencryptedResponseReceivedState: FlowState
+public sealed record VerifierUnencryptedResponseReceivedState : FlowState
 {
     /// <summary>
     /// The plaintext <c>vp_token</c> JSON string. Preserved for audit and

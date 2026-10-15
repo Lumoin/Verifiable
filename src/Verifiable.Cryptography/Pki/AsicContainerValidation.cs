@@ -169,7 +169,7 @@ public sealed record AsicManifestValidation
 /// created. The <see cref="AsicContainerValidationResult"/> holding it disposes it.
 /// </remarks>
 [DebuggerDisplay("AsicSignatureValidation: {Status}, {EntryName}")]
-public sealed class AsicSignatureValidation: IDisposable
+public sealed class AsicSignatureValidation : IDisposable
 {
     /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
     private bool disposed;
@@ -435,7 +435,7 @@ public sealed record AsicContainerValidationContext
 /// carrier those runs were given. Disposing it releases them all; nothing it exposes may be read afterwards.
 /// </remarks>
 [DebuggerDisplay("AsicContainerValidationResult: {Status}")]
-public sealed class AsicContainerValidationResult: IDisposable
+public sealed class AsicContainerValidationResult : IDisposable
 {
     /// <summary>The carriers this validation created and therefore owns, released in reverse order.</summary>
     private List<IDisposable> Owned { get; } = [];

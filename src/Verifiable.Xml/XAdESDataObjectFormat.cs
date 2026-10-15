@@ -18,7 +18,7 @@ namespace Verifiable.Xml;
 /// <see cref="Table"/> or a nested <see cref="XAdESObjectIdentifier"/> — so no <see cref="IDisposable"/>
 /// surface is needed.
 /// </remarks>
-public readonly struct XAdESDataObjectFormat: IEquatable<XAdESDataObjectFormat>
+public readonly struct XAdESDataObjectFormat : IEquatable<XAdESDataObjectFormat>
 {
     /// <summary>The table the property's spans read from.</summary>
     internal XmlNodeTable Table { get; }

@@ -9,7 +9,7 @@ namespace Verifiable.Json.Converters;
 /// object (<c>{ "contentType"?, "error"?, "proof"? }</c>). Member handling is shared with
 /// <see cref="DidResolutionMetadataConverter"/> through <see cref="DidResolutionMetadataJson"/>.
 /// </summary>
-public class DidDereferencingMetadataConverter: JsonConverter<DidDereferencingMetadata>
+public class DidDereferencingMetadataConverter : JsonConverter<DidDereferencingMetadata>
 {
     /// <inheritdoc />
     public override bool CanConvert(Type typeToConvert)

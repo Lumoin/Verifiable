@@ -14,7 +14,7 @@ namespace Verifiable.Xml;
 /// 1.0</see>. The content model is <c>##any</c>, mixed — other children and character data the section
 /// declares as permitted algorithm-parameter extensibility are tolerated and left unmodeled.
 /// </summary>
-public readonly struct XmlCanonicalizationMethodInfo: IEquatable<XmlCanonicalizationMethodInfo>
+public readonly struct XmlCanonicalizationMethodInfo : IEquatable<XmlCanonicalizationMethodInfo>
 {
     /// <summary>The table the method's spans read from.</summary>
     internal XmlNodeTable Table { get; }
@@ -140,7 +140,7 @@ public readonly struct XmlCanonicalizationMethodInfo: IEquatable<XmlCanonicaliza
 /// altered along with everything else in an unauthenticated <c>SignedInfo</c> — the truncation attack
 /// RFC 2104 warns of, present here only as a recorded field.
 /// </remarks>
-public readonly struct XmlSignatureMethodInfo: IEquatable<XmlSignatureMethodInfo>
+public readonly struct XmlSignatureMethodInfo : IEquatable<XmlSignatureMethodInfo>
 {
     /// <summary>The table the method's spans read from.</summary>
     internal XmlNodeTable Table { get; }
@@ -319,7 +319,7 @@ public readonly struct XmlSignatureMethodInfo: IEquatable<XmlSignatureMethodInfo
 /// its <c>SignatureMethod</c>, and its one-or-more <c>Reference</c> children, in that order, per section
 /// 4.3.
 /// </summary>
-public readonly struct XmlSignedInfo: IEquatable<XmlSignedInfo>
+public readonly struct XmlSignedInfo : IEquatable<XmlSignedInfo>
 {
     /// <summary>The table the info's spans read from.</summary>
     internal XmlNodeTable Table { get; }
@@ -506,7 +506,7 @@ public readonly struct XmlSignedInfo: IEquatable<XmlSignedInfo>
 /// job, not this reader's.
 /// </para>
 /// </remarks>
-public sealed class XmlSignature: IDisposable
+public sealed class XmlSignature : IDisposable
 {
     /// <summary>The document the signature was read from. Not owned; the caller disposes it separately.</summary>
     public XmlNodeTable Table { get; }

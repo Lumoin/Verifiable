@@ -45,7 +45,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class Tpm2bSignatureHint: IDisposable, ITpmWireType
+public sealed class Tpm2bSignatureHint : IDisposable, ITpmWireType
 {
     /// <summary>
     /// The largest hint a <c>TPM2B_SIGNATURE_HINT</c> buffer may carry: 57 octets, the encoded R value of

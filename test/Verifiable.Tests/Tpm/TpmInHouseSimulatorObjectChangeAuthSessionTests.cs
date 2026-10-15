@@ -552,7 +552,7 @@ internal sealed class TpmInHouseSimulatorObjectChangeAuthSessionTests
     /// A loaded sealed object under test: its transient handle, an owned clone of its Name, and an owned clone of
     /// its public area (the unchanged area a rewrapped private area reloads with).
     /// </summary>
-    private sealed class SealedObject: IDisposable
+    private sealed class SealedObject : IDisposable
     {
         /// <summary>Whether the owned clones have been released.</summary>
         private bool isDisposed;

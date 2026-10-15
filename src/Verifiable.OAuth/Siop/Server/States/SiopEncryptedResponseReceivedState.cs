@@ -18,7 +18,7 @@ namespace Verifiable.OAuth.Siop.Server.States;
 /// <see cref="Verifiable.OAuth.Oid4Vp.Server.States.VerifierResponseReceivedState"/>.
 /// </summary>
 [DebuggerDisplay("SiopEncryptedResponseReceivedState FlowId={FlowId} ReceivedAt={ReceivedAt}")]
-public sealed record SiopEncryptedResponseReceivedState: FlowState
+public sealed record SiopEncryptedResponseReceivedState : FlowState
 {
     /// <summary>The compact JWE (five dot-separated segments) the Wallet POSTed. Preserved for audit and replay detection.</summary>
     public required string EncryptedIdToken { get; init; }

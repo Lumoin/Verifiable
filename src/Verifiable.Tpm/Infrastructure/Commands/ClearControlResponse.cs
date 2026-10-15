@@ -7,7 +7,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <remarks>
 /// See TPM 2.0 Library Part 3, clause 24.7 (Table 204).
 /// </remarks>
-public sealed class ClearControlResponse: ITpmWireType
+public sealed class ClearControlResponse : ITpmWireType
 {
     /// <summary>
     /// The shared instance returned for a successful, parameterless response.

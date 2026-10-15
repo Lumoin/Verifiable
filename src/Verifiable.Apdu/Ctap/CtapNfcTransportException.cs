@@ -15,7 +15,7 @@ namespace Verifiable.Apdu.Ctap;
 /// successful CTAP status word.
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class CtapNfcTransportException: Exception
+public sealed class CtapNfcTransportException : Exception
 {
     /// <summary>
     /// Gets the card-level status word that caused the failure, or <see langword="null"/> if the

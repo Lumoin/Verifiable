@@ -23,7 +23,7 @@ namespace Verifiable.Apdu.Lds;
 /// algorithm; this object owns them and is disposed by the caller.
 /// </para>
 /// </remarks>
-public sealed class LdsSecurityObject: IDisposable
+public sealed class LdsSecurityObject : IDisposable
 {
     private const byte SequenceTag = 0x30;
     private const byte IntegerTag = 0x02;

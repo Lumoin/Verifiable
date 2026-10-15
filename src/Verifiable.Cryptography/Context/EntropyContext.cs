@@ -14,7 +14,7 @@ namespace Verifiable.Cryptography.Context;
 /// Registry-based statistical assessment sits between the two.
 /// </remarks>
 [DebuggerDisplay("{EntropyAssessorNames.GetName(this),nq}")]
-public readonly struct EntropyAssessor: IEquatable<EntropyAssessor>
+public readonly struct EntropyAssessor : IEquatable<EntropyAssessor>
 {
     /// <summary>Gets the numeric code for this assessor.</summary>
     public int Code { get; }
@@ -110,7 +110,7 @@ public static class EntropyAssessorNames
 /// Identifies how an entropy health assessment was performed.
 /// </summary>
 [DebuggerDisplay("{EntropyAssessmentMethodNames.GetName(this),nq}")]
-public readonly struct EntropyAssessmentMethod: IEquatable<EntropyAssessmentMethod>
+public readonly struct EntropyAssessmentMethod : IEquatable<EntropyAssessmentMethod>
 {
     /// <summary>Gets the numeric code for this assessment method.</summary>
     public int Code { get; }
@@ -212,7 +212,7 @@ public static class EntropyAssessmentMethodNames
 /// The outcome of an entropy health assessment.
 /// </summary>
 [DebuggerDisplay("{EntropyOutcomeNames.GetName(this),nq}")]
-public readonly struct EntropyOutcome: IEquatable<EntropyOutcome>
+public readonly struct EntropyOutcome : IEquatable<EntropyOutcome>
 {
     /// <summary>Gets the numeric code for this outcome.</summary>
     public int Code { get; }

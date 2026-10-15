@@ -44,7 +44,7 @@ public sealed record RegistryInceptionEvent(
     string Uuid,
     string Issuer,
     long SequenceNumber,
-    string Datetime): AcdcRegistryEvent(VersionString, AcdcMessageTypes.RegistryInception, Said, SequenceNumber);
+    string Datetime) : AcdcRegistryEvent(VersionString, AcdcMessageTypes.RegistryInception, Said, SequenceNumber);
 
 
 /// <summary>
@@ -75,4 +75,4 @@ public sealed record RegistryUpdateEvent(
     string PriorSaid,
     string Datetime,
     string TransactionAcdcSaid,
-    string TransactionState): AcdcRegistryEvent(VersionString, AcdcMessageTypes.RegistryUpdate, Said, SequenceNumber);
+    string TransactionState) : AcdcRegistryEvent(VersionString, AcdcMessageTypes.RegistryUpdate, Said, SequenceNumber);

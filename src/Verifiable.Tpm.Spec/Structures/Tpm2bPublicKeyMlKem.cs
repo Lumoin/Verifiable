@@ -25,7 +25,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public readonly struct Tpm2bPublicKeyMlKem: IDisposable, IEquatable<Tpm2bPublicKeyMlKem>
+public readonly struct Tpm2bPublicKeyMlKem : IDisposable, IEquatable<Tpm2bPublicKeyMlKem>
 {
     /// <summary>
     /// Maximum public key size for ML-KEM-1024 (largest parameter set).

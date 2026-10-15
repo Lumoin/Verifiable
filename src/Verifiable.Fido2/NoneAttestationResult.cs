@@ -24,4 +24,4 @@ namespace Verifiable.Fido2;
 /// needs no change.
 /// </remarks>
 [DebuggerDisplay("NoneAttestationResult({Downgrade,nq})")]
-public sealed record NoneAttestationResult(Fido2AttestationDowngrade? Downgrade = null): AttestationResult;
+public sealed record NoneAttestationResult(Fido2AttestationDowngrade? Downgrade = null) : AttestationResult;

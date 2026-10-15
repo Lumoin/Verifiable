@@ -36,7 +36,7 @@ namespace Verifiable.Core.Model.SelectiveDisclosure;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class SdDisclosure: IEquatable<SdDisclosure>, IDisposable
+public sealed class SdDisclosure : IEquatable<SdDisclosure>, IDisposable
 {
     private bool disposed;
 

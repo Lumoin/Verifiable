@@ -30,7 +30,7 @@ public enum XAdESSignedDataObjectPropertyName
 /// <see cref="XAdESCommitmentTypeIndication"/>, <see cref="XAdESAllDataObjectsTimeStamp"/>,
 /// <see cref="XAdESIndividualDataObjectsTimeStamp"/>).
 /// </summary>
-public readonly struct XAdESSignedDataObjectPropertyEntry: IEquatable<XAdESSignedDataObjectPropertyEntry>
+public readonly struct XAdESSignedDataObjectPropertyEntry : IEquatable<XAdESSignedDataObjectPropertyEntry>
 {
     /// <summary>The property element's own index.</summary>
     public int ElementIndex { get; }
@@ -88,7 +88,7 @@ public readonly struct XAdESSignedDataObjectPropertyEntry: IEquatable<XAdESSigne
 /// Carries no owned pooled content of its own — every entry is a plain (element index, name) pair over
 /// <see cref="Table"/> — so no <see cref="IDisposable"/> surface is needed.
 /// </remarks>
-public readonly struct XAdESSignedDataObjectProperties: IEquatable<XAdESSignedDataObjectProperties>
+public readonly struct XAdESSignedDataObjectProperties : IEquatable<XAdESSignedDataObjectProperties>
 {
     private static (byte[] LocalName, XAdESSignedDataObjectPropertyName Name)[] Groups { get; } =
     [

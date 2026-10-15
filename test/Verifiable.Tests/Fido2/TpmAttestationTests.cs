@@ -523,7 +523,7 @@ internal sealed class TpmAttestationTests
     /// can override exactly one piece downstream while holding the rest conformant. Owns every
     /// disposable piece it carries; a test disposes it via a <see langword="using"/> declaration.
     /// </summary>
-    private sealed class Scenario: IDisposable
+    private sealed class Scenario : IDisposable
     {
         public required ECDsa RootKey { get; init; }
         public required ECDsa CredentialKey { get; init; }

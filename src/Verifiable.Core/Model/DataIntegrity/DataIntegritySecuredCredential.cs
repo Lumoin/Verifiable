@@ -29,7 +29,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("DataIntegritySecuredCredential(Id = {Id}, Proofs = {Proof?.Count})")]
-public class DataIntegritySecuredCredential: VerifiableCredential, IEquatable<DataIntegritySecuredCredential>
+public class DataIntegritySecuredCredential : VerifiableCredential, IEquatable<DataIntegritySecuredCredential>
 {
     /// <summary>
     /// The ordered Data Integrity proof chain securing this credential.

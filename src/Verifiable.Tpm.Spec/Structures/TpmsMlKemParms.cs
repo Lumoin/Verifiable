@@ -24,7 +24,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public readonly struct TpmsMlKemParms: IEquatable<TpmsMlKemParms>
+public readonly struct TpmsMlKemParms : IEquatable<TpmsMlKemParms>
 {
     /// <summary>
     /// Gets the symmetric algorithm definition for key derivation.

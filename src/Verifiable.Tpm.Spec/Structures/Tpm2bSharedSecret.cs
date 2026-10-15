@@ -36,7 +36,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class Tpm2bSharedSecret: SensitiveMemory, ITpmWireType
+public sealed class Tpm2bSharedSecret : SensitiveMemory, ITpmWireType
 {
     /// <summary>
     /// The largest shared secret this library's <c>TPM2B_SHARED_SECRET</c> buffer carries: 64 octets,

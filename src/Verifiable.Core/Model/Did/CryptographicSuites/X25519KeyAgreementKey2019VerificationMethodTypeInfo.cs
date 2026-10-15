@@ -5,7 +5,7 @@ namespace Verifiable.Core.Model.Did.CryptographicSuites
     /// agreement public key expressed as multibase-encoded key material, per the Linked
     /// Data Cryptographic Suite Registry's x25519-2019 suite.
     /// </summary>
-    public sealed class X25519KeyAgreementKey2019VerificationMethodTypeInfo: VerificationMethodTypeInfo
+    public sealed class X25519KeyAgreementKey2019VerificationMethodTypeInfo : VerificationMethodTypeInfo
     {
 #pragma warning disable CS0618 // Type or member is obsolete
         /// <summary>The shared <see cref="X25519KeyAgreementKey2019VerificationMethodTypeInfo"/> instance.</summary>

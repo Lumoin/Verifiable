@@ -50,7 +50,7 @@ namespace Verifiable.Cryptography.Context;
 /// </list>
 /// </remarks>
 [DebuggerDisplay("{EntropySourceNames.GetName(this),nq}")]
-public readonly struct EntropySource: IEquatable<EntropySource>
+public readonly struct EntropySource : IEquatable<EntropySource>
 {
     /// <summary>Gets the numeric code for this entropy source.</summary>
     public int Code { get; }

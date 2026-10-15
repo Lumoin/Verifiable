@@ -48,7 +48,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class TpmtTkCreation: IDisposable, ITpmWireType
+public sealed class TpmtTkCreation : IDisposable, ITpmWireType
 {
     /// <summary>
     /// The shared NULL Creation Ticket instance (TPM_ST_CREATION, TPM_RH_NULL, empty digest); it owns no pooled

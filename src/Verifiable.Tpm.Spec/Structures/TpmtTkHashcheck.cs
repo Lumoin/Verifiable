@@ -34,7 +34,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class TpmtTkHashcheck: IDisposable, ITpmWireType
+public sealed class TpmtTkHashcheck : IDisposable, ITpmWireType
 {
     /// <summary>
     /// The shared NULL Hashcheck Ticket instance (TPM_ST_HASHCHECK, TPM_RH_NULL, empty digest); it owns no

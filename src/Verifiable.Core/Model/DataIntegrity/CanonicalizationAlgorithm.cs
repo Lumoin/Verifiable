@@ -25,7 +25,7 @@ namespace Verifiable.Core.Model.DataIntegrity
     /// Data Integrity §4.3 Canonicalization</see>.
     /// </para>
     /// </remarks>
-    public readonly struct CanonicalizationAlgorithm: IEquatable<CanonicalizationAlgorithm>
+    public readonly struct CanonicalizationAlgorithm : IEquatable<CanonicalizationAlgorithm>
     {
         /// <summary>
         /// No canonicalization applied. The document is processed as-is.

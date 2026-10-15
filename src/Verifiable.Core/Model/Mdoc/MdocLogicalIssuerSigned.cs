@@ -19,7 +19,7 @@ namespace Verifiable.Core.Model.Mdoc;
 /// transferred to the signed side.
 /// </para>
 /// </remarks>
-public sealed class MdocLogicalIssuerSigned: IDisposable
+public sealed class MdocLogicalIssuerSigned : IDisposable
 {
     private bool disposed;
 

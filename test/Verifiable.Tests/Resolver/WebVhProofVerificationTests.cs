@@ -42,7 +42,7 @@ internal sealed class WebVhProofVerificationTests
     public async Task GenesisVerifies()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         string? error = await ValidateAsync(log.Lines[0], index: 0, new EmptyLogState<WebVhState>()).ConfigureAwait(false);
 
@@ -54,7 +54,7 @@ internal sealed class WebVhProofVerificationTests
     public async Task TamperedProofValueFails()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         string tampered = MutateProof(log.Lines[0], proof => proof["proofValue"] = FlipLastCharacter((string)proof["proofValue"]!));
 
@@ -68,7 +68,7 @@ internal sealed class WebVhProofVerificationTests
     public async Task TamperedDocumentFails()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         //Change the signed document without re-signing: the proof no longer covers these bytes.
         string tampered = Mutate(log.Lines[0], entry => entry["versionTime"] = "2025-01-01T12:00:00Z");
@@ -84,7 +84,7 @@ internal sealed class WebVhProofVerificationTests
     {
         using WebVhController controller = WebVhController.Create();
         using WebVhController stranger = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         //Point the proof at a key that is not in the active updateKeys.
         string tampered = MutateProof(log.Lines[0], proof => proof["verificationMethod"] = stranger.VerificationMethod);
@@ -99,7 +99,7 @@ internal sealed class WebVhProofVerificationTests
     public async Task WrongCryptosuiteFails()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         string tampered = MutateProof(log.Lines[0], proof => proof["cryptosuite"] = "ecdsa-sd-2023");
 
@@ -113,7 +113,7 @@ internal sealed class WebVhProofVerificationTests
     public async Task TamperedScidFails()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         //Replace the scid with a different (well-formed) multihash that no longer certifies the entry.
         string tampered = Mutate(log.Lines[0], entry =>
@@ -129,7 +129,7 @@ internal sealed class WebVhProofVerificationTests
     public async Task FutureVersionTimeFails()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, "2099-01-01T00:00:00Z", TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, "2099-01-01T00:00:00Z", WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         string? error = await ValidateAsync(log.Lines[0], index: 0, new EmptyLogState<WebVhState>()).ConfigureAwait(false);
 
@@ -141,7 +141,7 @@ internal sealed class WebVhProofVerificationTests
     public async Task DeactivatedStateRejectsFurtherEntries()
     {
         using WebVhController controller = WebVhController.Create();
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         WebVhState deactivated = PriorState(log.Lines[0]);
         string? error = await ValidateAsync(log.Lines[0], index: 1, new DeactivatedLogState<WebVhState>(deactivated)).ConfigureAwait(false);
@@ -233,7 +233,7 @@ internal sealed class WebVhProofVerificationTests
 
         //A date-only string is not a valid UTC ISO8601 versionTime; the previous lenient parse coerced it to
         //midnight UTC and accepted it, diverging from a conformant resolver.
-        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, "2025-01-01", TestContext.CancellationToken).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, "2025-01-01", WebVhGenesisOptions.None, TestContext.CancellationToken).ConfigureAwait(false);
 
         string? error = await ValidateAsync(log.Lines[0], index: 0, new EmptyLogState<WebVhState>()).ConfigureAwait(false);
 

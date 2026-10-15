@@ -18,7 +18,7 @@ namespace Verifiable.Tpm.EventLog;
 /// </remarks>
 
 [SuppressMessage("Design", "CA1008:EnumsShouldHaveZeroValue", Justification = "Enum values defined by TPM 2.0 specification.")]
-public enum TcgEventLogReaderError: uint
+public enum TcgEventLogReaderError : uint
 {
     /// <summary>
     /// The current platform is not supported for event log reading.

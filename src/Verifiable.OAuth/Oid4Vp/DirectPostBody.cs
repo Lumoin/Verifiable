@@ -14,7 +14,7 @@ namespace Verifiable.OAuth.Oid4Vp;
 /// is a DIF Presentation Exchange concept and is not used with DCQL.
 /// </remarks>
 [DebuggerDisplay("DirectPostBody State={State}")]
-public sealed class DirectPostBody: IEquatable<DirectPostBody>
+public sealed class DirectPostBody : IEquatable<DirectPostBody>
 {
     /// <summary>
     /// The VP Token containing one or more Verifiable Presentations keyed by

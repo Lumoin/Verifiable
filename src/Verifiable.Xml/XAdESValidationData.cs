@@ -32,7 +32,7 @@ namespace Verifiable.Xml;
 /// <see cref="XAdESCounterSignature"/> already applies to its own embedded <see cref="XmlSignature"/>.
 /// </para>
 /// </remarks>
-public sealed class XAdESValidationData: IDisposable
+public sealed class XAdESValidationData : IDisposable
 {
     /// <summary>The document the property was read from. Not owned; the caller disposes it separately.</summary>
     public XmlNodeTable Table { get; }

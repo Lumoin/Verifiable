@@ -24,7 +24,7 @@ namespace Verifiable.Json;
 /// name.
 /// </para>
 /// </remarks>
-public sealed class WebAuthnRegistrationResponseEnvelope: IDisposable
+public sealed class WebAuthnRegistrationResponseEnvelope : IDisposable
 {
     /// <summary>Guards against redundant disposal.</summary>
     private bool disposed;

@@ -33,7 +33,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// </remarks>
 [DebuggerDisplay("HolderContext: {SignedStatements.Count} statements, {LabelMap.Count} labels")]
 [SuppressMessage("Performance", "CA1819:Properties should not return arrays", Justification = "Wire-format POCO representing parsed proof components.")]
-public sealed class HolderProofContext: IDisposable
+public sealed class HolderProofContext : IDisposable
 {
     /// <summary>
     /// The canonical N-Quad statements before HMAC relabeling.

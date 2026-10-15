@@ -7,7 +7,7 @@ namespace Verifiable.OAuth.AuthCode.States;
 /// Initial flow state. PKCE parameters have been generated but no network call has been made.
 /// </summary>
 /// <remarks>Transitions to <see cref="ParRequestReadyState"/> when the PAR request body is composed.</remarks>
-public sealed record PkceGeneratedState: FlowState
+public sealed record PkceGeneratedState : FlowState
 {
     /// <summary>The PKCE verifier and challenge for this flow.</summary>
     public required PkceParameters Pkce { get; init; }

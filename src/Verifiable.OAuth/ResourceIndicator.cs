@@ -22,7 +22,7 @@ namespace Verifiable.OAuth;
 /// (U+00E9 with U+00C9, and U+212A with <c>k</c>).
 /// </summary>
 [DebuggerDisplay("ResourceIndicator {OriginalString,nq}")]
-public sealed class ResourceIndicator: IEquatable<ResourceIndicator>
+public sealed class ResourceIndicator : IEquatable<ResourceIndicator>
 {
     /// <summary>
     /// The character classes this reader validates a run of characters against, each the

@@ -804,7 +804,7 @@ internal sealed class OcspResponseVerificationTests
         MintedCertificate Leaf,
         PkiCertificateMemory Certificate,
         PkiCertificateMemory Issuer,
-        OcspRequestContent Request): IDisposable
+        OcspRequestContent Request) : IDisposable
     {
         /// <inheritdoc/>
         public void Dispose()

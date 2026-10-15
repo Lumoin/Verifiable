@@ -94,7 +94,7 @@ public sealed record XAdESTimestampContainerMetadata
 /// instance disposes both.
 /// </remarks>
 [DebuggerDisplay("XAdESSigningCertificateDigestFact: {Reference.DigestAlgorithm.Oid}, signer reference {Reference.IsSignerReference}")]
-public sealed class XAdESSigningCertificateDigestFact: IDisposable
+public sealed class XAdESSigningCertificateDigestFact : IDisposable
 {
     /// <summary>Gets the format-neutral reference — algorithm, digest, and whether this is <c>Cert[0]</c>, the signer's own reference (clause 5.2.2 NOTE 7).</summary>
     public required SigningCertificateReference Reference { get; init; }
@@ -125,7 +125,7 @@ public sealed class XAdESSigningCertificateDigestFact: IDisposable
 /// disposing this instance disposes both.
 /// </remarks>
 [DebuggerDisplay("XAdESCertificateReferenceDigestFact: {DigestAlgorithm.Oid}")]
-public sealed class XAdESCertificateReferenceDigestFact: IDisposable
+public sealed class XAdESCertificateReferenceDigestFact : IDisposable
 {
     /// <summary>Gets the digest algorithm the reference declares its certificate hash was taken under.</summary>
     public required AlgorithmIdentifier DigestAlgorithm { get; init; }
@@ -158,7 +158,7 @@ public sealed class XAdESCertificateReferenceDigestFact: IDisposable
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
     Justification = "CRLIdentifier/@URI is a retrieval hint only, never authoritative and never dereferenced here (no-HTTP-in-library house rule) — carried opaquely exactly as the leaf reads it, mirroring the leaf's own XAdESCrlIdentifier.Uri, which is untyped for the identical reason.")]
 [DebuggerDisplay("XAdESCrlReferenceFact: {DigestAlgorithm.Oid}, HasCrlIdentifier={HasCrlIdentifier}")]
-public sealed class XAdESCrlReferenceFact: IDisposable
+public sealed class XAdESCrlReferenceFact : IDisposable
 {
     /// <summary>Gets the digest algorithm the reference declares its CRL hash was taken under.</summary>
     public required AlgorithmIdentifier DigestAlgorithm { get; init; }
@@ -227,7 +227,7 @@ public enum XAdESOcspResponderIdKind
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
     Justification = "OCSPIdentifier/@URI is a retrieval hint only, never authoritative and never dereferenced here (no-HTTP-in-library house rule) — carried opaquely exactly as the leaf reads it, mirroring the leaf's own XAdESOcspIdentifier.Uri, which is untyped for the identical reason.")]
 [DebuggerDisplay("XAdESOcspReferenceFact: HasDigestAlgAndValue={HasDigestAlgAndValue}, ResponderKind={ResponderKind}")]
-public sealed class XAdESOcspReferenceFact: IDisposable
+public sealed class XAdESOcspReferenceFact : IDisposable
 {
     /// <summary>Gets whether the optional <c>DigestAlgAndValue</c> child is present.</summary>
     public required bool HasDigestAlgAndValue { get; init; }
@@ -278,7 +278,7 @@ public sealed class XAdESOcspReferenceFact: IDisposable
 /// <strong>Ownership.</strong> This instance owns <see cref="Hash"/>; disposing this instance disposes it.
 /// </remarks>
 [DebuggerDisplay("XAdESSignaturePolicyFact: implied={IsImplied}, {Id}")]
-public sealed class XAdESSignaturePolicyFact: IDisposable
+public sealed class XAdESSignaturePolicyFact : IDisposable
 {
     /// <summary>Gets whether the signature declares the <c>SignaturePolicyImplied</c> choice arm — an out-of-band, agreed policy the wire states no identifier for. <see cref="Id"/>/<see cref="HashAlgorithm"/>/<see cref="Hash"/> are <see langword="null"/> when this is <see langword="true"/>.</summary>
     public required bool IsImplied { get; init; }
@@ -437,7 +437,7 @@ public sealed record XAdESDiscoveryFact
 /// </para>
 /// </remarks>
 [DebuggerDisplay("XAdESQualifyingPropertiesFacts: {SigningCertificateDigests.Count} cert digests, {Timestamps.Count} timestamps")]
-public sealed class XAdESQualifyingPropertiesFacts: IDisposable
+public sealed class XAdESQualifyingPropertiesFacts : IDisposable
 {
     /// <summary>Gets the clause 4.4 discovery/binding outcome.</summary>
     public required XAdESDiscoveryFact Discovery { get; init; }
@@ -668,7 +668,7 @@ public enum XAdESQualifyingPropertiesParseStatus
 /// <see cref="Facts"/> and every carrier it holds; the caller disposes it. On failure it owns nothing.
 /// </summary>
 [DebuggerDisplay("XAdESQualifyingPropertiesParseResult: {Status}")]
-public sealed class XAdESQualifyingPropertiesParseResult: IDisposable
+public sealed class XAdESQualifyingPropertiesParseResult : IDisposable
 {
     /// <summary>Gets the parse outcome; <see cref="XAdESQualifyingPropertiesParseStatus.Parsed"/> is the only success.</summary>
     public required XAdESQualifyingPropertiesParseStatus Status { get; init; }

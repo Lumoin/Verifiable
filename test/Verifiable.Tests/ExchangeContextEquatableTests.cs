@@ -12,7 +12,7 @@ namespace Verifiable.Tests;
 internal sealed class ExchangeContextEquatableTests
 {
     /// <summary>An <see cref="ExchangeContext"/> subtype with no additional identity members.</summary>
-    private sealed class DerivedExchangeContext: ExchangeContext
+    private sealed class DerivedExchangeContext : ExchangeContext
     {
     }
 

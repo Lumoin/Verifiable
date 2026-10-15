@@ -32,7 +32,7 @@ namespace Verifiable.Core.Model.DataIntegrity;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("DataIntegritySecuredPresentation(Id = {Id}, Proofs = {Proof?.Count})")]
-public class DataIntegritySecuredPresentation: VerifiablePresentation, IEquatable<DataIntegritySecuredPresentation>
+public class DataIntegritySecuredPresentation : VerifiablePresentation, IEquatable<DataIntegritySecuredPresentation>
 {
     /// <summary>
     /// The ordered Data Integrity proof chain securing this presentation.

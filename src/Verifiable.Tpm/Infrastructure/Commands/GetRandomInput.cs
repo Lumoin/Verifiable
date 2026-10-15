@@ -21,7 +21,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// See TPM 2.0 Library Part 3, clause 16.1 - TPM2_GetRandom.
 /// </para>
 /// </remarks>
-public readonly record struct GetRandomInput(ushort BytesRequested): ITpmCommandInput
+public readonly record struct GetRandomInput(ushort BytesRequested) : ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_GetRandom;

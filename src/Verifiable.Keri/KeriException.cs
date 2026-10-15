@@ -5,7 +5,7 @@ namespace Verifiable.Keri;
 /// first event, an event whose sequence number does not follow the current state, an event for the wrong
 /// identifier, or any other break in the rules that fold key events into key state.
 /// </summary>
-public sealed class KeriException: Exception
+public sealed class KeriException : Exception
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="KeriException"/> class.

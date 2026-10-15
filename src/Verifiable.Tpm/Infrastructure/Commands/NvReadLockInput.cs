@@ -27,7 +27,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </remarks>
 /// <param name="AuthHandle">The authorization handle (the Index itself for Index authorization, or the owner hierarchy).</param>
 /// <param name="NvIndex">The NV Index to lock for reading.</param>
-public readonly record struct NvReadLockInput(uint AuthHandle, uint NvIndex): ITpmCommandInput
+public readonly record struct NvReadLockInput(uint AuthHandle, uint NvIndex) : ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_NV_ReadLock;

@@ -24,7 +24,7 @@ namespace Verifiable.OAuth.Federation;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{Value,nq}")]
-public readonly struct EntityTypeIdentifier: IEquatable<EntityTypeIdentifier>
+public readonly struct EntityTypeIdentifier : IEquatable<EntityTypeIdentifier>
 {
     /// <summary>
     /// The identifier value. Canonical identity; equality and hashing

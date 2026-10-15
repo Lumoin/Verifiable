@@ -206,7 +206,7 @@ internal sealed class SignVerifyEventTests
     /// makes no promise about which thread delivers, so a plain list here risks "Collection was modified"
     /// when this observer's own <c>OnNext</c> is invoked concurrently from two unrelated tests' emissions.
     /// </summary>
-    private sealed class CollectingObserver(ConcurrentQueue<CryptoEvent> sink): IObserver<CryptoEvent>
+    private sealed class CollectingObserver(ConcurrentQueue<CryptoEvent> sink) : IObserver<CryptoEvent>
     {
         /// <summary>No-op: this test observer never unsubscribes via completion.</summary>
         public void OnCompleted()

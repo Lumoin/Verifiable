@@ -8,7 +8,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// See <see href="https://trustedcomputinggroup.org/resource/tpm-library-specification/">TPM 2.0 Library
 /// Specification</see>, Part 3, clause 31.8 (Table 256).
 /// </remarks>
-public sealed class NvIncrementResponse: ITpmWireType
+public sealed class NvIncrementResponse : ITpmWireType
 {
     /// <summary>
     /// The shared instance returned for a successful, parameterless response.

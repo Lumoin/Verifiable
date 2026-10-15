@@ -80,7 +80,7 @@ namespace Verifiable.Tpm.Infrastructure.Sessions;
 /// See TPM 2.0 Library Part 1, clause 16.5 - Sessions.
 /// </para>
 /// </remarks>
-public sealed class TpmSession: TpmSessionBase, IDisposable
+public sealed class TpmSession : TpmSessionBase, IDisposable
 {
     private TpmAlgIdConstants SessionAlg { get; }
     private int DigestSize { get; }

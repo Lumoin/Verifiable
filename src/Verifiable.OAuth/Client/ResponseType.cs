@@ -23,7 +23,7 @@ namespace Verifiable.OAuth.Client;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{ResponseTypeNames.GetName(this),nq}")]
-public readonly struct ResponseType: IEquatable<ResponseType>
+public readonly struct ResponseType : IEquatable<ResponseType>
 {
     /// <summary>Gets the numeric code identifying this response type.</summary>
     public int Code { get; }

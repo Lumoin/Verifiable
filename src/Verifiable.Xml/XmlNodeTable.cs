@@ -40,7 +40,7 @@ namespace Verifiable.Xml;
 /// transcoding step locate the position in the document's once-transcoded UTF-8 form.
 /// </para>
 /// </remarks>
-public sealed class XmlNodeTable: IDisposable
+public sealed class XmlNodeTable : IDisposable
 {
     /// <summary>The document tree nodes, in document order.</summary>
     private PooledStructList<NodeRecord> Nodes { get; }

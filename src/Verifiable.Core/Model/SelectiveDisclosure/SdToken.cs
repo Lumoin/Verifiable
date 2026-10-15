@@ -39,7 +39,7 @@ namespace Verifiable.Core.Model.SelectiveDisclosure;
 /// </code>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public class SdToken<TEnvelope>: IEquatable<SdToken<TEnvelope>>, IDisposable where TEnvelope : notnull
+public class SdToken<TEnvelope> : IEquatable<SdToken<TEnvelope>>, IDisposable where TEnvelope : notnull
 {
     /// <summary>
     /// The shared empty value for <see cref="IssuerSignedClaims"/> and

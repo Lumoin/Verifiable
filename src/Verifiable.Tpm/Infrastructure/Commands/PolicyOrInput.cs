@@ -23,7 +23,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </list>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class PolicyOrInput: ITpmCommandInput
+public sealed class PolicyOrInput : ITpmCommandInput
 {
 
     /// <inheritdoc/>

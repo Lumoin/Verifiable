@@ -75,7 +75,7 @@ public sealed record AsicSignatureReference
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class AsicManifestExtension: IDisposable
+public sealed class AsicManifestExtension : IDisposable
 {
     /// <summary>The <c>Critical</c> attribute (required by the schema).</summary>
     public required bool Critical { get; init; }
@@ -150,7 +150,7 @@ public readonly record struct AsicManifestExtensionName(string NamespaceName, st
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
     Justification = "Annex A.6 item 2 makes a manifest reference a relative URI resolved against the container ROOT. System.Uri cannot hold a relative reference without a base, and constructing one against a base is exactly the resolution that annex forbids; the value is carried verbatim — it is also part of the octets a signature commits to — and resolved by AsicContainerUri.")]
-public sealed class AsicDataObjectReference: IDisposable
+public sealed class AsicDataObjectReference : IDisposable
 {
     /// <summary>The <c>URI</c> attribute (required by the schema): a relative reference naming the file object.</summary>
     public required string Uri { get; init; }
@@ -226,7 +226,7 @@ public sealed class AsicDataObjectReference: IDisposable
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class AsicManifest: IDisposable
+public sealed class AsicManifest : IDisposable
 {
     /// <summary>The <c>SigReference</c> element (exactly one, per the schema's sequence).</summary>
     public required AsicSignatureReference SignatureReference { get; init; }

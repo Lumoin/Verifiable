@@ -13,7 +13,7 @@ namespace Verifiable.Xml;
 /// that is not tied to a document position, such as an invalid prefix-list parameter, carries offset zero.
 /// </remarks>
 /// <seealso cref="XmlCanonicalizationFailure"/>
-public readonly struct XmlCanonicalizationError: IEquatable<XmlCanonicalizationError>
+public readonly struct XmlCanonicalizationError : IEquatable<XmlCanonicalizationError>
 {
     /// <summary>
     /// The reason the canonicalization was refused.

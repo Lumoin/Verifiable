@@ -106,7 +106,7 @@ public enum EArkClaimReason
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed record EArkClaimContext: ClaimContext
+public sealed record EArkClaimContext : ClaimContext
 {
     /// <summary>
     /// Initialises a claim context.

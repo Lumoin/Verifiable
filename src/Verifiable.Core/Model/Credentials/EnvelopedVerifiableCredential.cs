@@ -24,7 +24,7 @@ namespace Verifiable.Core.Model.Credentials;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("EnvelopedVerifiableCredential(Id = {Id})")]
-public sealed class EnvelopedVerifiableCredential: IEquatable<EnvelopedVerifiableCredential>
+public sealed class EnvelopedVerifiableCredential : IEquatable<EnvelopedVerifiableCredential>
 {
     /// <summary>
     /// The JSON-LD context. Per VC-DM 2.0 the object's <c>@context</c> MUST be present

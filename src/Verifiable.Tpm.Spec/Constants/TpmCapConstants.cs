@@ -14,7 +14,7 @@ namespace Verifiable.Tpm.Spec.Constants;
 /// </remarks>
 [SuppressMessage("Design", "CA1069:Enums values should not be duplicated", Justification = "TPM 2.0 specification allows duplicate values for compatibility and other reasons.")]
 [SuppressMessage("Design", "CA1027:Mark enums with FlagsAttribute", Justification = "TPM 2.0 specification does not define these as flags.")]
-public enum TpmCapConstants: uint
+public enum TpmCapConstants : uint
 {
     /// <summary>
     /// (no comment text in extracted table)

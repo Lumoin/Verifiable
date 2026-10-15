@@ -160,7 +160,7 @@ internal sealed class JAdESSignatureFactsTests
 
     /// <summary>Wraps a <see cref="PkiCertificateMemory"/> so it can stand in for the engine's <see cref="SensitiveMemory"/> Signed Data Object slot.</summary>
     /// <param name="carrier">The owned carrier.</param>
-    private sealed class SensitiveMemoryCarrier(PkiCertificateMemory carrier): IDisposable
+    private sealed class SensitiveMemoryCarrier(PkiCertificateMemory carrier) : IDisposable
     {
         /// <summary>Gets the carrier as the engine's own Signed Data Object type.</summary>
         public SensitiveMemory Memory => carrier;

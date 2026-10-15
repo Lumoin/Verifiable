@@ -32,7 +32,7 @@ namespace Verifiable.Json.Converters;
 ///   </description></item>
 /// </list>
 /// </remarks>
-public sealed class VerifierClientMetadataConverter: JsonConverter<VerifierClientMetadata>
+public sealed class VerifierClientMetadataConverter : JsonConverter<VerifierClientMetadata>
 {
     /// <inheritdoc/>
     [return: NotNull]

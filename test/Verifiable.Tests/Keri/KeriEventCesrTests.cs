@@ -393,7 +393,7 @@ internal sealed class KeriEventCesrTests
 
 
     //A native serialization carried in a pooled buffer the test owns and disposes.
-    private sealed class NativeEvent: IDisposable
+    private sealed class NativeEvent : IDisposable
     {
         private IMemoryOwner<byte> Owner { get; }
         private int Length { get; }

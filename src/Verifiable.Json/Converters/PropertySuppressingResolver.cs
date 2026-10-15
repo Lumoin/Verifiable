@@ -27,7 +27,7 @@ namespace Verifiable.Json.Converters;
 /// to use with source-generated resolvers in AOT scenarios.
 /// </para>
 /// </remarks>
-internal sealed class PropertySuppressingResolver: IJsonTypeInfoResolver
+internal sealed class PropertySuppressingResolver : IJsonTypeInfoResolver
 {
     private IJsonTypeInfoResolver InnerResolver { get; }
     private Type TargetType { get; }

@@ -76,7 +76,7 @@ namespace Verifiable.Cryptography.Pki;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("JAdESUnsignedHeaders({Count} elements, {Mode})")]
-public sealed class JAdESUnsignedHeaders: IReadOnlyList<JAdESUnsignedHeaderElement>, IDisposable
+public sealed class JAdESUnsignedHeaders : IReadOnlyList<JAdESUnsignedHeaderElement>, IDisposable
 {
     /// <summary>
     /// The ordered backing storage of this instance's elements, in incorporation (wire) order. Never empty

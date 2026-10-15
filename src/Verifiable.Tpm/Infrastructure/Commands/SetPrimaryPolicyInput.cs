@@ -30,7 +30,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// 195/196).
 /// </para>
 /// </remarks>
-public sealed class SetPrimaryPolicyInput: ITpmCommandInput, IDisposable
+public sealed class SetPrimaryPolicyInput : ITpmCommandInput, IDisposable
 {
     private bool disposed;
 

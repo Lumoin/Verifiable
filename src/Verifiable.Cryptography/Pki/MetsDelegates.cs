@@ -108,7 +108,7 @@ public enum MetsParseStatus
 /// fixity carrier that document holds); the caller disposes it. On failure it owns nothing.
 /// </summary>
 [DebuggerDisplay("MetsParseResult: {Status}")]
-public sealed class MetsParseResult: IDisposable
+public sealed class MetsParseResult : IDisposable
 {
     /// <summary>The parse outcome; <see cref="MetsParseStatus.Valid"/> is the only success.</summary>
     public required MetsParseStatus Status { get; init; }
@@ -250,7 +250,7 @@ public enum MetsEncodeStatus
 /// them. On failure it owns nothing.
 /// </summary>
 [DebuggerDisplay("MetsEncodeResult: {Status}")]
-public sealed class MetsEncodeResult: IDisposable
+public sealed class MetsEncodeResult : IDisposable
 {
     /// <summary>The encoding outcome; <see cref="MetsEncodeStatus.Encoded"/> is the only success.</summary>
     public required MetsEncodeStatus Status { get; init; }

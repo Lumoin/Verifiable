@@ -18,7 +18,7 @@ namespace Verifiable.OAuth.Oid4Vp.Wallet;
 /// direction. It throws to signal incorrect use.
 /// </para>
 /// </remarks>
-public sealed class WalletFlowKind: StatefulFlowKind
+public sealed class WalletFlowKind : StatefulFlowKind
 {
     /// <summary>The singleton instance.</summary>
     public static WalletFlowKind Instance { get; } = new();

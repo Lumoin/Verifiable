@@ -35,7 +35,7 @@ namespace Verifiable.JCose;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("JwtPayload({Count} claims)")]
-public sealed class JwtPayload: JoseDictionary, IEquatable<JwtPayload>
+public sealed class JwtPayload : JoseDictionary, IEquatable<JwtPayload>
 {
     /// <summary>
     /// Creates an empty JWT payload.

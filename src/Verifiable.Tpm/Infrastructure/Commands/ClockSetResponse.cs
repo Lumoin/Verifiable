@@ -7,7 +7,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <remarks>
 /// See TPM 2.0 Library Part 3, clause 29.2 (Table 235).
 /// </remarks>
-public sealed class ClockSetResponse: ITpmWireType
+public sealed class ClockSetResponse : ITpmWireType
 {
     /// <summary>
     /// The shared instance returned for a successful, parameterless response.

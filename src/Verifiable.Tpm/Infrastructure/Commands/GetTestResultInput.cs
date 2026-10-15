@@ -10,7 +10,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// carries an outData buffer and the test result code.
 /// </para>
 /// </remarks>
-public readonly record struct GetTestResultInput: ITpmCommandInput
+public readonly record struct GetTestResultInput : ITpmCommandInput
 {
     /// <inheritdoc/>
     public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_GetTestResult;

@@ -29,7 +29,7 @@ namespace Verifiable.Tpm.Infrastructure.Spec.Commands;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class Tpm2CreatePrimaryCommand: IDisposable
+public sealed class Tpm2CreatePrimaryCommand : IDisposable
 {
     /// <summary>
     /// Command code for TPM2_CreatePrimary.

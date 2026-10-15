@@ -33,7 +33,7 @@ namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 /// </param>
 public sealed record CtapRememberedBioEnrollmentState(
     BioEnrollmentTemplateId TemplateId,
-    int RemainingSamples): IDisposable
+    int RemainingSamples) : IDisposable
 {
     /// <summary>
     /// Releases the not-yet-persisted <see cref="TemplateId"/> this record owns.

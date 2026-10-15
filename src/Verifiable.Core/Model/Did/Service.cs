@@ -25,7 +25,7 @@ namespace Verifiable.Core.Model.Did
     /// </para>
     /// </remarks>
     [DebuggerDisplay("Service(Id = {Id}, Type = {Type})")]
-    public class Service: IEquatable<Service>
+    public class Service : IEquatable<Service>
     {
         /// <summary>
         /// An optional unique identifier for this service.

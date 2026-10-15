@@ -20,7 +20,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class NvReadResponse: ITpmWireType, IDisposable
+public sealed class NvReadResponse : ITpmWireType, IDisposable
 {
     private IMemoryOwner<byte> RawData { get; }
     private bool disposed;

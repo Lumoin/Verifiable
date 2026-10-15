@@ -15,7 +15,7 @@ namespace Verifiable.Tpm.Spec.Attributes;
 /// </para>
 /// </remarks>
 [Flags]
-public enum TpmaSession: byte
+public enum TpmaSession : byte
 {
     /// <summary>
     /// CONTINUE_SESSION (bit 0): SET (1) indicates the session remains active after successful completion of the command; in a response,

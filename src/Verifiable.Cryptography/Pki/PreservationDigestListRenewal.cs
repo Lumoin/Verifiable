@@ -114,7 +114,7 @@ public sealed class PreservationDigestListRenewalContext
 /// Record; the caller disposes it. On failure it owns nothing.
 /// </summary>
 [DebuggerDisplay("PreservationDigestListRenewalResult: {Status}")]
-public sealed class PreservationDigestListRenewalResult: IDisposable
+public sealed class PreservationDigestListRenewalResult : IDisposable
 {
     /// <summary>The outcome; <see cref="PreservationDigestListRenewalStatus.Renewed"/> is the only success.</summary>
     public required PreservationDigestListRenewalStatus Status { get; init; }

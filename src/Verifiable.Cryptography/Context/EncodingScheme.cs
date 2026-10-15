@@ -117,7 +117,7 @@ namespace Verifiable.Cryptography.Context;
 /// <seealso cref="MaterialSemantics"/>
 /// <seealso cref="Tag"/>
 [DebuggerDisplay("{EncodingSchemeNames.GetName(this),nq}")]
-public readonly struct EncodingScheme: IEquatable<EncodingScheme>
+public readonly struct EncodingScheme : IEquatable<EncodingScheme>
 {
     /// <summary>
     /// Gets the numeric code for this encoding scheme.

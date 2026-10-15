@@ -21,7 +21,7 @@ public abstract record CardResponseIntent(StatusWord StatusWord);
 /// error response.
 /// </summary>
 /// <param name="StatusWord">The status word.</param>
-public sealed record StatusOnlyResponse(StatusWord StatusWord): CardResponseIntent(StatusWord);
+public sealed record StatusOnlyResponse(StatusWord StatusWord) : CardResponseIntent(StatusWord);
 
 /// <summary>
 /// The successful response to READ BINARY: the requested octets of the selected file followed by
@@ -35,7 +35,7 @@ public sealed record StatusOnlyResponse(StatusWord StatusWord): CardResponseInte
 /// <param name="StatusWord">The status word (success).</param>
 /// <param name="Data">The octets read from the selected file (a borrowed view, not owned).</param>
 [DebuggerDisplay("BinaryReadResponse({Data.Length} bytes, {StatusWord})")]
-public sealed record BinaryReadResponse(StatusWord StatusWord, ReadOnlyMemory<byte> Data): CardResponseIntent(StatusWord);
+public sealed record BinaryReadResponse(StatusWord StatusWord, ReadOnlyMemory<byte> Data) : CardResponseIntent(StatusWord);
 
 /// <summary>
 /// The successful response to GET CHALLENGE: the chip nonce RND.IC followed by <c>9000</c>.
@@ -49,7 +49,7 @@ public sealed record BinaryReadResponse(StatusWord StatusWord, ReadOnlyMemory<by
 /// <param name="Challenge">The pooled buffer holding the issued challenge octets; disposed after framing.</param>
 /// <param name="Length">The number of valid octets in <paramref name="Challenge"/>.</param>
 [DebuggerDisplay("ChallengeResponse({Length} bytes, {StatusWord})")]
-public sealed record ChallengeResponse(StatusWord StatusWord, IMemoryOwner<byte> Challenge, int Length): CardResponseIntent(StatusWord);
+public sealed record ChallengeResponse(StatusWord StatusWord, IMemoryOwner<byte> Challenge, int Length) : CardResponseIntent(StatusWord);
 
 /// <summary>
 /// The successful response to EXTERNAL AUTHENTICATE: the card's Basic Access Control token <c>EIC || MIC</c>
@@ -64,7 +64,7 @@ public sealed record ChallengeResponse(StatusWord StatusWord, IMemoryOwner<byte>
 /// <param name="Token">The pooled buffer holding <c>EIC || MIC</c>; disposed after framing.</param>
 /// <param name="Length">The number of valid octets in <paramref name="Token"/>.</param>
 [DebuggerDisplay("BacAuthenticateResponse({Length} bytes, {StatusWord})")]
-public sealed record BacAuthenticateResponse(StatusWord StatusWord, IMemoryOwner<byte> Token, int Length): CardResponseIntent(StatusWord);
+public sealed record BacAuthenticateResponse(StatusWord StatusWord, IMemoryOwner<byte> Token, int Length) : CardResponseIntent(StatusWord);
 
 /// <summary>
 /// The response to a PACE GENERAL AUTHENTICATE round: a dynamic authentication data object (tag <c>0x7C</c>)
@@ -79,7 +79,7 @@ public sealed record BacAuthenticateResponse(StatusWord StatusWord, IMemoryOwner
 /// <param name="Data">The pooled buffer holding the <c>7C</c> response object; disposed after framing.</param>
 /// <param name="Length">The number of valid octets in <paramref name="Data"/>.</param>
 [DebuggerDisplay("DynamicAuthenticationDataResponse({Length} bytes, {StatusWord})")]
-public sealed record DynamicAuthenticationDataResponse(StatusWord StatusWord, IMemoryOwner<byte> Data, int Length): CardResponseIntent(StatusWord);
+public sealed record DynamicAuthenticationDataResponse(StatusWord StatusWord, IMemoryOwner<byte> Data, int Length) : CardResponseIntent(StatusWord);
 
 /// <summary>
 /// The successful response to INTERNAL AUTHENTICATE: the chip's Active Authentication signature over the
@@ -95,4 +95,4 @@ public sealed record DynamicAuthenticationDataResponse(StatusWord StatusWord, IM
 /// <param name="Signature">The pooled buffer holding the signature; disposed after framing.</param>
 /// <param name="Length">The number of valid octets in <paramref name="Signature"/>.</param>
 [DebuggerDisplay("ActiveAuthenticationResponse({Length} bytes, {StatusWord})")]
-public sealed record ActiveAuthenticationResponse(StatusWord StatusWord, IMemoryOwner<byte> Signature, int Length): CardResponseIntent(StatusWord);
+public sealed record ActiveAuthenticationResponse(StatusWord StatusWord, IMemoryOwner<byte> Signature, int Length) : CardResponseIntent(StatusWord);

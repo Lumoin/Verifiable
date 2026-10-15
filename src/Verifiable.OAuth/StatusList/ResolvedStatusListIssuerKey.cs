@@ -24,7 +24,7 @@ namespace Verifiable.OAuth.StatusList;
 /// distinct lifetimes and compare as such.
 /// </para>
 /// </remarks>
-public sealed class ResolvedStatusListIssuerKey: IDisposable
+public sealed class ResolvedStatusListIssuerKey : IDisposable
 {
     /// <summary>The public key the Status List Token's signature is verified under.</summary>
     public required PublicKeyMemory Key { get; init; }

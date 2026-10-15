@@ -14,7 +14,7 @@ namespace Verifiable.JCose;
 /// <see cref="CBAdESValidationResult"/>'s own mint-only rationale.
 /// </remarks>
 [DebuggerDisplay("CBAdESCoseSignSignerValidationResult: IsValid={IsValid}")]
-public sealed class CBAdESCoseSignSignerValidationResult: IDisposable
+public sealed class CBAdESCoseSignSignerValidationResult : IDisposable
 {
     private bool disposed;
 
@@ -145,7 +145,7 @@ public sealed class CBAdESCoseSignSignerValidationResult: IDisposable
 /// </para>
 /// </remarks>
 [DebuggerDisplay("CBAdESCoseSignValidationResult: IsValid={IsValid}, signers={Signers.Count}")]
-public sealed class CBAdESCoseSignValidationResult: IDisposable
+public sealed class CBAdESCoseSignValidationResult : IDisposable
 {
     private bool disposed;
 

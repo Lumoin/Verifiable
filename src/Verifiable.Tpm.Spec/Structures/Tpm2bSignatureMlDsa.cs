@@ -33,7 +33,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public readonly struct Tpm2bSignatureMlDsa: IDisposable, IEquatable<Tpm2bSignatureMlDsa>
+public readonly struct Tpm2bSignatureMlDsa : IDisposable, IEquatable<Tpm2bSignatureMlDsa>
 {
     /// <summary>
     /// Maximum signature size for ML-DSA-87 (largest parameter set).

@@ -90,7 +90,7 @@ public enum EvidenceRecordCreationFailureKind
 /// caller rather than an adversarial input to be classified and reported.
 /// </remarks>
 [DebuggerDisplay("EvidenceRecordCreationException({FailureKind}): {Message}")]
-public sealed class EvidenceRecordCreationException: Exception
+public sealed class EvidenceRecordCreationException : Exception
 {
     /// <summary>Gets what could not be done.</summary>
     public EvidenceRecordCreationFailureKind FailureKind { get; }
@@ -215,7 +215,7 @@ public enum EvidenceRecordVerificationStatus
 /// <see href="https://www.rfc-editor.org/rfc/rfc4998#section-4.3">IETF RFC 4998 clause 4.3</see>.
 /// </summary>
 [DebuggerDisplay("EvidenceRecordArchiveTimeStampVerification({Status}, {GenerationTime})")]
-public sealed class EvidenceRecordArchiveTimeStampVerification: IDisposable
+public sealed class EvidenceRecordArchiveTimeStampVerification : IDisposable
 {
     /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
     private bool disposed;
@@ -283,7 +283,7 @@ public sealed class EvidenceRecordArchiveTimeStampVerification: IDisposable
 /// not make.
 /// </remarks>
 [DebuggerDisplay("EvidenceRecordChainVerification({Status}, covers data object {CoversDataObject})")]
-public sealed class EvidenceRecordChainVerification: IDisposable
+public sealed class EvidenceRecordChainVerification : IDisposable
 {
     /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
     private bool disposed;
@@ -354,7 +354,7 @@ public sealed class EvidenceRecordChainVerification: IDisposable
 /// <see cref="EvidenceRecordArchiveTimeStampVerification.GenerationTime"/> values are what that caller needs.
 /// </remarks>
 [DebuggerDisplay("EvidenceRecordVerification({Status}, {Chains.Count} chains)")]
-public sealed class EvidenceRecordVerification: IDisposable
+public sealed class EvidenceRecordVerification : IDisposable
 {
     /// <summary>Whether <see cref="Dispose"/> has already run.</summary>
     private bool disposed;

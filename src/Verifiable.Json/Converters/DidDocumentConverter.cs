@@ -28,7 +28,7 @@ namespace Verifiable.Json.Converters;
 /// <see cref="DidDocument"/> subtypes, so it is not re-entered.
 /// </para>
 /// </remarks>
-public sealed class DidDocumentConverter: JsonConverter<DidDocument>
+public sealed class DidDocumentConverter : JsonConverter<DidDocument>
 {
     //The id prefix that selects the typed did:webplus subtype, computed once from the well-known method name.
     private static string WebPlusMethodPrefix { get; } = WellKnownDidMethodPrefixes.WebPlusDidMethodPrefix + ":";

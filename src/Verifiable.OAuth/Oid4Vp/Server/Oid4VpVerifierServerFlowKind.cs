@@ -9,7 +9,7 @@ namespace Verifiable.OAuth.Oid4Vp.Server;
 /// <remarks>
 /// Accessed via <c>FlowKind.Oid4VpVerifierServer</c>.
 /// </remarks>
-public sealed class Oid4VpVerifierServerFlowKind: StatefulFlowKind
+public sealed class Oid4VpVerifierServerFlowKind : StatefulFlowKind
 {
     /// <summary>The singleton instance.</summary>
     public static Oid4VpVerifierServerFlowKind Instance { get; } = new();

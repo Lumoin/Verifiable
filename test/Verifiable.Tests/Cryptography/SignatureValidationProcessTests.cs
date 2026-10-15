@@ -631,7 +631,7 @@ internal sealed class SignatureValidationProcessTests
     /// Internal rather than private so <c>SignatureValidationReportTests</c> can drive the TS 119 102-2 report
     /// builder over the same rich, real material rather than duplicating this fixture.
     /// </remarks>
-    internal sealed class SignatureScenario: IDisposable
+    internal sealed class SignatureScenario : IDisposable
     {
         /// <summary>The carriers this scenario minted, released in reverse order.</summary>
         private List<IDisposable> Owned { get; } = [];

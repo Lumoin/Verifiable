@@ -3,7 +3,7 @@ namespace Verifiable.Cryptography
     /// <summary>
     /// Represent a cryptographic key that is held in memory.
     /// </summary>
-    public abstract class SensitiveMemoryKey: IDisposable
+    public abstract class SensitiveMemoryKey : IDisposable
     {
         /// <summary>
         /// Detects and prevents redundant dispose calls.

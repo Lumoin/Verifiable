@@ -1950,7 +1950,7 @@ public static class CAdESSignatureCreation
 /// both DER forms and their digest, ready for either an external signer (phases 1+2, e.g. CSC/TS 119 432) or
 /// the registered signing seam (<see cref="CAdESSignatureCreation.SignAsync(PkiCertificateMemory, PrivateKeyMemory, ReadOnlyMemory{byte}?, ReadOnlyMemory{byte}?, DateTimeOffset, IReadOnlyList{PkiCertificateMemory}?, CryptographicConstraints?, bool, BaseMemoryPool, CancellationToken, CAdESOptionalSignedAttributes?, bool)"/>).
 /// </summary>
-public sealed class CAdESSignaturePreparation: IDisposable
+public sealed class CAdESSignaturePreparation : IDisposable
 {
     private bool disposed;
 

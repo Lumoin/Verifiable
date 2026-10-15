@@ -35,7 +35,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class Tpm2bSensitive: IDisposable
+public sealed class Tpm2bSensitive : IDisposable
 {
     /// <summary>The shared size-zero instance <see cref="Absent"/> answers, exempt from disposal.</summary>
     private static Tpm2bSensitive AbsentInstance { get; } = new();

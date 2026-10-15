@@ -24,7 +24,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </list>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class QuoteInput: ITpmCommandInput, IDisposable
+public sealed class QuoteInput : ITpmCommandInput, IDisposable
 {
     private bool Disposed { get; set; }
 

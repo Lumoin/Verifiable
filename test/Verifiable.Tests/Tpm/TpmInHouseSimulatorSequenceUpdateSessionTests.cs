@@ -1361,7 +1361,7 @@ internal sealed class TpmInHouseSimulatorSequenceUpdateSessionTests
     /// </summary>
     /// <param name="sequenceHandle">The <c>@sequenceHandle</c> handle value.</param>
     /// <param name="buffer">The <c>buffer</c> parameter's octets — borrowed; the caller owns them.</param>
-    private sealed class CallerNamedSequenceUpdateInput(uint sequenceHandle, ReadOnlyMemory<byte> buffer): ITpmCommandInput
+    private sealed class CallerNamedSequenceUpdateInput(uint sequenceHandle, ReadOnlyMemory<byte> buffer) : ITpmCommandInput
     {
         /// <summary>The <c>TPM2_SequenceUpdate()</c> command code.</summary>
         public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_SequenceUpdate;
@@ -1390,7 +1390,7 @@ internal sealed class TpmInHouseSimulatorSequenceUpdateSessionTests
     /// </summary>
     /// <param name="sequenceHandle">The <c>@sequenceHandle</c> handle value.</param>
     /// <param name="buffer">The over-bound <c>buffer</c> octets — borrowed; the caller owns them.</param>
-    private sealed class UnboundedSequenceUpdateInput(uint sequenceHandle, ReadOnlyMemory<byte> buffer): ITpmCommandInput
+    private sealed class UnboundedSequenceUpdateInput(uint sequenceHandle, ReadOnlyMemory<byte> buffer) : ITpmCommandInput
     {
         /// <summary>The <c>TPM2_SequenceUpdate()</c> command code.</summary>
         public TpmCcConstants CommandCode => TpmCcConstants.TPM_CC_SequenceUpdate;

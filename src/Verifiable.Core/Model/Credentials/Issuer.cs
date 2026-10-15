@@ -34,7 +34,7 @@ namespace Verifiable.Core.Model.Credentials;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("Issuer(Id = {Id}, Name = {Name})")]
-public class Issuer: IEquatable<Issuer>
+public class Issuer : IEquatable<Issuer>
 {
     /// <summary>
     /// The unique identifier of the issuer.

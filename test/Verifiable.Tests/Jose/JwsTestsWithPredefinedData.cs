@@ -20,6 +20,12 @@ internal sealed class JwsTestsWithPredefinedData
     public TestContext TestContext { get; set; } = null!;
 
 
+    /// <summary>
+    /// An ECDSA JWT signed from a jwt.io test vector's key carries the cross-check JWT's header and payload segments, and its
+    /// signature verifies under the vector's public key through a verification independent of the library's crypto drivers.
+    /// </summary>
+    /// <param name="testData">The jwt.io ECDSA test vector.</param>
+    /// <returns>A task completing once the signature is judged.</returns>
     [TestMethod]
     [DynamicData(nameof(JwtTestDataProvider.GetESTestData), typeof(JwtTestDataProvider))]
     public async Task EcdsaJwtFromTestDataVerifies(ESTestData testData)
@@ -82,6 +88,8 @@ signingDelegate,
             publicKey,
             (dataToVerify, signature, verificationKey, context, cancellationToken) =>
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 using var key = ECDsa.Create();
                 key.ImportSubjectPublicKeyInfo(verificationKey.Span, out _);
                 return ValueTask.FromResult<(bool, CryptoEvent?)>((key.VerifyData(dataToVerify.Span, signature.Span, hashAlgorithm), null));
@@ -92,6 +100,12 @@ signingDelegate,
     }
 
 
+    /// <summary>
+    /// An RSA PKCS#1 v1.5 JWT signed from a jwt.io test vector's key is, signature included, the cross-check JWT: the signature
+    /// is deterministic.
+    /// </summary>
+    /// <param name="testData">The jwt.io RSA PKCS#1 v1.5 test vector.</param>
+    /// <returns>A task completing once the JWT is judged.</returns>
     [TestMethod]
     [DynamicData(nameof(JwtTestDataProvider.GetRsaRsTestData), typeof(JwtTestDataProvider))]
     public async Task RsaRsJwtFromTestDataVerifies(RsaRSTestData testData)
@@ -135,6 +149,13 @@ signingDelegate,
     }
 
 
+    /// <summary>
+    /// An RSA-PSS JWT signed from a jwt.io test vector's key carries the cross-check JWT's header and payload segments, and its
+    /// randomly padded signature verifies under the vector's public key through a verification independent of the library's
+    /// crypto drivers.
+    /// </summary>
+    /// <param name="testData">The jwt.io RSA-PSS test vector.</param>
+    /// <returns>A task completing once the signature is judged.</returns>
     [TestMethod]
     [DynamicData(nameof(JwtTestDataProvider.GetRsaPsTestData), typeof(JwtTestDataProvider))]
     public async Task RsaPsJwtFromTestDataVerifies(RsaPSTestData testData)
@@ -189,6 +210,8 @@ signingDelegate,
             publicKey,
             (dataToVerify, signature, verificationKey, context, cancellationToken) =>
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 using var key = RSA.Create();
                 key.ImportSubjectPublicKeyInfo(verificationKey.Span, out _);
                 return ValueTask.FromResult<(bool, CryptoEvent?)>((key.VerifyData(dataToVerify.Span, signature.Span, hashAlgorithm, RSASignaturePadding.Pss), null));

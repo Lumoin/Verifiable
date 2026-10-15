@@ -37,7 +37,7 @@ namespace Verifiable.Fido2;
 ///     cancellationToken: cancellationToken);
 /// </code>
 /// </example>
-public sealed class Fido2RegistrationOptionsBuilder: Builder<PublicKeyCredentialCreationOptions, Fido2RegistrationOptionsBuildState, Fido2RegistrationOptionsBuilder>
+public sealed class Fido2RegistrationOptionsBuilder : Builder<PublicKeyCredentialCreationOptions, Fido2RegistrationOptionsBuildState, Fido2RegistrationOptionsBuilder>
 {
     /// <summary>
     /// The default <c>pubKeyCredParams</c> list: EdDSA, ES256, RS256 in that preference order (row

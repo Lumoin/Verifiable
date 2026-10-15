@@ -7,7 +7,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// <remarks>
 /// See TPM 2.0 Library Part 3, clause 24.2 (Table 194).
 /// </remarks>
-public sealed class HierarchyControlResponse: ITpmWireType
+public sealed class HierarchyControlResponse : ITpmWireType
 {
     /// <summary>
     /// The shared instance returned for a successful, parameterless response.

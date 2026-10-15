@@ -13,7 +13,7 @@ namespace Verifiable.JCose;
 /// disposal alongside the rest of the parsed message.
 /// </remarks>
 [DebuggerDisplay("AeadGeneralRecipient KeyId={KeyId} WrappedKeyLength={WrappedKey.Length}")]
-public sealed class AeadGeneralRecipient: IDisposable
+public sealed class AeadGeneralRecipient : IDisposable
 {
     private IMemoryOwner<byte> WrappedKeyOwner { get; }
     private bool disposed;

@@ -25,7 +25,7 @@ namespace Verifiable.Core.Model.Credentials;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("EnvelopedVerifiablePresentation(Id = {Id})")]
-public sealed class EnvelopedVerifiablePresentation: IEquatable<EnvelopedVerifiablePresentation>
+public sealed class EnvelopedVerifiablePresentation : IEquatable<EnvelopedVerifiablePresentation>
 {
     /// <summary>
     /// The JSON-LD context. MUST be present and include a context that defines the

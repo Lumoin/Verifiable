@@ -30,7 +30,7 @@ namespace Verifiable.Core.Model.Did
     /// <remarks>Note that for DID specifications private key information, such as 'd' field,
     /// MUST not be present. The DID usage of JWK is compatible with
     /// <see href="https://tools.ietf.org/html/rfc7517">JWK (RFC 7517) specification</see>.</remarks>
-    public class PublicKeyJwk: KeyFormat
+    public class PublicKeyJwk : KeyFormat
     {
         /// <summary>The JWK member set (<c>kty</c>, <c>crv</c>, <c>x</c>, <c>y</c>, and so on) per RFC 7517.</summary>
         public Dictionary<string, object> Header { get; set; } = [];

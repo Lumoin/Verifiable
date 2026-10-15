@@ -36,7 +36,7 @@ namespace Verifiable.DidComm.Transport;
 /// WebSocket/Bluetooth/libp2p binding) can mint a result.
 /// </para>
 /// </remarks>
-public sealed class DidCommExchangeResult: IDisposable
+public sealed class DidCommExchangeResult : IDisposable
 {
     private DidCommExchangeResult(
         bool isAccepted,

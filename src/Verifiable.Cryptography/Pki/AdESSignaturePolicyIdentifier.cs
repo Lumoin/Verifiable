@@ -96,7 +96,7 @@ namespace Verifiable.Cryptography.Pki;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("AdESSignaturePolicyIdentifier: HashAlgorithm={HashAlgorithm}, DigestIsPerSpecification={DigestIsPerSpecification}")]
-public sealed class AdESSignaturePolicyIdentifier: IDisposable
+public sealed class AdESSignaturePolicyIdentifier : IDisposable
 {
     /// <summary>
     /// Initializes a new <see cref="AdESSignaturePolicyIdentifier"/>. Ownership of <paramref name="digest"/>,
@@ -286,7 +286,7 @@ public abstract class AdESSignaturePolicyQualifier
 /// or case name different locations and stay unequal.
 /// </remarks>
 [DebuggerDisplay("AdESSignaturePolicyUri: {Location}")]
-public sealed class AdESSignaturePolicyUri: AdESSignaturePolicyQualifier, IEquatable<AdESSignaturePolicyUri>
+public sealed class AdESSignaturePolicyUri : AdESSignaturePolicyQualifier, IEquatable<AdESSignaturePolicyUri>
 {
     /// <summary>Initializes a new <see cref="AdESSignaturePolicyUri"/>.</summary>
     /// <param name="location">
@@ -366,7 +366,7 @@ public sealed class AdESSignaturePolicyUri: AdESSignaturePolicyQualifier, IEquat
 /// </para>
 /// </remarks>
 [DebuggerDisplay("AdESSignaturePolicyUserNotice: NoticeReference={NoticeReference != null}, ExplicitText={ExplicitText != null}")]
-public sealed class AdESSignaturePolicyUserNotice: AdESSignaturePolicyQualifier
+public sealed class AdESSignaturePolicyUserNotice : AdESSignaturePolicyQualifier
 {
     /// <summary>
     /// Initializes a new <see cref="AdESSignaturePolicyUserNotice"/>.
@@ -474,7 +474,7 @@ public sealed class AdESSignaturePolicyNoticeReference
 /// naming the same specification are interchangeable.
 /// </remarks>
 [DebuggerDisplay("AdESSignaturePolicyDocumentSpecification: {Specification}")]
-public sealed class AdESSignaturePolicyDocumentSpecification: AdESSignaturePolicyQualifier, IEquatable<AdESSignaturePolicyDocumentSpecification>
+public sealed class AdESSignaturePolicyDocumentSpecification : AdESSignaturePolicyQualifier, IEquatable<AdESSignaturePolicyDocumentSpecification>
 {
     /// <summary>Initializes a new <see cref="AdESSignaturePolicyDocumentSpecification"/>.</summary>
     /// <param name="specification">
@@ -537,7 +537,7 @@ public sealed class AdESSignaturePolicyDocumentSpecification: AdESSignaturePolic
 /// accepts an <see cref="AdESSignaturePolicyOtherQualifier"/>.
 /// </remarks>
 [DebuggerDisplay("AdESSignaturePolicyOtherQualifier: {Label}")]
-public sealed class AdESSignaturePolicyOtherQualifier: AdESSignaturePolicyQualifier
+public sealed class AdESSignaturePolicyOtherQualifier : AdESSignaturePolicyQualifier
 {
     /// <summary>Initializes a new <see cref="AdESSignaturePolicyOtherQualifier"/>.</summary>
     /// <param name="label">
@@ -590,10 +590,10 @@ public abstract record AdESSignaturePolicyQualifierLabel
 /// <summary>The <c>int</c> arm of the CB-AdES <c>label</c> CDDL rule (clause 5.2.5).</summary>
 /// <param name="Value">The integer label.</param>
 [DebuggerDisplay("AdESSignaturePolicyQualifierIntegerLabel: {Value}")]
-public sealed record AdESSignaturePolicyQualifierIntegerLabel(int Value): AdESSignaturePolicyQualifierLabel;
+public sealed record AdESSignaturePolicyQualifierIntegerLabel(int Value) : AdESSignaturePolicyQualifierLabel;
 
 
 /// <summary>The <c>tstr</c> arm of the CB-AdES <c>label</c> CDDL rule (clause 5.2.5).</summary>
 /// <param name="Value">The text label.</param>
 [DebuggerDisplay("AdESSignaturePolicyQualifierTextLabel: {Value}")]
-public sealed record AdESSignaturePolicyQualifierTextLabel(string Value): AdESSignaturePolicyQualifierLabel;
+public sealed record AdESSignaturePolicyQualifierTextLabel(string Value) : AdESSignaturePolicyQualifierLabel;

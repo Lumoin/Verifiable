@@ -22,7 +22,7 @@ namespace Verifiable.Tpm.Infrastructure.Commands;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class VerifySequenceStartResponse: ITpmWireType
+public sealed class VerifySequenceStartResponse : ITpmWireType
 {
     /// <summary>
     /// Gets the handle of the newly opened verification sequence.

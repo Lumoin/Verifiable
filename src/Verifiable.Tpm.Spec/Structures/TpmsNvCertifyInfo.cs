@@ -28,7 +28,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class TpmsNvCertifyInfo: ITpmWireType, IDisposable
+public sealed class TpmsNvCertifyInfo : ITpmWireType, IDisposable
 {
     private IMemoryOwner<byte>? NvContentsStorage { get; }
     private int NvContentsLength { get; }

@@ -63,4 +63,4 @@ public sealed record SignSiopRequestObject(
     KeyId SigningKeyId,
     string? IdTokenType,
     IReadOnlyList<string> AllowedAlgorithms,
-    JwtHeader? AdditionalHeaderClaims = null): OAuthAction;
+    JwtHeader? AdditionalHeaderClaims = null) : OAuthAction;

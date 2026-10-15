@@ -1079,7 +1079,7 @@ internal sealed class CAdESOptionalAttributesTests
     /// The material the requirement m)/content-time-stamp tests start from: a Root CA and a Time-Stamping
     /// Authority under it, and a signer whose key material comes from the repository's test-key creator.
     /// </summary>
-    private sealed class Scenario: IDisposable
+    private sealed class Scenario : IDisposable
     {
         /// <summary>Gets the Root CA the authority is issued by.</summary>
         internal required X509ChainTestRingNode Root { get; init; }

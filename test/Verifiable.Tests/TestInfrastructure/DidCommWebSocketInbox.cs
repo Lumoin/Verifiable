@@ -40,7 +40,7 @@ internal sealed record DidCommWebSocketDelivery(string MediaType, byte[] Bytes);
 /// endpoint is a trusted loopback inbox.
 /// </para>
 /// </remarks>
-internal sealed class DidCommWebSocketInbox: IAsyncDisposable
+internal sealed class DidCommWebSocketInbox : IAsyncDisposable
 {
     private WebApplication App { get; }
     private X509Certificate2 ListenerCertificate { get; }

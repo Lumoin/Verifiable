@@ -24,7 +24,7 @@ public abstract record InspectionStage;
 /// server. Always fires, including on requests that go on to fail
 /// validation or match no endpoint.
 /// </summary>
-public sealed record IncomingRequestStage(IncomingRequest Request): InspectionStage;
+public sealed record IncomingRequestStage(IncomingRequest Request) : InspectionStage;
 
 
 /// <summary>
@@ -36,7 +36,7 @@ public sealed record IncomingRequestStage(IncomingRequest Request): InspectionSt
 [DebuggerDisplay("MatchedStage Endpoint={Endpoint?.Name}")]
 public sealed record MatchedStage(
     ServerEndpoint? Endpoint,
-    MatchPayload? Payload): InspectionStage;
+    MatchPayload? Payload) : InspectionStage;
 
 
 /// <summary>
@@ -53,7 +53,7 @@ public sealed record MatchedStage(
 public sealed record StateTransitionStage(
     FlowState Before,
     FlowInput Input,
-    FlowState After): InspectionStage;
+    FlowState After) : InspectionStage;
 
 
 /// <summary>
@@ -62,4 +62,4 @@ public sealed record StateTransitionStage(
 /// of the status code.
 /// </summary>
 [DebuggerDisplay("OutgoingResponseStage StatusCode={Response.StatusCode}")]
-public sealed record OutgoingResponseStage(ServerHttpResponse Response): InspectionStage;
+public sealed record OutgoingResponseStage(ServerHttpResponse Response) : InspectionStage;

@@ -31,7 +31,7 @@ namespace Verifiable.Core.Model.Dcql;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{ToString()}")]
-public sealed class DcqlClaimPattern: IEquatable<DcqlClaimPattern>
+public sealed class DcqlClaimPattern : IEquatable<DcqlClaimPattern>
 {
     private PatternSegment[] Segments { get; }
 

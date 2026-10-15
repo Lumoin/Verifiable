@@ -30,7 +30,7 @@ namespace Verifiable.Core.Model.Credentials;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("CredentialStatus(Id = {Id}, Type = {Type}, StatusPurpose = {StatusPurpose})")]
-public class CredentialStatus: IEquatable<CredentialStatus>
+public class CredentialStatus : IEquatable<CredentialStatus>
 {
     /// <summary>
     /// A unique identifier for this status entry.

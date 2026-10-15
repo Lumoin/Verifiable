@@ -18,7 +18,7 @@ namespace Verifiable.Apdu.Lds;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("DataGroup7(DisplayedSignature, {Length} bytes)")]
-public sealed class DataGroup7: SensitiveMemory
+public sealed class DataGroup7 : SensitiveMemory
 {
     /// <summary>The eMRTD elementary file identifier of EF.DG7.</summary>
     public const ushort FileIdentifier = 0x0107;

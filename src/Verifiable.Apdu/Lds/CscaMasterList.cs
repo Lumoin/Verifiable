@@ -193,7 +193,7 @@ public static class CscaMasterList
 /// carried, and the Country Signing CA certificates it lists — trust anchors for Passive Authentication. Owns
 /// and disposes every certificate carrier.
 /// </summary>
-public sealed class CscaMasterListContent: IDisposable
+public sealed class CscaMasterListContent : IDisposable
 {
     private bool disposed;
 

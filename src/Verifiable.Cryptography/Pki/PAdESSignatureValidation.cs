@@ -80,7 +80,7 @@ public enum PAdESSignatureStatus
 /// <see cref="IsValid"/>.
 /// </remarks>
 [DebuggerDisplay("PAdESSignatureValidationResult: {Status}")]
-public sealed class PAdESSignatureValidationResult: IDisposable
+public sealed class PAdESSignatureValidationResult : IDisposable
 {
     private bool disposed;
 
@@ -162,7 +162,7 @@ public sealed class PAdESSignatureValidationResult: IDisposable
 /// </summary>
 /// <remarks>Ownership: owns the underlying <see cref="PdfByteSurfaceParseResult"/> and every entry of <see cref="Signatures"/>; <see cref="Dispose"/> disposes both.</remarks>
 [DebuggerDisplay("PAdESValidationResult: {IsSuccess}, {Signatures?.Count} signature(s)")]
-public sealed class PAdESValidationResult: IDisposable
+public sealed class PAdESValidationResult : IDisposable
 {
     private PdfByteSurfaceParseResult ByteSurface { get; }
     private bool disposed;

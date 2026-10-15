@@ -26,7 +26,7 @@ namespace Verifiable.Xml;
 /// type does not restate that surface, keeping to the one thing an <c>AnyType</c> position needs beyond what
 /// the table already exposes — the ordered list of child positions.
 /// </remarks>
-public readonly struct XAdESUnmodeledContent: IEquatable<XAdESUnmodeledContent>
+public readonly struct XAdESUnmodeledContent : IEquatable<XAdESUnmodeledContent>
 {
     /// <summary>The table the content's indices read from.</summary>
     internal XmlNodeTable Table { get; }

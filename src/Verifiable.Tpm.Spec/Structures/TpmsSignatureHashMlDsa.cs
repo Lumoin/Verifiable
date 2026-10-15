@@ -24,7 +24,7 @@ namespace Verifiable.Tpm.Spec.Structures;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public readonly struct TpmsSignatureHashMlDsa: IDisposable, IEquatable<TpmsSignatureHashMlDsa>
+public readonly struct TpmsSignatureHashMlDsa : IDisposable, IEquatable<TpmsSignatureHashMlDsa>
 {
     /// <summary>
     /// Gets the hash algorithm used for pre-hashing.

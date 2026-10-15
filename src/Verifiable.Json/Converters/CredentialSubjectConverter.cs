@@ -20,7 +20,7 @@ namespace Verifiable.Json.Converters;
 /// This converter handles both forms transparently, always deserializing to a list.
 /// </para>
 /// </remarks>
-public class CredentialSubjectConverter: JsonConverter<List<CredentialSubject>>
+public class CredentialSubjectConverter : JsonConverter<List<CredentialSubject>>
 {
     /// <inheritdoc/>
     public override bool CanConvert(Type typeToConvert)

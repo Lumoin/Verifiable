@@ -226,7 +226,7 @@ public sealed record PreservationContainerProfileContext
 /// container that arrived from elsewhere is data.
 /// </remarks>
 [DebuggerDisplay("PreservationContainerProfileException({Status}): {Message}")]
-public sealed class PreservationContainerProfileException: Exception
+public sealed class PreservationContainerProfileException : Exception
 {
     /// <summary>Gets which requirement of the profile the creation would not have satisfied.</summary>
     public PreservationContainerProfileStatus Status { get; }

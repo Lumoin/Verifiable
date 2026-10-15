@@ -87,7 +87,7 @@ namespace Verifiable.Tests.OAuth;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("TestHostShell Clients={Default.Registrations.Count} Flows={Default.FlowStates.Count}")]
-internal sealed class TestHostShell: IAsyncDisposable
+internal sealed class TestHostShell : IAsyncDisposable
 {
     /// <summary>
     /// All per-host state lives on this instance. The property aliases below mirror the historical
@@ -4399,7 +4399,7 @@ internal sealed class TestHostShell: IAsyncDisposable
 
 
     /// <summary>A host-owned resource whose disposal can be observed after a teardown fault.</summary>
-    internal sealed class DisposalProbe: IDisposable
+    internal sealed class DisposalProbe : IDisposable
     {
         /// <summary>Whether the owning host has released this resource.</summary>
         public bool IsDisposed { get; private set; }
@@ -4474,7 +4474,7 @@ internal sealed class TestHostShell: IAsyncDisposable
 
 
     /// <summary>A secondary fixture family whose bounded traversal faults exercise worker containment.</summary>
-    internal sealed class TraversalFaultIntegration: ServerIntegration
+    internal sealed class TraversalFaultIntegration : ServerIntegration
     {
         /// <summary>The remaining traversal faults, an Interlocked target shared with the worker thread.</summary>
         private int remainingFaults;
