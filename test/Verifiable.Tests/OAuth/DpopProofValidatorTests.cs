@@ -847,7 +847,10 @@ internal sealed class DpopProofValidatorTests
     /// <see cref="DpopProofValidationFailureReason.InvalidAlg"/>. A P-256 <c>x</c> of 31 octets
     /// (<see href="https://www.rfc-editor.org/rfc/rfc7518#section-6.2.1.2">RFC 7518 Section 6.2.1.2</see>: "The length
     /// of this octet string MUST be the full size of a coordinate for the curve specified in the "crv" parameter.")
-    /// reconstructs no point: <see cref="DpopProofValidationFailureReason.InvalidJwk"/>. An empty <c>n</c> and an
+    /// reconstructs no point: <see cref="DpopProofValidationFailureReason.InvalidJwk"/>. An empty <c>n</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7518#section-6.3.1.1">RFC 7518 Section 6.3.1.1</see>: "The "n"
+    /// (modulus) parameter contains the modulus value for the RSA public key. It is represented as a
+    /// Base64urlUInt-encoded value.", and an empty octet sequence encodes no modulus) and an
     /// <c>e</c> of zero (<see href="https://www.rfc-editor.org/rfc/rfc7518#section-2">RFC 7518 Section 2</see>: "Zero
     /// is represented as BASE64URL(single zero-valued octet), which is "AA"."; <see href="https://www.rfc-editor.org/rfc/rfc8017#section-3.1">RFC
     /// 8017 Section 3.1</see>: "the RSA public exponent e is an integer between 3 and n - 1") reconstruct no RSA public

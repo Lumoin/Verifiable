@@ -700,6 +700,36 @@ internal sealed class TestHostShell: IAsyncDisposable
         }, hostName, cancellationToken);
 
 
+    /// <summary>
+    /// Gives <paramref name="material"/>'s client the RFC 7592 client configuration endpoint a dynamically registered
+    /// client holds: the default host's listener is started, the registration is granted
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthDynamicClientRegistration"/> and its
+    /// <see cref="ClientRecord.RegistrationClientUri"/> names the endpoint on that listener, through
+    /// <see cref="UpdateAsync"/>. The registration access token is the one the host issued when it registered the client.
+    /// </summary>
+    /// <param name="material">The registered client.</param>
+    /// <param name="cancellationToken">Cancellation of the listener start and the commit.</param>
+    /// <returns>The client configuration URI and the client's registration access token.</returns>
+    public async Task<(Uri ManagementUri, string RegistrationAccessToken)> EnableClientConfigurationAsync(
+        VerifierKeyMaterial material, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(material);
+
+        await StartHttpHostAsync(cancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = Host("default");
+        Uri managementUri = new(
+            host.HttpBaseAddress!,
+            ComposeEndpointPath(WellKnownEndpointNames.RegistrationRegister, material.Registration.TenantId.Value));
+        _ = await UpdateAsync(material, previous => previous with
+        {
+            AllowedCapabilities = previous.AllowedCapabilities.Add(WellKnownCapabilityIdentifiers.OAuthDynamicClientRegistration),
+            RegistrationClientUri = managementUri
+        }, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        return (managementUri, host.RegistrationAccessTokens[material.Registration.ClientId]);
+    }
+
+
     /// <summary>Adds a scope, and optionally an audience mapping, through <see cref="UpdateAsync"/>.</summary>
     public Task<ClientRecord> AddScopeWithAudienceAsync(
         VerifierKeyMaterial material,

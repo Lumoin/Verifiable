@@ -1535,6 +1535,11 @@ internal sealed class HostedAuthorizationServer: IClientRegistrationStore
                     FrontchannelLogoutUri = root.TryGetProperty("frontchannel_logout_uri", out JsonElement parsedFrontchannelLogoutUri) ? new Uri(parsedFrontchannelLogoutUri.GetString()!) : null,
                     BackchannelLogoutSessionRequired = root.TryGetProperty("backchannel_logout_session_required", out JsonElement parsedBackchannelLogoutSessionRequired) && parsedBackchannelLogoutSessionRequired.GetBoolean(),
                     FrontchannelLogoutSessionRequired = root.TryGetProperty("frontchannel_logout_session_required", out JsonElement parsedFrontchannelLogoutSessionRequired) && parsedFrontchannelLogoutSessionRequired.GetBoolean(),
+                    DpopBoundAccessTokens = root.TryGetProperty(ClientMetadataParameterNames.DpopBoundAccessTokens, out JsonElement parsedDpopBoundAccessTokens) switch
+                    {
+                        true => parsedDpopBoundAccessTokens.GetBoolean(),
+                        false => null
+                    },
                     GrantTypes = root.TryGetProperty("grant_types", out JsonElement parsedGrantTypes) ? parsedGrantTypes.EnumerateArray().Select(value => GrantTypeNames.TryParse(value.GetString()!, out GrantType parsed) ? parsed : throw new InvalidOperationException("Invalid grant type.")).ToArray() : [],
                     ResponseTypes = root.TryGetProperty("response_types", out JsonElement parsedResponseTypes) ? parsedResponseTypes.EnumerateArray().Select(value => ResponseTypeNames.TryParse(value.GetString()!, out ResponseType parsed) ? parsed : throw new InvalidOperationException("Invalid response type.")).ToArray() : [],
                     PostLogoutRedirectUris = root.TryGetProperty("post_logout_redirect_uris", out JsonElement parsedPostLogoutRedirectUris) ? parsedPostLogoutRedirectUris.EnumerateArray().Select(value => new Uri(value.GetString()!)).ToArray() : [],

@@ -162,6 +162,12 @@ internal static class ClientMetadataJson
         {
             JsonAppender.AppendBoolField(sb, "frontchannel_logout_session_required", metadata.FrontchannelLogoutSessionRequired, ref isFirst);
         }
+
+        //RFC 9449 Section 5.2: dpop_bound_access_tokens is "A boolean value", written as a JSON boolean when declared.
+        if(metadata.DpopBoundAccessTokens is bool dpopBoundAccessTokens)
+        {
+            JsonAppender.AppendBoolField(sb, ClientMetadataParameterNames.DpopBoundAccessTokens, dpopBoundAccessTokens, ref isFirst);
+        }
     }
 
 

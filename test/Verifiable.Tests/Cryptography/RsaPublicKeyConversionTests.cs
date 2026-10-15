@@ -144,6 +144,49 @@ internal sealed class RsaPublicKeyConversionTests
     }
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7518#section-6.3.1">RFC 7518 Section 6.3.1</see>: "The following
+    /// members MUST be present for RSA public keys": <c>n</c> and <c>e</c>; an RSA public key's JWK is the same whichever
+    /// signature scheme it is used under (<see href="https://www.rfc-editor.org/rfc/rfc7518#section-3.3">Section 3.3</see>
+    /// and <see href="https://www.rfc-editor.org/rfc/rfc7518#section-3.5">Section 3.5</see> name the schemes, the key
+    /// type names none). A DER public key held under the tag of a scheme converts to a JWK of <c>kty</c> <c>RSA</c> whose
+    /// <c>n</c> and <c>e</c> are those the same octets give under the size tag, with the <c>alg</c> of that scheme.
+    /// </summary>
+    /// <param name="schemeName">The name of the scheme tag the public key is held under.</param>
+    /// <param name="expectedAlg">The JWS <c>alg</c> of the scheme.</param>
+    [TestMethod]
+    [DataRow("RsaSha256", "RS256")]
+    [DataRow("RsaSha384", "RS384")]
+    [DataRow("RsaSha512", "RS512")]
+    [DataRow("RsaSha256Pss", "PS256")]
+    [DataRow("RsaSha384Pss", "PS384")]
+    [DataRow("RsaSha512Pss", "PS512")]
+    public void AnRsaPublicKeyUnderASchemeTagConvertsToTheJwkOfItsOctets(string schemeName, string expectedAlg)
+    {
+        CryptoAlgorithm scheme = schemeName switch
+        {
+            "RsaSha256" => CryptoAlgorithm.RsaSha256,
+            "RsaSha384" => CryptoAlgorithm.RsaSha384,
+            "RsaSha512" => CryptoAlgorithm.RsaSha512,
+            "RsaSha256Pss" => CryptoAlgorithm.RsaSha256Pss,
+            "RsaSha384Pss" => CryptoAlgorithm.RsaSha384Pss,
+            "RsaSha512Pss" => CryptoAlgorithm.RsaSha512Pss,
+            _ => throw new ArgumentOutOfRangeException(nameof(schemeName), schemeName, "No such scheme row.")
+        };
+        byte[] der = EncodeDer(CreateModulus(256), [0x01, 0x00, 0x01]);
+
+        JsonWebKey underSize = CryptoFormatConversions.DefaultAlgorithmToJwkConverter(
+            CryptoAlgorithm.Rsa2048, Purpose.Verification, der, TestSetup.Base64UrlEncoder);
+        JsonWebKey underScheme = CryptoFormatConversions.DefaultAlgorithmToJwkConverter(
+            scheme, Purpose.Verification, der, TestSetup.Base64UrlEncoder);
+
+        Assert.AreEqual(WellKnownKeyTypeValues.Rsa, underScheme.Kty);
+        Assert.AreEqual(underSize.N, underScheme.N, "The modulus is the one the octets give under the size tag.");
+        Assert.AreEqual(underSize.E, underScheme.E, "The exponent is the one the octets give under the size tag.");
+        Assert.AreEqual(expectedAlg, underScheme.Alg);
+    }
+
+
     /// <summary>The RSA multicodec classifier uses modulus width, independently of exponent length.</summary>
     /// <param name="modulusLength">The registered modulus width in octets.</param>
     /// <param name="useBase64Url">Whether to carry the multicodec payload as base64url rather than base58btc.</param>

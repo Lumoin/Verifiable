@@ -236,6 +236,12 @@ public static class AuthCodeServerFlowTransitions
                                 Scope = refresh.Scope,
                                 IssuedAt = token.IssuedAt,
                                 Confirmation = token.Confirmation,
+
+                                //The retired refresh token's own binding, stored on its record at
+                                //issuance, carried so the reuse path judges a later presentation of
+                                //that token by it rather than by the access token this rotation issued.
+                                RetiredRefreshTokenConfirmation = refresh.Confirmation,
+
                                 //Carried forward so a later reuse of THIS retired refresh token —
                                 //resolved back to this exact record — can re-verify client_id and
                                 //the DPoP binding exactly as a live redemption would, per

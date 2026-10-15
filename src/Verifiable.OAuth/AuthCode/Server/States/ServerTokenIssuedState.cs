@@ -57,9 +57,45 @@ public sealed record ServerTokenIssuedState: FlowState
     /// constraint (Bearer). Carries the DPoP <c>jkt</c> thumbprint when DPoP
     /// enforcement bound the token; extensible to MTLS <c>x5t#S256</c> and
     /// other binding methods. Mirrors the <c>cnf</c> claim embedded in the
-    /// issued access token JWT.
+    /// issued access token JWT. On a record a refresh token rotation retired it is
+    /// the binding of the access token that rotation issued, and the retired refresh
+    /// token's own binding is <see cref="RetiredRefreshTokenConfirmation"/>.
     /// </summary>
     public ConfirmationMethod? Confirmation { get; init; }
+
+    /// <summary>
+    /// The RFC 7800 confirmation the refresh token this record retired was issued
+    /// under, the binding its own <see cref="ServerRefreshTokenIssuedState.Confirmation"/>
+    /// stored, or <see langword="null"/> when that refresh token was unbound or when this
+    /// state was reached by a code-grant token exchange rather than a refresh token
+    /// rotation. Set by the rotation transition of
+    /// <see cref="Verifiable.OAuth.AuthCode.Server.AuthCodeServerFlowTransitions"/> from the
+    /// retired refresh record. <see cref="AuthCode.AuthCodeEndpoints.HandleRefreshTokenReuseAsync"/>
+    /// holds a later presentation of that refresh token to this binding, whatever
+    /// <see cref="Confirmation"/> (the binding of the access token the rotation issued)
+    /// carries and whatever the client's registration declares at that presentation:
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>,
+    /// "When an authorization server supporting DPoP issues a refresh token to a public client
+    /// that presents a valid DPoP proof at the token endpoint, the refresh token MUST be bound
+    /// to the respective public key. The binding MUST be validated when the refresh token is
+    /// later presented to get new access tokens.", and "Refresh tokens issued to confidential
+    /// clients (those having established authentication credentials with the authorization
+    /// server) are not bound to the DPoP proof public key"; a presentation that meets this
+    /// binding is a reuse that revokes the grant under
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1
+    /// draft-16 Section 4.3.1</see>: "The authorization server cannot determine which party
+    /// submitted the invalid refresh token, but it will revoke the active refresh token as well
+    /// as the access authorization grant associated with it." A presentation that passes the
+    /// request's own checks, the issuer and client checks and the retired token's binding
+    /// revokes the grant; a malformed <c>DPoP</c> field is refused before the record is read.
+    /// A record stored without the member reads it as <see langword="null"/> and holds its
+    /// retired refresh token to no binding, so a record of a bound token written without the
+    /// member lets a presentation without that token's DPoP key revoke the grant for that
+    /// token's lifetime: a denial of service and nothing more, since no token is issued and
+    /// nothing escapes revocation. An application store that persists this state persists
+    /// the member.
+    /// </summary>
+    public ConfirmationMethod? RetiredRefreshTokenConfirmation { get; init; }
 
     /// <summary>
     /// The client identifier this response was issued to, non-<see langword="null"/> exactly

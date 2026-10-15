@@ -1940,6 +1940,40 @@ internal sealed class DpopEndToEndTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5.2">RFC 9449 Section 5.2</see>: "If the value is
+    /// true, the authorization server MUST reject token requests from the client that do not contain the DPoP header.",
+    /// which <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">Section 5</see> makes "applicable for all
+    /// access token requests regardless of grant type (e.g., the common authorization_code and refresh_token grant types
+    /// and extension grants such as the JWT authorization grant [RFC7523])". A public client whose registration declares
+    /// <c>dpop_bound_access_tokens</c> <c>true</c>, under a profile that leaves DPoP optional, redeems over the wire a
+    /// code its pushed request bound to no DPoP key, with no <c>DPoP</c> field: the redemption is refused 400
+    /// <c>use_dpop_nonce</c> "DPoP proof required." with exactly one <c>DPoP-Nonce</c> field line and no access token.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ClientDeclaringDpopBoundAccessTokensWithoutAProofIsRefusedAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterCodeBindingClientAsync(host, isDpopWired: true).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        (int parStatusCode, string parBody, Uri? location, int authorizeStatusCode) = await RawAuthCodeWirePushers.PushParAndAuthorizeAsync(
+            host, segment, ClientId, TestSubject, BuildAuthorizationRequestFields(pkce), TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(201, parStatusCode, parBody);
+        string code = DpopCodeBindingWire.ReadCode(authorizeStatusCode, location);
+        _ = await host.UpdateAsync(material, static previous => previous with { DpopBoundAccessTokens = true },
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        HttpResponseData response = await HttpClientTransport.SendFormPostAsync(
+            host.Host("default").SharedHttpClient!, RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment),
+            RawAuthCodeWirePushers.BuildTokenFields(ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString),
+            OutgoingHeaders.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        DpopCodeBindingWire.AssertProofRequired(response);
+    }
+
+
+    /// <summary>
     /// The <c>state</c> every authorization request of the code binding rows carries, so a row asserts that an error
     /// redirect echoes it.
     /// </summary>

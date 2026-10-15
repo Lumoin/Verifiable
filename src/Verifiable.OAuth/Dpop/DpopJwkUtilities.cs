@@ -274,12 +274,33 @@ public static class DpopJwkUtilities
 
 
     /// <summary>
-    /// Reconstructs a <see cref="PublicKeyMemory"/> from a JWK dictionary
-    /// embedded in a DPoP proof header. The <paramref name="alg"/> parameter
-    /// is currently informational — the underlying converter resolves the
-    /// algorithm from <c>kty</c> and <c>crv</c> per RFC 7518 — but is
-    /// retained so the caller's intent is documented at the call site.
+    /// Reconstructs a <see cref="PublicKeyMemory"/> from a JWK dictionary, a DPoP proof's <c>jwk</c> or a client's
+    /// registered JWK, tagged with the algorithm <paramref name="alg"/> uses it under. The converter resolves the public key's
+    /// family from <c>kty</c> and <c>crv</c> (RFC 7518); an RSA JWK names no signature scheme, the <c>alg</c> does
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7518#section-3.3">RFC 7518 Section 3.3</see>, RSASSA-PKCS1-v1_5;
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7518#section-3.5">Section 3.5</see>, RSASSA-PSS).
     /// </summary>
+    /// <remarks>
+    /// An RSA public key is tagged by <paramref name="alg"/>: under <c>RS256</c> it keeps the size tag the converter
+    /// gives it (<see cref="CryptoAlgorithm.Rsa2048"/> or <see cref="CryptoAlgorithm.Rsa4096"/>), which the registry
+    /// serves as RSASSA-PKCS1-v1_5 with SHA-256; under <c>RS384</c> it is <see cref="CryptoAlgorithm.RsaSha384"/>, under
+    /// <c>RS512</c> <see cref="CryptoAlgorithm.RsaSha512"/>, under <c>PS256</c> <see cref="CryptoAlgorithm.RsaSha256Pss"/>,
+    /// under <c>PS384</c> <see cref="CryptoAlgorithm.RsaSha384Pss"/> and under <c>PS512</c>
+    /// <see cref="CryptoAlgorithm.RsaSha512Pss"/>, the tag the registry serves with the scheme the <c>alg</c> names, as
+    /// <see cref="CryptoFormatConversions.CoseAlgorithmToCryptoAlgorithm(int)"/> tags a COSE RSA public key by its
+    /// algorithm; under any other identifier it keeps its size tag, which binds no identifier but <c>RS256</c>
+    /// (<see cref="JwsAlgorithmKeyBinding.IsAlgorithmOfKey(string?, CryptoAlgorithm)"/>). So a verification the tag selects
+    /// runs under the scheme the <c>alg</c> names
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.1">RFC 8725 Section 3.1</see>: "The library MUST
+    /// ensure that the "alg" or "enc" header specifies the same algorithm that is used for the cryptographic
+    /// operation."). Every other family keeps the tag the converter gives it. The public key's octets are the converter's,
+    /// rented from <paramref name="memoryPool"/>, whatever the tag.
+    /// </remarks>
+    /// <param name="jwk">The JWK members.</param>
+    /// <param name="alg">The JWS <c>alg</c> the public key is used under.</param>
+    /// <param name="base64UrlDecoder">Decodes the JWK members.</param>
+    /// <param name="memoryPool">The pool the public key material is rented from.</param>
+    /// <returns>The public key, which the caller owns and disposes.</returns>
     public static PublicKeyMemory PublicKeyFromJwk(
         IReadOnlyDictionary<string, string> jwk,
         string alg,
@@ -300,8 +321,36 @@ public static class DpopJwkUtilities
         (CryptoAlgorithm algorithm, Purpose purpose, EncodingScheme scheme, IMemoryOwner<byte> keyMaterial) =
             CryptoFormatConversions.DefaultJwkToAlgorithmConverter(jwkDict, memoryPool, base64UrlDecoder);
 
-        Tag tag = Tag.Create(algorithm).With(purpose).With(scheme);
+        bool isSizeTaggedRsa = algorithm.Equals(CryptoAlgorithm.Rsa2048) || algorithm.Equals(CryptoAlgorithm.Rsa4096);
+        CryptoAlgorithm taggedAlgorithm = isSizeTaggedRsa switch
+        {
+            true => RsaSchemeAlgorithm(alg) ?? algorithm,
+            false => algorithm
+        };
+        Tag tag = Tag.Create(taggedAlgorithm).With(purpose).With(scheme);
 
         return new PublicKeyMemory(keyMaterial, tag);
     }
+
+
+    /// <summary>
+    /// The scheme tag an RSA public key carries under <paramref name="alg"/>: <see cref="CryptoAlgorithm.RsaSha384"/>
+    /// for <c>RS384</c>, <see cref="CryptoAlgorithm.RsaSha512"/> for <c>RS512</c>, <see cref="CryptoAlgorithm.RsaSha256Pss"/>
+    /// for <c>PS256</c>, <see cref="CryptoAlgorithm.RsaSha384Pss"/> for <c>PS384</c> and
+    /// <see cref="CryptoAlgorithm.RsaSha512Pss"/> for <c>PS512</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7518#section-3.3">RFC 7518 Section 3.3</see> and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7518#section-3.5">Section 3.5</see>), or <see langword="null"/> for
+    /// <c>RS256</c>, whose scheme the size tag is served with, and for every other identifier.
+    /// </summary>
+    /// <param name="alg">The JWS <c>alg</c> the RSA public key is used under.</param>
+    /// <returns>The scheme tag, or <see langword="null"/> where the size tag stays.</returns>
+    private static CryptoAlgorithm? RsaSchemeAlgorithm(string alg) => alg switch
+    {
+        string when WellKnownJwaValues.IsRs384(alg) => CryptoAlgorithm.RsaSha384,
+        string when WellKnownJwaValues.IsRs512(alg) => CryptoAlgorithm.RsaSha512,
+        string when WellKnownJwaValues.IsPs256(alg) => CryptoAlgorithm.RsaSha256Pss,
+        string when WellKnownJwaValues.IsPs384(alg) => CryptoAlgorithm.RsaSha384Pss,
+        string when WellKnownJwaValues.IsPs512(alg) => CryptoAlgorithm.RsaSha512Pss,
+        _ => null
+    };
 }

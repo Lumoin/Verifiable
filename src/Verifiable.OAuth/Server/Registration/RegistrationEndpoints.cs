@@ -4,6 +4,7 @@ using System.Text;
 using Verifiable.Core;
 using Verifiable.JCose;
 using Verifiable.OAuth.Client;
+using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Oid4Vci;
 
 namespace Verifiable.OAuth.Server.Registration;
@@ -195,6 +196,13 @@ public static class RegistrationEndpoints
                 "Request body did not parse as a valid RFC 7591 client metadata document.");
         }
 
+        ServerHttpResponse? declarationRefusal = RefuseUnverifiableDpopDeclaration(oauth, metadata);
+        if(declarationRefusal is not null)
+        {
+
+            return declarationRefusal;
+        }
+
         string clientId = await oauth.GenerateIdentifierAsync!(
             WellKnownIdentifierPurposes.OAuthClientId, context, cancellationToken)
             .ConfigureAwait(false);
@@ -258,10 +266,46 @@ public static class RegistrationEndpoints
             ClientJwks = metadata.Jwks,
             ClientName = metadata.ClientName,
             ClientUri = metadata.ClientUri,
+            DpopBoundAccessTokens = metadata.DpopBoundAccessTokens is true,
             TokenLifetimes = FrozenDictionary<string, TimeSpan>.Empty,
             SigningKeys = FrozenDictionary<Verifiable.Cryptography.Context.KeyUsageContext, SigningKeySet>.Empty
         };
     }
+
+
+    /// <summary>
+    /// The fixed description of the refusal of a registration or an update declaring <c>dpop_bound_access_tokens</c>
+    /// <see langword="true"/> at an authorization server that verifies no DPoP proof, naming the member
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7591#section-3.2.2">RFC 7591 Section 3.2.2</see>:
+    /// <c>error_description</c> "Human-readable ASCII text description of the error used for debugging").
+    /// </summary>
+    private static string DpopBoundAccessTokensUnverifiableDescription { get; } =
+        "dpop_bound_access_tokens cannot be true at an authorization server that verifies no DPoP proof.";
+
+
+    /// <summary>
+    /// Refuses client metadata declaring <c>dpop_bound_access_tokens</c> <see langword="true"/> where the server
+    /// verifies no DPoP proof (<see cref="DpopRequestReading.IsProofValidationWired"/>, the one notion of a wired proof
+    /// validation the metadata composer and the token endpoint read): such a client's every token request would be
+    /// refused, since <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5.2">RFC 9449 Section 5.2</see> says
+    /// "If the value is true, the authorization server MUST reject token requests from the client that do not contain
+    /// the DPoP header." and a token request carrying the header meets a server that cannot check it.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7591#section-2">RFC 7591 Section 2</see>: "The authorization server
+    /// MAY reject any requested client metadata values by replacing requested values with suitable defaults as
+    /// described in Section 3.2.1 or by returning an error response as described in Section 3.2.2." The refusal is the
+    /// Section 3.2.2 error response, 400 <c>invalid_client_metadata</c> with
+    /// <see cref="DpopBoundAccessTokensUnverifiableDescription"/>.
+    /// </summary>
+    /// <param name="oauth">The integration admitted for the request.</param>
+    /// <param name="metadata">The client metadata the request carries.</param>
+    /// <returns>The refusal, or <see langword="null"/> when the declaration can be honoured or is absent.</returns>
+    private static ServerHttpResponse? RefuseUnverifiableDpopDeclaration(AuthorizationServerIntegration oauth, ClientMetadata metadata) =>
+        (metadata.DpopBoundAccessTokens is true, DpopRequestReading.IsProofValidationWired(oauth)) switch
+        {
+            (true, false) => ServerHttpResponse.BadRequest(
+                OAuthErrors.InvalidClientMetadata, DpopBoundAccessTokensUnverifiableDescription),
+            _ => null
+        };
 
 
     /// <summary>Maps RFC 9396 §10 optional authorization detail types to the immutable allowlist.</summary>
@@ -515,6 +559,13 @@ public static class RegistrationEndpoints
                 "RFC 7592 section 2.2 requires the issued client_id in the replacement document.");
         }
 
+        ServerHttpResponse? declarationRefusal = RefuseUnverifiableDpopDeclaration(oauth, newMetadata);
+        if(declarationRefusal is not null)
+        {
+
+            return declarationRefusal;
+        }
+
         ClientRecord updated = BuildUpdatedRecord(previous, newMetadata);
 
         IClientRegistrationStore store = oauth.ClientRegistrationStore
@@ -558,7 +609,8 @@ public static class RegistrationEndpoints
             ClientJwksUri = newMetadata.JwksUri,
             ClientJwks = newMetadata.Jwks,
             ClientName = newMetadata.ClientName,
-            ClientUri = newMetadata.ClientUri
+            ClientUri = newMetadata.ClientUri,
+            DpopBoundAccessTokens = newMetadata.DpopBoundAccessTokens is true
         };
     }
 
@@ -775,7 +827,18 @@ public static class RegistrationEndpoints
             AuthorizationDetailsTypes = registration.AllowedAuthorizationDetailsTypes?.Order(StringComparer.Ordinal).ToImmutableArray(),
             TokenEndpointAuthMethod = registration.TokenEndpointAuthMethod,
             JwksUri = registration.ClientJwksUri,
-            Jwks = registration.ClientJwks
+            Jwks = registration.ClientJwks,
+
+            //RFC 7592 Section 3: "Additionally, the authorization server MUST return all registered metadata about this
+            //client, including any fields provisioned by the authorization server itself.", beside RFC 7591 Section
+            //3.2.1, whose response carries "all registered metadata about this client". The record's declaration is reported whenever the
+            //client declared the member or the record holds true, as the other record-held members are; a member the
+            //client omitted and the record leaves false stays omitted.
+            DpopBoundAccessTokens = registration.DpopBoundAccessTokens switch
+            {
+                true => true,
+                false => registration.RegisteredMetadata?.DpopBoundAccessTokens is null ? null : false
+            }
         };
         StringBuilder sb = JsonAppender.Rent();
         try

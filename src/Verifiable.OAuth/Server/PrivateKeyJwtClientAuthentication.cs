@@ -387,6 +387,20 @@ public static class PrivateKeyJwtClientAuthentication
     /// <see cref="Jws.VerifyAsync(string,DecodeDelegate,BaseMemoryPool,PublicKeyMemory,CancellationToken)"/>'s
     /// own registry resolution.
     /// </summary>
+    /// <remarks>
+    /// The bound primitive receives the public key's octets only, never the assertion's <c>alg</c> or the public key's
+    /// tag, and verifies under the scheme it implements. An RSA <c>alg</c> names a scheme
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7518#section-3.3">RFC 7518 Section 3.3</see>, RSASSA-PKCS1-v1_5;
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7518#section-3.5">Section 3.5</see>, RSASSA-PSS), and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.1">RFC 8725 Section 3.1</see> holds the library to it:
+    /// "The library MUST ensure that the "alg" or "enc" header specifies the same algorithm that is used for the
+    /// cryptographic operation." This validator holds no bound primitive to the scheme the <c>alg</c> names, so a host
+    /// binding one RSA primitive accepts only the one RSA identifier that primitive verifies by narrowing
+    /// <see cref="AuthorizationServerIntegration.ClientAssertionSigningAlgorithmsSupported"/>, or the registration's
+    /// <c>token_endpoint_auth_signing_alg</c>, to it; otherwise a client assertion under another RSA identifier is
+    /// verified under the primitive's scheme rather than the one its <c>alg</c> names. The registry-resolving overload
+    /// selects the provider by the public key's tag, which carries the scheme the <c>alg</c> names.
+    /// </remarks>
     /// <param name="verificationDelegate">The verification function to use.</param>
     /// <param name="additionalAcceptedAudiences">
     /// Extra values <c>aud</c> may name beyond the resolved issuer identifier and the request's token
@@ -411,6 +425,7 @@ public static class PrivateKeyJwtClientAuthentication
     /// The <c>aud</c> claim rule this validator applies; see the registry-resolving overload's
     /// parameter of the same name.
     /// </param>
+    /// <returns>The validator of <c>private_key_jwt</c> client assertions, verifying through <paramref name="verificationDelegate"/>.</returns>
     public static ValidateClientCredentialsDelegate BuildValidator(
         VerificationDelegate verificationDelegate,
         IReadOnlyCollection<string>? additionalAcceptedAudiences = null,

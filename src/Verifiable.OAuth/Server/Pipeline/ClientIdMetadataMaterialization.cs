@@ -306,7 +306,10 @@ public static class ClientIdMetadataMaterialization
                 ClientName = document.ClientName,
                 ClientUri = document.ClientUri,
                 LogoUri = document.LogoUri,
-                SoftwareStatement = document.SoftwareStatement
+                SoftwareStatement = document.SoftwareStatement,
+
+                //RFC 9449 Section 5.2: "If omitted, the default value is false."
+                DpopBoundAccessTokens = document.DpopBoundAccessTokens is true
             };
 
             return new RegistrationMaterialization { Registration = materialized };

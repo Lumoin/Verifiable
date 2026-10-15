@@ -205,4 +205,14 @@ public sealed record ClientMetadata
     /// <c>iss</c> and <c>sid</c> query parameters.
     /// </summary>
     public bool FrontchannelLogoutSessionRequired { get; init; }
+
+    /// <summary>
+    /// The client's <c>dpop_bound_access_tokens</c> declaration,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5.2">RFC 9449, Section 5.2</see>:
+    /// "A boolean value specifying whether the client always uses DPoP for token requests. If
+    /// omitted, the default value is false." <see langword="null"/> when the member is omitted,
+    /// so a writer echoes only what was declared; a reader of the declaration treats
+    /// <see langword="null"/> as <see langword="false"/>.
+    /// </summary>
+    public bool? DpopBoundAccessTokens { get; init; }
 }

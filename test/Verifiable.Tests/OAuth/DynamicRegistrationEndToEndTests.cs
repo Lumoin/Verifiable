@@ -788,6 +788,384 @@ internal sealed class DynamicRegistrationEndToEndTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7591#section-3.2.1">RFC 7591 Section 3.2.1</see>: "Additionally, the
+    /// authorization server MUST return all registered metadata about this client, including any fields provisioned by
+    /// the authorization server itself.", the metadata including the member
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-12.10">RFC 9449 Section 12.10</see> registers: "Client
+    /// Metadata Name: dpop_bound_access_tokens". A client registers over the wire at a server that verifies DPoP proofs
+    /// with <c>"dpop_bound_access_tokens":true</c>: the 201 registration response and the RFC 7592 read of its client
+    /// configuration each carry <c>"dpop_bound_access_tokens":true</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task RegistrationEchoesDpopBoundAccessTokensAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        (int statusCode, string body) = await RegisterDeclaringAsync(host, dpopBoundAccessTokens: true).ConfigureAwait(false);
+        Assert.AreEqual(201, statusCode, body);
+        Assert.Contains("\"dpop_bound_access_tokens\":true", body, StringComparison.Ordinal, body);
+
+        (string clientId, string accessToken, Uri managementUri) = ReadIssuedRegistration(body);
+        string read = await SendToTheClientConfigurationAsync(
+            host, HttpMethod.Get, managementUri, clientId, accessToken, json: null).ConfigureAwait(false);
+
+        Assert.StartsWith("200\n", read, StringComparison.Ordinal, read);
+        Assert.Contains("\"dpop_bound_access_tokens\":true", read, StringComparison.Ordinal, read);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7592#section-2.2">RFC 7592 Section 2.2</see>: "Valid values of
+    /// client metadata fields in this request MUST replace, not augment, the values previously associated with this
+    /// client.", with <see href="https://www.rfc-editor.org/rfc/rfc7591#section-3.2.1">RFC 7591 Section 3.2.1</see>:
+    /// "the authorization server MUST return all registered metadata about this client". A client registered over the
+    /// wire with <c>"dpop_bound_access_tokens":true</c> at a server that verifies DPoP proofs sends an update of its
+    /// client configuration carrying <c>"dpop_bound_access_tokens":false</c>: the update's answer and a later read each
+    /// carry <c>"dpop_bound_access_tokens":false</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task RegistrationUpdateReplacesDpopBoundAccessTokensAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        (int statusCode, string body) = await RegisterDeclaringAsync(host, dpopBoundAccessTokens: true).ConfigureAwait(false);
+        Assert.AreEqual(201, statusCode, body);
+        (string clientId, string accessToken, Uri managementUri) = ReadIssuedRegistration(body);
+
+        string update = await SendToTheClientConfigurationAsync(
+            host, HttpMethod.Put, managementUri, clientId, accessToken, DeclaringMetadataOf(clientId, dpopBoundAccessTokens: false)).ConfigureAwait(false);
+        string read = await SendToTheClientConfigurationAsync(
+            host, HttpMethod.Get, managementUri, clientId, accessToken, json: null).ConfigureAwait(false);
+
+        Assert.StartsWith("200\n", update, StringComparison.Ordinal, update);
+        Assert.Contains("\"dpop_bound_access_tokens\":false", update, StringComparison.Ordinal, update);
+        Assert.StartsWith("200\n", read, StringComparison.Ordinal, read);
+        Assert.Contains("\"dpop_bound_access_tokens\":false", read, StringComparison.Ordinal, read);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7591#section-3.2.1">RFC 7591 Section 3.2.1</see>: "Additionally, the
+    /// authorization server MUST return all registered metadata about this client, including any fields provisioned by
+    /// the authorization server itself." A client registers over the wire, at a server that verifies DPoP proofs, without
+    /// <c>dpop_bound_access_tokens</c>; the server then provisions the declaration on the client's stored registration.
+    /// The RFC 7592 read of its client configuration carries <c>"dpop_bound_access_tokens":true</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task RegistrationReadEchoesAServerProvisionedDpopDeclarationAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        (int statusCode, string body) = await RegisterDeclaringAsync(host, dpopBoundAccessTokens: null).ConfigureAwait(false);
+        Assert.AreEqual(201, statusCode, body);
+        Assert.DoesNotContain("dpop_bound_access_tokens", body, StringComparison.Ordinal, body);
+        (string clientId, string accessToken, Uri managementUri) = ReadIssuedRegistration(body);
+        HostedAuthorizationServer served = host.Host("default");
+        ClientRecord registered = served.Registrations[clientId];
+        _ = await served.UpdateClientAsync(
+            registered, registered with { DpopBoundAccessTokens = true }, [], TestContext.CancellationToken).ConfigureAwait(false);
+
+        string read = await SendToTheClientConfigurationAsync(
+            host, HttpMethod.Get, managementUri, clientId, accessToken, json: null).ConfigureAwait(false);
+
+        Assert.StartsWith("200\n", read, StringComparison.Ordinal, read);
+        Assert.Contains("\"dpop_bound_access_tokens\":true", read, StringComparison.Ordinal, read);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7591#section-3.2.1">RFC 7591 Section 3.2.1</see>: "Additionally, the
+    /// authorization server MUST return all registered metadata about this client, including any fields provisioned by
+    /// the authorization server itself. The authorization server MAY reject or replace any of the client's requested
+    /// metadata values submitted during the registration and substitute them with suitable values.", which
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7592#section-3">RFC 7592 Section 3</see> repeats for the response of
+    /// the client configuration endpoint: "Additionally, the authorization server MUST return all registered metadata
+    /// about this client, including any fields provisioned by the authorization server itself.", with
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7591#section-2">RFC 7591 Section 2</see>: "The authorization server
+    /// MAY reject any requested client metadata values by replacing requested values with suitable defaults". A client
+    /// registers over the wire, at a server that verifies DPoP proofs, with <c>"dpop_bound_access_tokens":true</c>; the
+    /// server then provisions <c>false</c> on the client's stored registration. The RFC 7592 read of its client
+    /// configuration carries <c>"dpop_bound_access_tokens":false</c>, and a token exchange request of the client, whose
+    /// host grants it that grant and its issuance signing keys, sent with no <c>DPoP</c> field under a profile that
+    /// leaves DPoP optional, is answered 200 with <c>token_type</c> <c>Bearer</c> and an access token carrying no
+    /// <c>cnf</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task RegistrationReadReportsAProvisionedFalseOverARegisteredTrueAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        (int statusCode, string body) = await RegisterDeclaringAsync(host, dpopBoundAccessTokens: true).ConfigureAwait(false);
+        Assert.AreEqual(201, statusCode, body);
+        (string clientId, string accessToken, Uri managementUri) = ReadIssuedRegistration(body);
+        HostedAuthorizationServer served = host.Host("default");
+        ClientRecord registered = served.Registrations[clientId];
+        _ = await served.UpdateClientAsync(
+            registered, registered with { DpopBoundAccessTokens = false }, [], TestContext.CancellationToken).ConfigureAwait(false);
+
+        string read = await SendToTheClientConfigurationAsync(
+            host, HttpMethod.Get, managementUri, clientId, accessToken, json: null).ConfigureAwait(false);
+
+        Assert.StartsWith("200\n", read, StringComparison.Ordinal, read);
+        Assert.Contains("\"dpop_bound_access_tokens\":false", read, StringComparison.Ordinal, read);
+
+        HttpResponseData response = await RequestATokenExchangeWithoutAProofAsync(host, clientId).ConfigureAwait(false);
+
+        DpopCodeBindingWire.AssertIssued(response.StatusCode, response.Body, "Bearer", expectedJwkThumbprint: null);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7592#section-2.2">RFC 7592 Section 2.2</see>: "Omitted fields MUST be
+    /// treated as null or empty values by the server, indicating the client's request to delete them from the client's
+    /// registration.", with <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5.2">RFC 9449 Section 5.2</see>:
+    /// "If omitted, the default value is false." A client registered over the wire with
+    /// <c>"dpop_bound_access_tokens":true</c>, at a server that verifies DPoP proofs, sends an update of its client
+    /// configuration whose metadata omits the member: the update's answer and a later read carry no
+    /// <c>dpop_bound_access_tokens</c>, and a token exchange request of the client, whose host grants it that grant and
+    /// its issuance signing keys, sent with no <c>DPoP</c> field under a profile that leaves DPoP optional, is answered
+    /// 200 with <c>token_type</c> <c>Bearer</c> and an access token carrying no <c>cnf</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task RegistrationUpdateOmittingDpopBoundAccessTokensDeletesItAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        (int statusCode, string body) = await RegisterDeclaringAsync(host, dpopBoundAccessTokens: true).ConfigureAwait(false);
+        Assert.AreEqual(201, statusCode, body);
+        (string clientId, string accessToken, Uri managementUri) = ReadIssuedRegistration(body);
+
+        string update = await SendToTheClientConfigurationAsync(
+            host, HttpMethod.Put, managementUri, clientId, accessToken, DeclaringMetadataOf(clientId, dpopBoundAccessTokens: null)).ConfigureAwait(false);
+        string read = await SendToTheClientConfigurationAsync(
+            host, HttpMethod.Get, managementUri, clientId, accessToken, json: null).ConfigureAwait(false);
+
+        Assert.StartsWith("200\n", update, StringComparison.Ordinal, update);
+        Assert.DoesNotContain("dpop_bound_access_tokens", update, StringComparison.Ordinal, update);
+        Assert.StartsWith("200\n", read, StringComparison.Ordinal, read);
+        Assert.DoesNotContain("dpop_bound_access_tokens", read, StringComparison.Ordinal, read);
+
+        HttpResponseData response = await RequestATokenExchangeWithoutAProofAsync(host, clientId).ConfigureAwait(false);
+
+        DpopCodeBindingWire.AssertIssued(response.StatusCode, response.Body, "Bearer", expectedJwkThumbprint: null);
+    }
+
+
+    /// <summary>
+    /// Has the host grant the dynamically registered client <paramref name="clientId"/> the token exchange grant and the
+    /// issuance signing keys of a statically registered client of the same host, as a deployment provisions issuance
+    /// keys, then sends over the wire a token exchange request of that client with no <c>DPoP</c> field.
+    /// </summary>
+    /// <param name="host">The fixture whose listener serves the request.</param>
+    /// <param name="clientId">The dynamically registered client the request is sent for.</param>
+    /// <returns>The whole response.</returns>
+    private async Task<HttpResponseData> RequestATokenExchangeWithoutAProofAsync(TestHostShell host, string clientId)
+    {
+        using VerifierKeyMaterial issuanceKeyHolder = await host.RegisterDpopClientAsync(
+            IssuanceKeyHolderClientId, new Uri(IssuanceKeyHolderClientId)).ConfigureAwait(false);
+        await ServeTheTokenExchangeGrantAsync(host).ConfigureAwait(false);
+        HostedAuthorizationServer served = host.Host("default");
+        ClientRecord registered = served.Registrations[clientId];
+        ClientRecord stored = await served.UpdateClientAsync(
+            registered,
+            registered with
+            {
+                AllowedCapabilities = registered.AllowedCapabilities.Add(WellKnownCapabilityIdentifiers.OAuthTokenExchange),
+                SigningKeys = issuanceKeyHolder.Registration.SigningKeys
+            },
+            [], TestContext.CancellationToken).ConfigureAwait(false);
+
+        return await HttpClientTransport.SendFormPostAsync(
+            served.SharedHttpClient!,
+            new Uri(served.HttpBaseAddress!, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.TokenExchangeToken, stored.TenantId.Value)),
+            [
+                new(OAuthRequestParameterNames.GrantType, WellKnownGrantTypes.TokenExchange),
+                new(OAuthRequestParameterNames.ClientId, clientId),
+                new(OAuthRequestParameterNames.SubjectToken, "subject-token-0123456789"),
+                new(OAuthRequestParameterNames.SubjectTokenType, "urn:ietf:params:oauth:token-type:access_token")
+            ],
+            OutgoingHeaders.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>The client identifier of the registration whose issuance signing keys the host grants a dynamically registered client.</summary>
+    private static string IssuanceKeyHolderClientId { get; } = "https://issuance-key-holder.client.test";
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7591#section-2">RFC 7591 Section 2</see>: "The authorization server
+    /// MAY reject any requested client metadata values by replacing requested values with suitable defaults as
+    /// described in Section 3.2.1 or by returning an error response as described in Section 3.2.2.", with
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7591#section-3.2.2">Section 3.2.2</see>: "invalid_client_metadata
+    /// The value of one of the client metadata fields is invalid and the server has rejected this request." A server
+    /// that verifies no DPoP proof could honour no token request of a client declaring
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-5.2">RFC 9449 Section 5.2</see>) "If the value is true,
+    /// the authorization server MUST reject token requests from the client that do not contain the DPoP header.": a
+    /// registration, and an update of a registered client, sent over the wire with
+    /// <c>"dpop_bound_access_tokens":true</c> are refused 400 <c>invalid_client_metadata</c> "dpop_bound_access_tokens
+    /// cannot be true at an authorization server that verifies no DPoP proof.", and an updated client keeps the metadata
+    /// it was registered with.
+    /// </summary>
+    /// <param name="operation">The request that carries the declaration: <c>registration</c> or <c>update</c>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("registration")]
+    [DataRow("update")]
+    public async Task RegistrationDeclaringDpopBoundAccessTokensUnderAServerVerifyingNoProofIsRefusedAsync(string operation)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        const string ExpectedRefusal =
+            "{\"error\":\"invalid_client_metadata\",\"error_description\":\"dpop_bound_access_tokens cannot be true at an authorization server that verifies no DPoP proof.\"}";
+
+        if(operation == "registration")
+        {
+            (int statusCode, string body) = await RegisterDeclaringAsync(host, dpopBoundAccessTokens: true).ConfigureAwait(false);
+            Assert.AreEqual(400, statusCode, body);
+            Assert.AreEqual(ExpectedRefusal, body);
+
+            return;
+        }
+
+        (int registeredStatusCode, string registeredBody) = await RegisterDeclaringAsync(host, dpopBoundAccessTokens: null).ConfigureAwait(false);
+        Assert.AreEqual(201, registeredStatusCode, registeredBody);
+        (string clientId, string accessToken, Uri managementUri) = ReadIssuedRegistration(registeredBody);
+
+        string update = await SendToTheClientConfigurationAsync(
+            host, HttpMethod.Put, managementUri, clientId, accessToken, DeclaringMetadataOf(clientId, dpopBoundAccessTokens: true)).ConfigureAwait(false);
+        string read = await SendToTheClientConfigurationAsync(
+            host, HttpMethod.Get, managementUri, clientId, accessToken, json: null).ConfigureAwait(false);
+
+        Assert.StartsWith("400\n", update, StringComparison.Ordinal, update);
+        Assert.EndsWith("\n\n" + ExpectedRefusal, update, StringComparison.Ordinal, update);
+        Assert.DoesNotContain("dpop_bound_access_tokens", read, StringComparison.Ordinal, read);
+        Assert.AreEqual(1L, host.Host("default").Registrations[clientId].Revision, "The updated client keeps the revision it was registered with.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5.2">RFC 9449 Section 5.2</see>: "If the value is
+    /// true, the authorization server MUST reject token requests from the client that do not contain the DPoP header."
+    /// A client that declares <c>"dpop_bound_access_tokens":true</c> over the wire, in its registration or in an update
+    /// of its client configuration, at a server that verifies DPoP proofs and whose host then grants the client the token
+    /// exchange grant, then sends a token exchange request with no <c>DPoP</c> field: it is refused 400 <c>use_dpop_nonce</c> "DPoP proof
+    /// required." with exactly one <c>DPoP-Nonce</c> field line and no access token.
+    /// </summary>
+    /// <param name="operation">The request that carries the declaration: <c>registration</c> or <c>update</c>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("registration")]
+    [DataRow("update")]
+    public async Task ClientDeclaringDpopBoundAccessTokensOverTheWireIsRefusedATokenRequestWithoutAProofAsync(string operation)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        (int statusCode, string body) = await RegisterDeclaringAsync(
+            host,
+            dpopBoundAccessTokens: operation switch
+            {
+                "registration" => true,
+                _ => null
+            }).ConfigureAwait(false);
+        Assert.AreEqual(201, statusCode, body);
+        (string clientId, string accessToken, Uri managementUri) = ReadIssuedRegistration(body);
+        if(operation == "update")
+        {
+            string update = await SendToTheClientConfigurationAsync(
+                host, HttpMethod.Put, managementUri, clientId, accessToken, DeclaringMetadataOf(clientId, dpopBoundAccessTokens: true)).ConfigureAwait(false);
+            Assert.StartsWith("200\n", update, StringComparison.Ordinal, update);
+        }
+
+        await ServeTheTokenExchangeGrantAsync(host).ConfigureAwait(false);
+        HostedAuthorizationServer served = host.Host("default");
+        ClientRecord registered = served.Registrations[clientId];
+        ClientRecord stored = await served.UpdateClientAsync(
+            registered,
+            registered with { AllowedCapabilities = registered.AllowedCapabilities.Add(WellKnownCapabilityIdentifiers.OAuthTokenExchange) },
+            [], TestContext.CancellationToken).ConfigureAwait(false);
+
+        HttpResponseData response = await HttpClientTransport.SendFormPostAsync(
+            served.SharedHttpClient!,
+            new Uri(served.HttpBaseAddress!, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.TokenExchangeToken, stored.TenantId.Value)),
+            [
+                new(OAuthRequestParameterNames.GrantType, WellKnownGrantTypes.TokenExchange),
+                new(OAuthRequestParameterNames.ClientId, clientId),
+                new(OAuthRequestParameterNames.SubjectToken, "subject-token-0123456789"),
+                new(OAuthRequestParameterNames.SubjectTokenType, "urn:ietf:params:oauth:token-type:access_token")
+            ],
+            OutgoingHeaders.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        DpopCodeBindingWire.AssertProofRequired(response);
+    }
+
+
+    /// <summary>
+    /// Starts the host's listener, has the application's issuer resolver name
+    /// <see cref="RawAuthCodeWirePushers.ManagedClientIssuer"/>, and registers a client over the listener with the
+    /// metadata of <see cref="DeclaringMetadataOf"/>, carrying no <c>client_id</c>.
+    /// </summary>
+    /// <param name="host">The serving fixture.</param>
+    /// <param name="dpopBoundAccessTokens">The <c>dpop_bound_access_tokens</c> value the request declares, or <see langword="null"/> for none.</param>
+    /// <returns>The status code and body of the registration response.</returns>
+    private async Task<(int StatusCode, string Body)> RegisterDeclaringAsync(TestHostShell host, bool? dpopBoundAccessTokens)
+    {
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        await TestHostShell.NameIssuerAsync(host.Server, RawAuthCodeWirePushers.ManagedClientIssuer).ConfigureAwait(false);
+        using HttpResponseMessage response = await RawAuthCodeWirePushers.SendPinnedJsonPostAsync(host,
+            new Uri(host.Host("default").HttpBaseAddress!, "/connect/register"),
+            DeclaringMetadataOf(clientId: null, dpopBoundAccessTokens), TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        return ((int)response.StatusCode, body);
+    }
+
+
+    /// <summary>
+    /// The metadata of a managed client declaring <paramref name="dpopBoundAccessTokens"/>: its issued
+    /// <paramref name="clientId"/> when given, the client name <c>initial-client</c>, its client URI, its one redirect
+    /// URI, its scope and, when given, <c>dpop_bound_access_tokens</c> as a JSON boolean.
+    /// </summary>
+    /// <param name="clientId">The issued client identifier, or <see langword="null"/> for a registration request.</param>
+    /// <param name="dpopBoundAccessTokens">The declared value, or <see langword="null"/> to leave the member out.</param>
+    /// <returns>The JSON body.</returns>
+    private static string DeclaringMetadataOf(string? clientId, bool? dpopBoundAccessTokens)
+    {
+        string clientIdMember = clientId switch
+        {
+            null => string.Empty,
+            _ => $"\"client_id\":\"{clientId}\","
+        };
+        string declaration = dpopBoundAccessTokens switch
+        {
+            true => ",\"dpop_bound_access_tokens\":true",
+            false => ",\"dpop_bound_access_tokens\":false",
+            null => string.Empty
+        };
+
+        return "{" + clientIdMember
+            + "\"client_name\":\"initial-client\",\"client_uri\":\"https://client.example.test/\",\"redirect_uris\":[\"https://client.example.test/callback\"],\"scope\":\"initial-scope\""
+            + declaration + "}";
+    }
+
+
+    /// <summary>Reads the issued client identifier, registration access token and client configuration URI of a 201 registration response.</summary>
+    /// <param name="body">The registration response body.</param>
+    /// <returns>The three values.</returns>
+    private static (string ClientId, string AccessToken, Uri ManagementUri) ReadIssuedRegistration(string body)
+    {
+        using JsonDocument document = JsonDocument.Parse(body);
+
+        return (document.RootElement.GetProperty("client_id").GetString()!,
+            document.RootElement.GetProperty("registration_access_token").GetString()!,
+            new Uri(document.RootElement.GetProperty("registration_client_uri").GetString()!));
+    }
+
+
+    /// <summary>
     /// The complete metadata a client's PUT carries: its issued <paramref name="clientId"/>, the client name
     /// <c>updated-client</c>, and every other member as the managed client registers it.
     /// </summary>

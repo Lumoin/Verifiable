@@ -31,8 +31,8 @@ namespace Verifiable.OAuth.AuthCode.Server;
 /// applies it exactly as <see cref="ValidatePresentedProofAsync"/> does, so client credentials,
 /// token exchange, the JWT-bearer grant and the pre-authorized code grant answer a nonce-less
 /// proof identically to the two step endpoints (code redemption, refresh). A proof ABSENT from the request is a separate
-/// decision, gated on whether DPoP is required at all (the registration's profile, or — at a step
-/// endpoint's handler — the stored record's own binding).
+/// decision, gated on whether DPoP is required at all (the registration's profile or the client's
+/// <c>dpop_bound_access_tokens</c> declaration, or, at a step endpoint's handler, the stored record's own binding).
 /// </para>
 /// <para>
 /// A STEP endpoint (code redemption, refresh live, refresh reuse) never calls
@@ -129,9 +129,10 @@ internal static class DpopTokenEndpointValidation
     /// <param name="issuerUri">The authorization server's issuer URI; its authority, unless the request carries a listener authority, combined with the request path forms the expected DPoP <c>htu</c> claim, and it keys the JTI replay record.</param>
     /// <param name="now">The current instant the DPoP proof's freshness window is evaluated against.</param>
     /// <param name="proofRequiredByRegistration">
-    /// Whether the client's registration profile mandates DPoP
-    /// (<see cref="Verifiable.OAuth.Client.ClientPolicyProfiles.RequiresDpop"/>) — the only
-    /// signal available before any stored record is loaded.
+    /// Whether the client's registration requires a proof: its profile mandates DPoP
+    /// (<see cref="Verifiable.OAuth.Client.ClientPolicyProfiles.RequiresDpop"/>) or the client declared
+    /// <c>dpop_bound_access_tokens</c> <see langword="true"/> (<see cref="ClientRecord.DpopBoundAccessTokens"/>): the
+    /// only signals available before any stored record is loaded.
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The refusal to answer with, or <see langword="null"/> to proceed.</returns>
@@ -335,12 +336,20 @@ internal static class DpopTokenEndpointValidation
     /// in the step.
     /// </para>
     /// <para>
-    /// The refresh grant passes the refresh token's stored binding and
+    /// The refresh grant passes the binding the refresh token's record stores, decided when the
+    /// token was issued, whatever the client's registration declares at the presentation, and
     /// <see cref="Verifiable.OAuth.AuthCode.AuthCodeEndpoints.RefreshTokenNotFoundDescription"/>,
     /// verifying the binding the refresh token was issued under
-    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>: "The
-    /// binding MUST be validated when the refresh token is later presented to get new access
-    /// tokens."). The code redemption passes the code's binding, the thumbprint the authorization
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>: "When an
+    /// authorization server supporting DPoP issues a refresh token to a public client that presents a
+    /// valid DPoP proof at the token endpoint, the refresh token MUST be bound to the respective public
+    /// key. The binding MUST be validated when the refresh token is later presented to get new access
+    /// tokens.", and "Refresh tokens issued to confidential clients (those having established
+    /// authentication credentials with the authorization server) are not bound to the DPoP proof public
+    /// key because they are already sender-constrained with a different existing mechanism."): a refresh
+    /// token issued to a public client that presents a valid proof is bound to that proof's DPoP key,
+    /// and every refresh token is held at every presentation to the binding it was issued under (none
+    /// when unbound); a confidential client's is not bound. The code redemption passes the code's binding, the thumbprint the authorization
     /// request named with <c>dpop_jkt</c> or the pushed request's proof carried, and
     /// <see cref="Verifiable.OAuth.AuthCode.AuthCodeEndpoints.CodeGrantNotFoundDescription"/>:
     /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10">RFC 9449 Section 10</see>, "the

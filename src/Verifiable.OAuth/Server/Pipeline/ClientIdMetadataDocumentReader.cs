@@ -82,7 +82,18 @@ public enum ClientIdMetadataDocumentDefects
     /// One or more entries of the document's <c>redirect_uris</c> array do not parse as an absolute
     /// URI (draft-ietf-oauth-client-id-metadata-document-02 §4.2/§8.6, CIMD-058).
     /// </summary>
-    InvalidRedirectUri = 1 << 8
+    InvalidRedirectUri = 1 << 8,
+
+    /// <summary>
+    /// The document carries a <c>dpop_bound_access_tokens</c> member that is not a JSON boolean.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5.2">RFC 9449, Section 5.2</see>
+    /// defines the member as "A boolean value specifying whether the client always uses DPoP for
+    /// token requests", and <see href="https://www.rfc-editor.org/rfc/rfc7591#section-2">RFC 7591,
+    /// Section 2</see> defines every client metadata member's type "in terms of their JSON
+    /// [RFC7159] representations", so a string, a number, <c>null</c>, an object or an array in its
+    /// place declares nothing the server can honour.
+    /// </summary>
+    InvalidDpopBoundAccessTokens = 1 << 9
 }
 
 
@@ -199,6 +210,10 @@ public static class ClientIdMetadataDocumentReader
 
         defects |= jwksUriDefect | logoUriDefect | clientUriDefect | redirectUriDefect;
 
+        (bool? dpopBoundAccessTokens, ClientIdMetadataDocumentDefects dpopBoundAccessTokensDefect) =
+            ExtractDpopBoundAccessTokens(document);
+        defects |= dpopBoundAccessTokensDefect;
+
         ClientMetadata metadata = new()
         {
             ClientName = JwkJsonReader.ExtractStringValue(document, ClientMetadataParameterNames.ClientNameUtf8),
@@ -225,7 +240,8 @@ public static class ClientIdMetadataDocumentReader
             BackchannelLogoutSessionRequired = ExtractBoolean(document, "backchannel_logout_session_required"u8),
             FrontchannelLogoutUri = ExtractAbsoluteUri(document, "frontchannel_logout_uri"u8),
             FrontchannelLogoutSessionRequired = ExtractBoolean(document, "frontchannel_logout_session_required"u8),
-            SoftwareStatement = JwkJsonReader.ExtractStringValue(document, ClientMetadataParameterNames.SoftwareStatementUtf8)
+            SoftwareStatement = JwkJsonReader.ExtractStringValue(document, ClientMetadataParameterNames.SoftwareStatementUtf8),
+            DpopBoundAccessTokens = dpopBoundAccessTokens
         };
 
         return new ClientIdMetadataDocumentReadResult
@@ -432,6 +448,33 @@ public static class ClientIdMetadataDocumentReader
 
     private static bool ExtractBoolean(ReadOnlySpan<byte> document, ReadOnlySpan<byte> key) =>
         JwkJsonReader.TryExtractBooleanValue(document, key, out bool value) && value;
+
+
+    /// <summary>
+    /// Reads the document's <c>dpop_bound_access_tokens</c>,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5.2">RFC 9449, Section 5.2</see>: "A boolean value
+    /// specifying whether the client always uses DPoP for token requests. If omitted, the default value is false."
+    /// An omitted member reads as <see langword="null"/>; a JSON <c>true</c> or <c>false</c> as itself; a present
+    /// member of any other JSON type (<see href="https://www.rfc-editor.org/rfc/rfc7591#section-2">RFC 7591,
+    /// Section 2</see>: member types "are defined in terms of their JSON [RFC7159] representations") as
+    /// <see cref="ClientIdMetadataDocumentDefects.InvalidDpopBoundAccessTokens"/>, so a declaration the server cannot
+    /// read is never taken as <see langword="false"/>.
+    /// </summary>
+    /// <param name="document">The document body, already gated for well-formedness.</param>
+    /// <returns>The declared value or <see langword="null"/>, and the defect the member carries.</returns>
+    private static (bool? Value, ClientIdMetadataDocumentDefects Defect) ExtractDpopBoundAccessTokens(ReadOnlySpan<byte> document)
+    {
+        bool isPresent = JwkJsonReader.ContainsKey(document, ClientMetadataParameterNames.DpopBoundAccessTokensUtf8);
+        bool isBoolean = JwkJsonReader.TryExtractBooleanValue(
+            document, ClientMetadataParameterNames.DpopBoundAccessTokensUtf8, out bool value);
+
+        return (isPresent, isBoolean) switch
+        {
+            (false, _) => (null, ClientIdMetadataDocumentDefects.None),
+            (true, true) => (value, ClientIdMetadataDocumentDefects.None),
+            (true, false) => (null, ClientIdMetadataDocumentDefects.InvalidDpopBoundAccessTokens)
+        };
+    }
 
 
     private static List<GrantType> ExtractGrantTypes(ReadOnlySpan<byte> document)

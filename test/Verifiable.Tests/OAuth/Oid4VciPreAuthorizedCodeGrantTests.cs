@@ -1286,6 +1286,43 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5.2">RFC 9449 Section 5.2</see>: "If the value is
+    /// true, the authorization server MUST reject token requests from the client that do not contain the DPoP header.",
+    /// which <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">Section 5</see> makes "applicable for all
+    /// access token requests regardless of grant type". A Wallet whose registration declares
+    /// <c>dpop_bound_access_tokens</c> <c>true</c>, under a profile that leaves DPoP optional, sends a Pre-Authorized
+    /// Code token request over the wire with no <c>DPoP</c> field: it is refused 400 <c>use_dpop_nonce</c> "DPoP proof
+    /// required." with exactly one <c>DPoP-Nonce</c> field line and no access token.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ClientDeclaringDpopBoundAccessTokensWithoutAProofIsRefusedAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, GrantCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidatePreAuthorizedCodeAsync =
+                static (code, txCode, clientId, registration, context, ct) =>
+                    ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(OfferSubject));
+        }).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+        _ = await host.UpdateAsync(material, static previous => previous with { DpopBoundAccessTokens = true },
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+
+        HttpResponseData response = await HttpClientTransport.SendFormPostAsync(
+            host.Host("default").SharedHttpClient!, RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment),
+            BuildPreAuthorizedFields(), OutgoingHeaders.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        DpopCodeBindingWire.AssertProofRequired(response);
+    }
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7">RFC 9449 §7</see>: a
     /// DPoP-bound access token must be presented with a matching proof at the resource endpoint. A
     /// token this grant bound is refused at the Credential Endpoint without a proof and accepted

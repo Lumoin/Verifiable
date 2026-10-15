@@ -43,7 +43,10 @@ internal sealed class ClientMetadataParameterNamesTests
     /// <see href="https://www.rfc-editor.org/rfc/rfc7591#section-3.2.1">RFC 7591, Section 3.2.1</see>
     /// and the software statement from
     /// <see href="https://www.rfc-editor.org/rfc/rfc7591#section-2.3">RFC 7591, Section 2.3</see>.
-    /// A single member proves the interned string and the <c>Utf8</c> span never diverge.
+    /// A single member proves the interned string and the <c>Utf8</c> span never diverge. The
+    /// registered extension member <c>dpop_bound_access_tokens</c> is spelled as
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-12.10">RFC 9449, Section 12.10</see>
+    /// registers it: "Client Metadata Name: dpop_bound_access_tokens".
     /// </summary>
     [TestMethod]
     [DataRow("redirect_uris")]
@@ -66,6 +69,7 @@ internal sealed class ClientMetadataParameterNamesTests
     [DataRow("client_secret")]
     [DataRow("client_id_issued_at")]
     [DataRow("client_secret_expires_at")]
+    [DataRow("dpop_bound_access_tokens")]
     public void MemberWireSpellingAndSpanAgreeWithRfc(string specWireName)
     {
         (string interned, string utf8Decoded, _) = ResolveMember(specWireName);
@@ -82,7 +86,10 @@ internal sealed class ClientMetadataParameterNamesTests
     /// defines the member names as JSON object names, and
     /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-4">RFC 8259, Section 4</see>
     /// ("The names within an object SHOULD be unique") treats a name as a case-sensitive string, so a
-    /// case-folded or suffixed lookalike is a different name and MUST NOT match.
+    /// case-folded or suffixed lookalike is a different name and MUST NOT match. The same holds for
+    /// the extension member <c>dpop_bound_access_tokens</c> that
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-12.10">RFC 9449, Section 12.10</see>
+    /// registers.
     /// </summary>
     [TestMethod]
     [DataRow("redirect_uris")]
@@ -105,6 +112,7 @@ internal sealed class ClientMetadataParameterNamesTests
     [DataRow("client_secret")]
     [DataRow("client_id_issued_at")]
     [DataRow("client_secret_expires_at")]
+    [DataRow("dpop_bound_access_tokens")]
     public void MemberPredicateIsExactAndOrdinal(string specWireName)
     {
         (_, _, Func<string, bool> predicate) = ResolveMember(specWireName);
@@ -347,6 +355,8 @@ internal sealed class ClientMetadataParameterNamesTests
                 Encoding.UTF8.GetString(ClientMetadataParameterNames.ClientIdIssuedAtUtf8), ClientMetadataParameterNames.IsClientIdIssuedAt),
             "client_secret_expires_at" => (ClientMetadataParameterNames.ClientSecretExpiresAt,
                 Encoding.UTF8.GetString(ClientMetadataParameterNames.ClientSecretExpiresAtUtf8), ClientMetadataParameterNames.IsClientSecretExpiresAt),
+            "dpop_bound_access_tokens" => (ClientMetadataParameterNames.DpopBoundAccessTokens,
+                Encoding.UTF8.GetString(ClientMetadataParameterNames.DpopBoundAccessTokensUtf8), ClientMetadataParameterNames.IsDpopBoundAccessTokens),
             _ => throw new ArgumentOutOfRangeException(nameof(specWireName), specWireName, "Unmapped RFC 7591 client metadata member name.")
         };
 }

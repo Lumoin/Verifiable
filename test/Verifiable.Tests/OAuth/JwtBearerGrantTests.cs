@@ -1275,6 +1275,44 @@ internal sealed class JwtBearerGrantTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5.2">RFC 9449 Section 5.2</see>: "If the value is
+    /// true, the authorization server MUST reject token requests from the client that do not contain the DPoP header.",
+    /// which <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">Section 5</see> makes "applicable for all
+    /// access token requests regardless of grant type (e.g., the common authorization_code and refresh_token grant types
+    /// and extension grants such as the JWT authorization grant [RFC7523])". A client whose registration declares
+    /// <c>dpop_bound_access_tokens</c> <c>true</c>, under a profile that leaves DPoP optional, sends a JWT bearer grant
+    /// request over the wire with no <c>DPoP</c> field: it is refused 400 <c>use_dpop_nonce</c> "DPoP proof required."
+    /// with exactly one <c>DPoP-Nonce</c> field line and no access token.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ClientDeclaringDpopBoundAccessTokensWithoutAProofIsRefusedAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterJwtBearerClientAsync(app, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+        await WireAcceptingValidatorAsync(app).ConfigureAwait(false);
+        _ = await app.EnableDpopAsync().ConfigureAwait(false);
+        _ = await app.UpdateAsync(material, static previous => previous with { DpopBoundAccessTokens = true },
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+
+        OutgoingFormFields form = BuildRequest(new JwtBearerBuilderOptions
+        {
+            Assertion = "eyJhbGciOiJFUzI1NiJ9.opaque-assertion-blob.signature"
+        }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+        HttpResponseData response = await HttpClientTransport.SendFormPostAsync(
+            host.SharedHttpClient!, tokenUrl, form, OutgoingHeaders.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        DpopCodeBindingWire.AssertProofRequired(response);
+    }
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 §5</see>: under a
     /// registration whose profile mandates DPoP, a jwt-bearer request presenting a valid proof binds
     /// the issued access token to it — <c>token_type</c> answers <c>DPoP</c>.

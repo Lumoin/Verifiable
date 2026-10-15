@@ -153,6 +153,28 @@ public sealed record ClientRecord: IRegistrationRecord
     public bool BackchannelLogoutSessionRequired { get; init; }
 
     /// <summary>
+    /// Whether this client declared <c>dpop_bound_access_tokens</c> <see langword="true"/>, the
+    /// server-side mirror of <see cref="Verifiable.OAuth.Client.ClientMetadata.DpopBoundAccessTokens"/>,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5.2">RFC 9449, Section 5.2</see>:
+    /// "If the value is true, the authorization server MUST reject token requests from the client
+    /// that do not contain the DPoP header." <see langword="false"/> when the client declared
+    /// <see langword="false"/> or omitted the member ("If omitted, the default value is false").
+    /// </summary>
+    /// <remarks>
+    /// The token endpoint reads it at every grant beside the registration's policy profile: a
+    /// request from a client holding <see langword="true"/> that carries no <c>DPoP</c> header
+    /// field is refused as a request under a profile that requires DPoP is refused. The member
+    /// follows the client's registration: an RFC 7592 update that omits it deletes it
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7592#section-2.2">RFC 7592, Section 2.2</see>:
+    /// "Omitted fields MUST be treated as null or empty values by the server, indicating the
+    /// client's request to delete them from the client's registration."), whatever value the host
+    /// provisioned on the record; a host's DPoP mandate that the client cannot remove is the
+    /// registration's policy profile (<see cref="ClientPolicyProfiles.RequiresDpop"/>), which no
+    /// client configuration update changes.
+    /// </remarks>
+    public bool DpopBoundAccessTokens { get; init; }
+
+    /// <summary>
     /// The scopes this client may request.
     /// </summary>
     public required ImmutableHashSet<string> AllowedScopes { get; init; }

@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Text.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
@@ -139,6 +140,41 @@ internal static class DpopCodeBindingWire
     public static void AssertCarriesJsonErrorBody(string body)
     {
         Assert.Contains("\"error\":\"", body, $"The answer carries a JSON error body naming its error; the body was '{body}'.");
+    }
+
+
+    /// <summary>
+    /// Asserts the refusal of a token request that carries no <c>DPoP</c> field from a client that must present a proof
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">RFC 9449 Section 8</see>: "the authorization server
+    /// responds to requests that do not include a nonce with an HTTP 400 (Bad Request) error response per Section 5.2
+    /// of [RFC6749] using use_dpop_nonce as the error code value. The authorization server includes a DPoP-Nonce HTTP
+    /// header in the response supplying a nonce value."): status <c>400</c>, <c>error</c> <c>use_dpop_nonce</c>,
+    /// <c>error_description</c> "DPoP proof required.", exactly one <c>DPoP-Nonce</c> field line and no access token.
+    /// </summary>
+    /// <param name="response">The token endpoint's whole response.</param>
+    public static void AssertProofRequired(HttpResponseData response)
+    {
+        AssertError(response.StatusCode, response.Body, 400, "use_dpop_nonce", "DPoP proof required.");
+        Assert.HasCount(1, response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.DPoPNonce),
+            "The refusal carries exactly one DPoP-Nonce field line.");
+        Assert.DoesNotContain("\"access_token\"", response.Body, StringComparison.Ordinal, response.Body);
+    }
+
+
+    /// <summary>
+    /// Reads the JOSE Header of a compact DPoP proof as it was received: the first segment's base64url text decoded
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7515#section-7.1">RFC 7515 Section 7.1</see>) and parsed as one
+    /// JSON object.
+    /// </summary>
+    /// <param name="proof">The compact proof.</param>
+    /// <returns>The header object, detached from the parse that read it.</returns>
+    public static JsonElement ReadProofHeader(string proof)
+    {
+        string headerSegment = proof[..proof.IndexOf('.', StringComparison.Ordinal)];
+        using IMemoryOwner<byte> decoded = TestHostShell.Base64UrlDecoder(headerSegment, TestHostShell.MemoryPool);
+        using JsonDocument document = JsonDocument.Parse(decoded.Memory);
+
+        return document.RootElement.Clone();
     }
 
 

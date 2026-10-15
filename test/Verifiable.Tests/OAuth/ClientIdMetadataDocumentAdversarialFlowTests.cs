@@ -345,6 +345,159 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5.2">RFC 9449 Section 5.2</see>:
+    /// "dpop_bound_access_tokens: A boolean value specifying whether the client always uses DPoP for token requests. If
+    /// omitted, the default value is false. If the value is true, the authorization server MUST reject token requests
+    /// from the client that do not contain the DPoP header." A public client whose Client ID Metadata Document, fetched
+    /// over the wire, declares the member <c>true</c> redeems its authorization code over the wire with no <c>DPoP</c>
+    /// field: the redemption is refused 400 <c>use_dpop_nonce</c> "DPoP proof required." with exactly one
+    /// <c>DPoP-Nonce</c> field line; one whose document omits the member is answered 200 with <c>token_type</c>
+    /// <c>Bearer</c>.
+    /// </summary>
+    /// <param name="isDeclaredTrue">Whether the document declares the member <c>true</c>, else omits it.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(true, DisplayName = "declared true")]
+    [DataRow(false, DisplayName = "the member omitted")]
+    public async Task ADocumentDeclaringDpopBoundAccessTokensBindsTheClientAsync(bool isDeclaredTrue)
+    {
+        await using StaticContentHost documentHost = await StaticContentHost.StartAsync(
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Uri documentUri = new(documentHost.BaseAddress, "/app");
+        string? declaration = isDeclaredTrue switch
+        {
+            true => "\"dpop_bound_access_tokens\":true",
+            false => null
+        };
+        documentHost.Publish("/app",
+            Encoding.UTF8.GetBytes(BuildDocumentJson(documentUri.OriginalString, [RedirectUri], extraMemberRaw: declaration)),
+            "application/json");
+
+        await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
+        await app.WireCimdMaterializationAsync("default", documentHost.Certificate).ConfigureAwait(false);
+        _ = await app.EnableDpopAsync().ConfigureAwait(false);
+        ClientRecord stub = await app.RegisterCimdStubClientAsync(documentUri, AuthCodeCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> flowStore) =
+            await app.CreateOAuthClientAndRegistrationAsync(
+                stub, RedirectUri.OriginalString, PolicyProfile.Rfc6749WithPkce, TestContext.CancellationToken)
+                .ConfigureAwait(false);
+        HostedAuthorizationServer hosted = app.Host("default");
+        using HttpClient browserClient = LoopbackTls.CreateSingleHopPinnedHttpClient(app.ServerCertificate);
+        string segment = stub.TenantId.Value;
+
+        (string flowId, _) = await AuthCodeFlowDriver.DriveParAuthorizeAndCallbackAsync(
+            hosted, client, registration, flowStore, segment, RedirectUri, SubjectId, browserClient,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        AuthorizationCodeReceivedState callbackState = (AuthorizationCodeReceivedState)flowStore[flowId];
+        HttpResponseData response = await HttpClientTransport.SendFormPostAsync(
+            hosted.SharedHttpClient!, RawAuthCodeWirePushers.ResolveTokenEndpointUri(app, segment),
+            RawAuthCodeWirePushers.BuildTokenFields(
+                stub.ClientId, callbackState.Code, callbackState.Pkce.EncodedVerifier, callbackState.RedirectUri.OriginalString),
+            OutgoingHeaders.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        if(isDeclaredTrue)
+        {
+            DpopCodeBindingWire.AssertProofRequired(response);
+
+            return;
+        }
+
+        DpopCodeBindingWire.AssertIssued(response.StatusCode, response.Body, "Bearer", expectedJwkThumbprint: null);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5.2">RFC 9449 Section 5.2</see>: "If the value is true,
+    /// the authorization server MUST reject token requests from the client that do not contain the DPoP header." A public
+    /// client whose Client ID Metadata Document, fetched over the wire, declares <c>dpop_bound_access_tokens</c>
+    /// <c>true</c>, at an authorization server that verifies no DPoP proof, redeems its authorization code over the wire
+    /// with no <c>DPoP</c> field: the redemption is refused 500 <c>server_error</c> "DPoP enforcement is required by
+    /// policy but DPoP delegates are not wired." and no access token is issued.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ADocumentDeclaringDpopBoundAccessTokensAtAServerVerifyingNoProofIsAnsweredServerErrorAsync()
+    {
+        await using StaticContentHost documentHost = await StaticContentHost.StartAsync(
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Uri documentUri = new(documentHost.BaseAddress, "/app");
+        documentHost.Publish("/app",
+            Encoding.UTF8.GetBytes(BuildDocumentJson(documentUri.OriginalString, [RedirectUri], extraMemberRaw: "\"dpop_bound_access_tokens\":true")),
+            "application/json");
+
+        await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
+        await app.WireCimdMaterializationAsync("default", documentHost.Certificate).ConfigureAwait(false);
+        ClientRecord stub = await app.RegisterCimdStubClientAsync(documentUri, AuthCodeCapabilities, PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> flowStore) =
+            await app.CreateOAuthClientAndRegistrationAsync(
+                stub, RedirectUri.OriginalString, PolicyProfile.Rfc6749WithPkce, TestContext.CancellationToken)
+                .ConfigureAwait(false);
+        HostedAuthorizationServer hosted = app.Host("default");
+        using HttpClient browserClient = LoopbackTls.CreateSingleHopPinnedHttpClient(app.ServerCertificate);
+        string segment = stub.TenantId.Value;
+
+        (string flowId, _) = await AuthCodeFlowDriver.DriveParAuthorizeAndCallbackAsync(
+            hosted, client, registration, flowStore, segment, RedirectUri, SubjectId, browserClient,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        AuthorizationCodeReceivedState callbackState = (AuthorizationCodeReceivedState)flowStore[flowId];
+        HttpResponseData response = await HttpClientTransport.SendFormPostAsync(
+            hosted.SharedHttpClient!, RawAuthCodeWirePushers.ResolveTokenEndpointUri(app, segment),
+            RawAuthCodeWirePushers.BuildTokenFields(
+                stub.ClientId, callbackState.Code, callbackState.Pkce.EncodedVerifier, callbackState.RedirectUri.OriginalString),
+            OutgoingHeaders.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        DpopCodeBindingWire.AssertError(response.StatusCode, response.Body, 500, "server_error",
+            "DPoP enforcement is required by policy but DPoP delegates are not wired.");
+        Assert.DoesNotContain("\"access_token\"", response.Body, StringComparison.Ordinal, response.Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5.2">RFC 9449 Section 5.2</see>:
+    /// "dpop_bound_access_tokens: A boolean value specifying whether the client always uses DPoP for token requests.",
+    /// with <see href="https://www.rfc-editor.org/rfc/rfc7591#section-2">RFC 7591 Section 2</see>: "All data member types
+    /// (strings, arrays, numbers) are defined in terms of their JSON [RFC7159] representations." A Client ID Metadata
+    /// Document, fetched over the wire, whose <c>dpop_bound_access_tokens</c> is a JSON string, number, null, object or
+    /// array declares nothing the server can honour, and one whose member name escapes a lone surrogate is no JSON text
+    /// of Unicode names: the pushed authorization request of its client is refused, <c>invalid_client</c> "Client
+    /// authentication failed.", and a second attempt fetches the document again rather than serving it from a cache.
+    /// </summary>
+    /// <param name="member">The member the document carries, as JSON text.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("\"dpop_bound_access_tokens\":\"true\"", DisplayName = "a JSON string")]
+    [DataRow("\"dpop_bound_access_tokens\":1", DisplayName = "a JSON number")]
+    [DataRow("\"dpop_bound_access_tokens\":null", DisplayName = "the JSON null")]
+    [DataRow("\"dpop_bound_access_tokens\":{}", DisplayName = "a JSON object")]
+    [DataRow("\"dpop_bound_access_tokens\":[]", DisplayName = "a JSON array")]
+    [DataRow("\"dpop_bound_access_tokens\\uD800\":true", DisplayName = "a member name escaping a lone surrogate")]
+    public async Task ADocumentWhoseDpopBoundAccessTokensIsNoBooleanAbortsAsync(string member)
+    {
+        await using StaticContentHost documentHost = await StaticContentHost.StartAsync(
+            TestContext.CancellationToken).ConfigureAwait(false);
+        const string DocumentPath = "/dpop-bound-access-tokens";
+        Uri documentUri = new(documentHost.BaseAddress, DocumentPath);
+        documentHost.Publish(DocumentPath,
+            Encoding.UTF8.GetBytes(BuildDocumentJson(documentUri.OriginalString, [RedirectUri], extraMemberRaw: member)),
+            "application/json");
+
+        await using TestHostShell app = new(new FakeTimeProvider(TestClock.CanonicalEpoch));
+        await app.WireCimdMaterializationAsync("default", documentHost.Certificate).ConfigureAwait(false);
+
+        AuthCodeFlowEndpointResult first = await StartParAgainstStubAsync(app, documentUri, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, first.Outcome,
+            $"The pushed request is refused. ErrorCode={first.ErrorCode} ErrorDescription={first.ErrorDescription}");
+        AssertNoInternalDetailLeaked(first);
+        Assert.IsTrue(documentHost.WasRequested(DocumentPath));
+        int requestsAfterFirst = documentHost.TotalRequests;
+
+        AuthCodeFlowEndpointResult second = await StartParAgainstStubAsync(app, documentUri, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, second.Outcome, "The second attempt is refused.");
+        Assert.IsGreaterThan(requestsAfterFirst, documentHost.TotalRequests, "A second attempt fetches the document again.");
+    }
+
+
+    /// <summary>
     /// CIMD-008/014/015/016: the document's <c>client_id</c> MUST ordinal-equal the fetch URL. A
     /// generic mismatch aborts, and so does a scheme-case variant — RFC 3986 §3.1 treats the
     /// scheme as case-insensitive for URI equivalence, but CIMD-008/016 require literal ordinal
@@ -2532,9 +2685,21 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
     }
 
 
-    //Builds a conformant-shaped Client ID Metadata Document (§4). client_id is included unless the
-    //caller wants to model CIMD-013's missing-property defect; every other member is included only
-    //when supplied, so an omitted property stays genuinely absent from the wire JSON.
+    /// <summary>
+    /// Builds the JSON text of a Client ID Metadata Document of the conformant shape: <c>client_id</c> first, then each
+    /// other member only when its argument is supplied, so an omitted member stays absent from the text on the wire.
+    /// </summary>
+    /// <param name="clientId">The document's <c>client_id</c>, written as a JSON string.</param>
+    /// <param name="redirectUris">The <c>redirect_uris</c>, written as a JSON array of strings when non-empty, else omitted.</param>
+    /// <param name="tokenEndpointAuthMethod">The <c>token_endpoint_auth_method</c>, or <see langword="null"/> to omit it.</param>
+    /// <param name="includeClientSecret">Whether the document carries a <c>client_secret</c> member.</param>
+    /// <param name="jwksRawJson">The <c>jwks</c> member's value as JSON text, written as given, or <see langword="null"/> to omit it.</param>
+    /// <param name="jwksUriRaw">The <c>jwks_uri</c>, or <see langword="null"/> to omit it.</param>
+    /// <param name="logoUri">The <c>logo_uri</c>, or <see langword="null"/> to omit it.</param>
+    /// <param name="clientName">The <c>client_name</c>, or <see langword="null"/> to omit it.</param>
+    /// <param name="softwareStatement">The <c>software_statement</c>, or <see langword="null"/> to omit it.</param>
+    /// <param name="extraMemberRaw">One more member, its name and value as JSON text, appended as written, or <see langword="null"/> for none.</param>
+    /// <returns>The document's JSON text.</returns>
     private static string BuildDocumentJson(
         string clientId,
         IReadOnlyList<Uri>? redirectUris = null,
@@ -2544,7 +2709,8 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
         string? jwksUriRaw = null,
         string? logoUri = null,
         string? clientName = null,
-        string? softwareStatement = null)
+        string? softwareStatement = null,
+        string? extraMemberRaw = null)
     {
         List<string> members = [$"\"client_id\":\"{clientId}\""];
 
@@ -2587,6 +2753,11 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
         if(softwareStatement is not null)
         {
             members.Add($"\"software_statement\":\"{softwareStatement}\"");
+        }
+
+        if(extraMemberRaw is not null)
+        {
+            members.Add(extraMemberRaw);
         }
 
         return "{" + string.Join(',', members) + "}";

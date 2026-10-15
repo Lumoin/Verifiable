@@ -327,4 +327,25 @@ public static class ClientMetadataParameterNames
     /// <c>client_secret_expires_at</c>.</summary>
     public static bool IsClientSecretExpiresAt(string value) =>
         string.Equals(value, ClientSecretExpiresAt, StringComparison.Ordinal);
+
+
+    /// <summary>The UTF-8 source literal of <see cref="DpopBoundAccessTokens"/>.</summary>
+    public static ReadOnlySpan<byte> DpopBoundAccessTokensUtf8 => "dpop_bound_access_tokens"u8;
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5.2">RFC 9449, Section 5.2</see>:
+    /// "dpop_bound_access_tokens: A boolean value specifying whether the client always uses DPoP
+    /// for token requests. If omitted, the default value is false." Registered in the OAuth
+    /// Dynamic Client Registration Metadata registry by
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-12.10">RFC 9449, Section 12.10</see>
+    /// ("Boolean value specifying whether the client always uses DPoP for token requests").
+    /// </summary>
+    public static string DpopBoundAccessTokens { get; } = Utf8Constants.ToInternedString(DpopBoundAccessTokensUtf8);
+
+    /// <summary>Returns <see langword="true"/> when <paramref name="value"/> is exactly
+    /// <c>dpop_bound_access_tokens</c>.</summary>
+    /// <param name="value">The metadata member name to compare, ordinally.</param>
+    /// <returns><see langword="true"/> when <paramref name="value"/> is <see cref="DpopBoundAccessTokens"/>; otherwise <see langword="false"/>.</returns>
+    public static bool IsDpopBoundAccessTokens(string value) =>
+        string.Equals(value, DpopBoundAccessTokens, StringComparison.Ordinal);
 }

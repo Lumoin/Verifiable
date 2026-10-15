@@ -2731,6 +2731,65 @@ internal sealed class UserInfoEndpointTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.2">RFC 9449 Section 4.2</see>: "The JOSE Header of a
+    /// DPoP JWT MUST contain at least the following parameters: typ ... alg ... jwk", with
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">Section 7.1</see>: "invalid_dpop_proof is used to
+    /// indicate that the DPoP proof itself was deemed invalid based on the criteria of Section 4.3." A proof presented
+    /// with its DPoP-bound token at UserInfo over the wire, signed by the bound DPoP key and carrying the provided nonce,
+    /// whose header leaves out one of the three, is refused with 401 and the one challenge
+    /// <c>DPoP error="invalid_dpop_proof", algs="..."</c>.
+    /// </summary>
+    /// <param name="missingParameter">The header parameter the proof leaves out.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("typ")]
+    [DataRow("alg")]
+    [DataRow("jwk")]
+    public async Task UserInfoRefusesAProofWhoseHeaderLacksARequiredParameterAsync(string missingParameter)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        using DpopClientFixture fixture = await CreateDpopFixtureAsync(host, material).ConfigureAwait(false);
+        DpopPresentationContext presentation = await PrepareDpopPresentationAsync(host, material, fixture).ConfigureAwait(false);
+
+        string proof = await ResourceDpopProofs.BuildAsync(
+            presentation.DpopKey, "POST", presentation.UserInfoUrl, presentation.AccessToken, presentation.Nonce,
+            TimeProvider.GetUtcNow(), TestContext.CancellationToken,
+            alterHeader: header => _ = header.Remove(missingParameter)).ConfigureAwait(false);
+
+        await AssertProofRefusedAsync(presentation, proof, "invalid_dpop_proof").ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.2">RFC 9449 Section 4.2</see>, <c>alg</c>: "It MUST
+    /// NOT be none or an identifier for a symmetric algorithm (Message Authentication Code (MAC))." A proof presented with
+    /// its DPoP-bound token at UserInfo over the wire, carrying the provided nonce, whose header declares <c>HS256</c>
+    /// beside the bound DPoP key's <c>jwk</c> and whose signature is an HMAC with SHA-256 over the JWS Signing Input
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7518#section-3.2">RFC 7518 Section 3.2</see>), is refused with 401,
+    /// the one challenge <c>DPoP error="invalid_dpop_proof", algs="..."</c> and the body's <c>error_description</c>
+    /// "DPoP proof validation failed: InvalidAlg.", the refusal of its algorithm.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task UserInfoRefusesAProofUnderAMacAlgorithmAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        using DpopClientFixture fixture = await CreateDpopFixtureAsync(host, material).ConfigureAwait(false);
+        DpopPresentationContext presentation = await PrepareDpopPresentationAsync(host, material, fixture).ConfigureAwait(false);
+
+        string proof = await ResourceDpopProofs.BuildAsync(
+            presentation.DpopKey, "POST", presentation.UserInfoUrl, presentation.AccessToken, presentation.Nonce,
+            TimeProvider.GetUtcNow(), TestContext.CancellationToken,
+            alterHeader: static header => header["alg"] = "HS256", sign: ResourceDpopProofs.SignHmacSha256Async).ConfigureAwait(false);
+
+        await AssertProofRefusedAsync(
+            presentation, proof, "invalid_dpop_proof", expectedDescription: "DPoP proof validation failed: InvalidAlg.").ConfigureAwait(false);
+    }
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-5.1">RFC 9728 Section 5.1</see>: "This parameter
     /// MAY also be used in WWW-Authenticate responses using authorization schemes other than "Bearer" [RFC6750],
     /// such as the DPoP scheme defined by [RFC9449]." The resource takes the option not for the <c>DPoP</c>
@@ -3655,8 +3714,10 @@ internal sealed class UserInfoEndpointTests
     /// <param name="proof">The DPoP proof sent.</param>
     /// <param name="error">The expected error.</param>
     /// <param name="isDpopNonceExpected">Whether the refusal is answered with a <c>DPoP-Nonce</c> field.</param>
+    /// <param name="expectedDescription">The <c>error_description</c> the body carries, or <see langword="null"/> when the row does not read it.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
     private async Task AssertProofRefusedAsync(
-        DpopPresentationContext presentation, string proof, string error, bool isDpopNonceExpected = false)
+        DpopPresentationContext presentation, string proof, string error, bool isDpopNonceExpected = false, string? expectedDescription = null)
     {
         using HttpResponseMessage response = await SendUserInfoOverWireAsync(
             presentation.Host, presentation.Material, presentation.AccessToken, scheme: "DPoP", dpopProof: proof)
@@ -3664,6 +3725,12 @@ internal sealed class UserInfoEndpointTests
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertRefused(response, body, HttpStatusCode.Unauthorized, ResourceDpopProofs.DpopChallenge(error), error);
+        if(expectedDescription is not null)
+        {
+            using JsonDocument document = JsonDocument.Parse(body);
+            Assert.AreEqual(expectedDescription, document.RootElement.GetProperty("error_description").GetString(), body);
+        }
+
         if(isDpopNonceExpected)
         {
             Assert.IsFalse(string.IsNullOrEmpty(ResourceDpopProofs.ReadNonce(response)), "The refusal is answered with a DPoP-Nonce field.");

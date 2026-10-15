@@ -3303,7 +3303,7 @@ public static class AuthCodeEndpoints
             }
         }
 
-        bool proofRequiredByRegistration = ClientPolicyProfiles.RequiresDpop(registration.Profile);
+        bool proofRequiredByRegistration = IsProofRequired(registration);
         return await DpopTokenEndpointValidation.ValidatePresentedProofAsync(
             server, context, registration, issuerUri, server.TimeProvider.GetUtcNow(),
             proofRequiredByRegistration, cancellationToken).ConfigureAwait(false);
@@ -3665,7 +3665,8 @@ public static class AuthCodeEndpoints
     /// </para>
     /// <para>
     /// <see cref="DpopTokenEndpointValidation.ValidatePresentedProofAsync"/> runs last, deciding
-    /// the request-only half of DPoP from the registration's profile alone; the handler reads the
+    /// the request-only half of DPoP from the registration's profile or the client's
+    /// <c>dpop_bound_access_tokens</c> declaration (<see cref="IsProofRequired"/>); the handler reads the
     /// carried outcome through <see cref="DpopTokenEndpointValidation.BindValidatedProofAsync"/>
     /// once it knows whether the stored record itself binds a proof.
     /// </para>
@@ -3767,7 +3768,7 @@ public static class AuthCodeEndpoints
             }
         }
 
-        bool proofRequiredByRegistration = ClientPolicyProfiles.RequiresDpop(registration.Profile);
+        bool proofRequiredByRegistration = IsProofRequired(registration);
         return await DpopTokenEndpointValidation.ValidatePresentedProofAsync(
             server, context, registration, issuerUri, server.TimeProvider.GetUtcNow(),
             proofRequiredByRegistration, cancellationToken).ConfigureAwait(false);
@@ -3918,7 +3919,13 @@ public static class AuthCodeEndpoints
         }
 
         EndpointServer server = context.RequestServer!;
-        ConfirmationMethod? boundConfirmation = retiredState.Confirmation;
+
+        //RFC 9449 Section 5: "The binding MUST be validated when the refresh token is later presented to
+        //get new access tokens." The retired token is held to the binding it was issued under, stored on
+        //its own record and carried onto the retired record by the rotation, never to the binding of the
+        //access token that rotation issued, and whatever the client's registration declares at this
+        //presentation.
+        ConfirmationMethod? boundConfirmation = retiredState.RetiredRefreshTokenConfirmation;
 
         //BeforeRefreshCorrelationAsync already resolved the issuer once for this request and
         //carried it. A missing carry means the endpoint's step did not run as the dispatcher
@@ -4521,7 +4528,7 @@ public static class AuthCodeEndpoints
                         IssuedAt = now,
                         SubjectId = codeState.SubjectId,
                         Scope = codeState.Scope,
-                        Confirmation = confirmation,
+                        Confirmation = RefreshTokenConfirmationOf(registration, confirmation),
                         AuthTime = codeState.AuthTime,
                         SessionId = codeState.SessionId,
                         Acr = codeState.Acr,
@@ -4903,7 +4910,7 @@ public static class AuthCodeEndpoints
                 //checks, after issuer resolution, before issuance. expectedThumbprint
                 //is null because this grant establishes no prior binding to verify
                 //against.
-                bool dpopRequired = ClientPolicyProfiles.RequiresDpop(registration.Profile);
+                bool dpopRequired = IsProofRequired(registration);
                 DpopValidationOutcome dpopOutcome = await DpopTokenEndpointValidation.ValidateAsync(
                     server, context, registration, issuerUri, now,
                     expectedThumbprint: null, dpopRequired, ct).ConfigureAwait(false);
@@ -5209,7 +5216,8 @@ public static class AuthCodeEndpoints
                 //RFC 9449 §5: "This is applicable for all access token requests regardless of grant
                 //type ... and extension grants such as the JWT authorization grant [RFC7523]" — Token
                 //Exchange is such an extension grant, and this call enforces the registration's own
-                //mandate (ClientPolicyProfiles.RequiresDpop) exactly as the authorization-code and
+                //mandate (IsProofRequired: the profile, or the client's dpop_bound_access_tokens
+                //declaration of RFC 9449 Section 5.2) exactly as the authorization-code and
                 //client_credentials grants do. It runs BEFORE the subject-token, actor-token, and
                 //authorization seams below: each MAY be implemented with a side effect, so a
                 //use_dpop_nonce challenge (RFC 9449 §8) or a rejected proof MUST NOT consume any of
@@ -5219,8 +5227,8 @@ public static class AuthCodeEndpoints
                 //once, then apply the same §9.8.1.2-shaped matrix the ID-JAG mint and redemption legs
                 //use — a bound subject token requires a matching proof, an unbound one may still opt a
                 //fresh key in, and an unbound token with no proof is refused only when the
-                //registration's own profile mandates DPoP.
-                bool dpopRequired = ClientPolicyProfiles.RequiresDpop(registration.Profile);
+                //registration's own profile or declaration requires a proof.
+                bool dpopRequired = IsProofRequired(registration);
                 DpopValidationOutcome dpopOutcome = await DpopTokenEndpointValidation.ValidateAsync(
                     server, context, registration, issuerUri, now,
                     expectedThumbprint: null, dpopRequired, ct).ConfigureAwait(false);
@@ -5923,9 +5931,10 @@ public static class AuthCodeEndpoints
     /// subject-token exchange can validate it, and returns it in the <c>access_token</c> field with
     /// <c>issued_token_type</c> the refresh_token URN and <c>token_type</c> <c>N_A</c>. Per
     /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 §5</see> the minted Refresh
-    /// Token itself carries <paramref name="confirmation"/> when the subject token's binding (or a
-    /// fresh proof under an unbound one) sender-constrained this issuance, so a later
-    /// <c>refresh_token</c> grant enforces the same binding the code grant already does. A refresh token is
+    /// Token itself carries <paramref name="confirmation"/>, when the subject token's binding (or a
+    /// fresh proof under an unbound one) sender-constrained this issuance, for a client that is public at
+    /// this request (<see cref="RefreshTokenConfirmationOf"/>), so a later <c>refresh_token</c> grant
+    /// enforces the same binding the code grant already does; a confidential client's carries none. A refresh token is
     /// issued only for a grant whose audience a refresh of it issues again: an authorization whose
     /// <see cref="TokenExchange.TokenExchangeAuthorization.Audience"/> names an entry
     /// <see cref="IsCarriedAudienceEntry"/> does not store is answered 400 <see cref="OAuthErrors.InvalidTarget"/>
@@ -6068,7 +6077,7 @@ public static class AuthCodeEndpoints
                 ? string.Join(' ', readAudience)
                 : null,
 
-            Confirmation = confirmation
+            Confirmation = RefreshTokenConfirmationOf(registration, confirmation)
         };
         await oauth.SaveFlowStateAsync!(
             registration.TenantId, refreshFlowId, refreshState, stepCount: 0, context, cancellationToken).ConfigureAwait(false);
@@ -6709,7 +6718,7 @@ public static class AuthCodeEndpoints
                 //(RFC 7523 §3 rule 7 / JtiReplayGuard consumes it), so a use_dpop_nonce challenge
                 //(RFC 9449 §8) or a rejected proof MUST NOT consume it — the caller retries the same
                 //assertion once it has satisfied the challenge.
-                bool dpopRequired = ClientPolicyProfiles.RequiresDpop(registration.Profile);
+                bool dpopRequired = IsProofRequired(registration);
                 DpopValidationOutcome dpopOutcome = await DpopTokenEndpointValidation.ValidateAsync(
                     server, context, registration, issuerUri, now,
                     expectedThumbprint: null, dpopRequired, ct).ConfigureAwait(false);
@@ -6828,7 +6837,8 @@ public static class AuthCodeEndpoints
                 //thumbprint (cnf.jkt) and the Resource Server's sender-constraint requirement to
                 //decide Bearer vs DPoP-bound vs reject. A grant with neither a bound key nor a
                 //constraint requirement and no presented proof yields the Bearer flow unless the
-                //registration's own profile mandates DPoP.
+                //registration's profile or the client's dpop_bound_access_tokens declaration requires a
+                //proof (IsProofRequired, read above).
                 IdJagDpopDecision dpopDecision = IdJagDpopDecision.Evaluate(
                     grant.RequiredKeyThumbprint,
                     dpopOutcome.Confirmation?.JwkThumbprint,
@@ -7628,7 +7638,7 @@ public static class AuthCodeEndpoints
                 //pre-authorized_code is single-use and the seam may consume it, so a
                 //use_dpop_nonce challenge (RFC 9449 §8) or a rejected proof MUST NOT consume it
                 //— the Wallet retries the same code once it has satisfied the challenge.
-                bool dpopRequired = ClientPolicyProfiles.RequiresDpop(registration.Profile);
+                bool dpopRequired = IsProofRequired(registration);
                 DpopValidationOutcome dpopOutcome = await DpopTokenEndpointValidation.ValidateAsync(
                     server, context, registration, issuerUri, now,
                     expectedThumbprint: null, dpopRequired, ct).ConfigureAwait(false);
@@ -9177,13 +9187,18 @@ public static class AuthCodeEndpoints
 
                 DateTimeOffset now = server.TimeProvider.GetUtcNow();
 
-                //RFC 9449 §5 — when the refresh token was issued under a
-                //DPoP-bound flow, the refresh exchange MUST present a proof
-                //whose thumbprint matches the stored binding. The request-only half already ran
-                //once, in BeforeRefreshCorrelationAsync; this reads the carried outcome and
-                //rejects on thumbprint mismatch with invalid_dpop_proof. A missing carry means the
-                //step did not run as the dispatcher requires, and is a server fault rather than a
-                //silent Bearer fallback.
+                //RFC 9449 Section 5: a refresh token issued to a public client that presents a valid
+                //proof is bound to that proof's DPoP key, and every refresh token is held at every
+                //presentation to the binding it was issued under, none when unbound ("The binding MUST
+                //be validated when the refresh token is later presented to get new access tokens."); a
+                //confidential client's is not bound ("Refresh tokens issued to confidential clients ...
+                //are not bound to the DPoP proof public key"), so its record stores none
+                //(RefreshTokenConfirmationOf) and the client authenticated in
+                //BeforeRefreshCorrelationAsync instead (RFC 6749 Section 6). The stored binding is the
+                //one held, whatever the client's registration declares at this presentation. The
+                //request-only half already ran once, in BeforeRefreshCorrelationAsync; this
+                //reads the carried outcome. A missing carry means the step did not run as the
+                //dispatcher requires, and is a server fault rather than a silent Bearer fallback.
                 ConfirmationMethod? boundConfirmation = storedRefresh.Confirmation;
                 if(context.DpopStepOutcome is not DpopValidationOutcome carriedDpopOutcome)
                 {
@@ -9202,11 +9217,17 @@ public static class AuthCodeEndpoints
                     return (null, dpopOutcome.FailureResponse!);
                 }
 
-                //Inherit the binding from the stored refresh state, not the
-                //fresh validation outcome — the validated proof matched the
-                //bound thumbprint, so they're equal, but conceptually the
-                //binding is owned by the original issuance.
-                ConfirmationMethod? confirmation = boundConfirmation;
+                //RFC 9449 Section 5: "To sender-constrain the access token after checking the validity
+                //of the DPoP proof, the authorization server associates the issued access token with
+                //the public key from the DPoP proof", and "When an authorization server supporting DPoP
+                //issues a refresh token to a public client that presents a valid DPoP proof at the
+                //token endpoint, the refresh token MUST be bound to the respective public key." The
+                //issuance's binding is the validated proof's: for a bound refresh token it equals the
+                //stored binding the proof was held to; a proof presented with an unbound refresh token
+                //binds the refreshed access token; no proof issues Bearer. The rotated refresh token
+                //below stores the same binding only when the client is public at this request
+                //(RefreshTokenConfirmationOf).
+                ConfirmationMethod? confirmation = dpopOutcome.Confirmation;
 
                 //RFC 9396 §7 / §9.1 / §11.2: the granted authorization_details stored with the
                 //grant ride the refresh exchange. The stored value is the authorized baseline; a
@@ -9246,8 +9267,8 @@ public static class AuthCodeEndpoints
 
                     //OID4VCI 1.0 §13.10 — the refreshed token gives access to Credentials. A
                     //long-lived bearer Credential token MUST NOT be issued unless sender-
-                    //constrained; the refresh exchange inherits the binding from the original
-                    //issuance (confirmation above).
+                    //constrained; the refreshed access token carries the validated proof's binding
+                    //(confirmation above).
                     ServerHttpResponse? protectionFailure = GuardCredentialAccessTokenProtection(
                         server, registration, context, isSenderConstrained: confirmation is { IsEmpty: false });
                     if(protectionFailure is not null)
@@ -9428,7 +9449,7 @@ public static class AuthCodeEndpoints
                         IssuedAt = now,
                         SubjectId = storedRefresh.SubjectId,
                         Scope = storedRefresh.Scope,
-                        Confirmation = confirmation,
+                        Confirmation = RefreshTokenConfirmationOf(registration, confirmation),
                         AuthTime = storedRefresh.AuthTime,
                         SessionId = storedRefresh.SessionId,
                         Acr = storedRefresh.Acr,
@@ -9482,6 +9503,10 @@ public static class AuthCodeEndpoints
                         IssuedAt: now,
                         ExpiresAt: retiredRecordExpiresAt)
                     {
+                        //The retired record's Confirmation mirrors the access token this rotation issued, its
+                        //token_type and cnf. The retired refresh token's own binding travels on the transition
+                        //from the retired refresh record (RetiredRefreshTokenConfirmation), and a later reuse of
+                        //that token is held to it (HandleRefreshTokenReuseAsync).
                         Confirmation = confirmation,
                         SuccessorRefreshFlowId = newRefreshFlowId
                     }, null);
@@ -11281,15 +11306,79 @@ public static class AuthCodeEndpoints
             return true;
         }
 
-        bool isPublicClient = tokenEndpointAuthMethod is null
-            || tokenEndpointAuthMethod.Value == ClientAuthenticationMethod.None;
         bool isPkceS256 = WellKnownCodeChallengeMethods.IsS256(codeChallengeMethod ?? string.Empty);
 
-        return isPublicClient
+        return IsPublicClient(tokenEndpointAuthMethod)
             && isPkceS256
             && RedirectUriMatching.IsRegisteredLoopback(
                 registeredRedirectUris, requested, context.IsLocalhostNameAcceptedForLoopbackRedirects);
     }
+
+
+    /// <summary>
+    /// Whether a registration declaring <paramref name="tokenEndpointAuthMethod"/> is a public client: no declared
+    /// method (<see langword="null"/>) or <see cref="ClientAuthenticationMethod.None"/>, the reading
+    /// <see cref="ClientRecord.TokenEndpointAuthMethod"/> gives a missing declaration ("public client behavior");
+    /// any other method is a confidential client, one that has "established authentication credentials with the
+    /// authorization server" (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>;
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-2.1">RFC 6749 Section 2.1</see>: "Clients capable of
+    /// maintaining the confidentiality of their credentials"). The one reading of the token endpoint's loopback
+    /// redirect fallback and of the DPoP binding a refresh token is issued with (<see cref="RefreshTokenConfirmationOf"/>).
+    /// </summary>
+    /// <param name="tokenEndpointAuthMethod">The registration's declared client authentication method.</param>
+    /// <returns><see langword="true"/> for a public client.</returns>
+    private static bool IsPublicClient(ClientAuthenticationMethod? tokenEndpointAuthMethod) => tokenEndpointAuthMethod switch
+    {
+        null => true,
+        ClientAuthenticationMethod method => method == ClientAuthenticationMethod.None
+    };
+
+
+    /// <summary>
+    /// Whether a token request of <paramref name="registration"/> must present a DPoP proof: its policy profile
+    /// mandates DPoP (<see cref="ClientPolicyProfiles.RequiresDpop"/>), or the client declared
+    /// <c>dpop_bound_access_tokens</c> <see langword="true"/> (<see cref="ClientRecord.DpopBoundAccessTokens"/>),
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5.2">RFC 9449 Section 5.2</see>: "If the value is
+    /// true, the authorization server MUST reject token requests from the client that do not contain the DPoP
+    /// header.", which <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">Section 5</see> makes "applicable
+    /// for all access token requests regardless of grant type". Every grant the token endpoint serves reads it; a
+    /// request without the header is answered as a request under a mandating profile is, 400 <c>use_dpop_nonce</c>
+    /// "DPoP proof required." with a <c>DPoP-Nonce</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">Section 8</see>: the authorization server
+    /// "responds to requests that do not include a nonce with an HTTP 400 (Bad Request) error response").
+    /// </summary>
+    /// <param name="registration">The client registration the request belongs to.</param>
+    /// <returns><see langword="true"/> when the request must present a proof.</returns>
+    private static bool IsProofRequired(ClientRecord registration) =>
+        ClientPolicyProfiles.RequiresDpop(registration.Profile) || registration.DpopBoundAccessTokens;
+
+
+    /// <summary>
+    /// The DPoP binding the record of a refresh token issued to <paramref name="registration"/> stores: the issuance's
+    /// confirmation for a client that is public (<see cref="IsPublicClient"/>) under the registration in force at the
+    /// issuing request, and none for a confidential client. A refresh token issued to a public client is bound at
+    /// issuance and held to that binding at every presentation; a confidential client's is not bound. The binding is
+    /// decided here, once, and never read again from the registration: a later change of the client's declared
+    /// authentication method leaves every refresh token already issued held to the binding it was issued with.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>: "When an authorization
+    /// server supporting DPoP issues a refresh token to a public client that presents a valid DPoP proof at the token
+    /// endpoint, the refresh token MUST be bound to the respective public key. The binding MUST be validated when the
+    /// refresh token is later presented to get new access tokens.", and "Refresh tokens issued to confidential clients
+    /// (those having established authentication credentials with the authorization server) are not bound to the DPoP
+    /// proof public key because they are already sender-constrained with a different existing mechanism.", the
+    /// mechanism of <see href="https://www.rfc-editor.org/rfc/rfc6749#section-6">RFC 6749 Section 6</see>: the
+    /// authorization server MUST "require client authentication for confidential clients". The access token issued
+    /// beside the refresh token keeps its own binding whatever the client type.
+    /// </summary>
+    /// <param name="registration">The client registration in force at the request that issues the refresh token.</param>
+    /// <param name="issuanceConfirmation">The binding of the issuance, the validated proof's, or <see langword="null"/> for none.</param>
+    /// <returns>The binding the refresh token's record stores, or <see langword="null"/> for none.</returns>
+    private static ConfirmationMethod? RefreshTokenConfirmationOf(ClientRecord registration, ConfirmationMethod? issuanceConfirmation) =>
+        IsPublicClient(registration.TokenEndpointAuthMethod) switch
+        {
+            true => issuanceConfirmation,
+            false => null
+        };
 
 
     /// <summary>

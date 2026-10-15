@@ -8,6 +8,7 @@ using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
+using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Server;
@@ -776,6 +777,271 @@ internal sealed class RefreshConfidentialClientAuthenticationTests
             RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, original),
             headers, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, successorResponse.StatusCode, successorResponse.Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>: "Refresh tokens issued to
+    /// confidential clients (those having established authentication credentials with the authorization server) are not
+    /// bound to the DPoP proof public key because they are already sender-constrained with a different existing
+    /// mechanism.", the mechanism of <see href="https://www.rfc-editor.org/rfc/rfc6749#section-6">RFC 6749 Section
+    /// 6</see>: "require client authentication for confidential clients or for any client that was issued client
+    /// credentials". A <c>client_secret_basic</c> client whose refresh token was issued with an access token bound to one
+    /// DPoP key refreshes it over the wire with its credentials and a valid proof by another DPoP key carrying the supplied
+    /// nonce: it is answered 200 with <c>token_type</c> <c>DPoP</c> and the access token's <c>cnf.jkt</c> the JWK SHA-256
+    /// Thumbprint of the other DPoP key.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ConfidentialClientRefreshesUnderAnotherDpopKeyAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        using FreshDpopKey issuanceKey = new();
+        using FreshDpopKey otherKey = new();
+        (Uri tokenUri, string refreshToken, string nonce) =
+            await IssueDpopBoundBasicAuthenticatedRefreshTokenAsync(host, material, issuanceKey.Key).ConfigureAwait(false);
+
+        HttpResponseData response = await PostBasicAuthenticatedRefreshAsync(
+            host, tokenUri, refreshToken, await BuildTokenProofAsync(otherKey.Key, tokenUri, nonce).ConfigureAwait(false)).ConfigureAwait(false);
+
+        DpopCodeBindingWire.AssertIssued(response.StatusCode, response.Body, "DPoP",
+            otherKey.Key.GetThumbprint(TestHostShell.Base64UrlEncoder, TestHostShell.MemoryPool));
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>: "An authorization server
+    /// MAY elect to issue access tokens that are not DPoP bound, which is signaled to the client with a value of Bearer in
+    /// the token_type parameter of the access token response per [RFC6750]." and "Refresh tokens issued to confidential
+    /// clients (those having established authentication credentials with the authorization server) are not bound to the
+    /// DPoP proof public key". A <c>client_secret_basic</c> client, under a profile that leaves DPoP optional, whose
+    /// refresh token was issued with an access token bound to a DPoP key refreshes it over the wire with its credentials
+    /// and no <c>DPoP</c> field: it is answered 200 with <c>token_type</c> <c>Bearer</c> and an access token carrying no
+    /// <c>cnf</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ConfidentialClientRefreshWithoutAProofUnderAnOptionalProfileIsServedBearerAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        using FreshDpopKey issuanceKey = new();
+        (Uri tokenUri, string refreshToken, _) =
+            await IssueDpopBoundBasicAuthenticatedRefreshTokenAsync(host, material, issuanceKey.Key).ConfigureAwait(false);
+
+        HttpResponseData response = await PostBasicAuthenticatedRefreshAsync(host, tokenUri, refreshToken, proof: null).ConfigureAwait(false);
+
+        DpopCodeBindingWire.AssertIssued(response.StatusCode, response.Body, "Bearer", expectedJwkThumbprint: null);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>: "Refresh tokens issued to
+    /// confidential clients (those having established authentication credentials with the authorization server) are not
+    /// bound to the DPoP proof public key because they are already sender-constrained with a different existing
+    /// mechanism." A <c>client_secret_basic</c> client, under a profile that leaves DPoP optional and with no
+    /// <c>dpop_bound_access_tokens</c> declaration, is issued over the wire a refresh token with an access token bound to
+    /// a DPoP key; an update of its client configuration with its registration access token then omits
+    /// <c>token_endpoint_auth_method</c> (<see href="https://www.rfc-editor.org/rfc/rfc7592#section-2.2">RFC 7592 Section
+    /// 2.2</see>: "Omitted fields MUST be treated as null or empty values by the server, indicating the client's request
+    /// to delete them from the client's registration."). The refresh token, presented with the client identifier alone and
+    /// no <c>DPoP</c> field, is answered 200 with <c>token_type</c> <c>Bearer</c> and an access token carrying no
+    /// <c>cnf</c>: it was issued to a confidential client and carries no DPoP binding.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ConfidentialClientTurnedPublicRefreshesItsUnboundTokenAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        using FreshDpopKey issuanceKey = new();
+        (Uri tokenUri, string refreshToken, _) =
+            await IssueDpopBoundBasicAuthenticatedRefreshTokenAsync(host, material, issuanceKey.Key).ConfigureAwait(false);
+        (Uri managementUri, string registrationAccessToken) =
+            await host.EnableClientConfigurationAsync(material, TestContext.CancellationToken).ConfigureAwait(false);
+
+        string metadataWithoutAMethod = $$"""{"client_id":"{{ClientId}}","redirect_uris":["{{RedirectUri.OriginalString}}"],"scope":"{{WellKnownScopes.OpenId}}"}""";
+        using HttpResponseMessage update = await RawAuthCodeWirePushers.SendPinnedRegistrationAsync(
+            host, HttpMethod.Put, managementUri, registrationAccessToken, metadataWithoutAMethod, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)update.StatusCode, await update.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false));
+        Assert.IsNull(host.Host("default").Registrations[ClientId].TokenEndpointAuthMethod, "The update deleted the declared method.");
+
+        HttpResponseData response = await HttpClientTransport.SendFormPostAsync(
+            host.Host("default").SharedHttpClient!, tokenUri, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, refreshToken),
+            OutgoingHeaders.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        DpopCodeBindingWire.AssertIssued(response.StatusCode, response.Body, "Bearer", expectedJwkThumbprint: null);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>: "Refresh tokens issued to
+    /// confidential clients (those having established authentication credentials with the authorization server) are not
+    /// bound to the DPoP proof public key because they are already sender-constrained with a different existing
+    /// mechanism.", with <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1 draft-16
+    /// Section 4.3.1</see>: "If a refresh token is compromised and subsequently used by both the attacker and the
+    /// legitimate client, one of them will present an invalidated refresh token, which will inform the authorization
+    /// server of the breach. The authorization server cannot determine which party submitted the invalid refresh token,
+    /// but it will revoke the active refresh token as well as the access authorization grant associated with it." A
+    /// <c>client_secret_basic</c> client's refresh token is issued unbound, whatever DPoP key its access token was bound
+    /// to; the client rotates it over the wire with its credentials and a proof by that DPoP key, then presents the
+    /// rotated-out token with its credentials and either a valid proof by another DPoP key or no <c>DPoP</c> field:
+    /// held to the binding it was issued under, none, the authenticated presentation is a valid reuse whichever it
+    /// carries, refused 400 <c>invalid_grant</c> "The refresh token is unknown, expired, or has been revoked.", and the
+    /// grant is revoked: the successor, presented with the credentials and a proof by the original DPoP key, is refused
+    /// with the same answer.
+    /// </summary>
+    /// <param name="presentation">The DPoP field the reuse carries: <c>another DPoP key</c> or <c>no proof</c>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("another DPoP key")]
+    [DataRow("no proof")]
+    public async Task ConfidentialClientReuseOfARotatedRefreshTokenRevokesTheGrantAsync(string presentation)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        using FreshDpopKey issuanceKey = new();
+        using FreshDpopKey otherKey = new();
+        (Uri tokenUri, string original, string nonce) =
+            await IssueDpopBoundBasicAuthenticatedRefreshTokenAsync(host, material, issuanceKey.Key).ConfigureAwait(false);
+
+        HttpResponseData rotation = await PostBasicAuthenticatedRefreshAsync(
+            host, tokenUri, original, await BuildTokenProofAsync(issuanceKey.Key, tokenUri, nonce).ConfigureAwait(false)).ConfigureAwait(false);
+        Assert.AreEqual(200, rotation.StatusCode, rotation.Body);
+        using JsonDocument rotationDocument = JsonDocument.Parse(rotation.Body);
+        string successor = rotationDocument.RootElement.GetProperty(OAuthRequestParameterNames.RefreshToken).GetString()!;
+
+        string? reuseProof = presentation switch
+        {
+            "another DPoP key" => await BuildTokenProofAsync(otherKey.Key, tokenUri, nonce).ConfigureAwait(false),
+            "no proof" => null,
+            _ => throw new ArgumentOutOfRangeException(nameof(presentation), presentation, "No such presentation row.")
+        };
+        HttpResponseData reuse = await PostBasicAuthenticatedRefreshAsync(host, tokenUri, original, reuseProof).ConfigureAwait(false);
+        DpopCodeBindingWire.AssertError(reuse.StatusCode, reuse.Body, 400, "invalid_grant", "The refresh token is unknown, expired, or has been revoked.");
+
+        HttpResponseData afterReuse = await PostBasicAuthenticatedRefreshAsync(
+            host, tokenUri, successor, await BuildTokenProofAsync(issuanceKey.Key, tokenUri, nonce).ConfigureAwait(false)).ConfigureAwait(false);
+        DpopCodeBindingWire.AssertError(afterReuse.StatusCode, afterReuse.Body, 400, "invalid_grant", "The refresh token is unknown, expired, or has been revoked.");
+    }
+
+
+    /// <summary>
+    /// Issues a refresh token to a <c>client_secret_basic</c> client through a complete real-wire authorization whose
+    /// code is redeemed with the client's credentials and a valid proof by <paramref name="key"/>: the server's DPoP
+    /// verification is wired, the redemption is first challenged for a nonce and then answered with an access token bound
+    /// to <paramref name="key"/>.
+    /// </summary>
+    /// <param name="host">The fixture whose listener serves the flow.</param>
+    /// <param name="material">The registration the flow runs under.</param>
+    /// <param name="key">The DPoP key the issuance is bound to.</param>
+    /// <returns>The token endpoint URL, the refresh token and the nonce the endpoint supplied.</returns>
+    private async Task<(Uri TokenUri, string RefreshToken, string Nonce)> IssueDpopBoundBasicAuthenticatedRefreshTokenAsync(
+        TestHostShell host, VerifierKeyMaterial material, DpopKey key)
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> secretMaterial = BuildSecretKeyMaterial(ClientSecret);
+        try
+        {
+            _ = await host.EnableDpopAsync().ConfigureAwait(false);
+            await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+            {
+                candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, context, ct) =>
+                    ValueTask.FromResult(AuthCodeFlowDriver.DecodeAndMatchBasicHeader(reading, registration.ClientId, ClientSecret));
+            }).ConfigureAwait(false);
+            await DeclareServerSideAuthMethodAsync(host, material, ClientAuthenticationMethod.ClientSecretBasic).ConfigureAwait(false);
+            (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
+                await host.CreateOAuthClientAndRegistrationAsync(
+                    material.Registration, RedirectUri.OriginalString, profile: PolicyProfile.Rfc6749WithPkce,
+                    TestContext.CancellationToken).ConfigureAwait(false);
+            registration = registration with
+            {
+                AuthenticationMethod = ClientAuthenticationMethod.ClientSecretBasic,
+                AuthenticationKeyMaterial = secretMaterial
+            };
+            using HttpClient browserClient = LoopbackTls.CreateSingleHopPinnedHttpClient(host.ServerCertificate);
+            HostedAuthorizationServer hosted = host.Host("default");
+            string segment = material.Registration.TenantId.Value;
+            (string flowId, _) = await AuthCodeFlowDriver.DriveParAuthorizeAndCallbackAsync(
+                hosted, client, registration, clientFlowStore, segment, RedirectUri, SubjectId, browserClient,
+                scope: WellKnownScopes.OpenId, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            AuthorizationCodeReceivedState callbackState = (AuthorizationCodeReceivedState)clientFlowStore[flowId];
+            Uri tokenUri = RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment);
+            Dictionary<string, string> fields = RawAuthCodeWirePushers.BuildTokenFields(
+                ClientId, callbackState.Code, callbackState.Pkce.EncodedVerifier, callbackState.RedirectUri.OriginalString);
+
+            HttpResponseData challenge = await HttpClientTransport.SendFormPostAsync(
+                hosted.SharedHttpClient!, tokenUri, fields,
+                BasicCredentials().WithDpop(await BuildTokenProofAsync(key, tokenUri, nonce: null).ConfigureAwait(false)),
+                TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.AreEqual(400, challenge.StatusCode, challenge.Body);
+            string nonce = challenge.Headers.TryGetSingle(WellKnownHttpHeaderNames.DPoPNonce)
+                ?? throw new AssertFailedException("The nonce challenge carries a DPoP-Nonce field.");
+
+            HttpResponseData redemption = await HttpClientTransport.SendFormPostAsync(
+                hosted.SharedHttpClient!, tokenUri, fields,
+                BasicCredentials().WithDpop(await BuildTokenProofAsync(key, tokenUri, nonce).ConfigureAwait(false)),
+                TestContext.CancellationToken).ConfigureAwait(false);
+            DpopCodeBindingWire.AssertIssued(redemption.StatusCode, redemption.Body, "DPoP",
+                key.GetThumbprint(TestHostShell.Base64UrlEncoder, TestHostShell.MemoryPool));
+            using JsonDocument redemptionDocument = JsonDocument.Parse(redemption.Body);
+
+            return (tokenUri, redemptionDocument.RootElement.GetProperty(OAuthRequestParameterNames.RefreshToken).GetString()!, nonce);
+        }
+        finally
+        {
+            secretMaterial.PublicKey.Dispose();
+            secretMaterial.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>The <c>client_secret_basic</c> credentials of the client, an HTTP Basic <c>Authorization</c> field.</summary>
+    /// <returns>The headers carrying the field.</returns>
+    private static OutgoingHeaders BasicCredentials() =>
+        OutgoingHeaders.Empty.WithClientSecretBasic(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+
+
+    /// <summary>
+    /// Builds a token request proof by <paramref name="key"/>: <c>htm</c> <c>POST</c>, <c>htu</c>
+    /// <paramref name="tokenUri"/>, a fresh <c>jti</c>, the current instant and <paramref name="nonce"/>.
+    /// </summary>
+    /// <param name="key">The DPoP key that signs the proof.</param>
+    /// <param name="tokenUri">The token endpoint URL.</param>
+    /// <param name="nonce">The <c>nonce</c>, or <see langword="null"/> for none.</param>
+    /// <returns>The compact proof.</returns>
+    private Task<string> BuildTokenProofAsync(DpopKey key, Uri tokenUri, string? nonce) =>
+        ResourceDpopProofs.BuildAsync(
+            key, WellKnownHttpMethods.Post, tokenUri.OriginalString, accessToken: null, nonce, TimeProvider.GetUtcNow(),
+            TestContext.CancellationToken);
+
+
+    /// <summary>
+    /// Presents <paramref name="refreshToken"/> at the token endpoint over the wire with the client's
+    /// <c>client_secret_basic</c> credentials, carrying <paramref name="proof"/> in its one <c>DPoP</c> field or no such
+    /// field when it is <see langword="null"/>.
+    /// </summary>
+    /// <param name="host">The fixture whose listener serves the request.</param>
+    /// <param name="tokenUri">The token endpoint URL.</param>
+    /// <param name="refreshToken">The refresh token presented.</param>
+    /// <param name="proof">The DPoP proof, or <see langword="null"/> for none.</param>
+    /// <returns>The whole response.</returns>
+    private async Task<HttpResponseData> PostBasicAuthenticatedRefreshAsync(
+        TestHostShell host, Uri tokenUri, string refreshToken, string? proof)
+    {
+        OutgoingHeaders headers = proof switch
+        {
+            null => BasicCredentials(),
+            _ => BasicCredentials().WithDpop(proof)
+        };
+
+        return await HttpClientTransport.SendFormPostAsync(
+            host.Host("default").SharedHttpClient!, tokenUri, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, refreshToken),
+            headers, TestContext.CancellationToken).ConfigureAwait(false);
     }
 
 

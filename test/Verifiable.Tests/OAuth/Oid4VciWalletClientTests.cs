@@ -1474,6 +1474,51 @@ internal sealed class Oid4VciWalletClientTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.2">RFC 9449 Section 4.2</see>: "htm: The value of the
+    /// HTTP method (Section 9.1 of [RFC9110]) of the request to which the JWT is attached." A wallet wired with a DPoP key
+    /// drives a Pre-Authorized Code issuance over the wire, its Token Requests and its Credential Request each sent with
+    /// the method POST, and the Credential is issued; every proof the Issuer received, the Credential Request's among
+    /// them, read as it arrived, carries <c>htm</c> <c>POST</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task WalletSendsEveryProofNamingTheMethodOfItsRequestAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Haip10, IssuerCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        _ = await WireIssuerSeamsAsync(host).ConfigureAwait(false);
+        List<(string HttpUrl, string Proof)> receivedProofs = await host.RecordReceivedDpopProofsAsync().ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        var walletDpopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory walletDpopPublic = walletDpopKeys.PublicKey;
+        using PrivateKeyMemory walletDpopPrivate = walletDpopKeys.PrivateKey;
+
+        Oid4VciWalletClient walletClient = BuildWalletClient(
+            host,
+            constructDpopProofAsync: BuildWalletDpopProofAsync,
+            dpopKey: new DpopKey(walletDpopKeys, WellKnownJwaValues.Es256));
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await IssueOverTheWireAsync(walletClient, host, material, holderPrivate, holderPublic).ConfigureAwait(false);
+
+        Assert.IsTrue(outcome.IsSuccess, "The issuance succeeds over the wire.");
+        Uri credentialEndpoint = ResolveEndpoints(host, material).CredentialEndpoint;
+        Assert.Contains(received => new Uri(received.HttpUrl) == credentialEndpoint, receivedProofs,
+            $"The Issuer received the Credential Request's proof; it received proofs for {string.Join(" ", receivedProofs.Select(static received => received.HttpUrl))}.");
+        foreach((_, string proof) in receivedProofs)
+        {
+            Assert.AreEqual("POST", DpopWireReading.ReadPayloadClaim(proof, "htm", Pool), proof);
+        }
+    }
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>, of the <c>DPoP</c>
     /// challenge: "Additional authentication parameters MAY be used, and unknown parameters MUST be ignored by
     /// recipients." The Credential Endpoint answers the wallet's first Credential Request with its 401 nonce

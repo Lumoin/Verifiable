@@ -395,6 +395,17 @@ namespace Verifiable.JCose
         /// public-key bytes under the <c>pub</c> parameter.
         /// </para>
         /// <para>
+        /// An RSA public key is emitted with <c>kty=RSA</c>, <c>n</c> and <c>e</c> under its size tag
+        /// (<see cref="CryptoAlgorithm.Rsa2048"/>, <see cref="CryptoAlgorithm.Rsa4096"/>, with <c>alg</c> <c>RS256</c>)
+        /// and under the tag of each RSA signature scheme (<see cref="CryptoAlgorithm.RsaSha256"/>,
+        /// <see cref="CryptoAlgorithm.RsaSha384"/>, <see cref="CryptoAlgorithm.RsaSha512"/>,
+        /// <see cref="CryptoAlgorithm.RsaSha256Pss"/>, <see cref="CryptoAlgorithm.RsaSha384Pss"/>,
+        /// <see cref="CryptoAlgorithm.RsaSha512Pss"/>, with the <c>alg</c> of that scheme): the same octets give the same
+        /// <c>n</c> and <c>e</c> whichever scheme the public key is tagged for, since an RSA JWK names no scheme
+        /// (<see href="https://www.rfc-editor.org/rfc/rfc7518#section-6.3.1">RFC 7518 Section 6.3.1</see>: "The following
+        /// members MUST be present for RSA public keys": <c>n</c> and <c>e</c>).
+        /// </para>
+        /// <para>
         /// The converter sets the cryptographic fields only. Callers layer
         /// <c>kid</c> and <c>use</c> on top by assigning the corresponding
         /// properties on the returned <see cref="JsonWebKey"/>.
@@ -422,8 +433,19 @@ namespace Verifiable.JCose
                 };
             }
 
+            //BuildRsa renders an RSA public key as a JWK with kty RSA, its modulus n and exponent e (RFC 7518
+            //Section 6.3.1: "The following members MUST be present for RSA public keys": n and e), and the alg the
+            //caller names for the tag the public key carries; the same octets give the same n and e under every tag,
+            //since an RSA JWK names no signature scheme.
+            //Parameter keyMaterial: the RSA public key's octets, a DER public key or a bare modulus read with the
+            //exponent 65537.
+            //Parameter alg: the JWS alg the JWK carries, RS256 under a size tag, otherwise the identifier of the
+            //tagged signature scheme.
+            //Parameter encoder: the base64url encoder n and e are written with.
+            //Returns: the JWK of the RSA public key.
             static JsonWebKey BuildRsa(
                 ReadOnlySpan<byte> keyMaterial,
+                string alg,
                 EncodeDelegate encoder)
             {
                 //A public key the library holds is read by the rule the verification providers read it by: a DER key
@@ -433,7 +455,7 @@ namespace Verifiable.JCose
                 return new JsonWebKey
                 {
                     Kty = WellKnownKeyTypeValues.Rsa,
-                    Alg = WellKnownJwaValues.Rs256,
+                    Alg = alg,
                     N = encoder(modulus),
                     E = encoder(exponent)
                 };
@@ -499,11 +521,24 @@ namespace Verifiable.JCose
                 (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P521) && p.Equals(Purpose.Exchange) =>
                     BuildEc(keyMaterial, EllipticCurveTypes.P521, WellKnownCurveValues.P521, null, base64UrlEncoder),
 
-                //RSA keys.
+                //RSA keys: under a size tag, served as RS256, and under the tag of each signature scheme, the same n
+                //and e with the alg of that scheme (RFC 7518 Sections 3.3 and 3.5; the key type names no scheme).
                 (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa2048) && p.Equals(Purpose.Verification) =>
-                    BuildRsa(keyMaterial, base64UrlEncoder),
+                    BuildRsa(keyMaterial, WellKnownJwaValues.Rs256, base64UrlEncoder),
                 (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa4096) && p.Equals(Purpose.Verification) =>
-                    BuildRsa(keyMaterial, base64UrlEncoder),
+                    BuildRsa(keyMaterial, WellKnownJwaValues.Rs256, base64UrlEncoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha256) && p.Equals(Purpose.Verification) =>
+                    BuildRsa(keyMaterial, WellKnownJwaValues.Rs256, base64UrlEncoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha384) && p.Equals(Purpose.Verification) =>
+                    BuildRsa(keyMaterial, WellKnownJwaValues.Rs384, base64UrlEncoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha512) && p.Equals(Purpose.Verification) =>
+                    BuildRsa(keyMaterial, WellKnownJwaValues.Rs512, base64UrlEncoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha256Pss) && p.Equals(Purpose.Verification) =>
+                    BuildRsa(keyMaterial, WellKnownJwaValues.Ps256, base64UrlEncoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha384Pss) && p.Equals(Purpose.Verification) =>
+                    BuildRsa(keyMaterial, WellKnownJwaValues.Ps384, base64UrlEncoder),
+                (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha512Pss) && p.Equals(Purpose.Verification) =>
+                    BuildRsa(keyMaterial, WellKnownJwaValues.Ps512, base64UrlEncoder),
 
                 //OKP keys.
                 (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Ed25519) && p.Equals(Purpose.Verification) =>

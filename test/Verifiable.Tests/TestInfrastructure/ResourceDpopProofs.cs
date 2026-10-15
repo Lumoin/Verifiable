@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
+using System.Collections.Frozen;
 using System.Text;
 using Verifiable.Cryptography;
 using Verifiable.Microsoft;
@@ -58,6 +59,10 @@ internal static class ResourceDpopProofs
     /// Rewrites the serialized payload before signing, or <see langword="null"/> to keep it, so a proof that still
     /// verifies under its own DPoP key carries a claim set the test names, a required claim removed among them.
     /// </param>
+    /// <param name="sign">
+    /// The signing function over the JWS Signing Input, or <see langword="null"/> for ES256 under the DPoP key, so a row
+    /// can sign a proof whose header names another algorithm with that algorithm's own function.
+    /// </param>
     /// <returns>The compact DPoP proof.</returns>
     public static async Task<string> BuildAsync(
         DpopKey key,
@@ -69,7 +74,8 @@ internal static class ResourceDpopProofs
         CancellationToken cancellationToken,
         string? jti = null,
         Action<Dictionary<string, object>>? alterHeader = null,
-        Action<Dictionary<string, object>>? alterPayload = null)
+        Action<Dictionary<string, object>>? alterPayload = null,
+        SigningDelegate? sign = null)
     {
         ArgumentNullException.ThrowIfNull(key);
 
@@ -118,9 +124,48 @@ internal static class ResourceDpopProofs
 
         return await DpopProofConstruction.BuildAsync(
             claims, key, TestHostShell.Base64UrlEncoder, serializer,
-            MicrosoftCryptographicFunctionsAdapter.SignP256Async, TestHostShell.MemoryPool, cancellationToken)
+            sign ?? MicrosoftCryptographicFunctionsAdapter.SignP256Async, TestHostShell.MemoryPool, cancellationToken)
             .ConfigureAwait(false);
     }
+
+
+    /// <summary>
+    /// A signing function that computes HMAC with SHA-256 over the JWS Signing Input, keyed by the octets it is handed
+    /// as the private key: the Message Authentication Code <c>HS256</c> names
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7518#section-3.2">RFC 7518 Section 3.2</see>: "HMAC with SHA-2
+    /// Functions"). A proof whose header declares <c>HS256</c> and whose signature this function made is a proof under
+    /// a symmetric algorithm in every respect.
+    /// </summary>
+    /// <param name="privateKeyBytes">The octets the MAC is keyed by.</param>
+    /// <param name="dataToSign">The JWS Signing Input.</param>
+    /// <param name="signaturePool">The pool the MAC's octets are rented from.</param>
+    /// <param name="context">The provider context, passed through.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The 32-octet MAC as the signature, and no event.</returns>
+    public static async ValueTask<(Signature Signature, CryptoEvent? Event)> SignHmacSha256Async(
+        ReadOnlyMemory<byte> privateKeyBytes,
+        ReadOnlyMemory<byte> dataToSign,
+        BaseMemoryPool signaturePool,
+        FrozenDictionary<string, object>? context = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(signaturePool);
+
+        (HmacValue mac, _) = await MicrosoftHmacFunctionsAdapter.ComputeHmacAsync(
+            dataToSign, privateKeyBytes, HmacSha256OctetCount, CryptoTags.HmacSha256Key, signaturePool, context,
+            cancellationToken).ConfigureAwait(false);
+        using(mac)
+        {
+            IMemoryOwner<byte> signatureOwner = signaturePool.Rent(mac.AsReadOnlySpan().Length);
+            mac.AsReadOnlySpan().CopyTo(signatureOwner.Memory.Span);
+
+            return (new Signature(signatureOwner, CryptoTags.HmacSha256Value), null);
+        }
+    }
+
+
+    /// <summary>The octet count of an HMAC with SHA-256, the length of a SHA-256 hash value.</summary>
+    private static int HmacSha256OctetCount => 32;
 
 
     /// <summary>
