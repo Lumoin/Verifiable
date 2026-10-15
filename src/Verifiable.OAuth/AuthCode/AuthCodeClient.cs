@@ -303,7 +303,8 @@ public readonly struct AuthCodeClient
     /// <param name="clientAssertionOptions">
     /// The <c>private_key_jwt</c> client-assertion signing inputs (RFC 7523 §2.2). Required when
     /// <see cref="ClientRegistration.AuthenticationMethod"/> is
-    /// <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/>; ignored for every other method.
+    /// <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/> or <see cref="ClientAuthenticationMethod.ClientSecretJwt"/>,
+    /// whose assertion is MACed under the client secret with no <c>kid</c>; ignored for every other method.
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public ValueTask<AuthCodeFlowEndpointResult> ExchangeTokenAsync(
@@ -359,7 +360,8 @@ public readonly struct AuthCodeClient
     /// <param name="clientAssertionOptions">
     /// The <c>private_key_jwt</c> client-assertion signing inputs (RFC 7523 §2.2). Required when
     /// <see cref="ClientRegistration.AuthenticationMethod"/> is
-    /// <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/>; ignored for every other method.
+    /// <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/> or <see cref="ClientAuthenticationMethod.ClientSecretJwt"/>,
+    /// whose assertion is MACed under the client secret with no <c>kid</c>; ignored for every other method.
     /// </param>
     /// <param name="resource">
     /// The RFC 8707 <c>resource</c> indicators to name, each one absolute URI given as its own entry
@@ -435,7 +437,8 @@ public readonly struct AuthCodeClient
     /// <param name="clientAssertionOptions">
     /// The <c>private_key_jwt</c> client-assertion signing inputs (RFC 7523 §2.2). Required when
     /// <see cref="ClientRegistration.AuthenticationMethod"/> is
-    /// <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/>; ignored for every other method.
+    /// <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/> or <see cref="ClientAuthenticationMethod.ClientSecretJwt"/>,
+    /// whose assertion is MACed under the client secret with no <c>kid</c>; ignored for every other method.
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public ValueTask<AuthCodeFlowEndpointResult> RefreshAsync(

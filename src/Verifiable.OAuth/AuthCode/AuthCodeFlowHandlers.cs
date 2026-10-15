@@ -694,7 +694,8 @@ public static class AuthCodeFlowHandlers
     /// The <c>private_key_jwt</c> client-assertion signing inputs (RFC 7523 §2.2): the <c>kid</c>,
     /// the header/payload serialisers, and the assertion lifetime. Required when
     /// <see cref="ClientRegistration.AuthenticationMethod"/> is
-    /// <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/> — the signing key itself is read from
+    /// <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/> or <see cref="ClientAuthenticationMethod.ClientSecretJwt"/>
+    /// — the signing key or the client secret itself is read from
     /// <see cref="ClientRegistration.AuthenticationKeyMaterial"/>. Ignored for every other method.
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -719,7 +720,8 @@ public static class AuthCodeFlowHandlers
     /// The <c>private_key_jwt</c> client-assertion signing inputs (RFC 7523 §2.2): the <c>kid</c>,
     /// the header/payload serialisers, and the assertion lifetime. Required when
     /// <see cref="ClientRegistration.AuthenticationMethod"/> is
-    /// <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/> — the signing key itself is read from
+    /// <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/> or <see cref="ClientAuthenticationMethod.ClientSecretJwt"/>
+    /// — the signing key or the client secret itself is read from
     /// <see cref="ClientRegistration.AuthenticationKeyMaterial"/>. Ignored for every other method.
     /// </param>
     /// <param name="resource">
@@ -991,7 +993,8 @@ public static class AuthCodeFlowHandlers
     /// <param name="clientAssertionOptions">
     /// The <c>private_key_jwt</c> client-assertion signing inputs (RFC 7523 §2.2). Required when
     /// <see cref="ClientRegistration.AuthenticationMethod"/> is
-    /// <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/>; ignored for every other method.
+    /// <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/> or <see cref="ClientAuthenticationMethod.ClientSecretJwt"/>,
+    /// whose assertion is MACed under the client secret with no <c>kid</c>; ignored for every other method.
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public static async ValueTask<AuthCodeFlowEndpointResult> RefreshAsync(

@@ -7,23 +7,33 @@ using Verifiable.OAuth.Server;
 namespace Verifiable.OAuth.Client;
 
 /// <summary>
-/// Per-call inputs for signing the <c>private_key_jwt</c> client assertion
-/// <see cref="ClientTokenEndpointAuthentication.AttachClientAssertionAsync"/> attaches to a
-/// token-endpoint request per
-/// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-2.2">RFC 7523 §2.2</see>. The signing
-/// key itself is read from <see cref="ClientRegistration.AuthenticationKeyMaterial"/> — this record
-/// carries only the pieces that vary independently of the registration (the <c>kid</c>, the wire
-/// serialisers, and the assertion's validity window).
+/// Per-call inputs for composing the client assertion a token-endpoint request presents per
+/// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-2.2">RFC 7523 §2.2</see>: the
+/// <c>private_key_jwt</c> assertion <see cref="ClientTokenEndpointAuthentication.AttachClientAssertionAsync"/>
+/// signs, or the <c>client_secret_jwt</c> assertion
+/// <see cref="ClientTokenEndpointAuthentication.AttachClientSecretAssertionAsync"/> MACs (OpenID Connect Core 1.0
+/// §9). The signing key or the client secret itself is read from
+/// <see cref="ClientRegistration.AuthenticationKeyMaterial"/> — this record carries only the pieces that vary
+/// independently of the registration (the <c>kid</c> of a signing key, the HMAC algorithm of a client secret, the
+/// wire serialisers, and the assertion's validity window).
 /// </summary>
-[DebuggerDisplay("ClientAssertionOptions SigningKeyId={SigningKeyId}")]
+[DebuggerDisplay("ClientAssertionOptions SigningKeyId={SigningKeyId} ClientSecretAlgorithm={ClientSecretAlgorithm}")]
 public sealed record ClientAssertionOptions
 {
     /// <summary>
     /// The <c>kid</c> header parameter value identifying
     /// <see cref="ClientRegistration.AuthenticationKeyMaterial"/>'s private key to the authorization
-    /// server.
+    /// server: required for <c>private_key_jwt</c>, and <see langword="null"/> for <c>client_secret_jwt</c>, whose
+    /// key is the client's own secret, which its identifier already names, so its header names no <c>kid</c>.
     /// </summary>
-    public required string SigningKeyId { get; init; }
+    public string? SigningKeyId { get; init; }
+
+    /// <summary>
+    /// The JWS <c>alg</c> a <c>client_secret_jwt</c> assertion is MACed under, one of RFC 7518 §3.2's HMAC algorithms
+    /// (OpenID Connect Core 1.0 §9: "such as HMAC SHA-256"). Defaults to <see cref="WellKnownJwaValues.Hs256"/>; not read
+    /// for <c>private_key_jwt</c>, whose key's own tag names its algorithm.
+    /// </summary>
+    public string ClientSecretAlgorithm { get; init; } = WellKnownJwaValues.Hs256;
 
     /// <summary>Serialises the client-assertion protected header to UTF-8 JSON bytes.</summary>
     public required JwtHeaderSerializer HeaderSerializer { get; init; }
@@ -100,25 +110,9 @@ public static class ClientTokenEndpointAuthentication
         ArgumentNullException.ThrowIfNull(tokenEndpoint);
         ArgumentNullException.ThrowIfNull(infrastructure);
 
+        string audience = AudienceOf(registration, tokenEndpoint);
         string jti = await infrastructure.GenerateIdentifierAsync(
             WellKnownIdentifierPurposes.OAuthJti, context, cancellationToken).ConfigureAwait(false);
-
-        //rfc7523bis-11 Section 4: for client authentication the aud value MUST indicate only the issuer
-        //identifier of the intended authorization server, the string the library's own server compares
-        //ordinally (PrivateKeyJwtClientAuthentication); RFC 7523 Section 3 item 3 permits (MAY) and
-        //OpenID Connect Core Section 9 recommends (SHOULD) the token endpoint URL instead, for an
-        //authorization server that refuses its issuer identifier.
-        string audience = registration.ClientAssertionAudience.Code switch
-        {
-            var c when c == ClientAssertionAudience.IssuerIdentifier.Code => registration.AuthorizationServerIssuer.OriginalString,
-            var c when c == ClientAssertionAudience.TokenEndpoint.Code => tokenEndpoint.OriginalString,
-            _ => throw new NotSupportedException(
-                $"Client assertion audience '{registration.ClientAssertionAudience}' is not supported.")
-        };
-
-        string type = registration.IsClientAssertionExplicitlyTyped
-            ? WellKnownMediaTypes.Jwt.ClientAuthenticationJwt
-            : WellKnownJwkValues.TypeJwt;
 
         string clientAssertion = await ClientAssertionSigning.SignAsync(
             registration.ClientId.Value,
@@ -128,13 +122,125 @@ public static class ClientTokenEndpointAuthentication
             now.Add(clientAssertionLifetime),
             signingKey,
             signingKeyId,
-            type,
+            TypeOf(registration),
             headerSerializer,
             payloadSerializer,
             infrastructure.Base64UrlEncoder,
             infrastructure.MemoryPool,
             cancellationToken).ConfigureAwait(false);
 
+        AddAssertion(form, registration, clientAssertion);
+    }
+
+
+    /// <summary>
+    /// Adds the confidential-client authentication parameters, <c>client_id</c>,
+    /// <c>client_assertion_type</c>, and a freshly-MACed <c>client_secret_jwt</c> <c>client_assertion</c>
+    /// (OpenID Connect Core 1.0 Section 9; RFC 7523 Section 2.2) to a token-endpoint request form: the claims, the
+    /// audience and the <c>typ</c> header follow the registration exactly as
+    /// <see cref="AttachClientAssertionAsync"/>'s do, and the MAC is computed under the client secret through
+    /// <see cref="ClientAssertionSigning.SignWithClientSecretAsync"/>, whose header names no <c>kid</c>.
+    /// </summary>
+    /// <param name="form">The outgoing form fields the assertion parameters are added to.</param>
+    /// <param name="registration">
+    /// The registration whose <see cref="ClientRegistration.ClientAssertionAudience"/> and
+    /// <see cref="ClientRegistration.IsClientAssertionExplicitlyTyped"/> choose the assertion's <c>aud</c>
+    /// and <c>typ</c>.
+    /// </param>
+    /// <param name="tokenEndpoint">
+    /// The authorization server's resolved token endpoint URL, read as <see cref="AttachClientAssertionAsync"/> reads it.
+    /// </param>
+    /// <param name="clientSecret">The octets of the UTF-8 representation of the client secret, the MAC's key.</param>
+    /// <param name="algorithm">The HMAC algorithm the assertion is MACed under (RFC 7518 Section 3.2).</param>
+    /// <param name="headerSerializer">Serialises the protected header to UTF-8 JSON bytes.</param>
+    /// <param name="payloadSerializer">Serialises the payload claims to UTF-8 JSON bytes.</param>
+    /// <param name="clientAssertionLifetime">The assertion's validity window (RFC 7523 Section 3 rule 4).</param>
+    /// <param name="infrastructure">Supplies the <c>jti</c> generator, the encoder, and the memory pool.</param>
+    /// <param name="now">The instant the assertion's <c>iat</c> and <c>exp</c> are computed from.</param>
+    /// <param name="context">The per-operation exchange context passed to the <c>jti</c> generator.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public static async ValueTask AttachClientSecretAssertionAsync(
+        OutgoingFormFields form,
+        ClientRegistration registration,
+        Uri tokenEndpoint,
+        PrivateKeyMemory clientSecret,
+        string algorithm,
+        JwtHeaderSerializer headerSerializer,
+        JwtPayloadSerializer payloadSerializer,
+        TimeSpan clientAssertionLifetime,
+        OAuthClientInfrastructure infrastructure,
+        DateTimeOffset now,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(form);
+        ArgumentNullException.ThrowIfNull(registration);
+        ArgumentNullException.ThrowIfNull(registration.ClientAssertionAudience);
+        ArgumentNullException.ThrowIfNull(tokenEndpoint);
+        ArgumentNullException.ThrowIfNull(infrastructure);
+
+        string audience = AudienceOf(registration, tokenEndpoint);
+        string jti = await infrastructure.GenerateIdentifierAsync(
+            WellKnownIdentifierPurposes.OAuthJti, context, cancellationToken).ConfigureAwait(false);
+
+        string clientAssertion = await ClientAssertionSigning.SignWithClientSecretAsync(
+            registration.ClientId.Value,
+            audience,
+            jti,
+            now,
+            now.Add(clientAssertionLifetime),
+            clientSecret,
+            algorithm,
+            TypeOf(registration),
+            headerSerializer,
+            payloadSerializer,
+            infrastructure.Base64UrlEncoder,
+            infrastructure.MemoryPool,
+            cancellationToken).ConfigureAwait(false);
+
+        AddAssertion(form, registration, clientAssertion);
+    }
+
+
+    /// <summary>
+    /// The one value a client assertion composed under the registration names as its <c>aud</c>. rfc7523bis-11 Section 4:
+    /// for client authentication the aud value MUST indicate only the issuer identifier of the intended authorization
+    /// server, the string the library's own server compares ordinally (PrivateKeyJwtClientAuthentication); RFC 7523
+    /// Section 3 item 3 permits (MAY) and OpenID Connect Core Section 9 recommends (SHOULD) the token endpoint URL
+    /// instead, for an authorization server that refuses its issuer identifier.
+    /// </summary>
+    /// <param name="registration">The registration.</param>
+    /// <param name="tokenEndpoint">The token endpoint, read under <see cref="ClientAssertionAudience.TokenEndpoint"/> alone.</param>
+    /// <returns>The audience value.</returns>
+    /// <exception cref="NotSupportedException">The registration names an audience form the library defines none of.</exception>
+    private static string AudienceOf(ClientRegistration registration, Uri tokenEndpoint) =>
+        registration.ClientAssertionAudience.Code switch
+        {
+            var c when c == ClientAssertionAudience.IssuerIdentifier.Code => registration.AuthorizationServerIssuer.OriginalString,
+            var c when c == ClientAssertionAudience.TokenEndpoint.Code => tokenEndpoint.OriginalString,
+            _ => throw new NotSupportedException(
+                $"Client assertion audience '{registration.ClientAssertionAudience}' is not supported.")
+        };
+
+
+    /// <summary>The <c>typ</c> header a client assertion composed under the registration carries (rfc7523bis-11 Section 4).</summary>
+    /// <param name="registration">The registration.</param>
+    /// <returns>The <c>typ</c> value.</returns>
+    private static string TypeOf(ClientRegistration registration) =>
+        registration.IsClientAssertionExplicitlyTyped
+            ? WellKnownMediaTypes.Jwt.ClientAuthenticationJwt
+            : WellKnownJwkValues.TypeJwt;
+
+
+    /// <summary>
+    /// Adds a composed assertion to the form with the client's identifier and the JWT Bearer assertion type
+    /// (RFC 7523 Section 2.2).
+    /// </summary>
+    /// <param name="form">The form.</param>
+    /// <param name="registration">The registration naming the client.</param>
+    /// <param name="clientAssertion">The compact assertion.</param>
+    private static void AddAssertion(OutgoingFormFields form, ClientRegistration registration, string clientAssertion)
+    {
         form[OAuthRequestParameterNames.ClientId] = registration.ClientId.Value;
         form[OAuthRequestParameterNames.ClientAssertionType] = WellKnownClientAssertionTypes.JwtBearer;
         form[OAuthRequestParameterNames.ClientAssertion] = clientAssertion;

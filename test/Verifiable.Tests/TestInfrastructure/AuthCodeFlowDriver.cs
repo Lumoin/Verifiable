@@ -336,10 +336,10 @@ internal static class AuthCodeFlowDriver
 
         if(registration.AuthenticationMethod == ClientAuthenticationMethod.PrivateKeyJwt)
         {
-            if(clientAssertionOptions is null)
+            if(clientAssertionOptions is not { SigningKeyId: string signingKeyId })
             {
                 throw new InvalidOperationException(
-                    "ClientAuthenticationMethod.PrivateKeyJwt requires a ClientAssertionOptions instance to sign the PAR client_assertion.");
+                    "ClientAuthenticationMethod.PrivateKeyJwt requires a ClientAssertionOptions instance naming the SigningKeyId to sign the PAR client_assertion.");
             }
 
             PrivateKeyMemory signingKey = RequireAuthenticationKey(registration);
@@ -348,7 +348,33 @@ internal static class AuthCodeFlowDriver
                 registration,
                 tokenEndpoint,
                 signingKey,
-                clientAssertionOptions.SigningKeyId,
+                signingKeyId,
+                clientAssertionOptions.HeaderSerializer,
+                clientAssertionOptions.PayloadSerializer,
+                clientAssertionOptions.ClientAssertionLifetime,
+                infrastructure,
+                now,
+                context,
+                cancellationToken).ConfigureAwait(false);
+
+            return OutgoingHeaders.Empty;
+        }
+
+        if(registration.AuthenticationMethod == ClientAuthenticationMethod.ClientSecretJwt)
+        {
+            if(clientAssertionOptions is null)
+            {
+                throw new InvalidOperationException(
+                    "ClientAuthenticationMethod.ClientSecretJwt requires a ClientAssertionOptions instance to MAC the PAR client_assertion.");
+            }
+
+            PrivateKeyMemory secret = RequireAuthenticationKey(registration);
+            await ClientTokenEndpointAuthentication.AttachClientSecretAssertionAsync(
+                form,
+                registration,
+                tokenEndpoint,
+                secret,
+                clientAssertionOptions.ClientSecretAlgorithm,
                 clientAssertionOptions.HeaderSerializer,
                 clientAssertionOptions.PayloadSerializer,
                 clientAssertionOptions.ClientAssertionLifetime,

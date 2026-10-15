@@ -67,7 +67,8 @@ public readonly struct ClientCredentialsClient
     /// <param name="clientAssertionOptions">
     /// The <c>private_key_jwt</c> client-assertion signing inputs (RFC 7523 §2.2). Required when
     /// <see cref="ClientRegistration.AuthenticationMethod"/> is
-    /// <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/>; ignored for every other method.
+    /// <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/> or <see cref="ClientAuthenticationMethod.ClientSecretJwt"/>,
+    /// whose assertion is MACed under the client secret with no <c>kid</c>; ignored for every other method.
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>

@@ -1090,6 +1090,172 @@ internal sealed class AuthCodeClientAuthenticationTests
 
 
     /// <summary>
+    /// <c>client_secret_jwt</c> (OpenID Connect Core 1.0 §9; RFC 7523 §2.2): the real client MACs and attaches a
+    /// <c>client_assertion</c> under the client secret at both legs it authenticates at - the pushed request and the token
+    /// exchange, the library's own flow - and the server verifies each independently of the library: the HMAC SHA-256 of
+    /// the assertion's signing input under the secret's UTF-8 octets, recomputed with the platform's own HMAC, equal to the
+    /// signature it carries; a header naming <c>alg</c> <c>HS256</c> and no <c>kid</c>; <c>iss</c> and <c>sub</c> the
+    /// client; and a <c>jti</c> no earlier assertion carried, so each leg presents a fresh one.
+    /// </summary>
+    [TestMethod]
+    public async Task ClientSecretJwtAuthenticatesOverRealWire()
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> secretMaterial = BuildSecretKeyMaterial(ClientSecret);
+        try
+        {
+            await using TestHostShell host = new(TimeProvider);
+            using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+                ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+            List<string> verifiedIdentifiers = [];
+            await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+            {
+                candidateIntegration.ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+                    ValueTask.FromResult(
+                        fields.TryGetValue(OAuthRequestParameterNames.ClientAssertion, out string? assertion)
+                        && IsMacedUnderTheClientSecret(assertion, verifiedIdentifiers));
+            }).ConfigureAwait(false);
+
+            await DeclareServerSideAuthMethodAsync(
+                host, material, ClientAuthenticationMethod.ClientSecretJwt, assertionSigningAlgorithm: WellKnownJwaValues.Hs256)
+                .ConfigureAwait(false);
+
+            (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
+                await host.CreateOAuthClientAndRegistrationAsync(
+                    material.Registration,
+                    RedirectUri.OriginalString,
+                    profile: PolicyProfile.Rfc6749WithPkce,
+                    TestContext.CancellationToken).ConfigureAwait(false);
+            registration = registration with
+            {
+                AuthenticationMethod = ClientAuthenticationMethod.ClientSecretJwt,
+                AuthenticationKeyMaterial = secretMaterial
+            };
+
+            await DriveAndAssertSucceedsAsync(
+                host, client, registration, clientFlowStore, material.Registration.TenantId.Value,
+                clientAssertionOptions: new ClientAssertionOptions
+                {
+                    HeaderSerializer = host.Server.OAuth().Codecs.JwtHeaderSerializer!,
+                    PayloadSerializer = host.Server.OAuth().Codecs.JwtPayloadSerializer!
+                }).ConfigureAwait(false);
+
+            Assert.HasCount(2, verifiedIdentifiers,
+                "The pushed request and the token exchange must each present one client_assertion MACed under the secret, each with a jti of its own.");
+        }
+        finally
+        {
+            secretMaterial.PublicKey.Dispose();
+            secretMaterial.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// <c>client_secret_jwt</c> names no key identifier (OpenID Connect Core 1.0 §9: the secret is the client's own), so
+    /// options naming a <c>kid</c> were composed for a signing key: the library's token exchange refuses them before
+    /// anything is MACed or sent, and the server sees no token request.
+    /// </summary>
+    [TestMethod]
+    public async Task ClientSecretJwtRefusesOptionsNamingAKeyIdentifier()
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> secretMaterial = BuildSecretKeyMaterial(ClientSecret);
+        try
+        {
+            await using TestHostShell host = new(TimeProvider);
+            using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+                ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+            List<string> verifiedIdentifiers = [];
+            await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+            {
+                candidateIntegration.ValidateClientCredentialsAsync = (request, fields, registration, context, ct) =>
+                    ValueTask.FromResult(
+                        fields.TryGetValue(OAuthRequestParameterNames.ClientAssertion, out string? assertion)
+                        && IsMacedUnderTheClientSecret(assertion, verifiedIdentifiers));
+            }).ConfigureAwait(false);
+
+            await DeclareServerSideAuthMethodAsync(
+                host, material, ClientAuthenticationMethod.ClientSecretJwt, assertionSigningAlgorithm: WellKnownJwaValues.Hs256)
+                .ConfigureAwait(false);
+
+            (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
+                await host.CreateOAuthClientAndRegistrationAsync(
+                    material.Registration,
+                    RedirectUri.OriginalString,
+                    profile: PolicyProfile.Rfc6749WithPkce,
+                    TestContext.CancellationToken).ConfigureAwait(false);
+            registration = registration with
+            {
+                AuthenticationMethod = ClientAuthenticationMethod.ClientSecretJwt,
+                AuthenticationKeyMaterial = secretMaterial
+            };
+
+            _ = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
+                async () => await DriveAndAssertSucceedsAsync(
+                    host, client, registration, clientFlowStore, material.Registration.TenantId.Value,
+                    clientAssertionOptions: new ClientAssertionOptions
+                    {
+                        SigningKeyId = "a-key-identifier-no-secret-carries",
+                        HeaderSerializer = host.Server.OAuth().Codecs.JwtHeaderSerializer!,
+                        PayloadSerializer = host.Server.OAuth().Codecs.JwtPayloadSerializer!
+                    }).ConfigureAwait(false)).ConfigureAwait(false);
+
+            Assert.HasCount(1, verifiedIdentifiers, "Only the pushed request was sent; the refused token exchange never was.");
+        }
+        finally
+        {
+            secretMaterial.PublicKey.Dispose();
+            secretMaterial.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// The server's own judgement of a <c>client_secret_jwt</c> assertion, independent of the library that composed it: the
+    /// platform's HMAC SHA-256 of the signing input under <see cref="ClientSecret"/>'s UTF-8 octets equals the signature
+    /// segment, compared in constant time; the header names <c>alg</c> <c>HS256</c> and no <c>kid</c>; <c>iss</c> and
+    /// <c>sub</c> name the client; and the <c>jti</c> is one no earlier assertion carried. The identifier of an assertion judged so is recorded.
+    /// </summary>
+    /// <param name="assertion">The presented assertion.</param>
+    /// <param name="verified">The identifiers of the assertions judged so far, which a verified one's joins.</param>
+    /// <returns><see langword="true"/> when the assertion is MACed under the secret and names the client.</returns>
+    private static bool IsMacedUnderTheClientSecret(string assertion, List<string> verified)
+    {
+        string[] parts = assertion.Split('.');
+        if(parts.Length != 3)
+        {
+            return false;
+        }
+
+        byte[] expected = System.Security.Cryptography.HMACSHA256.HashData(
+            Encoding.UTF8.GetBytes(ClientSecret), Encoding.ASCII.GetBytes($"{parts[0]}.{parts[1]}"));
+        byte[] presented = System.Buffers.Text.Base64Url.DecodeFromChars(parts[2]);
+        if(!System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(expected, presented))
+        {
+            return false;
+        }
+
+        using JsonDocument header = JsonDocument.Parse(System.Buffers.Text.Base64Url.DecodeFromChars(parts[0]));
+        using JsonDocument claims = JsonDocument.Parse(System.Buffers.Text.Base64Url.DecodeFromChars(parts[1]));
+        string? jti = claims.RootElement.GetProperty(WellKnownJwtClaimNames.Jti).GetString();
+        bool holds = string.Equals(header.RootElement.GetProperty(WellKnownJwkMemberNames.Alg).GetString(), WellKnownJwaValues.Hs256, StringComparison.Ordinal)
+            && !header.RootElement.TryGetProperty(WellKnownJwkMemberNames.Kid, out _)
+            && string.Equals(claims.RootElement.GetProperty(WellKnownJwtClaimNames.Iss).GetString(), ClientId, StringComparison.Ordinal)
+            && string.Equals(claims.RootElement.GetProperty(WellKnownJwtClaimNames.Sub).GetString(), ClientId, StringComparison.Ordinal)
+            && jti is not null
+            && !verified.Contains(jti, StringComparer.Ordinal);
+
+        if(holds)
+        {
+            verified.Add(jti!);
+        }
+
+        return holds;
+    }
+
+
+    /// <summary>
     /// <c>private_key_jwt</c> (RFC 7523 §2.2): the real client signs and attaches a
     /// <c>client_assertion</c> from <see cref="TestKeyMaterialProvider"/>-generated P-256 key material,
     /// driven through <see cref="AuthCodeFlowDriver.DriveParAuthorizeCallbackAndTokenAsync"/>'s
@@ -1617,7 +1783,7 @@ internal sealed class AuthCodeClientAuthenticationTests
     /// <summary>
     /// Drives <c>private_key_jwt</c> over the real token endpoint with a client assertion carrying no
     /// <c>kid</c> header, asserting the exchange's outcome against <paramref name="expectAccepted"/>.
-    /// <see cref="ClientAssertionOptions.SigningKeyId"/> is required and
+    /// <see cref="ClientAssertionOptions.SigningKeyId"/> is required for <c>private_key_jwt</c> and
     /// <see cref="ClientAssertionSigning.SignAsync(string, string, string, DateTimeOffset, DateTimeOffset, PrivateKeyMemory, string, JwtHeaderSerializer, JwtPayloadSerializer, EncodeDelegate, BaseMemoryPool, CancellationToken)"/>
     /// always attaches it as <c>kid</c>, so this
     /// branch signs its own assertion directly and pushes the token-endpoint form fields rather than
