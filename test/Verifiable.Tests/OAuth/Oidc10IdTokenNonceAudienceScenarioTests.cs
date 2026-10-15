@@ -290,7 +290,7 @@ internal sealed class Oidc10IdTokenNonceAudienceScenarioTests
 
         (string idToken, string issuer) = await DriveCodeExchangeOverWireForIdTokenAsync(host, material).ConfigureAwait(false);
         string whitespaceKidIdToken = await CompactJwsResigning.ResignWithHeaderAsync(
-            host, idToken, material.SigningKeyId, " ", "JWT").ConfigureAwait(false);
+            host, idToken, material.SigningKeyId, " ", "JWT", TestContext.CancellationToken).ConfigureAwait(false);
 
         Oidc10IdTokenValidationResult result = await ValidateAsRelyingPartyAsync(
             whitespaceKidIdToken, material, expectedNonce: null, trustedAudiences: null, expectedIssuerOverride: issuer)

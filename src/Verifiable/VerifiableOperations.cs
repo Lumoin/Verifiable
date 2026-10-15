@@ -238,7 +238,7 @@ internal static partial class VerifiableOperations
         //emit hook is internal to Verifiable.Cryptography. The Activity spans these calls emit are what
         //EmitCbom --observe actually reads (CBOM and CryptoEvent are separate mechanisms).
         (Signature signature, CryptoEvent? _) = await MicrosoftCryptographicFunctions.SignP256Async(
-            privateKey.AsReadOnlyMemory(), payload, pool, timeProvider, cancellationToken: cancellationToken).ConfigureAwait(false);
+            privateKey.AsReadOnlyMemory(), payload, pool, timeProvider, null, cancellationToken).ConfigureAwait(false);
         using(signature)
         {
             _ = await MicrosoftCryptographicFunctions.VerifyP256Async(

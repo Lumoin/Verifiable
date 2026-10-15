@@ -657,7 +657,7 @@ internal sealed class AuthCodeClientAuthenticationTests
         {
             Func<Dictionary<string, object>, string> claimShape = claimShapes[index];
             signers[index] = signing => SignRawClaimsAsync(
-                signing.SigningKey, signing.Algorithm, claimShape(BuildDefaultClaims(signing)));
+                signing.SigningKey, signing.Algorithm, claimShape(BuildDefaultClaims(signing)), TestContext.CancellationToken);
         }
 
         return PushAtParAsync(validator, signingKeyId, signers, observe);
@@ -740,15 +740,16 @@ internal sealed class AuthCodeClientAuthenticationTests
     /// <param name="signingKey">The client's private key.</param>
     /// <param name="algorithm">The JWA algorithm name matching <paramref name="signingKey"/>.</param>
     /// <param name="payloadJson">The JSON object that becomes the payload.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The compact serialization of the signed assertion.</returns>
-    private static async Task<string> SignRawClaimsAsync(PrivateKeyMemory signingKey, string algorithm, string payloadJson)
+    private static async Task<string> SignRawClaimsAsync(PrivateKeyMemory signingKey, string algorithm, string payloadJson, CancellationToken cancellationToken)
     {
         string headerSegment = TestSetup.Base64UrlEncoder(
             Encoding.UTF8.GetBytes($"{{\"alg\":\"{algorithm}\",\"typ\":\"JWT\"}}"));
         string payloadSegment = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(payloadJson));
         byte[] signingInput = Encoding.ASCII.GetBytes($"{headerSegment}.{payloadSegment}");
 
-        using Signature signature = await signingKey.SignAsync(signingInput, Pool).ConfigureAwait(false);
+        using var signature = await signingKey.SignAsync(signingInput, Pool, cancellationToken).ConfigureAwait(false);
 
         return $"{headerSegment}.{payloadSegment}.{TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan())}";
     }
@@ -1103,6 +1104,7 @@ internal sealed class AuthCodeClientAuthenticationTests
     public async Task ClientSecretJwtAuthenticatesOverRealWire()
     {
         var secretMaterial = BuildSecretKeyMaterial(ClientSecret);
+
         try
         {
             await using var host = new TestHostShell(TimeProvider);
@@ -1160,6 +1162,7 @@ internal sealed class AuthCodeClientAuthenticationTests
     public async Task ClientSecretJwtRefusesOptionsNamingAKeyIdentifier()
     {
         var secretMaterial = BuildSecretKeyMaterial(ClientSecret);
+
         try
         {
             await using var host = new TestHostShell(TimeProvider);
@@ -1243,6 +1246,7 @@ internal sealed class AuthCodeClientAuthenticationTests
     private static bool IsMacedUnderTheClientSecret(string assertion, List<string> verified)
     {
         var parts = assertion.Split('.');
+
         if(parts.Length != 3)
         {
             return false;
@@ -1250,6 +1254,7 @@ internal sealed class AuthCodeClientAuthenticationTests
 
         var expected = HMACSHA256.HashData(Encoding.UTF8.GetBytes(ClientSecret), Encoding.ASCII.GetBytes($"{parts[0]}.{parts[1]}"));
         var presented = Base64Url.DecodeFromChars(parts[2]);
+
         if(!CryptographicOperations.FixedTimeEquals(expected, presented))
         {
             return false;

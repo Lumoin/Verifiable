@@ -104,11 +104,11 @@ internal sealed class CardSimulatorRsaTerminalAuthenticationTests
         //the chip verifies each PSO:Verify Certificate through the RSA issuer path and the EXTERNAL AUTHENTICATE
         //through the RSA terminal path. Every certificate exceeds the short-Lc limit, exercising extended Lc.
         using CardVerifiableCertificate trustAnchor = CardVerifiableCertificateMinter.Mint(
-            cvcaKey, cvcaKey, CvcaReference, CvcaReference, CardVerifiableCertificateMinter.CvcaRole, Effective, Expiration, BaseMemoryPool.Shared);
+            cvcaKey, cvcaKey, CvcaReference, CvcaReference, CardVerifiableCertificateMinter.CvcaRole, Effective, Expiration, BaseMemoryPool.Shared, TestContext.CancellationToken);
         using CardVerifiableCertificate documentVerifier = CardVerifiableCertificateMinter.Mint(
-            cvcaKey, documentVerifierKey, CvcaReference, DocumentVerifierReference, CardVerifiableCertificateMinter.DocumentVerifierRole, Effective, Expiration, BaseMemoryPool.Shared);
+            cvcaKey, documentVerifierKey, CvcaReference, DocumentVerifierReference, CardVerifiableCertificateMinter.DocumentVerifierRole, Effective, Expiration, BaseMemoryPool.Shared, TestContext.CancellationToken);
         using CardVerifiableCertificate terminal = CardVerifiableCertificateMinter.Mint(
-            documentVerifierKey, terminalKey, DocumentVerifierReference, TerminalReference, CardVerifiableCertificateMinter.TerminalRole, Effective, Expiration, BaseMemoryPool.Shared);
+            documentVerifierKey, terminalKey, DocumentVerifierReference, TerminalReference, CardVerifiableCertificateMinter.TerminalRole, Effective, Expiration, BaseMemoryPool.Shared, TestContext.CancellationToken);
 
         bool accepted = await DriveTerminalAuthenticationAsync(trustAnchor, [documentVerifier, terminal], terminalKey.ExportRSAPrivateKey());
 
@@ -130,13 +130,13 @@ internal sealed class CardSimulatorRsaTerminalAuthenticationTests
         using ECDsa documentVerifierKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
         using CardVerifiableCertificate trustAnchor = CardVerifiableCertificateMinter.Mint(
-            cvcaKey, cvcaKey, CvcaReference, CvcaReference, CardVerifiableCertificateMinter.CvcaRole, includeDomainParameters: true, Effective, Expiration, inheritedCurve: null, BaseMemoryPool.Shared);
+            cvcaKey, cvcaKey, CvcaReference, CvcaReference, CardVerifiableCertificateMinter.CvcaRole, includeDomainParameters: true, Effective, Expiration, inheritedCurve: null, BaseMemoryPool.Shared, TestContext.CancellationToken);
         Tag certificateCurve = trustAnchor.PublicKey.EllipticCurvePoint!.Tag;
         using CardVerifiableCertificate documentVerifier = CardVerifiableCertificateMinter.Mint(
-            cvcaKey, documentVerifierKey, CvcaReference, DocumentVerifierReference, CardVerifiableCertificateMinter.DocumentVerifierRole, includeDomainParameters: false, Effective, Expiration, certificateCurve, BaseMemoryPool.Shared);
+            cvcaKey, documentVerifierKey, CvcaReference, DocumentVerifierReference, CardVerifiableCertificateMinter.DocumentVerifierRole, includeDomainParameters: false, Effective, Expiration, certificateCurve, BaseMemoryPool.Shared, TestContext.CancellationToken);
         //The terminal certificate carries an RSA subject key but is signed by the Document Verifier with ECDSA.
         using CardVerifiableCertificate terminal = CardVerifiableCertificateMinter.Mint(
-            documentVerifierKey, certificateKey, DocumentVerifierReference, TerminalReference, CardVerifiableCertificateMinter.TerminalRole, Effective, Expiration, BaseMemoryPool.Shared);
+            documentVerifierKey, certificateKey, DocumentVerifierReference, TerminalReference, CardVerifiableCertificateMinter.TerminalRole, Effective, Expiration, BaseMemoryPool.Shared, TestContext.CancellationToken);
 
         return await DriveTerminalAuthenticationAsync(trustAnchor, [documentVerifier, terminal], signingKey.ExportRSAPrivateKey());
     }

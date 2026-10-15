@@ -102,7 +102,7 @@ public static class TpmCryptographicFunctions
     /// <see cref="ArgumentNullException.ThrowIfNull(object?, string?)"/> on <paramref name="context"/>
     /// proves it non-null for every indexer read below it — the C# compiler's own nullable flow
     /// analysis recognizes the guard, so the reads carry no null-dereference risk despite the
-    /// parameter's nullable, defaulted declaration.
+    /// parameter's nullable declaration.
     /// </remarks>
     [SuppressMessage("Microsoft.Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the returned Signature transfers to the caller.")]
     public static async ValueTask<SigningResult> SignAsync(
@@ -110,8 +110,8 @@ public static class TpmCryptographicFunctions
         ReadOnlyMemory<byte> dataToSign,
         BaseMemoryPool signaturePool,
         TimeProvider timeProvider,
-        FrozenDictionary<string, object>? context = null,
-        CancellationToken cancellationToken = default)
+        FrozenDictionary<string, object>? context,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(signaturePool);
         ArgumentNullException.ThrowIfNull(timeProvider);

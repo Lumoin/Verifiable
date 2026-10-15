@@ -54,6 +54,7 @@ internal static class WebVhTestLog
         string domain,
         WebVhController signer,
         string versionTime,
+        CancellationToken cancellationToken,
         ImmutableArray<string>? nextKeyHashes = null,
         WebVhController? authentication = null,
         string? explicitFilesServiceEndpoint = null,
@@ -64,12 +65,12 @@ internal static class WebVhTestLog
         return MintAsync(domain,
         [
             new WebVhEntryPlan(signer, [signer.Multikey], nextKeyHashes, Deactivated: false, versionTime, Authentication: authentication, ExplicitFilesServiceEndpoint: explicitFilesServiceEndpoint, ExplicitFilesServiceEndpointMap: explicitFilesServiceEndpointMap, ExplicitWhoisServiceEndpoint: explicitWhoisServiceEndpoint, GenesisAlsoKnownAs: genesisAlsoKnownAs)
-        ]);
+        ], cancellationToken);
     }
 
 
     /// <summary>Mints a multi-entry log, executing the Create step for the first plan and Update for the rest.</summary>
-    public static async Task<WebVhMintedLog> MintAsync(string domain, IReadOnlyList<WebVhEntryPlan> plans)
+    public static async Task<WebVhMintedLog> MintAsync(string domain, IReadOnlyList<WebVhEntryPlan> plans, CancellationToken cancellationToken)
     {
         JsonObject genesisParameters = new()
         {
@@ -156,7 +157,7 @@ internal static class WebVhTestLog
             string versionId = $"{index + 1}-{entryHash}";
             entry["versionId"] = versionId;
 
-            JsonObject proof = await SignAsync(entry, plan).ConfigureAwait(false);
+            var proof = await SignAsync(entry, plan, cancellationToken).ConfigureAwait(false);
             entry["proof"] = new JsonArray(proof);
 
             lines.Add(entry.ToJsonString());
@@ -244,7 +245,7 @@ internal static class WebVhTestLog
 
 
     /// <summary>Mints a <c>did-witness.json</c> file: each approval signs <c>JCS({"versionId"})</c> with its witnesses.</summary>
-    public static async Task<string> MintWitnessFileAsync(IReadOnlyList<WebVhWitnessApproval> approvals)
+    public static async Task<string> MintWitnessFileAsync(IReadOnlyList<WebVhWitnessApproval> approvals, CancellationToken cancellationToken)
     {
         var records = new JsonArray();
         foreach(WebVhWitnessApproval approval in approvals)
@@ -252,7 +253,7 @@ internal static class WebVhTestLog
             var proofs = new JsonArray();
             foreach(WebVhController witness in approval.Witnesses)
             {
-                proofs.Add(await SignWitnessProofAsync(approval.VersionId, witness, approval.Created).ConfigureAwait(false));
+                proofs.Add(await SignWitnessProofAsync(approval.VersionId, witness, approval.Created, cancellationToken).ConfigureAwait(false));
             }
 
             records.Add(new JsonObject
@@ -268,7 +269,7 @@ internal static class WebVhTestLog
 
     //Signs one witness proof over JCS({"versionId": versionId}); eddsa-jcs-2022 signs
     //SHA-256(JCS(proofOptions)) concatenated with SHA-256(JCS(document)).
-    private static async Task<JsonObject> SignWitnessProofAsync(string versionId, WebVhController witness, string created)
+    private static async Task<JsonObject> SignWitnessProofAsync(string versionId, WebVhController witness, string created, CancellationToken cancellationToken)
     {
         JsonObject document = new() { ["versionId"] = versionId };
         JsonObject proofOptions = new()
@@ -285,7 +286,7 @@ internal static class WebVhTestLog
         HashCanonical(proofOptions.ToJsonString(), hashData.Span[..32]);
         HashCanonical(document.ToJsonString(), hashData.Span[32..]);
 
-        string proofValue = await witness.SignProofValueAsync(hashData).ConfigureAwait(false);
+        var proofValue = await witness.SignProofValueAsync(hashData, cancellationToken).ConfigureAwait(false);
         proofOptions["proofValue"] = proofValue;
 
         return proofOptions;
@@ -308,6 +309,7 @@ internal static class WebVhTestLog
         string created,
         PresentationSerializeDelegate serializePresentation,
         ProofOptionsSerializeDelegate serializeProofOptions,
+        CancellationToken cancellationToken,
         string? boundChallenge = null,
         string? boundDomain = null,
         string? verificationMethodId = null)
@@ -351,7 +353,7 @@ internal static class WebVhTestLog
         HashCanonical(proofOptionsSerialized, hashData.Span[..32]);
         HashCanonical(presentationSerialized, hashData.Span[32..]);
 
-        newProof.ProofValue = await authController.SignProofValueAsync(hashData).ConfigureAwait(false);
+        newProof.ProofValue = await authController.SignProofValueAsync(hashData, cancellationToken).ConfigureAwait(false);
 
         DataIntegritySecuredPresentation securedPresentation = new()
         {
@@ -380,7 +382,7 @@ internal static class WebVhTestLog
     }
 
 
-    private static async Task<JsonObject> SignAsync(JsonObject entry, WebVhEntryPlan plan)
+    private static async Task<JsonObject> SignAsync(JsonObject entry, WebVhEntryPlan plan, CancellationToken cancellationToken)
     {
         JsonObject document = JsonNode.Parse(entry.ToJsonString())!.AsObject();
         _ = document.Remove("proof");
@@ -400,7 +402,7 @@ internal static class WebVhTestLog
         HashCanonical(proofOptions.ToJsonString(), hashData.Span[..32]);
         HashCanonical(document.ToJsonString(), hashData.Span[32..]);
 
-        string proofValue = await plan.Signer.SignProofValueAsync(hashData).ConfigureAwait(false);
+        var proofValue = await plan.Signer.SignProofValueAsync(hashData, cancellationToken).ConfigureAwait(false);
         proofOptions["proofValue"] = proofValue;
 
         return proofOptions;
@@ -569,9 +571,9 @@ internal sealed class WebVhController: IDisposable
 
 
     /// <summary>Signs the eddsa-jcs-2022 hash data and encodes the signature as a multibase proofValue.</summary>
-    public async Task<string> SignProofValueAsync(ReadOnlyMemory<byte> hashData)
+    public async Task<string> SignProofValueAsync(ReadOnlyMemory<byte> hashData, CancellationToken cancellationToken)
     {
-        using Signature signature = await PrivateKey.SignAsync(hashData, BaseMemoryPool.Shared).ConfigureAwait(false);
+        using var signature = await PrivateKey.SignAsync(hashData, BaseMemoryPool.Shared, null, cancellationToken).ConfigureAwait(false);
 
         return ProofValueCodecs.EncodeBase58Btc(signature.AsReadOnlyMemory().Span, WebVhTestLog.Base58Encoder, BaseMemoryPool.Shared);
     }

@@ -122,7 +122,7 @@ public static class CoseCounterSign
             byte[] toBeSigned = buildCountersignStructure(input);
 
             (Signature signature, CryptoEvent? evt) = await signingDelegate(
-                privateKey.AsReadOnlyMemory(), toBeSigned, signaturePool, cancellationToken: cancellationToken).ConfigureAwait(false);
+                privateKey.AsReadOnlyMemory(), toBeSigned, signaturePool, null, cancellationToken).ConfigureAwait(false);
 
             if(evt is not null)
             {
@@ -213,7 +213,7 @@ public static class CoseCounterSign
         byte[] toBeSigned = buildCountersignStructure(input);
 
         (Signature signature, CryptoEvent? evt) = await signingDelegate(
-            privateKey.AsReadOnlyMemory(), toBeSigned, signaturePool, cancellationToken: cancellationToken).ConfigureAwait(false);
+            privateKey.AsReadOnlyMemory(), toBeSigned, signaturePool, null, cancellationToken).ConfigureAwait(false);
 
         if(evt is not null)
         {

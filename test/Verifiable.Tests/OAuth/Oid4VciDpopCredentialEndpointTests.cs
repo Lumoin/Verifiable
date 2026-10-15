@@ -342,7 +342,7 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
         using DpopClientFixture fixture = ctx.Fixture;
 
         string whitespaceKidToken = await CompactJwsResigning.ResignWithHeaderAsync(
-            host, ctx.AccessToken, ctx.SigningKeyId, " ", "at+jwt").ConfigureAwait(false);
+            host, ctx.AccessToken, ctx.SigningKeyId, " ", "at+jwt", TestContext.CancellationToken).ConfigureAwait(false);
 
         using HttpResponseMessage response = await PostCredentialAsync(
             ctx, whitespaceKidToken, dpopProof: null, scheme: WellKnownAuthenticationSchemes.Bearer).ConfigureAwait(false);

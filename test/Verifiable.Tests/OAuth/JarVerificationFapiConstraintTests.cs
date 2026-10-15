@@ -166,7 +166,7 @@ internal sealed class JarVerificationFapiConstraintTests
         string payloadB64 = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(payloadJson));
 
         byte[] signingInput = Encoding.ASCII.GetBytes($"{headerB64}.{payloadB64}");
-        using Signature signature = await signingKey.SignAsync(signingInput, Pool).ConfigureAwait(false);
+        using var signature = await signingKey.SignAsync(signingInput, Pool, TestContext.CancellationToken).ConfigureAwait(false);
         string signatureB64 = TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan());
         string jar = $"{headerB64}.{payloadB64}.{signatureB64}";
 

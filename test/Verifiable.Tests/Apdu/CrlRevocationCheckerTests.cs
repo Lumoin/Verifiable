@@ -28,7 +28,7 @@ internal sealed class CrlRevocationCheckerTests
     [TestMethod]
     public async Task ReportsGoodForACleanCrl()
     {
-        using RevocationScenario scenario = SyntheticPassportFactory.MintRevocationScenario(ValidationTime);
+        using var scenario = SyntheticPassportFactory.MintRevocationScenario(ValidationTime, TestContext.CancellationToken);
         var checker = new CrlRevocationChecker([scenario.CleanCrl]);
 
         CertificateRevocationStatus status = await checker.CheckAsync(
@@ -41,7 +41,7 @@ internal sealed class CrlRevocationCheckerTests
     [TestMethod]
     public async Task ReportsRevokedForARevokingCrl()
     {
-        using RevocationScenario scenario = SyntheticPassportFactory.MintRevocationScenario(ValidationTime);
+        using var scenario = SyntheticPassportFactory.MintRevocationScenario(ValidationTime, TestContext.CancellationToken);
         var checker = new CrlRevocationChecker([scenario.RevokingCrl]);
 
         CertificateRevocationStatus status = await checker.CheckAsync(
@@ -54,7 +54,7 @@ internal sealed class CrlRevocationCheckerTests
     [TestMethod]
     public async Task ReportsUnknownWhenNoCrlIsAvailable()
     {
-        using RevocationScenario scenario = SyntheticPassportFactory.MintRevocationScenario(ValidationTime);
+        using var scenario = SyntheticPassportFactory.MintRevocationScenario(ValidationTime, TestContext.CancellationToken);
         var checker = new CrlRevocationChecker([]);
 
         CertificateRevocationStatus status = await checker.CheckAsync(
@@ -67,7 +67,7 @@ internal sealed class CrlRevocationCheckerTests
     [TestMethod]
     public async Task ReportsUnknownForAStaleCrl()
     {
-        using RevocationScenario scenario = SyntheticPassportFactory.MintRevocationScenario(ValidationTime);
+        using var scenario = SyntheticPassportFactory.MintRevocationScenario(ValidationTime, TestContext.CancellationToken);
         var checker = new CrlRevocationChecker([scenario.StaleCrl]);
 
         CertificateRevocationStatus status = await checker.CheckAsync(
@@ -80,7 +80,7 @@ internal sealed class CrlRevocationCheckerTests
     [TestMethod]
     public async Task ReportsUnknownForACrlItCannotVerify()
     {
-        using RevocationScenario scenario = SyntheticPassportFactory.MintRevocationScenario(ValidationTime);
+        using var scenario = SyntheticPassportFactory.MintRevocationScenario(ValidationTime, TestContext.CancellationToken);
 
         //The forged CRL claims the CSCA's issuer name and lists the Document Signer's serial, but is signed by a
         //different key — it must not authenticate, so it cannot mark the signer revoked and the status stays Unknown.
@@ -96,7 +96,7 @@ internal sealed class CrlRevocationCheckerTests
     [TestMethod]
     public async Task RevocationWinsWhenACleanAndARevokingCrlAreBothPresent()
     {
-        using RevocationScenario scenario = SyntheticPassportFactory.MintRevocationScenario(ValidationTime);
+        using var scenario = SyntheticPassportFactory.MintRevocationScenario(ValidationTime, TestContext.CancellationToken);
         var checker = new CrlRevocationChecker([scenario.CleanCrl, scenario.RevokingCrl]);
 
         CertificateRevocationStatus status = await checker.CheckAsync(
@@ -109,7 +109,7 @@ internal sealed class CrlRevocationCheckerTests
     [TestMethod]
     public async Task ReportsUnknownForANotYetValidCrl()
     {
-        using RevocationScenario scenario = SyntheticPassportFactory.MintRevocationScenario(ValidationTime);
+        using var scenario = SyntheticPassportFactory.MintRevocationScenario(ValidationTime, TestContext.CancellationToken);
         var checker = new CrlRevocationChecker([scenario.NotYetValidCrl]);
 
         CertificateRevocationStatus status = await checker.CheckAsync(
@@ -122,7 +122,7 @@ internal sealed class CrlRevocationCheckerTests
     [TestMethod]
     public async Task ReportsUnknownForAnUntrustedCleanCrl()
     {
-        using RevocationScenario scenario = SyntheticPassportFactory.MintRevocationScenario(ValidationTime);
+        using var scenario = SyntheticPassportFactory.MintRevocationScenario(ValidationTime, TestContext.CancellationToken);
 
         //A clean CRL signed by an untrusted key must not be accepted as authoritative; otherwise a forged clean CRL
         //could vouch for a revoked signer. This pins the fail-open direction of the signature gate.
@@ -138,7 +138,7 @@ internal sealed class CrlRevocationCheckerTests
     [TestMethod]
     public async Task ReportsUnknownWhenTheAuthorisingCandidateLacksCrlSign()
     {
-        using RevocationScenario scenario = SyntheticPassportFactory.MintRevocationScenario(ValidationTime);
+        using var scenario = SyntheticPassportFactory.MintRevocationScenario(ValidationTime, TestContext.CancellationToken);
 
         //The revoking CRL verifies under the candidate's key (it shares the CSCA's key), but the candidate's Key Usage
         //lacks cRLSign (RFC 5280 §6.3.3(f)), so it is not authorised to attest revocation and the CRL is not honoured.
@@ -154,7 +154,7 @@ internal sealed class CrlRevocationCheckerTests
     [TestMethod]
     public async Task ReportsUnknownForACrlWithoutNextUpdateByDefault()
     {
-        using RevocationScenario scenario = SyntheticPassportFactory.MintRevocationScenario(ValidationTime);
+        using var scenario = SyntheticPassportFactory.MintRevocationScenario(ValidationTime, TestContext.CancellationToken);
 
         //A CRL with no nextUpdate has no freshness bound; the secure default treats it as non-authoritative.
         var checker = new CrlRevocationChecker([scenario.NoNextUpdateCrl]);
@@ -169,7 +169,7 @@ internal sealed class CrlRevocationCheckerTests
     [TestMethod]
     public async Task AcceptsACrlWithoutNextUpdateWhenTheFlagAllowsIt()
     {
-        using RevocationScenario scenario = SyntheticPassportFactory.MintRevocationScenario(ValidationTime);
+        using var scenario = SyntheticPassportFactory.MintRevocationScenario(ValidationTime, TestContext.CancellationToken);
 
         //Opting in, a no-nextUpdate CRL is treated as authoritative, so the clean no-nextUpdate CRL reports Good.
         var checker = new CrlRevocationChecker([scenario.NoNextUpdateCrl], allowCrlsWithoutNextUpdate: true);
@@ -184,7 +184,7 @@ internal sealed class CrlRevocationCheckerTests
     [TestMethod]
     public async Task SkipsAMalformedCrlAndStillConsultsAValidOne()
     {
-        using RevocationScenario scenario = SyntheticPassportFactory.MintRevocationScenario(ValidationTime);
+        using var scenario = SyntheticPassportFactory.MintRevocationScenario(ValidationTime, TestContext.CancellationToken);
 
         //A malformed CRL in the set must be skipped, not abort the scan; the valid revoking CRL behind it still applies.
         var checker = new CrlRevocationChecker([scenario.MalformedCrl, scenario.RevokingCrl]);
@@ -199,7 +199,7 @@ internal sealed class CrlRevocationCheckerTests
     [TestMethod]
     public async Task ChainValidationRejectsALeafRevokedByTheCrlChecker()
     {
-        using RevocationScenario scenario = SyntheticPassportFactory.MintRevocationScenario(ValidationTime);
+        using var scenario = SyntheticPassportFactory.MintRevocationScenario(ValidationTime, TestContext.CancellationToken);
         var checker = new CrlRevocationChecker([scenario.RevokingCrl]);
         PkiCertificateMemory[] chain = [scenario.DocumentSigner];
         PkiCertificateMemory[] anchors = [scenario.CscaAnchor];
@@ -223,7 +223,7 @@ internal sealed class CrlRevocationCheckerTests
     [TestMethod]
     public async Task ChainValidationAcceptsALeafClearedByTheCrlChecker()
     {
-        using RevocationScenario scenario = SyntheticPassportFactory.MintRevocationScenario(ValidationTime);
+        using var scenario = SyntheticPassportFactory.MintRevocationScenario(ValidationTime, TestContext.CancellationToken);
         var checker = new CrlRevocationChecker([scenario.CleanCrl]);
         PkiCertificateMemory[] chain = [scenario.DocumentSigner];
         PkiCertificateMemory[] anchors = [scenario.CscaAnchor];

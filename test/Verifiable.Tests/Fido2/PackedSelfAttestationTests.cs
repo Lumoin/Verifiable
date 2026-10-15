@@ -43,7 +43,7 @@ internal sealed class PackedSelfAttestationTests
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash([1, 2, 3], BaseMemoryPool.Shared);
         using AuthenticatorData authenticatorData = Fido2AttestationTestVectors.BuildAuthenticatorData(Guid.NewGuid(), credentialPublicKey, out byte[] authDataBytes);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned).ConfigureAwait(false);
+        var signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned, TestContext.CancellationToken).ConfigureAwait(false);
 
         var statement = new PackedAttestationStatement(Alg: WellKnownCoseAlgorithms.Es256, Signature: signature, X5c: null);
         AttestationVerifyDelegate verify = BuildVerifier(Fido2AttestationTestVectors.CreateStatementParser(statement));
@@ -72,7 +72,7 @@ internal sealed class PackedSelfAttestationTests
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash([1, 2, 3], BaseMemoryPool.Shared);
         using AuthenticatorData authenticatorData = Fido2AttestationTestVectors.BuildAuthenticatorData(Guid.NewGuid(), credentialPublicKey, out byte[] authDataBytes);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned).ConfigureAwait(false);
+        var signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned, TestContext.CancellationToken).ConfigureAwait(false);
 
         var statement = new PackedAttestationStatement(Alg: WellKnownCoseAlgorithms.Rs256, Signature: signature, X5c: null);
 
@@ -99,7 +99,7 @@ internal sealed class PackedSelfAttestationTests
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash([1, 2, 3], BaseMemoryPool.Shared);
         using AuthenticatorData authenticatorData = Fido2AttestationTestVectors.BuildAuthenticatorData(Guid.NewGuid(), credentialPublicKey, out byte[] authDataBytes);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned).ConfigureAwait(false);
+        var signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned, TestContext.CancellationToken).ConfigureAwait(false);
 
         var statement = new PackedAttestationStatement(Alg: WellKnownCoseAlgorithms.Es256, Signature: signature, X5c: null);
 
@@ -125,7 +125,7 @@ internal sealed class PackedSelfAttestationTests
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash([1, 2, 3], BaseMemoryPool.Shared);
         using AuthenticatorData authenticatorData = Fido2AttestationTestVectors.BuildAuthenticatorData(Guid.NewGuid(), credentialPublicKey, out byte[] authDataBytes);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned).ConfigureAwait(false);
+        var signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned, TestContext.CancellationToken).ConfigureAwait(false);
         signature[0] ^= 0xFF;
 
         var statement = new PackedAttestationStatement(Alg: WellKnownCoseAlgorithms.Es256, Signature: signature, X5c: null);
@@ -194,7 +194,7 @@ internal sealed class PackedSelfAttestationTests
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash([1, 2, 3], BaseMemoryPool.Shared);
         using AuthenticatorData authenticatorData = Fido2AttestationTestVectors.BuildAuthenticatorData(Guid.NewGuid(), credentialPublicKey, out byte[] authDataBytes);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP384(credentialKey, toBeSigned).ConfigureAwait(false);
+        var signature = await Fido2AttestationTestVectors.SignWithEcdsaP384(credentialKey, toBeSigned, TestContext.CancellationToken).ConfigureAwait(false);
 
         var statement = new PackedAttestationStatement(Alg: WellKnownCoseAlgorithms.Es384, Signature: signature, X5c: null);
         AttestationVerifyDelegate verify = BuildVerifier(Fido2AttestationTestVectors.CreateStatementParser(statement));
@@ -222,7 +222,7 @@ internal sealed class PackedSelfAttestationTests
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash([1, 2, 3], BaseMemoryPool.Shared);
         using AuthenticatorData authenticatorData = Fido2AttestationTestVectors.BuildAuthenticatorData(Guid.NewGuid(), credentialPublicKey, out byte[] authDataBytes);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP521(credentialKey, toBeSigned).ConfigureAwait(false);
+        var signature = await Fido2AttestationTestVectors.SignWithEcdsaP521(credentialKey, toBeSigned, TestContext.CancellationToken).ConfigureAwait(false);
 
         var statement = new PackedAttestationStatement(Alg: WellKnownCoseAlgorithms.Es512, Signature: signature, X5c: null);
         AttestationVerifyDelegate verify = BuildVerifier(Fido2AttestationTestVectors.CreateStatementParser(statement));
@@ -250,7 +250,7 @@ internal sealed class PackedSelfAttestationTests
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash([1, 2, 3], BaseMemoryPool.Shared);
         using AuthenticatorData authenticatorData = Fido2AttestationTestVectors.BuildAuthenticatorData(Guid.NewGuid(), credentialPublicKey, out byte[] authDataBytes);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = await Fido2AttestationTestVectors.SignWithRsaPkcs1Sha256(credentialKey, toBeSigned).ConfigureAwait(false);
+        var signature = await Fido2AttestationTestVectors.SignWithRsaPkcs1Sha256(credentialKey, toBeSigned, TestContext.CancellationToken).ConfigureAwait(false);
 
         var statement = new PackedAttestationStatement(Alg: WellKnownCoseAlgorithms.Rs256, Signature: signature, X5c: null);
         AttestationVerifyDelegate verify = BuildVerifier(Fido2AttestationTestVectors.CreateStatementParser(statement));
@@ -281,7 +281,7 @@ internal sealed class PackedSelfAttestationTests
             using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash([1, 2, 3], BaseMemoryPool.Shared);
             using AuthenticatorData authenticatorData = Fido2AttestationTestVectors.BuildAuthenticatorData(Guid.NewGuid(), credentialPublicKey, out byte[] authDataBytes);
             byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-            byte[] signature = await Fido2AttestationTestVectors.SignWithEd25519Async(keyMaterial.PrivateKey, toBeSigned);
+            var signature = await Fido2AttestationTestVectors.SignWithEd25519Async(keyMaterial.PrivateKey, toBeSigned, TestContext.CancellationToken);
 
             var statement = new PackedAttestationStatement(Alg: WellKnownCoseAlgorithms.EdDsa, Signature: signature, X5c: null);
             AttestationVerifyDelegate verify = BuildVerifier(Fido2AttestationTestVectors.CreateStatementParser(statement));
@@ -314,7 +314,7 @@ internal sealed class PackedSelfAttestationTests
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash([1, 2, 3], BaseMemoryPool.Shared);
         using AuthenticatorData authenticatorData = Fido2AttestationTestVectors.BuildAuthenticatorData(Guid.NewGuid(), credentialPublicKey, out byte[] authDataBytes);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = await Fido2AttestationTestVectors.SignWithRsaPssSha256Async(credentialKey, toBeSigned);
+        var signature = await Fido2AttestationTestVectors.SignWithRsaPssSha256Async(credentialKey, toBeSigned, TestContext.CancellationToken);
 
         var statement = new PackedAttestationStatement(Alg: WellKnownCoseAlgorithms.Ps256, Signature: signature, X5c: null);
         AttestationVerifyDelegate verify = BuildVerifier(Fido2AttestationTestVectors.CreateStatementParser(statement));
@@ -345,7 +345,7 @@ internal sealed class PackedSelfAttestationTests
             using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash([1, 2, 3], BaseMemoryPool.Shared);
             using AuthenticatorData authenticatorData = Fido2AttestationTestVectors.BuildAuthenticatorData(Guid.NewGuid(), credentialPublicKey, out byte[] authDataBytes);
             byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-            byte[] signature = await Fido2AttestationTestVectors.SignWithSecp256k1Async(keyMaterial.PrivateKey, toBeSigned);
+            var signature = await Fido2AttestationTestVectors.SignWithSecp256k1Async(keyMaterial.PrivateKey, toBeSigned, TestContext.CancellationToken);
 
             var statement = new PackedAttestationStatement(Alg: WellKnownCoseAlgorithms.Es256K, Signature: signature, X5c: null);
             AttestationVerifyDelegate verify = BuildVerifier(Fido2AttestationTestVectors.CreateStatementParser(statement));

@@ -1,8 +1,6 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core;
-using Verifiable.Cryptography;
-using Verifiable.JCose;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.Client;
 
@@ -12,7 +10,8 @@ namespace Verifiable.OAuth.IdJag;
 /// Per-call inputs for <see cref="IdJagClient.MintAsync(ClientRegistration, IdJagMintOptions, CancellationToken)"/>
 /// — the client side of the ID-JAG mint (a Token Exchange requesting <c>requested_token_type</c> id-jag,
 /// draft-ietf-oauth-identity-assertion-authz-grant-04 (21 May 2026) §4.3). The client authenticates as a confidential
-/// client (§9.1) with a <c>private_key_jwt</c> assertion signed from <see cref="SigningKey"/>.
+/// client (§9.1) with the client assertion its registration's method names (RFC 7523 §2.2), composed under the key or the
+/// secret the registration carries and the inputs <see cref="ClientAssertion"/> names.
 /// </summary>
 [DebuggerDisplay("IdJagMintOptions Audience={Audience}, SubjectTokenType={SubjectTokenType}")]
 public sealed record IdJagMintOptions
@@ -26,17 +25,13 @@ public sealed record IdJagMintOptions
     /// <summary>The type of <see cref="SubjectToken"/> (<c>subject_token_type</c>, §4.3) — for example <see cref="TokenType.IdToken"/>, <see cref="TokenType.Saml2"/>, or <see cref="TokenType.RefreshToken"/>.</summary>
     public required TokenType SubjectTokenType { get; init; }
 
-    /// <summary>The client's signing key for the <c>private_key_jwt</c> client assertion. Its <see cref="Tag"/> determines the JWS <c>alg</c>.</summary>
-    public required PrivateKeyMemory SigningKey { get; init; }
-
-    /// <summary>The <c>kid</c> header value identifying <see cref="SigningKey"/> to the authorization server.</summary>
-    public required string SigningKeyId { get; init; }
-
-    /// <summary>Serialises the client-assertion protected header to UTF-8 JSON bytes.</summary>
-    public required JwtHeaderSerializer HeaderSerializer { get; init; }
-
-    /// <summary>Serialises the client-assertion payload claims to UTF-8 JSON bytes.</summary>
-    public required JwtPayloadSerializer PayloadSerializer { get; init; }
+    /// <summary>
+    /// The client assertion's inputs (RFC 7523 §2.2): the <c>kid</c> of a <c>private_key_jwt</c> key or the HMAC algorithm
+    /// of a <c>client_secret_jwt</c> secret, the serialisers and the assertion's validity window. The key or the secret
+    /// itself is the registration's <see cref="ClientRegistration.AuthenticationKeyMaterial"/>, under the method the
+    /// registration names (<see cref="ClientAssertionCredential.Of"/>).
+    /// </summary>
+    public required ClientAssertionOptions ClientAssertion { get; init; }
 
     /// <summary>The requested Resource Identifier(s) (RFC 8707 / §4.3 <c>resource</c>). MAY be empty. The entries are sent as given and unchecked; the application decides whether an entry is acceptable.</summary>
     public IReadOnlyList<string> Resource { get; init; } = [];
@@ -59,9 +54,6 @@ public sealed record IdJagMintOptions
 
     /// <summary>The requested RFC 9396 <c>authorization_details</c> as a JSON array string (§4.3.3), or <see langword="null"/>.</summary>
     public string? AuthorizationDetails { get; init; }
-
-    /// <summary>The validity window of the signed client assertion (RFC 7523 §3). Defaults to one minute.</summary>
-    public TimeSpan ClientAssertionLifetime { get; init; } = TimeSpan.FromMinutes(1);
 }
 
 
@@ -69,27 +61,21 @@ public sealed record IdJagMintOptions
 /// Per-call inputs for <see cref="IdJagClient.RedeemAsync(ClientRegistration, IdJagRedeemOptions, CancellationToken)"/>
 /// — the client side of the ID-JAG redeem (a JWT Bearer grant presenting the ID-JAG as the assertion,
 /// draft-ietf-oauth-identity-assertion-authz-grant-04 §4.4). The client authenticates as a confidential
-/// client (§9.1) with a <c>private_key_jwt</c> assertion signed from <see cref="SigningKey"/>.
+/// client (§9.1) with the client assertion its registration's method names (RFC 7523 §2.2), composed under the key or the
+/// secret the registration carries and the inputs <see cref="ClientAssertion"/> names.
 /// </summary>
 public sealed record IdJagRedeemOptions
 {
     /// <summary>The ID-JAG obtained from the mint, presented as the §4.4 <c>assertion</c> (REQUIRED).</summary>
     public required string Assertion { get; init; }
 
-    /// <summary>The client's signing key for the <c>private_key_jwt</c> client assertion. Its <see cref="Tag"/> determines the JWS <c>alg</c>.</summary>
-    public required PrivateKeyMemory SigningKey { get; init; }
-
-    /// <summary>The <c>kid</c> header value identifying <see cref="SigningKey"/> to the authorization server.</summary>
-    public required string SigningKeyId { get; init; }
-
-    /// <summary>Serialises the client-assertion protected header to UTF-8 JSON bytes.</summary>
-    public required JwtHeaderSerializer HeaderSerializer { get; init; }
-
-    /// <summary>Serialises the client-assertion payload claims to UTF-8 JSON bytes.</summary>
-    public required JwtPayloadSerializer PayloadSerializer { get; init; }
-
-    /// <summary>The validity window of the signed client assertion (RFC 7523 §3). Defaults to one minute.</summary>
-    public TimeSpan ClientAssertionLifetime { get; init; } = TimeSpan.FromMinutes(1);
+    /// <summary>
+    /// The client assertion's inputs (RFC 7523 §2.2): the <c>kid</c> of a <c>private_key_jwt</c> key or the HMAC algorithm
+    /// of a <c>client_secret_jwt</c> secret, the serialisers and the assertion's validity window. The key or the secret
+    /// itself is the registration's <see cref="ClientRegistration.AuthenticationKeyMaterial"/>, under the method the
+    /// registration names (<see cref="ClientAssertionCredential.Of"/>).
+    /// </summary>
+    public required ClientAssertionOptions ClientAssertion { get; init; }
 }
 
 
@@ -98,7 +84,7 @@ public sealed record IdJagRedeemOptions
 /// profile (draft-ietf-oauth-identity-assertion-authz-grant-04): <see cref="MintAsync(ClientRegistration, IdJagMintOptions, CancellationToken)"/>
 /// obtains an ID-JAG from the IdP via Token Exchange (§4.3); <see cref="RedeemAsync(ClientRegistration, IdJagRedeemOptions, CancellationToken)"/>
 /// redeems it at the Resource Authorization Server via the JWT Bearer grant (§4.4). Both authenticate the
-/// confidential client (§9.1) with a <c>private_key_jwt</c> assertion.
+/// confidential client (§9.1) with the client assertion the registration's method names.
 /// </summary>
 /// <remarks>
 /// Constructed via the <see cref="IdJagClientExtensions">OAuthClient.IdJag</see> extension property. The

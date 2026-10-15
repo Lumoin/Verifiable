@@ -108,17 +108,17 @@ internal sealed class WebVhCrossWireFlowTests
         [
             new WebVhEntryPlan(controller, [controller.Multikey], NextKeyHashes: null, Deactivated: false, GenesisTime, Witness: WebVhWitnessSpec.Rule(1, witness), Authentication: authentication),
             new WebVhEntryPlan(controller, [controller.Multikey], NextKeyHashes: null, Deactivated: false, SecondTime, Witness: WebVhWitnessSpec.Rule(1, witness), Authentication: authentication)
-        ]).ConfigureAwait(false);
+        ], TestContext.CancellationToken).ConfigureAwait(false);
 
         //The witness rule activated by the genesis takes effect for the NEXT entry, so entry 2 (versionId 2-...)
         //is the witnessed one; approving it confirms the active rule and forces the did-witness.json socket fetch.
         string witnessFile = await WebVhTestLog.MintWitnessFileAsync(
         [
             new WebVhWitnessApproval(log.VersionIds[1], [witness], WitnessTime)
-        ]).ConfigureAwait(false);
+        ], TestContext.CancellationToken).ConfigureAwait(false);
 
         string whois = await WebVhTestLog.MintWhoisPresentationAsync(
-            log.Did, authentication, GenesisTime, SerializePresentation, SerializeProofOptions).ConfigureAwait(false);
+            log.Did, authentication, GenesisTime, SerializePresentation, SerializeProofOptions, TestContext.CancellationToken).ConfigureAwait(false);
 
         byte[] issuersFile = Encoding.UTF8.GetBytes("{\"issuers\":[\"did:webvh:issuer\"]}");
 
@@ -213,7 +213,7 @@ internal sealed class WebVhCrossWireFlowTests
         //Mint a valid DID at node A's host but DO NOT publish its log: every path 404s over the socket.
         string domain = $"localhost%3A{port}";
         using WebVhController controller = WebVhController.Create();
-        WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(domain, controller, GenesisTime).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
 
         using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(nodeA.Certificate);
         DidResolver composed = BuildCrossWireResolver(httpClient, nodeA.BaseAddress);
@@ -251,7 +251,7 @@ internal sealed class WebVhCrossWireFlowTests
         [
             new WebVhEntryPlan(controller, [controller.Multikey], NextKeyHashes: null, Deactivated: false, GenesisTime, Portable: true),
             new WebVhEntryPlan(controller, [controller.Multikey], NextKeyHashes: null, Deactivated: false, SecondTime, MoveToDomain: movedDomain)
-        ]).ConfigureAwait(false);
+        ], TestContext.CancellationToken).ConfigureAwait(false);
 
         //The moved DID's path-bearing domain (".../moved") transforms to https://localhost:{port}/moved/did.jsonl
         //(no .well-known for a path location), so the whole log is published there.
@@ -296,7 +296,7 @@ internal sealed class WebVhCrossWireFlowTests
         [
             new WebVhEntryPlan(controller, [controller.Multikey], NextKeyHashes: null, Deactivated: false, GenesisTime, Portable: true),
             new WebVhEntryPlan(controller, [controller.Multikey], NextKeyHashes: null, Deactivated: false, SecondTime, MoveToDomain: movedDomain)
-        ]).ConfigureAwait(false);
+        ], TestContext.CancellationToken).ConfigureAwait(false);
 
         string preMoveDid = $"did:webvh:{log.Scid}:{originDomain}";
 
@@ -346,7 +346,7 @@ internal sealed class WebVhCrossWireFlowTests
         [
             new WebVhEntryPlan(controller, [controller.Multikey], NextKeyHashes: null, Deactivated: false, GenesisTime, Portable: true),
             new WebVhEntryPlan(controller, [controller.Multikey], NextKeyHashes: null, Deactivated: false, SecondTime, MoveToDomain: movedDomain)
-        ]).ConfigureAwait(false);
+        ], TestContext.CancellationToken).ConfigureAwait(false);
 
         string preMoveDid = $"did:webvh:{log.Scid}:{originDomain}";
 
@@ -389,7 +389,7 @@ internal sealed class WebVhCrossWireFlowTests
         [
             new WebVhEntryPlan(controller, [controller.Multikey], NextKeyHashes: null, Deactivated: false, GenesisTime, Portable: true),
             new WebVhEntryPlan(controller, [controller.Multikey], NextKeyHashes: null, Deactivated: false, SecondTime, MoveToDomain: movedDomain, Authentication: authentication)
-        ]).ConfigureAwait(false);
+        ], TestContext.CancellationToken).ConfigureAwait(false);
 
         string preMoveDid = $"did:webvh:{log.Scid}:{originDomain}";
         string expectedVerificationMethodId = $"{log.Did}#key-1";
@@ -444,7 +444,7 @@ internal sealed class WebVhCrossWireFlowTests
         [
             new WebVhEntryPlan(controller, [controller.Multikey], NextKeyHashes: null, Deactivated: false, GenesisTime, Portable: true),
             new WebVhEntryPlan(controller, [controller.Multikey], NextKeyHashes: null, Deactivated: false, SecondTime, MoveToDomain: movedDomain, ExtraMoveAlsoKnownAs: [thirdDid])
-        ]).ConfigureAwait(false);
+        ], TestContext.CancellationToken).ConfigureAwait(false);
 
         byte[] logBytes = Encoding.UTF8.GetBytes(string.Join('\n', log.Lines));
 
@@ -482,7 +482,7 @@ internal sealed class WebVhCrossWireFlowTests
         string domain = $"localhost%3A{port}";
 
         using WebVhController controller = WebVhController.Create();
-        WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(domain, controller, GenesisTime).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
 
         nodeA.Publish("/.well-known/did.jsonl", Encoding.UTF8.GetBytes(string.Join('\n', log.Lines)), "application/jsonl");
 

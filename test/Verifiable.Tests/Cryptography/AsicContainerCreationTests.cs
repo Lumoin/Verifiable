@@ -280,7 +280,7 @@ internal sealed class AsicContainerCreationTests
             SigningDelegate signing = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(algorithm, purpose);
             (Signature signatureValue, _) = await signing(
                 privateKey.AsReadOnlyMemory(), preparation.SignaturePreparation.SigningInput.AsReadOnlyMemory(), BaseMemoryPool.Shared,
-                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+                null, TestContext.CancellationToken).ConfigureAwait(false);
 
             using(signatureValue)
             {

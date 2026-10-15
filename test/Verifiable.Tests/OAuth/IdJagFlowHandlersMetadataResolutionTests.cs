@@ -58,14 +58,16 @@ internal sealed class IdJagFlowHandlersMetadataResolutionTests
             Audience = "https://resource-as.example.com/",
             SubjectToken = "subject-token-opaque",
             SubjectTokenType = TokenType.IdToken,
-            SigningKey = signingKey,
-            SigningKeyId = "client-key-1",
-            HeaderSerializer = HeaderSerializer,
-            PayloadSerializer = PayloadSerializer
+            ClientAssertion = new ClientAssertionOptions
+            {
+                SigningKeyId = "client-key-1",
+                HeaderSerializer = HeaderSerializer,
+                PayloadSerializer = PayloadSerializer
+            }
         };
 
         Result<TokenResponse, OAuthParseError> result = await IdJagFlowHandlers.MintAsync(
-            options, infrastructure, registration, [], TestContext.CancellationToken).ConfigureAwait(false);
+            options, infrastructure, registration with { AuthenticationKeyMaterial = keyMaterial }, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSuccess);
         OAuthAuthorizationServerMetadataUnresolved failure =
@@ -94,14 +96,16 @@ internal sealed class IdJagFlowHandlersMetadataResolutionTests
         IdJagRedeemOptions options = new()
         {
             Assertion = "id-jag-assertion-opaque",
-            SigningKey = signingKey,
-            SigningKeyId = "client-key-1",
-            HeaderSerializer = HeaderSerializer,
-            PayloadSerializer = PayloadSerializer
+            ClientAssertion = new ClientAssertionOptions
+            {
+                SigningKeyId = "client-key-1",
+                HeaderSerializer = HeaderSerializer,
+                PayloadSerializer = PayloadSerializer
+            }
         };
 
         Result<TokenResponse, OAuthParseError> result = await IdJagFlowHandlers.RedeemAsync(
-            options, infrastructure, registration, [], TestContext.CancellationToken).ConfigureAwait(false);
+            options, infrastructure, registration with { AuthenticationKeyMaterial = keyMaterial }, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSuccess);
         OAuthAuthorizationServerMetadataUnresolved failure =
@@ -136,14 +140,16 @@ internal sealed class IdJagFlowHandlersMetadataResolutionTests
             Audience = "https://resource-as.example.com/",
             SubjectToken = "subject-token-opaque",
             SubjectTokenType = TokenType.IdToken,
-            SigningKey = signingKey,
-            SigningKeyId = "client-key-1",
-            HeaderSerializer = HeaderSerializer,
-            PayloadSerializer = PayloadSerializer
+            ClientAssertion = new ClientAssertionOptions
+            {
+                SigningKeyId = "client-key-1",
+                HeaderSerializer = HeaderSerializer,
+                PayloadSerializer = PayloadSerializer
+            }
         };
 
         Result<TokenResponse, OAuthParseError> result = await IdJagFlowHandlers.MintAsync(
-            options, infrastructure, registration, [], TestContext.CancellationToken).ConfigureAwait(false);
+            options, infrastructure, registration with { AuthenticationKeyMaterial = keyMaterial }, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSuccess);
         OAuthOutboundFetchPolicyDenied failure = Assert.IsInstanceOfType<OAuthOutboundFetchPolicyDenied>(result.Error);
@@ -171,14 +177,16 @@ internal sealed class IdJagFlowHandlersMetadataResolutionTests
         IdJagRedeemOptions options = new()
         {
             Assertion = "id-jag-assertion-opaque",
-            SigningKey = signingKey,
-            SigningKeyId = "client-key-1",
-            HeaderSerializer = HeaderSerializer,
-            PayloadSerializer = PayloadSerializer
+            ClientAssertion = new ClientAssertionOptions
+            {
+                SigningKeyId = "client-key-1",
+                HeaderSerializer = HeaderSerializer,
+                PayloadSerializer = PayloadSerializer
+            }
         };
 
         Result<TokenResponse, OAuthParseError> result = await IdJagFlowHandlers.RedeemAsync(
-            options, infrastructure, registration, [], TestContext.CancellationToken).ConfigureAwait(false);
+            options, infrastructure, registration with { AuthenticationKeyMaterial = keyMaterial }, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSuccess);
         OAuthOutboundFetchPolicyDenied failure = Assert.IsInstanceOfType<OAuthOutboundFetchPolicyDenied>(result.Error);

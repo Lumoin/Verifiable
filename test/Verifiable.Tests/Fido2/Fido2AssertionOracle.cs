@@ -255,7 +255,7 @@ internal sealed class Fido2AssertionOracle: IDisposable
         byte[] toBeSigned = Fido2TestVectors.Concat(authenticatorData, clientDataHash.AsReadOnlySpan().ToArray());
 
         Signature mintedSignature = await KeyMaterial.PrivateKey.SignAsync(
-            toBeSigned, IndependentSigner, BaseMemoryPool.Shared, context: null).ConfigureAwait(false);
+            toBeSigned, IndependentSigner, BaseMemoryPool.Shared, context: null, cancellationToken).ConfigureAwait(false);
         Signature signature = ReencodeToDerIfEc(mintedSignature, CredentialPublicKey.Alg, BaseMemoryPool.Shared);
 
         return new MintedAssertion(authenticatorData, clientDataJson, signature);

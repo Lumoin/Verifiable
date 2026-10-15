@@ -241,7 +241,7 @@ namespace Verifiable.Tests.Cryptography
         {
             ReadOnlyMemory<byte> data = TestData;
             (Signature signature, CryptoEvent? _) = await sign(privateKey.AsReadOnlyMemory(), data, BaseMemoryPool.Shared,
-                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+                null, TestContext.CancellationToken).ConfigureAwait(false);
             using var disposableSignature = signature;
 
             Assert.IsGreaterThan(0, signature.AsReadOnlyMemory().Length);

@@ -54,7 +54,7 @@ namespace Verifiable.Tests.Cryptography
             using var privateKey = keys.PrivateKey;
 
             ReadOnlyMemory<byte> data = TestData;
-            using var signature = await privateKey.SignAsync(data, LibsodiumCryptographicFunctionsAdapter.SignEd25519Async, BaseMemoryPool.Shared)
+            using var signature = await privateKey.SignAsync(data, LibsodiumCryptographicFunctionsAdapter.SignEd25519Async, BaseMemoryPool.Shared, null, TestContext.CancellationToken)
                 .ConfigureAwait(false);
 
             Assert.IsTrue(await publicKey.VerifyAsync(data, signature, LibsodiumCryptographicFunctionsAdapter.VerifyEd25519Async)
@@ -75,7 +75,7 @@ namespace Verifiable.Tests.Cryptography
             using var privateKey = new PrivateKey(keys.PrivateKey, "ed25519-test", LibsodiumCryptographicFunctionsAdapter.SignEd25519Async);
 
             ReadOnlyMemory<byte> data = TestData;
-            using var signature = await privateKey.SignAsync(data, BaseMemoryPool.Shared).ConfigureAwait(false);
+            using var signature = await privateKey.SignAsync(data, BaseMemoryPool.Shared, null, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsTrue(await publicKey.VerifyAsync(data, signature).ConfigureAwait(false));
         }
@@ -373,7 +373,7 @@ namespace Verifiable.Tests.Cryptography
             ReadOnlyMemory<byte> data = TestData;
 
             _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
-                await LibsodiumCryptographicFunctions.SignEd25519Async(wrongLengthPrivateKey, data, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch))
+                await LibsodiumCryptographicFunctions.SignEd25519Async(wrongLengthPrivateKey, data, BaseMemoryPool.Shared, new FakeTimeProvider(TestClock.CanonicalEpoch), null, TestContext.CancellationToken)
                 .ConfigureAwait(false)).ConfigureAwait(false);
         }
 
@@ -428,7 +428,7 @@ namespace Verifiable.Tests.Cryptography
             using var privateKey = keys.PrivateKey;
 
             ReadOnlyMemory<byte> data = TestData;
-            using var signature = await privateKey.SignAsync(data, LibsodiumCryptographicFunctionsAdapter.SignEd25519Async, BaseMemoryPool.Shared)
+            using var signature = await privateKey.SignAsync(data, LibsodiumCryptographicFunctionsAdapter.SignEd25519Async, BaseMemoryPool.Shared, null, TestContext.CancellationToken)
                 .ConfigureAwait(false);
 
             byte[] tamperedSignature = signature.AsReadOnlySpan().ToArray();
@@ -474,7 +474,7 @@ namespace Verifiable.Tests.Cryptography
             Assert.IsTrue(derivedPublicKey.SequenceEqual(expectedPublicKey), "The seed must derive the RFC 8032 known-answer public key.");
 
             ReadOnlyMemory<byte> dataToSign = message;
-            (Signature signature, CryptoEvent? _) = await LibsodiumCryptographicFunctions.SignEd25519Async(seed, dataToSign, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
+            var (signature, _) = await LibsodiumCryptographicFunctions.SignEd25519Async(seed, dataToSign, BaseMemoryPool.Shared, new FakeTimeProvider(TestClock.CanonicalEpoch), null, TestContext.CancellationToken).ConfigureAwait(false);
             using Signature disposableSignature = signature;
 
             Assert.IsTrue(

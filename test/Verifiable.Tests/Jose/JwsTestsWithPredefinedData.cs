@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Collections.Frozen;
 using System.Security.Cryptography;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -38,7 +39,7 @@ internal sealed class JwsTestsWithPredefinedData
 
         //Signs with framework ECDsa, independent of the project's own crypto drivers — the
         //self-consistency firewall this file's jwt.io cross-checks rely on.
-        ValueTask<SigningResult> signingDelegate(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, System.Collections.Frozen.FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        ValueTask<SigningResult> signingDelegate(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, FrozenDictionary<string, object>? context, CancellationToken cancellationToken)
         {
             using ECDsa key = ECDsa.Create(new ECParameters { Curve = curve, D = privateKeyBytes.ToArray() });
             byte[] signatureBytes = key.SignData(dataToSign.Span, hashAlgorithm);
@@ -74,7 +75,7 @@ signingDelegate,
 
         //Verifies with framework ECDsa, independent of the project's own crypto drivers — an
         //independent-oracle check of the signature Jws.SignAsync produced.
-        ValueTask<(bool IsVerified, CryptoEvent? Event)> verificationDelegate(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> publicKeyBytes, System.Collections.Frozen.FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        ValueTask<(bool IsVerified, CryptoEvent? Event)> verificationDelegate(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> publicKeyBytes, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             using ECDsa key = ECDsa.Create();
             key.ImportSubjectPublicKeyInfo(publicKeyBytes.Span, out _);
@@ -109,7 +110,7 @@ verificationDelegate,
 
         //RSA-PKCS1 signing is deterministic — this framework implementation recomputes jwt.io's
         //exact signature, the self-consistency firewall the full-JWT assertion below relies on.
-        ValueTask<SigningResult> signingDelegate(ReadOnlyMemory<byte> privKey, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, System.Collections.Frozen.FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        ValueTask<SigningResult> signingDelegate(ReadOnlyMemory<byte> privKey, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, FrozenDictionary<string, object>? context, CancellationToken cancellationToken)
         {
             using RSA key = RSA.Create();
             key.ImportPkcs8PrivateKey(privKey.Span, out _);
@@ -153,7 +154,7 @@ signingDelegate,
 
         //Signs with framework RSA-PSS, independent of the project's own crypto drivers — the
         //self-consistency firewall this file's jwt.io cross-checks rely on.
-        ValueTask<SigningResult> signingDelegate(ReadOnlyMemory<byte> privKey, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, System.Collections.Frozen.FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        ValueTask<SigningResult> signingDelegate(ReadOnlyMemory<byte> privKey, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, FrozenDictionary<string, object>? context, CancellationToken cancellationToken)
         {
             using RSA key = RSA.Create();
             key.ImportPkcs8PrivateKey(privKey.Span, out _);
@@ -183,7 +184,7 @@ signingDelegate,
         //of the project's own crypto drivers, closing the self-consistency-firewall loop.
         using PublicKeyMemory publicKey = CreatePublicKeyMemory(publicKeyBytes, CryptoTags.Rsa2048PublicKey);
 
-        ValueTask<(bool IsVerified, CryptoEvent? Event)> verificationDelegate(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> pubKey, System.Collections.Frozen.FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        ValueTask<(bool IsVerified, CryptoEvent? Event)> verificationDelegate(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> pubKey, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             using RSA key = RSA.Create();
             key.ImportSubjectPublicKeyInfo(pubKey.Span, out _);

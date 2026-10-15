@@ -384,7 +384,7 @@ internal static class EArkCapstoneSource
 
         SigningDelegate sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.P256, Purpose.Signing);
         using Signature signatureValueP1363 = (await sign(
-            signerPrivateKeyOwner.Memory, preparation.SignaturePreparation.SigningInput.AsReadOnlyMemory(), BaseMemoryPool.Shared, cancellationToken: cancellationToken).ConfigureAwait(false)).Signature;
+            signerPrivateKeyOwner.Memory, preparation.SignaturePreparation.SigningInput.AsReadOnlyMemory(), BaseMemoryPool.Shared, null, cancellationToken).ConfigureAwait(false)).Signature;
         using IMemoryOwner<byte> signatureValueDer = EcdsaSignatureEncoding.ConvertP1363ToDer(
             signatureValueP1363.AsReadOnlySpan(), BaseMemoryPool.Shared, out int derLength);
         using AsicContainerCreationResult created = AsicContainerCreation.CompleteSignature(

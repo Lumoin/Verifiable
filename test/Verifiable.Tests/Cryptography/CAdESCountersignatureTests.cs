@@ -872,7 +872,7 @@ internal sealed class CAdESCountersignatureTests
             SigningDelegate signing = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(algorithm, purpose);
             (Signature signature, CryptoEvent? evt) = await signing(
                 CountersignerPrivateKey.AsReadOnlyMemory(), preparation.SigningInput.AsReadOnlyMemory(), BaseMemoryPool.Shared,
-                cancellationToken: cancellationToken).ConfigureAwait(false);
+                null, cancellationToken).ConfigureAwait(false);
 
             using(signature)
             {

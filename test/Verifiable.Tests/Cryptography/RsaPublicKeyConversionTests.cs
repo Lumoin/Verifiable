@@ -68,10 +68,10 @@ internal sealed class RsaPublicKeyConversionTests
                 jwk, WellKnownJwaValues.Rs256, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared);
 
             (Signature signatureThree, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.SignRsa2048Async(
-                privateThree, message, BaseMemoryPool.Shared, clock, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+                privateThree, message, BaseMemoryPool.Shared, clock, null, TestContext.CancellationToken).ConfigureAwait(false);
             using Signature ownedThree = signatureThree;
             (Signature signature65537, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.SignRsa2048Async(
-                private65537, message, BaseMemoryPool.Shared, clock, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+                private65537, message, BaseMemoryPool.Shared, clock, null, TestContext.CancellationToken).ConfigureAwait(false);
             using Signature owned65537 = signature65537;
 
             Assert.IsTrue(await VerifyAsync(useMicrosoft, message, signatureThree, keyThree).ConfigureAwait(false),

@@ -1100,7 +1100,7 @@ internal sealed class TpmInHouseSimulatorSignTests
             TpmCryptographicFunctionsAdapter.SignAsync,
             TpmCryptographicFunctions.CreateP256SigningContext(tpm));
 
-        using Signature signature = await privateKey.SignAsync(MessageBytes, pool).ConfigureAwait(false);
+        using var signature = await privateKey.SignAsync(MessageBytes, pool, null, TestContext.CancellationToken).ConfigureAwait(false);
 
         //Verify with the library's registered software P-256 verifier, from a public key reconstructed solely from
         //the TPM's exported public area (compressed SEC1 point, as the verifier requires).

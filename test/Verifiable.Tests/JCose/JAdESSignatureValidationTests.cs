@@ -574,7 +574,7 @@ internal sealed class JAdESSignatureValidationTests
         //§5.1 concatenation a second time.
         using IMemoryOwner<byte> signingInput = Jws.RentSigningInput(
             protectedSegment, payload, true, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared, out int length);
-        (Signature signature, _) = await MicrosoftCryptographicFunctions.SignP256Async(privateKey.AsReadOnlyMemory(), signingInput.Memory[..length], BaseMemoryPool.Shared, cancellationToken: cancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
+        (Signature signature, _) = await MicrosoftCryptographicFunctions.SignP256Async(privateKey.AsReadOnlyMemory(), signingInput.Memory[..length], BaseMemoryPool.Shared, new FakeTimeProvider(TestClock.CanonicalEpoch), null, cancellationToken).ConfigureAwait(false);
 
         using(signature)
         {

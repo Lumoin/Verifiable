@@ -192,7 +192,7 @@ public static class PresentationDataIntegrityExtensions
             proofOptionsDigest.AsReadOnlySpan().CopyTo(hashData);
             presentationDigest.AsReadOnlySpan().CopyTo(hashData[proofOptionsDigest.Length..]);
 
-            using var signature = await privateKey.SignAsync(hashDataOwner.Memory, memoryPool)
+            using var signature = await privateKey.SignAsync(hashDataOwner.Memory, memoryPool, cancellationToken)
                 .ConfigureAwait(false);
 
             //Attach the proof value to the pre-signed skeleton — the only member the

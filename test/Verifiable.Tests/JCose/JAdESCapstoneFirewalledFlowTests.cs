@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
+using System.Collections.Frozen;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -207,7 +208,7 @@ internal sealed class JAdESCapstoneFirewalledFlowTests
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> placeholderKeyMaterial = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using PrivateKeyMemory placeholderPrivateKey = placeholderKeyMaterial.PrivateKey;
         placeholderKeyMaterial.PublicKey.Dispose();
-        ValueTask<SigningResult> signingDelegate(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, System.Collections.Frozen.FrozenDictionary<string, object>? context = null, CancellationToken ct = default) =>
+        ValueTask<SigningResult> signingDelegate(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, FrozenDictionary<string, object>? context, CancellationToken ct) =>
             SignWithEcdsaAsync(signer.SigningKey, dataToSign, signaturePool);
 
         DigestValue signingCertificateDigest = await CryptographicKeyEvents.ComputeDigestAsync(

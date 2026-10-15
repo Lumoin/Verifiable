@@ -129,7 +129,7 @@ public static class Cose
             privateKey.AsReadOnlyMemory(),
             toBeSigned,
             signaturePool,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+            null, cancellationToken).ConfigureAwait(false);
 
         if(evt is not null)
         {
@@ -371,7 +371,7 @@ public static class Cose
         }
 
         using PrivateKey privateKey = await binder(material, binderState, cancellationToken).ConfigureAwait(false);
-        Signature signature = await privateKey.SignAsync(toBeSigned, pool).ConfigureAwait(false);
+        var signature = await privateKey.SignAsync(toBeSigned, pool, null, cancellationToken).ConfigureAwait(false);
 
         return new CoseSign1Message(
             protectedHeader,

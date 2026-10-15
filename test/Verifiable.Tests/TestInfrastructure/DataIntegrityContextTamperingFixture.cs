@@ -223,7 +223,7 @@ internal static class DataIntegrityContextTamperingFixture
     /// <summary>
     /// Signs an eddsa-jcs-2022 presentation for the holder of <paramref name="holderDidDocument"/> with the document's
     /// first verification method, through
-    /// <see cref="SignJcsPresentationAsync(string, string, PrivateKeyMemory, string?, string?, DateTime, List{VerifiableCredential}?, List{EnvelopedVerifiableCredential}?)"/>.
+    /// <see cref="SignJcsPresentationAsync(string, string, PrivateKeyMemory, string?, string?, DateTime, CancellationToken, List{VerifiableCredential}?, List{EnvelopedVerifiableCredential}?)"/>.
     /// </summary>
     /// <param name="holderDidDocument">
     /// The holder's DID document: its first verification method signs, and its <c>id</c> is the presentation's holder.
@@ -232,11 +232,13 @@ internal static class DataIntegrityContextTamperingFixture
     /// <param name="challenge">The challenge to bind into the proof, or <see langword="null"/> for none.</param>
     /// <param name="domain">The domain to bind into the proof, or <see langword="null"/> for none.</param>
     /// <param name="proofCreated">The instant written into the proof's <c>created</c> member.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The secured presentation.</returns>
     public static Task<DataIntegritySecuredPresentation> SignJcsPresentationAsync(
-        DidDocument holderDidDocument, PrivateKeyMemory privateKey, string? challenge, string? domain, DateTime proofCreated) =>
+        DidDocument holderDidDocument, PrivateKeyMemory privateKey, string? challenge, string? domain, DateTime proofCreated,
+        CancellationToken cancellationToken) =>
         SignJcsPresentationAsync(
-            holderDidDocument.Id!.ToString(), holderDidDocument.VerificationMethod![0].Id!, privateKey, challenge, domain, proofCreated);
+            holderDidDocument.Id!.ToString(), holderDidDocument.VerificationMethod![0].Id!, privateKey, challenge, domain, proofCreated, cancellationToken);
 
 
     /// <summary>
@@ -257,6 +259,7 @@ internal static class DataIntegrityContextTamperingFixture
     /// <param name="challenge">The challenge to bind into the proof, or <see langword="null"/> for none.</param>
     /// <param name="domain">The domain to bind into the proof, or <see langword="null"/> for none.</param>
     /// <param name="proofCreated">The instant written into the proof's <c>created</c> member.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     /// <param name="containedCredentials">The presentation's <c>verifiableCredential</c> entries, or <see langword="null"/> for none.</param>
     /// <param name="envelopedCredentials">The presentation's enveloped credential entries, or <see langword="null"/> for none.</param>
     /// <returns>The secured presentation.</returns>
@@ -267,6 +270,7 @@ internal static class DataIntegrityContextTamperingFixture
         string? challenge,
         string? domain,
         DateTime proofCreated,
+        CancellationToken cancellationToken,
         List<VerifiableCredential>? containedCredentials = null,
         List<EnvelopedVerifiableCredential>? envelopedCredentials = null)
     {
@@ -306,7 +310,7 @@ internal static class DataIntegrityContextTamperingFixture
         HashCanonical(proofOptionsSerialized, hashData.Span[..32]);
         HashCanonical(presentationSerialized, hashData.Span[32..]);
 
-        using Signature signature = await signerPrivateKey.SignAsync(hashData, BaseMemoryPool.Shared).ConfigureAwait(false);
+        using var signature = await signerPrivateKey.SignAsync(hashData, BaseMemoryPool.Shared, cancellationToken).ConfigureAwait(false);
         newProof.ProofValue = ProofValueCodecs.EncodeBase58Btc(signature.AsReadOnlySpan(), TestSetup.Base58Encoder, BaseMemoryPool.Shared);
 
         return new DataIntegritySecuredPresentation
@@ -705,7 +709,7 @@ internal static class DataIntegrityContextTamperingFixture
         prepared.EphemeralPublicKeyWithHeader.Memory.Span.CopyTo(signData.Memory.Span[proofHash.Length..]);
         prepared.MandatoryHash.CopyTo(signData.Memory.Span[(proofHash.Length + publicKeyLength)..]);
 
-        using Signature baseSignature = await issuerPrivateKey.SignAsync(signData.Memory[..signDataLength], BaseMemoryPool.Shared).ConfigureAwait(false);
+        using var baseSignature = await issuerPrivateKey.SignAsync(signData.Memory[..signDataLength], BaseMemoryPool.Shared, cancellationToken).ConfigureAwait(false);
 
         //A re-signing that did not cover these sign data would leave a proof that fails its signature check, and a test
         //that expects the purpose to be refused would stay green for the wrong reason: the fixture fails here instead.

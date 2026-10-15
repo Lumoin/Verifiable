@@ -78,7 +78,7 @@ internal sealed class WebVhDidUrlDereferencerTests
     public async Task PathDereferencesFileBytes()
     {
         using WebVhController controller = WebVhController.Create();
-        WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
 
         byte[] served = Encoding.UTF8.GetBytes("{\"issuers\":[\"did:webvh:issuer\"]}");
         var routes = LogRoutes(log);
@@ -102,7 +102,7 @@ internal sealed class WebVhDidUrlDereferencerTests
     public async Task PathDereferenceMaxAgeResponseReportsThatManySecondsOfStorableFreshness()
     {
         using WebVhController controller = WebVhController.Create();
-        WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
 
         byte[] served = Encoding.UTF8.GetBytes("{\"issuers\":[\"did:webvh:issuer\"]}");
         var routes = LogRoutes(log);
@@ -128,7 +128,7 @@ internal sealed class WebVhDidUrlDereferencerTests
     public async Task PathDereferenceNon200ResponseReportsNonStorableFreshness()
     {
         using WebVhController controller = WebVhController.Create();
-        WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
 
         var routes = LogRoutes(log);
         routes["https://example.com/governance/issuers.json"] = (404, null, null);
@@ -149,7 +149,7 @@ internal sealed class WebVhDidUrlDereferencerTests
     public async Task PathNotFoundWhenFileMissing()
     {
         using WebVhController controller = WebVhController.Create();
-        WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
 
         //The #files endpoint resolves but the targeted file is served as a 404.
         var routes = LogRoutes(log);
@@ -174,7 +174,7 @@ internal sealed class WebVhDidUrlDereferencerTests
         //An explicit #files service whose endpoint scheme is not HTTP(S) is an invalidDid (the resolved DID is
         //valid, but the DID URL cannot be dereferenced over a supported transport).
         WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(
-            Domain, controller, GenesisTime, explicitFilesServiceEndpoint: "ftp://example.com/").ConfigureAwait(false);
+            Domain, controller, GenesisTime, explicitFilesServiceEndpoint: "ftp://example.com/", cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         DidDereferencingResult result = await DereferenceAsync($"{log.Did}/governance/issuers.json", LogRoutes(log)).ConfigureAwait(false);
 
@@ -203,7 +203,7 @@ internal sealed class WebVhDidUrlDereferencerTests
     public async Task PathFetchCancellationCarriedInsideTheTransportFaultPropagates(string cancellationShape, bool isCallerCancelled)
     {
         using WebVhController controller = WebVhController.Create();
-        WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
         using CancellationTokenSource caller = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
 
         //The DID Log is served, so the base DID resolves; only the resource fetch meets the cancellation.
@@ -229,10 +229,10 @@ internal sealed class WebVhDidUrlDereferencerTests
     {
         using WebVhController controller = WebVhController.Create();
         using WebVhController authentication = WebVhController.Create();
-        WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, authentication: authentication).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, authentication: authentication, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string whois = await WebVhTestLog.MintWhoisPresentationAsync(
-            log.Did, authentication, GenesisTime, SerializePresentation, SerializeProofOptions).ConfigureAwait(false);
+            log.Did, authentication, GenesisTime, SerializePresentation, SerializeProofOptions, TestContext.CancellationToken).ConfigureAwait(false);
 
         var routes = LogRoutes(log);
         routes[WhoisUrl] = (200, Encoding.UTF8.GetBytes(whois), WellKnownWebVhValues.WhoisMediaType);
@@ -254,10 +254,10 @@ internal sealed class WebVhDidUrlDereferencerTests
     {
         using WebVhController controller = WebVhController.Create();
         using WebVhController authentication = WebVhController.Create();
-        WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, authentication: authentication).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, authentication: authentication, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string whois = await WebVhTestLog.MintWhoisPresentationAsync(
-            log.Did, authentication, GenesisTime, SerializePresentation, SerializeProofOptions).ConfigureAwait(false);
+            log.Did, authentication, GenesisTime, SerializePresentation, SerializeProofOptions, TestContext.CancellationToken).ConfigureAwait(false);
 
         //Flip the last character of the proofValue so the signature no longer verifies.
         string tampered = TamperProofValue(whois);
@@ -282,12 +282,12 @@ internal sealed class WebVhDidUrlDereferencerTests
         using WebVhController controller = WebVhController.Create();
         using WebVhController authentication = WebVhController.Create();
         using WebVhController foreign = WebVhController.Create();
-        WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, authentication: authentication).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, authentication: authentication, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //The presentation is signed by a key that is NOT the document's authentication key. The verify resolves
         //the verification method through authentication and fails to find the foreign key.
         string whois = await WebVhTestLog.MintWhoisPresentationAsync(
-            log.Did, foreign, GenesisTime, SerializePresentation, SerializeProofOptions).ConfigureAwait(false);
+            log.Did, foreign, GenesisTime, SerializePresentation, SerializeProofOptions, TestContext.CancellationToken).ConfigureAwait(false);
 
         var routes = LogRoutes(log);
         routes[WhoisUrl] = (200, Encoding.UTF8.GetBytes(whois), WellKnownWebVhValues.WhoisMediaType);
@@ -308,12 +308,12 @@ internal sealed class WebVhDidUrlDereferencerTests
     {
         using WebVhController controller = WebVhController.Create();
         using WebVhController authentication = WebVhController.Create();
-        WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, authentication: authentication).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, authentication: authentication, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //A presentation re-signed WITHOUT the DID's credential: it verifies cryptographically (the proof covers
         //the credential-less presentation), so the rejection is specifically the missing-credential-about-DID
         //conformance gate, not a signature failure.
-        string withoutCredential = await ReSignWithoutCredentialAsync(log.Did, authentication).ConfigureAwait(false);
+        var withoutCredential = await ReSignWithoutCredentialAsync(log.Did, authentication, TestContext.CancellationToken).ConfigureAwait(false);
 
         var routes = LogRoutes(log);
         routes[WhoisUrl] = (200, Encoding.UTF8.GetBytes(withoutCredential), WellKnownWebVhValues.WhoisMediaType);
@@ -334,13 +334,13 @@ internal sealed class WebVhDidUrlDereferencerTests
     {
         using WebVhController controller = WebVhController.Create();
         using WebVhController authentication = WebVhController.Create();
-        WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, authentication: authentication).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, authentication: authentication, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //A whois minted WITH a challenge/domain replay binding: the static linked-presentation verify is
         //fail-closed against a bound proof, so even a cryptographically valid presentation is rejected.
         string whois = await WebVhTestLog.MintWhoisPresentationAsync(
             log.Did, authentication, GenesisTime, SerializePresentation, SerializeProofOptions,
-            boundChallenge: "challenge-abc", boundDomain: "verifier.example").ConfigureAwait(false);
+            boundChallenge: "challenge-abc", boundDomain: "verifier.example", cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var routes = LogRoutes(log);
         routes[WhoisUrl] = (200, Encoding.UTF8.GetBytes(whois), WellKnownWebVhValues.WhoisMediaType);
@@ -361,7 +361,7 @@ internal sealed class WebVhDidUrlDereferencerTests
     {
         using WebVhController controller = WebVhController.Create();
         using WebVhController authentication = WebVhController.Create();
-        WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, authentication: authentication).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, authentication: authentication, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //The base DID resolves, but no whois.vp is served (a 404 at its endpoint).
         var routes = LogRoutes(log);
@@ -394,7 +394,7 @@ internal sealed class WebVhDidUrlDereferencerTests
     public async Task WhoisParseCancellationCarriedInsideTheParserFaultPropagates(string cancellationShape, bool isCallerCancelled)
     {
         using WebVhController controller = WebVhController.Create();
-        WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
         using CancellationTokenSource caller = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
         VerifiablePresentation CancelledPresentationParser(string serialized)
         {
@@ -431,7 +431,7 @@ internal sealed class WebVhDidUrlDereferencerTests
         //An explicit #files service overrides the implicit one (did:webvh v1.0, DID URL Path Resolution); the
         //path is dereferenced against the explicit endpoint, not the DID's default web location.
         WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(
-            Domain, controller, GenesisTime, explicitFilesServiceEndpoint: "https://files.example/").ConfigureAwait(false);
+            Domain, controller, GenesisTime, explicitFilesServiceEndpoint: "https://files.example/", cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         byte[] served = Encoding.UTF8.GetBytes("{\"issuers\":[]}");
         var routes = LogRoutes(log);
@@ -463,7 +463,7 @@ internal sealed class WebVhDidUrlDereferencerTests
         //bare string. The file is served ONLY at that endpoint, so a successful dereference proves the map form
         //was resolved.
         WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(
-            Domain, controller, GenesisTime, explicitFilesServiceEndpointMap: "https://files.example/").ConfigureAwait(false);
+            Domain, controller, GenesisTime, explicitFilesServiceEndpointMap: "https://files.example/", cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         byte[] served = Encoding.UTF8.GetBytes("{\"issuers\":[]}");
         var routes = LogRoutes(log);
@@ -492,10 +492,10 @@ internal sealed class WebVhDidUrlDereferencerTests
         const string explicitWhoisUrl = "https://whois.example/custom-whois.vp";
 
         WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(
-            Domain, controller, GenesisTime, authentication: authentication, explicitWhoisServiceEndpoint: explicitWhoisUrl).ConfigureAwait(false);
+            Domain, controller, GenesisTime, authentication: authentication, explicitWhoisServiceEndpoint: explicitWhoisUrl, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string whois = await WebVhTestLog.MintWhoisPresentationAsync(
-            log.Did, authentication, GenesisTime, SerializePresentation, SerializeProofOptions).ConfigureAwait(false);
+            log.Did, authentication, GenesisTime, SerializePresentation, SerializeProofOptions, TestContext.CancellationToken).ConfigureAwait(false);
 
         var routes = LogRoutes(log);
 
@@ -526,14 +526,14 @@ internal sealed class WebVhDidUrlDereferencerTests
         const string parallelDidWeb = "did:web:example.com";
 
         WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(
-            Domain, controller, GenesisTime, authentication: authentication, genesisAlsoKnownAs: [parallelDidWeb]).ConfigureAwait(false);
+            Domain, controller, GenesisTime, authentication: authentication, genesisAlsoKnownAs: [parallelDidWeb], cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         //The whois proof references the did:web DID's verification method (#key-1), signed by the SAME
         //authentication key. The resolved did:webvh document's authentication method shares the fragment, so the
         //resolver cross-verifies the proof against the resolved document.
         string whois = await WebVhTestLog.MintWhoisPresentationAsync(
             log.Did, authentication, GenesisTime, SerializePresentation, SerializeProofOptions,
-            verificationMethodId: $"{parallelDidWeb}#key-1").ConfigureAwait(false);
+            verificationMethodId: $"{parallelDidWeb}#key-1", cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var routes = LogRoutes(log);
         routes[WhoisUrl] = (200, Encoding.UTF8.GetBytes(whois), WellKnownWebVhValues.WhoisMediaType);
@@ -557,11 +557,11 @@ internal sealed class WebVhDidUrlDereferencerTests
         using WebVhController authentication = WebVhController.Create();
 
         //No alsoKnownAs is declared, so a proof referencing a did:web DID has no established parallel pairing.
-        WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, authentication: authentication).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, authentication: authentication, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string whois = await WebVhTestLog.MintWhoisPresentationAsync(
             log.Did, authentication, GenesisTime, SerializePresentation, SerializeProofOptions,
-            verificationMethodId: "did:web:unrelated.example#key-1").ConfigureAwait(false);
+            verificationMethodId: "did:web:unrelated.example#key-1", cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         var routes = LogRoutes(log);
         routes[WhoisUrl] = (200, Encoding.UTF8.GetBytes(whois), WellKnownWebVhValues.WhoisMediaType);
@@ -582,7 +582,7 @@ internal sealed class WebVhDidUrlDereferencerTests
     public async Task PathWithUnknownVersionQueryIsNotFound()
     {
         using WebVhController controller = WebVhController.Create();
-        WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
 
         //The file IS served, so the only reason to fail is the version query: a versionId that does not exist
         //makes base resolution NotFound, proving the DID-URL version query is threaded into resolution rather
@@ -610,7 +610,7 @@ internal sealed class WebVhDidUrlDereferencerTests
         [
             new WebVhEntryPlan(controller, [controller.Multikey], NextKeyHashes: null, Deactivated: false, GenesisTime),
             new WebVhEntryPlan(controller, [controller.Multikey], NextKeyHashes: null, Deactivated: false, "2025-02-01T00:00:00Z")
-        ]).ConfigureAwait(false);
+        ], TestContext.CancellationToken).ConfigureAwait(false);
 
         DidDereferencingResult result = await DereferenceAsync($"{log.Did}?versionId={log.VersionIds[0]}", LogRoutes(log)).ConfigureAwait(false);
 
@@ -626,7 +626,7 @@ internal sealed class WebVhDidUrlDereferencerTests
     public async Task QueryOnlyUnknownVersionIdIsNotFound()
     {
         using WebVhController controller = WebVhController.Create();
-        WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
 
         DidDereferencingResult result = await DereferenceAsync(
             $"{log.Did}?versionId=9-QmUnknownVersionXXXXXXXXXXXXXXXXXXXXXXXXXXXX", LogRoutes(log)).ConfigureAwait(false);
@@ -669,8 +669,9 @@ internal sealed class WebVhDidUrlDereferencerTests
     /// </summary>
     /// <param name="did">The DID the presentation's holder names.</param>
     /// <param name="authentication">The controller of the DID's authentication key, which signs.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The signed presentation's JSON text.</returns>
-    private static async Task<string> ReSignWithoutCredentialAsync(string did, WebVhController authentication)
+    private static async Task<string> ReSignWithoutCredentialAsync(string did, WebVhController authentication, CancellationToken cancellationToken)
     {
         VerifiablePresentation unsigned = new()
         {
@@ -697,7 +698,7 @@ internal sealed class WebVhDidUrlDereferencerTests
         HashCanonical(proofOptionsSerialized, hashData.Span[..32]);
         HashCanonical(presentationSerialized, hashData.Span[32..]);
 
-        newProof.ProofValue = await authentication.SignProofValueAsync(hashData).ConfigureAwait(false);
+        newProof.ProofValue = await authentication.SignProofValueAsync(hashData, cancellationToken).ConfigureAwait(false);
 
         DataIntegritySecuredPresentation secured = new()
         {

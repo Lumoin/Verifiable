@@ -27,7 +27,7 @@ namespace Verifiable.Tests.Cryptography
             using var privateKey = keys.PrivateKey;
 
             ReadOnlyMemory<byte> data = TestData;
-            (Signature signature, CryptoEvent? _) = await LibsodiumCryptographicFunctions.SignEd25519Async(privateKey.AsReadOnlyMemory(), data, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
+            var (signature, _) = await LibsodiumCryptographicFunctions.SignEd25519Async(privateKey.AsReadOnlyMemory(), data, BaseMemoryPool.Shared, new FakeTimeProvider(TestClock.CanonicalEpoch), null, TestContext.CancellationToken).ConfigureAwait(false);
             using var disposableSignature = signature;
 
             (bool isVerified, CryptoEvent? _) = await LibsodiumCryptographicFunctions.VerifyEd25519Async(data, signature.AsReadOnlyMemory(), publicKey.AsReadOnlyMemory(), cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
@@ -43,7 +43,7 @@ namespace Verifiable.Tests.Cryptography
             using var privateKey = keys.PrivateKey;
 
             ReadOnlyMemory<byte> data = TestData;
-            (Signature signature, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.SignEd25519Async(privateKey.AsReadOnlyMemory(), data, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
+            var (signature, _) = await BouncyCastleCryptographicFunctions.SignEd25519Async(privateKey.AsReadOnlyMemory(), data, BaseMemoryPool.Shared, new FakeTimeProvider(TestClock.CanonicalEpoch), null, TestContext.CancellationToken).ConfigureAwait(false);
             using var disposableSignature = signature;
 
             (bool isVerified, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.VerifyEd25519Async(data, signature.AsReadOnlyMemory(), publicKey.AsReadOnlyMemory(), cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
@@ -59,7 +59,7 @@ namespace Verifiable.Tests.Cryptography
             using var privateKey = keys.PrivateKey;
 
             ReadOnlyMemory<byte> data = TestData;
-            (Signature signature, CryptoEvent? _) = await LibsodiumCryptographicFunctions.SignEd25519Async(privateKey.AsReadOnlyMemory(), data, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
+            var (signature, _) = await LibsodiumCryptographicFunctions.SignEd25519Async(privateKey.AsReadOnlyMemory(), data, BaseMemoryPool.Shared, new FakeTimeProvider(TestClock.CanonicalEpoch), null, TestContext.CancellationToken).ConfigureAwait(false);
             using var disposableSignature = signature;
 
             (bool isVerified, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.VerifyEd25519Async(data, signature.AsReadOnlyMemory(), publicKey.AsReadOnlyMemory(), cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
@@ -75,7 +75,7 @@ namespace Verifiable.Tests.Cryptography
             using var privateKey = keys.PrivateKey;
 
             ReadOnlyMemory<byte> data = TestData;
-            (Signature signature, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.SignEd25519Async(privateKey.AsReadOnlyMemory(), data, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
+            var (signature, _) = await BouncyCastleCryptographicFunctions.SignEd25519Async(privateKey.AsReadOnlyMemory(), data, BaseMemoryPool.Shared, new FakeTimeProvider(TestClock.CanonicalEpoch), null, TestContext.CancellationToken).ConfigureAwait(false);
             using var disposableSignature = signature;
 
             (bool isVerified, CryptoEvent? _) = await LibsodiumCryptographicFunctions.VerifyEd25519Async(data, signature.AsReadOnlyMemory(), publicKey.AsReadOnlyMemory(), cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);

@@ -321,7 +321,8 @@ public static class CredentialEcdsaSd2023Extensions
 
                 baseSignature = await issuerPrivateKey.SignAsync(
                     baseSignatureData.Memory[..signatureDataLength],
-                    memoryPool).ConfigureAwait(false);
+                    memoryPool,
+                    cancellationToken).ConfigureAwait(false);
 
                 //Sign non-mandatory statements.
                 var sortedNonMandatoryIndexes = prepared.NonMandatoryIndexes.OrderBy(i => i).ToList();
@@ -1687,7 +1688,8 @@ public static class CredentialEcdsaSd2023Extensions
             var statement = statements[i];
             var signature = await privateKey.SignAsync(
                 Encoding.UTF8.GetBytes(statement),
-                pool).ConfigureAwait(false);
+                pool,
+                cancellationToken).ConfigureAwait(false);
 
             signedStatements.Add(new NQuadSignedStatement(statement, signature, statementIndexes[i]));
         }

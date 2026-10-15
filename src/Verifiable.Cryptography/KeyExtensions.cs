@@ -63,13 +63,14 @@ public static class KeyExtensions
     /// such as <c>BouncyCastleCryptographicFunctions.SignEd25519Async</c>.</param>
     /// <param name="signaturePool">The memory pool for allocating the signature buffer.</param>
     /// <param name="context">Optional context parameters for the signing operation.</param>
+    /// <param name="cancellationToken">Cancels the signing.</param>
     /// <returns>The signature of the data.</returns>
     /// <remarks>
     /// Unwraps the <see cref="SignatureProducedEvent"/> the bound <paramref name="signingDelegate"/>
     /// constructs and emits it through <see cref="CryptographicKeyEvents.Events"/> when non-null,
     /// exactly as <see cref="PrivateKey.SignAsync"/> does.
     /// </remarks>
-    public static async ValueTask<Signature> SignAsync(this PrivateKeyMemory privateKey, ReadOnlyMemory<byte> dataToSign, SigningDelegate signingDelegate, BaseMemoryPool signaturePool, FrozenDictionary<string, object>? context = null)
+    public static async ValueTask<Signature> SignAsync(this PrivateKeyMemory privateKey, ReadOnlyMemory<byte> dataToSign, SigningDelegate signingDelegate, BaseMemoryPool signaturePool, FrozenDictionary<string, object>? context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(privateKey);
         ArgumentNullException.ThrowIfNull(signingDelegate);
@@ -77,7 +78,7 @@ public static class KeyExtensions
 
         (Signature signature, CryptoEvent? evt) = await privateKey.WithKeyBytesAsync(
             (privateKeyBytes, dataToSign, signaturePool) =>
-                signingDelegate(privateKeyBytes, dataToSign, signaturePool, context),
+                signingDelegate(privateKeyBytes, dataToSign, signaturePool, context, cancellationToken),
             dataToSign,
             signaturePool).ConfigureAwait(false);
 
@@ -90,7 +91,12 @@ public static class KeyExtensions
     /// <summary>
     /// Signs data using the signing delegate resolved from the key's Tag via CryptoFunctionRegistry.
     /// </summary>
-    public static async ValueTask<Signature> SignAsync(this PrivateKeyMemory privateKey, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool)
+    /// <param name="privateKey">The private key memory containing the key material.</param>
+    /// <param name="dataToSign">The data which needs to be signed.</param>
+    /// <param name="signaturePool">The memory pool for allocating the signature buffer.</param>
+    /// <param name="cancellationToken">Cancels the signing.</param>
+    /// <returns>The signature of the data.</returns>
+    public static async ValueTask<Signature> SignAsync(this PrivateKeyMemory privateKey, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(privateKey);
         ArgumentNullException.ThrowIfNull(signaturePool);
@@ -98,7 +104,7 @@ public static class KeyExtensions
         var purpose = privateKey.Tag.Get<Purpose>();
         var signingDelegate = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(algorithm, purpose);
 
-        return await privateKey.SignAsync(dataToSign, signingDelegate, signaturePool).ConfigureAwait(false);
+        return await privateKey.SignAsync(dataToSign, signingDelegate, signaturePool, null, cancellationToken).ConfigureAwait(false);
     }
 
 

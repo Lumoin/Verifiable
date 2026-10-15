@@ -753,6 +753,7 @@ public static class AuthCodeFlowHandlers
         ArgumentNullException.ThrowIfNull(context);
 
         var assertionKey = TokenEndpointClientOperations.ResolveClientAssertionKey(registration, clientAssertionOptions);
+
         if(!assertionKey.IsSuccess)
         {
             return assertionKey.Error;
@@ -1017,6 +1018,7 @@ public static class AuthCodeFlowHandlers
         ArgumentNullException.ThrowIfNull(context);
 
         var assertionKey = TokenEndpointClientOperations.ResolveClientAssertionKey(registration, clientAssertionOptions);
+
         if(!assertionKey.IsSuccess)
         {
             return assertionKey.Error;

@@ -170,6 +170,7 @@ internal static class TokenEndpointClientOperations
         }
 
         var key = ClientAssertionCredential.Of(registration, clientAssertionOptions);
+
         if(!key.IsSuccess)
         {
             return Result<ClientAssertionCredential?, AuthCodeFlowEndpointResult>.Failure(new AuthCodeFlowEndpointResult

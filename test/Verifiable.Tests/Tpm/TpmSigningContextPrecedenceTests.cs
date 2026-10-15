@@ -98,7 +98,7 @@ internal sealed class TpmSigningContextPrecedenceTests
         //override proven below is a meaningful precedence check rather than a vacuous one.
         _ = await Assert.ThrowsExactlyAsync<InvalidOperationException>(async () =>
         {
-            _ = await privateKey.SignAsync(MessageBytes, pool).ConfigureAwait(false);
+            _ = await privateKey.SignAsync(MessageBytes, pool, null, TestContext.CancellationToken).ConfigureAwait(false);
         }).ConfigureAwait(false);
 
         //The mutation this test kills swaps `context ?? defaultContext` for `defaultContext ?? context`
@@ -108,7 +108,7 @@ internal sealed class TpmSigningContextPrecedenceTests
         Signature signature;
         using(CryptographicKeyEvents.Events.Subscribe(observer))
         {
-            signature = await privateKey.SignAsync(MessageBytes, pool, context: correctContext).ConfigureAwait(false);
+            signature = await privateKey.SignAsync(MessageBytes, pool, context: correctContext, TestContext.CancellationToken).ConfigureAwait(false);
         }
 
         using(signature)

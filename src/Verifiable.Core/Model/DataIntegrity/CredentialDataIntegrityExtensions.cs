@@ -250,7 +250,7 @@ public static class CredentialDataIntegrityExtensions
             credentialDigest.AsReadOnlySpan().CopyTo(hashData[proofOptionsDigest.Length..]);
 
             //Sign using the private key (uses CryptoFunctionRegistry internally via Tag).
-            using var signature = await privateKey.SignAsync(hashDataOwner.Memory, memoryPool)
+            using var signature = await privateKey.SignAsync(hashDataOwner.Memory, memoryPool, cancellationToken)
                 .ConfigureAwait(false);
 
             //Encode proof value and attach it to the pre-signed skeleton — the only

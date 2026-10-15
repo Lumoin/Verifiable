@@ -422,7 +422,7 @@ internal sealed class KeyAttestationVerifierTests
             "\"kid\":\"" + Kid + "\",\"kid\":\"" + Kid + "\"}";
 
         string duplicateAttestation =
-            await SignRawAsync(wpPrivate, duplicateHeaderJson, payloadJson).ConfigureAwait(false);
+            await SignRawAsync(wpPrivate, duplicateHeaderJson, payloadJson, TestContext.CancellationToken).ConfigureAwait(false);
 
         KeyAttestationVerificationResult duplicateResult =
             await VerifyAsync(duplicateAttestation).ConfigureAwait(false);
@@ -432,7 +432,7 @@ internal sealed class KeyAttestationVerifierTests
             "{\"alg\":\"" + algorithm + "\",\"typ\":\"key-attestation+jwt\",\"kid\":\"" + Kid + "\"}";
 
         string acceptedAttestation =
-            await SignRawAsync(wpPrivate, singleHeaderJson, payloadJson).ConfigureAwait(false);
+            await SignRawAsync(wpPrivate, singleHeaderJson, payloadJson, TestContext.CancellationToken).ConfigureAwait(false);
 
         ValueTask<PublicKeyMemory?> resolver(string kid, string algorithm, ExchangeContext context, CancellationToken ct) =>
             string.Equals(kid, Kid, StringComparison.Ordinal)
@@ -595,13 +595,13 @@ internal sealed class KeyAttestationVerifierTests
     //Signs a hand-built header/payload JSON pair over their exact UTF-8 bytes with the project's
     //signing primitive, never through HeaderSerializer/PayloadSerializer — proves the well-formedness
     //gate's refusal is independent of how a JSON serializer would itself react to a repeated member.
-    private static async Task<string> SignRawAsync(PrivateKeyMemory signingKey, string headerJson, string payloadJson)
+    private static async Task<string> SignRawAsync(PrivateKeyMemory signingKey, string headerJson, string payloadJson, CancellationToken cancellationToken)
     {
         string headerB64 = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(headerJson));
         string payloadB64 = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(payloadJson));
         byte[] signingInput = Encoding.ASCII.GetBytes($"{headerB64}.{payloadB64}");
 
-        using Signature signature = await signingKey.SignAsync(signingInput, Pool).ConfigureAwait(false);
+        using var signature = await signingKey.SignAsync(signingInput, Pool, cancellationToken).ConfigureAwait(false);
         string signatureB64 = TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan());
 
         return $"{headerB64}.{payloadB64}.{signatureB64}";

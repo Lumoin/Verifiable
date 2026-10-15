@@ -675,7 +675,7 @@ internal sealed class CAdESParallelSignatureTests
         SigningDelegate signing = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(algorithm, purpose);
         (Signature signature, CryptoEvent? evt) = await signing(
             privateKey.AsReadOnlyMemory(), preparation.SigningInput.AsReadOnlyMemory(), BaseMemoryPool.Shared,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+            null, cancellationToken).ConfigureAwait(false);
 
         using(signature)
         {

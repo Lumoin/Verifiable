@@ -127,7 +127,7 @@ public static class TerminalAuthenticationSignature
 
         using IMemoryOwner<byte> message = BuildSignedMessage(chipIdentifier.Span, chipChallenge.Span, terminalEphemeralPublicKey.Span, pool, out int messageLength);
 
-        return await terminalKey.SignAsync(message.Memory[..messageLength], pool).ConfigureAwait(false);
+        return await terminalKey.SignAsync(message.Memory[..messageLength], pool, null, cancellationToken).ConfigureAwait(false);
     }
 
 

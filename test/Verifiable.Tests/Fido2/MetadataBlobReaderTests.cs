@@ -20,6 +20,9 @@ namespace Verifiable.Tests.Fido2;
 [TestClass]
 internal sealed class MetadataBlobReaderTests
 {
+    /// <summary>The test context, carrying the token that cancels a test that outruns its run.</summary>
+    public TestContext TestContext { get; set; } = null!;
+
     /// <summary>
     /// A happy-path BLOB with two entries — one AAGUID'd FIDO2 entry carrying an attestation root
     /// certificate, one <c>attestationCertificateKeyIdentifiers</c>'d U2F entry — parses every
@@ -45,7 +48,7 @@ internal sealed class MetadataBlobReaderTests
 
         string headerJson = MetadataBlobTestVectors.BuildHeaderJson(WellKnownJwaValues.Es256, [signerCertificate.RawData]);
         string payloadJson = MetadataBlobTestVectors.BuildPayloadJson(1, "2030-01-01", [entry1, entry2]);
-        byte[] blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(signingKey, data));
+        var blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(signingKey, data, TestContext.CancellationToken));
 
         using UnverifiedMetadataBlob blob = MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared);
 
@@ -117,7 +120,7 @@ internal sealed class MetadataBlobReaderTests
 
         string headerJson = MetadataBlobTestVectors.BuildHeaderJson(WellKnownJwaValues.Es256, [signerCertificate.RawData], includeX5u: true);
         string payloadJson = MetadataBlobTestVectors.BuildPayloadJson(1, "2030-01-01", [MetadataBlobTestVectors.BuildEntryJson(aaguid: Guid.NewGuid())]);
-        byte[] blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(signingKey, data));
+        var blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(signingKey, data, TestContext.CancellationToken));
 
         _ = Assert.ThrowsExactly<Fido2FormatException>(() => MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared));
     }
@@ -133,7 +136,7 @@ internal sealed class MetadataBlobReaderTests
 
         string headerJson = MetadataBlobTestVectors.BuildHeaderJson(WellKnownJwaValues.Es256, [signerCertificate.RawData]);
         const string payloadJson = """{"no":1,"no":2,"nextUpdate":"2030-01-01","entries":[]}""";
-        byte[] blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(signingKey, data));
+        var blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(signingKey, data, TestContext.CancellationToken));
 
         _ = Assert.ThrowsExactly<Fido2FormatException>(() => MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared));
     }
@@ -149,7 +152,7 @@ internal sealed class MetadataBlobReaderTests
 
         string headerJson = MetadataBlobTestVectors.BuildHeaderJson(WellKnownJwaValues.Es256, [signerCertificate.RawData]);
         const string payloadJson = "[]";
-        byte[] blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(signingKey, data));
+        var blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(signingKey, data, TestContext.CancellationToken));
 
         _ = Assert.ThrowsExactly<Fido2FormatException>(() => MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared));
     }
@@ -165,7 +168,7 @@ internal sealed class MetadataBlobReaderTests
 
         string headerJson = MetadataBlobTestVectors.BuildHeaderJson(WellKnownJwaValues.Es256, [signerCertificate.RawData]);
         const string payloadJson = """{"no":1,"nextUpdate":"2030-01-01"}""";
-        byte[] blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(signingKey, data));
+        var blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(signingKey, data, TestContext.CancellationToken));
 
         Fido2FormatException exception = Assert.ThrowsExactly<Fido2FormatException>(() => MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared));
         Assert.Contains("entries", exception.Message, StringComparison.Ordinal);
@@ -183,7 +186,7 @@ internal sealed class MetadataBlobReaderTests
         string headerJson = MetadataBlobTestVectors.BuildHeaderJson(WellKnownJwaValues.Es256, [signerCertificate.RawData]);
         const string entryJson = """{"aaguid":"not-a-guid","metadataStatement":{},"statusReports":[{"status":"FIDO_CERTIFIED"}]}""";
         string payloadJson = MetadataBlobTestVectors.BuildPayloadJson(1, "2030-01-01", [entryJson]);
-        byte[] blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(signingKey, data));
+        var blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(signingKey, data, TestContext.CancellationToken));
 
         _ = Assert.ThrowsExactly<Fido2FormatException>(() => MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared));
     }
@@ -201,7 +204,7 @@ internal sealed class MetadataBlobReaderTests
         string deeplyNestedValue = BuildDeeplyNestedJsonValue(24);
         string entryJson = $$"""{"aaguid":"{{Guid.NewGuid():D}}","metadataStatement":{"poison":{{deeplyNestedValue}}},"statusReports":[{"status":"FIDO_CERTIFIED"}]}""";
         string payloadJson = MetadataBlobTestVectors.BuildPayloadJson(1, "2030-01-01", [entryJson]);
-        byte[] blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(signingKey, data));
+        var blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(signingKey, data, TestContext.CancellationToken));
 
         _ = Assert.ThrowsExactly<Fido2FormatException>(() => MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared));
     }

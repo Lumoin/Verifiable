@@ -10,7 +10,7 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// Rebuilds a compact JWS the server issued and signs it again with a private half the
 /// <see cref="TestHostShell"/> holds, so a test can present a token that verifies under a key of
 /// its choosing and differs from the issued one only in the part the test names: the protected
-/// header (<see cref="ResignWithHeaderAsync(TestHostShell, string, KeyId, string?)"/>) or the payload
+/// header (<see cref="ResignWithHeaderAsync(TestHostShell, string, KeyId, string?, CancellationToken)"/>) or the payload
 /// (<see cref="ResignWithPayloadAsync"/>).
 /// </summary>
 /// <remarks>
@@ -29,9 +29,10 @@ internal static class CompactJwsResigning
     /// <param name="compactJws">The compact JWS the server issued.</param>
     /// <param name="keyId">The key the rebuilt token names and is signed under.</param>
     /// <param name="typ">The <c>typ</c> header value, or <see langword="null"/> to write no <c>typ</c>.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The re-signed compact JWS.</returns>
-    public static Task<string> ResignWithHeaderAsync(TestHostShell host, string compactJws, KeyId keyId, string? typ) =>
-        ResignWithHeaderAsync(host, compactJws, keyId, keyId.Value, typ);
+    public static Task<string> ResignWithHeaderAsync(TestHostShell host, string compactJws, KeyId keyId, string? typ, CancellationToken cancellationToken) =>
+        ResignWithHeaderAsync(host, compactJws, keyId, keyId.Value, typ, cancellationToken);
 
 
     /// <summary>
@@ -46,9 +47,11 @@ internal static class CompactJwsResigning
     /// <param name="signingKeyId">The key the rebuilt token is signed under.</param>
     /// <param name="headerKid">The <c>kid</c> the rebuilt header carries.</param>
     /// <param name="typ">The <c>typ</c> header value, or <see langword="null"/> to write no <c>typ</c>.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The re-signed compact JWS.</returns>
     public static async Task<string> ResignWithHeaderAsync(
-        TestHostShell host, string compactJws, KeyId signingKeyId, string headerKid, string? typ)
+        TestHostShell host, string compactJws, KeyId signingKeyId, string headerKid, string? typ,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(host);
         ArgumentException.ThrowIfNullOrEmpty(compactJws);
@@ -61,7 +64,7 @@ internal static class CompactJwsResigning
         string headerJson = $"{{\"alg\":\"{algorithm}\"{typMember},\"kid\":\"{headerKid}\"}}";
         string headerSegment = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(headerJson));
 
-        return await SignAsync(host, headerSegment, parts[1], signingKeyId).ConfigureAwait(false);
+        return await SignAsync(host, headerSegment, parts[1], signingKeyId, cancellationToken).ConfigureAwait(false);
     }
 
 
@@ -75,9 +78,11 @@ internal static class CompactJwsResigning
     /// <param name="compactJws">The compact JWS the server issued.</param>
     /// <param name="keyId">The key the issued header names and the rebuilt token is signed under.</param>
     /// <param name="payloadJson">The JSON text of the rebuilt payload.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The re-signed compact JWS.</returns>
     public static async Task<string> ResignWithPayloadAsync(
-        TestHostShell host, string compactJws, KeyId keyId, string payloadJson)
+        TestHostShell host, string compactJws, KeyId keyId, string payloadJson,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(host);
         ArgumentException.ThrowIfNullOrEmpty(compactJws);
@@ -86,7 +91,7 @@ internal static class CompactJwsResigning
         string[] parts = compactJws.Split('.');
         string payloadSegment = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(payloadJson));
 
-        return await SignAsync(host, parts[0], payloadSegment, keyId).ConfigureAwait(false);
+        return await SignAsync(host, parts[0], payloadSegment, keyId, cancellationToken).ConfigureAwait(false);
     }
 
 
@@ -110,12 +115,13 @@ internal static class CompactJwsResigning
     /// <param name="headerSegment">The base64url protected header segment.</param>
     /// <param name="payloadSegment">The base64url payload segment.</param>
     /// <param name="keyId">The key to sign under.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The compact JWS.</returns>
-    private static async Task<string> SignAsync(TestHostShell host, string headerSegment, string payloadSegment, KeyId keyId)
+    private static async Task<string> SignAsync(TestHostShell host, string headerSegment, string payloadSegment, KeyId keyId, CancellationToken cancellationToken)
     {
         PrivateKeyMemory signingKey = host.Host("default").SigningKeys[keyId];
         byte[] signingInput = Encoding.ASCII.GetBytes($"{headerSegment}.{payloadSegment}");
-        using Signature signature = await signingKey.SignAsync(signingInput, BaseMemoryPool.Shared).ConfigureAwait(false);
+        using var signature = await signingKey.SignAsync(signingInput, BaseMemoryPool.Shared, cancellationToken).ConfigureAwait(false);
 
         return $"{headerSegment}.{payloadSegment}.{TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan())}";
     }

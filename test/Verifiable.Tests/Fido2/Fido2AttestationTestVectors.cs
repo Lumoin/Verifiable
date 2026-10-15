@@ -658,8 +658,9 @@ internal static class Fido2AttestationTestVectors
     /// </summary>
     /// <param name="key">The P-256 private key to sign with.</param>
     /// <param name="toBeSigned">The bytes to sign.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The ASN.1 DER-encoded <c>Ecdsa-Sig-Value</c> ECDSA/SHA-256 signature bytes.</returns>
-    internal static async Task<byte[]> SignWithEcdsaP256(ECDsa key, byte[] toBeSigned)
+    internal static async Task<byte[]> SignWithEcdsaP256(ECDsa key, byte[] toBeSigned, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(toBeSigned);
@@ -670,7 +671,7 @@ internal static class Fido2AttestationTestVectors
         CryptographicOperations.ZeroMemory(exportedPrivateKey);
 
         SigningDelegate sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.P256, Purpose.Signing);
-        using Signature p1363Signature = (await sign(privateKeyOwner.Memory, toBeSigned, BaseMemoryPool.Shared).ConfigureAwait(false)).Signature;
+        using Signature p1363Signature = (await sign(privateKeyOwner.Memory, toBeSigned, BaseMemoryPool.Shared, null, cancellationToken).ConfigureAwait(false)).Signature;
         using IMemoryOwner<byte> derOwner = EcdsaSignatureEncoding.ConvertP1363ToDer(p1363Signature.AsReadOnlySpan(), BaseMemoryPool.Shared, out int derLength);
 
         return derOwner.Memory.Span[..derLength].ToArray();
@@ -683,8 +684,9 @@ internal static class Fido2AttestationTestVectors
     /// </summary>
     /// <param name="key">The P-384 private key to sign with.</param>
     /// <param name="toBeSigned">The bytes to sign.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The ASN.1 DER-encoded <c>Ecdsa-Sig-Value</c> ECDSA/SHA-384 signature bytes.</returns>
-    internal static async Task<byte[]> SignWithEcdsaP384(ECDsa key, byte[] toBeSigned)
+    internal static async Task<byte[]> SignWithEcdsaP384(ECDsa key, byte[] toBeSigned, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(toBeSigned);
@@ -695,7 +697,7 @@ internal static class Fido2AttestationTestVectors
         CryptographicOperations.ZeroMemory(exportedPrivateKey);
 
         SigningDelegate sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.P384, Purpose.Signing);
-        using Signature p1363Signature = (await sign(privateKeyOwner.Memory, toBeSigned, BaseMemoryPool.Shared).ConfigureAwait(false)).Signature;
+        using Signature p1363Signature = (await sign(privateKeyOwner.Memory, toBeSigned, BaseMemoryPool.Shared, null, cancellationToken).ConfigureAwait(false)).Signature;
         using IMemoryOwner<byte> derOwner = EcdsaSignatureEncoding.ConvertP1363ToDer(p1363Signature.AsReadOnlySpan(), BaseMemoryPool.Shared, out int derLength);
 
         return derOwner.Memory.Span[..derLength].ToArray();
@@ -708,8 +710,9 @@ internal static class Fido2AttestationTestVectors
     /// </summary>
     /// <param name="key">The P-521 private key to sign with.</param>
     /// <param name="toBeSigned">The bytes to sign.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The ASN.1 DER-encoded <c>Ecdsa-Sig-Value</c> ECDSA/SHA-512 signature bytes.</returns>
-    internal static async Task<byte[]> SignWithEcdsaP521(ECDsa key, byte[] toBeSigned)
+    internal static async Task<byte[]> SignWithEcdsaP521(ECDsa key, byte[] toBeSigned, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(toBeSigned);
@@ -720,7 +723,7 @@ internal static class Fido2AttestationTestVectors
         CryptographicOperations.ZeroMemory(exportedPrivateKey);
 
         SigningDelegate sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.P521, Purpose.Signing);
-        using Signature p1363Signature = (await sign(privateKeyOwner.Memory, toBeSigned, BaseMemoryPool.Shared).ConfigureAwait(false)).Signature;
+        using Signature p1363Signature = (await sign(privateKeyOwner.Memory, toBeSigned, BaseMemoryPool.Shared, null, cancellationToken).ConfigureAwait(false)).Signature;
         using IMemoryOwner<byte> derOwner = EcdsaSignatureEncoding.ConvertP1363ToDer(p1363Signature.AsReadOnlySpan(), BaseMemoryPool.Shared, out int derLength);
 
         return derOwner.Memory.Span[..derLength].ToArray();
@@ -734,8 +737,9 @@ internal static class Fido2AttestationTestVectors
     /// </summary>
     /// <param name="key">The RSA private key to sign with.</param>
     /// <param name="toBeSigned">The bytes to sign.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The raw RSASSA-PKCS1-v1_5/SHA-256 signature bytes.</returns>
-    internal static async Task<byte[]> SignWithRsaPkcs1Sha256(RSA key, byte[] toBeSigned)
+    internal static async Task<byte[]> SignWithRsaPkcs1Sha256(RSA key, byte[] toBeSigned, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(toBeSigned);
@@ -746,7 +750,7 @@ internal static class Fido2AttestationTestVectors
         CryptographicOperations.ZeroMemory(exportedPrivateKey);
 
         SigningDelegate sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.RsaSha256, Purpose.Signing);
-        using Signature signature = (await sign(privateKeyOwner.Memory, toBeSigned, BaseMemoryPool.Shared).ConfigureAwait(false)).Signature;
+        using Signature signature = (await sign(privateKeyOwner.Memory, toBeSigned, BaseMemoryPool.Shared, null, cancellationToken).ConfigureAwait(false)).Signature;
 
         return signature.AsReadOnlySpan().ToArray();
     }
@@ -759,13 +763,14 @@ internal static class Fido2AttestationTestVectors
     /// </summary>
     /// <param name="privateKey">The Ed25519 private key to sign with.</param>
     /// <param name="toBeSigned">The bytes to sign.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The raw Ed25519 signature bytes.</returns>
-    internal static async ValueTask<byte[]> SignWithEd25519Async(PrivateKeyMemory privateKey, byte[] toBeSigned)
+    internal static async ValueTask<byte[]> SignWithEd25519Async(PrivateKeyMemory privateKey, byte[] toBeSigned, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(privateKey);
         ArgumentNullException.ThrowIfNull(toBeSigned);
 
-        using Signature signature = await privateKey.SignAsync(toBeSigned, BouncyCastleCryptographicFunctionsAdapter.SignEd25519Async, BaseMemoryPool.Shared).ConfigureAwait(false);
+        using var signature = await privateKey.SignAsync(toBeSigned, BouncyCastleCryptographicFunctionsAdapter.SignEd25519Async, BaseMemoryPool.Shared, null, cancellationToken).ConfigureAwait(false);
 
         return signature.AsReadOnlySpan().ToArray();
     }
@@ -783,13 +788,14 @@ internal static class Fido2AttestationTestVectors
     /// </summary>
     /// <param name="privateKey">The secp256k1 private key to sign with.</param>
     /// <param name="toBeSigned">The bytes to sign.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The ASN.1 DER-encoded ECDSA/secp256k1 signature bytes.</returns>
-    internal static async ValueTask<byte[]> SignWithSecp256k1Async(PrivateKeyMemory privateKey, byte[] toBeSigned)
+    internal static async ValueTask<byte[]> SignWithSecp256k1Async(PrivateKeyMemory privateKey, byte[] toBeSigned, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(privateKey);
         ArgumentNullException.ThrowIfNull(toBeSigned);
 
-        using Signature p1363Signature = await privateKey.SignAsync(toBeSigned, BouncyCastleCryptographicFunctionsAdapter.SignSecp256k1Async, BaseMemoryPool.Shared).ConfigureAwait(false);
+        using var p1363Signature = await privateKey.SignAsync(toBeSigned, BouncyCastleCryptographicFunctionsAdapter.SignSecp256k1Async, BaseMemoryPool.Shared, null, cancellationToken).ConfigureAwait(false);
         using IMemoryOwner<byte> derOwner = EcdsaSignatureEncoding.ConvertP1363ToDer(p1363Signature.AsReadOnlySpan(), BaseMemoryPool.Shared, out int derLength);
 
         return derOwner.Memory.Span[..derLength].ToArray();
@@ -804,14 +810,15 @@ internal static class Fido2AttestationTestVectors
     /// </summary>
     /// <param name="key">The RSA private key to sign with.</param>
     /// <param name="toBeSigned">The bytes to sign.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The RSASSA-PSS/SHA-256 signature bytes.</returns>
-    internal static async ValueTask<byte[]> SignWithRsaPssSha256Async(RSA key, byte[] toBeSigned)
+    internal static async ValueTask<byte[]> SignWithRsaPssSha256Async(RSA key, byte[] toBeSigned, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(toBeSigned);
 
         byte[] privateKeyDer = key.ExportRSAPrivateKey();
-        (Signature signature, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.SignRsaSha256PssAsync(privateKeyDer, toBeSigned, BaseMemoryPool.Shared, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
+        var (signature, _) = await BouncyCastleCryptographicFunctions.SignRsaSha256PssAsync(privateKeyDer, toBeSigned, BaseMemoryPool.Shared, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch), null, cancellationToken).ConfigureAwait(false);
         using var disposableSignature = signature;
 
         return signature.AsReadOnlySpan().ToArray();

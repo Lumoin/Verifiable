@@ -115,7 +115,8 @@ internal sealed class ClientSecretMac
     private SigningResult ResultOf(IMemoryOwner<byte> macOctets)
     {
         //The signature is handed on to the result alone; on any path that does not hand it on, it is disposed here.
-        Signature? signature = new(macOctets, ValueTag);
+        var signature = new Signature(macOctets, ValueTag);
+
         try
         {
             var result = new SigningResult(signature, null);

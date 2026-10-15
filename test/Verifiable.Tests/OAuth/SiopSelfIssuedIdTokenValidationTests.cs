@@ -215,7 +215,7 @@ internal sealed class SiopSelfIssuedIdTokenValidationTests
 
         string payloadSegment = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(duplicateBearingPayload));
         byte[] signingInput = Encoding.ASCII.GetBytes($"{parts[0]}.{payloadSegment}");
-        using Signature signature = await subjectPrivate.SignAsync(signingInput, Pool).ConfigureAwait(false);
+        using var signature = await subjectPrivate.SignAsync(signingInput, Pool, TestContext.CancellationToken).ConfigureAwait(false);
         string signatureSegment = TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan());
         string duplicateBearingToken = $"{parts[0]}.{payloadSegment}.{signatureSegment}";
 

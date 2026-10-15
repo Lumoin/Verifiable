@@ -29,8 +29,8 @@ public delegate ValueTask<SigningResult> RecoverableSigningDelegate(
     ReadOnlyMemory<byte> privateKeyBytes,
     ReadOnlyMemory<byte> nonRecoverableMessage,
     BaseMemoryPool signaturePool,
-    FrozenDictionary<string, object>? context = null,
-    CancellationToken cancellationToken = default);
+    FrozenDictionary<string, object>? context,
+    CancellationToken cancellationToken);
 
 
 /// <summary>

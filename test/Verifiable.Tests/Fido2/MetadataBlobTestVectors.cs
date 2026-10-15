@@ -274,8 +274,9 @@ internal static class MetadataBlobTestVectors
     /// </summary>
     /// <param name="key">The P-256 private key to sign with.</param>
     /// <param name="data">The bytes to sign.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The raw P1363 ECDSA/SHA-256 signature bytes.</returns>
-    internal static byte[] SignEs256(ECDsa key, byte[] data)
+    internal static byte[] SignEs256(ECDsa key, byte[] data, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(data);
@@ -286,7 +287,7 @@ internal static class MetadataBlobTestVectors
         CryptographicOperations.ZeroMemory(exportedPrivateKey);
 
         SigningDelegate sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.P256, Purpose.Signing);
-        using Signature signature = sign(privateKeyOwner.Memory, data, BaseMemoryPool.Shared).AsTask().GetAwaiter().GetResult().Signature;
+        using var signature = sign(privateKeyOwner.Memory, data, BaseMemoryPool.Shared, null, cancellationToken).AsTask().GetAwaiter().GetResult().Signature;
 
         return signature.AsReadOnlySpan().ToArray();
     }
@@ -298,8 +299,9 @@ internal static class MetadataBlobTestVectors
     /// </summary>
     /// <param name="key">The RSA private key to sign with.</param>
     /// <param name="data">The bytes to sign.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The raw RSASSA-PKCS1-v1_5/SHA-256 signature bytes.</returns>
-    internal static byte[] SignRs256(RSA key, byte[] data)
+    internal static byte[] SignRs256(RSA key, byte[] data, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(data);
@@ -310,7 +312,7 @@ internal static class MetadataBlobTestVectors
         CryptographicOperations.ZeroMemory(exportedPrivateKey);
 
         SigningDelegate sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.RsaSha256, Purpose.Signing);
-        using Signature signature = sign(privateKeyOwner.Memory, data, BaseMemoryPool.Shared).AsTask().GetAwaiter().GetResult().Signature;
+        using var signature = sign(privateKeyOwner.Memory, data, BaseMemoryPool.Shared, null, cancellationToken).AsTask().GetAwaiter().GetResult().Signature;
 
         return signature.AsReadOnlySpan().ToArray();
     }

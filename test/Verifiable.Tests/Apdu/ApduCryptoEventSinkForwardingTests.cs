@@ -202,14 +202,14 @@ internal sealed class ApduCryptoEventSinkForwardingTests
 
         using CardVerifiableCertificate cvca = CardVerifiableCertificateMinter.Mint(
             cvcaKey, cvcaKey, "UTCVCA00002", "UTCVCA00002", CardVerifiableCertificateMinter.CvcaRole,
-            includeDomainParameters: true, effective, expiration, inheritedCurve: null, BaseMemoryPool.Shared);
+            includeDomainParameters: true, effective, expiration, inheritedCurve: null, BaseMemoryPool.Shared, TestContext.CancellationToken);
         Tag curve = cvca.PublicKey.EllipticCurvePoint!.Tag;
         using CardVerifiableCertificate documentVerifier = CardVerifiableCertificateMinter.Mint(
             cvcaKey, documentVerifierKey, "UTCVCA00002", "UTDVDE00002", CardVerifiableCertificateMinter.DocumentVerifierRole,
-            includeDomainParameters: false, effective, expiration, curve, BaseMemoryPool.Shared);
+            includeDomainParameters: false, effective, expiration, curve, BaseMemoryPool.Shared, TestContext.CancellationToken);
         using CardVerifiableCertificate terminal = CardVerifiableCertificateMinter.Mint(
             documentVerifierKey, terminalKey, "UTDVDE00002", "UTISDE00002", CardVerifiableCertificateMinter.TerminalRole,
-            includeDomainParameters: false, effective, expiration, curve, BaseMemoryPool.Shared);
+            includeDomainParameters: false, effective, expiration, curve, BaseMemoryPool.Shared, TestContext.CancellationToken);
 
         var observer = new TestObserver<CryptoEvent>();
         using(CryptographicKeyEvents.Events.Subscribe(observer))

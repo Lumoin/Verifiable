@@ -87,7 +87,7 @@ public static class Fido2CredentialSigner
         cancellationToken.ThrowIfCancellationRequested();
 
         using IMemoryOwner<byte> messageOwner = RentToBeSigned(authenticatorData, clientDataHash, pool, out int messageLength);
-        Signature rawSignature = await credentialKey.SignAsync(messageOwner.Memory[..messageLength], pool).ConfigureAwait(false);
+        var rawSignature = await credentialKey.SignAsync(messageOwner.Memory[..messageLength], pool, null, cancellationToken).ConfigureAwait(false);
 
         return IsEcAlgorithm(coseAlgorithm) ? ReencodeToDer(rawSignature, pool) : rawSignature;
     }

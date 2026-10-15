@@ -167,7 +167,7 @@ internal sealed class Fido2RegistrationVerifierTests
 
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash(clientDataJson, BaseMemoryPool.Shared);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned).ConfigureAwait(false);
+        var signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned, TestContext.CancellationToken).ConfigureAwait(false);
         var statement = new PackedAttestationStatement(Alg: WellKnownCoseAlgorithms.Es256, Signature: signature, X5c: null);
 
         using RegistrationCeremonyInput ceremonyInput = Fido2CeremonyInputFactory.CreateValidRegistrationInput(
@@ -216,7 +216,7 @@ internal sealed class Fido2RegistrationVerifierTests
 
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash(clientDataJson, BaseMemoryPool.Shared);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(leafKey, toBeSigned).ConfigureAwait(false);
+        var signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(leafKey, toBeSigned, TestContext.CancellationToken).ConfigureAwait(false);
 
         using PkiCertificateMemory leafPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(leafCert.RawData);
         using PkiCertificateMemory rootPki = Fido2AttestationTestVectors.ToPkiCertificateMemory(rootCert.RawData);
@@ -397,7 +397,7 @@ internal sealed class Fido2RegistrationVerifierTests
 
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash(clientDataJson, BaseMemoryPool.Shared);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned).ConfigureAwait(false);
+        var signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned, TestContext.CancellationToken).ConfigureAwait(false);
         signature[0] ^= 0xFF;
         var statement = new PackedAttestationStatement(Alg: WellKnownCoseAlgorithms.Es256, Signature: signature, X5c: null);
 
@@ -634,7 +634,7 @@ internal sealed class Fido2RegistrationVerifierTests
 
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash(clientDataJson, BaseMemoryPool.Shared);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authDataBytes, clientDataHash);
-        byte[] signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(leafKey, toBeSigned).ConfigureAwait(false);
+        var signature = await Fido2AttestationTestVectors.SignWithEcdsaP256(leafKey, toBeSigned, TestContext.CancellationToken).ConfigureAwait(false);
         if(tamperSignature)
         {
             signature[0] ^= 0xFF;

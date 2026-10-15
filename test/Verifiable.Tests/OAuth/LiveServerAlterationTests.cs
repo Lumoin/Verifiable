@@ -1378,7 +1378,7 @@ countingMetadataBuilder
         ServerHttpResponse jwks = await RawAuthCodeWirePushers.PushNamedEndpointAsync(app, segment,
             WellKnownEndpointNames.MetadataJwks, "GET", new RequestFields(), [], deadline.Token).ConfigureAwait(false);
         Assert.AreEqual(200, jwks.StatusCode, jwks.Body);
-        Assert.IsTrue(await IsSignatureVerifiedByPublishedSigningKeyAsync(jwks.Body, keys).ConfigureAwait(false),
+        Assert.IsTrue(await IsSignatureVerifiedByPublishedSigningKeyAsync(jwks.Body, keys, TestContext.CancellationToken).ConfigureAwait(false),
             "The declared key set publishes the registration's signing key, and it validates that key's signatures.");
         using HttpResponseMessage discovery = await SendDiscoveryAsync(app, keys.Registration, deadline.Token).ConfigureAwait(false);
         Assert.AreEqual(404, (int)discovery.StatusCode, "Undeclared discovery is not served.");
@@ -1425,7 +1425,7 @@ countingMetadataBuilder
         {
             string servedBody = await served.Content.ReadAsStringAsync(deadline.Token).ConfigureAwait(false);
             Assert.AreEqual(200, (int)served.StatusCode, servedBody);
-            Assert.IsTrue(await IsSignatureVerifiedByPublishedSigningKeyAsync(servedBody, keys).ConfigureAwait(false),
+            Assert.IsTrue(await IsSignatureVerifiedByPublishedSigningKeyAsync(servedBody, keys, TestContext.CancellationToken).ConfigureAwait(false),
                 "The advertised key set publishes the registration's signing key, and it validates that key's signatures.");
         }
 
@@ -1438,7 +1438,7 @@ countingMetadataBuilder
         ServerHttpResponse retained = await RawAuthCodeWirePushers.PushNamedEndpointAsync(app, segment,
             WellKnownEndpointNames.MetadataJwks, "GET", new RequestFields(), [], deadline.Token).ConfigureAwait(false);
         Assert.AreEqual(200, retained.StatusCode, retained.Body);
-        Assert.IsTrue(await IsSignatureVerifiedByPublishedSigningKeyAsync(retained.Body, keys).ConfigureAwait(false),
+        Assert.IsTrue(await IsSignatureVerifiedByPublishedSigningKeyAsync(retained.Body, keys, TestContext.CancellationToken).ConfigureAwait(false),
             "The accepted composition keeps serving its key set, whose signing key validates that key's signatures.");
     }
 
@@ -4729,8 +4729,9 @@ countingMetadataBuilder
     /// </summary>
     /// <param name="body">The JWK Set JSON body obtained over the listener.</param>
     /// <param name="keys">The registration's key material, whose private signing key makes the signature.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>Whether exactly one published key carries the identifier and it verifies the signature.</returns>
-    private static async Task<bool> IsSignatureVerifiedByPublishedSigningKeyAsync(string body, VerifierKeyMaterial keys)
+    private static async Task<bool> IsSignatureVerifiedByPublishedSigningKeyAsync(string body, VerifierKeyMaterial keys, CancellationToken cancellationToken)
     {
         Dictionary<string, string> jwk = new(StringComparer.Ordinal);
         using(JsonDocument document = JsonDocument.Parse(body))
@@ -4759,7 +4760,7 @@ countingMetadataBuilder
         using IMemoryOwner<byte> message = BaseMemoryPool.Shared.Rent(text.Length);
         text.CopyTo(message.Memory.Span);
         ReadOnlyMemory<byte> signed = message.Memory[..text.Length];
-        using Signature signature = await keys.SigningPrivateKey.SignAsync(signed, BaseMemoryPool.Shared).ConfigureAwait(false);
+        using var signature = await keys.SigningPrivateKey.SignAsync(signed, BaseMemoryPool.Shared, cancellationToken).ConfigureAwait(false);
         VerificationDelegate verify = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(
             publishedKey.Tag.Get<CryptoAlgorithm>(), publishedKey.Tag.Get<Purpose>());
 

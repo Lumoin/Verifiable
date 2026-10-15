@@ -182,7 +182,7 @@ internal sealed class DataIntegrityTests
         var privateKeyBytes = MultibaseSerializer.Decode(SecretKeyMultibase, MulticodecHeaders.Ed25519PrivateKey.Length, TestSetup.Base58Decoder, BaseMemoryPool.Shared);
         using PrivateKeyMemory privateKeyMemory = new(privateKeyBytes, CryptoTags.Ed25519PrivateKey);
 
-        var signature = await privateKeyMemory.SignAsync(hashData, BouncyCastleCryptographicFunctionsAdapter.SignEd25519Async, BaseMemoryPool.Shared).ConfigureAwait(false);
+        var signature = await privateKeyMemory.SignAsync(hashData, BouncyCastleCryptographicFunctionsAdapter.SignEd25519Async, BaseMemoryPool.Shared, null, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(ExpectedSignatureHex, Convert.ToHexStringLower(signature.AsReadOnlySpan()), "Signature must match W3C test vector.");
 
         //Encode proofValue and verify.
@@ -253,7 +253,7 @@ internal sealed class DataIntegrityTests
         var payloadBase64Url = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(credentialJson));
 
         var signingInput = $"{headerBase64Url}.{payloadBase64Url}";
-        var signature = await privateKeyMemory.SignAsync(Encoding.UTF8.GetBytes(signingInput), BouncyCastleCryptographicFunctionsAdapter.SignEd25519Async, BaseMemoryPool.Shared).ConfigureAwait(false);
+        var signature = await privateKeyMemory.SignAsync(Encoding.UTF8.GetBytes(signingInput), BouncyCastleCryptographicFunctionsAdapter.SignEd25519Async, BaseMemoryPool.Shared, null, TestContext.CancellationToken).ConfigureAwait(false);
         var jwt = $"{signingInput}.{TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan())}";
 
         //Verify JWT structure and signature.

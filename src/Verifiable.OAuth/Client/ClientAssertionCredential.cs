@@ -99,6 +99,7 @@ public sealed class ClientAssertionCredential
         }
 
         var secretOctets = clientSecret.AsReadOnlySpan().Length;
+
         if(secretOctets < mac.Length)
         {
             return Result<ClientAssertionCredential, ClientAssertionCredentialRefusal>.Failure(new ClientAssertionCredentialRefusal
@@ -120,40 +121,51 @@ public sealed class ClientAssertionCredential
     /// <see cref="ClientRegistration.AuthenticationKeyMaterial"/> and the options: for <c>private_key_jwt</c> the private
     /// key under the options' <see cref="ClientAssertionOptions.SigningKeyId"/> (<see cref="OfPrivateKey"/>), and for
     /// <c>client_secret_jwt</c> the client secret under the options' <see cref="ClientAssertionOptions.ClientSecretAlgorithm"/>
-    /// (<see cref="OfClientSecret"/>), whose options name no key identifier.
+    /// (<see cref="OfClientSecret"/>), whose options name no key identifier. A key identifier that is empty or white space
+    /// only names none.
     /// </summary>
-    /// <param name="registration">The registration naming <c>private_key_jwt</c> or <c>client_secret_jwt</c> and carrying its key.</param>
+    /// <param name="registration">The registration naming the method and carrying its key.</param>
     /// <param name="options">The assertion options composed for the request.</param>
     /// <returns>
-    /// The key; or the refusal of options naming no key identifier for a private key
-    /// (<see cref="ClientAssertionCredentialRefusalReason.PrivateKeyNamesNoKeyIdentifier"/>), naming one for a client secret
-    /// (<see cref="ClientAssertionCredentialRefusalReason.ClientSecretNamesAKeyIdentifier"/>), or of the secret itself
-    /// (<see cref="OfClientSecret"/>).
+    /// The key; or the refusal of a registration naming a method that presents no assertion
+    /// (<see cref="ClientAssertionCredentialRefusalReason.MethodPresentsNoAssertion"/>) or carrying no key
+    /// (<see cref="ClientAssertionCredentialRefusalReason.RegistrationCarriesNoKey"/>), of options naming no key identifier
+    /// for a private key (<see cref="ClientAssertionCredentialRefusalReason.PrivateKeyNamesNoKeyIdentifier"/>) or naming one
+    /// for a client secret (<see cref="ClientAssertionCredentialRefusalReason.ClientSecretNamesAKeyIdentifier"/>), or of the
+    /// secret itself (<see cref="OfClientSecret"/>).
     /// </returns>
-    /// <exception cref="ArgumentException">The registration names a method that presents no assertion.</exception>
-    /// <exception cref="InvalidOperationException">The registration carries no authentication key material.</exception>
     public static Result<ClientAssertionCredential, ClientAssertionCredentialRefusal> Of(ClientRegistration registration, ClientAssertionOptions options)
     {
         ArgumentNullException.ThrowIfNull(registration);
         ArgumentNullException.ThrowIfNull(options);
 
-        var isPrivateKey = registration.AuthenticationMethod == ClientAuthenticationMethod.PrivateKeyJwt;
-        var isClientSecret = registration.AuthenticationMethod == ClientAuthenticationMethod.ClientSecretJwt;
+        var method = registration.AuthenticationMethod;
+        var isPrivateKey = method == ClientAuthenticationMethod.PrivateKeyJwt;
+        var isClientSecret = method == ClientAuthenticationMethod.ClientSecretJwt;
+
         if(!isPrivateKey && !isClientSecret)
         {
-            throw new ArgumentException(
-                $"ClientAuthenticationMethod.{ClientAuthenticationMethodNames.GetName(registration.AuthenticationMethod)} presents no client assertion.",
-                nameof(registration));
+            return Result<ClientAssertionCredential, ClientAssertionCredentialRefusal>.Failure(new ClientAssertionCredentialRefusal
+            {
+                Reason = ClientAssertionCredentialRefusalReason.MethodPresentsNoAssertion,
+                Method = method
+            });
         }
 
-        var key = registration.AuthenticationKeyMaterial?.PrivateKey
-            ?? throw new InvalidOperationException(
-                $"ClientAuthenticationMethod.{ClientAuthenticationMethodNames.GetName(registration.AuthenticationMethod)} "
-                + "requires ClientRegistration.AuthenticationKeyMaterial to carry the client secret or signing key.");
+        if(registration.AuthenticationKeyMaterial?.PrivateKey is not PrivateKeyMemory key)
+        {
+            return Result<ClientAssertionCredential, ClientAssertionCredentialRefusal>.Failure(new ClientAssertionCredentialRefusal
+            {
+                Reason = ClientAssertionCredentialRefusalReason.RegistrationCarriesNoKey,
+                Method = method
+            });
+        }
+
+        var signingKeyId = string.IsNullOrWhiteSpace(options.SigningKeyId) ? null : options.SigningKeyId;
 
         if(isPrivateKey)
         {
-            return options.SigningKeyId is string signingKeyId
+            return signingKeyId is not null
                 ? Result<ClientAssertionCredential, ClientAssertionCredentialRefusal>.Success(OfPrivateKey(key, signingKeyId))
                 : Result<ClientAssertionCredential, ClientAssertionCredentialRefusal>.Failure(new ClientAssertionCredentialRefusal
                 {
@@ -162,7 +174,7 @@ public sealed class ClientAssertionCredential
                 });
         }
 
-        if(options.SigningKeyId is not null)
+        if(signingKeyId is not null)
         {
             return Result<ClientAssertionCredential, ClientAssertionCredentialRefusal>.Failure(new ClientAssertionCredentialRefusal
             {

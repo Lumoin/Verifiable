@@ -866,7 +866,7 @@ internal sealed class CoseCounterSignatureTests
 
         static ValueTask<SigningResult> ThrowingSigningDelegate(
             ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool,
-            FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default) =>
+            FrozenDictionary<string, object>? context, CancellationToken cancellationToken) =>
             throw new InvalidOperationException("Simulated signing-delegate failure (test-only).");
 
         _ = await Assert.ThrowsExactlyAsync<InvalidOperationException>(async () =>

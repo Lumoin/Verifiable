@@ -80,7 +80,8 @@ public static class LibsodiumCryptographicFunctions
         ReadOnlyMemory<byte> dataToSign,
         BaseMemoryPool signaturePool,
         TimeProvider timeProvider,
-        FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        FrozenDictionary<string, object>? context,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(signaturePool);
         ArgumentNullException.ThrowIfNull(timeProvider);

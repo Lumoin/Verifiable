@@ -20,6 +20,9 @@ namespace Verifiable.Tests.Cryptography;
 [TestClass]
 internal sealed class KeyCreationFunctionRegistryTests
 {
+    /// <summary>The test context, carrying the token that cancels a test that outruns its run.</summary>
+    public TestContext TestContext { get; set; } = null!;
+
     /// <summary>The payload signed by <see cref="MintBindSignEmitsExactlyOneKeyMaterialGeneratedEvent"/>.</summary>
     private static byte[] TestData { get; } = Encoding.UTF8.GetBytes("KeyCreationFunctionRegistryTests payload.");
 
@@ -151,7 +154,7 @@ internal sealed class KeyCreationFunctionRegistryTests
             using PublicKey publicKey = CryptographicKeyFactory.CreatePublicKey(
                 publicKeyMemory, "double-emission-key", CryptoAlgorithm.BrainpoolP224r1, Purpose.Verification);
 
-            using Signature signature = await privateKey.SignAsync(TestData, BaseMemoryPool.Shared).ConfigureAwait(false);
+            using var signature = await privateKey.SignAsync(TestData, BaseMemoryPool.Shared, null, TestContext.CancellationToken).ConfigureAwait(false);
             bool isVerified = await publicKey.VerifyAsync(TestData, signature).ConfigureAwait(false);
             Assert.IsTrue(isVerified, "The mint -> bind -> sign -> verify chain must round-trip correctly.");
 

@@ -393,7 +393,7 @@ resolver, PayloadDeserializer, TestSetup.Base64UrlDecoder, Pool,
         string payloadB64 = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(payloadJson));
         byte[] signingInput = Encoding.ASCII.GetBytes($"{headerB64}.{payloadB64}");
 
-        using Signature signature = await serverPrivate.SignAsync(signingInput, Pool).ConfigureAwait(false);
+        using var signature = await serverPrivate.SignAsync(signingInput, Pool, TestContext.CancellationToken).ConfigureAwait(false);
         string signatureB64 = TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan());
         string responseJwt = $"{headerB64}.{payloadB64}.{signatureB64}";
 
@@ -476,7 +476,7 @@ resolver, PayloadDeserializer, TestSetup.Base64UrlDecoder, Pool,
         string payloadB64 = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(payloadJson));
         byte[] signingInput = Encoding.ASCII.GetBytes($"{headerB64}.{payloadB64}");
 
-        using Signature signature = await serverPrivate.SignAsync(signingInput, Pool).ConfigureAwait(false);
+        using var signature = await serverPrivate.SignAsync(signingInput, Pool, TestContext.CancellationToken).ConfigureAwait(false);
         string signatureB64 = TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan());
         string responseJwt = $"{headerB64}.{payloadB64}.{signatureB64}";
 

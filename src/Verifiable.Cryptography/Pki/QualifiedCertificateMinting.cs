@@ -295,7 +295,7 @@ public static class QualifiedCertificateMinting
         using PooledMemory tbsCertificate = WriteTbsCertificate(request, profile, serialNumber.AsReadOnlySpan(), pool);
 
         (Signature signature, CryptoEvent? evt) = await signingDelegate(
-            issuerPrivateKey.AsReadOnlyMemory(), tbsCertificate.AsReadOnlyMemory(), pool, cancellationToken: cancellationToken).ConfigureAwait(false);
+            issuerPrivateKey.AsReadOnlyMemory(), tbsCertificate.AsReadOnlyMemory(), pool, null, cancellationToken).ConfigureAwait(false);
 
         using(signature)
         {

@@ -143,7 +143,7 @@ namespace Verifiable.Tests.Cryptography
             using var privateKey = keys.PrivateKey;
 
             ReadOnlyMemory<byte> data = TestData;
-            (Signature signature, CryptoEvent? _) = await BouncyCastleCryptographicFunctions.SignMlDsa65Async(privateKey.AsReadOnlyMemory(), data, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
+            var (signature, _) = await BouncyCastleCryptographicFunctions.SignMlDsa65Async(privateKey.AsReadOnlyMemory(), data, BaseMemoryPool.Shared, new FakeTimeProvider(TestClock.CanonicalEpoch), null, TestContext.CancellationToken).ConfigureAwait(false);
             using var disposableSignature = signature;
 
             byte[] tamperedBytes = signature.AsReadOnlyMemory().ToArray();
@@ -364,7 +364,7 @@ namespace Verifiable.Tests.Cryptography
         {
             ReadOnlyMemory<byte> data = TestData;
             (Signature signature, CryptoEvent? _) = await sign(privateKey.AsReadOnlyMemory(), data, BaseMemoryPool.Shared,
-                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+                null, TestContext.CancellationToken).ConfigureAwait(false);
             using var disposableSignature = signature;
 
             Assert.IsGreaterThan(0, signature.AsReadOnlyMemory().Length);

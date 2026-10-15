@@ -9,15 +9,18 @@ namespace Verifiable.OAuth.IdJag;
 /// <summary>
 /// Drives the two client-side ID-JAG token-endpoint exchanges of
 /// draft-ietf-oauth-identity-assertion-authz-grant-04 (21 May 2026) §4.3 (mint) and §4.4 (redeem) over the injected
-/// transport. Both authenticate the confidential client (§9.1) with a <c>private_key_jwt</c> client
-/// assertion (RFC 7523 §2.2) and parse the response through the infrastructure's token-response parser.
+/// transport. Both authenticate the confidential client (§9.1) with the client assertion (RFC 7523 §2.2) the
+/// registration's method names, composed under the key or the secret the registration carries, and parse the response
+/// through the infrastructure's token-response parser. A credential the registration cannot form is refused, typed,
+/// before anything is resolved or sent.
 /// </summary>
 public static class IdJagFlowHandlers
 {
     /// <summary>
     /// Mints an ID-JAG: a Token Exchange (<c>requested_token_type</c> id-jag, §4.3) to the IdP's token
-    /// endpoint, authenticated with a <c>private_key_jwt</c> client assertion. The returned token response
-    /// carries the ID-JAG in its <see cref="TokenResponse.AccessToken"/> (<c>token_type</c> N_A, §4.3.4).
+    /// endpoint, authenticated with the client assertion the registration's method names. The returned token response
+    /// carries the ID-JAG in its <see cref="TokenResponse.AccessToken"/> (<c>token_type</c> N_A, §4.3.4); a credential
+    /// the registration cannot form is the <see cref="OAuthClientAssertionRefused"/> failure, before any send.
     /// </summary>
     public static async ValueTask<Result<TokenResponse, OAuthParseError>> MintAsync(
         IdJagMintOptions options,
@@ -30,6 +33,13 @@ public static class IdJagFlowHandlers
         ArgumentNullException.ThrowIfNull(infrastructure);
         ArgumentNullException.ThrowIfNull(registration);
         ArgumentNullException.ThrowIfNull(context);
+
+        var credential = ResolveCredential(registration, options.ClientAssertion);
+
+        if(!credential.IsSuccess)
+        {
+            return Result<TokenResponse, OAuthParseError>.Failure(credential.Error);
+        }
 
         AuthorizationServerMetadataResolution resolution = await infrastructure
             .ResolveAuthorizationServerMetadataAsync(registration.AuthorizationServerIssuer, context, cancellationToken)
@@ -80,21 +90,14 @@ public static class IdJagFlowHandlers
             return Result<TokenResponse, OAuthParseError>.Failure(mintPolicyDenial);
         }
 
-        //RFC 9449 §8.1's retry re-sends this SAME request; attaching the private_key_jwt client
-        //assertion per attempt (rather than once before the first send) gives the retry a fresh
-        //jti/iat instead of the assertion the challenged attempt already presented — see
+        //RFC 9449 §8.1's retry re-sends this SAME request; attaching the client assertion per attempt
+        //(rather than once before the first send) gives the retry a fresh jti/iat instead of the
+        //assertion the challenged attempt already presented — see
         //TokenEndpointClientOperations.SendWithDpopRetryAsync's remarks.
         HttpResponseData response = await TokenEndpointClientOperations.SendWithDpopRetryAsync(
             infrastructure, tokenEndpoint, form,
-            async (attemptNow, ct) =>
-            {
-                await ClientTokenEndpointAuthentication.AttachClientAssertionAsync(
-                    form, registration, tokenEndpoint, ClientAssertionCredential.OfPrivateKey(options.SigningKey, options.SigningKeyId),
-                    options.HeaderSerializer, options.PayloadSerializer, options.ClientAssertionLifetime,
-                    infrastructure, attemptNow, context, ct).ConfigureAwait(false);
-
-                return OutgoingHeaders.Empty;
-            },
+            (attemptNow, ct) => AttachAssertionAsync(
+                form, registration, tokenEndpoint, credential.Value, options.ClientAssertion, infrastructure, attemptNow, context, ct),
             context, cancellationToken).ConfigureAwait(false);
 
         return infrastructure.ParseTokenResponseAsync(response, now);
@@ -103,8 +106,9 @@ public static class IdJagFlowHandlers
 
     /// <summary>
     /// Redeems an ID-JAG: a JWT Bearer grant (§4.4) presenting the grant as the <c>assertion</c> to the
-    /// Resource Authorization Server's token endpoint, authenticated with a <c>private_key_jwt</c> client
-    /// assertion. The returned token response carries the issued access token.
+    /// Resource Authorization Server's token endpoint, authenticated with the client assertion the registration's method
+    /// names. The returned token response carries the issued access token; a credential the registration cannot form is
+    /// the <see cref="OAuthClientAssertionRefused"/> failure, before any send.
     /// </summary>
     public static async ValueTask<Result<TokenResponse, OAuthParseError>> RedeemAsync(
         IdJagRedeemOptions options,
@@ -117,6 +121,13 @@ public static class IdJagFlowHandlers
         ArgumentNullException.ThrowIfNull(infrastructure);
         ArgumentNullException.ThrowIfNull(registration);
         ArgumentNullException.ThrowIfNull(context);
+
+        var credential = ResolveCredential(registration, options.ClientAssertion);
+
+        if(!credential.IsSuccess)
+        {
+            return Result<TokenResponse, OAuthParseError>.Failure(credential.Error);
+        }
 
         AuthorizationServerMetadataResolution resolution = await infrastructure
             .ResolveAuthorizationServerMetadataAsync(registration.AuthorizationServerIssuer, context, cancellationToken)
@@ -143,24 +154,80 @@ public static class IdJagFlowHandlers
             return Result<TokenResponse, OAuthParseError>.Failure(redeemPolicyDenial);
         }
 
-        //RFC 9449 §8.1's retry re-sends this SAME request; attaching the private_key_jwt client
-        //assertion per attempt (rather than once before the first send) gives the retry a fresh
-        //jti/iat instead of the assertion the challenged attempt already presented — see
+        //RFC 9449 §8.1's retry re-sends this SAME request; attaching the client assertion per attempt
+        //(rather than once before the first send) gives the retry a fresh jti/iat instead of the
+        //assertion the challenged attempt already presented — see
         //TokenEndpointClientOperations.SendWithDpopRetryAsync's remarks.
         HttpResponseData response = await TokenEndpointClientOperations.SendWithDpopRetryAsync(
             infrastructure, tokenEndpoint, form,
-            async (attemptNow, ct) =>
-            {
-                await ClientTokenEndpointAuthentication.AttachClientAssertionAsync(
-                    form, registration, tokenEndpoint, ClientAssertionCredential.OfPrivateKey(options.SigningKey, options.SigningKeyId),
-                    options.HeaderSerializer, options.PayloadSerializer, options.ClientAssertionLifetime,
-                    infrastructure, attemptNow, context, ct).ConfigureAwait(false);
-
-                return OutgoingHeaders.Empty;
-            },
+            (attemptNow, ct) => AttachAssertionAsync(
+                form, registration, tokenEndpoint, credential.Value, options.ClientAssertion, infrastructure, attemptNow, context, ct),
             context, cancellationToken).ConfigureAwait(false);
 
         return infrastructure.ParseTokenResponseAsync(response, now);
+    }
+
+
+    /// <summary>
+    /// Forms the credential the exchange's client assertion is composed under from the registration's method and key
+    /// material and the assertion's inputs (<see cref="ClientAssertionCredential.Of"/>), before anything is resolved or
+    /// sent: a registration naming a method that presents no assertion, carrying no key, or whose key the inputs cannot
+    /// form is the typed <see cref="OAuthClientAssertionRefused"/> failure both flows return.
+    /// </summary>
+    /// <param name="registration">The registration naming the method and carrying the key or the secret.</param>
+    /// <param name="clientAssertion">The assertion's inputs.</param>
+    /// <returns>The credential, or the refusal.</returns>
+    private static Result<ClientAssertionCredential, OAuthParseError> ResolveCredential(
+        ClientRegistration registration, ClientAssertionOptions clientAssertion)
+    {
+        ArgumentNullException.ThrowIfNull(clientAssertion);
+
+        var credential = ClientAssertionCredential.Of(registration, clientAssertion);
+
+        if(credential.IsSuccess)
+        {
+            return Result<ClientAssertionCredential, OAuthParseError>.Success(credential.Value);
+        }
+
+        return Result<ClientAssertionCredential, OAuthParseError>.Failure(new OAuthClientAssertionRefused(
+            credential.Error,
+            new DecisionSupport(credential.Error.Describe())
+            {
+                SpecificationReference = "RFC 7523 §2.2"
+            }));
+    }
+
+
+    /// <summary>
+    /// Attaches one attempt's client assertion, composed fresh under the formed credential, to the exchange's form.
+    /// </summary>
+    /// <param name="form">The exchange's form.</param>
+    /// <param name="registration">The registration choosing the assertion's audience and type.</param>
+    /// <param name="tokenEndpoint">The token endpoint the form is sent to.</param>
+    /// <param name="credential">The credential <see cref="ResolveCredential"/> formed.</param>
+    /// <param name="clientAssertion">The assertion's serialisers and validity window.</param>
+    /// <param name="infrastructure">The client infrastructure.</param>
+    /// <param name="now">The instant of this attempt.</param>
+    /// <param name="context">The per-operation exchange context.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>No header fields: the assertion travels in the form.</returns>
+    private static async ValueTask<OutgoingHeaders> AttachAssertionAsync(
+        OutgoingFormFields form,
+        ClientRegistration registration,
+        Uri tokenEndpoint,
+        ClientAssertionCredential credential,
+        ClientAssertionOptions clientAssertion,
+        OAuthClientInfrastructure infrastructure,
+        DateTimeOffset now,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+    {
+        await ClientTokenEndpointAuthentication.AttachClientAssertionAsync(
+            form, registration, tokenEndpoint, credential,
+            clientAssertion.HeaderSerializer, clientAssertion.PayloadSerializer, clientAssertion.ClientAssertionLifetime,
+            infrastructure, now, context, cancellationToken).ConfigureAwait(false);
+
+        return OutgoingHeaders.Empty;
     }
 
 

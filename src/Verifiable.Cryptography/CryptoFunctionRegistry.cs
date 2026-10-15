@@ -82,8 +82,8 @@ public delegate ValueTask<SigningResult> SigningDelegate(
     ReadOnlyMemory<byte> privateKeyBytes,
     ReadOnlyMemory<byte> dataToSign,
     BaseMemoryPool signaturePool,
-    FrozenDictionary<string, object>? context = null,
-    CancellationToken cancellationToken = default);
+    FrozenDictionary<string, object>? context,
+    CancellationToken cancellationToken);
 
 
 /// <summary>

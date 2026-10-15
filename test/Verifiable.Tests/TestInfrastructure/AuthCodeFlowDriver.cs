@@ -344,6 +344,7 @@ internal static class AuthCodeFlowDriver
             }
 
             var key = ClientAssertionCredential.Of(registration, clientAssertionOptions);
+
             if(!key.IsSuccess)
             {
                 throw new InvalidOperationException(key.Error.Describe());

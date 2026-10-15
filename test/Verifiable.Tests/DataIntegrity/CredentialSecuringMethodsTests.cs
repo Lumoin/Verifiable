@@ -694,7 +694,7 @@ internal sealed class CredentialSecuringMethodsTests
         var sigStructureBytes = sigStructureBuffer.WrittenSpan.ToArray();
 
         using var signature = await privateKeyMemory.SignAsync(
-            sigStructureBytes, BouncyCastleCryptographicFunctionsAdapter.SignEd25519Async, BaseMemoryPool.Shared).ConfigureAwait(false);
+            sigStructureBytes, BouncyCastleCryptographicFunctionsAdapter.SignEd25519Async, BaseMemoryPool.Shared, null, TestContext.CancellationToken).ConfigureAwait(false);
 
         var coseSign1Buffer = new ArrayBufferWriter<byte>();
         var coseSign1 = new CborWriter(coseSign1Buffer, CborOptions.RfcCanonical);
@@ -787,7 +787,7 @@ internal sealed class CredentialSecuringMethodsTests
         var signingInput = $"{headerBase64Url}.{payloadBase64Url}";
 
         var signature = await privateKeyMemory.SignAsync(
-            Encoding.ASCII.GetBytes(signingInput), BouncyCastleCryptographicFunctionsAdapter.SignEd25519Async, BaseMemoryPool.Shared).ConfigureAwait(false);
+            Encoding.ASCII.GetBytes(signingInput), BouncyCastleCryptographicFunctionsAdapter.SignEd25519Async, BaseMemoryPool.Shared, null, TestContext.CancellationToken).ConfigureAwait(false);
 
         var issuerSignedJwt = $"{signingInput}.{TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan())}";
         var sdJwt = $"{issuerSignedJwt}{SdConstants.JwtSeparator}{encodedDisclosure1}{SdConstants.JwtSeparator}{encodedDisclosure2}{SdConstants.JwtSeparator}";
@@ -845,7 +845,7 @@ internal sealed class CredentialSecuringMethodsTests
         var sigStructureBytes = sigStructureBuffer.WrittenSpan.ToArray();
 
         using var signature = await privateKeyMemory.SignAsync(
-            sigStructureBytes, BouncyCastleCryptographicFunctionsAdapter.SignEd25519Async, BaseMemoryPool.Shared).ConfigureAwait(false);
+            sigStructureBytes, BouncyCastleCryptographicFunctionsAdapter.SignEd25519Async, BaseMemoryPool.Shared, null, TestContext.CancellationToken).ConfigureAwait(false);
 
         var sdCwtMessage = new SdCwtMessage(
             payload.AsMemory(), protectedHeader.AsMemory(), signature.AsReadOnlySpan().ToArray(), [disclosure1, disclosure2]);

@@ -702,7 +702,7 @@ public static class CAdESSignatureCreation
 
         (Signature signature, CryptoEvent? evt) = await signingDelegate(
             privateKey.AsReadOnlyMemory(), preparation.SigningInput.AsReadOnlyMemory(), pool,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+            null, cancellationToken).ConfigureAwait(false);
 
         using(signature)
         {
@@ -1098,7 +1098,7 @@ public static class CAdESSignatureCreation
 
         (Signature signature, CryptoEvent? evt) = await signingDelegate(
             countersignerPrivateKey.AsReadOnlyMemory(), preparation.SigningInput.AsReadOnlyMemory(), pool,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+            null, cancellationToken).ConfigureAwait(false);
 
         using(signature)
         {
@@ -1330,7 +1330,7 @@ public static class CAdESSignatureCreation
 
         (Signature signature, CryptoEvent? evt) = await signingDelegate(
             privateKey.AsReadOnlyMemory(), preparation.SigningInput.AsReadOnlyMemory(), pool,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+            null, cancellationToken).ConfigureAwait(false);
 
         using(signature)
         {

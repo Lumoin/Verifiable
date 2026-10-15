@@ -72,8 +72,8 @@ public static class BouncyCastleRecoverableSignatureFunctions
         ReadOnlyMemory<byte> nonRecoverableMessage,
         BaseMemoryPool signaturePool,
         TimeProvider timeProvider,
-        FrozenDictionary<string, object>? context = null,
-        CancellationToken cancellationToken = default)
+        FrozenDictionary<string, object>? context,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(signaturePool);
         ArgumentNullException.ThrowIfNull(timeProvider);

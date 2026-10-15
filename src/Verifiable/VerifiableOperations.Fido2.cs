@@ -889,7 +889,7 @@ internal static partial class VerifiableOperations
         clientDataHash.AsReadOnlySpan().CopyTo(toBeSigned.AsSpan(authenticatorDataBytes.Length));
 
         byte[] derSignature;
-        Signature p1363Signature = await privateKey.SignAsync(toBeSigned, pool).ConfigureAwait(false);
+        var p1363Signature = await privateKey.SignAsync(toBeSigned, pool, null, cancellationToken).ConfigureAwait(false);
         using(p1363Signature)
         {
             using IMemoryOwner<byte> derOwner = EcdsaSignatureEncoding.ConvertP1363ToDer(p1363Signature.AsReadOnlySpan(), pool, out int derLength);

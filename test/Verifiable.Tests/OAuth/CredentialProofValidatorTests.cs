@@ -495,7 +495,7 @@ internal sealed class CredentialProofValidatorTests
             "{\"alg\":\"" + algorithm + "\",\"typ\":\"" + Oid4VciProofIssuance.ProofJwtType + "\"," +
             "\"jwk\":" + jwkJson + ",\"jwk\":" + jwkJson + "}";
 
-        string duplicateProof = await SignRawAsync(holderPrivate, duplicateHeaderJson, payloadJson).ConfigureAwait(false);
+        var duplicateProof = await SignRawAsync(holderPrivate, duplicateHeaderJson, payloadJson, TestContext.CancellationToken).ConfigureAwait(false);
 
         CredentialProofValidationResult duplicateResult = await ValidateAsync(duplicateProof).ConfigureAwait(false);
         Assert.AreEqual(CredentialProofValidationFailureReason.Malformed, duplicateResult.FailureReason);
@@ -504,7 +504,7 @@ internal sealed class CredentialProofValidatorTests
             "{\"alg\":\"" + algorithm + "\",\"typ\":\"" + Oid4VciProofIssuance.ProofJwtType + "\"," +
             "\"jwk\":" + jwkJson + "}";
 
-        string acceptedProof = await SignRawAsync(holderPrivate, singleHeaderJson, payloadJson).ConfigureAwait(false);
+        var acceptedProof = await SignRawAsync(holderPrivate, singleHeaderJson, payloadJson, TestContext.CancellationToken).ConfigureAwait(false);
 
         CredentialProofValidationResult acceptedResult = await ValidateAsync(acceptedProof).ConfigureAwait(false);
 
@@ -516,13 +516,13 @@ internal sealed class CredentialProofValidatorTests
     //Signs a hand-built header/payload JSON pair over their exact UTF-8 bytes with the project's
     //signing primitive, never through HeaderSerializer/PayloadSerializer — proves the well-formedness
     //gate's refusal is independent of how a JSON serializer would itself react to a repeated member.
-    private static async Task<string> SignRawAsync(PrivateKeyMemory signingKey, string headerJson, string payloadJson)
+    private static async Task<string> SignRawAsync(PrivateKeyMemory signingKey, string headerJson, string payloadJson, CancellationToken cancellationToken)
     {
         string headerB64 = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(headerJson));
         string payloadB64 = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(payloadJson));
         byte[] signingInput = Encoding.ASCII.GetBytes($"{headerB64}.{payloadB64}");
 
-        using Signature signature = await signingKey.SignAsync(signingInput, Pool).ConfigureAwait(false);
+        using var signature = await signingKey.SignAsync(signingInput, Pool, cancellationToken).ConfigureAwait(false);
         string signatureB64 = TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan());
 
         return $"{headerB64}.{payloadB64}.{signatureB64}";

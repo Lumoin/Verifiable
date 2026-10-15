@@ -59,6 +59,7 @@ internal static class ClientCredentialsFlowHandlers
         ArgumentNullException.ThrowIfNull(context);
 
         var assertionKey = TokenEndpointClientOperations.ResolveClientAssertionKey(registration, clientAssertionOptions);
+
         if(!assertionKey.IsSuccess)
         {
             return assertionKey.Error;

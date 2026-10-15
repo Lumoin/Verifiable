@@ -33,7 +33,7 @@ internal sealed class WebPlusMinterTests
         [
             new WebPlusDocPlan(root, VersionId: 0, RootTime),
             new WebPlusDocPlan(next, VersionId: 1, SecondTime)
-        ]).ConfigureAwait(false);
+        ], TestContext.CancellationToken).ConfigureAwait(false);
 
         DidResolutionResult result = await ResolveAsync(minted).ConfigureAwait(false);
 
@@ -54,7 +54,7 @@ internal sealed class WebPlusMinterTests
         [
             new WebPlusDocPlan(root, VersionId: 0, RootTime),
             new WebPlusDocPlan(next, VersionId: 1, SecondTime, Deactivate: true)
-        ]).ConfigureAwait(false);
+        ], TestContext.CancellationToken).ConfigureAwait(false);
 
         DidResolutionResult result = await ResolveAsync(minted).ConfigureAwait(false);
 
@@ -75,7 +75,7 @@ internal sealed class WebPlusMinterTests
         [
             new WebPlusDocPlan(root, VersionId: 0, RootTime),
             new WebPlusDocPlan(next, VersionId: 1, SecondTime, IdOverride: "did:webplus:example.com:uHiCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
-        ]).ConfigureAwait(false);
+        ], TestContext.CancellationToken).ConfigureAwait(false);
 
         DidResolutionResult result = await ResolveAsync(minted).ConfigureAwait(false);
 
@@ -95,7 +95,7 @@ internal sealed class WebPlusMinterTests
             new WebPlusDocPlan(root, VersionId: 0, SecondTime),
             //versionId-1 validFrom is BEFORE the root's, violating the strictly-later obligation.
             new WebPlusDocPlan(next, VersionId: 1, RootTime)
-        ]).ConfigureAwait(false);
+        ], TestContext.CancellationToken).ConfigureAwait(false);
 
         DidResolutionResult result = await ResolveAsync(minted).ConfigureAwait(false);
 
@@ -115,7 +115,7 @@ internal sealed class WebPlusMinterTests
             new WebPlusDocPlan(root, VersionId: 0, RootTime),
             //versionId 5 instead of 1: not exactly predecessor + 1.
             new WebPlusDocPlan(next, VersionId: 1, SecondTime, VersionIdOverride: 5)
-        ]).ConfigureAwait(false);
+        ], TestContext.CancellationToken).ConfigureAwait(false);
 
         DidResolutionResult result = await ResolveAsync(minted).ConfigureAwait(false);
 
@@ -134,7 +134,7 @@ internal sealed class WebPlusMinterTests
         [
             new WebPlusDocPlan(root, VersionId: 0, RootTime),
             new WebPlusDocPlan(next, VersionId: 1, SecondTime, PrevSelfHashOverride: "uHiCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
-        ]).ConfigureAwait(false);
+        ], TestContext.CancellationToken).ConfigureAwait(false);
 
         DidResolutionResult result = await ResolveAsync(minted).ConfigureAwait(false);
 
@@ -156,7 +156,7 @@ internal sealed class WebPlusMinterTests
             //versionId-1 deactivates (updateRules {}); its update key still signs the (illegitimate) versionId-2.
             new WebPlusDocPlan(afterDeactivation, VersionId: 1, SecondTime, Deactivate: true),
             new WebPlusDocPlan(revived, VersionId: 2, ThirdTime)
-        ]).ConfigureAwait(false);
+        ], TestContext.CancellationToken).ConfigureAwait(false);
 
         DidResolutionResult result = await ResolveAsync(minted).ConfigureAwait(false);
 
@@ -179,7 +179,7 @@ internal sealed class WebPlusMinterTests
         [
             new WebPlusDocPlan(root, VersionId: 0, RootTime),
             new WebPlusDocPlan(next, VersionId: 1, SecondTime, ProofHeaderMutator: WithB64True)
-        ]).ConfigureAwait(false);
+        ], TestContext.CancellationToken).ConfigureAwait(false);
 
         DidResolutionResult result = await ResolveAsync(minted).ConfigureAwait(false);
 
@@ -201,7 +201,7 @@ internal sealed class WebPlusMinterTests
         [
             new WebPlusDocPlan(root, VersionId: 0, RootTime),
             new WebPlusDocPlan(next, VersionId: 1, SecondTime, ProofHeaderMutator: WithoutKid)
-        ]).ConfigureAwait(false);
+        ], TestContext.CancellationToken).ConfigureAwait(false);
 
         DidResolutionResult result = await ResolveAsync(minted).ConfigureAwait(false);
 
@@ -223,7 +223,7 @@ internal sealed class WebPlusMinterTests
         [
             new WebPlusDocPlan(root, VersionId: 0, RootTime),
             new WebPlusDocPlan(next, VersionId: 1, SecondTime, ProofHeaderMutator: WithoutAlg)
-        ]).ConfigureAwait(false);
+        ], TestContext.CancellationToken).ConfigureAwait(false);
 
         DidResolutionResult result = await ResolveAsync(minted).ConfigureAwait(false);
 
@@ -246,7 +246,7 @@ internal sealed class WebPlusMinterTests
         [
             new WebPlusDocPlan(root, VersionId: 0, RootTime),
             new WebPlusDocPlan(next, VersionId: 1, SecondTime, ProofHeaderMutator: WithCritNotMarkingB64)
-        ]).ConfigureAwait(false);
+        ], TestContext.CancellationToken).ConfigureAwait(false);
 
         DidResolutionResult result = await ResolveAsync(minted).ConfigureAwait(false);
 
@@ -270,7 +270,7 @@ internal sealed class WebPlusMinterTests
         [
             new WebPlusDocPlan(root, VersionId: 0, RootTime),
             new WebPlusDocPlan(next, VersionId: 1, SecondTime, ProofHeaderMutator: WithoutCrit)
-        ]).ConfigureAwait(false);
+        ], TestContext.CancellationToken).ConfigureAwait(false);
 
         DidResolutionResult result = await ResolveAsync(minted).ConfigureAwait(false);
 
@@ -293,7 +293,7 @@ internal sealed class WebPlusMinterTests
         [
             new WebPlusDocPlan(root, VersionId: 0, RootTime),
             new WebPlusDocPlan(next, VersionId: 1, SecondTime, ProofHeaderMutator: WithMismatchedAlg)
-        ]).ConfigureAwait(false);
+        ], TestContext.CancellationToken).ConfigureAwait(false);
 
         DidResolutionResult result = await ResolveAsync(minted).ConfigureAwait(false);
 
@@ -317,7 +317,7 @@ internal sealed class WebPlusMinterTests
         [
             new WebPlusDocPlan(root, VersionId: 0, RootTime),
             new WebPlusDocPlan(next, VersionId: 1, SecondTime, SignerOverride: unauthorized)
-        ]).ConfigureAwait(false);
+        ], TestContext.CancellationToken).ConfigureAwait(false);
 
         DidResolutionResult result = await ResolveAsync(minted).ConfigureAwait(false);
 
@@ -341,7 +341,7 @@ internal sealed class WebPlusMinterTests
         [
             new WebPlusDocPlan(root, VersionId: 0, RootTime),
             new WebPlusDocPlan(next, VersionId: 1, SecondTime, VerificationMethodIdMutator: DropSelfHashQueryParameter)
-        ]).ConfigureAwait(false);
+        ], TestContext.CancellationToken).ConfigureAwait(false);
 
         DidResolutionResult result = await ResolveAsync(minted).ConfigureAwait(false);
 
@@ -363,7 +363,7 @@ internal sealed class WebPlusMinterTests
         [
             new WebPlusDocPlan(root, VersionId: 0, RootTime),
             new WebPlusDocPlan(next, VersionId: 1, SecondTime, ProofsMutator: ToSingleStringProofs)
-        ]).ConfigureAwait(false);
+        ], TestContext.CancellationToken).ConfigureAwait(false);
 
         DidResolutionResult result = await ResolveAsync(minted).ConfigureAwait(false);
 
@@ -385,7 +385,7 @@ internal sealed class WebPlusMinterTests
         WebPlusMintedDid minted = await WebPlusMinter.MintAsync(Host,
         [
             new WebPlusDocPlan(root, VersionId: 0, RootTime, UpdateRulesJsonOverride: """{"all":[]}""")
-        ]).ConfigureAwait(false);
+        ], TestContext.CancellationToken).ConfigureAwait(false);
 
         DidResolutionResult result = await ResolveAsync(minted).ConfigureAwait(false);
 
@@ -405,7 +405,7 @@ internal sealed class WebPlusMinterTests
         WebPlusMintedDid minted = await WebPlusMinter.MintAsync(Host,
         [
             new WebPlusDocPlan(root, VersionId: 0, RootTime, UpdateRulesJsonOverride: """{"atLeast":0,"of":[{"key":"uAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}]}""")
-        ]).ConfigureAwait(false);
+        ], TestContext.CancellationToken).ConfigureAwait(false);
 
         DidResolutionResult result = await ResolveAsync(minted).ConfigureAwait(false);
 
@@ -429,7 +429,7 @@ internal sealed class WebPlusMinterTests
         [
             new WebPlusDocPlan(root, VersionId: 0, RootTime),
             new WebPlusDocPlan(next, VersionId: 1, SecondTime, ProofsMutator: ToEmptyProofs)
-        ]).ConfigureAwait(false);
+        ], TestContext.CancellationToken).ConfigureAwait(false);
 
         DidResolutionResult result = await ResolveAsync(minted).ConfigureAwait(false);
 
@@ -457,7 +457,7 @@ internal sealed class WebPlusMinterTests
         [
             new WebPlusDocPlan(root, VersionId: 0, RootTime),
             new WebPlusDocPlan(next, VersionId: 1, SecondTime, RawProofHeaderMutator: DuplicateAlgMember)
-        ]).ConfigureAwait(false);
+        ], TestContext.CancellationToken).ConfigureAwait(false);
 
         DidResolutionResult result = await ResolveAsync(minted).ConfigureAwait(false);
 

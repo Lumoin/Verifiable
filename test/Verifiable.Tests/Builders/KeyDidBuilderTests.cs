@@ -113,7 +113,7 @@ namespace Verifiable.Tests.Builders
 
             //Sign data.
             var contentToSign = Encoding.UTF8.GetBytes("Hello, DID!");
-            using var signature = await privateKey.SignAsync(contentToSign, BaseMemoryPool.Shared)
+            using var signature = await privateKey.SignAsync(contentToSign, BaseMemoryPool.Shared, TestContext.CancellationToken)
                 .ConfigureAwait(false);
 
             //Verify signature using the verification method by ID.

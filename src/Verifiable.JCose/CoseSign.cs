@@ -107,7 +107,7 @@ public static class CoseSign
             privateKey.AsReadOnlyMemory(),
             toBeSigned,
             signaturePool,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+            null, cancellationToken).ConfigureAwait(false);
 
         if(evt is not null)
         {

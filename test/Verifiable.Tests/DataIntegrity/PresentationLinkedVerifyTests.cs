@@ -81,7 +81,7 @@ internal sealed class PresentationLinkedVerifyTests
             publicKey, testData.VerificationMethodTypeInfo, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         DataIntegritySecuredPresentation signed = await SignStaticPresentationAsync(
-            holderDidDocument, privateKey, challenge: null, domain: null).ConfigureAwait(false);
+            holderDidDocument, privateKey, challenge: null, domain: null, TestContext.CancellationToken).ConfigureAwait(false);
 
         var result = await signed.VerifyLinkedPresentationAsync(
             holderDidDocument,
@@ -119,7 +119,7 @@ internal sealed class PresentationLinkedVerifyTests
 
         //A challenge with no domain isolates the challenge half of the binding rejection.
         DataIntegritySecuredPresentation signed = await SignStaticPresentationAsync(
-            holderDidDocument, privateKey, challenge: VerifierChallenge, domain: null).ConfigureAwait(false);
+            holderDidDocument, privateKey, challenge: VerifierChallenge, domain: null, TestContext.CancellationToken).ConfigureAwait(false);
 
         var result = await signed.VerifyLinkedPresentationAsync(
             holderDidDocument,
@@ -158,7 +158,7 @@ internal sealed class PresentationLinkedVerifyTests
 
         //A domain with no challenge isolates the domain half of the binding rejection.
         DataIntegritySecuredPresentation signed = await SignStaticPresentationAsync(
-            holderDidDocument, privateKey, challenge: null, domain: VerifierDomain).ConfigureAwait(false);
+            holderDidDocument, privateKey, challenge: null, domain: VerifierDomain, TestContext.CancellationToken).ConfigureAwait(false);
 
         var result = await signed.VerifyLinkedPresentationAsync(
             holderDidDocument,
@@ -196,7 +196,7 @@ internal sealed class PresentationLinkedVerifyTests
             publicKey, testData.VerificationMethodTypeInfo, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         DataIntegritySecuredPresentation signed = await SignStaticPresentationAsync(
-            holderDidDocument, privateKey, challenge: null, domain: null).ConfigureAwait(false);
+            holderDidDocument, privateKey, challenge: null, domain: null, TestContext.CancellationToken).ConfigureAwait(false);
 
         //Flip the last proof-value character so the signature no longer matches the signed bytes.
         string proofValue = signed.Proof![0].ProofValue!;
@@ -226,7 +226,7 @@ internal sealed class PresentationLinkedVerifyTests
             publicKey, testData.VerificationMethodTypeInfo, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         DataIntegritySecuredPresentation signed = await SignStaticPresentationAsync(
-            holderDidDocument, privateKey, challenge: null, domain: null).ConfigureAwait(false);
+            holderDidDocument, privateKey, challenge: null, domain: null, TestContext.CancellationToken).ConfigureAwait(false);
 
         //Point the proof at a method id absent from the document's authentication relationship; resolution fails
         //before the signature is ever checked.
@@ -256,7 +256,7 @@ internal sealed class PresentationLinkedVerifyTests
             publicKey, testData.VerificationMethodTypeInfo, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         DataIntegritySecuredPresentation signed = await SignStaticPresentationAsync(
-            holderDidDocument, privateKey, challenge: null, domain: null).ConfigureAwait(false);
+            holderDidDocument, privateKey, challenge: null, domain: null, TestContext.CancellationToken).ConfigureAwait(false);
 
         signed.Proof![0].ProofPurpose = AssertionMethod.Purpose;
 
@@ -287,7 +287,7 @@ internal sealed class PresentationLinkedVerifyTests
         //Bind the presentation with a challenge, take it to the wire, and DELETE the challenge member from the
         //proof — an attacker trying to route a replay-bound presentation through the static verify.
         DataIntegritySecuredPresentation bound = await SignStaticPresentationAsync(
-            holderDidDocument, privateKey, challenge: VerifierChallenge, domain: null).ConfigureAwait(false);
+            holderDidDocument, privateKey, challenge: VerifierChallenge, domain: null, TestContext.CancellationToken).ConfigureAwait(false);
 
         string wire = SerializePresentation(bound);
         JsonObject wireObject = JsonNode.Parse(wire)!.AsObject();
@@ -325,14 +325,14 @@ internal sealed class PresentationLinkedVerifyTests
 
     /// <summary>
     /// Signs a holder-only presentation, optionally with a challenge and/or domain, through the shared
-    /// <see cref="DataIntegrityContextTamperingFixture.SignJcsPresentationAsync(DidDocument, PrivateKeyMemory, string?, string?, DateTime)"/>: the unbound form carries no binding
+    /// <see cref="DataIntegrityContextTamperingFixture.SignJcsPresentationAsync(DidDocument, PrivateKeyMemory, string?, string?, DateTime, CancellationToken)"/>: the unbound form carries no binding
     /// fields and the bound forms the ones given, so the proof covers whatever binding is present, exactly as a wire
     /// whois.vp would.
     /// </summary>
     private static Task<DataIntegritySecuredPresentation> SignStaticPresentationAsync(
-        DidDocument holderDidDocument, PrivateKeyMemory privateKey, string? challenge, string? domain) =>
+        DidDocument holderDidDocument, PrivateKeyMemory privateKey, string? challenge, string? domain, CancellationToken cancellationToken) =>
         DataIntegrityContextTamperingFixture.SignJcsPresentationAsync(
-            holderDidDocument, privateKey, challenge, domain, TimeProvider.GetUtcNow().UtcDateTime);
+            holderDidDocument, privateKey, challenge, domain, TimeProvider.GetUtcNow().UtcDateTime, cancellationToken);
 
 
     /// <summary>
@@ -356,7 +356,7 @@ internal sealed class PresentationLinkedVerifyTests
             publicKey, testData.VerificationMethodTypeInfo, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         DataIntegritySecuredPresentation signed = await SignStaticPresentationAsync(
-            holderDidDocument, privateKey, challenge: null, domain: null).ConfigureAwait(false);
+            holderDidDocument, privateKey, challenge: null, domain: null, TestContext.CancellationToken).ConfigureAwait(false);
 
         signed.Proof![0].Type = null!;
 

@@ -618,6 +618,7 @@ internal sealed class IdJagGrantTests
                     ClientId = new ClientId(ClientId),
                     AuthorizationServerIssuer = material.Registration.IssuerUri!,
                     AuthenticationMethod = ClientAuthenticationMethod.PrivateKeyJwt,
+                    AuthenticationKeyMaterial = clientKeys,
                     Profile = PolicyProfile.Haip10
                 };
 
@@ -630,10 +631,12 @@ internal sealed class IdJagGrantTests
                         Audience = ResourceAsIssuer,
                         SubjectToken = SubjectTokenValue,
                         SubjectTokenType = TokenType.IdToken,
-                        SigningKey = clientKeys.PrivateKey,
-                        SigningKeyId = MintRedeemSigningKeyId,
-                        HeaderSerializer = ClientAssertionHeaderSerializer,
-                        PayloadSerializer = ClientAssertionPayloadSerializer
+                        ClientAssertion = new ClientAssertionOptions
+                        {
+                            SigningKeyId = MintRedeemSigningKeyId,
+                            HeaderSerializer = ClientAssertionHeaderSerializer,
+                            PayloadSerializer = ClientAssertionPayloadSerializer
+                        }
                     },
                     TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -737,6 +740,7 @@ internal sealed class IdJagGrantTests
                     ClientId = new ClientId(ClientId),
                     AuthorizationServerIssuer = material.Registration.IssuerUri!,
                     AuthenticationMethod = ClientAuthenticationMethod.PrivateKeyJwt,
+                    AuthenticationKeyMaterial = clientKeys,
                     Profile = PolicyProfile.Haip10
                 };
 
@@ -747,10 +751,12 @@ internal sealed class IdJagGrantTests
                     new IdJagRedeemOptions
                     {
                         Assertion = jag,
-                        SigningKey = clientKeys.PrivateKey,
-                        SigningKeyId = MintRedeemSigningKeyId,
-                        HeaderSerializer = ClientAssertionHeaderSerializer,
-                        PayloadSerializer = ClientAssertionPayloadSerializer
+                        ClientAssertion = new ClientAssertionOptions
+                        {
+                            SigningKeyId = MintRedeemSigningKeyId,
+                            HeaderSerializer = ClientAssertionHeaderSerializer,
+                            PayloadSerializer = ClientAssertionPayloadSerializer
+                        }
                     },
                     TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -956,6 +962,7 @@ internal sealed class IdJagGrantTests
                     ClientId = new ClientId(ClientId),
                     AuthorizationServerIssuer = material.Registration.IssuerUri!,
                     AuthenticationMethod = ClientAuthenticationMethod.PrivateKeyJwt,
+                    AuthenticationKeyMaterial = clientKeys,
                     Profile = PolicyProfile.Haip10
                 };
 
@@ -966,10 +973,12 @@ internal sealed class IdJagGrantTests
                     new IdJagRedeemOptions
                     {
                         Assertion = "opaque-id-jag-the-accepting-validator-does-not-inspect",
-                        SigningKey = clientKeys.PrivateKey,
-                        SigningKeyId = MintRedeemSigningKeyId,
-                        HeaderSerializer = ClientAssertionHeaderSerializer,
-                        PayloadSerializer = ClientAssertionPayloadSerializer
+                        ClientAssertion = new ClientAssertionOptions
+                        {
+                            SigningKeyId = MintRedeemSigningKeyId,
+                            HeaderSerializer = ClientAssertionHeaderSerializer,
+                            PayloadSerializer = ClientAssertionPayloadSerializer
+                        }
                     },
                     TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -1051,6 +1060,7 @@ internal sealed class IdJagGrantTests
                 ClientId = new ClientId(ClientId),
                 AuthorizationServerIssuer = material.Registration.IssuerUri!,
                 AuthenticationMethod = ClientAuthenticationMethod.PrivateKeyJwt,
+                AuthenticationKeyMaterial = clientKeys,
                 Profile = PolicyProfile.Haip10
             };
 
@@ -1063,10 +1073,12 @@ internal sealed class IdJagGrantTests
                     Audience = ResourceAsIssuer,
                     SubjectToken = SubjectTokenValue,
                     SubjectTokenType = TokenType.IdToken,
-                    SigningKey = clientKeys.PrivateKey,
-                    SigningKeyId = MintRedeemSigningKeyId,
-                    HeaderSerializer = ClientAssertionHeaderSerializer,
-                    PayloadSerializer = ClientAssertionPayloadSerializer
+                    ClientAssertion = new ClientAssertionOptions
+                    {
+                        SigningKeyId = MintRedeemSigningKeyId,
+                        HeaderSerializer = ClientAssertionHeaderSerializer,
+                        PayloadSerializer = ClientAssertionPayloadSerializer
+                    }
                 },
                 TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -1079,10 +1091,12 @@ internal sealed class IdJagGrantTests
                 new IdJagRedeemOptions
                 {
                     Assertion = "opaque-id-jag-not-inspected-before-the-dpop-mandate-gate",
-                    SigningKey = clientKeys.PrivateKey,
-                    SigningKeyId = MintRedeemSigningKeyId,
-                    HeaderSerializer = ClientAssertionHeaderSerializer,
-                    PayloadSerializer = ClientAssertionPayloadSerializer
+                    ClientAssertion = new ClientAssertionOptions
+                    {
+                        SigningKeyId = MintRedeemSigningKeyId,
+                        HeaderSerializer = ClientAssertionHeaderSerializer,
+                        PayloadSerializer = ClientAssertionPayloadSerializer
+                    }
                 },
                 TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -5494,20 +5508,30 @@ internal sealed class IdJagGrantTests
         }).ConfigureAwait(false);
 
         //Leg 1 — the client mints an ID-JAG via Token Exchange.
+        //The client authenticates with the private_key_jwt assertion its registration names, under the key the
+        //registration carries.
+        var assertingRegistration = clientRegistration with
+        {
+            AuthenticationMethod = ClientAuthenticationMethod.PrivateKeyJwt,
+            AuthenticationKeyMaterial = clientKey
+        };
+
         IdJagMintOptions mintOptions = new()
         {
             Audience = ResourceAsIssuer,
             SubjectToken = SubjectTokenValue,
             SubjectTokenType = TokenType.IdToken,
-            SigningKey = clientPrivate,
-            SigningKeyId = clientSigningKeyId,
-            HeaderSerializer = ClientAssertionHeaderSerializer,
-            PayloadSerializer = ClientAssertionPayloadSerializer,
+            ClientAssertion = new ClientAssertionOptions
+            {
+                SigningKeyId = clientSigningKeyId,
+                HeaderSerializer = ClientAssertionHeaderSerializer,
+                PayloadSerializer = ClientAssertionPayloadSerializer
+            },
             Scope = WellKnownScopes.OpenId
         };
 
         var mintResult = await oauthClient.IdJag.MintAsync(
-            clientRegistration, mintOptions, TestContext.CancellationToken).ConfigureAwait(false);
+            assertingRegistration, mintOptions, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(mintResult.IsSuccess, mintResult.Error?.Support.Summary);
 
         string jag = mintResult.Value.AccessToken;
@@ -5518,14 +5542,16 @@ internal sealed class IdJagGrantTests
         IdJagRedeemOptions redeemOptions = new()
         {
             Assertion = jag,
-            SigningKey = clientPrivate,
-            SigningKeyId = clientSigningKeyId,
-            HeaderSerializer = ClientAssertionHeaderSerializer,
-            PayloadSerializer = ClientAssertionPayloadSerializer
+            ClientAssertion = new ClientAssertionOptions
+            {
+                SigningKeyId = clientSigningKeyId,
+                HeaderSerializer = ClientAssertionHeaderSerializer,
+                PayloadSerializer = ClientAssertionPayloadSerializer
+            }
         };
 
         var redeemResult = await oauthClient.IdJag.RedeemAsync(
-            clientRegistration, redeemOptions, TestContext.CancellationToken).ConfigureAwait(false);
+            assertingRegistration, redeemOptions, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(redeemResult.IsSuccess, redeemResult.Error?.Support.Summary);
         Assert.AreEqual(WellKnownAuthenticationSchemes.Bearer, redeemResult.Value.TokenType);
         Assert.IsFalse(string.IsNullOrEmpty(redeemResult.Value.AccessToken), "an access token must be issued.");
@@ -5604,21 +5630,31 @@ internal sealed class IdJagGrantTests
                 };
         }).ConfigureAwait(false);
 
+        //The client authenticates with the private_key_jwt assertion its registration names, under the key the
+        //registration carries.
+        var assertingRegistration = clientRegistration with
+        {
+            AuthenticationMethod = ClientAuthenticationMethod.PrivateKeyJwt,
+            AuthenticationKeyMaterial = clientKey
+        };
+
         IdJagMintOptions mintOptions = new()
         {
             Audience = ResourceAsIssuer,
             SubjectToken = SubjectTokenValue,
             SubjectTokenType = TokenType.IdToken,
-            SigningKey = clientPrivate,
-            SigningKeyId = clientSigningKeyId,
-            HeaderSerializer = ClientAssertionHeaderSerializer,
-            PayloadSerializer = ClientAssertionPayloadSerializer,
+            ClientAssertion = new ClientAssertionOptions
+            {
+                SigningKeyId = clientSigningKeyId,
+                HeaderSerializer = ClientAssertionHeaderSerializer,
+                PayloadSerializer = ClientAssertionPayloadSerializer
+            },
             Scope = WellKnownScopes.OpenId,
             Resource = [FirstResource, SecondResource]
         };
 
         var mintResult = await oauthClient.IdJag.MintAsync(
-            clientRegistration, mintOptions, TestContext.CancellationToken).ConfigureAwait(false);
+            assertingRegistration, mintOptions, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(mintResult.IsSuccess, mintResult.Error?.Support.Summary);
 
         Assert.IsNotNull(seenResources, "The authorization seam must have run.");
@@ -5669,6 +5705,7 @@ internal sealed class IdJagGrantTests
             ClientId = new ClientId(ClientId),
             AuthorizationServerIssuer = material.Registration.IssuerUri!,
             AuthenticationMethod = ClientAuthenticationMethod.PrivateKeyJwt,
+            AuthenticationKeyMaterial = clientKeys,
             Profile = PolicyProfile.Rfc6749WithPkce
         };
         OAuthClient client = new(infrastructure);
@@ -5680,10 +5717,12 @@ internal sealed class IdJagGrantTests
                 Audience = ResourceAsIssuer,
                 SubjectToken = SubjectTokenValue,
                 SubjectTokenType = TokenType.IdToken,
-                SigningKey = clientPrivate,
-                SigningKeyId = MintRedeemSigningKeyId,
-                HeaderSerializer = ClientAssertionHeaderSerializer,
-                PayloadSerializer = ClientAssertionPayloadSerializer,
+                ClientAssertion = new ClientAssertionOptions
+                {
+                    SigningKeyId = MintRedeemSigningKeyId,
+                    HeaderSerializer = ClientAssertionHeaderSerializer,
+                    PayloadSerializer = ClientAssertionPayloadSerializer
+                },
                 Scope = scope
             },
             TestContext.CancellationToken).ConfigureAwait(false);

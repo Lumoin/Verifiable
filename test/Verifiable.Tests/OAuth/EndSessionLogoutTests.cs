@@ -259,7 +259,7 @@ internal sealed class EndSessionLogoutTests
 
         PrivateKeyMemory signingKey = host.Host("default").SigningKeys[new KeyId(kid)];
         byte[] signingInput = Encoding.ASCII.GetBytes($"{parts[0]}.{tamperedPayloadB64}");
-        using Signature signature = await signingKey.SignAsync(signingInput, BaseMemoryPool.Shared).ConfigureAwait(false);
+        using var signature = await signingKey.SignAsync(signingInput, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
         string signatureB64 = TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan());
         string tamperedIdToken = $"{parts[0]}.{tamperedPayloadB64}.{signatureB64}";
 
@@ -624,7 +624,7 @@ internal sealed class EndSessionLogoutTests
         List<string> terminated = await WireTerminateSeamAsync(host).ConfigureAwait(false);
 
         string idToken = await IssueIdTokenAsync(host, material, "session-T").ConfigureAwait(false);
-        string hint = await CompactJwsResigning.ResignWithHeaderAsync(host, idToken, material.SigningKeyId, type).ConfigureAwait(false);
+        var hint = await CompactJwsResigning.ResignWithHeaderAsync(host, idToken, material.SigningKeyId, type, TestContext.CancellationToken).ConfigureAwait(false);
 
         using HttpResponseMessage response = await EndSessionOverWireAsync(host, material, hint, "t1").ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -666,7 +666,7 @@ internal sealed class EndSessionLogoutTests
         List<string> terminated = await WireTerminateSeamAsync(host).ConfigureAwait(false);
 
         string idToken = await IssueIdTokenAsync(host, material, "session-U").ConfigureAwait(false);
-        string hint = await CompactJwsResigning.ResignWithHeaderAsync(host, idToken, material.SigningKeyId, typ).ConfigureAwait(false);
+        var hint = await CompactJwsResigning.ResignWithHeaderAsync(host, idToken, material.SigningKeyId, typ, TestContext.CancellationToken).ConfigureAwait(false);
 
         using HttpResponseMessage response = await EndSessionOverWireAsync(host, material, hint, "u1").ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -710,7 +710,7 @@ internal sealed class EndSessionLogoutTests
         List<string> terminated = await WireTerminateSeamAsync(host).ConfigureAwait(false);
 
         string idToken = await IssueIdTokenAsync(host, material, "session-K").ConfigureAwait(false);
-        string hint = await CompactJwsResigning.ResignWithHeaderAsync(host, idToken, otherMaterial.SigningKeyId, "JWT").ConfigureAwait(false);
+        var hint = await CompactJwsResigning.ResignWithHeaderAsync(host, idToken, otherMaterial.SigningKeyId, "JWT", TestContext.CancellationToken).ConfigureAwait(false);
 
         using HttpResponseMessage response = await EndSessionOverWireAsync(host, material, hint, "k1").ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -746,7 +746,7 @@ internal sealed class EndSessionLogoutTests
         List<string> terminated = await WireTerminateSeamAsync(host).ConfigureAwait(false);
 
         string idToken = await IssueIdTokenAsync(host, material, "session-W").ConfigureAwait(false);
-        string hint = await CompactJwsResigning.ResignWithHeaderAsync(host, idToken, material.SigningKeyId, " ", "JWT").ConfigureAwait(false);
+        var hint = await CompactJwsResigning.ResignWithHeaderAsync(host, idToken, material.SigningKeyId, " ", "JWT", TestContext.CancellationToken).ConfigureAwait(false);
 
         using HttpResponseMessage response = await EndSessionOverWireAsync(host, material, hint, "w1").ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -853,7 +853,7 @@ internal sealed class EndSessionLogoutTests
         List<string> terminated = await WireTerminateSeamAsync(host).ConfigureAwait(false);
 
         string idToken = await IssueIdTokenAsync(host, material, "session-A").ConfigureAwait(false);
-        string hint = await CompactJwsResigning.ResignWithHeaderAsync(host, idToken, material.SigningKeyId, "JWT").ConfigureAwait(false);
+        var hint = await CompactJwsResigning.ResignWithHeaderAsync(host, idToken, material.SigningKeyId, "JWT", TestContext.CancellationToken).ConfigureAwait(false);
 
         using HttpResponseMessage response = await EndSessionOverWireAsync(host, material, hint, "a1").ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -983,7 +983,7 @@ internal sealed class EndSessionLogoutTests
             await WireTerminateAndDeliverSeamsAsync(host).ConfigureAwait(false);
 
         string idToken = await IssueIdTokenAsync(host, material, "session-S").ConfigureAwait(false);
-        string hint = await ResignIdTokenPayloadAsync(host, idToken, payload => payload["sub"] = " ").ConfigureAwait(false);
+        var hint = await ResignIdTokenPayloadAsync(host, idToken, payload => payload["sub"] = " ", TestContext.CancellationToken).ConfigureAwait(false);
 
         using HttpResponseMessage response = await EndSessionOverWireAsync(host, material, hint, "s1").ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -1022,7 +1022,7 @@ internal sealed class EndSessionLogoutTests
             await WireTerminateAndDeliverSeamsAsync(host).ConfigureAwait(false);
 
         string idToken = await IssueIdTokenAsync(host, material, "session-B").ConfigureAwait(false);
-        string hint = await ResignIdTokenPayloadAsync(host, idToken, payload => payload["sid"] = " ").ConfigureAwait(false);
+        var hint = await ResignIdTokenPayloadAsync(host, idToken, payload => payload["sid"] = " ", TestContext.CancellationToken).ConfigureAwait(false);
 
         using HttpResponseMessage response = await EndSessionOverWireAsync(host, material, hint, "b1").ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -1109,9 +1109,11 @@ internal sealed class EndSessionLogoutTests
     /// <param name="host">The host whose signing-key store holds the signing key's private half.</param>
     /// <param name="idToken">The ID Token the server issued.</param>
     /// <param name="alterPayload">Rewrites the decoded payload in place.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The re-signed ID Token.</returns>
     private static async Task<string> ResignIdTokenPayloadAsync(
-        TestHostShell host, string idToken, Action<JsonObject> alterPayload)
+        TestHostShell host, string idToken, Action<JsonObject> alterPayload,
+        CancellationToken cancellationToken)
     {
         string[] parts = idToken.Split('.');
         using IMemoryOwner<byte> headerOwner = TestSetup.Base64UrlDecoder(parts[0], BaseMemoryPool.Shared);
@@ -1122,7 +1124,7 @@ internal sealed class EndSessionLogoutTests
         JsonObject payload = JsonNode.Parse(payloadOwner.Memory.Span)!.AsObject();
         alterPayload(payload);
 
-        return await CompactJwsResigning.ResignWithPayloadAsync(host, idToken, new KeyId(kid), payload.ToJsonString())
+        return await CompactJwsResigning.ResignWithPayloadAsync(host, idToken, new KeyId(kid), payload.ToJsonString(), cancellationToken)
             .ConfigureAwait(false);
     }
 

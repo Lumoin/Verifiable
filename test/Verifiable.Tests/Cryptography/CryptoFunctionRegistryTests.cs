@@ -8,6 +8,9 @@ namespace Verifiable.Tests.Cryptography
     [TestClass]
     internal class CryptoFunctionRegistryTests
     {
+        /// <summary>The test context, carrying the token that cancels a test that outruns its run.</summary>
+        public TestContext TestContext { get; set; } = null!;
+
         private static byte[] TestData { get; } = Encoding.UTF8.GetBytes("Hello, CryptoFunctionRegistryTests!");
 
 
@@ -34,7 +37,7 @@ namespace Verifiable.Tests.Cryptography
 
             using var publicKey = CryptographicKeyFactory.CreatePublicKey(compressedKeys.PublicKey, "key-identifier", compressedKeys.PublicKey.Tag);
             using var privateKey = CryptographicKeyFactory.CreatePrivateKey(compressedKeys.PrivateKey, "key-identifier", compressedKeys.PrivateKey.Tag);
-            var signature = await privateKey.SignAsync(TestData.AsMemory(), BaseMemoryPool.Shared)
+            var signature = await privateKey.SignAsync(TestData.AsMemory(), BaseMemoryPool.Shared, null, TestContext.CancellationToken)
                 .ConfigureAwait(false);
             bool isVerified = await publicKey.VerifyAsync(TestData.AsMemory(), signature)
                 .ConfigureAwait(false);

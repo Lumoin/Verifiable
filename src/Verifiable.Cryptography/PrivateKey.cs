@@ -73,6 +73,7 @@ namespace Verifiable.Cryptography
         /// <param name="signaturePool">The pool from which to reserve the memory for the signature.</param>
         /// <param name="context">Optional context for this signing operation. If not provided,
         /// the default context from construction is used.</param>
+        /// <param name="cancellationToken">Cancels the signing.</param>
         /// <returns>The signature of the data.</returns>
         /// <remarks>
         /// This is the choke point for every signing performed through a <see cref="PrivateKey"/>:
@@ -83,11 +84,11 @@ namespace Verifiable.Cryptography
         /// parameter instead, reaching the same <see cref="CryptographicKeyEvents.Events"/> stream
         /// by default — see <see cref="CryptoEventSink"/> for the two-route rationale.
         /// </remarks>
-        public async ValueTask<Signature> SignAsync(ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, FrozenDictionary<string, object>? context = null)
+        public async ValueTask<Signature> SignAsync(ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, FrozenDictionary<string, object>? context, CancellationToken cancellationToken)
         {
             (Signature signature, CryptoEvent? evt) = await KeyMaterial.WithKeyBytesAsync(
                 (privateKeyBytes, dataToSign, signaturePool) =>
-                    SigningDelegate(privateKeyBytes, dataToSign, signaturePool, context ?? DefaultContext),
+                    SigningDelegate(privateKeyBytes, dataToSign, signaturePool, context ?? DefaultContext, cancellationToken),
                 dataToSign,
                 signaturePool).ConfigureAwait(false);
 

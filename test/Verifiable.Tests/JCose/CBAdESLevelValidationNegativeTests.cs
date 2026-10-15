@@ -1886,7 +1886,7 @@ verifyThenCancel,
     /// <returns>The raw signature bytes.</returns>
     private static async ValueTask<byte[]> SignSigStructureAsync(PrivateKeyMemory privateKey, byte[] sigStructure, CancellationToken cancellationToken)
     {
-        (Signature signature, _) = await MicrosoftCryptographicFunctions.SignP256Async(privateKey.AsReadOnlyMemory(), sigStructure, BaseMemoryPool.Shared, cancellationToken: cancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch)).ConfigureAwait(false);
+        (Signature signature, _) = await MicrosoftCryptographicFunctions.SignP256Async(privateKey.AsReadOnlyMemory(), sigStructure, BaseMemoryPool.Shared, new FakeTimeProvider(TestClock.CanonicalEpoch), null, cancellationToken).ConfigureAwait(false);
         using(signature)
         {
             return signature.AsReadOnlySpan().ToArray();

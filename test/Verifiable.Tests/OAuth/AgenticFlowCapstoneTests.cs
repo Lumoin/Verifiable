@@ -281,7 +281,7 @@ internal sealed class AgenticFlowCapstoneTests
         //against the materialized document jwks, and AS2 issues its OWN access token.
         int documentFetchesBeforeRedeem = topology.DocumentHost.TotalRequests;
         var redeemResult = await topology.As2Client.IdJag.RedeemAsync(
-            topology.As2Registration, topology.BuildRedeemOptions(jag), TestContext.CancellationToken)
+            topology.As2Registration, CapstoneTopology.BuildRedeemOptions(jag), TestContext.CancellationToken)
             .ConfigureAwait(false);
         Assert.IsTrue(redeemResult.IsSuccess, redeemResult.Error?.Support.Summary);
         Assert.AreEqual(WellKnownAuthenticationSchemes.Bearer, redeemResult.Value.TokenType);
@@ -391,7 +391,7 @@ internal sealed class AgenticFlowCapstoneTests
         }
 
         var redeemResult = await topology.As2Client.IdJag.RedeemAsync(
-            topology.As2Registration, topology.BuildRedeemOptions(jag), TestContext.CancellationToken)
+            topology.As2Registration, CapstoneTopology.BuildRedeemOptions(jag), TestContext.CancellationToken)
             .ConfigureAwait(false);
         Assert.IsTrue(redeemResult.IsSuccess, redeemResult.Error?.Support.Summary);
 
@@ -463,7 +463,7 @@ internal sealed class AgenticFlowCapstoneTests
             .ConfigureAwait(false);
 
         var redeemResult = await topology.As2Client.IdJag.RedeemAsync(
-            topology.As2Registration, topology.BuildRedeemOptions(jag), TestContext.CancellationToken)
+            topology.As2Registration, CapstoneTopology.BuildRedeemOptions(jag), TestContext.CancellationToken)
             .ConfigureAwait(false);
         Assert.IsTrue(redeemResult.IsSuccess, redeemResult.Error?.Support.Summary);
 
@@ -547,12 +547,12 @@ internal sealed class AgenticFlowCapstoneTests
             .ConfigureAwait(false);
 
         var firstRedeem = await topology.As2Client.IdJag.RedeemAsync(
-            topology.As2Registration, topology.BuildRedeemOptions(jag), TestContext.CancellationToken)
+            topology.As2Registration, CapstoneTopology.BuildRedeemOptions(jag), TestContext.CancellationToken)
             .ConfigureAwait(false);
         Assert.IsTrue(firstRedeem.IsSuccess, firstRedeem.Error?.Support.Summary);
 
         var secondRedeem = await topology.As2Client.IdJag.RedeemAsync(
-            topology.As2Registration, topology.BuildRedeemOptions(jag), TestContext.CancellationToken)
+            topology.As2Registration, CapstoneTopology.BuildRedeemOptions(jag), TestContext.CancellationToken)
             .ConfigureAwait(false);
         Assert.IsFalse(secondRedeem.IsSuccess, "The second redemption of the same JAG must be refused.");
         OAuthProtocolError protocolError = Assert.IsInstanceOfType<OAuthProtocolError>(secondRedeem.Error);
@@ -655,7 +655,7 @@ internal sealed class AgenticFlowCapstoneTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         var redeemResult = await topology.As2Client.IdJag.RedeemAsync(
-            topology.As2Registration, topology.BuildRedeemOptions(sameDomainJag), TestContext.CancellationToken)
+            topology.As2Registration, CapstoneTopology.BuildRedeemOptions(sameDomainJag), TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         Assert.IsFalse(redeemResult.IsSuccess,
@@ -1220,7 +1220,11 @@ internal sealed class AgenticFlowCapstoneTests
             await Shell.StartHttpHostAsync(As2HostName, cancellationToken).ConfigureAwait(false);
             ClientRecord alignedStub2 = Shell.AlignRegistrationToHostHttpBase(As2HostName, stub2);
             As2Issuer = alignedStub2.IssuerUri!;
-            (As2Client, As2Registration) = BuildOAuthClientForHost(As2, alignedStub2, Time);
+            (As2Client, var as2Registration) = BuildOAuthClientForHost(As2, alignedStub2, Time);
+
+            //The redeem authenticates with the private_key_jwt assertion AS2's registration names, under the key the
+            //registration carries.
+            As2Registration = as2Registration with { AuthenticationKeyMaterial = ClientKeys };
 
             As1TokenEndpoint = new Uri(
                 As1.HttpBaseAddress!, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeToken, Segment1));
@@ -1400,26 +1404,37 @@ internal sealed class AgenticFlowCapstoneTests
         }
 
 
+        /// <summary>The mint's inputs: the id_token as the subject token, AS2 as the audience, and the client assertion's inputs.</summary>
+        /// <param name="idToken">The id_token presented as the subject token.</param>
+        /// <param name="scope">The scope the mint requests.</param>
+        /// <returns>The mint's inputs.</returns>
         public IdJagMintOptions BuildMintOptions(string idToken, string scope) => new()
         {
             Audience = As2Issuer.OriginalString,
             SubjectToken = idToken,
             SubjectTokenType = TokenType.IdToken,
-            SigningKey = ClientKeys.PrivateKey,
-            SigningKeyId = ClientSigningKeyId,
-            HeaderSerializer = CapstoneHeaderSerializer,
-            PayloadSerializer = CapstonePayloadSerializer,
+            ClientAssertion = new ClientAssertionOptions
+            {
+                SigningKeyId = ClientSigningKeyId,
+                HeaderSerializer = CapstoneHeaderSerializer,
+                PayloadSerializer = CapstonePayloadSerializer
+            },
             Scope = scope
         };
 
 
-        public IdJagRedeemOptions BuildRedeemOptions(string jag) => new()
+        /// <summary>The redeem's inputs: the ID-JAG as the assertion, and the client assertion's inputs.</summary>
+        /// <param name="jag">The ID-JAG presented as the assertion.</param>
+        /// <returns>The redeem's inputs.</returns>
+        public static IdJagRedeemOptions BuildRedeemOptions(string jag) => new()
         {
             Assertion = jag,
-            SigningKey = ClientKeys.PrivateKey,
-            SigningKeyId = ClientSigningKeyId,
-            HeaderSerializer = CapstoneHeaderSerializer,
-            PayloadSerializer = CapstonePayloadSerializer
+            ClientAssertion = new ClientAssertionOptions
+            {
+                SigningKeyId = ClientSigningKeyId,
+                HeaderSerializer = CapstoneHeaderSerializer,
+                PayloadSerializer = CapstonePayloadSerializer
+            }
         };
 
 

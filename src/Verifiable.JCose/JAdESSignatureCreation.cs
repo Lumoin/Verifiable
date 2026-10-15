@@ -407,7 +407,7 @@ public static class JAdESSignatureCreation
                 privateKey.AsReadOnlyMemory(),
                 signingInputOwner.Memory[..signingInputLength],
                 pool,
-                cancellationToken: cancellationToken).ConfigureAwait(false);
+                null, cancellationToken).ConfigureAwait(false);
 
             if(signedEvent is not null)
             {

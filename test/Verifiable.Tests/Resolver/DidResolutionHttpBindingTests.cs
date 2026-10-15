@@ -71,7 +71,7 @@ internal sealed class DidResolutionHttpBindingTests
     public async Task WebVhResolutionResultEnvelopeIsReturned()
     {
         using WebVhController controller = WebVhController.Create();
-        WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
 
         await using DidResolutionHttpHost host = await StartHostAsync(BuildWebVhResolver(LogRoutes(log))).ConfigureAwait(false);
 
@@ -98,7 +98,7 @@ internal sealed class DidResolutionHttpBindingTests
     public async Task WebVhBareAcceptReturnsOnlyDocument()
     {
         using WebVhController controller = WebVhController.Create();
-        WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
 
         await using DidResolutionHttpHost host = await StartHostAsync(BuildWebVhResolver(LogRoutes(log))).ConfigureAwait(false);
 
@@ -131,7 +131,7 @@ internal sealed class DidResolutionHttpBindingTests
     public async Task WebVhAcceptQZeroExcludesEnvelope()
     {
         using WebVhController controller = WebVhController.Create();
-        WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
 
         await using DidResolutionHttpHost host = await StartHostAsync(BuildWebVhResolver(LogRoutes(log))).ConfigureAwait(false);
 
@@ -158,7 +158,7 @@ internal sealed class DidResolutionHttpBindingTests
     public async Task WebVhUnsatisfiableAcceptIs406()
     {
         using WebVhController controller = WebVhController.Create();
-        WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
 
         await using DidResolutionHttpHost host = await StartHostAsync(BuildWebVhResolver(LogRoutes(log))).ConfigureAwait(false);
 
@@ -176,7 +176,7 @@ internal sealed class DidResolutionHttpBindingTests
     public async Task WebVhNonexistentIsNotFound()
     {
         using WebVhController controller = WebVhController.Create();
-        WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
 
         //The composed resolver knows the method but the log is served as a 404, so resolution fails NOT_FOUND.
         var routes = new Dictionary<string, (int, byte[]?, string?)>(StringComparer.Ordinal)
@@ -215,10 +215,10 @@ internal sealed class DidResolutionHttpBindingTests
         using WebVhController controller = WebVhController.Create();
         using WebVhController authentication = WebVhController.Create();
         WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(
-            Domain, controller, GenesisTime, authentication: authentication).ConfigureAwait(false);
+            Domain, controller, GenesisTime, authentication: authentication, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string whois = await WebVhTestLog.MintWhoisPresentationAsync(
-            log.Did, authentication, GenesisTime, SerializePresentation, SerializeProofOptions).ConfigureAwait(false);
+            log.Did, authentication, GenesisTime, SerializePresentation, SerializeProofOptions, TestContext.CancellationToken).ConfigureAwait(false);
 
         var routes = LogRoutes(log);
         routes[WhoisUrl] = (200, Encoding.UTF8.GetBytes(whois), WellKnownWebVhValues.WhoisMediaType);
@@ -249,7 +249,7 @@ internal sealed class DidResolutionHttpBindingTests
     public async Task WebVhDeactivatedIsGone()
     {
         using WebVhController controller = WebVhController.Create();
-        WebVhMintedLog log = await MintDeactivatedAsync(controller).ConfigureAwait(false);
+        var log = await MintDeactivatedAsync(controller, TestContext.CancellationToken).ConfigureAwait(false);
 
         await using DidResolutionHttpHost host = await StartHostAsync(BuildWebVhResolver(LogRoutes(log))).ConfigureAwait(false);
 
@@ -320,10 +320,10 @@ internal sealed class DidResolutionHttpBindingTests
         using WebVhController controller = WebVhController.Create();
         using WebVhController authentication = WebVhController.Create();
         WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(
-            Domain, controller, GenesisTime, authentication: authentication).ConfigureAwait(false);
+            Domain, controller, GenesisTime, authentication: authentication, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string whois = await WebVhTestLog.MintWhoisPresentationAsync(
-            log.Did, authentication, GenesisTime, SerializePresentation, SerializeProofOptions).ConfigureAwait(false);
+            log.Did, authentication, GenesisTime, SerializePresentation, SerializeProofOptions, TestContext.CancellationToken).ConfigureAwait(false);
 
         //Flip the last character of the proofValue so the presentation's signature no longer verifies; the
         //dereferencer's whois verify is load-bearing through the binding, so the failure must surface as the
@@ -358,7 +358,7 @@ internal sealed class DidResolutionHttpBindingTests
     public async Task WebVhBareAcceptPathReturnsFileItself()
     {
         using WebVhController controller = WebVhController.Create();
-        WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime).ConfigureAwait(false);
+        var log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime, TestContext.CancellationToken).ConfigureAwait(false);
 
         byte[] served = Encoding.UTF8.GetBytes("{\"issuers\":[]}");
         var routes = LogRoutes(log);
@@ -418,13 +418,13 @@ internal sealed class DidResolutionHttpBindingTests
 
 
     //Mints a two-entry log whose second entry declares deactivated:true, signed by the same controller.
-    private static Task<WebVhMintedLog> MintDeactivatedAsync(WebVhController controller)
+    private static Task<WebVhMintedLog> MintDeactivatedAsync(WebVhController controller, CancellationToken cancellationToken)
     {
         return WebVhTestLog.MintAsync(Domain,
         [
             new WebVhEntryPlan(controller, [controller.Multikey], null, Deactivated: false, GenesisTime),
             new WebVhEntryPlan(controller, [controller.Multikey], null, Deactivated: true, "2025-02-01T00:00:00Z")
-        ]);
+        ], cancellationToken);
     }
 
 

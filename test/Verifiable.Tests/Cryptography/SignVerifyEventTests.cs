@@ -20,6 +20,9 @@ namespace Verifiable.Tests.Cryptography;
 [TestClass]
 internal sealed class SignVerifyEventTests
 {
+    /// <summary>The test context, carrying the token that cancels a test that outruns its run.</summary>
+    public TestContext TestContext { get; set; } = null!;
+
     private static byte[] TestData { get; } = Encoding.UTF8.GetBytes("SignVerifyEventTests payload.");
 
 
@@ -40,7 +43,7 @@ internal sealed class SignVerifyEventTests
         var observed = new ConcurrentQueue<CryptoEvent>();
         using(CryptographicKeyEvents.Events.Subscribe(new CollectingObserver(observed)))
         {
-            using Signature signature = await privateKey.SignAsync(TestData, BaseMemoryPool.Shared).ConfigureAwait(false);
+            using var signature = await privateKey.SignAsync(TestData, BaseMemoryPool.Shared, null, TestContext.CancellationToken).ConfigureAwait(false);
             int signatureLength = signature.AsReadOnlySpan().Length;
 
             //Matches every asserted property in one predicate rather than pulling a single element out of the
@@ -73,7 +76,7 @@ internal sealed class SignVerifyEventTests
         using PrivateKey privateKey = new(privateKeyMemory, "ms-p256-sign", MicrosoftCryptographicFunctionsAdapter.SignP256Async);
         using PublicKey publicKey = new(publicKeyMemory, "ms-p256-verify", MicrosoftCryptographicFunctionsAdapter.VerifyP256Async);
 
-        using Signature signature = await privateKey.SignAsync(TestData, BaseMemoryPool.Shared).ConfigureAwait(false);
+        using var signature = await privateKey.SignAsync(TestData, BaseMemoryPool.Shared, null, TestContext.CancellationToken).ConfigureAwait(false);
 
         var observed = new ConcurrentQueue<CryptoEvent>();
         using(CryptographicKeyEvents.Events.Subscribe(new CollectingObserver(observed)))
@@ -110,7 +113,7 @@ internal sealed class SignVerifyEventTests
         var observed = new ConcurrentQueue<CryptoEvent>();
         using(CryptographicKeyEvents.Events.Subscribe(new CollectingObserver(observed)))
         {
-            using Signature signature = await privateKey.SignAsync(TestData, BaseMemoryPool.Shared).ConfigureAwait(false);
+            using var signature = await privateKey.SignAsync(TestData, BaseMemoryPool.Shared, null, TestContext.CancellationToken).ConfigureAwait(false);
             int signatureLength = signature.AsReadOnlySpan().Length;
 
             Assert.Contains(
@@ -139,7 +142,7 @@ internal sealed class SignVerifyEventTests
         using PrivateKey privateKey = new(privateKeyMemory, "bc-ed25519-sign", BouncyCastleCryptographicFunctionsAdapter.SignEd25519Async);
         using PublicKey publicKey = new(publicKeyMemory, "bc-ed25519-verify", BouncyCastleCryptographicFunctionsAdapter.VerifyEd25519Async);
 
-        using Signature signature = await privateKey.SignAsync(TestData, BaseMemoryPool.Shared).ConfigureAwait(false);
+        using var signature = await privateKey.SignAsync(TestData, BaseMemoryPool.Shared, null, TestContext.CancellationToken).ConfigureAwait(false);
 
         var observed = new ConcurrentQueue<CryptoEvent>();
         using(CryptographicKeyEvents.Events.Subscribe(new CollectingObserver(observed)))
@@ -172,7 +175,7 @@ internal sealed class SignVerifyEventTests
         using PrivateKey privateKey = new(privateKeyMemory, "ms-p256-sign", MicrosoftCryptographicFunctionsAdapter.SignP256Async);
         using PublicKey publicKey = new(publicKeyMemory, "ms-p256-verify", MicrosoftCryptographicFunctionsAdapter.VerifyP256Async);
 
-        using Signature signature = await privateKey.SignAsync(TestData, BaseMemoryPool.Shared).ConfigureAwait(false);
+        using var signature = await privateKey.SignAsync(TestData, BaseMemoryPool.Shared, null, TestContext.CancellationToken).ConfigureAwait(false);
 
         byte[] tampered = (byte[])TestData.Clone();
         tampered[0] ^= 0x01;

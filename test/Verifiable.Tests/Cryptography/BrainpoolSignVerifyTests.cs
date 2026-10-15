@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Time.Testing;
+using System.Collections.Frozen;
 using System.Text;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
@@ -129,8 +130,8 @@ internal sealed class BrainpoolSignVerifyTests
     /// <see langword="finally"/> block because a <see langword="using"/> declaration cannot target one.</summary>
     private static async Task AssertBcRoundTrip(
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyMaterial,
-        Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>, BaseMemoryPool, System.Collections.Frozen.FrozenDictionary<string, object>?, CancellationToken, ValueTask<SigningResult>> signAsync,
-        Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>, System.Collections.Frozen.FrozenDictionary<string, object>?, CancellationToken, ValueTask<(bool IsVerified, CryptoEvent? Event)>> verifyAsync,
+        Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>, BaseMemoryPool, FrozenDictionary<string, object>?, CancellationToken, ValueTask<SigningResult>> signAsync,
+        Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>, FrozenDictionary<string, object>?, CancellationToken, ValueTask<(bool IsVerified, CryptoEvent? Event)>> verifyAsync,
         int expectedSignatureLength,
         CancellationToken cancellationToken)
     {

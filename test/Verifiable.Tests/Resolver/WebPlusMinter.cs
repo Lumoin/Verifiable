@@ -71,8 +71,9 @@ internal static class WebPlusMinter
     /// </summary>
     /// <param name="host">The DID host (for example <c>example.com</c>).</param>
     /// <param name="plans">The ordered document plans, root first.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The minted DID, its microledger lines and each document's selfHash.</returns>
-    public static async Task<WebPlusMintedDid> MintAsync(string host, IReadOnlyList<WebPlusDocPlan> plans)
+    public static async Task<WebPlusMintedDid> MintAsync(string host, IReadOnlyList<WebPlusDocPlan> plans, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(plans);
         if(plans.Count == 0)
@@ -98,7 +99,7 @@ internal static class WebPlusMinter
         string predecessorSelfHash = rootSelfHash;
         for(int i = 1; i < plans.Count; i++)
         {
-            string line = await MintNonRoot(did, plans[i], plans[i - 1].UpdateKey!, predecessorSelfHash, placeholder).ConfigureAwait(false);
+            var line = await MintNonRoot(did, plans[i], plans[i - 1].UpdateKey!, predecessorSelfHash, placeholder, cancellationToken).ConfigureAwait(false);
             string selfHash = ReadSelfHash(line);
             lines.Add(line);
             selfHashes.Add(selfHash);
@@ -144,8 +145,9 @@ internal static class WebPlusMinter
     /// <param name="predecessorUpdateKey">The predecessor's update key, the controller authorizing this update unless the plan's <see cref="WebPlusDocPlan.SignerOverride"/> replaces it.</param>
     /// <param name="predecessorSelfHash">The predecessor document's selfHash, referenced as <c>prevDIDDocumentSelfHash</c>.</param>
     /// <param name="placeholder">The MBHash placeholder occupying the self-hash slot before self-hashing.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The self-hashed, proof-signed non-root document as its JCS line.</returns>
-    private static async Task<string> MintNonRoot(string did, WebPlusDocPlan plan, WebPlusController predecessorUpdateKey, string predecessorSelfHash, string placeholder)
+    private static async Task<string> MintNonRoot(string did, WebPlusDocPlan plan, WebPlusController predecessorUpdateKey, string predecessorSelfHash, string placeholder, CancellationToken cancellationToken)
     {
         JsonObject unsigned = BuildDocumentJson(
             plan.IdOverride ?? did, plan, placeholder, plan.PrevSelfHashOverride ?? predecessorSelfHash);
@@ -156,7 +158,7 @@ internal static class WebPlusMinter
         //(the WP-VAL-7e negative).
         WebPlusController signer = plan.SignerOverride ?? predecessorUpdateKey;
         byte[] signingInput = Jcs.CanonicalizeToUtf8Bytes(unsigned.ToJsonString());
-        string proof = await BuildProofAsync(signer, signingInput, plan.ProofHeaderMutator, plan.RawProofHeaderMutator).ConfigureAwait(false);
+        var proof = await BuildProofAsync(signer, signingInput, plan.ProofHeaderMutator, plan.RawProofHeaderMutator, cancellationToken).ConfigureAwait(false);
 
         //The proofs member is an array of the detached-JWS proofs; a ProofsMutator can replace it with a
         //non-array shape (the WP-DM-6 negative).
@@ -263,8 +265,9 @@ internal static class WebPlusMinter
     /// <param name="signingInput">The detached payload <c>S</c> the proof signs over.</param>
     /// <param name="headerMutator">An optional transform of the protected header applied BEFORE it is encoded and signed, so the signature stays valid for a deliberately-malformed header (the WP-PRF-2/3 negatives); <see langword="null"/> mints a conformant header.</param>
     /// <param name="rawHeaderMutator">An optional transform of the protected header's JSON text applied AFTER serialization and before encoding, minting a header shape a <see cref="JsonObject"/> cannot express (a repeated top-level member); the signature stays valid over the mutated bytes.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The compact detached JWS (<c>&lt;header&gt;..&lt;signature&gt;</c>).</returns>
-    private static async Task<string> BuildProofAsync(WebPlusController signer, ReadOnlyMemory<byte> signingInput, WebPlusProofHeaderMutator? headerMutator, WebPlusProofHeaderTextMutator? rawHeaderMutator)
+    private static async Task<string> BuildProofAsync(WebPlusController signer, ReadOnlyMemory<byte> signingInput, WebPlusProofHeaderMutator? headerMutator, WebPlusProofHeaderTextMutator? rawHeaderMutator, CancellationToken cancellationToken)
     {
         JsonObject header = new()
         {
@@ -297,7 +300,7 @@ internal static class WebPlusMinter
         using IMemoryOwner<byte> signingInputOwner = Jws.RentSigningInput(
             protectedSegment, signingInput.Span, base64UrlPayload: false, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared, out int signingInputLength);
 
-        using Signature signature = await signer.SignAsync(signingInputOwner.Memory[..signingInputLength]).ConfigureAwait(false);
+        using var signature = await signer.SignAsync(signingInputOwner.Memory[..signingInputLength], cancellationToken).ConfigureAwait(false);
         string signatureSegment = TestSetup.Base64UrlEncoder(signature.AsReadOnlyMemory().Span);
 
         //A detached compact JWS leaves the payload segment empty: <protected>..<signature>.
@@ -361,10 +364,11 @@ internal sealed class WebPlusController: IDisposable
 
     /// <summary>Signs the given bytes with this controller's Ed25519 key, returning the raw signature carrier.</summary>
     /// <param name="data">The bytes to sign (the RFC 7797 JWS signing input).</param>
+    /// <param name="cancellationToken">Cancels the signing.</param>
     /// <returns>The signature; the caller disposes it and encodes it through the shared encoder delegate.</returns>
-    public ValueTask<Signature> SignAsync(ReadOnlyMemory<byte> data)
+    public ValueTask<Signature> SignAsync(ReadOnlyMemory<byte> data, CancellationToken cancellationToken)
     {
-        return SigningKey.SignAsync(data, BaseMemoryPool.Shared);
+        return SigningKey.SignAsync(data, BaseMemoryPool.Shared, null, cancellationToken);
     }
 
 

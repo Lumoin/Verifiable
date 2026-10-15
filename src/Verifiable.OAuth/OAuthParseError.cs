@@ -1,5 +1,6 @@
 using System.Globalization;
 using Verifiable.Core;
+using Verifiable.OAuth.Client;
 
 namespace Verifiable.OAuth;
 
@@ -46,6 +47,13 @@ namespace Verifiable.OAuth;
 ///       <see cref="OAuthOutboundFetchPolicyDenied"/> — the metadata resolved and named an
 ///       endpoint, but that endpoint was refused by the caller's
 ///       <see cref="Verifiable.Core.Outbound.OutboundFetchPolicy"/> before any request was sent.
+///     </description>
+///   </item>
+///   <item>
+///     <description>
+///       <see cref="OAuthClientAssertionRefused"/> — the client authentication assertion the request was to
+///       present was refused as its credential was formed from the registration, before anything was resolved,
+///       composed or sent.
 ///     </description>
 ///   </item>
 /// </list>
@@ -165,7 +173,7 @@ public sealed record OAuthInvalidFieldValue(
 /// <param name="Resolution">The metadata resolution failure and its evidence.</param>
 /// <param name="Support">Guidance for the calling application.</param>
 public sealed record OAuthAuthorizationServerMetadataUnresolved(
-    Verifiable.OAuth.Client.AuthorizationServerMetadataResolution Resolution,
+    AuthorizationServerMetadataResolution Resolution,
     DecisionSupport Support): OAuthParseError(Support);
 
 
@@ -184,4 +192,21 @@ public sealed record OAuthAuthorizationServerMetadataUnresolved(
 public sealed record OAuthOutboundFetchPolicyDenied(
     Uri Endpoint,
     string DenyReason,
+    DecisionSupport Support): OAuthParseError(Support);
+
+
+/// <summary>
+/// The client authentication assertion (RFC 7523 Section 2.2) the exchange was to present was refused as its credential
+/// was formed from the registration's method and key material
+/// (<see cref="ClientAssertionCredential.Of"/>), before any metadata was resolved, any assertion
+/// composed or any request sent.
+/// </summary>
+/// <remarks>
+/// Carries the library's typed refusal as it is, the rule broken and the values it was judged on, so the application
+/// reads the reason without parsing a sentence; <see cref="DecisionSupport.Summary"/> is rendered from it.
+/// </remarks>
+/// <param name="Refusal">The refusal of the credential.</param>
+/// <param name="Support">Guidance for the calling application.</param>
+public sealed record OAuthClientAssertionRefused(
+    ClientAssertionCredentialRefusal Refusal,
     DecisionSupport Support): OAuthParseError(Support);

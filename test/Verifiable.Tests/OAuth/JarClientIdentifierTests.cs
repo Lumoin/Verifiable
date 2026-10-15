@@ -1032,7 +1032,7 @@ internal sealed class JarClientIdentifierTests
         string payloadB64 = Encoder(Encoding.UTF8.GetBytes(payloadJson));
         byte[] signingInput = Encoding.ASCII.GetBytes($"{headerB64}.{payloadB64}");
 
-        using Signature signature = await signingKey.SignAsync(signingInput, Pool).ConfigureAwait(false);
+        using var signature = await signingKey.SignAsync(signingInput, Pool, TestContext.CancellationToken).ConfigureAwait(false);
         string signatureB64 = Encoder(signature.AsReadOnlySpan());
         string compactJar = $"{headerB64}.{payloadB64}.{signatureB64}";
 
@@ -1080,7 +1080,7 @@ internal sealed class JarClientIdentifierTests
         string payloadB64 = Encoder(Encoding.UTF8.GetBytes(payloadJson));
         byte[] signingInput = Encoding.ASCII.GetBytes($"{headerB64}.{payloadB64}");
 
-        using Signature signature = await signingKey.SignAsync(signingInput, Pool).ConfigureAwait(false);
+        using var signature = await signingKey.SignAsync(signingInput, Pool, TestContext.CancellationToken).ConfigureAwait(false);
         string signatureB64 = Encoder(signature.AsReadOnlySpan());
         string compactJar = $"{headerB64}.{payloadB64}.{signatureB64}";
 

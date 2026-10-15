@@ -286,7 +286,7 @@ public static class Jws
             privateKey.AsReadOnlyMemory(),
             dataToSignOwner.Memory[..signingInputLength],
             signaturePool,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+            null, cancellationToken).ConfigureAwait(false);
 
         if(evt is not null)
         {
@@ -361,7 +361,7 @@ public static class Jws
             privateKey.AsReadOnlyMemory(),
             dataToSignOwner.Memory[..signingInputLength],
             signaturePool,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+            null, cancellationToken).ConfigureAwait(false);
 
         if(evt is not null)
         {
@@ -1040,7 +1040,7 @@ public static class Jws
 
         using PrivateKey privateKey = await binder(material, binderState, cancellationToken).ConfigureAwait(false);
         Signature signature = await privateKey.SignAsync(
-            dataToSignOwner.Memory[..signingInputLength], pool).ConfigureAwait(false);
+            dataToSignOwner.Memory[..signingInputLength], pool, null, cancellationToken).ConfigureAwait(false);
 
         var protectedHeader = BuildProtectedHeaderDictionary(header);
 

@@ -191,7 +191,7 @@ internal sealed class UserInfoEndpointTests
 
         PrivateKeyMemory signingKey = host.Host("default").SigningKeys[new KeyId(kid)];
         byte[] signingInput = Encoding.ASCII.GetBytes($"{parts[0]}.{tamperedPayloadB64}");
-        using Signature signature = await signingKey.SignAsync(signingInput, BaseMemoryPool.Shared).ConfigureAwait(false);
+        using var signature = await signingKey.SignAsync(signingInput, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
         string signatureB64 = TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan());
         string tamperedAccessToken = $"{parts[0]}.{tamperedPayloadB64}.{signatureB64}";
 
@@ -724,7 +724,7 @@ internal sealed class UserInfoEndpointTests
         };
 
         string resignedAccessToken = await CompactJwsResigning.ResignWithHeaderAsync(
-            host, accessToken, foreignKeyId, "at+jwt").ConfigureAwait(false);
+            host, accessToken, foreignKeyId, "at+jwt", TestContext.CancellationToken).ConfigureAwait(false);
 
         using HttpResponseMessage response = await SendUserInfoOverWireAsync(host, material, resignedAccessToken)
             .ConfigureAwait(false);
@@ -807,7 +807,7 @@ internal sealed class UserInfoEndpointTests
         string accessToken = await IssueAccessTokenAsync(host, material, WellKnownScopes.OpenId)
             .ConfigureAwait(false);
         string whitespaceKidToken = await CompactJwsResigning.ResignWithHeaderAsync(
-            host, accessToken, material.SigningKeyId, " ", "at+jwt").ConfigureAwait(false);
+            host, accessToken, material.SigningKeyId, " ", "at+jwt", TestContext.CancellationToken).ConfigureAwait(false);
 
         using HttpResponseMessage response = await SendUserInfoOverWireAsync(host, material, whitespaceKidToken)
             .ConfigureAwait(false);
@@ -850,7 +850,7 @@ internal sealed class UserInfoEndpointTests
         JsonObject payload = JsonNode.Parse(payloadOwner.Memory.Span)!.AsObject();
         Assert.IsTrue(payload.Remove("sub"), "The issued access token carries a sub claim to remove.");
         string subjectlessToken = await CompactJwsResigning.ResignWithPayloadAsync(
-            host, accessToken, material.SigningKeyId, payload.ToJsonString()).ConfigureAwait(false);
+            host, accessToken, material.SigningKeyId, payload.ToJsonString(), TestContext.CancellationToken).ConfigureAwait(false);
 
         using HttpResponseMessage response = await SendUserInfoOverWireAsync(host, material, subjectlessToken)
             .ConfigureAwait(false);
@@ -1684,7 +1684,7 @@ internal sealed class UserInfoEndpointTests
         string accessToken = await IssueAccessTokenAsync(host, material, WellKnownScopes.OpenId).ConfigureAwait(false);
         string certificateBoundToken = await ResignAccessTokenPayloadAsync(
             host, accessToken, material.SigningKeyId,
-            payload => payload["cnf"] = new JsonObject { ["x5t#S256"] = "bwcK0esc3ACC3DB2Y5_lESsXE8o9ltc05O89jdN-dg2" })
+            payload => payload["cnf"] = new JsonObject { ["x5t#S256"] = "bwcK0esc3ACC3DB2Y5_lESsXE8o9ltc05O89jdN-dg2" }, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         using HttpResponseMessage response = await SendUserInfoOverWireAsync(host, material, certificateBoundToken)
@@ -1729,11 +1729,11 @@ internal sealed class UserInfoEndpointTests
             TamperedSignatureRow => (TamperSignature(boundAccessToken), HttpStatusCode.Unauthorized,
                 ResourceDpopProofs.DpopChallenge("invalid_token"), "invalid_token"),
             WithoutOpenIdScopeRow => (await ResignAccessTokenPayloadAsync(host, boundAccessToken, material.SigningKeyId,
-                    payload => payload["scope"] = WellKnownScopes.Profile).ConfigureAwait(false),
+                    payload => payload["scope"] = WellKnownScopes.Profile, TestContext.CancellationToken).ConfigureAwait(false),
                 HttpStatusCode.Forbidden,
                 $"DPoP error=\"insufficient_scope\", scope=\"openid\", algs=\"{ResourceDpopProofs.AcceptedProofAlgorithms}\"", "insufficient_scope"),
             WithoutSubjectRow => (await ResignAccessTokenPayloadAsync(host, boundAccessToken, material.SigningKeyId,
-                    payload => _ = payload.Remove("sub")).ConfigureAwait(false),
+                    payload => _ = payload.Remove("sub"), TestContext.CancellationToken).ConfigureAwait(false),
                 HttpStatusCode.Unauthorized, ResourceDpopProofs.DpopChallenge("invalid_token"), "invalid_token"),
             _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown refusal row.")
         };
@@ -1798,7 +1798,7 @@ internal sealed class UserInfoEndpointTests
 
         string accessToken = await IssueAccessTokenAsync(host, material, WellKnownScopes.OpenId).ConfigureAwait(false);
         string farExpiryToken = await ResignAccessTokenPayloadAsync(
-            host, accessToken, material.SigningKeyId, payload => payload["exp"] = long.MaxValue).ConfigureAwait(false);
+            host, accessToken, material.SigningKeyId, payload => payload["exp"] = long.MaxValue, TestContext.CancellationToken).ConfigureAwait(false);
 
         using HttpResponseMessage response = await SendUserInfoOverWireAsync(host, material, farExpiryToken)
             .ConfigureAwait(false);
@@ -1828,7 +1828,7 @@ internal sealed class UserInfoEndpointTests
             host, material, KeyUsageContext.IdTokenIssuance).ConfigureAwait(false);
 
         string accessToken = await IssueAccessTokenAsync(host, material, WellKnownScopes.OpenId).ConfigureAwait(false);
-        string underIdTokenKey = await CompactJwsResigning.ResignWithHeaderAsync(host, accessToken, idTokenKeyId, "at+jwt")
+        var underIdTokenKey = await CompactJwsResigning.ResignWithHeaderAsync(host, accessToken, idTokenKeyId, "at+jwt", TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         using HttpResponseMessage response = await SendUserInfoOverWireAsync(host, material, underIdTokenKey)
@@ -2038,16 +2038,18 @@ internal sealed class UserInfoEndpointTests
     /// <param name="accessToken">The issued access token.</param>
     /// <param name="keyId">The key the token's header names and the rebuilt token is signed under.</param>
     /// <param name="alterPayload">Rewrites the parsed payload.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>The re-signed access token.</returns>
     private static async Task<string> ResignAccessTokenPayloadAsync(
-        TestHostShell host, string accessToken, KeyId keyId, Action<JsonObject> alterPayload)
+        TestHostShell host, string accessToken, KeyId keyId, Action<JsonObject> alterPayload,
+        CancellationToken cancellationToken)
     {
         string[] parts = accessToken.Split('.');
         using IMemoryOwner<byte> payloadOwner = TestSetup.Base64UrlDecoder(parts[1], BaseMemoryPool.Shared);
         JsonObject payload = JsonNode.Parse(payloadOwner.Memory.Span)!.AsObject();
         alterPayload(payload);
 
-        return await CompactJwsResigning.ResignWithPayloadAsync(host, accessToken, keyId, payload.ToJsonString())
+        return await CompactJwsResigning.ResignWithPayloadAsync(host, accessToken, keyId, payload.ToJsonString(), cancellationToken)
             .ConfigureAwait(false);
     }
 

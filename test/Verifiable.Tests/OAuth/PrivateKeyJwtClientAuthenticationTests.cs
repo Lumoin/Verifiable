@@ -578,7 +578,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             };
             string headerSegment = TestSetup.Base64UrlEncoder(JsonSerializer.SerializeToUtf8Bytes(header));
             byte[] signingInput = Encoding.ASCII.GetBytes($"{headerSegment}.{segments[1]}");
-            using Signature signature = await clientKeys.PrivateKey.SignAsync(signingInput, BaseMemoryPool.Shared)
+            using var signature = await clientKeys.PrivateKey.SignAsync(signingInput, BaseMemoryPool.Shared, TestContext.CancellationToken)
                 .ConfigureAwait(false);
             string signatureSegment = TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan());
             string mismatchedAssertion = $"{headerSegment}.{segments[1]}.{signatureSegment}";
@@ -688,7 +688,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             string tamperedPayloadB64 = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(tamperedPayloadJson));
 
             byte[] signingInput = Encoding.ASCII.GetBytes($"{segments[0]}.{tamperedPayloadB64}");
-            using Signature signature = await clientKeys.PrivateKey.SignAsync(signingInput, BaseMemoryPool.Shared)
+            using var signature = await clientKeys.PrivateKey.SignAsync(signingInput, BaseMemoryPool.Shared, TestContext.CancellationToken)
                 .ConfigureAwait(false);
             string signatureB64 = TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan());
             string tamperedAssertion = $"{segments[0]}.{tamperedPayloadB64}.{signatureB64}";
@@ -1152,7 +1152,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             string repeatedPayloadB64 = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(repeatedPayloadJson));
 
             byte[] signingInput = Encoding.ASCII.GetBytes($"{segments[0]}.{repeatedPayloadB64}");
-            using Signature signature = await clientKeys.PrivateKey.SignAsync(signingInput, BaseMemoryPool.Shared)
+            using var signature = await clientKeys.PrivateKey.SignAsync(signingInput, BaseMemoryPool.Shared, TestContext.CancellationToken)
                 .ConfigureAwait(false);
             string signatureB64 = TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan());
             string repeatedAssertion = $"{segments[0]}.{repeatedPayloadB64}.{signatureB64}";

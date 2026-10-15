@@ -124,7 +124,7 @@ internal sealed class WebPlusDidBuilderTests
         WebPlusMintedDid minted = await WebPlusMinter.MintAsync(Host,
         [
             new WebPlusDocPlan(controller, VersionId: 0, ValidFrom)
-        ]).ConfigureAwait(false);
+        ], TestContext.CancellationToken).ConfigureAwait(false);
 
         WebPlusDidDocument built = await CreateBuilder().BuildRootAsync(
             controller.PublicKey, Host, ValidFrom, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
