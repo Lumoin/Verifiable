@@ -923,6 +923,101 @@ internal sealed class IdJagGrantTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>: "This is applicable for all
+    /// access token requests regardless of grant type", and "If the access token response contains a different
+    /// token_type value than DPoP, the access token protection provided by DPoP is not given. The client MUST discard
+    /// the response in this case if this protection is deemed important for the security of the application". A
+    /// DPoP-wired client redeems a signed ID-JAG at the token endpoint over the wire, a JWT bearer grant; the listener
+    /// emits the 200 answering the retry of the challenged redemption with its <c>token_type</c> naming <c>Bearer</c>.
+    /// The redemption fails with the invalid field value <c>token_type</c>, carrying no value of the server.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task RedeemDiscardsATokenResponseWhoseTokenTypeIsNotDpopAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), profile: PolicyProfile.Haip10, capabilities: IdJagClientCapabilities).ConfigureAwait(false);
+        _ = await app.EnableDpopAsync().ConfigureAwait(false);
+
+        const string externalIdpIssuer = "https://external-idp.example/";
+        const string externalKid = "external-idp-key-1";
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> idpKey =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory idpPublicKey = idpKey.PublicKey;
+        using PrivateKeyMemory idpPrivateKey = idpKey.PrivateKey;
+
+        DateTimeOffset assertionIssuedAt = TimeProvider.GetUtcNow();
+        string jag = await BuildForeignIdJagAsync(
+            idpPrivateKey, externalKid, externalIdpIssuer, SubjectIdentity, ResourceAsIssuer,
+            ClientId, ChatScope, assertionIssuedAt, assertionIssuedAt.AddMinutes(5)).ConfigureAwait(false);
+
+        ValueTask<PublicKeyMemory?> resolver(KeyId kid, KeyUsageContext usage, TenantId tenant, ExchangeContext ctx, CancellationToken ct) =>
+            ValueTask.FromResult(string.Equals(kid.Value, externalKid, StringComparison.Ordinal) switch
+            {
+                true => (PublicKeyMemory?)idpPublicKey,
+                false => null
+            });
+
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateJwtBearerAssertionAsync =
+                async (assertion, requestedScope, registration, context, ct) =>
+                    await ValidateIdJagAsync(assertion, registration, resolver, ResourceAsIssuer).ConfigureAwait(false);
+        }).ConfigureAwait(false);
+
+        (HostedAuthorizationServer host, Uri tokenEndpoint, PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> clientKeys) =
+            await StartHostAndWirePrivateKeyJwtClientAuthenticationAsync(app, material).ConfigureAwait(false);
+        using PublicKeyMemory clientPublicKey = clientKeys.PublicKey;
+        using PrivateKeyMemory clientPrivateKey = clientKeys.PrivateKey;
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> dpopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory dpopPublicKey = dpopKeys.PublicKey;
+        using PrivateKeyMemory dpopPrivateKey = dpopKeys.PrivateKey;
+        List<(string Path, int StatusCode, string BodyBefore, string BodyAfter)> rewrittenAnswers = app.RewriteAnswerBody(
+            tokenEndpoint.AbsolutePath, 2, static body => TestHostShell.RewriteTokenTypeMember(body, WellKnownAuthenticationSchemes.Bearer));
+
+        int dialCount = 0;
+        AuthorizationServerMetadata metadata = new()
+        {
+            Issuer = material.Registration.IssuerUri!,
+            TokenEndpoint = tokenEndpoint
+        };
+        OAuthClient client = new(CreateClientInfrastructure(
+            host, metadata, _ => dialCount++, new DpopKey(dpopKeys, WellKnownJwaValues.Es256), new InMemoryDpopNonceCache()));
+        ClientRegistration registration = new()
+        {
+            ClientId = new ClientId(ClientId),
+            AuthorizationServerIssuer = material.Registration.IssuerUri!,
+            AuthenticationMethod = ClientAuthenticationMethod.PrivateKeyJwt,
+            Profile = PolicyProfile.Haip10
+        };
+
+        Result<TokenResponse, OAuthParseError> result = await client.IdJag.RedeemAsync(
+            registration,
+            new IdJagRedeemOptions
+            {
+                Assertion = jag,
+                SigningKey = clientPrivateKey,
+                SigningKeyId = MintRedeemSigningKeyId,
+                HeaderSerializer = ClientAssertionHeaderSerializer,
+                PayloadSerializer = ClientAssertionPayloadSerializer
+            },
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        (_, int statusCode, string bodyBefore, string bodyAfter) = Assert.ContainsSingle(rewrittenAnswers,
+            "The listener emitted one answer with a body other than the library's.");
+        Assert.AreEqual(200, statusCode, "The altered answer is the redemption's 200.");
+        Assert.Contains(TestHostShell.DpopTokenTypeMember, bodyBefore, StringComparison.Ordinal, bodyBefore);
+        Assert.Contains("\"token_type\":\"Bearer\"", bodyAfter, StringComparison.Ordinal, bodyAfter);
+        Assert.AreEqual(2, dialCount, "The challenged redemption and its retry.");
+        Assert.IsFalse(result.IsSuccess, "The redemption answered with another token_type is refused.");
+        OAuthInvalidFieldValue refusal = Assert.IsInstanceOfType<OAuthInvalidFieldValue>(result.Error);
+        Assert.AreEqual(OAuthRequestParameterNames.TokenType, refusal.FieldName);
+        Assert.AreEqual(string.Empty, refusal.ReceivedValue, "The server's value is never echoed.");
+    }
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.2">RFC 9449 §4.2</see>: a proof
     /// bound to the wrong <c>htu</c> is a structural defect the DPoP validator rejects outright, not
     /// a <c>use_dpop_nonce</c> challenge, so it must never reach the assertion seam or the <c>jti</c>

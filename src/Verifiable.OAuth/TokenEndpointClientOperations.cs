@@ -358,7 +358,7 @@ internal static class TokenEndpointClientOperations
         ExchangeContext context,
         CancellationToken cancellationToken)
     {
-        if(infrastructure.ConstructDpopProofAsync is null || infrastructure.DpopKey is null)
+        if(!IsDpopWired(infrastructure))
         {
             //DPoP not wired — a single attempt, so there is no retry to refresh the attachment for.
             OutgoingHeaders authenticationHeaders = await attachClientAuthenticationAsync(
@@ -381,6 +381,69 @@ internal static class TokenEndpointClientOperations
             infrastructure.StoreDpopNonce,
             cancellationToken).ConfigureAwait(false);
     }
+
+
+    /// <summary>
+    /// Whether <paramref name="infrastructure"/> has DPoP wired: both
+    /// <see cref="OAuthClientInfrastructure.ConstructDpopProofAsync"/> and
+    /// <see cref="OAuthClientInfrastructure.DpopKey"/> set, so every token request it sends carries a proof
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>: "the client MUST provide
+    /// a valid DPoP proof JWT in a DPoP header when making an access token request to the authorization server's token
+    /// endpoint").
+    /// </summary>
+    /// <param name="infrastructure">The infrastructure whose DPoP slots are read.</param>
+    /// <returns><see langword="true"/> when both DPoP slots are set.</returns>
+    private static bool IsDpopWired(OAuthClientInfrastructure infrastructure) =>
+        infrastructure.ConstructDpopProofAsync is not null && infrastructure.DpopKey is not null;
+
+
+    /// <summary>
+    /// The refusal of a token response whose <c>token_type</c> is not <c>DPoP</c>, answering a token request that
+    /// carried a DPoP proof, or <see langword="null"/> when the response stands.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>: "If the access token
+    /// response contains a different token_type value than DPoP, the access token protection provided by DPoP is not
+    /// given. The client MUST discard the response in this case if this protection is deemed important for the
+    /// security of the application; otherwise, the client may continue as in a regular OAuth interaction." The
+    /// protection is deemed important when DPoP is wired (<see cref="IsDpopWired"/>) and
+    /// <see cref="OAuthClientInfrastructure.RequiresDpopTokenType"/> is set; the <c>token_type</c> is compared
+    /// case-insensitively (<see cref="WellKnownAuthenticationSchemes.IsDPoP"/>;
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 Section 5.1</see>: "Value is case
+    /// insensitive."). The refusal is the token response parser's shape for a member it refuses: the field name, an
+    /// empty received value, so a server value is never echoed, and a fixed reason.
+    /// </summary>
+    /// <param name="infrastructure">The infrastructure the token request was sent through.</param>
+    /// <param name="tokenResponse">The parsed token response.</param>
+    /// <returns>The refusal, or <see langword="null"/> when the response stands.</returns>
+    internal static OAuthInvalidFieldValue? RefuseTokenTypeOtherThanDpop(
+        OAuthClientInfrastructure infrastructure, TokenResponse tokenResponse)
+    {
+        ArgumentNullException.ThrowIfNull(infrastructure);
+        ArgumentNullException.ThrowIfNull(tokenResponse);
+
+        bool isRefused = IsDpopWired(infrastructure)
+            && infrastructure.RequiresDpopTokenType
+            && !WellKnownAuthenticationSchemes.IsDPoP(tokenResponse.TokenType);
+
+        return isRefused switch
+        {
+            true => new OAuthInvalidFieldValue(
+                OAuthRequestParameterNames.TokenType,
+                string.Empty,
+                TokenTypeOtherThanDpopReason,
+                new DecisionSupport("The token response names a token_type other than DPoP; the DPoP protection the request asked for is not given, and the response is discarded.")
+                {
+                    SpecificationReference = "RFC 9449 Section 5"
+                }),
+            false => null
+        };
+    }
+
+
+    /// <summary>
+    /// The <see cref="OAuthInvalidFieldValue.Reason"/> of <see cref="RefuseTokenTypeOtherThanDpop"/>'s refusal.
+    /// </summary>
+    private static string TokenTypeOtherThanDpopReason { get; } =
+        "The token response to a request that carried a DPoP proof names a token_type other than DPoP.";
 
 
     /// <summary>

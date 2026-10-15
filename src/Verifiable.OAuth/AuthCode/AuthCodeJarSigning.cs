@@ -88,13 +88,19 @@ public static class AuthCodeJarSigning
     /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707 §2.1</see> gives it:
     /// "For an authorization request sent as a JSON Web Token (JWT), such as when using the JWT
     /// Secured Authorization Request [JWT-SAR], a single "resource" parameter value is represented as
-    /// a JSON string while multiple values are represented as an array of strings."
+    /// a JSON string while multiple values are represented as an array of strings." The <c>dpop_jkt</c> claim is
+    /// signed, as a JSON string, when <see cref="AuthCodeRequestObject.DpopJkt"/> names a value:
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-3">RFC 9126 Section 3</see>, "All other request
+    /// parameters, i.e., those pertaining to the authorization request itself, MUST appear as claims of the JWT
+    /// representing the authorization request", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-4">RFC 9101 Section 4</see>, "Parameter names and
+    /// string values MUST be included as JSON strings."
     /// </summary>
     /// <param name="requestObject">The request object whose parameters become the claims.</param>
     /// <returns>The claims to sign.</returns>
     private static JwtPayload BuildPayload(AuthCodeRequestObject requestObject)
     {
-        JwtPayload payload = new(capacity: 14)
+        JwtPayload payload = new(capacity: 16)
         {
             [OAuthRequestParameterNames.ClientId] = requestObject.ClientId,
             [OAuthRequestParameterNames.ResponseType] = requestObject.ResponseType,
@@ -141,6 +147,11 @@ public static class AuthCodeJarSigning
         if(requestObject.Jti is string jti)
         {
             payload[WellKnownJwtClaimNames.Jti] = jti;
+        }
+
+        if(requestObject.DpopJkt is string dpopJkt)
+        {
+            payload[OAuthRequestParameterNames.DpopJkt] = dpopJkt;
         }
 
         return payload;

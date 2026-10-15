@@ -67,7 +67,15 @@ public sealed record AuthCodeStartJarParOptions
     /// Open-ended additional outer body fields for the POST to the PAR endpoint
     /// (vendor extensions, profile-specific parameters). The outer
     /// <c>client_id</c> (RFC 9101 §5) and <c>request</c> field are added
-    /// automatically; callers do not include them here.
+    /// automatically; callers do not include them here. A field under a name the start composes
+    /// (<c>client_id</c>, <c>response_type</c>, <c>redirect_uri</c>, <c>scope</c>, <c>state</c>,
+    /// <c>code_challenge</c>, <c>code_challenge_method</c>, <c>resource</c>, <c>dpop_jkt</c>, <c>request_uri</c>,
+    /// <c>request</c>) is dropped
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9126#section-3">RFC 9126 Section 3</see>: "All other request
+    /// parameters, i.e., those pertaining to the authorization request itself, MUST appear as claims of the JWT
+    /// representing the authorization request.";
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-5">RFC 9101 Section 5</see>: "If this parameter is
+    /// present in the authorization request, "request_uri" MUST NOT be present.").
     /// </summary>
     public OAuthFormEncodedFields AdditionalFields { get; init; } = OAuthFormEncodedFields.Empty;
 

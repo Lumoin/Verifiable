@@ -340,71 +340,48 @@ internal sealed class Oid4VciWalletClientTests
 
 
     /// <summary>
-    /// A Pre-Authorized Code journey whose Token Response, after it crossed the wire, carries a
-    /// <c>token_type</c> written as a URI-reference is spent: the wallet makes the Credential Request and
-    /// surfaces the type as written.
+    /// A wallet without a DPoP key drives a Pre-Authorized Code issuance over the wire; the listener emits the Token
+    /// Endpoint's 200 (its first answer: a Token Request without a proof meets no nonce challenge) with its
+    /// <c>token_type</c> naming the URI-reference <c>urn:ietf:params:oauth:token-type:jwt</c>, and the wallet's own
+    /// transport reads it. The wallet reads the URI-reference as a token type and uses no token of a type it does not
+    /// understand: it answers a malformed response of the Token Endpoint with status 200, the refusal of RFC 6749 Section
+    /// 7.1 in place of a malformed <c>token_type</c>, and no request reaches the Nonce or the Credential Endpoint.
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#appendix-A.13">RFC 6749 Appendix A.13</see>:
     /// "token-type = type-name / URI-reference", where
     /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-4.1">RFC 3986 Section 4.1</see> defines
-    /// "URI-reference = URI / relative-ref".
+    /// "URI-reference = URI / relative-ref";
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-7.1">RFC 6749 Section 7.1</see>: "The client
+    /// MUST NOT use an access token if it does not understand the token type."
     /// </summary>
     /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
-    public async Task APreAuthorizedUriReferenceTokenTypeIsSpent()
+    public async Task APreAuthorizedUriReferenceTokenTypeIsReadButNotUsed()
     {
         const string UriReferenceTokenType = "urn:ietf:params:oauth:token-type:jwt";
 
-        await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuerCapabilities).ConfigureAwait(false);
-        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
-        IssuerSeamObservations observations = await WireIssuerSeamsAsync(host).ConfigureAwait(false);
-        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        WalletTokenTypeRun run = await IssueUnderAnEmittedTokenTypeAsync(
+            UriReferenceTokenType, isDpopWired: false, requiresDpopTokenType: true).ConfigureAwait(false);
 
-        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
-        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
-        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
-
-        //The library's Authorization Server sends a type name, so the Token Response is rewritten after it
-        //crossed the wire and before the wallet reads it: the token_type's value becomes the URI-reference.
-        bool isRewritten = false;
-        Oid4VciWalletClient walletClient = BuildWalletClient(
-            host,
-            rewriteTokenAnswer: answer =>
-            {
-                const string TokenTypeMember = "\"token_type\":\"";
-                int valueStart = answer.Body.IndexOf(TokenTypeMember, StringComparison.Ordinal);
-                if(valueStart < 0)
-                {
-                    return answer;
-                }
-
-                valueStart += TokenTypeMember.Length;
-                int valueEnd = valueStart + answer.Body.AsSpan(valueStart).IndexOf('"');
-                isRewritten = true;
-
-                return answer with
-                {
-                    Body = string.Concat(answer.Body.AsSpan(0, valueStart), UriReferenceTokenType, answer.Body.AsSpan(valueEnd))
-                };
-            });
-
-        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await walletClient.IssuePreAuthorizedDetailedAsync(
-            ComposeOffer(material),
-            ConfigurationId,
-            holderPrivate,
-            holderPublic,
-            ResolveEndpoints(host, material),
-            transactionCode: null,
-            responseEncryption: null,
-            TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy),
-            TestContext.CancellationToken).ConfigureAwait(false);
-
-        Assert.IsTrue(isRewritten, "The Token Response must have carried a token_type to rewrite.");
-        Assert.IsTrue(outcome.IsSuccess, "A URI-reference token_type must be accepted.");
-        Assert.AreEqual(UriReferenceTokenType, outcome.Value.TokenType, "The token_type must be surfaced as written.");
-        Assert.AreEqual(1, observations.IssuanceRequests, "Exactly one Credential Request must reach the Issuer.");
+        (string path, int statusCode, string bodyBefore, string bodyAfter) = Assert.ContainsSingle(run.RewrittenAnswers,
+            "The listener emitted one answer with a body other than the library's.");
+        Assert.AreEqual(run.Endpoints.TokenEndpoint.AbsolutePath, path, "The altered answer is the Token Endpoint's.");
+        Assert.AreEqual(200, statusCode, "The altered answer is the Token Endpoint's 200.");
+        Assert.Contains("\"token_type\":\"Bearer\"", bodyBefore, StringComparison.Ordinal, bodyBefore);
+        Assert.Contains($"\"token_type\":\"{UriReferenceTokenType}\"", bodyAfter, StringComparison.Ordinal, bodyAfter);
+        Assert.IsFalse(run.Outcome.IsSuccess, $"A token of a type the wallet does not understand must not be used; got {DescribeOutcome(run.Outcome)}.");
+        Assert.AreEqual(Oid4VciRequestFailureKind.MalformedResponse, run.Outcome.Error.Kind, DescribeOutcome(run.Outcome));
+        Assert.AreEqual(run.Endpoints.TokenEndpoint, run.Outcome.Error.Endpoint, "The refusal names the Token Endpoint, whose answer named the type.");
+        Assert.AreEqual(200, run.Outcome.Error.StatusCode, "The refusal carries the status of the Token Endpoint's answer.");
+        Assert.AreEqual(UriReferenceTokenTypeRefusalDescription, run.Outcome.Error.ErrorDescription,
+            "The URI-reference is read as a token type: the refusal is the unused type's, not a malformed token_type's.");
+        Assert.IsNull(run.Outcome.Error.ErrorCode);
+        AssertNoResourceRequestArrived(run);
     }
+
+
+    /// <summary>The description of the wallet's refusal of a Token Response whose token type it does not understand.</summary>
+    private static string UriReferenceTokenTypeRefusalDescription { get; } =
+        "RFC 6749 Section 7.1 the Token Response's token_type is neither Bearer nor DPoP, and the Wallet does not use an access token whose type it does not understand.";
 
 
     /// <summary>
@@ -753,14 +730,17 @@ internal sealed class Oid4VciWalletClientTests
 
     /// <summary>
     /// A Token Response whose <c>token_type</c> is an RFC 3986 URI-reference (a URI behind its scheme,
-    /// whatever its authority's port, or a relative reference whose first segment holds no colon) is
-    /// accepted: the wallet spends the token on one Credential Request and surfaces the type as written.
-    /// The library's Authorization Server sends no such type, so the response is delivered through the
-    /// wallet's transport delegate.
+    /// whatever its authority's port, or a relative reference whose first segment holds no colon) is read as a
+    /// token type, and the wallet uses no token of a type it does not understand: it answers a malformed response of
+    /// the Token Endpoint with the answer's status 200, the refusal of RFC 6749 Section 7.1 in place of a malformed
+    /// <c>token_type</c>, and sends no Nonce or Credential Request. The library's Authorization Server sends no such
+    /// type, so the response is delivered through the wallet's transport delegate.
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#appendix-A.13">RFC 6749 Appendix A.13</see>:
     /// "token-type = type-name / URI-reference", where
     /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-4.1">RFC 3986 Section 4.1</see> defines
-    /// "URI-reference = URI / relative-ref".
+    /// "URI-reference = URI / relative-ref";
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-7.1">RFC 6749 Section 7.1</see>: "The client
+    /// MUST NOT use an access token if it does not understand the token type."
     /// </summary>
     /// <param name="tokenType">The <c>token_type</c> the Token Response carries.</param>
     /// <returns>A task that completes when the assertions have run.</returns>
@@ -772,14 +752,18 @@ internal sealed class Oid4VciWalletClientTests
     [DataRow("https://as.example:99999/t")]
     [DataRow("http://")]
     [DataRow("types/bearer")]
-    public async Task AUriReferenceTokenTypeIsSpent(string tokenType)
+    public async Task AUriReferenceTokenTypeIsReadButNotUsed(string tokenType)
     {
         GrantedDetailsIssuance issuance = await IssueOverTokenResponseAsync(
             "{\"access_token\":\"tok\",\"token_type\":\"" + tokenType + "\"}").ConfigureAwait(false);
 
-        Assert.IsTrue(issuance.Outcome.IsSuccess, "A URI-reference token_type must be accepted.");
-        Assert.HasCount(1, issuance.CredentialRequestBodies, "Exactly one Credential Request must be sent.");
-        Assert.AreEqual(tokenType, issuance.Outcome.Value.TokenType, "The token_type must be surfaced as written.");
+        Assert.IsFalse(issuance.Outcome.IsSuccess, "A token of a type the wallet does not understand must not be used.");
+        Assert.AreEqual(Oid4VciRequestFailureKind.MalformedResponse, issuance.Outcome.Error.Kind);
+        Assert.AreEqual(issuance.TokenEndpoint, issuance.Outcome.Error.Endpoint, "The refusal names the Token Endpoint, whose answer named the type.");
+        Assert.AreEqual(200, issuance.Outcome.Error.StatusCode, "The refusal carries the status of the Token Endpoint's answer.");
+        Assert.AreEqual(UriReferenceTokenTypeRefusalDescription, issuance.Outcome.Error.ErrorDescription,
+            "The URI-reference is read as a token type: the refusal is the unused type's, not a malformed token_type's.");
+        Assert.IsEmpty(issuance.LaterRequests, "No Nonce or Credential Request may present the token.");
     }
 
 
@@ -1287,9 +1271,9 @@ internal sealed class Oid4VciWalletClientTests
 
 
     /// <summary>
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">RFC 9449 §9</see>: "Resource servers
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">RFC 9449 Section 9</see>: "Resource servers
     /// use an HTTP 401 (Unauthorized) error code with an accompanying WWW-Authenticate: DPoP value and
-    /// DPoP-Nonce value to accomplish this." and §8: "The client will typically retry the request with
+    /// DPoP-Nonce value to accomplish this." and Section 8: "The client will typically retry the request with
     /// the new nonce value supplied upon receiving a use_dpop_nonce error with an accompanying nonce
     /// value." A Pre-Authorized Code is redeemed for a DPoP-bound token and a Credential Request follows, over the
     /// loopback HTTP listener. The wallet is wired with no nonce store, so the first proof the Credential Endpoint
@@ -1298,6 +1282,7 @@ internal sealed class Oid4VciWalletClientTests
     /// Credential Endpoint answers the first request with its 401 nonce challenge; the wallet retries exactly once,
     /// its retry's proof carrying the nonce that challenge supplied, and the Credential is issued.
     /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
     public async Task IssuesCredentialAfterRetryingOnTheCredentialEndpointNonceChallengeOverRealWireAsync()
     {
@@ -2604,6 +2589,826 @@ internal sealed class Oid4VciWalletClientTests
     }
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>: "If the access token
+    /// response contains a different token_type value than DPoP, the access token protection provided by DPoP is not
+    /// given. The client MUST discard the response in this case if this protection is deemed important for the
+    /// security of the application". A wallet wired with a DPoP key, which deems the protection important unless told
+    /// otherwise, drives a Pre-Authorized Code issuance over the wire; the listener emits the 200 answering the retry of
+    /// the challenged Token Request with its <c>token_type</c> naming <paramref name="tokenType"/>. The wallet answers
+    /// a malformed response of the Token Endpoint with status 200 and no error code, and sends no Nonce or Credential
+    /// Request.
+    /// </summary>
+    /// <param name="tokenType">The <c>token_type</c> the 200 names: <c>Bearer</c> or <c>N_A</c>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("Bearer", DisplayName = "Bearer")]
+    [DataRow("N_A", DisplayName = "N_A")]
+    public async Task WalletDiscardsATokenResponseWhoseTokenTypeIsNotDpopAsync(string tokenType)
+    {
+        WalletTokenTypeRun run = await IssueUnderAnEmittedTokenTypeAsync(tokenType, isDpopWired: true, requiresDpopTokenType: true).ConfigureAwait(false);
+
+        (_, int statusCode, string bodyBefore, string bodyAfter) = Assert.ContainsSingle(run.RewrittenAnswers,
+            "The listener emitted one answer with a body other than the library's.");
+        Assert.AreEqual(200, statusCode, "The altered answer is the Token Endpoint's 200.");
+        Assert.Contains(TestHostShell.DpopTokenTypeMember, bodyBefore, StringComparison.Ordinal, bodyBefore);
+        Assert.Contains($"\"token_type\":\"{tokenType}\"", bodyAfter, StringComparison.Ordinal, bodyAfter);
+        Assert.IsFalse(run.Outcome.IsSuccess, $"The Token Response is discarded; got {DescribeOutcome(run.Outcome)}.");
+        Assert.AreEqual(Oid4VciRequestFailureKind.MalformedResponse, run.Outcome.Error.Kind, DescribeOutcome(run.Outcome));
+        Assert.AreEqual(200, run.Outcome.Error.StatusCode);
+        Assert.AreEqual(run.Endpoints.TokenEndpoint, run.Outcome.Error.Endpoint);
+        Assert.AreEqual(
+            "RFC 9449 Section 5 the Token Response to a Token Request that carried a DPoP proof names a token_type other than DPoP.",
+            run.Outcome.Error.ErrorDescription);
+        Assert.IsNull(run.Outcome.Error.ErrorCode);
+        AssertNoResourceRequestArrived(run);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>: "The client MUST discard
+    /// the response in this case if this protection is deemed important for the security of the application;
+    /// otherwise, the client may continue as in a regular OAuth interaction." A wallet wired with a DPoP key, whose
+    /// application does not deem the protection important, drives a Pre-Authorized Code issuance over the wire; the
+    /// listener emits the 200 answering the retry of the challenged Token Request with its <c>token_type</c> naming
+    /// <c>Bearer</c>. The wallet continues: its Nonce Request presents the access token under the <c>Bearer</c> scheme,
+    /// and the Nonce Endpoint receives it with no <c>DPoP</c> field.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task WalletNotRequiringTheDpopTokenTypePresentsABearerAnswerUnderBearerAsync()
+    {
+        WalletTokenTypeRun run = await IssueUnderAnEmittedTokenTypeAsync(
+            WellKnownAuthenticationSchemes.Bearer, isDpopWired: true, requiresDpopTokenType: false).ConfigureAwait(false);
+
+        (_, int statusCode, string bodyBefore, string bodyAfter) = Assert.ContainsSingle(run.RewrittenAnswers,
+            "The listener emitted one answer with a body other than the library's.");
+        Assert.AreEqual(200, statusCode, "The altered answer is the Token Endpoint's 200.");
+        Assert.Contains(TestHostShell.DpopTokenTypeMember, bodyBefore, StringComparison.Ordinal, bodyBefore);
+        Assert.Contains("\"token_type\":\"Bearer\"", bodyAfter, StringComparison.Ordinal, bodyAfter);
+        (_, string? authorization) = Assert.ContainsSingle(
+            run.ResourceRequests.Where(request => request.Endpoint == run.Endpoints.NonceEndpoint),
+            "The wallet sends one Nonce Request.");
+        Assert.IsNotNull(authorization, "The Nonce Request carries an Authorization field.");
+        Assert.StartsWith(WellKnownAuthenticationSchemes.Bearer + " ", authorization, StringComparison.Ordinal,
+            "The Nonce Request presents the access token under the Bearer scheme.");
+        string[] nonceEndpointFieldLines = Assert.ContainsSingle(
+            run.Arrivals.Where(arrival => string.Equals(arrival.Path, run.Endpoints.NonceEndpoint.AbsolutePath, StringComparison.Ordinal)),
+            "The Nonce Endpoint received one request.").DpopFieldLines;
+        Assert.IsEmpty(nonceEndpointFieldLines, "The Nonce Endpoint received no DPoP field.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 Section 5.1</see>: "token_type REQUIRED.
+    /// The type of the token issued as described in Section 7.1. Value is case insensitive."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "A DPoP-bound access
+    /// token is sent using the Authorization request header field per Section 11.6.2 of [RFC9110] with an
+    /// authentication scheme of DPoP." A wallet wired with a DPoP key drives a Pre-Authorized Code issuance over the
+    /// wire; the listener emits the 200 answering the retry of the challenged Token Request (the Token Endpoint's second
+    /// answer: the first is the nonce challenge to a proof without a nonce) with its <c>token_type</c> written
+    /// <c>dpop</c>. The wallet reads it as <c>DPoP</c>: its Nonce Request presents the access token under the
+    /// <c>DPoP</c> scheme, the Nonce Endpoint receives one request carrying exactly one <c>DPoP</c> field line, and the
+    /// Credential is issued.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task WalletReadsTheDpopTokenTypeInAnyCaseAsync()
+    {
+        WalletTokenTypeRun run = await IssueUnderAnEmittedTokenTypeAsync(
+            "dpop", isDpopWired: true, requiresDpopTokenType: true).ConfigureAwait(false);
+
+        (string path, int statusCode, string bodyBefore, string bodyAfter) = Assert.ContainsSingle(run.RewrittenAnswers,
+            "The listener emitted one answer with a body other than the library's.");
+        Assert.AreEqual(run.Endpoints.TokenEndpoint.AbsolutePath, path, "The altered answer is the Token Endpoint's.");
+        Assert.AreEqual(200, statusCode, "The altered answer is the Token Endpoint's 200.");
+        Assert.Contains(TestHostShell.DpopTokenTypeMember, bodyBefore, StringComparison.Ordinal, bodyBefore);
+        Assert.Contains("\"token_type\":\"dpop\"", bodyAfter, StringComparison.Ordinal, bodyAfter);
+        Assert.IsTrue(run.Outcome.IsSuccess, $"The Credential is issued; got {DescribeOutcome(run.Outcome)}.");
+        Assert.AreEqual(IssuedCredential, run.Outcome.Value.Credentials[0]);
+        (_, string? authorization) = Assert.ContainsSingle(
+            run.ResourceRequests.Where(request => request.Endpoint == run.Endpoints.NonceEndpoint),
+            "The wallet sends one Nonce Request.");
+        Assert.IsNotNull(authorization, "The Nonce Request carries an Authorization field.");
+        Assert.StartsWith(WellKnownAuthenticationSchemes.DPoP + " ", authorization, StringComparison.Ordinal,
+            "The Nonce Request presents the access token under the DPoP scheme.");
+        string[] nonceEndpointFieldLines = Assert.ContainsSingle(
+            run.Arrivals.Where(arrival => string.Equals(arrival.Path, run.Endpoints.NonceEndpoint.AbsolutePath, StringComparison.Ordinal)),
+            "The Nonce Endpoint received one request.").DpopFieldLines;
+        _ = Assert.ContainsSingle(nonceEndpointFieldLines, "The Nonce Endpoint received exactly one DPoP field line.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-7.1">RFC 6749 Section 7.1</see>: "The client MUST NOT
+    /// use an access token if it does not understand the token type." A wallet wired with a DPoP key is handed an access
+    /// token whose type is <paramref name="tokenType"/>, neither <c>Bearer</c> nor <c>DPoP</c>, and asked for a
+    /// Credential at an Issuer served over the wire: the wallet answers a refusal naming the Nonce Endpoint, with no
+    /// status and no error code, and no request reaches the Nonce or the Credential Endpoint.
+    /// </summary>
+    /// <param name="tokenType">The type of the handed-in access token: <c>N_A</c> or <c>MAC</c>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("N_A", DisplayName = "N_A")]
+    [DataRow("MAC", DisplayName = "MAC")]
+    public async Task WalletRefusesAHandedInTokenOfATypeItDoesNotUnderstandAsync(string tokenType)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Haip10, IssuerCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        _ = await WireIssuerSeamsAsync(host).ConfigureAwait(false);
+        List<(string Path, string[] DpopFieldLines)> arrivals = host.RecordArrivingDpopFieldLines();
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        var walletDpopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory walletDpopPublic = walletDpopKeys.PublicKey;
+        using PrivateKeyMemory walletDpopPrivate = walletDpopKeys.PrivateKey;
+        Oid4VciIssuanceEndpoints endpoints = ResolveEndpoints(host, material);
+        Oid4VciWalletClient walletClient = BuildWalletClient(
+            host,
+            constructDpopProofAsync: BuildWalletDpopProofAsync,
+            dpopKey: new DpopKey(walletDpopKeys, WellKnownJwaValues.Es256));
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await walletClient.IssueWithAccessTokenDetailedAsync(
+            "access-token-of-a-type-the-wallet-does-not-understand",
+            tokenType,
+            accessTokenExpiresAt: null,
+            material.Registration.IssuerUri!,
+            CredentialRequestTarget.ForConfiguration(ConfigurationId),
+            holderPrivate,
+            holderPublic,
+            endpoints,
+            responseEncryption: null,
+            TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(outcome.IsSuccess, $"The handed-in token is not used; got {DescribeOutcome(outcome)}.");
+        Assert.AreEqual(Oid4VciRequestFailureKind.MalformedResponse, outcome.Error.Kind, DescribeOutcome(outcome));
+        Assert.AreEqual(endpoints.NonceEndpoint, outcome.Error.Endpoint);
+        Assert.IsNull(outcome.Error.StatusCode, "No request was sent, so no status was received.");
+        Assert.IsNull(outcome.Error.ErrorCode);
+        Assert.AreEqual(HandedInTokenTypeRefusalDescription, outcome.Error.ErrorDescription);
+        Assert.DoesNotContain(
+            arrival => string.Equals(arrival.Path, endpoints.NonceEndpoint.AbsolutePath, StringComparison.Ordinal)
+                || string.Equals(arrival.Path, endpoints.CredentialEndpoint.AbsolutePath, StringComparison.Ordinal),
+            arrivals, "No request reaches the Nonce or the Credential Endpoint.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-7.1">RFC 6749 Section 7.1</see>: "The client MUST NOT
+    /// use an access token if it does not understand the token type." A wallet wired with a DPoP key is handed an access
+    /// token whose type is <paramref name="tokenType"/>, neither <c>Bearer</c> nor <c>DPoP</c>, and asked to poll the
+    /// Deferred Credential Endpoint of an Issuer served over the wire for a deferred issuance: the wallet answers a
+    /// refusal naming the Deferred Credential Endpoint, with no status and no error code, and no request reaches the
+    /// Deferred Credential, the Nonce or the Credential Endpoint.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "A DPoP-bound access
+    /// token is sent using the Authorization request header field per Section 11.6.2 of [RFC9110] with an
+    /// authentication scheme of DPoP." A wallet without a DPoP key, handed an access token typed <c>DPoP</c>, has no
+    /// DPoP key to send it under that scheme with and answers the same refusal, naming the same endpoint, with the
+    /// description of a <c>DPoP</c> token it cannot prove. The Issuer serves the Deferred Credential Endpoint: a token
+    /// that reached it would be answered by the endpoint itself, and none does.
+    /// </summary>
+    /// <param name="tokenType">The type of the handed-in access token: <c>N_A</c>, <c>MAC</c> or <c>DPoP</c>.</param>
+    /// <param name="isDpopWired">Whether the wallet is wired with a DPoP key.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("N_A", true, DisplayName = "N_A")]
+    [DataRow("MAC", true, DisplayName = "MAC")]
+    [DataRow("DPoP", false, DisplayName = "DPoP without a DPoP key")]
+    public async Task WalletRefusesAHandedInTokenOfATypeItDoesNotUnderstandAtTheDeferredCredentialEndpointAsync(
+        string tokenType, bool isDpopWired)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Haip10, IssuerCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        _ = await WireIssuerSeamsAsync(host).ConfigureAwait(false);
+        await WireDeferredCredentialResolutionAsync(host, "notification-of-a-deferred-issuance").ConfigureAwait(false);
+        List<(string Path, string[] DpopFieldLines)> arrivals = host.RecordArrivingDpopFieldLines();
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+
+        var walletDpopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory walletDpopPublic = walletDpopKeys.PublicKey;
+        using PrivateKeyMemory walletDpopPrivate = walletDpopKeys.PrivateKey;
+        Oid4VciIssuanceEndpoints endpoints = ResolveEndpoints(host, material);
+        Uri deferredCredentialEndpoint = ResolveDeferredEndpoint(host, material);
+        Oid4VciWalletClient walletClient = BuildWalletClient(
+            host,
+            constructDpopProofAsync: isDpopWired switch
+            {
+                true => BuildWalletDpopProofAsync,
+                false => null
+            },
+            dpopKey: isDpopWired switch
+            {
+                true => new DpopKey(walletDpopKeys, WellKnownJwaValues.Es256),
+                false => null
+            });
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await walletClient.PollDeferredCredentialAsync(
+            "transaction-of-a-deferred-issuance",
+            "access-token-of-a-type-the-wallet-does-not-understand",
+            tokenType,
+            accessTokenExpiresAt: null,
+            deferredCredentialEndpoint,
+            responseEncryption: null,
+            TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(outcome.IsSuccess, $"The handed-in token is not used; got {DescribeOutcome(outcome)}.");
+        Assert.AreEqual(Oid4VciRequestFailureKind.MalformedResponse, outcome.Error.Kind, DescribeOutcome(outcome));
+        Assert.AreEqual(deferredCredentialEndpoint, outcome.Error.Endpoint);
+        Assert.IsNull(outcome.Error.StatusCode, "No request was sent, so no status was received.");
+        Assert.IsNull(outcome.Error.ErrorCode);
+        Assert.AreEqual(
+            isDpopWired switch
+            {
+                true => HandedInTokenTypeRefusalDescription,
+                false => DpopTokenTypeWithoutDpopKeyRefusalDescription
+            },
+            outcome.Error.ErrorDescription);
+        Assert.DoesNotContain(
+            arrival => string.Equals(arrival.Path, deferredCredentialEndpoint.AbsolutePath, StringComparison.Ordinal)
+                || string.Equals(arrival.Path, endpoints.NonceEndpoint.AbsolutePath, StringComparison.Ordinal)
+                || string.Equals(arrival.Path, endpoints.CredentialEndpoint.AbsolutePath, StringComparison.Ordinal),
+            arrivals, "No request reaches the Deferred Credential, the Nonce or the Credential Endpoint.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-7.1">RFC 6749 Section 7.1</see>: "The client MUST NOT
+    /// use an access token if it does not understand the token type." A wallet wired with a DPoP key is handed an access
+    /// token whose type is <paramref name="tokenType"/>, neither <c>Bearer</c> nor <c>DPoP</c>, and asked to send a
+    /// Notification Request to the Notification Endpoint of an Issuer served over the wire: the wallet answers a refusal
+    /// naming the Notification Endpoint, with no status and no error code, and no request reaches the Notification, the
+    /// Nonce or the Credential Endpoint.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "A DPoP-bound access
+    /// token is sent using the Authorization request header field per Section 11.6.2 of [RFC9110] with an
+    /// authentication scheme of DPoP." A wallet without a DPoP key, handed an access token typed <c>DPoP</c>, has no
+    /// DPoP key to send it under that scheme with and answers the same refusal, naming the same endpoint, with the
+    /// description of a <c>DPoP</c> token it cannot prove. The Issuer serves the Notification Endpoint: a token that
+    /// reached it would be answered by the endpoint itself, and none does.
+    /// </summary>
+    /// <param name="tokenType">The type of the handed-in access token: <c>N_A</c>, <c>MAC</c> or <c>DPoP</c>.</param>
+    /// <param name="isDpopWired">Whether the wallet is wired with a DPoP key.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("N_A", true, DisplayName = "N_A")]
+    [DataRow("MAC", true, DisplayName = "MAC")]
+    [DataRow("DPoP", false, DisplayName = "DPoP without a DPoP key")]
+    public async Task WalletRefusesAHandedInTokenOfATypeItDoesNotUnderstandAtTheNotificationEndpointAsync(
+        string tokenType, bool isDpopWired)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Haip10, IssuerCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        _ = await WireIssuerSeamsAsync(host).ConfigureAwait(false);
+        await WireNotificationProcessingAsync(host, observe: null).ConfigureAwait(false);
+        List<(string Path, string[] DpopFieldLines)> arrivals = host.RecordArrivingDpopFieldLines();
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+
+        var walletDpopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory walletDpopPublic = walletDpopKeys.PublicKey;
+        using PrivateKeyMemory walletDpopPrivate = walletDpopKeys.PrivateKey;
+        Oid4VciIssuanceEndpoints endpoints = ResolveEndpoints(host, material);
+        Uri notificationEndpoint = ResolveNotificationEndpoint(host, material);
+        Oid4VciWalletClient walletClient = BuildWalletClient(
+            host,
+            constructDpopProofAsync: isDpopWired switch
+            {
+                true => BuildWalletDpopProofAsync,
+                false => null
+            },
+            dpopKey: isDpopWired switch
+            {
+                true => new DpopKey(walletDpopKeys, WellKnownJwaValues.Es256),
+                false => null
+            });
+
+        Oid4VciRequestFailure? failure = await walletClient.SendCredentialNotificationAsync(
+            "notification-of-an-issuance",
+            Oid4VciNotificationEvents.CredentialAccepted,
+            "access-token-of-a-type-the-wallet-does-not-understand",
+            tokenType,
+            notificationEndpoint,
+            eventDescription: null,
+            TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsNotNull(failure, "The handed-in token is not used: the notification is refused.");
+        Assert.AreEqual(Oid4VciRequestFailureKind.MalformedResponse, failure.Kind, $"{failure.Kind} {failure.StatusCode} {failure.ErrorCode}");
+        Assert.AreEqual(notificationEndpoint, failure.Endpoint);
+        Assert.IsNull(failure.StatusCode, "No request was sent, so no status was received.");
+        Assert.IsNull(failure.ErrorCode);
+        Assert.AreEqual(
+            isDpopWired switch
+            {
+                true => HandedInTokenTypeRefusalDescription,
+                false => DpopTokenTypeWithoutDpopKeyRefusalDescription
+            },
+            failure.ErrorDescription);
+        Assert.DoesNotContain(
+            arrival => string.Equals(arrival.Path, notificationEndpoint.AbsolutePath, StringComparison.Ordinal)
+                || string.Equals(arrival.Path, endpoints.NonceEndpoint.AbsolutePath, StringComparison.Ordinal)
+                || string.Equals(arrival.Path, endpoints.CredentialEndpoint.AbsolutePath, StringComparison.Ordinal),
+            arrivals, "No request reaches the Notification, the Nonce or the Credential Endpoint.");
+    }
+
+
+    /// <summary>The description of the wallet's refusal of a handed-in access token whose type it does not understand.</summary>
+    private static string HandedInTokenTypeRefusalDescription { get; } =
+        "RFC 6749 Section 7.1 the access token's token_type is neither Bearer nor DPoP, and the Wallet does not use an access token whose type it does not understand.";
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "A DPoP-bound access
+    /// token is sent using the Authorization request header field per Section 11.6.2 of [RFC9110] with an
+    /// authentication scheme of DPoP."; <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">Section
+    /// 7.2</see>: "such a protected resource MUST reject a DPoP-bound access token received as a bearer token per
+    /// [RFC6750]." A wallet without a DPoP key is handed an access token typed <c>DPoP</c> and asked for a Credential at
+    /// an Issuer served over the wire: having no DPoP key to send the token under the DPoP scheme with, the wallet
+    /// answers a refusal naming the Nonce Endpoint, with no status and no error code, and no request reaches the Nonce
+    /// or the Credential Endpoint.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task WalletWithoutADpopKeyRefusesAHandedInDpopTokenAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Haip10, IssuerCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        _ = await WireIssuerSeamsAsync(host).ConfigureAwait(false);
+        List<(string Path, string[] DpopFieldLines)> arrivals = host.RecordArrivingDpopFieldLines();
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        Oid4VciIssuanceEndpoints endpoints = ResolveEndpoints(host, material);
+        Oid4VciWalletClient walletClient = BuildWalletClient(host);
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await walletClient.IssueWithAccessTokenDetailedAsync(
+            "access-token-typed-dpop",
+            WellKnownAuthenticationSchemes.DPoP,
+            accessTokenExpiresAt: null,
+            material.Registration.IssuerUri!,
+            CredentialRequestTarget.ForConfiguration(ConfigurationId),
+            holderPrivate,
+            holderPublic,
+            endpoints,
+            responseEncryption: null,
+            TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(outcome.IsSuccess, $"The handed-in token is not used; got {DescribeOutcome(outcome)}.");
+        Assert.AreEqual(Oid4VciRequestFailureKind.MalformedResponse, outcome.Error.Kind, DescribeOutcome(outcome));
+        Assert.AreEqual(endpoints.NonceEndpoint, outcome.Error.Endpoint);
+        Assert.IsNull(outcome.Error.StatusCode, "No request was sent, so no status was received.");
+        Assert.IsNull(outcome.Error.ErrorCode);
+        Assert.AreEqual(DpopTokenTypeWithoutDpopKeyRefusalDescription, outcome.Error.ErrorDescription);
+        Assert.DoesNotContain(
+            arrival => string.Equals(arrival.Path, endpoints.NonceEndpoint.AbsolutePath, StringComparison.Ordinal)
+                || string.Equals(arrival.Path, endpoints.CredentialEndpoint.AbsolutePath, StringComparison.Ordinal),
+            arrivals, "No request reaches the Nonce or the Credential Endpoint.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "A DPoP-bound access
+    /// token is sent using the Authorization request header field per Section 11.6.2 of [RFC9110] with an
+    /// authentication scheme of DPoP."; <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">Section
+    /// 7.2</see>: "such a protected resource MUST reject a DPoP-bound access token received as a bearer token per
+    /// [RFC6750]." A wallet without a DPoP key drives a Pre-Authorized Code issuance over the wire; the listener emits the
+    /// Token Endpoint's 200 (its first answer: a Token Request without a proof meets no nonce challenge) with its
+    /// <c>token_type</c> naming <c>DPoP</c>. Having no DPoP key to send the token under the DPoP scheme with, the wallet
+    /// answers a malformed response of the Token Endpoint with status 200 and no error code, and no request reaches the
+    /// Nonce or the Credential Endpoint.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task WalletWithoutADpopKeyDoesNotUseATokenResponseTypedDpopAsync()
+    {
+        WalletTokenTypeRun run = await IssueUnderAnEmittedTokenTypeAsync(
+            WellKnownAuthenticationSchemes.DPoP, isDpopWired: false, requiresDpopTokenType: true).ConfigureAwait(false);
+
+        (string path, int statusCode, string bodyBefore, string bodyAfter) = Assert.ContainsSingle(run.RewrittenAnswers,
+            "The listener emitted one answer with a body other than the library's.");
+        Assert.AreEqual(run.Endpoints.TokenEndpoint.AbsolutePath, path, "The altered answer is the Token Endpoint's.");
+        Assert.AreEqual(200, statusCode, "The altered answer is the Token Endpoint's 200.");
+        Assert.Contains("\"token_type\":\"Bearer\"", bodyBefore, StringComparison.Ordinal, bodyBefore);
+        Assert.Contains(TestHostShell.DpopTokenTypeMember, bodyAfter, StringComparison.Ordinal, bodyAfter);
+        Assert.IsFalse(run.Outcome.IsSuccess, $"The Token Response is not used; got {DescribeOutcome(run.Outcome)}.");
+        Assert.AreEqual(Oid4VciRequestFailureKind.MalformedResponse, run.Outcome.Error.Kind, DescribeOutcome(run.Outcome));
+        Assert.AreEqual(run.Endpoints.TokenEndpoint, run.Outcome.Error.Endpoint, "The refusal names the Token Endpoint, whose answer named the type.");
+        Assert.AreEqual(200, run.Outcome.Error.StatusCode, "The refusal carries the status of the Token Endpoint's answer.");
+        Assert.AreEqual(DpopTokenTypeWithoutDpopKeyRefusalDescription, run.Outcome.Error.ErrorDescription);
+        Assert.IsNull(run.Outcome.Error.ErrorCode);
+        AssertNoResourceRequestArrived(run);
+    }
+
+
+    /// <summary>The description of the wallet's refusal of an access token typed DPoP when it has no DPoP key.</summary>
+    private static string DpopTokenTypeWithoutDpopKeyRefusalDescription { get; } =
+        "RFC 9449 Section 7.1 the access token is typed DPoP and the Wallet has no DPoP key to prove its possession, so it presents the token under no scheme.";
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-7.1">RFC 6749 Section 7.1</see>: "The client MUST NOT
+    /// use an access token if it does not understand the token type."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "A DPoP-bound access
+    /// token is sent using the Authorization request header field per Section 11.6.2 of [RFC9110] with an
+    /// authentication scheme of DPoP." A wallet drives a Pre-Authorized Code issuance over the wire; the listener emits
+    /// the Token Endpoint's 200 with its <c>token_type</c> naming <paramref name="tokenType"/>: a wallet wired with a
+    /// DPoP key, which does not require the DPoP token type, reads a type that is neither <c>Bearer</c> nor
+    /// <c>DPoP</c> (the 200 answering the retry of the challenged Token Request) and uses no token of a type it does
+    /// not understand; a wallet without a DPoP key reads <c>dpop</c> in any case as <c>DPoP</c> (the first answer: a
+    /// Token Request without a proof meets no nonce challenge) and, having no DPoP key to send the token under the DPoP
+    /// scheme with, uses no token it cannot prove. Each answers a malformed response of the Token Endpoint with status
+    /// 200 and no error code, and no request reaches the Nonce or the Credential Endpoint.
+    /// </summary>
+    /// <param name="tokenType">The <c>token_type</c> the 200 names: <c>N_A</c> or <c>dpop</c>.</param>
+    /// <param name="isDpopWired">Whether the wallet is wired with a DPoP key and the Issuer requires DPoP.</param>
+    /// <param name="requiresDpopTokenType">The wallet's <see cref="Oid4VciWalletConfiguration.RequiresDpopTokenType"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("N_A", true, false, DisplayName = "N_A, DPoP wired, DPoP token type not required")]
+    [DataRow("dpop", false, true, DisplayName = "dpop, no DPoP key")]
+    public async Task WalletRefusesATokenResponseTypeItCannotUseAsync(string tokenType, bool isDpopWired, bool requiresDpopTokenType)
+    {
+        WalletTokenTypeRun run = await IssueUnderAnEmittedTokenTypeAsync(tokenType, isDpopWired, requiresDpopTokenType).ConfigureAwait(false);
+
+        (string path, int statusCode, string bodyBefore, string bodyAfter) = Assert.ContainsSingle(run.RewrittenAnswers,
+            "The listener emitted one answer with a body other than the library's.");
+        Assert.AreEqual(run.Endpoints.TokenEndpoint.AbsolutePath, path, "The altered answer is the Token Endpoint's.");
+        Assert.AreEqual(200, statusCode, "The altered answer is the Token Endpoint's 200.");
+        Assert.Contains(
+            isDpopWired switch
+            {
+                true => TestHostShell.DpopTokenTypeMember,
+                false => "\"token_type\":\"Bearer\""
+            },
+            bodyBefore, StringComparison.Ordinal, bodyBefore);
+        Assert.Contains($"\"token_type\":\"{tokenType}\"", bodyAfter, StringComparison.Ordinal, bodyAfter);
+        Assert.IsFalse(run.Outcome.IsSuccess, $"The Token Response is not used; got {DescribeOutcome(run.Outcome)}.");
+        Assert.AreEqual(Oid4VciRequestFailureKind.MalformedResponse, run.Outcome.Error.Kind, DescribeOutcome(run.Outcome));
+        Assert.AreEqual(run.Endpoints.TokenEndpoint, run.Outcome.Error.Endpoint, "The refusal names the Token Endpoint, whose answer named the type.");
+        Assert.AreEqual(200, run.Outcome.Error.StatusCode, "The refusal carries the status of the Token Endpoint's answer.");
+        Assert.AreEqual(
+            isDpopWired switch
+            {
+                true => UriReferenceTokenTypeRefusalDescription,
+                false => DpopTokenTypeWithoutDpopKeyRefusalDescription
+            },
+            run.Outcome.Error.ErrorDescription);
+        Assert.IsNull(run.Outcome.Error.ErrorCode);
+        AssertNoResourceRequestArrived(run);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-7.1">RFC 6749 Section 7.1</see>: "For example, the
+    /// "bearer" token type defined in [RFC6750] is utilized by simply including the access token string in the
+    /// request". A wallet obtains a <c>Bearer</c> access token through a Pre-Authorized Code issuance over the wire;
+    /// a wallet wired with a DPoP key is then handed that token typed <c>Bearer</c> and asked for a Credential: its
+    /// Nonce Request presents the token under the <c>Bearer</c> scheme, the Nonce Endpoint receives it with no
+    /// <c>DPoP</c> field, and the Credential is issued.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task WalletPresentsAHandedInBearerTokenUnderBearerAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuerCapabilities).ConfigureAwait(false);
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        _ = await WireIssuerSeamsAsync(host).ConfigureAwait(false);
+        List<(string Path, string[] DpopFieldLines)> arrivals = host.RecordArrivingDpopFieldLines();
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        var walletDpopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory walletDpopPublic = walletDpopKeys.PublicKey;
+        using PrivateKeyMemory walletDpopPrivate = walletDpopKeys.PrivateKey;
+        Oid4VciIssuanceEndpoints endpoints = ResolveEndpoints(host, material);
+        string? bearerToken = null;
+        Oid4VciWalletClient bearerWallet = BuildWalletClient(
+            host,
+            observeResourceRequest: (endpoint, headers) =>
+            {
+                if(endpoint == endpoints.NonceEndpoint
+                    && headers.Values.TryGetValue(WellKnownHttpHeaderNames.Authorization, out string? authorization))
+                {
+                    bearerToken = authorization[(WellKnownAuthenticationSchemes.Bearer.Length + 1)..];
+                }
+            });
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> first = await IssueOverTheWireAsync(
+            bearerWallet, host, material, holderPrivate, holderPublic).ConfigureAwait(false);
+        Assert.IsTrue(first.IsSuccess, $"The Bearer issuance is answered with the Credential; got {DescribeOutcome(first)}.");
+        Assert.AreEqual(WellKnownAuthenticationSchemes.Bearer, first.Value.TokenType);
+        Assert.IsNotNull(bearerToken, "The first Nonce Request presented the Bearer access token.");
+
+        List<string?> presented = [];
+        Oid4VciWalletClient dpopWallet = BuildWalletClient(
+            host,
+            constructDpopProofAsync: BuildWalletDpopProofAsync,
+            dpopKey: new DpopKey(walletDpopKeys, WellKnownJwaValues.Es256),
+            observeResourceRequest: (endpoint, headers) =>
+            {
+                if(endpoint == endpoints.NonceEndpoint)
+                {
+                    presented.Add(ReadAuthorization(headers));
+                }
+            });
+        int arrivalsBefore = arrivals.Count;
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> second = await dpopWallet.IssueWithAccessTokenDetailedAsync(
+            bearerToken,
+            WellKnownAuthenticationSchemes.Bearer,
+            accessTokenExpiresAt: null,
+            material.Registration.IssuerUri!,
+            CredentialRequestTarget.ForConfiguration(ConfigurationId),
+            holderPrivate,
+            holderPublic,
+            endpoints,
+            responseEncryption: null,
+            TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual($"{WellKnownAuthenticationSchemes.Bearer} {bearerToken}", Assert.ContainsSingle(presented,
+            "The DPoP-wired wallet sends one Nonce Request."), "The handed-in Bearer token is presented under the Bearer scheme.");
+        string[] nonceEndpointFieldLines = Assert.ContainsSingle(
+            arrivals.Skip(arrivalsBefore).Where(arrival => string.Equals(arrival.Path, endpoints.NonceEndpoint.AbsolutePath, StringComparison.Ordinal)),
+            "The Nonce Endpoint received one request from the DPoP-wired wallet.").DpopFieldLines;
+        Assert.IsEmpty(nonceEndpointFieldLines, "The Nonce Endpoint received no DPoP field.");
+        Assert.IsTrue(second.IsSuccess, $"The Credential is issued; got {DescribeOutcome(second)}.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 Section 5.1</see>: "token_type REQUIRED.
+    /// The type of the token issued as described in Section 7.1. Value is case insensitive." A wallet obtains an access
+    /// token through a Pre-Authorized Code issuance over the wire, a <c>Bearer</c> token from an Issuer that does not
+    /// require DPoP for <c>bearer</c> and a <c>DPoP</c> token through a wallet wired with a DPoP key for <c>dpop</c>; a
+    /// wallet wired with a DPoP key is then handed that token typed <paramref name="tokenType"/>, the type written in
+    /// lower case, and asked for a Credential. It reads the type in any case: its Nonce Request presents the token under
+    /// the <c>Bearer</c> scheme with no <c>DPoP</c> field for <c>bearer</c>, and under the <c>DPoP</c> scheme with
+    /// exactly one <c>DPoP</c> field line for <c>dpop</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "A DPoP-bound access
+    /// token is sent using the Authorization request header field per Section 11.6.2 of [RFC9110] with an
+    /// authentication scheme of DPoP."), as the Nonce Endpoint receives it, and the Credential is issued.
+    /// </summary>
+    /// <param name="tokenType">The type of the handed-in access token: <c>bearer</c> or <c>dpop</c>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("bearer", DisplayName = "bearer")]
+    [DataRow("dpop", DisplayName = "dpop")]
+    public async Task WalletReadsAHandedInTokenTypeInAnyCaseAsync(string tokenType)
+    {
+        bool isDpopToken = string.Equals(tokenType, "dpop", StringComparison.Ordinal);
+        PolicyProfile profile = isDpopToken switch
+        {
+            true => PolicyProfile.Haip10,
+            false => PolicyProfile.Rfc6749WithPkce
+        };
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile, IssuerCapabilities).ConfigureAwait(false);
+        if(!isDpopToken)
+        {
+            await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
+        }
+
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        _ = await WireIssuerSeamsAsync(host).ConfigureAwait(false);
+        List<(string Path, string[] DpopFieldLines)> arrivals = host.RecordArrivingDpopFieldLines();
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        var walletDpopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory walletDpopPublic = walletDpopKeys.PublicKey;
+        using PrivateKeyMemory walletDpopPrivate = walletDpopKeys.PrivateKey;
+        Oid4VciIssuanceEndpoints endpoints = ResolveEndpoints(host, material);
+        List<string?> presented = [];
+        Oid4VciWalletClient dpopWallet = BuildWalletClient(
+            host,
+            constructDpopProofAsync: BuildWalletDpopProofAsync,
+            dpopKey: new DpopKey(walletDpopKeys, WellKnownJwaValues.Es256),
+            observeResourceRequest: (endpoint, headers) =>
+            {
+                if(endpoint == endpoints.NonceEndpoint)
+                {
+                    presented.Add(ReadAuthorization(headers));
+                }
+            });
+        Oid4VciWalletClient obtainingWallet = isDpopToken switch
+        {
+            true => dpopWallet,
+            false => BuildWalletClient(host)
+        };
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> first = await IssueOverTheWireAsync(
+            obtainingWallet, host, material, holderPrivate, holderPublic).ConfigureAwait(false);
+        Assert.IsTrue(first.IsSuccess, $"The issuance that obtains the token is answered with the Credential; got {DescribeOutcome(first)}.");
+        string obtainedScheme = isDpopToken switch
+        {
+            true => WellKnownAuthenticationSchemes.DPoP,
+            false => WellKnownAuthenticationSchemes.Bearer
+        };
+        Assert.AreEqual(obtainedScheme, first.Value.TokenType, "The issuance obtains a token of the type the case hands in.");
+
+        presented.Clear();
+        int arrivalsBefore = arrivals.Count;
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> second = await dpopWallet.IssueWithAccessTokenDetailedAsync(
+            first.Value.AccessToken,
+            tokenType,
+            accessTokenExpiresAt: null,
+            material.Registration.IssuerUri!,
+            CredentialRequestTarget.ForConfiguration(ConfigurationId),
+            holderPrivate,
+            holderPublic,
+            endpoints,
+            responseEncryption: null,
+            TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(second.IsSuccess, $"The Credential is issued; got {DescribeOutcome(second)}.");
+        Assert.AreEqual($"{obtainedScheme} {first.Value.AccessToken}", Assert.ContainsSingle(presented,
+            "The DPoP-wired wallet sends one Nonce Request for the handed-in token."),
+            "The handed-in token is presented under the scheme its type names.");
+        string[] nonceEndpointFieldLines = Assert.ContainsSingle(
+            arrivals.Skip(arrivalsBefore).Where(arrival => string.Equals(arrival.Path, endpoints.NonceEndpoint.AbsolutePath, StringComparison.Ordinal)),
+            "The Nonce Endpoint received one request for the handed-in token.").DpopFieldLines;
+        int expectedDpopFieldLines = isDpopToken switch
+        {
+            true => 1,
+            false => 0
+        };
+        Assert.HasCount(expectedDpopFieldLines, nonceEndpointFieldLines,
+            "The Nonce Endpoint receives one DPoP field line with a DPoP token and none with a Bearer token.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 Section 5.1</see>: "token_type REQUIRED.
+    /// The type of the token issued as described in Section 7.1. Value is case insensitive." A wallet, wired with a DPoP
+    /// key or not as <paramref name="isDpopWired"/> says, drives a Pre-Authorized Code issuance over the wire; the
+    /// listener emits the Token Endpoint's 200 with its <c>token_type</c> member removed. The wallet answers a malformed
+    /// response of the Token Endpoint with status 200 naming the REQUIRED <c>token_type</c>, and sends no Nonce or
+    /// Credential Request.
+    /// </summary>
+    /// <param name="isDpopWired">Whether the wallet is wired with a DPoP key.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(true, DisplayName = "DPoP wired")]
+    [DataRow(false, DisplayName = "DPoP not wired")]
+    public async Task WalletRefusesATokenResponseWithoutATokenTypeAsync(bool isDpopWired)
+    {
+        WalletTokenTypeRun run = await IssueUnderAnEmittedTokenTypeAsync(tokenType: null, isDpopWired, requiresDpopTokenType: true).ConfigureAwait(false);
+
+        (_, int statusCode, string bodyBefore, string bodyAfter) = Assert.ContainsSingle(run.RewrittenAnswers,
+            "The listener emitted one answer with a body other than the library's.");
+        Assert.AreEqual(200, statusCode, "The altered answer is the Token Endpoint's 200.");
+        Assert.Contains("\"token_type\":", bodyBefore, StringComparison.Ordinal, bodyBefore);
+        Assert.DoesNotContain("token_type", bodyAfter, StringComparison.Ordinal, bodyAfter);
+        Assert.IsFalse(run.Outcome.IsSuccess, $"The Token Response is refused; got {DescribeOutcome(run.Outcome)}.");
+        Assert.AreEqual(Oid4VciRequestFailureKind.MalformedResponse, run.Outcome.Error.Kind, DescribeOutcome(run.Outcome));
+        Assert.AreEqual(200, run.Outcome.Error.StatusCode);
+        Assert.AreEqual(run.Endpoints.TokenEndpoint, run.Outcome.Error.Endpoint);
+        Assert.AreEqual("RFC 6749 Section 5.1 the Token Response carried no token_type, a REQUIRED member.", run.Outcome.Error.ErrorDescription);
+        Assert.IsNull(run.Outcome.Error.ErrorCode);
+        AssertNoResourceRequestArrived(run);
+    }
+
+
+    /// <summary>
+    /// What a row of the emitted <c>token_type</c> observed: the issuance outcome, the Issuer's endpoints, the answers
+    /// the listener emitted with a body other than the library's, every request the listener read with its <c>DPoP</c> field lines, and
+    /// every JSON post the wallet sent with its <c>Authorization</c> field value.
+    /// </summary>
+    /// <param name="Outcome">The issuance outcome.</param>
+    /// <param name="Endpoints">The Token, Nonce and Credential Endpoints.</param>
+    /// <param name="RewrittenAnswers">The answers emitted with a body other than the library's.</param>
+    /// <param name="Arrivals">Every request the listener read, in arrival order.</param>
+    /// <param name="ResourceRequests">Every JSON post the wallet sent, with its <c>Authorization</c> field value.</param>
+    private sealed record WalletTokenTypeRun(
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> Outcome,
+        Oid4VciIssuanceEndpoints Endpoints,
+        List<(string Path, int StatusCode, string BodyBefore, string BodyAfter)> RewrittenAnswers,
+        List<(string Path, string[] DpopFieldLines)> Arrivals,
+        List<(Uri Endpoint, string? Authorization)> ResourceRequests);
+
+
+    /// <summary>
+    /// Serves an Issuer over the wire under a profile that requires DPoP when <paramref name="isDpopWired"/> and one that
+    /// does not otherwise, has the listener emit the Token Endpoint's 200 (the retry's answer when the Token Request is
+    /// challenged for a nonce, the first answer otherwise) with its <c>token_type</c> naming <paramref name="tokenType"/>
+    /// or removed when that is <see langword="null"/>, and drives a Pre-Authorized Code issuance through a wallet wired
+    /// with a DPoP key when <paramref name="isDpopWired"/>.
+    /// </summary>
+    /// <param name="tokenType">The <c>token_type</c> the emitted 200 names, or <see langword="null"/> to remove the member.</param>
+    /// <param name="isDpopWired">Whether the wallet is wired with a DPoP key and the Issuer requires DPoP.</param>
+    /// <param name="requiresDpopTokenType">The wallet's <see cref="Oid4VciWalletConfiguration.RequiresDpopTokenType"/>.</param>
+    /// <returns>The run.</returns>
+    private async Task<WalletTokenTypeRun> IssueUnderAnEmittedTokenTypeAsync(string? tokenType, bool isDpopWired, bool requiresDpopTokenType)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        PolicyProfile profile = isDpopWired switch
+        {
+            true => PolicyProfile.Haip10,
+            false => PolicyProfile.Rfc6749WithPkce
+        };
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile, IssuerCapabilities).ConfigureAwait(false);
+        if(isDpopWired)
+        {
+            _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        }
+        else
+        {
+            await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
+        }
+
+        _ = await WireIssuerSeamsAsync(host).ConfigureAwait(false);
+        List<(string Path, string[] DpopFieldLines)> arrivals = host.RecordArrivingDpopFieldLines();
+        string tokenPath = TestHostShell.ComposeEndpointPath(
+            WellKnownEndpointNames.Oid4VciPreAuthorizedToken, material.Registration.TenantId.Value);
+        int tokenAnswerNumber = isDpopWired switch
+        {
+            true => 2,
+            false => 1
+        };
+        List<(string Path, int StatusCode, string BodyBefore, string BodyAfter)> rewrittenAnswers = host.RewriteAnswerBody(
+            tokenPath, tokenAnswerNumber, body => TestHostShell.RewriteTokenTypeMember(body, tokenType));
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        var walletDpopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory walletDpopPublic = walletDpopKeys.PublicKey;
+        using PrivateKeyMemory walletDpopPrivate = walletDpopKeys.PrivateKey;
+        Oid4VciIssuanceEndpoints endpoints = ResolveEndpoints(host, material);
+        List<(Uri Endpoint, string? Authorization)> resourceRequests = [];
+        Oid4VciWalletClient walletClient = BuildWalletClient(
+            host,
+            constructDpopProofAsync: isDpopWired switch
+            {
+                true => BuildWalletDpopProofAsync,
+                false => null
+            },
+            dpopKey: isDpopWired switch
+            {
+                true => new DpopKey(walletDpopKeys, WellKnownJwaValues.Es256),
+                false => null
+            },
+            observeResourceRequest: (endpoint, headers) =>
+                resourceRequests.Add((endpoint, ReadAuthorization(headers))),
+            requiresDpopTokenType: requiresDpopTokenType);
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await IssueOverTheWireAsync(
+            walletClient, host, material, holderPrivate, holderPublic).ConfigureAwait(false);
+
+        return new WalletTokenTypeRun(outcome, endpoints, rewrittenAnswers, arrivals, resourceRequests);
+    }
+
+
+    /// <summary>The <c>Authorization</c> field value of a request the wallet sends, or <see langword="null"/> when it carries none.</summary>
+    /// <param name="headers">The request's header fields.</param>
+    /// <returns>The field value, or <see langword="null"/>.</returns>
+    private static string? ReadAuthorization(OutgoingHeaders headers) =>
+        headers.Values.TryGetValue(WellKnownHttpHeaderNames.Authorization, out string? authorization) switch
+        {
+            true => authorization,
+            false => null
+        };
+
+
+    /// <summary>Asserts that the listener read no request at the Nonce or the Credential Endpoint of the run.</summary>
+    /// <param name="run">The run.</param>
+    private static void AssertNoResourceRequestArrived(WalletTokenTypeRun run) =>
+        Assert.DoesNotContain(
+            arrival => string.Equals(arrival.Path, run.Endpoints.NonceEndpoint.AbsolutePath, StringComparison.Ordinal)
+                || string.Equals(arrival.Path, run.Endpoints.CredentialEndpoint.AbsolutePath, StringComparison.Ordinal),
+            run.Arrivals, "No request reaches the Nonce or the Credential Endpoint.");
+
+
     /// <summary>The nonce the server emits on a Credential Endpoint 200.</summary>
     private static string NonceServedOnACredential200 { get; } = "served-on-a-credential-200";
 
@@ -3140,10 +3945,8 @@ internal sealed class Oid4VciWalletClientTests
         {
             candidateIntegration.IssueCredentialAsync = (_, _, _, _, _) =>
                 ValueTask.FromResult(CredentialIssuanceDecision.Defer(TransactionId, intervalSeconds: 5));
-
-            candidateIntegration.ResolveDeferredCredentialAsync = (_, _, _, _, _) =>
-                ValueTask.FromResult(DeferredCredentialDecision.Issue([IssuedCredential], NotificationId));
         }).ConfigureAwait(false);
+        await WireDeferredCredentialResolutionAsync(host, NotificationId).ConfigureAwait(false);
 
         await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -3213,15 +4016,7 @@ internal sealed class Oid4VciWalletClientTests
         }).ConfigureAwait(false);
 
         CredentialNotification? observed = null;
-        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
-        {
-            candidateIntegration.ProcessCredentialNotificationAsync = (notification, _, _, _, _) =>
-            {
-                observed = notification;
-
-                return ValueTask.FromResult(CredentialNotificationDecision.Accept);
-            };
-        }).ConfigureAwait(false);
+        await WireNotificationProcessingAsync(host, notification => observed = notification).ConfigureAwait(false);
 
         await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -4244,7 +5039,7 @@ internal sealed class Oid4VciWalletClientTests
         Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await IssueViaTokenEndpointAsync(
             walletClient, tokenEndpoint, nonceEndpoint, credentialEndpoint).ConfigureAwait(false);
 
-        return new GrantedDetailsIssuance(outcome, laterRequests, credentialRequestBodies);
+        return new GrantedDetailsIssuance(outcome, laterRequests, credentialRequestBodies, tokenEndpoint);
     }
 
 
@@ -4255,10 +5050,12 @@ internal sealed class Oid4VciWalletClientTests
     /// <param name="Outcome">The issuance outcome the wallet answered.</param>
     /// <param name="LaterRequests">The endpoints of the Nonce and Credential Requests sent after the Token Request, in order.</param>
     /// <param name="CredentialRequestBodies">The bodies of the Credential Requests sent, in order.</param>
+    /// <param name="TokenEndpoint">The Token Endpoint the Token Request was sent to.</param>
     private sealed record GrantedDetailsIssuance(
         Result<CredentialIssuanceResult, Oid4VciRequestFailure> Outcome,
         IReadOnlyList<Uri> LaterRequests,
-        IReadOnlyList<string> CredentialRequestBodies);
+        IReadOnlyList<string> CredentialRequestBodies,
+        Uri TokenEndpoint);
 
 
     //A §7/§8 JSON-POST spy: the first call (the Nonce Request, empty body) answers c_nonce; every
@@ -5027,6 +5824,40 @@ internal sealed class Oid4VciWalletClientTests
 
 
     /// <summary>
+    /// Serves the Deferred Credential Endpoint of the Issuer: the resolution seam answers every poll with the
+    /// issued Credential and <paramref name="notificationId"/>.
+    /// </summary>
+    /// <param name="host">The host whose Issuer serves the endpoint.</param>
+    /// <param name="notificationId">The <c>notification_id</c> the resolved Credential carries.</param>
+    /// <returns>A task that completes when the seam is installed.</returns>
+    private static Task WireDeferredCredentialResolutionAsync(TestHostShell host, string notificationId) =>
+        TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveDeferredCredentialAsync = (_, _, _, _, _) =>
+                ValueTask.FromResult(DeferredCredentialDecision.Issue([IssuedCredential], notificationId));
+        });
+
+
+    /// <summary>
+    /// Serves the Notification Endpoint of the Issuer: the processing seam accepts every notification and hands it to
+    /// <paramref name="observe"/> when one is given.
+    /// </summary>
+    /// <param name="host">The host whose Issuer serves the endpoint.</param>
+    /// <param name="observe">Receives each notification the endpoint processes, or <see langword="null"/>.</param>
+    /// <returns>A task that completes when the seam is installed.</returns>
+    private static Task WireNotificationProcessingAsync(TestHostShell host, Action<CredentialNotification>? observe) =>
+        TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ProcessCredentialNotificationAsync = (notification, _, _, _, _) =>
+            {
+                observe?.Invoke(notification);
+
+                return ValueTask.FromResult(CredentialNotificationDecision.Accept);
+            };
+        });
+
+
+    /// <summary>
     /// Builds the wallet client over HttpClient-backed transport delegates that close over the started
     /// host's SharedHttpClient. The wallet library stays System.Net-free; the test reuses
     /// <see cref="HttpClientTransport"/> (the same real-HttpClient transport the authorization-code
@@ -5066,6 +5897,10 @@ internal sealed class Oid4VciWalletClientTests
     /// <param name="storeDpopNonce">
     /// The wallet's store of the nonce an endpoint supplied, or <see langword="null"/> to keep none across calls.
     /// </param>
+    /// <param name="requiresDpopTokenType">
+    /// Whether the wallet refuses a Token Response whose <c>token_type</c> is not <c>DPoP</c>
+    /// (<see cref="Oid4VciWalletConfiguration.RequiresDpopTokenType"/>).
+    /// </param>
     /// <returns>The wallet client.</returns>
     private Oid4VciWalletClient BuildWalletClient(
         TestHostShell host,
@@ -5080,7 +5915,8 @@ internal sealed class Oid4VciWalletClientTests
         Action<Uri, OutgoingHeaders>? observeResourceRequest = null,
         GenerateIdentifierDelegate? generateIdentifierAsync = null,
         DpopNonceLookupDelegate? lookupDpopNonce = null,
-        DpopNonceStoreDelegate? storeDpopNonce = null)
+        DpopNonceStoreDelegate? storeDpopNonce = null,
+        bool requiresDpopTokenType = true)
     {
         HttpClient httpClient = host.Host("default").SharedHttpClient!;
 
@@ -5127,7 +5963,8 @@ internal sealed class Oid4VciWalletClientTests
                 _ => generateIdentifierAsync ?? DpopJtiGenerator
             },
             LookupDpopNonce = lookupDpopNonce,
-            StoreDpopNonce = storeDpopNonce
+            StoreDpopNonce = storeDpopNonce,
+            RequiresDpopTokenType = requiresDpopTokenType
         };
 
         return new Oid4VciWalletClient(configuration);

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Time.Testing;
+using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using Verifiable.Core;
 using Verifiable.JCose;
@@ -375,27 +376,35 @@ internal sealed class DpopEndToEndTests
 
 
     /// <summary>
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10">RFC 9449 Section 10</see>: "Use of the
-    /// dpop_jkt authorization request parameter is OPTIONAL." The client takes the option not: the DPoP-wired
-    /// client pushes its authorization request over the wire with a body that carries no <c>dpop_jkt</c> field
-    /// and a request that carries no <c>DPoP</c> field (the other way
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10.1">Section 10.1</see> names to communicate
-    /// the DPoP public key at the pushed request), the server answers with its <c>request_uri</c>, and the
-    /// authorization request URL the client is redirected to carries no <c>dpop_jkt</c> parameter.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10.1">RFC 9449 Section 10.1</see>: "The dpop_jkt
+    /// parameter can be used as described in Section 10 to bind the issued authorization code to a specific key. In
+    /// this case, dpop_jkt MUST be included alongside other authorization request parameters in the POST body of the
+    /// PAR request." <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10">Section 10</see>: "The value of the
+    /// dpop_jkt authorization request parameter is the JWK Thumbprint [RFC7638] of the proof-of-possession public key
+    /// using the SHA-256 hash function", and "the dpop_jkt authorization request parameter MAY also be used in
+    /// combination with Proof Key for Code Exchange (PKCE)". The DPoP-wired client pushes its authorization request
+    /// over the wire with a body that carries exactly one <c>dpop_jkt</c>, the 43 base64url characters of the RFC 7638
+    /// SHA-256 thumbprint of its DPoP key computed here from that definition, beside <c>code_challenge_method</c>
+    /// <c>S256</c>, and the pushed body the server receives carries exactly that one <c>dpop_jkt</c>; the pushed
+    /// request carries no <c>DPoP</c> field, the server answers with its <c>request_uri</c>, and the authorization
+    /// request URL the client is redirected to carries no <c>dpop_jkt</c> parameter.
     /// </summary>
     /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
-    public async Task ClientPushesItsAuthorizationRequestWithoutDpopJktAsync()
+    public async Task ClientPushesItsAuthorizationRequestWithDpopJktAsync()
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
         _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        ConcurrentQueue<RequestFields> accepted = await AuthCodeParPkceRealWireFlowTests.RecordAcceptedRequestFieldsAsync(host).ConfigureAwait(false);
 
         List<(Uri Endpoint, IReadOnlyCollection<KeyValuePair<string, string>> Fields, OutgoingHeaders Headers)> posts = [];
         using DpopClientFixture fixture = await host.CreateDpopEnabledOAuthClientAsync(
             material.Registration,
             RedirectUri.OriginalString,
             (endpoint, fields, headers) => posts.Add((endpoint, [.. fields], headers)),
+            PolicyProfile.Haip10,
+            requiresDpopTokenType: true,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         AuthCodeFlowEndpointResult parResult = await fixture.Client.AuthCode.StartParAsync(
@@ -409,11 +418,406 @@ internal sealed class DpopEndToEndTests
         Assert.EndsWith(
             TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodePar, material.Registration.TenantId.Value),
             endpoint.AbsolutePath, "The one form post is the pushed authorization request.");
-        Assert.DoesNotContain(static field => string.Equals(field.Key, "dpop_jkt", StringComparison.Ordinal), fields,
-            "The pushed authorization request body carries no dpop_jkt.");
+        string expectedThumbprint = await ResourceDpopProofs.ComputeJwkThumbprintAsync(fixture.DpopKey, TestContext.CancellationToken).ConfigureAwait(false);
+        KeyValuePair<string, string> dpopJkt = Assert.ContainsSingle(
+            fields.Where(static field => string.Equals(field.Key, OAuthRequestParameterNames.DpopJkt, StringComparison.Ordinal)),
+            "The pushed authorization request body carries exactly one dpop_jkt.");
+        Assert.HasCount(43, dpopJkt.Value, "A base64url SHA-256 thumbprint is 43 characters.");
+        Assert.AreEqual(expectedThumbprint, dpopJkt.Value, "The dpop_jkt is the RFC 7638 thumbprint of the client's DPoP key.");
+        Assert.AreEqual(WellKnownCodeChallengeMethods.S256, Assert.ContainsSingle(
+            fields.Where(static field => string.Equals(field.Key, OAuthRequestParameterNames.CodeChallengeMethod, StringComparison.Ordinal))).Value,
+            "PKCE S256 rides beside the dpop_jkt.");
         Assert.IsFalse(headers.Values.ContainsKey(WellKnownHttpHeaderNames.DPoP), "The pushed authorization request carries no DPoP field.");
         Assert.DoesNotContain("dpop_jkt", parResult.RedirectUri!.ToString(), "The authorization request URL carries no dpop_jkt.");
+        RequestFields pushed = Assert.ContainsSingle(accepted.Where(static received => received.ContainsKey(OAuthRequestParameterNames.CodeChallenge)),
+            "The server received one pushed authorization request.");
+        string[] expectedValues = [expectedThumbprint];
+        Assert.AreSequenceEqual(expectedValues, pushed.GetValues(OAuthRequestParameterNames.DpopJkt),
+            "The pushed body the server received carries exactly one dpop_jkt, the thumbprint of the client's DPoP key.");
     }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>: "If the access token
+    /// response contains a different token_type value than DPoP, the access token protection provided by DPoP is not
+    /// given. The client MUST discard the response in this case if this protection is deemed important for the
+    /// security of the application". A DPoP-wired client pushes its authorization request, is redirected through the
+    /// authorization endpoint and accepts the code at its callback, all over the wire, then redeems the code; the
+    /// listener emits the 200 answering the retry of the challenged redemption with its <c>token_type</c> naming
+    /// <c>Bearer</c>. The client answers <c>invalid_response</c> naming <c>token_type</c>, and its flow store still
+    /// holds the flow's code-received state and no token-received state.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ClientDiscardsACodeRedemptionAnsweredWithAnotherTokenTypeAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        using DpopClientFixture fixture = await host.CreateDpopEnabledOAuthClientAsync(
+            material.Registration, RedirectUri.OriginalString, TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        string flowId = await DriveToCodeReceivedAsync(host, fixture, segment).ConfigureAwait(false);
+
+        List<(string Path, int StatusCode, string BodyBefore, string BodyAfter)> rewrittenAnswers = host.RewriteAnswerBody(
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeToken, segment), 2,
+            static body => TestHostShell.RewriteTokenTypeMember(body, WellKnownAuthenticationSchemes.Bearer));
+        AuthCodeFlowEndpointResult tokenResult = await fixture.Client.AuthCode.ExchangeTokenAsync(
+            fixture.Registration, flowId, TestContext.CancellationToken).ConfigureAwait(false);
+
+        AssertBearerWasEmitted(rewrittenAnswers);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, tokenResult.Outcome,
+            $"ErrorCode={tokenResult.ErrorCode} ErrorDescription={tokenResult.ErrorDescription}");
+        Assert.AreEqual("invalid_response", tokenResult.ErrorCode);
+        Assert.AreEqual(TokenTypeRefusalDescription, tokenResult.ErrorDescription);
+        Assert.IsNull(tokenResult.Body, "No token is surfaced.");
+        _ = Assert.IsInstanceOfType<AuthorizationCodeReceivedState>(fixture.ClientFlowStore[flowId],
+            "The flow keeps its code-received state.");
+        Assert.DoesNotContain(static state => state is TokenReceivedState, fixture.ClientFlowStore.Values,
+            "No token-received state is saved.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10">RFC 9449 Section 10</see>: "When a token request
+    /// is received, the authorization server computes the JWK Thumbprint of the proof-of-possession public key in the
+    /// DPoP proof and verifies that it matches the dpop_jkt parameter value in the authorization request. If they do not
+    /// match, it MUST reject the request." <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.9">Section
+    /// 11.9</see>: "Use of the dpop_jkt parameter prevents this attack". A DPoP-wired client under the profile
+    /// <paramref name="profileRow"/> names pushes its authorization request, is redirected through the authorization endpoint
+    /// and accepts the code at its callback, all over the wire. A redemption of that code with the flow's PKCE
+    /// verifier, sent by another party (under a valid proof by another DPoP key carrying the supplied nonce, or with no
+    /// proof), is refused 400 <c>invalid_grant</c>; the client's own redemption then issues a DPoP access token whose
+    /// <c>cnf.jkt</c> is the RFC 7638 thumbprint of the client's DPoP key, computed here from that definition.
+    /// </summary>
+    /// <param name="profileRow">
+    /// The policy profile of the registration: <see cref="Haip10ProfileRow"/>, one that requires DPoP, or
+    /// <see cref="Rfc6749WithPkceProfileRow"/>, one that does not.
+    /// </param>
+    /// <param name="isOtherRedemptionProven">Whether the other party's redemption carries a proof by another DPoP key.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(Haip10ProfileRow, true, DisplayName = "HAIP, a redemption under another DPoP key")]
+    [DataRow(Rfc6749WithPkceProfileRow, false, DisplayName = "RFC 6749 with PKCE, a redemption with no proof")]
+    public async Task CodeBoundByTheClientsPushedDpopJktIsRedeemedOnlyUnderItsKeyAsync(string profileRow, bool isOtherRedemptionProven)
+    {
+        PolicyProfile profile = profileRow switch
+        {
+            Haip10ProfileRow => PolicyProfile.Haip10,
+            Rfc6749WithPkceProfileRow => PolicyProfile.Rfc6749WithPkce,
+            _ => throw new ArgumentOutOfRangeException(nameof(profileRow), profileRow, "Unknown profile row.")
+        };
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri, profile).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        using DpopClientFixture fixture = await host.CreateDpopEnabledOAuthClientAsync(
+            material.Registration, RedirectUri.OriginalString, observeFormPost: null, profile, requiresDpopTokenType: true,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        string flowId = await DriveToCodeReceivedAsync(host, fixture, segment).ConfigureAwait(false);
+
+        (int otherStatusCode, string otherBody) = await RedeemTheFlowsCodeElsewhereAsync(
+            host, fixture, segment, flowId, isOtherRedemptionProven).ConfigureAwait(false);
+        DpopCodeBindingWire.AssertError(otherStatusCode, otherBody, 400, "invalid_grant", "The authorization code is unknown, expired, or already used.");
+
+        await AssertTheClientRedeemsUnderItsKeyAsync(fixture, flowId).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10">RFC 9449 Section 10</see> (Figure 25, an
+    /// authorization request sent directly) with
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10.1">Section 10.1</see>: "Allowing both mechanisms
+    /// ensures that clients using dpop_jkt do not need to distinguish between front-channel and pushed authorization
+    /// requests". A DPoP-wired client starts a direct authorization request; the authorization request URL carries
+    /// exactly one <c>dpop_jkt</c>, the RFC 7638 thumbprint of the client's DPoP key computed here from that definition.
+    /// The browser follows it over the wire to the authorization endpoint, whose received query carries exactly that one
+    /// <c>dpop_jkt</c>, the client accepts the code at its callback, a redemption of that code under a valid proof by
+    /// another DPoP key is refused 400 <c>invalid_grant</c>, and the client's own redemption issues a DPoP access token
+    /// bound to its DPoP key.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ClientSendsDpopJktOnItsDirectAuthorizationRequestAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CodeBindingCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        ConcurrentQueue<RequestFields> accepted = await AuthCodeParPkceRealWireFlowTests.RecordAcceptedRequestFieldsAsync(host).ConfigureAwait(false);
+        using DpopClientFixture fixture = await host.CreateDpopEnabledOAuthClientAsync(
+            material.Registration, RedirectUri.OriginalString, observeFormPost: null, PolicyProfile.Rfc6749WithPkce,
+            requiresDpopTokenType: true, TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        string expectedThumbprint = await ResourceDpopProofs.ComputeJwkThumbprintAsync(fixture.DpopKey, TestContext.CancellationToken).ConfigureAwait(false);
+
+        AuthCodeFlowEndpointResult startResult = await fixture.Client.AuthCode.StartAsync(
+            fixture.Registration, RedirectUri, OAuthFormEncodedFieldsFixtures.OpenIdScope, [], resource: null,
+            TimeSpan.FromMinutes(5), TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, startResult.Outcome, startResult.ErrorDescription);
+        List<string> dpopJktValues = ReadQueryValues(startResult.RedirectUri!, OAuthRequestParameterNames.DpopJkt);
+        Assert.AreEqual(expectedThumbprint, Assert.ContainsSingle(dpopJktValues, "The authorization request URL carries exactly one dpop_jkt."),
+            "The dpop_jkt is the RFC 7638 thumbprint of the client's DPoP key.");
+
+        using HttpResponseMessage authorizeResponse = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, startResult.RedirectUri!, TestSubject, TestContext.CancellationToken).ConfigureAwait(false);
+        string code = DpopCodeBindingWire.ReadCode((int)authorizeResponse.StatusCode, authorizeResponse.Headers.Location);
+        RequestFields authorizationRequest = Assert.ContainsSingle(
+            accepted.Where(static received => received.ContainsKey(OAuthRequestParameterNames.CodeChallenge)),
+            "The server received one authorization request.");
+        string[] expectedValues = [expectedThumbprint];
+        Assert.AreSequenceEqual(expectedValues, authorizationRequest.GetValues(OAuthRequestParameterNames.DpopJkt),
+            "The authorization request query the server received carries exactly one dpop_jkt, the thumbprint of the client's DPoP key.");
+        string flowId = fixture.ClientFlowStore.Keys.Single();
+        await AcceptTheCodeAtTheCallbackAsync(fixture, flowId, authorizeResponse.Headers.Location!.ToString()).ConfigureAwait(false);
+        Assert.AreEqual(code, ((AuthorizationCodeReceivedState)fixture.ClientFlowStore[flowId]).Code);
+
+        (int otherStatusCode, string otherBody) = await RedeemTheFlowsCodeElsewhereAsync(
+            host, fixture, segment, flowId, isProven: true).ConfigureAwait(false);
+        DpopCodeBindingWire.AssertError(otherStatusCode, otherBody, 400, "invalid_grant", "The authorization code is unknown, expired, or already used.");
+
+        await AssertTheClientRedeemsUnderItsKeyAsync(fixture, flowId).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10">RFC 9449 Section 10</see>: "The value of the
+    /// dpop_jkt authorization request parameter is the JWK Thumbprint [RFC7638] of the proof-of-possession public key
+    /// using the SHA-256 hash function"; <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 Section
+    /// 3.1</see>: "Request and response parameters MUST NOT be included more than once." A client whose caller hands its
+    /// pushed start a <c>dpop_jkt</c> field naming the thumbprint of another DPoP key pushes its authorization request
+    /// over the wire, and the pushed body the server receives carries no <c>dpop_jkt</c> when the client is not
+    /// DPoP-wired, and exactly one when it is, the RFC 7638 thumbprint of the client's own DPoP key computed here from
+    /// that definition; the server answers 201 in both cases.
+    /// </summary>
+    /// <param name="isDpopWired">Whether the client is DPoP-wired.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(false, DisplayName = "DPoP not wired")]
+    [DataRow(true, DisplayName = "DPoP wired")]
+    public async Task ClientOwnsTheDpopJktOfItsPushedRequestAsync(bool isDpopWired)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CodeBindingCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        ConcurrentQueue<RequestFields> accepted = await AuthCodeParPkceRealWireFlowTests.RecordAcceptedRequestFieldsAsync(host).ConfigureAwait(false);
+        using FreshDpopKey other = new();
+        string otherThumbprint = await ResourceDpopProofs.ComputeJwkThumbprintAsync(other.Key, TestContext.CancellationToken).ConfigureAwait(false);
+        OAuthFormEncodedFields callerFields = new(new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId,
+            [OAuthRequestParameterNames.DpopJkt] = otherThumbprint
+        });
+
+        (AuthCodeFlowEndpointResult parResult, string? ownThumbprint) = isDpopWired switch
+        {
+            true => await PushThroughTheDpopWiredClientAsync(host, material, callerFields).ConfigureAwait(false),
+            false => (await PushThroughAClientWithoutDpopAsync(host, material, callerFields).ConfigureAwait(false), null)
+        };
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, parResult.Outcome, $"The server answers 201. {parResult.ErrorDescription}");
+        RequestFields pushed = Assert.ContainsSingle(accepted.Where(static fields => fields.ContainsKey(OAuthRequestParameterNames.CodeChallenge)),
+            "The server received one pushed authorization request.");
+        IReadOnlyList<string> dpopJktValues = pushed.GetValues(OAuthRequestParameterNames.DpopJkt);
+        IReadOnlyList<string> expectedValues = ownThumbprint switch
+        {
+            null => [],
+            _ => [ownThumbprint]
+        };
+        Assert.AreSequenceEqual(expectedValues, dpopJktValues,
+            "The pushed body carries no dpop_jkt from a client that is not DPoP-wired, and exactly one, the thumbprint of the client's own DPoP key, from one that is.");
+    }
+
+
+    /// <summary>
+    /// The data row naming <see cref="PolicyProfile.Haip10"/>, a profile that requires DPoP. A constant, not a property,
+    /// because a data row's attribute argument must be one.
+    /// </summary>
+    private const string Haip10ProfileRow = "haip-1.0";
+
+
+    /// <summary>
+    /// The data row naming <see cref="PolicyProfile.Rfc6749WithPkce"/>, a profile under which DPoP is optional. A
+    /// constant, not a property, because a data row's attribute argument must be one.
+    /// </summary>
+    private const string Rfc6749WithPkceProfileRow = "rfc6749-with-pkce";
+
+
+    /// <summary>
+    /// The <see cref="AuthCodeFlowEndpointResult.ErrorDescription"/> of a token response refused for its
+    /// <c>token_type</c>: the field name, then the reason the refusal carries.
+    /// </summary>
+    private static string TokenTypeRefusalDescription { get; } =
+        "token_type: The token response to a request that carried a DPoP proof names a token_type other than DPoP.";
+
+
+    /// <summary>
+    /// Drives a DPoP-wired client's pushed authorization request, the browser's authorization request and the client's
+    /// callback over the wire, and returns the flow identifier ready for the code redemption.
+    /// </summary>
+    /// <param name="host">The fixture owning the listener.</param>
+    /// <param name="fixture">The DPoP-wired client.</param>
+    /// <param name="segment">The tenant route segment.</param>
+    /// <returns>The flow identifier.</returns>
+    private async Task<string> DriveToCodeReceivedAsync(TestHostShell host, DpopClientFixture fixture, string segment)
+    {
+        using HttpClient browserClient = LoopbackTls.CreateSingleHopPinnedHttpClient(host.ServerCertificate);
+        (string flowId, _) = await AuthCodeFlowDriver.DriveParAuthorizeAndCallbackAsync(
+            host.Host("default"), fixture.Client, fixture.Registration, fixture.ClientFlowStore, segment, RedirectUri, TestSubject,
+            browserClient, scope: WellKnownScopes.OpenId, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        return flowId;
+    }
+
+
+    /// <summary>
+    /// Redeems the code of the flow <paramref name="flowId"/> with its PKCE verifier and redirect URI, as another party
+    /// that holds them would, over the wire: under a valid proof by a fresh DPoP key carrying the nonce the token
+    /// endpoint supplies when <paramref name="isProven"/>, and with no <c>DPoP</c> field otherwise.
+    /// </summary>
+    /// <param name="host">The fixture owning the listener.</param>
+    /// <param name="fixture">The client whose flow store holds the code.</param>
+    /// <param name="segment">The tenant route segment.</param>
+    /// <param name="flowId">The flow whose code is redeemed.</param>
+    /// <param name="isProven">Whether the redemption carries a proof by another DPoP key.</param>
+    /// <returns>The response's status code and body.</returns>
+    private async Task<(int StatusCode, string Body)> RedeemTheFlowsCodeElsewhereAsync(
+        TestHostShell host, DpopClientFixture fixture, string segment, string flowId, bool isProven)
+    {
+        AuthorizationCodeReceivedState codeState = (AuthorizationCodeReceivedState)fixture.ClientFlowStore[flowId];
+        using FreshDpopKey other = new();
+        string? proof = isProven switch
+        {
+            true => await DpopCodeBindingWire.BuildTokenProofAsync(
+                host, segment, other.Key,
+                await RawAuthCodeWirePushers.ObtainTokenEndpointDpopNonceAsync(
+                    host, segment, ClientId, other.Key, TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false),
+                TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false),
+            false => null
+        };
+
+        return await RawAuthCodeWirePushers.RedeemCodeAsync(
+            host, segment, ClientId, codeState.Code, codeState.Pkce.EncodedVerifier, codeState.RedirectUri.OriginalString, proof,
+            TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Has the client redeem the code of the flow <paramref name="flowId"/> and asserts the answer: a DPoP access token
+    /// whose <c>cnf.jkt</c> is the RFC 7638 thumbprint of the client's DPoP key, computed here from that definition
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.1">RFC 9449 Section 6.1</see>).
+    /// </summary>
+    /// <param name="fixture">The DPoP-wired client.</param>
+    /// <param name="flowId">The flow whose code is redeemed.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    private async Task AssertTheClientRedeemsUnderItsKeyAsync(DpopClientFixture fixture, string flowId)
+    {
+        AuthCodeFlowEndpointResult tokenResult = await fixture.Client.AuthCode.ExchangeTokenAsync(
+            fixture.Registration, flowId, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, tokenResult.Outcome,
+            $"The client's own redemption is served. ErrorCode={tokenResult.ErrorCode} ErrorDescription={tokenResult.ErrorDescription}");
+        Assert.AreEqual(WellKnownAuthenticationSchemes.DPoP, (string)tokenResult.Body![OAuthRequestParameterNames.TokenType]);
+        string expectedThumbprint = await ResourceDpopProofs.ComputeJwkThumbprintAsync(fixture.DpopKey, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(expectedThumbprint, JwtPayloadReader.ReadCnfJkt((string)tokenResult.Body[OAuthRequestParameterNames.AccessToken]),
+            "The access token's cnf.jkt is the thumbprint of the client's DPoP key.");
+    }
+
+
+    /// <summary>
+    /// Hands the client's callback the <c>code</c>, the flow's <c>state</c> and, when present, the <c>iss</c> of the
+    /// authorization endpoint's redirect <paramref name="location"/>, and asserts that the client accepts them.
+    /// </summary>
+    /// <param name="fixture">The client.</param>
+    /// <param name="flowId">The flow identifier, the <c>state</c> of the request.</param>
+    /// <param name="location">The redirect's <c>Location</c>.</param>
+    /// <returns>A task that completes when the assertion has run.</returns>
+    private async Task AcceptTheCodeAtTheCallbackAsync(DpopClientFixture fixture, string flowId, string location)
+    {
+        Dictionary<string, string> callbackFields = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.Code] = TestBrowser.ExtractQueryParam(location, OAuthRequestParameterNames.Code)!,
+            [OAuthRequestParameterNames.State] = flowId
+        };
+        if(TestBrowser.ExtractQueryParam(location, OAuthRequestParameterNames.Iss) is string iss)
+        {
+            callbackFields[OAuthRequestParameterNames.Iss] = iss;
+        }
+
+        AuthCodeFlowEndpointResult callbackResult = await fixture.Client.AuthCode.HandleCallbackAsync(
+            fixture.Registration, new OAuthFormEncodedFields(callbackFields), TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, callbackResult.Outcome, callbackResult.ErrorDescription);
+    }
+
+
+    /// <summary>
+    /// Pushes an authorization request through a DPoP-wired client handed <paramref name="callerFields"/> and returns
+    /// the client's answer with the RFC 7638 thumbprint of the client's DPoP key, computed here from that definition.
+    /// </summary>
+    /// <param name="host">The fixture owning the listener.</param>
+    /// <param name="material">The registration.</param>
+    /// <param name="callerFields">The fields the caller hands the pushed start.</param>
+    /// <returns>The client's answer and the thumbprint of its DPoP key.</returns>
+    private async Task<(AuthCodeFlowEndpointResult Result, string? OwnThumbprint)> PushThroughTheDpopWiredClientAsync(
+        TestHostShell host, VerifierKeyMaterial material, OAuthFormEncodedFields callerFields)
+    {
+        using DpopClientFixture fixture = await host.CreateDpopEnabledOAuthClientAsync(
+            material.Registration, RedirectUri.OriginalString, observeFormPost: null, PolicyProfile.Rfc6749WithPkce,
+            requiresDpopTokenType: true, TestContext.CancellationToken).ConfigureAwait(false);
+        AuthCodeFlowEndpointResult result = await fixture.Client.AuthCode.StartParAsync(
+            fixture.Registration, RedirectUri, callerFields, TestContext.CancellationToken).ConfigureAwait(false);
+
+        return (result, await ResourceDpopProofs.ComputeJwkThumbprintAsync(fixture.DpopKey, TestContext.CancellationToken).ConfigureAwait(false));
+    }
+
+
+    /// <summary>
+    /// Pushes an authorization request through a client that is not DPoP-wired, handed <paramref name="callerFields"/>,
+    /// and returns the client's answer.
+    /// </summary>
+    /// <param name="host">The fixture owning the listener.</param>
+    /// <param name="material">The registration.</param>
+    /// <param name="callerFields">The fields the caller hands the pushed start.</param>
+    /// <returns>The client's answer.</returns>
+    private async Task<AuthCodeFlowEndpointResult> PushThroughAClientWithoutDpopAsync(
+        TestHostShell host, VerifierKeyMaterial material, OAuthFormEncodedFields callerFields)
+    {
+        (OAuthClient client, ClientRegistration registration, _) = await host.CreateOAuthClientAndRegistrationAsync(
+            material.Registration, RedirectUri.OriginalString, profile: PolicyProfile.Rfc6749WithPkce,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        return await client.AuthCode.StartParAsync(registration, RedirectUri, callerFields, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Asserts that the listener emitted one 200 whose body the library wrote with <c>"token_type":"DPoP"</c>, with that
+    /// member naming <c>Bearer</c>.
+    /// </summary>
+    /// <param name="rewrittenAnswers">The answers emitted with a body other than the library's.</param>
+    private static void AssertBearerWasEmitted(List<(string Path, int StatusCode, string BodyBefore, string BodyAfter)> rewrittenAnswers)
+    {
+        (_, int statusCode, string bodyBefore, string bodyAfter) = Assert.ContainsSingle(rewrittenAnswers,
+            "The listener emitted one answer with a body other than the library's.");
+        Assert.AreEqual(200, statusCode, "The altered answer is the token endpoint's 200.");
+        Assert.Contains(TestHostShell.DpopTokenTypeMember, bodyBefore, StringComparison.Ordinal, bodyBefore);
+        Assert.Contains("\"token_type\":\"Bearer\"", bodyAfter, StringComparison.Ordinal, bodyAfter);
+    }
+
+
+    /// <summary>Reads every value of the query parameter <paramref name="name"/> of <paramref name="uri"/>, in order, unescaped.</summary>
+    /// <param name="uri">The URI.</param>
+    /// <param name="name">The parameter name, compared ordinally.</param>
+    /// <returns>The values.</returns>
+    private static List<string> ReadQueryValues(Uri uri, string name) =>
+        [.. uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Select(static pair => pair.Split('=', 2))
+            .Where(pair => string.Equals(Uri.UnescapeDataString(pair[0]), name, StringComparison.Ordinal))
+            .Select(static pair => pair switch
+            {
+                [_, string value] => Uri.UnescapeDataString(value),
+                _ => string.Empty
+            })];
 
 
     /// <summary>

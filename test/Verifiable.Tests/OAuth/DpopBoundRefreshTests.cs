@@ -153,6 +153,59 @@ internal sealed class DpopBoundRefreshTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>: "If the access token
+    /// response contains a different token_type value than DPoP, the access token protection provided by DPoP is not
+    /// given. The client MUST discard the response in this case if this protection is deemed important for the
+    /// security of the application". A DPoP-wired client drives its authorization request and its callback over the
+    /// wire and redeems the code for a DPoP access token and a refresh token; it then refreshes, and the listener emits
+    /// the 200 answering the refresh request with its <c>token_type</c> naming <c>Bearer</c>. The client answers
+    /// <c>invalid_response</c> naming <c>token_type</c> and surfaces no access token.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ClientDiscardsARefreshAnsweredWithAnotherTokenTypeAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        using DpopClientFixture fixture = await host.CreateDpopEnabledOAuthClientAsync(
+            material.Registration, RedirectUri.OriginalString, TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        using HttpClient browserClient = LoopbackTls.CreateSingleHopPinnedHttpClient(host.ServerCertificate);
+        (string flowId, _) = await AuthCodeFlowDriver.DriveParAuthorizeAndCallbackAsync(
+            host.Host("default"), fixture.Client, fixture.Registration, fixture.ClientFlowStore, segment, RedirectUri, SubjectId,
+            browserClient, scope: WellKnownScopes.OpenId, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        AuthCodeFlowEndpointResult tokenResult = await fixture.Client.AuthCode.ExchangeTokenAsync(
+            fixture.Registration, flowId, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, tokenResult.Outcome,
+            $"ErrorCode={tokenResult.ErrorCode} ErrorDescription={tokenResult.ErrorDescription}");
+        Assert.AreEqual(WellKnownAuthenticationSchemes.DPoP, (string)tokenResult.Body![OAuthRequestParameterNames.TokenType]);
+        string refreshToken = (string)tokenResult.Body[OAuthRequestParameterNames.RefreshToken];
+
+        List<(string Path, int StatusCode, string BodyBefore, string BodyAfter)> rewrittenAnswers = host.RewriteAnswerBody(
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeToken, segment), 1,
+            static body => TestHostShell.RewriteTokenTypeMember(body, WellKnownAuthenticationSchemes.Bearer));
+        AuthCodeFlowEndpointResult refreshResult = await fixture.Client.AuthCode.RefreshAsync(
+            fixture.Registration,
+            new RefreshTokenRequest { ClientId = fixture.Registration.ClientId.Value, RefreshToken = refreshToken },
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        (_, int statusCode, string bodyBefore, string bodyAfter) = Assert.ContainsSingle(rewrittenAnswers,
+            "The listener emitted one answer with a body other than the library's.");
+        Assert.AreEqual(200, statusCode, "The altered answer is the refresh's 200.");
+        Assert.Contains(TestHostShell.DpopTokenTypeMember, bodyBefore, StringComparison.Ordinal, bodyBefore);
+        Assert.Contains("\"token_type\":\"Bearer\"", bodyAfter, StringComparison.Ordinal, bodyAfter);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, refreshResult.Outcome,
+            $"ErrorCode={refreshResult.ErrorCode} ErrorDescription={refreshResult.ErrorDescription}");
+        Assert.AreEqual("invalid_response", refreshResult.ErrorCode);
+        Assert.AreEqual(
+            "token_type: The token response to a request that carried a DPoP proof names a token_type other than DPoP.",
+            refreshResult.ErrorDescription);
+        Assert.IsNull(refreshResult.Body, "No access token is surfaced.");
+    }
+
+
+    /// <summary>
     /// Forces the RFC 9449 §8.1 <c>use_dpop_nonce</c> retry branch to fire on the REFRESH leg
     /// itself, not merely at token exchange. The nonce
     /// <see cref="DpopSenderConstrainedRefreshTokenRefreshesThroughRealClientAsync"/> caches during

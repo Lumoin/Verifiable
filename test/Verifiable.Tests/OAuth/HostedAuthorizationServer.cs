@@ -189,6 +189,17 @@ internal sealed class HostedAuthorizationServer: IClientRegistrationStore
 
 
     /// <summary>
+    /// The fixture hook the skin (<see cref="AuthorizationServerHttpApplication"/>) calls once for every answer the
+    /// library gave, with the request path and that answer, before <see cref="AppendAnswerFieldLines"/> is read and the
+    /// answer is written; the answer it returns is the one the listener emits, its status, its header fields and its
+    /// body, so a client reads it through its own HTTP parsing. <see langword="null"/>, the default, emits every answer
+    /// as the library gave it. Settable so a test installs it on a started host, as
+    /// <see cref="TrustedListenerAuthority"/> is.
+    /// </summary>
+    public Func<string, ServerHttpResponse, ServerHttpResponse>? RewriteAnswer { get; set; }
+
+
+    /// <summary>
     /// Whether <see cref="AuthorizationServerHttpApplication.ProcessRequestAsync"/> holds an
     /// inbound request the ordering matrix (<see cref="ResolveOrderingKey"/>) can place behind
     /// other requests of the SAME (tenant, grant key) before dispatching it to the library. This is

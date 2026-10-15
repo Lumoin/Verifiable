@@ -61,7 +61,10 @@ public readonly struct AuthCodeClient
     /// <summary>
     /// Starts a PAR+PKCE flow: generates a fresh PKCE verifier and challenge,
     /// sends a Pushed Authorization Request, and returns a redirect to the
-    /// authorization endpoint with the <c>request_uri</c>.
+    /// authorization endpoint with the <c>request_uri</c>. With DPoP wired on the infrastructure, the pushed
+    /// body carries <c>dpop_jkt</c>, the thumbprint of the DPoP key (RFC 9449 Section 10.1); a caller's own
+    /// <c>dpop_jkt</c> field is dropped whether DPoP is wired or not, and so are a caller's <c>request_uri</c>, which a
+    /// pushed request never carries (RFC 9126 Section 2.1), and <c>request</c>.
     /// </summary>
     /// <param name="registration">The registration identifying the authorization server.</param>
     /// <param name="redirectUri">
@@ -163,10 +166,12 @@ public readonly struct AuthCodeClient
     /// or a blank one, the query carries no <c>scope</c> parameter and the authorization server
     /// applies its own default or refuses (RFC 6749 §3.3). An OpenID Connect request names
     /// <c>openid</c> in this field itself (OpenID Connect Core 1.0 §3.1.2.1: "OpenID Connect requests
-    /// MUST contain the openid scope value."). A field named after one this call mints itself —
+    /// MUST contain the openid scope value."). A field named after one this call mints itself,
     /// <c>response_type</c>, <c>client_id</c>, <c>redirect_uri</c>, <c>state</c>,
-    /// <c>code_challenge</c>, <c>code_challenge_method</c>, or <c>resource</c> — is dropped rather
-    /// than allowed to override it.
+    /// <c>code_challenge</c>, <c>code_challenge_method</c>, <c>resource</c>, or <c>dpop_jkt</c> (sent as the
+    /// thumbprint of the DPoP key when DPoP is wired, RFC 9449 Section 10), is dropped rather
+    /// than allowed to override it, and so are <c>request_uri</c> and <c>request</c>, which would have the
+    /// authorization server read parameters other than the ones this call composes (RFC 9101 Section 5).
     /// </param>
     /// <param name="context">The per-operation exchange context threaded into the flow-state delegates.</param>
     /// <param name="resource">
@@ -254,7 +259,12 @@ public readonly struct AuthCodeClient
     /// assertion. A <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/> registration needs the
     /// <see cref="ExchangeTokenAsync(ClientRegistration, string, ExchangeContext, ClientAssertionOptions?, CancellationToken)"/>
     /// overload instead, so the caller can supply the client-assertion signing inputs
-    /// (RFC 7523 §2.2) the AS-declared method requires.
+    /// (RFC 7523 Section 2.2) the AS-declared method requires. With DPoP wired and
+    /// <see cref="OAuthClientInfrastructure.RequiresDpopTokenType"/> set, a token response whose <c>token_type</c> is
+    /// not <c>DPoP</c> is refused, its token never surfaced and the flow kept in its code-received state:
+    /// <see cref="AuthCodeFlowEndpointOutcome.BadRequest"/> with the error code <c>invalid_response</c> and an
+    /// <see cref="OAuthInvalidFieldValue"/> naming <c>token_type</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>).
     /// </summary>
     /// <param name="registration">The registration identifying the authorization server.</param>
     /// <param name="flowId">
@@ -289,7 +299,11 @@ public readonly struct AuthCodeClient
     /// Exchanges the authorization code and PKCE verifier for tokens at the
     /// token endpoint, attaching confidential-client authentication per
     /// <see cref="ClientRegistration.AuthenticationMethod"/> (RFC 6749 §3.2.1 / RFC 7523 §2.2) —
-    /// the overload that reaches <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/>.
+    /// the overload that reaches <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/>. A token response whose
+    /// <c>token_type</c> is not <c>DPoP</c>, with DPoP wired and
+    /// <see cref="OAuthClientInfrastructure.RequiresDpopTokenType"/> set, is refused as
+    /// <see cref="AuthCodeFlowEndpointOutcome.BadRequest"/> <c>invalid_response</c> with an
+    /// <see cref="OAuthInvalidFieldValue"/> naming <c>token_type</c>, its token never surfaced (RFC 9449 Section 5).
     /// </summary>
     /// <remarks>
     /// The signed <c>client_assertion</c>'s <c>iss</c>/<c>sub</c> (the client identifier), <c>aud</c>
@@ -327,7 +341,10 @@ public readonly struct AuthCodeClient
     /// the <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.2">RFC 8707 §2.2</see>
     /// <c>resource</c> indicators of the access token request, and attaching client authentication as
     /// <see cref="ExchangeTokenAsync(ClientRegistration, string, ExchangeContext, ClientAssertionOptions?, CancellationToken)"/>
-    /// describes.
+    /// describes. A token response whose <c>token_type</c> is not <c>DPoP</c>, with DPoP wired and
+    /// <see cref="OAuthClientInfrastructure.RequiresDpopTokenType"/> set, is refused as
+    /// <see cref="AuthCodeFlowEndpointOutcome.BadRequest"/> <c>invalid_response</c> with an
+    /// <see cref="OAuthInvalidFieldValue"/> naming <c>token_type</c>, its token never surfaced (RFC 9449 Section 5).
     /// </summary>
     /// <remarks>
     /// <para>
@@ -406,7 +423,12 @@ public readonly struct AuthCodeClient
     /// assertion. A <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/> registration needs the
     /// <see cref="RefreshAsync(ClientRegistration, RefreshTokenRequest, ExchangeContext, ClientAssertionOptions?, CancellationToken)"/>
     /// overload instead, so the caller can supply the client-assertion signing inputs
-    /// (RFC 7523 §2.2) the AS-declared method requires.
+    /// (RFC 7523 Section 2.2) the AS-declared method requires. With DPoP wired and
+    /// <see cref="OAuthClientInfrastructure.RequiresDpopTokenType"/> set, a token response whose <c>token_type</c> is
+    /// not <c>DPoP</c> is refused and its token never surfaced:
+    /// <see cref="AuthCodeFlowEndpointOutcome.BadRequest"/> with the error code <c>invalid_response</c> and an
+    /// <see cref="OAuthInvalidFieldValue"/> naming <c>token_type</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>).
     /// </summary>
     /// <param name="registration">The registration identifying the authorization server.</param>
     /// <param name="request">The refresh token request.</param>
@@ -434,7 +456,11 @@ public readonly struct AuthCodeClient
     /// <summary>
     /// Refreshes an access token using a refresh token, attaching confidential-client
     /// authentication per <see cref="ClientRegistration.AuthenticationMethod"/> (RFC 6749 §6 /
-    /// RFC 7523 §2.2) — the overload that reaches <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/>.
+    /// RFC 7523 Section 2.2), the overload that reaches <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/>. A token
+    /// response whose <c>token_type</c> is not <c>DPoP</c>, with DPoP wired and
+    /// <see cref="OAuthClientInfrastructure.RequiresDpopTokenType"/> set, is refused as
+    /// <see cref="AuthCodeFlowEndpointOutcome.BadRequest"/> <c>invalid_response</c> with an
+    /// <see cref="OAuthInvalidFieldValue"/> naming <c>token_type</c>, its token never surfaced (RFC 9449 Section 5).
     /// </summary>
     /// <param name="registration">The registration identifying the authorization server.</param>
     /// <param name="request">The refresh token request.</param>
@@ -502,7 +528,9 @@ public readonly struct AuthCodeClient
     /// AuthCode JAR carrying the PKCE challenge and the AuthCode claims, POSTs
     /// to the PAR endpoint with the outer <c>client_id</c> + <c>request</c>
     /// body, and returns the authorize redirect URI carrying the issued
-    /// <c>request_uri</c>. A <see cref="AuthCodeStartJarParOptions.Resource"/> entry holding any
+    /// <c>request_uri</c>. A field of <see cref="AuthCodeStartJarParOptions.AdditionalFields"/> under a name the
+    /// start composes (including <c>dpop_jkt</c>, <c>request_uri</c> and <c>request</c>) is dropped. A
+    /// <see cref="AuthCodeStartJarParOptions.Resource"/> entry holding any
     /// white-space character is refused with <c>invalid_request</c> before anything is signed, sent
     /// or stored.
     /// </summary>
@@ -539,7 +567,9 @@ public readonly struct AuthCodeClient
     /// <summary>
     /// Starts a JAR-by-value direct authorization per RFC 9101 Section 5.1: signs an
     /// AuthCode JAR and returns a redirect URL whose query carries
-    /// <c>request=&lt;compact-jws&gt;</c> alongside the outer <c>client_id</c>. A
+    /// <c>request=&lt;compact-jws&gt;</c> alongside the outer <c>client_id</c>. A field of
+    /// <see cref="AuthCodeStartJarAuthorizeOptions.AdditionalFields"/> under a name the start composes (including
+    /// <c>dpop_jkt</c>, <c>request_uri</c> and <c>request</c>) is dropped. A
     /// <see cref="AuthCodeStartJarAuthorizeOptions.Resource"/> entry holding any white-space
     /// character is refused with <c>invalid_request</c> before anything is signed, sent or stored.
     /// </summary>

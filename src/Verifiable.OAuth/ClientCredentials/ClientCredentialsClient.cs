@@ -73,7 +73,12 @@ public readonly struct ClientCredentialsClient
     /// <returns>
     /// <see cref="AuthCodeFlowEndpointOutcome.Ok"/> with the token response fields on success, or the
     /// typed failure the token leg answers with: a refused request carries the authorization server's
-    /// error code, and a token endpoint the outbound policy denies is never dialed.
+    /// error code, and a token endpoint the outbound policy denies is never dialed. With DPoP wired and
+    /// <see cref="OAuthClientInfrastructure.RequiresDpopTokenType"/> set, a token response whose <c>token_type</c> is
+    /// not <c>DPoP</c> is refused and its token never surfaced:
+    /// <see cref="AuthCodeFlowEndpointOutcome.BadRequest"/> with the error code <c>invalid_response</c> and an
+    /// <see cref="OAuthInvalidFieldValue"/> naming <c>token_type</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>).
     /// </returns>
     public ValueTask<AuthCodeFlowEndpointResult> RequestTokenAsync(
         ClientRegistration registration,

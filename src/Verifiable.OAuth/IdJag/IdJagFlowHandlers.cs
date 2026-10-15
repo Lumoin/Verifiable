@@ -19,6 +19,15 @@ public static class IdJagFlowHandlers
     /// endpoint, authenticated with a <c>private_key_jwt</c> client assertion. The returned token response
     /// carries the ID-JAG in its <see cref="TokenResponse.AccessToken"/> (<c>token_type</c> N_A, §4.3.4).
     /// </summary>
+    /// <remarks>
+    /// The mint's token response stands whatever its <c>token_type</c> when DPoP is wired: the issued token is an
+    /// ID-JAG, never an access token, so the discard of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>, which binds "the access
+    /// token response", does not apply to it.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.1">RFC 8693 Section 2.2.1</see>: "If the issued
+    /// token is not an access token or usable as an access token, then the "token_type" value "N_A" is used to indicate
+    /// that an OAuth 2.0 "token_type" identifier is not applicable in that context."
+    /// </remarks>
     public static async ValueTask<Result<TokenResponse, OAuthParseError>> MintAsync(
         IdJagMintOptions options,
         OAuthClientInfrastructure infrastructure,
@@ -111,7 +120,10 @@ public static class IdJagFlowHandlers
     /// <summary>
     /// Redeems an ID-JAG: a JWT Bearer grant (§4.4) presenting the grant as the <c>assertion</c> to the
     /// Resource Authorization Server's token endpoint, authenticated with a <c>private_key_jwt</c> client
-    /// assertion. The returned token response carries the issued access token.
+    /// assertion. The returned token response carries the issued access token; with DPoP wired and
+    /// <see cref="OAuthClientInfrastructure.RequiresDpopTokenType"/> set, a token response naming a
+    /// <c>token_type</c> other than <c>DPoP</c> fails with an <see cref="OAuthInvalidFieldValue"/> naming
+    /// <c>token_type</c> (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>).
     /// </summary>
     public static async ValueTask<Result<TokenResponse, OAuthParseError>> RedeemAsync(
         IdJagRedeemOptions options,
@@ -174,7 +186,19 @@ public static class IdJagFlowHandlers
             return Result<TokenResponse, OAuthParseError>.Failure(redeemRedirectRefusal);
         }
 
-        return infrastructure.ParseTokenResponseAsync(response, now);
+        Result<TokenResponse, OAuthParseError> redeemResult = infrastructure.ParseTokenResponseAsync(response, now);
+        if(!redeemResult.IsSuccess)
+        {
+            return redeemResult;
+        }
+
+        //RFC 9449 Section 5: the JWT bearer grant is an access token request, so its token response naming a
+        //token_type other than DPoP is discarded when the protection is deemed important.
+        return TokenEndpointClientOperations.RefuseTokenTypeOtherThanDpop(infrastructure, redeemResult.Value) switch
+        {
+            OAuthInvalidFieldValue tokenTypeRefusal => Result<TokenResponse, OAuthParseError>.Failure(tokenTypeRefusal),
+            _ => redeemResult
+        };
     }
 
 

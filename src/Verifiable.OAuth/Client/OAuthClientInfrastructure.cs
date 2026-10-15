@@ -245,6 +245,22 @@ public sealed class OAuthClientInfrastructure
     /// </summary>
     public DpopNonceStoreDelegate? StoreDpopNonce { get; private init; }
 
+    /// <summary>
+    /// Whether a token response whose <c>token_type</c> is not <c>DPoP</c> is refused when DPoP is wired
+    /// (<see cref="ConstructDpopProofAsync"/> and <see cref="DpopKey"/> set), so every token request carries a proof.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>: "If the access token
+    /// response contains a different token_type value than DPoP, the access token protection provided by DPoP is not
+    /// given. The client MUST discard the response in this case if this protection is deemed important for the
+    /// security of the application; otherwise, the client may continue as in a regular OAuth interaction."
+    /// <see langword="true"/>, the default, deems the protection important: the code redemption, the refresh, the
+    /// <c>client_credentials</c> request and the ID-JAG redemption answer such a response as a refusal, the
+    /// <c>token_type</c> compared case-insensitively
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 Section 5.1</see>: "Value is case
+    /// insensitive."), and the token is never surfaced or stored. <see langword="false"/> lets the application
+    /// continue as in a regular OAuth interaction. No effect when DPoP is not wired.
+    /// </summary>
+    public bool RequiresDpopTokenType { get; private init; }
+
 
     //Client-side issuer validation — RFC 9207 §4 authorization-server
     //issuer uniqueness. Opt-in.
@@ -269,6 +285,9 @@ public sealed class OAuthClientInfrastructure
     /// Constructs a fully validated <see cref="OAuthClientInfrastructure"/>.
     /// Every mandatory delegate is checked for non-null at construction so
     /// missing wiring fails fast at startup, not at first protocol call.
+    /// The last parameter, <c>requiresDpopTokenType</c>, sets <see cref="RequiresDpopTokenType"/>: whether, with
+    /// DPoP wired, a token response whose <c>token_type</c> is not <c>DPoP</c> is refused
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>).
     /// </summary>
     public static OAuthClientInfrastructure Create(
         SendFormPostDelegate sendFormPostAsync,
@@ -296,7 +315,8 @@ public sealed class OAuthClientInfrastructure
         ConstructDpopProofDelegate? constructDpopProofAsync = null,
         DpopKey? dpopKey = null,
         DpopNonceLookupDelegate? lookupDpopNonce = null,
-        DpopNonceStoreDelegate? storeDpopNonce = null)
+        DpopNonceStoreDelegate? storeDpopNonce = null,
+        bool requiresDpopTokenType = true)
     {
         ArgumentNullException.ThrowIfNull(sendFormPostAsync);
         ArgumentNullException.ThrowIfNull(saveStateAsync);
@@ -354,7 +374,8 @@ public sealed class OAuthClientInfrastructure
             ConstructDpopProofAsync = constructDpopProofAsync,
             DpopKey = dpopKey,
             LookupDpopNonce = lookupDpopNonce,
-            StoreDpopNonce = storeDpopNonce
+            StoreDpopNonce = storeDpopNonce,
+            RequiresDpopTokenType = requiresDpopTokenType
         };
     }
 }

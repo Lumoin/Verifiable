@@ -6004,6 +6004,7 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     /// <param name="material">The registration's request-object signing key material.</param>
     /// <param name="scope">The scope the request object names; blank names none.</param>
     /// <param name="resource">The RFC 8707 resource indicators the request object names, or <see langword="null"/> for none.</param>
+    /// <param name="additionalFields">The caller's further fields of the start, or <see langword="null"/> for none.</param>
     /// <returns>The client's answer to the start.</returns>
     private async Task<AuthCodeFlowEndpointResult> StartRequestObjectAsync(
         string start,
@@ -6012,10 +6013,12 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         ClientRegistration registration,
         VerifierKeyMaterial material,
         string scope,
-        IReadOnlyList<string>? resource)
+        IReadOnlyList<string>? resource,
+        OAuthFormEncodedFields? additionalFields = null)
     {
         JwtHeaderSerializer headerSerializer = host.Server.OAuth().Codecs.JwtHeaderSerializer!;
         JwtPayloadSerializer payloadSerializer = host.Server.OAuth().Codecs.JwtPayloadSerializer!;
+        OAuthFormEncodedFields callerFields = additionalFields ?? OAuthFormEncodedFields.Empty;
 
         return start switch
         {
@@ -6030,7 +6033,8 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
                     RedirectUri = RedirectUri,
                     HeaderSerializer = headerSerializer,
                     PayloadSerializer = payloadSerializer,
-                    MemoryPool = BaseMemoryPool.Shared
+                    MemoryPool = BaseMemoryPool.Shared,
+                    AdditionalFields = callerFields
                 },
                 TestContext.CancellationToken).ConfigureAwait(false),
             RequestObjectByValueStart => await client.AuthCode.StartJarAuthorizeAsync(
@@ -6044,7 +6048,8 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
                     RedirectUri = RedirectUri,
                     HeaderSerializer = headerSerializer,
                     PayloadSerializer = payloadSerializer,
-                    MemoryPool = BaseMemoryPool.Shared
+                    MemoryPool = BaseMemoryPool.Shared,
+                    AdditionalFields = callerFields
                 },
                 TestContext.CancellationToken).ConfigureAwait(false),
             _ => throw new ArgumentOutOfRangeException(nameof(start), start, "Unknown request object start.")
@@ -6993,7 +6998,7 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
     /// </summary>
     /// <param name="host">The host whose authorization server records the requests it accepts.</param>
     /// <returns>The parameters of every accepted request, each once, in arrival order.</returns>
-    private static async Task<ConcurrentQueue<RequestFields>> RecordAcceptedRequestFieldsAsync(TestHostShell host)
+    internal static async Task<ConcurrentQueue<RequestFields>> RecordAcceptedRequestFieldsAsync(TestHostShell host)
     {
         ConcurrentQueue<RequestFields> accepted = new();
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
@@ -9301,6 +9306,366 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, startResult.Outcome,
             $"ErrorCode={startResult.ErrorCode} ErrorDescription={startResult.ErrorDescription}");
         Assert.AreEqual(OAuthErrors.InvalidRequestObject, startResult.ErrorCode);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-3">RFC 9126 Section 3</see>: "All other request
+    /// parameters, i.e., those pertaining to the authorization request itself, MUST appear as claims of the JWT
+    /// representing the authorization request."; <see href="https://www.rfc-editor.org/rfc/rfc9101#section-4">RFC 9101
+    /// Section 4</see>: "It MUST contain all the parameters (including extension parameters) used to process the OAuth
+    /// 2.0 [RFC6749] authorization request except the "request" and "request_uri" parameters that are defined in this
+    /// document. The parameters are represented as the JWT Claims of the object. Parameter names and string values MUST
+    /// be included as JSON strings."; <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10">RFC 9449 Section
+    /// 10</see>: "If they do not match, it MUST reject the request." A DPoP-wired client starts an authorization request
+    /// carrying a signed request object, pushed or by value as <paramref name="start"/> names, and the request is driven
+    /// over the wire through the authorization endpoint to a code the client accepts. The request object the server
+    /// received carries the claim <c>dpop_jkt</c>, a JSON string, the RFC 7638 thumbprint of the client's DPoP key
+    /// computed here from that definition, and the outer request carries no <c>dpop_jkt</c>; a redemption of the code
+    /// under a valid proof by another DPoP key is refused 400 <c>invalid_grant</c>, and the client's own redemption
+    /// issues a DPoP access token bound to its DPoP key.
+    /// </summary>
+    /// <param name="start"><see cref="PushedRequestObjectStart"/> or <see cref="RequestObjectByValueStart"/>.</param>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DataRow(PushedRequestObjectStart)]
+    [DataRow(RequestObjectByValueStart)]
+    public async Task ARequestObjectStartSignsTheClientsDpopJktAsync(string start)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: ResourceJourneyCapabilities).ConfigureAwait(false);
+        using DpopClientFixture fixture = await ComposeDpopRequestObjectJourneyClientAsync(host, material).ConfigureAwait(false);
+        ConcurrentQueue<RequestFields> accepted = await RecordAcceptedRequestFieldsAsync(host).ConfigureAwait(false);
+        string expectedThumbprint = await ResourceDpopProofs.ComputeJwkThumbprintAsync(fixture.DpopKey, TestContext.CancellationToken).ConfigureAwait(false);
+
+        string flowId = await DriveDpopRequestObjectStartToCodeReceivedAsync(start, host, fixture, material, additionalFields: null).ConfigureAwait(false);
+
+        RequestFields outer = accepted.Single(received => received.ContainsKey(OAuthRequestParameterNames.Request));
+        using JsonDocument claims = DecodeReceivedRequestObject(accepted);
+        Assert.IsTrue(claims.RootElement.TryGetProperty(OAuthRequestParameterNames.DpopJkt, out JsonElement dpopJktClaim),
+            $"The request object carries the dpop_jkt claim. Claims: {claims.RootElement}");
+        Assert.AreEqual(JsonValueKind.String, dpopJktClaim.ValueKind, $"The dpop_jkt claim is a JSON string. Claims: {claims.RootElement}");
+        Assert.AreEqual(expectedThumbprint, dpopJktClaim.GetString(), "The dpop_jkt claim is the RFC 7638 thumbprint of the client's DPoP key.");
+        Assert.IsEmpty(outer.GetValues(OAuthRequestParameterNames.DpopJkt), "The outer request carries no dpop_jkt.");
+        await AssertTheCodeRedeemsOnlyUnderTheClientsKeyAsync(host, fixture, material, flowId).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-3">RFC 9126 Section 3</see>: "All other request
+    /// parameters, i.e., those pertaining to the authorization request itself, MUST appear as claims of the JWT
+    /// representing the authorization request."; <see href="https://www.rfc-editor.org/rfc/rfc9101#section-6.3">RFC 9101
+    /// Section 6.3</see>: "The authorization server MUST only use the parameters in the Request Object, even if the same
+    /// parameter is provided in the query parameter. The client ID values in the "client_id" request parameter and in the
+    /// Request Object "client_id" claim MUST be identical."; <see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC
+    /// 6749 Section 3.1</see>: "Request and response parameters MUST NOT be included more than once." A DPoP-wired
+    /// client whose caller hands its start, pushed or by value as <paramref name="start"/> names, a <c>dpop_jkt</c>
+    /// field naming the thumbprint of another DPoP key and a <c>client_id</c> field naming another client starts an
+    /// authorization request carrying a signed request object, and the request is driven over the wire through the
+    /// authorization endpoint to a code the client accepts. The outer request the server received carries one
+    /// <c>client_id</c>, the client's own, and no <c>dpop_jkt</c>; the request object carries the client's own
+    /// <c>client_id</c> and the RFC 7638 thumbprint of the client's DPoP key as <c>dpop_jkt</c>; a redemption of the code
+    /// under a valid proof by another DPoP key is refused 400 <c>invalid_grant</c>, and the client's own redemption issues
+    /// a DPoP access token bound to its DPoP key.
+    /// </summary>
+    /// <param name="start"><see cref="PushedRequestObjectStart"/> or <see cref="RequestObjectByValueStart"/>.</param>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DataRow(PushedRequestObjectStart)]
+    [DataRow(RequestObjectByValueStart)]
+    public async Task ARequestObjectStartOwnsTheClientIdAndDpopJktOfItsOuterRequestAsync(string start)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: ResourceJourneyCapabilities).ConfigureAwait(false);
+        using DpopClientFixture fixture = await ComposeDpopRequestObjectJourneyClientAsync(host, material).ConfigureAwait(false);
+        ConcurrentQueue<RequestFields> accepted = await RecordAcceptedRequestFieldsAsync(host).ConfigureAwait(false);
+        string expectedThumbprint = await ResourceDpopProofs.ComputeJwkThumbprintAsync(fixture.DpopKey, TestContext.CancellationToken).ConfigureAwait(false);
+        using FreshDpopKey other = new();
+        string otherThumbprint = await ResourceDpopProofs.ComputeJwkThumbprintAsync(other.Key, TestContext.CancellationToken).ConfigureAwait(false);
+        OAuthFormEncodedFields callerFields = new(new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.DpopJkt] = otherThumbprint,
+            [OAuthRequestParameterNames.ClientId] = OtherClientId
+        });
+
+        string flowId = await DriveDpopRequestObjectStartToCodeReceivedAsync(start, host, fixture, material, callerFields).ConfigureAwait(false);
+
+        RequestFields outer = accepted.Single(received => received.ContainsKey(OAuthRequestParameterNames.Request));
+        string[] expectedClientIds = [ClientId];
+        Assert.AreSequenceEqual(expectedClientIds, outer.GetValues(OAuthRequestParameterNames.ClientId),
+            "The outer request carries one client_id, the client's own.");
+        Assert.IsEmpty(outer.GetValues(OAuthRequestParameterNames.DpopJkt), "The outer request carries no dpop_jkt.");
+        using JsonDocument claims = DecodeReceivedRequestObject(accepted);
+        Assert.AreEqual(ClientId, claims.RootElement.GetProperty(OAuthRequestParameterNames.ClientId).GetString(),
+            "The request object carries the client's own client_id.");
+        Assert.IsTrue(claims.RootElement.TryGetProperty(OAuthRequestParameterNames.DpopJkt, out JsonElement dpopJktClaim),
+            $"The request object carries the dpop_jkt claim. Claims: {claims.RootElement}");
+        Assert.AreEqual(expectedThumbprint, dpopJktClaim.GetString(), "The dpop_jkt claim is the thumbprint of the client's own DPoP key.");
+        await AssertTheCodeRedeemsOnlyUnderTheClientsKeyAsync(host, fixture, material, flowId).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.1">RFC 9126 Section 2.1</see>: "The "request_uri"
+    /// authorization request parameter is one exception, and it MUST NOT be provided.";
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-5">RFC 9101 Section 5</see>: "If this parameter is
+    /// present in the authorization request, "request_uri" MUST NOT be present." A DPoP-wired client whose caller hands
+    /// its start, as <paramref name="start"/> names (the direct start, the pushed start, the pushed request object or the
+    /// request object by value), a <c>request_uri</c> field naming a valid pushed reference of the same client, which a
+    /// pushed start under another DPoP key obtained beforehand, and a <c>request</c> field holding compact JWS text,
+    /// starts an authorization request, and the request is driven over the wire through the authorization endpoint to a
+    /// code the client accepts. The request the server received from the start (the pushed body, or the authorization
+    /// request's query of the direct start and of the request object by value) carries no <c>request_uri</c> and no
+    /// <c>request</c> but the start's own, one <c>client_id</c>, the client's own, and at the direct and the pushed start
+    /// exactly one <c>dpop_jkt</c>, the RFC 7638 thumbprint of the client's DPoP key computed here from that definition,
+    /// which the request object carries as its claim at the other two; a redemption of the code under a valid proof by
+    /// another DPoP key is refused 400 <c>invalid_grant</c>, and the client's own redemption issues a DPoP access token
+    /// bound to its DPoP key. At the direct start the caller's fields also carry the valid <c>request_uri</c> alone,
+    /// with no <c>request</c> field: the authorization request the server receives carries no <c>request_uri</c>, so
+    /// the server does not complete the pushed request of the other DPoP key in place of the client's own request, and
+    /// the code the flow ends in is bound to the client's own DPoP key.
+    /// </summary>
+    /// <param name="start">
+    /// <see cref="DirectStart"/>, <see cref="PushedStart"/>, <see cref="PushedRequestObjectStart"/> or
+    /// <see cref="RequestObjectByValueStart"/>.
+    /// </param>
+    /// <param name="isRequestFieldIncluded">
+    /// Whether the caller's fields carry the <c>request</c> field beside the <c>request_uri</c>.
+    /// </param>
+    /// <returns>A task that completes when the row has run.</returns>
+    [TestMethod]
+    [DataRow(DirectStart, true, DisplayName = "direct, request_uri and request")]
+    [DataRow(DirectStart, false, DisplayName = "direct, request_uri alone")]
+    [DataRow(PushedStart, true, DisplayName = "pushed, request_uri and request")]
+    [DataRow(PushedRequestObjectStart, true, DisplayName = "pushed request object, request_uri and request")]
+    [DataRow(RequestObjectByValueStart, true, DisplayName = "request object by value, request_uri and request")]
+    public async Task AStartOwnsTheRequestAndRequestUriOfItsOuterRequestAsync(string start, bool isRequestFieldIncluded)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: ResourceJourneyCapabilities).ConfigureAwait(false);
+        using DpopClientFixture fixture = await ComposeDpopRequestObjectJourneyClientAsync(host, material).ConfigureAwait(false);
+        ConcurrentQueue<RequestFields> accepted = await RecordAcceptedRequestFieldsAsync(host).ConfigureAwait(false);
+        string expectedThumbprint = await ResourceDpopProofs.ComputeJwkThumbprintAsync(fixture.DpopKey, TestContext.CancellationToken).ConfigureAwait(false);
+        string foreignRequestUri = await PushUnderAnotherDpopKeyAsync(host, material).ConfigureAwait(false);
+        int acceptedBefore = accepted.Count;
+        Dictionary<string, string> callerFieldValues = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.RequestUri] = foreignRequestUri
+        };
+        if(isRequestFieldIncluded)
+        {
+            callerFieldValues[OAuthRequestParameterNames.Request] = CallerRequestObjectText;
+        }
+
+        bool isPlainStart = start is DirectStart or PushedStart;
+        if(isPlainStart)
+        {
+            callerFieldValues[OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId;
+        }
+
+        OAuthFormEncodedFields callerFields = new(callerFieldValues);
+
+        string flowId = start switch
+        {
+            DirectStart or PushedStart => await DriveDpopStartToCodeReceivedAsync(start, host, fixture, callerFields).ConfigureAwait(false),
+            _ => await DriveDpopRequestObjectStartToCodeReceivedAsync(start, host, fixture, material, callerFields).ConfigureAwait(false)
+        };
+
+        string receivedName = isPlainStart switch
+        {
+            true => OAuthRequestParameterNames.CodeChallenge,
+            false => OAuthRequestParameterNames.Request
+        };
+        RequestFields received = Assert.ContainsSingle(accepted.Skip(acceptedBefore).Where(fields => fields.ContainsKey(receivedName)),
+            "The server received one request from the start.");
+        Assert.IsEmpty(received.GetValues(OAuthRequestParameterNames.RequestUri), "The request the server received carries no request_uri.");
+        string[] expectedClientIds = [ClientId];
+        Assert.AreSequenceEqual(expectedClientIds, received.GetValues(OAuthRequestParameterNames.ClientId),
+            "The request the server received carries one client_id, the client's own.");
+        if(isPlainStart)
+        {
+            Assert.IsEmpty(received.GetValues(OAuthRequestParameterNames.Request), "The request the server received carries no request.");
+            string[] expectedDpopJkt = [expectedThumbprint];
+            Assert.AreSequenceEqual(expectedDpopJkt, received.GetValues(OAuthRequestParameterNames.DpopJkt),
+                "The request the server received carries exactly one dpop_jkt, the thumbprint of the client's own DPoP key.");
+        }
+        else
+        {
+            string ownRequest = Assert.ContainsSingle(received.GetValues(OAuthRequestParameterNames.Request),
+                "The outer request the server received carries one request.");
+            Assert.AreNotEqual(CallerRequestObjectText, ownRequest, "The request the server received is the start's own request object.");
+            using JsonDocument claims = DecodeReceivedRequestObject(accepted);
+            Assert.AreEqual(expectedThumbprint, claims.RootElement.GetProperty(OAuthRequestParameterNames.DpopJkt).GetString(),
+                "The request object carries the thumbprint of the client's own DPoP key as its dpop_jkt claim.");
+        }
+
+        await AssertTheCodeRedeemsOnlyUnderTheClientsKeyAsync(host, fixture, material, flowId).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// The compact JWS text a caller's <c>request</c> field holds: three base64url segments, a header naming
+    /// <c>ES256</c>, a payload naming another client and a signature segment, so it reads as a request object.
+    /// </summary>
+    private static string CallerRequestObjectText { get; } =
+        "eyJhbGciOiJFUzI1NiJ9.eyJjbGllbnRfaWQiOiJodHRwczovL290aGVyLWNsaWVudC5leGFtcGxlLmNvbSJ9.c2lnbmF0dXJl";
+
+
+    /// <summary>
+    /// Pushes an authorization request over the real wire through a second DPoP-wired client of the same registration,
+    /// under a DPoP key of its own, and answers the <c>request_uri</c> the PAR endpoint issued for it: a valid pushed
+    /// reference of the client that the row's own client did not make. The second client is composed over the
+    /// registration as the host holds it, its request-object signing key list included, since composing a client
+    /// writes the registration it is given back to the host.
+    /// </summary>
+    /// <param name="host">The host serving the registration over the real wire.</param>
+    /// <param name="material">The registration.</param>
+    /// <returns>The <c>request_uri</c> the PAR endpoint issued.</returns>
+    private async Task<string> PushUnderAnotherDpopKeyAsync(TestHostShell host, VerifierKeyMaterial material)
+    {
+        using DpopClientFixture other = await host.CreateDpopEnabledOAuthClientAsync(
+            host.RegistrationStore[material.Registration.TenantId.Value], RedirectUri.OriginalString, observeFormPost: null,
+            PolicyProfile.Rfc6749WithPkce, requiresDpopTokenType: true, TestContext.CancellationToken).ConfigureAwait(false);
+        AuthCodeFlowEndpointResult otherPush = await other.Client.AuthCode.StartParAsync(
+            other.Registration, RedirectUri, OAuthFormEncodedFieldsFixtures.OpenIdScope, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, otherPush.Outcome,
+            $"The other pushed start must redirect. ErrorCode={otherPush.ErrorCode} ErrorDescription={otherPush.ErrorDescription}");
+
+        return TestBrowser.ExtractQueryParam(otherPush.RedirectUri!.ToString(), OAuthRequestParameterNames.RequestUri)
+            ?? throw new InvalidOperationException("The other pushed start's redirect carries no request_uri.");
+    }
+
+
+    /// <summary>
+    /// Starts an authorization request through the DPoP-wired client, directly or pushed as <paramref name="start"/>
+    /// names, handing the start <paramref name="fields"/>, and drives it over the real wire through the authorization
+    /// endpoint to a code the client accepts at its callback. Returns the flow identifier ready for the code redemption.
+    /// </summary>
+    /// <param name="start"><see cref="DirectStart"/> or <see cref="PushedStart"/>.</param>
+    /// <param name="host">The host serving the registration over the real wire.</param>
+    /// <param name="fixture">The DPoP-wired client.</param>
+    /// <param name="fields">The fields the caller hands the start.</param>
+    /// <returns>The flow identifier.</returns>
+    private async Task<string> DriveDpopStartToCodeReceivedAsync(
+        string start, TestHostShell host, DpopClientFixture fixture, OAuthFormEncodedFields fields)
+    {
+        AuthCodeFlowEndpointResult startResult = start switch
+        {
+            DirectStart => await fixture.Client.AuthCode.StartAsync(
+                fixture.Registration, RedirectUri, fields, [], resource: null, TimeSpan.FromMinutes(5),
+                TestContext.CancellationToken).ConfigureAwait(false),
+            PushedStart => await fixture.Client.AuthCode.StartParAsync(
+                fixture.Registration, RedirectUri, fields, TestContext.CancellationToken).ConfigureAwait(false),
+            _ => throw new ArgumentOutOfRangeException(nameof(start), start, "Unknown authorization request start.")
+        };
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, startResult.Outcome,
+            $"The start must redirect. ErrorCode={startResult.ErrorCode} ErrorDescription={startResult.ErrorDescription}");
+
+        return await GetAuthorizeRedirectAndCallbackAsync(
+            host.Host("default"), fixture.Client, fixture.Registration, host.ServerCertificate, startResult.RedirectUri!,
+            fixture.ClientFlowStore.Keys.Single(), TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>The identifier of a client other than <see cref="ClientId"/>, which a caller's field names.</summary>
+    private static string OtherClientId { get; } = "https://other-client.example.com";
+
+
+    /// <summary>
+    /// Composes a DPoP-wired client for a registration made with <see cref="ResourceJourneyCapabilities"/>: the
+    /// client-credential check answers true, the authorization server verifies DPoP proofs, and the registration's own
+    /// key is listed as its request-object signing key, as <see cref="ComposeResourceJourneyClientAsync"/> lists it.
+    /// </summary>
+    /// <param name="host">The host serving the registration over the real wire.</param>
+    /// <param name="material">The registration and its key material.</param>
+    /// <returns>The DPoP-wired client; the caller disposes it.</returns>
+    private async Task<DpopClientFixture> ComposeDpopRequestObjectJourneyClientAsync(TestHostShell host, VerifierKeyMaterial material)
+    {
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
+                ValueTask.FromResult(true);
+        }).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+
+        DpopClientFixture fixture = await host.CreateDpopEnabledOAuthClientAsync(
+            material.Registration, RedirectUri.OriginalString, observeFormPost: null, PolicyProfile.Rfc6749WithPkce,
+            requiresDpopTokenType: true, TestContext.CancellationToken).ConfigureAwait(false);
+
+        string segment = material.Registration.TenantId.Value;
+        await host.UpdateSigningKeysAsync(
+            segment,
+            host.RegistrationStore[segment].SigningKeys.ToImmutableDictionary()
+                .Add(KeyUsageContext.JarSigning, new SigningKeySet { Current = [material.SigningKeyId] })).ConfigureAwait(false);
+
+        return fixture;
+    }
+
+
+    /// <summary>
+    /// Starts an authorization request carrying a signed request object through the DPoP-wired client, pushed or by value
+    /// as <paramref name="start"/> names, handing the start <paramref name="additionalFields"/>, and drives it over the
+    /// real wire through the authorization endpoint to a code the client accepts at its callback. Returns the flow
+    /// identifier ready for the code redemption.
+    /// </summary>
+    /// <param name="start"><see cref="PushedRequestObjectStart"/> or <see cref="RequestObjectByValueStart"/>.</param>
+    /// <param name="host">The host serving the registration over the real wire.</param>
+    /// <param name="fixture">The DPoP-wired client.</param>
+    /// <param name="material">The registration's request-object signing key material.</param>
+    /// <param name="additionalFields">The caller's further fields of the start, or <see langword="null"/> for none.</param>
+    /// <returns>The flow identifier.</returns>
+    private async Task<string> DriveDpopRequestObjectStartToCodeReceivedAsync(
+        string start, TestHostShell host, DpopClientFixture fixture, VerifierKeyMaterial material, OAuthFormEncodedFields? additionalFields)
+    {
+        AuthCodeFlowEndpointResult startResult = await StartRequestObjectAsync(
+            start, host, fixture.Client, fixture.Registration, material, WellKnownScopes.OpenId, resource: null, additionalFields).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, startResult.Outcome,
+            $"The request object start must redirect. ErrorCode={startResult.ErrorCode} ErrorDescription={startResult.ErrorDescription}");
+
+        return await GetAuthorizeRedirectAndCallbackAsync(
+            host.Host("default"), fixture.Client, fixture.Registration, host.ServerCertificate, startResult.RedirectUri!,
+            fixture.ClientFlowStore.Keys.Single(), TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10">RFC 9449 Section 10</see>: asserts that a redemption
+    /// of the code of the flow <paramref name="flowId"/>, with its PKCE verifier and under a valid proof by another DPoP
+    /// key carrying the nonce the token endpoint supplies, is refused 400 <c>invalid_grant</c>, and that the client's own
+    /// redemption then issues a DPoP access token whose <c>cnf.jkt</c> is the RFC 7638 thumbprint of the client's DPoP
+    /// key, computed here from that definition.
+    /// </summary>
+    /// <param name="host">The host serving the registration over the real wire.</param>
+    /// <param name="fixture">The DPoP-wired client whose flow store holds the code.</param>
+    /// <param name="material">The registration.</param>
+    /// <param name="flowId">The flow whose code is redeemed.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    private async Task AssertTheCodeRedeemsOnlyUnderTheClientsKeyAsync(
+        TestHostShell host, DpopClientFixture fixture, VerifierKeyMaterial material, string flowId)
+    {
+        string segment = material.Registration.TenantId.Value;
+        AuthorizationCodeReceivedState codeState = (AuthorizationCodeReceivedState)fixture.ClientFlowStore[flowId];
+        using FreshDpopKey other = new();
+        string nonce = await RawAuthCodeWirePushers.ObtainTokenEndpointDpopNonceAsync(
+            host, segment, ClientId, other.Key, TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+        string proof = await DpopCodeBindingWire.BuildTokenProofAsync(
+            host, segment, other.Key, nonce, TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+        (int otherStatusCode, string otherBody) = await RawAuthCodeWirePushers.RedeemCodeAsync(
+            host, segment, ClientId, codeState.Code, codeState.Pkce.EncodedVerifier, codeState.RedirectUri.OriginalString, proof,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        DpopCodeBindingWire.AssertError(otherStatusCode, otherBody, 400, "invalid_grant", "The authorization code is unknown, expired, or already used.");
+
+        AuthCodeFlowEndpointResult tokenResult = await fixture.Client.AuthCode.ExchangeTokenAsync(
+            fixture.Registration, flowId, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, tokenResult.Outcome,
+            $"The client's own redemption is served. ErrorCode={tokenResult.ErrorCode} ErrorDescription={tokenResult.ErrorDescription}");
+        Assert.AreEqual(WellKnownAuthenticationSchemes.DPoP, (string)tokenResult.Body![OAuthRequestParameterNames.TokenType]);
+        string expectedThumbprint = await ResourceDpopProofs.ComputeJwkThumbprintAsync(fixture.DpopKey, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(expectedThumbprint, JwtPayloadReader.ReadCnfJkt((string)tokenResult.Body[OAuthRequestParameterNames.AccessToken]),
+            "The access token's cnf.jkt is the thumbprint of the client's DPoP key.");
     }
 
 

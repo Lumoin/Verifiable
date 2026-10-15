@@ -42,7 +42,10 @@ internal static class ClientCredentialsFlowHandlers
     /// <see cref="AuthCodeFlowEndpointOutcome.Ok"/> with the token response fields on success — the
     /// same typed-result shape
     /// <see cref="AuthCodeFlowHandlers.HandleTokenAsync(System.Collections.Generic.IReadOnlyDictionary{string, string}, OAuthClientInfrastructure, ClientRegistration, ExchangeContext, ClientAssertionOptions?, CancellationToken)"/>
-    /// answers in.
+    /// answers in; with DPoP wired and <see cref="OAuthClientInfrastructure.RequiresDpopTokenType"/> set, a token
+    /// response naming a <c>token_type</c> other than <c>DPoP</c> answers <see cref="AuthCodeFlowEndpointOutcome.BadRequest"/>
+    /// with <c>invalid_response</c> and no token
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>).
     /// </returns>
     internal static async ValueTask<AuthCodeFlowEndpointResult> HandleTokenRequestAsync(
         ClientRegistration registration,
@@ -103,6 +106,14 @@ internal static class ClientCredentialsFlowHandlers
         }
 
         TokenResponse tokenResponse = tokenResult.Value;
+
+        //RFC 9449 Section 5: a token response naming a token_type other than DPoP to a request that carried a
+        //proof is discarded when the protection is deemed important, and no token is surfaced.
+        if(TokenEndpointClientOperations.RefuseTokenTypeOtherThanDpop(infrastructure, tokenResponse) is OAuthInvalidFieldValue tokenTypeRefusal)
+        {
+            return TokenEndpointClientOperations.BuildEndpointResultFromParseError(tokenTypeRefusal);
+        }
+
         var body = new Dictionary<string, object>
         {
             [OAuthRequestParameterNames.AccessToken] = tokenResponse.AccessToken,

@@ -349,6 +349,12 @@ public sealed class Oid4VciWalletClient
     /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.2">OID4VCI 1.0 Section 6.2</see>:
     /// "The Wallet MUST use these identifiers together with an Access Token in subsequent Credential
     /// Requests."
+    /// The Token Response is also refused as a <see cref="Oid4VciRequestFailureKind.MalformedResponse"/> naming the
+    /// Token Endpoint with the answer's status, with no Nonce or Credential Request sent, when it carries no
+    /// <c>token_type</c> (RFC 6749 Section 5.1), when DPoP is wired and
+    /// <see cref="Oid4VciWalletConfiguration.RequiresDpopTokenType"/> set and its <c>token_type</c> is not <c>DPoP</c>
+    /// (RFC 9449 Section 5), when its <c>token_type</c> is neither <c>Bearer</c> nor <c>DPoP</c> (RFC 6749 Section 7.1),
+    /// and when it is <c>DPoP</c> with DPoP not wired (RFC 9449 Section 7.1).
     /// </returns>
     /// <exception cref="InvalidOperationException">
     /// Thrown when <paramref name="offer"/> carries no Pre-Authorized Code grant, or when the
@@ -416,6 +422,12 @@ public sealed class Oid4VciWalletClient
     /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.2">OID4VCI 1.0 Section 6.2</see>:
     /// "The Wallet MUST use these identifiers together with an Access Token in subsequent Credential
     /// Requests."
+    /// The Token Response is also refused as a <see cref="Oid4VciRequestFailureKind.MalformedResponse"/> naming the
+    /// Token Endpoint with the answer's status, with no Nonce or Credential Request sent, when it carries no
+    /// <c>token_type</c> (RFC 6749 Section 5.1), when DPoP is wired and
+    /// <see cref="Oid4VciWalletConfiguration.RequiresDpopTokenType"/> set and its <c>token_type</c> is not <c>DPoP</c>
+    /// (RFC 9449 Section 5), when its <c>token_type</c> is neither <c>Bearer</c> nor <c>DPoP</c> (RFC 6749 Section 7.1),
+    /// and when it is <c>DPoP</c> with DPoP not wired (RFC 9449 Section 7.1).
     /// </returns>
     /// <exception cref="InvalidOperationException">Thrown when <paramref name="offer"/> carries no Pre-Authorized Code grant.</exception>
     public async ValueTask<Result<CredentialIssuanceResult, Oid4VciRequestFailure>> IssuePreAuthorizedDetailedAsync(
@@ -479,6 +491,12 @@ public sealed class Oid4VciWalletClient
     /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.2">OID4VCI 1.0 Section 6.2</see>:
     /// "The Wallet MUST use these identifiers together with an Access Token in subsequent Credential
     /// Requests."
+    /// The Token Response is also refused as a <see cref="Oid4VciRequestFailureKind.MalformedResponse"/> naming the
+    /// Token Endpoint with the answer's status, with no Nonce or Credential Request sent, when it carries no
+    /// <c>token_type</c> (RFC 6749 Section 5.1), when DPoP is wired and
+    /// <see cref="Oid4VciWalletConfiguration.RequiresDpopTokenType"/> set and its <c>token_type</c> is not <c>DPoP</c>
+    /// (RFC 9449 Section 5), when its <c>token_type</c> is neither <c>Bearer</c> nor <c>DPoP</c> (RFC 6749 Section 7.1),
+    /// and when it is <c>DPoP</c> with DPoP not wired (RFC 9449 Section 7.1).
     /// </returns>
     /// <exception cref="InvalidOperationException">
     /// Thrown when the issuance succeeded on the wire but was deferred or produced no
@@ -563,6 +581,12 @@ public sealed class Oid4VciWalletClient
     /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.2">OID4VCI 1.0 Section 6.2</see>:
     /// "The Wallet MUST use these identifiers together with an Access Token in subsequent Credential
     /// Requests."
+    /// The Token Response is also refused as a <see cref="Oid4VciRequestFailureKind.MalformedResponse"/> naming the
+    /// Token Endpoint with the answer's status, with no Nonce or Credential Request sent, when it carries no
+    /// <c>token_type</c> (RFC 6749 Section 5.1), when DPoP is wired and
+    /// <see cref="Oid4VciWalletConfiguration.RequiresDpopTokenType"/> set and its <c>token_type</c> is not <c>DPoP</c>
+    /// (RFC 9449 Section 5), when its <c>token_type</c> is neither <c>Bearer</c> nor <c>DPoP</c> (RFC 6749 Section 7.1),
+    /// and when it is <c>DPoP</c> with DPoP not wired (RFC 9449 Section 7.1).
     /// </returns>
     public async ValueTask<Result<CredentialIssuanceResult, Oid4VciRequestFailure>> IssuePreAuthorizedDetailedAsync(
         PreAuthorizedCodeOfferGrant grant,
@@ -639,7 +663,15 @@ public sealed class Oid4VciWalletClient
     /// Requests."
     /// </remarks>
     /// <param name="accessToken">The access token authorizing the Nonce and Credential Requests.</param>
-    /// <param name="tokenType">The token's <c>token_type</c> (<c>Bearer</c>, or <c>DPoP</c> with the DPoP delegate wired).</param>
+    /// <param name="tokenType">
+    /// The token's <c>token_type</c> (<c>Bearer</c>, or <c>DPoP</c> with the DPoP delegate wired), read in any case. Any
+    /// other type, and <c>DPoP</c> with DPoP not wired, is refused before a request is sent, as a
+    /// <see cref="Oid4VciRequestFailureKind.MalformedResponse"/> naming the Nonce Endpoint with no status
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-7.1">RFC 6749 Section 7.1</see>: "The client MUST NOT
+    /// use an access token if it does not understand the token type.";
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: the DPoP-bound token
+    /// is sent "with an authentication scheme of DPoP").
+    /// </param>
     /// <param name="accessTokenExpiresAt">
     /// The instant <paramref name="accessToken"/> expires, carried over into the returned
     /// <see cref="CredentialIssuanceResult.ExpiresAt"/>, or <see langword="null"/> when the caller
@@ -654,7 +686,12 @@ public sealed class Oid4VciWalletClient
     /// <param name="responseEncryption">The section 8.2 response-encryption ask, or <see langword="null"/>.</param>
     /// <param name="context">The per-operation exchange context carrying the outbound-fetch policy evaluated before each dial.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The full Credential Response outcome, or the endpoint's refusal.</returns>
+    /// <returns>
+    /// The full Credential Response outcome, or the endpoint's refusal; or, before any request, a
+    /// <see cref="Oid4VciRequestFailureKind.MalformedResponse"/> naming the Nonce Endpoint with no status when
+    /// <paramref name="tokenType"/> is neither <c>Bearer</c> nor <c>DPoP</c> (RFC 6749 Section 7.1) or is <c>DPoP</c>
+    /// with DPoP not wired (RFC 9449 Section 7.1).
+    /// </returns>
     public async ValueTask<Result<CredentialIssuanceResult, Oid4VciRequestFailure>> IssueWithAccessTokenDetailedAsync(
         string accessToken,
         string tokenType,
@@ -676,6 +713,13 @@ public sealed class Oid4VciWalletClient
         ArgumentNullException.ThrowIfNull(holderPublic);
         ArgumentNullException.ThrowIfNull(endpoints);
         ArgumentNullException.ThrowIfNull(context);
+
+        //RFC 6749 Section 7.1 and RFC 9449 Section 7.1: the Wallet presents a Bearer token, or a DPoP token when DPoP is
+        //wired, and uses no other.
+        if(RefuseTokenTypeNotUnderstood(endpoints.NonceEndpoint, tokenType) is Oid4VciRequestFailure tokenTypeRefusal)
+        {
+            return Result<CredentialIssuanceResult, Oid4VciRequestFailure>.Failure(tokenTypeRefusal);
+        }
 
         //§7: the Nonce Endpoint issues the c_nonce the proof must carry.
         Result<string, Oid4VciRequestFailure> nonceOutcome = await RequestNonceAsync(
@@ -753,8 +797,17 @@ public sealed class Oid4VciWalletClient
     /// well-formed JSON, repeats a member, carries no <c>access_token</c>, carries an empty
     /// <c>access_token</c>, one holding a char outside <c>%x20-7E</c> (RFC 6749 Appendix A.12) or one
     /// that is not a <c>token68</c> credential (RFC 9110 Section 11.2; the Token Response parser holds
-    /// Appendix A.12 alone, since it serves clients that carry the token elsewhere), or a
-    /// <c>token_type</c> that is neither a type-name nor an RFC 3986 URI-reference (Appendix A.13),
+    /// Appendix A.12 alone, since it serves clients that carry the token elsewhere), carries no
+    /// <c>token_type</c> (RFC 6749 Section 5.1: "token_type REQUIRED."), a
+    /// <c>token_type</c> that is neither a type-name nor an RFC 3986 URI-reference (Appendix A.13), or, with DPoP
+    /// wired and <see cref="Oid4VciWalletConfiguration.RequiresDpopTokenType"/> set, one other than <c>DPoP</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>), a
+    /// <c>token_type</c> that is neither <c>Bearer</c> nor <c>DPoP</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-7.1">RFC 6749 Section 7.1</see>: "The client MUST NOT
+    /// use an access token if it does not understand the token type."), or <c>DPoP</c> with DPoP not wired
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "A DPoP-bound access
+    /// token is sent using the Authorization request header field per Section 11.6.2 of [RFC9110] with an
+    /// authentication scheme of DPoP."), each naming <paramref name="tokenEndpoint"/> with the answer's status,
     /// carries <c>authorization_details</c> that are not a non-empty array of objects, an entry without a
     /// string <c>type</c>, or an <c>openid_credential</c> object without its configuration or a non-empty <c>credential_identifiers</c> or listing an
     /// identifier that is empty or white space, or grants <c>credential_identifiers</c> for no object
@@ -857,11 +910,20 @@ public sealed class Oid4VciWalletClient
         }
 
         //RFC 6749 Section 5.1 makes token_type REQUIRED: "token_type REQUIRED. The type of the token
-        //issued as described in Section 7.1. Value is case insensitive." An absent one is read as Bearer;
-        //a present one is held to Appendix A.13, a type-name or an RFC 3986 URI-reference as
-        //OAuthResponseParsers.IsTokenType reads it with its span recognizer of the URI-reference grammar.
-        string tokenType = JwkJsonReader.ExtractStringValue(tokenJson, OAuthRequestParameterNames.TokenTypeUtf8)
-            ?? WellKnownAuthenticationSchemes.Bearer;
+        //issued as described in Section 7.1. Value is case insensitive." An absent one is refused, as the
+        //library's token response parser refuses it; a present one is held to Appendix A.13, a type-name or
+        //an RFC 3986 URI-reference as OAuthResponseParsers.IsTokenType reads it with its span recognizer of the
+        //URI-reference grammar.
+        string? tokenType = JwkJsonReader.ExtractStringValue(tokenJson, OAuthRequestParameterNames.TokenTypeUtf8);
+        if(tokenType is null)
+        {
+            return Result<(string, string, DateTimeOffset?, CredentialRequestTarget), Oid4VciRequestFailure>.Failure(
+                MalformedResponseFailure(
+                    tokenEndpoint,
+                    response.StatusCode,
+                    "RFC 6749 Section 5.1 the Token Response carried no token_type, a REQUIRED member."));
+        }
+
         if(!OAuthResponseParsers.IsTokenType(tokenType))
         {
             return Result<(string, string, DateTimeOffset?, CredentialRequestTarget), Oid4VciRequestFailure>.Failure(
@@ -869,6 +931,40 @@ public sealed class Oid4VciWalletClient
                     tokenEndpoint,
                     response.StatusCode,
                     "RFC 6749 Appendix A.13 the Token Response's token_type is neither a type-name nor an RFC 3986 URI-reference."));
+        }
+
+        //RFC 9449 Section 5: "If the access token response contains a different token_type value than DPoP, the
+        //access token protection provided by DPoP is not given. The client MUST discard the response in this case
+        //if this protection is deemed important for the security of the application". The Token Request carried a
+        //proof when DPoP is wired; RequiresDpopTokenType deems the protection important, and the comparison is
+        //case-insensitive (RFC 6749 Section 5.1).
+        if(IsDpopWired(Configuration) && Configuration.RequiresDpopTokenType && !WellKnownAuthenticationSchemes.IsDPoP(tokenType))
+        {
+            return Result<(string, string, DateTimeOffset?, CredentialRequestTarget), Oid4VciRequestFailure>.Failure(
+                MalformedResponseFailure(
+                    tokenEndpoint,
+                    response.StatusCode,
+                    "RFC 9449 Section 5 the Token Response to a Token Request that carried a DPoP proof names a token_type other than DPoP."));
+        }
+
+        //RFC 6749 Section 7.1: "The client MUST NOT use an access token if it does not understand the token type." The
+        //Wallet understands Bearer and DPoP, compared case-insensitively; any other type, a URI-reference included, is
+        //refused here at the Token Endpoint whose answer named it, after the Section 5 discard of a wallet with DPoP
+        //wired (which answers that refusal first).
+        if(!WellKnownAuthenticationSchemes.IsBearer(tokenType) && !WellKnownAuthenticationSchemes.IsDPoP(tokenType))
+        {
+            return Result<(string, string, DateTimeOffset?, CredentialRequestTarget), Oid4VciRequestFailure>.Failure(
+                MalformedResponseFailure(tokenEndpoint, response.StatusCode, TokenResponseTokenTypeNotUnderstoodRule));
+        }
+
+        //RFC 9449 Section 7.1: "A DPoP-bound access token is sent using the Authorization request header field per
+        //Section 11.6.2 of [RFC9110] with an authentication scheme of DPoP." A Wallet without DPoP wired has no DPoP key
+        //to prove with, and a resource refuses the token presented as a bearer token (Section 7.2), so the token is not
+        //used.
+        if(WellKnownAuthenticationSchemes.IsDPoP(tokenType) && !IsDpopWired(Configuration))
+        {
+            return Result<(string, string, DateTimeOffset?, CredentialRequestTarget), Oid4VciRequestFailure>.Failure(
+                MalformedResponseFailure(tokenEndpoint, response.StatusCode, DpopTokenTypeWithoutDpopKeyRule));
         }
 
         DateTimeOffset? expiresAt = JwkJsonReader.TryExtractLongValue(
@@ -1134,7 +1230,10 @@ public sealed class Oid4VciWalletClient
     /// </summary>
     /// <param name="transactionId">The §9.1 <c>transaction_id</c> from the deferred issuance.</param>
     /// <param name="accessToken">The issuance access token (from <see cref="CredentialIssuanceResult.AccessToken"/>).</param>
-    /// <param name="tokenType">The access token's type (<c>Bearer</c> or <c>DPoP</c>).</param>
+    /// <param name="tokenType">
+    /// The access token's type, read in any case: <c>Bearer</c>, or <c>DPoP</c> with the DPoP delegate wired; any other
+    /// type, and <c>DPoP</c> with DPoP not wired, is refused before the request is sent.
+    /// </param>
     /// <param name="accessTokenExpiresAt">
     /// The instant <paramref name="accessToken"/> expires (from a prior
     /// <see cref="CredentialIssuanceResult.ExpiresAt"/>), carried over into a successful outcome's
@@ -1146,7 +1245,9 @@ public sealed class Oid4VciWalletClient
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>
     /// The issued Credentials, a still-deferred result to poll again after the interval, or the
-    /// §9.3 refusal.
+    /// Section 9.3 refusal; or, before any request, a <see cref="Oid4VciRequestFailureKind.MalformedResponse"/> naming
+    /// <paramref name="deferredCredentialEndpoint"/> with no status when <paramref name="tokenType"/> is neither
+    /// <c>Bearer</c> nor <c>DPoP</c> (RFC 6749 Section 7.1) or is <c>DPoP</c> with DPoP not wired (RFC 9449 Section 7.1).
     /// </returns>
     public async ValueTask<Result<CredentialIssuanceResult, Oid4VciRequestFailure>> PollDeferredCredentialAsync(
         string transactionId,
@@ -1163,6 +1264,13 @@ public sealed class Oid4VciWalletClient
         ArgumentException.ThrowIfNullOrWhiteSpace(tokenType);
         ArgumentNullException.ThrowIfNull(deferredCredentialEndpoint);
         ArgumentNullException.ThrowIfNull(context);
+
+        //RFC 6749 Section 7.1 and RFC 9449 Section 7.1: the Wallet presents a Bearer token, or a DPoP token when DPoP is
+        //wired, and uses no other.
+        if(RefuseTokenTypeNotUnderstood(deferredCredentialEndpoint, tokenType) is Oid4VciRequestFailure tokenTypeRefusal)
+        {
+            return Result<CredentialIssuanceResult, Oid4VciRequestFailure>.Failure(tokenTypeRefusal);
+        }
 
         string requestBody = await EncryptRequestIfAskedAsync(
             BuildDeferredRequestBody(transactionId), responseEncryption, cancellationToken).ConfigureAwait(false);
@@ -1219,7 +1327,10 @@ public sealed class Oid4VciWalletClient
     /// <param name="notificationId">The §8.3 <c>notification_id</c> from the issuance.</param>
     /// <param name="notificationEvent">The §11.1 <c>event</c> — one of <see cref="Oid4VciNotificationEvents"/>.</param>
     /// <param name="accessToken">The issuance access token (from <see cref="CredentialIssuanceResult.AccessToken"/>).</param>
-    /// <param name="tokenType">The access token's type (<c>Bearer</c> or <c>DPoP</c>).</param>
+    /// <param name="tokenType">
+    /// The access token's type, read in any case: <c>Bearer</c>, or <c>DPoP</c> with the DPoP delegate wired; any other
+    /// type, and <c>DPoP</c> with DPoP not wired, is refused before the request is sent.
+    /// </param>
     /// <param name="notificationEndpoint">The §11 Notification Endpoint URL.</param>
     /// <param name="eventDescription">The §11.1 <c>event_description</c> (OPTIONAL human-readable text), or <see langword="null"/>.</param>
     /// <param name="context">The per-operation exchange context carrying the outbound-fetch policy evaluated before the dial.</param>
@@ -1229,8 +1340,11 @@ public sealed class Oid4VciWalletClient
     /// status in the 2xx range, with 204 (No Content) RECOMMENDED; otherwise the
     /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-11.3">§11.3</see>
     /// failure — the policy's <see cref="Oid4VciRequestFailureKind.OutboundPolicyDenied"/> refusal, the
-    /// <see cref="Oid4VciRequestFailureKind.RedirectRefused"/> refusal of a redirect answer, or the
-    /// endpoint's own <see cref="Oid4VciRequestFailureKind.ErrorResponse"/> such as <c>invalid_notification_id</c>.
+    /// <see cref="Oid4VciRequestFailureKind.RedirectRefused"/> refusal of a redirect answer, the
+    /// endpoint's own <see cref="Oid4VciRequestFailureKind.ErrorResponse"/> such as <c>invalid_notification_id</c>,
+    /// or, before any request, a <see cref="Oid4VciRequestFailureKind.MalformedResponse"/> naming
+    /// <paramref name="notificationEndpoint"/> with no status when <paramref name="tokenType"/> is neither
+    /// <c>Bearer</c> nor <c>DPoP</c> (RFC 6749 Section 7.1) or is <c>DPoP</c> with DPoP not wired (RFC 9449 Section 7.1).
     /// </returns>
     public async ValueTask<Oid4VciRequestFailure?> SendCredentialNotificationAsync(
         string notificationId,
@@ -1248,6 +1362,13 @@ public sealed class Oid4VciWalletClient
         ArgumentException.ThrowIfNullOrWhiteSpace(tokenType);
         ArgumentNullException.ThrowIfNull(notificationEndpoint);
         ArgumentNullException.ThrowIfNull(context);
+
+        //RFC 6749 Section 7.1 and RFC 9449 Section 7.1: the Wallet presents a Bearer token, or a DPoP token when DPoP is
+        //wired, and uses no other.
+        if(RefuseTokenTypeNotUnderstood(notificationEndpoint, tokenType) is Oid4VciRequestFailure tokenTypeRefusal)
+        {
+            return tokenTypeRefusal;
+        }
 
         string requestBody = BuildNotificationRequestBody(notificationId, notificationEvent, eventDescription);
 
@@ -1600,6 +1721,97 @@ public sealed class Oid4VciWalletClient
 
 
     /// <summary>
+    /// Whether <paramref name="configuration"/> has DPoP wired: both
+    /// <see cref="Oid4VciWalletConfiguration.ConstructDpopProofAsync"/> and <see cref="Oid4VciWalletConfiguration.DpopKey"/>
+    /// set, so the Token Request carries a proof
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>: "the client MUST provide a
+    /// valid DPoP proof JWT in a DPoP header when making an access token request to the authorization server's token
+    /// endpoint").
+    /// </summary>
+    /// <param name="configuration">The configuration whose DPoP slots are read.</param>
+    /// <returns><see langword="true"/> when both DPoP slots are set.</returns>
+    private static bool IsDpopWired(Oid4VciWalletConfiguration configuration) =>
+        configuration.ConstructDpopProofAsync is not null && configuration.DpopKey is not null;
+
+
+    /// <summary>
+    /// The refusal of a handed-in access token the Wallet cannot use, before any request presents it, or
+    /// <see langword="null"/> when it can: a <c>Bearer</c> token, and a <c>DPoP</c> token when DPoP is wired
+    /// (<see cref="IsDpopWired"/>), the type compared case-insensitively
+    /// (<see cref="WellKnownAuthenticationSchemes.IsBearer"/>, <see cref="WellKnownAuthenticationSchemes.IsDPoP"/>;
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 Section 5.1</see>: "Value is case
+    /// insensitive."). A token of any other type is refused:
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-7.1">RFC 6749 Section 7.1</see>: "The client MUST NOT
+    /// use an access token if it does not understand the token type." A <c>DPoP</c> token is refused when DPoP is not
+    /// wired: <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "A DPoP-bound
+    /// access token is sent using the Authorization request header field per Section 11.6.2 of [RFC9110] with an
+    /// authentication scheme of DPoP.", and without a DPoP key the Wallet has no proof to send it with, while
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 Section 7.2</see> has a resource
+    /// supporting both schemes refuse it as a bearer token ("such a protected resource MUST reject a DPoP-bound access
+    /// token received as a bearer token per [RFC6750]."), so the Wallet does not send it. The guard serves the three
+    /// public entries that present a handed-in token; the Wallet's own Token Response reaches it with a type
+    /// <see cref="RequestAccessTokenAsync"/> has already held to the same two rules at the Token Endpoint. The refusal is
+    /// a <see cref="Oid4VciRequestFailureKind.MalformedResponse"/> naming <paramref name="endpoint"/>, the endpoint the
+    /// token would have been presented at, with no status, since nothing was sent, and no error code.
+    /// </summary>
+    /// <param name="endpoint">The endpoint the request would have presented the token at.</param>
+    /// <param name="tokenType">The access token's type, as the application handed it in.</param>
+    /// <returns>The refusal, or <see langword="null"/> when the Wallet can present the token.</returns>
+    private Oid4VciRequestFailure? RefuseTokenTypeNotUnderstood(Uri endpoint, string tokenType) =>
+        (WellKnownAuthenticationSchemes.IsBearer(tokenType), WellKnownAuthenticationSchemes.IsDPoP(tokenType), IsDpopWired(Configuration)) switch
+        {
+            (true, _, _) => null,
+            (false, true, true) => null,
+            (false, true, false) => PresentationRefusal(endpoint, DpopTokenTypeWithoutDpopKeyRule),
+            (false, false, _) => PresentationRefusal(endpoint, HandedInTokenTypeNotUnderstoodRule)
+        };
+
+
+    /// <summary>
+    /// The <see cref="Oid4VciRequestFailureKind.MalformedResponse"/> refusal of a handed-in access token made before
+    /// any request: <paramref name="endpoint"/>, the endpoint the token would have been presented at, no status, since
+    /// nothing was sent, no error code, and <paramref name="rule"/> as the description.
+    /// </summary>
+    /// <param name="endpoint">The endpoint the request would have presented the token at.</param>
+    /// <param name="rule">The rule the token's type breaks, in the library's own words.</param>
+    /// <returns>The refusal.</returns>
+    private static Oid4VciRequestFailure PresentationRefusal(Uri endpoint, string rule) =>
+        new()
+        {
+            Kind = Oid4VciRequestFailureKind.MalformedResponse,
+            Endpoint = endpoint,
+            StatusCode = null,
+            ErrorCode = null,
+            ErrorDescription = rule
+        };
+
+
+    /// <summary>
+    /// The description of the refusal of a handed-in access token whose type is neither <c>Bearer</c> nor <c>DPoP</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-7.1">RFC 6749 Section 7.1</see>).
+    /// </summary>
+    private static string HandedInTokenTypeNotUnderstoodRule { get; } =
+        "RFC 6749 Section 7.1 the access token's token_type is neither Bearer nor DPoP, and the Wallet does not use an access token whose type it does not understand.";
+
+
+    /// <summary>
+    /// The description of the refusal of a Token Response whose <c>token_type</c> is neither <c>Bearer</c> nor
+    /// <c>DPoP</c> (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-7.1">RFC 6749 Section 7.1</see>).
+    /// </summary>
+    private static string TokenResponseTokenTypeNotUnderstoodRule { get; } =
+        "RFC 6749 Section 7.1 the Token Response's token_type is neither Bearer nor DPoP, and the Wallet does not use an access token whose type it does not understand.";
+
+
+    /// <summary>
+    /// The description of the refusal of an access token typed <c>DPoP</c>, handed in or named by a Token Response, when
+    /// the Wallet has no DPoP wired
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>).
+    /// </summary>
+    private static string DpopTokenTypeWithoutDpopKeyRule { get; } =
+        "RFC 9449 Section 7.1 the access token is typed DPoP and the Wallet has no DPoP key to prove its possession, so it presents the token under no scheme.";
+
+
+    /// <summary>
     /// Builds the <see cref="Oid4VciRequestFailureKind.RedirectRefused"/> failure when
     /// <paramref name="response"/> is a redirect, an HTTP status of the 3xx class, answering a request
     /// that carried a credential: the refusal is recorded and typed by
@@ -1690,23 +1902,27 @@ public sealed class Oid4VciWalletClient
 
 
     /// <summary>
-    /// Sends a §7/§8/§9/§11 authorized JSON POST, carrying the access-token authorization per
-    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-2.1">RFC 6750 §2.1</see>
+    /// Sends an OID4VCI Section 7, 8, 9 or 11 authorized JSON POST, carrying the access-token authorization per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-2.1">RFC 6750 Section 2.1</see>
     /// (<c>Authorization: Bearer &lt;token&gt;</c>) or, when <paramref name="tokenType"/> is
     /// DPoP-bound and <see cref="Oid4VciWalletConfiguration.ConstructDpopProofAsync"/> is wired,
-    /// through <see cref="DpopNonceRetry.SendWithNonceRetryAsync"/> — the helper shared with the §6
-    /// Token Request and the AuthCode client — retrying exactly once on a <c>use_dpop_nonce</c>
-    /// challenge (RFC 9449 §9) carrying a <c>DPoP-Nonce</c> response header.
+    /// through <see cref="DpopNonceRetry.SendWithNonceRetryAsync"/>, the helper shared with the Section 6
+    /// Token Request and the AuthCode client, retrying exactly once on a <c>use_dpop_nonce</c>
+    /// challenge (RFC 9449 Section 9) carrying a <c>DPoP-Nonce</c> response header.
     /// </summary>
     /// <remarks>
+    /// Every public entry that reaches this method has run <see cref="RefuseTokenTypeNotUnderstood"/> first, or holds
+    /// the Wallet's own Token Response that <see cref="RequestAccessTokenAsync"/> held to the same rules, so the token
+    /// arriving here is a <c>Bearer</c> token or a <c>DPoP</c> token with DPoP wired; the <c>Bearer</c> branch's
+    /// condition names the DPoP slots as well, so a <c>DPoP</c> token is never sent with a proof the Wallet cannot make.
     /// Two challenge forms are recognised. Every OID4VCI 1.0 error response this Wallet's
-    /// resource requests receive is a §8.3.1 Credential Error Response shape — HTTP 400 with the
-    /// error code in the JSON body — so an OID4VCI Credential/Nonce/Deferred/Notification Endpoint
-    /// signals <c>use_dpop_nonce</c> the same way the §6 Token Endpoint does (HTTP 400 +
-    /// <c>error=use_dpop_nonce</c> in the body). RFC 9449 §9 additionally documents a generic
+    /// resource requests receive is a Section 8.3.1 Credential Error Response shape, HTTP 400 with the
+    /// error code in the JSON body, so an OID4VCI Credential, Nonce, Deferred or Notification Endpoint
+    /// signals <c>use_dpop_nonce</c> the same way the Section 6 Token Endpoint does (HTTP 400 and
+    /// <c>error=use_dpop_nonce</c> in the body). RFC 9449 Section 9 additionally documents a generic
     /// resource server's own form: "an HTTP 401 (Unauthorized) error code with an accompanying
     /// <c>WWW-Authenticate: DPoP</c> value" carrying <c>error="use_dpop_nonce"</c>
-    /// (<see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 §3</see> auth-param
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 Section 3</see> auth-param
     /// form). This Wallet recognises either so it retries against a conformant Issuer regardless
     /// of which form its Credential Endpoint chose. Each endpoint keeps its own nonce, under its scheme,
     /// authority and path, so the Nonce, Credential, Deferred and Notification Endpoints and the Token Endpoint

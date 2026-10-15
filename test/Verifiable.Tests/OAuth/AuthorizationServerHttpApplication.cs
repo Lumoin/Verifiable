@@ -203,6 +203,9 @@ internal sealed class AuthorizationServerHttpApplication
                 response = response with { Body = compactJar };
             }
 
+            //The fixture's answer rewrite decides the answer the listener emits.
+            response = Host?.RewriteAnswer?.Invoke(incomingRequest.Path, response) ?? response;
+
             IReadOnlyList<KeyValuePair<string, string>> appendedFieldLines =
                 Host?.AppendAnswerFieldLines?.Invoke(incomingRequest.Path, response) ?? [];
             await WriteResponseAsync(response, appendedFieldLines, context.Response, context.RequestAborted)

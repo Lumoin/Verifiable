@@ -4124,6 +4124,114 @@ internal sealed class TestHostShell: IAsyncDisposable
 
 
     /// <summary>
+    /// Has the default host's listener emit, on one answer, the body <paramref name="rewriteBody"/> makes of the body
+    /// the library gave: the answer numbered <paramref name="answerNumber"/> among the answers the endpoint at
+    /// <paramref name="endpointPath"/> gives after this call, counted from one. The answer is rewritten at the skin
+    /// before it is written (<see cref="HostedAuthorizationServer.RewriteAnswer"/>), its status and header fields kept,
+    /// so the listener emits the rewritten body and a client reads it through its own HTTP parsing. Every other answer
+    /// is written as the library gave it. A rewrite installed before is kept and runs first.
+    /// </summary>
+    /// <param name="endpointPath">The request path of the endpoint whose answer is rewritten, compared ordinally.</param>
+    /// <param name="answerNumber">The number of that endpoint's answer, from one, that is rewritten.</param>
+    /// <param name="rewriteBody">Makes the emitted body of the body the library gave.</param>
+    /// <returns>
+    /// The answers rewritten, in order, each with its request path, its status, the body the library gave and the body
+    /// emitted; filled as the answer is written.
+    /// </returns>
+    public List<(string Path, int StatusCode, string BodyBefore, string BodyAfter)> RewriteAnswerBody(
+        string endpointPath, int answerNumber, Func<string, string> rewriteBody)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(endpointPath);
+        ArgumentOutOfRangeException.ThrowIfLessThan(answerNumber, 1);
+        ArgumentNullException.ThrowIfNull(rewriteBody);
+
+        List<(string Path, int StatusCode, string BodyBefore, string BodyAfter)> rewrittenAnswers = [];
+        int answersAtEndpoint = 0;
+        HostedAuthorizationServer host = Default;
+        Func<string, ServerHttpResponse, ServerHttpResponse>? installed = host.RewriteAnswer;
+        host.RewriteAnswer = (path, response) =>
+        {
+            ServerHttpResponse earlier = installed?.Invoke(path, response) ?? response;
+            if(!string.Equals(path, endpointPath, StringComparison.Ordinal)
+                || Interlocked.Increment(ref answersAtEndpoint) != answerNumber)
+            {
+                return earlier;
+            }
+
+            string bodyBefore = earlier.Body;
+            string bodyAfter = rewriteBody(bodyBefore);
+            lock(rewrittenAnswers)
+            {
+                rewrittenAnswers.Add((path, earlier.StatusCode, bodyBefore, bodyAfter));
+            }
+
+            return earlier with { Body = bodyAfter };
+        };
+
+        return rewrittenAnswers;
+    }
+
+
+    /// <summary>
+    /// The JSON member a token response of a DPoP-bound access token carries, written as the library's token endpoint
+    /// writes it: <c>"token_type":"DPoP"</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>: "A token_type of DPoP
+    /// MUST be included in the access token response").
+    /// </summary>
+    public static string DpopTokenTypeMember { get; } = "\"token_type\":\"DPoP\"";
+
+
+    /// <summary>
+    /// The opening of a token response's <c>token_type</c> member as the library's token endpoint writes it: the member
+    /// name, the colon and the quote that opens the value.
+    /// </summary>
+    private static string TokenTypeMemberOpening { get; } = "\"token_type\":\"";
+
+
+    /// <summary>
+    /// The text of a token response body whose <c>token_type</c> member, written as the library's token endpoint
+    /// writes it (<c>"token_type":"</c>, the value, <c>"</c>), names <paramref name="tokenType"/> in place of the value
+    /// the library wrote, or, when <paramref name="tokenType"/> is <see langword="null"/>, with that member and the comma
+    /// that separates it from its neighbour removed, every other character kept. A body carrying no such member is
+    /// returned as it is.
+    /// </summary>
+    /// <param name="body">The token response body the library gave.</param>
+    /// <param name="tokenType">The <c>token_type</c> value to name, or <see langword="null"/> to remove the member.</param>
+    /// <returns>The rewritten body.</returns>
+    public static string RewriteTokenTypeMember(string body, string? tokenType)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+
+        int memberStart = body.IndexOf(TokenTypeMemberOpening, StringComparison.Ordinal);
+        int valueEnd = memberStart switch
+        {
+            < 0 => -1,
+            _ => body.IndexOf('"', memberStart + TokenTypeMemberOpening.Length, StringComparison.Ordinal)
+        };
+        if(valueEnd < 0)
+        {
+            return body;
+        }
+
+        int memberEnd = valueEnd + 1;
+        if(tokenType is not null)
+        {
+            return string.Concat(body.AsSpan(0, memberStart), $"\"token_type\":\"{tokenType}\"", body.AsSpan(memberEnd));
+        }
+
+        bool isFollowedByComma = memberEnd < body.Length && body[memberEnd] == ',';
+        bool isPrecededByComma = memberStart > 0 && body[memberStart - 1] == ',';
+
+        return (isFollowedByComma, isPrecededByComma) switch
+        {
+            (true, _) => string.Concat(body.AsSpan(0, memberStart), body.AsSpan(memberEnd + 1)),
+            (false, true) => string.Concat(body.AsSpan(0, memberStart - 1), body.AsSpan(memberEnd)),
+            _ => string.Concat(body.AsSpan(0, memberStart), body.AsSpan(memberEnd))
+        };
+    }
+
+
+    /// <summary>
     /// Records every request the default host's listener reads, in arrival order, with its request path and the
     /// <c>DPoP</c> field lines exactly as they arrived (an empty array when the request carries no <c>DPoP</c>
     /// field), at the skin's request reading (<see cref="HostedAuthorizationServer.ObserveArrivingRequest"/>) and
@@ -4645,13 +4753,15 @@ internal sealed class TestHostShell: IAsyncDisposable
         ClientRecord record,
         string redirectUri,
         CancellationToken cancellationToken = default) =>
-        CreateDpopEnabledOAuthClientAsync(record, redirectUri, observeFormPost: null, cancellationToken);
+        CreateDpopEnabledOAuthClientAsync(
+            record, redirectUri, observeFormPost: null, PolicyProfile.Haip10, requiresDpopTokenType: true, cancellationToken);
 
 
     /// <summary>
     /// The HTTP-backed DPoP-enabled client of
     /// <see cref="CreateDpopEnabledOAuthClientAsync(ClientRecord, string, CancellationToken)"/>, whose transport
-    /// first hands each form post to <paramref name="observeFormPost"/>.
+    /// first hands each form post to <paramref name="observeFormPost"/>, whose registration runs under
+    /// <paramref name="profile"/>, and whose infrastructure carries <paramref name="requiresDpopTokenType"/>.
     /// </summary>
     /// <param name="record">The server registration the client is built for.</param>
     /// <param name="redirectUri">The client's redirection URI.</param>
@@ -4659,12 +4769,19 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// Sees each form post the client sends, its endpoint, fields and headers, before the post crosses the wire,
     /// or <see langword="null"/> to observe none.
     /// </param>
+    /// <param name="profile">The policy profile of the client's registration of the authorization server.</param>
+    /// <param name="requiresDpopTokenType">
+    /// Whether the client refuses a token response whose <c>token_type</c> is not <c>DPoP</c>
+    /// (<see cref="OAuthClientInfrastructure.RequiresDpopTokenType"/>).
+    /// </param>
     /// <param name="cancellationToken">Cancellation of the listener start.</param>
     /// <returns>The client fixture; the caller disposes it.</returns>
     public async ValueTask<DpopClientFixture> CreateDpopEnabledOAuthClientAsync(
         ClientRecord record,
         string redirectUri,
         Action<Uri, IReadOnlyCollection<KeyValuePair<string, string>>, OutgoingHeaders>? observeFormPost,
+        PolicyProfile profile,
+        bool requiresDpopTokenType,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(record);
@@ -4753,7 +4870,8 @@ internal sealed class TestHostShell: IAsyncDisposable
                 ct),
             dpopKey: dpopKey,
             lookupDpopNonce: nonceCache.Lookup,
-            storeDpopNonce: nonceCache.Store);
+            storeDpopNonce: nonceCache.Store,
+            requiresDpopTokenType: requiresDpopTokenType);
 
         ClientRegistration registration = new()
         {
@@ -4761,7 +4879,7 @@ internal sealed class TestHostShell: IAsyncDisposable
             AuthorizationServerIssuer = issuerUriValue,
             RedirectUris = [new Uri(redirectUri)],
             AuthenticationMethod = ClientAuthenticationMethod.None,
-            Profile = PolicyProfile.Haip10
+            Profile = profile
         };
 
         return new DpopClientFixture(

@@ -260,10 +260,29 @@ public sealed record Oid4VciWalletConfiguration
     /// <summary>
     /// Stores a server-issued DPoP nonce extracted from the one <c>DPoP-Nonce</c> field of an answer,
     /// under the endpoint (scheme, authority and path) that supplied it.
-    /// <see langword="null"/> skips caching — the one allowed retry (RFC 9449 §8/§9) still happens
-    /// with the nonce the challenge just supplied; only persistence across calls is skipped.
+    /// <see langword="null"/> skips caching: the library's one retry on a nonce challenge (RFC 9449 Section 8,
+    /// Section 9) carries the nonce that challenge supplied, and only the keeping of a nonce across calls is skipped.
     /// </summary>
     public DpopNonceStoreDelegate? StoreDpopNonce { get; init; }
+
+    /// <summary>
+    /// Whether a Token Response to the Pre-Authorized Code Token Request whose <c>token_type</c> is not <c>DPoP</c>
+    /// is refused when DPoP is wired (<see cref="ConstructDpopProofAsync"/> and <see cref="DpopKey"/> set), so the
+    /// Token Request carries a proof.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>: "If the access token
+    /// response contains a different token_type value than DPoP, the access token protection provided by DPoP is not
+    /// given. The client MUST discard the response in this case if this protection is deemed important for the
+    /// security of the application; otherwise, the client may continue as in a regular OAuth interaction."
+    /// <see langword="true"/>, the default, deems the protection important: such a Token Response, the
+    /// <c>token_type</c> compared case-insensitively
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 Section 5.1</see>: "Value is case
+    /// insensitive."), is answered as <see cref="Oid4VciRequestFailureKind.MalformedResponse"/> and no Nonce or
+    /// Credential Request follows. <see langword="false"/> lets the application continue as in a regular OAuth
+    /// interaction. No effect when DPoP is not wired, and none on a token the application hands to
+    /// <see cref="Oid4VciWalletClient.IssueWithAccessTokenDetailedAsync"/>, whose type the Wallet presents by
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-7.1">RFC 6749 Section 7.1</see>.
+    /// </summary>
+    public bool RequiresDpopTokenType { get; init; } = true;
 
     /// <summary>
     /// Optional §10 response-decryption drop-out. Required when the Wallet asks

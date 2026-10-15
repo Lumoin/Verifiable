@@ -215,7 +215,10 @@ public readonly struct IdJagClient
 
     /// <summary>
     /// Redeems an ID-JAG via the JWT Bearer grant at the Resource Authorization Server's token endpoint
-    /// (§4.4). The returned token response carries the issued access token.
+    /// (Section 4.4). The returned token response carries the issued access token. With DPoP wired and
+    /// <see cref="OAuthClientInfrastructure.RequiresDpopTokenType"/> set, a token response whose <c>token_type</c> is
+    /// not <c>DPoP</c> fails with an <see cref="OAuthInvalidFieldValue"/> naming <c>token_type</c> and its token is never
+    /// surfaced (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>).
     /// </summary>
     /// <param name="registration">The registration identifying the Resource Authorization Server.</param>
     /// <param name="options">The redeem inputs (the ID-JAG assertion, client signing material).</param>

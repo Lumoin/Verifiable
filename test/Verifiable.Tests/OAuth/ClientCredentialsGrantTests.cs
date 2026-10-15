@@ -3197,6 +3197,167 @@ internal sealed class ClientCredentialsGrantTests
     }
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>: "If the access token
+    /// response contains a different token_type value than DPoP, the access token protection provided by DPoP is not
+    /// given. The client MUST discard the response in this case if this protection is deemed important for the
+    /// security of the application"; <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 Section
+    /// 5.1</see>: "token_type REQUIRED. The type of the token issued as described in Section 7.1. Value is case
+    /// insensitive." A DPoP-wired client, which deems the protection important unless told otherwise, asks the token
+    /// endpoint for a <c>client_credentials</c> token over the wire; the listener emits the 200 answering the retry of
+    /// the challenged request with its <c>token_type</c> naming <paramref name="tokenType"/>, and the client's
+    /// transport reads that body. The client answers <c>invalid_response</c> naming <c>token_type</c> with no value of
+    /// the server echoed, and surfaces no token.
+    /// </summary>
+    /// <param name="tokenType">The <c>token_type</c> the 200 names: <c>Bearer</c>, <c>N_A</c> or <c>bearer</c>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("Bearer", DisplayName = "Bearer")]
+    [DataRow("N_A", DisplayName = "N_A")]
+    [DataRow("bearer", DisplayName = "bearer")]
+    public async Task ClientDiscardsATokenResponseWhoseTokenTypeIsNotDpopAsync(string tokenType)
+    {
+        TokenTypeAnswerRun run = await RequestTokenUnderAnEmittedTokenTypeAsync(tokenType, requiresDpopTokenType: true).ConfigureAwait(false);
+
+        AssertTheEmittedTokenTypeWasRead(run, tokenType);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, run.Result.Outcome,
+            $"ErrorCode={run.Result.ErrorCode} ErrorDescription={run.Result.ErrorDescription}");
+        Assert.AreEqual("invalid_response", run.Result.ErrorCode);
+        Assert.AreEqual(TokenTypeRefusalDescription, run.Result.ErrorDescription);
+        OAuthInvalidFieldValue refusal = Assert.IsInstanceOfType<OAuthInvalidFieldValue>(run.Result.ResponseError);
+        Assert.AreEqual(OAuthRequestParameterNames.TokenType, refusal.FieldName);
+        Assert.AreEqual(string.Empty, refusal.ReceivedValue, "The server's value is never echoed.");
+        Assert.IsNull(run.Result.Body, "No token is surfaced.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 Section 5.1</see>: "token_type REQUIRED.
+    /// The type of the token issued as described in Section 7.1. Value is case insensitive." A DPoP-wired client asks
+    /// the token endpoint for a <c>client_credentials</c> token over the wire; the listener emits the 200 answering the
+    /// retry of the challenged request with its <c>token_type</c> naming <c>dpop</c>, and the client's transport reads
+    /// that body. The client reads <c>dpop</c> as the <c>DPoP</c> token type and surfaces the token with the
+    /// <c>token_type</c> as received.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ClientReadsTheDpopTokenTypeInAnyCaseAsync()
+    {
+        TokenTypeAnswerRun run = await RequestTokenUnderAnEmittedTokenTypeAsync("dpop", requiresDpopTokenType: true).ConfigureAwait(false);
+
+        AssertTheEmittedTokenTypeWasRead(run, "dpop");
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, run.Result.Outcome,
+            $"ErrorCode={run.Result.ErrorCode} ErrorDescription={run.Result.ErrorDescription}");
+        Assert.AreEqual("dpop", (string)run.Result.Body![OAuthRequestParameterNames.TokenType]);
+        Assert.IsFalse(string.IsNullOrEmpty((string)run.Result.Body[OAuthRequestParameterNames.AccessToken]), "The token is surfaced.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5">RFC 9449 Section 5</see>: "The client MUST discard
+    /// the response in this case if this protection is deemed important for the security of the application;
+    /// otherwise, the client may continue as in a regular OAuth interaction." A DPoP-wired client whose application
+    /// does not deem the protection important asks the token endpoint for a <c>client_credentials</c> token over the
+    /// wire; the listener emits the 200 answering the retry of the challenged request with its <c>token_type</c> naming
+    /// <c>Bearer</c>, and the client's transport reads that body. The client continues: it surfaces the token with
+    /// <c>token_type</c> <c>Bearer</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ClientNotRequiringTheDpopTokenTypeContinuesWithABearerResponseAsync()
+    {
+        TokenTypeAnswerRun run = await RequestTokenUnderAnEmittedTokenTypeAsync(
+            WellKnownAuthenticationSchemes.Bearer, requiresDpopTokenType: false).ConfigureAwait(false);
+
+        AssertTheEmittedTokenTypeWasRead(run, WellKnownAuthenticationSchemes.Bearer);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, run.Result.Outcome,
+            $"ErrorCode={run.Result.ErrorCode} ErrorDescription={run.Result.ErrorDescription}");
+        Assert.AreEqual(WellKnownAuthenticationSchemes.Bearer, (string)run.Result.Body![OAuthRequestParameterNames.TokenType]);
+        Assert.IsFalse(string.IsNullOrEmpty((string)run.Result.Body[OAuthRequestParameterNames.AccessToken]), "The token is surfaced.");
+    }
+
+
+    /// <summary>
+    /// The <see cref="AuthCodeFlowEndpointResult.ErrorDescription"/> of a token response refused for its
+    /// <c>token_type</c>: the field name, then the reason the refusal carries.
+    /// </summary>
+    private static string TokenTypeRefusalDescription { get; } =
+        "token_type: The token response to a request that carried a DPoP proof names a token_type other than DPoP.";
+
+
+    /// <summary>
+    /// What a row of the emitted <c>token_type</c> observed: the client's answer, the answers the listener emitted
+    /// with a body other than the library's, and the body of every answer the client's transport read, in order.
+    /// </summary>
+    /// <param name="Result">The client's answer to the <c>client_credentials</c> request.</param>
+    /// <param name="RewrittenAnswers">The answers emitted with a body other than the library's.</param>
+    /// <param name="ReadBodies">The body of every answer the client's transport read.</param>
+    private sealed record TokenTypeAnswerRun(
+        AuthCodeFlowEndpointResult Result,
+        List<(string Path, int StatusCode, string BodyBefore, string BodyAfter)> RewrittenAnswers,
+        List<string> ReadBodies);
+
+
+    /// <summary>
+    /// Registers the machine client, wires DPoP on the host, has the listener emit the token endpoint's second answer
+    /// (the 200 answering the retry of the request the endpoint challenged for a nonce) with its <c>token_type</c>
+    /// naming <paramref name="tokenType"/>, and asks for a <c>client_credentials</c> token over the wire through a
+    /// DPoP-wired client whose transport records the body of every answer it read.
+    /// </summary>
+    /// <param name="tokenType">The <c>token_type</c> the emitted 200 names.</param>
+    /// <param name="requiresDpopTokenType">The client's <see cref="OAuthClientInfrastructure.RequiresDpopTokenType"/>.</param>
+    /// <returns>The run.</returns>
+    private async Task<TokenTypeAnswerRun> RequestTokenUnderAnEmittedTokenTypeAsync(string tokenType, bool requiresDpopTokenType)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterMachineClientAsync(app).ConfigureAwait(false);
+        Uri tokenUrl = await StartDpopTokenEndpointAsync(app, material).ConfigureAwait(false);
+        await AdmitTheMachineClientByItsIdentifierAsync(app).ConfigureAwait(false);
+        List<(string Path, int StatusCode, string BodyBefore, string BodyAfter)> rewrittenAnswers = app.RewriteAnswerBody(
+            tokenUrl.AbsolutePath, 2, body => TestHostShell.RewriteTokenTypeMember(body, tokenType));
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+        HttpClient httpClient = app.Host("default").SharedHttpClient!;
+        List<string> readBodies = [];
+
+        OAuthClient client = BuildDpopMachineClient(
+            material.Registration.IssuerUri!, tokenUrl, dpopKey, new InMemoryDpopNonceCache(), TestHostShell.LoopbackOutboundFetchPolicy,
+            async (endpoint, fields, headers, ct) =>
+            {
+                HttpResponseData answer = await HttpClientTransport.SendFormPostAsync(httpClient, endpoint, fields, headers, ct).ConfigureAwait(false);
+                readBodies.Add(answer.Body);
+
+                return answer;
+            },
+            requiresDpopTokenType);
+        AuthCodeFlowEndpointResult result = await client.ClientCredentials.RequestTokenAsync(
+            MachineClientRegistration(material.Registration.IssuerUri!), scope: MachineScope, resource: null, [],
+            clientAssertionOptions: null, TestContext.CancellationToken).ConfigureAwait(false);
+
+        return new TokenTypeAnswerRun(result, rewrittenAnswers, readBodies);
+    }
+
+
+    /// <summary>
+    /// Asserts that the listener emitted one 200 whose body the library wrote with <c>"token_type":"DPoP"</c>, with that
+    /// member naming <paramref name="tokenType"/>, and that the last body the client's transport read is that emitted
+    /// body.
+    /// </summary>
+    /// <param name="run">The run.</param>
+    /// <param name="tokenType">The <c>token_type</c> the emitted body names.</param>
+    private static void AssertTheEmittedTokenTypeWasRead(TokenTypeAnswerRun run, string tokenType)
+    {
+        (_, int statusCode, string bodyBefore, string bodyAfter) = Assert.ContainsSingle(run.RewrittenAnswers,
+            "The listener emitted one answer with a body other than the library's.");
+        Assert.AreEqual(200, statusCode, "The altered answer is the token endpoint's 200.");
+        Assert.Contains(TestHostShell.DpopTokenTypeMember, bodyBefore, StringComparison.Ordinal, bodyBefore);
+        Assert.Contains($"\"token_type\":\"{tokenType}\"", bodyAfter, StringComparison.Ordinal, bodyAfter);
+        Assert.AreEqual(bodyAfter, run.ReadBodies[^1], "The client's transport read the emitted body.");
+    }
+
+
     /// <summary>The row whose <c>DPoP-Nonce</c> field line the server emits on the 200 answering the retry of the challenged request.</summary>
     private const string RetryAnswerRow = "retry-answer";
 
@@ -3915,15 +4076,21 @@ internal sealed class ClientCredentialsGrantTests
     /// <param name="tokenUrl">The token endpoint URL.</param>
     /// <param name="dpopKey">The client's DPoP key.</param>
     /// <param name="nonceCache">The client's nonce cache.</param>
+    /// <param name="requiresDpopTokenType">
+    /// Whether the client refuses a token response whose <c>token_type</c> is not <c>DPoP</c>
+    /// (<see cref="OAuthClientInfrastructure.RequiresDpopTokenType"/>).
+    /// </param>
     /// <returns>The client.</returns>
     private OAuthClient BuildDpopMachineClientOverWire(
-        TestHostShell app, VerifierKeyMaterial material, Uri tokenUrl, DpopKey dpopKey, InMemoryDpopNonceCache nonceCache)
+        TestHostShell app, VerifierKeyMaterial material, Uri tokenUrl, DpopKey dpopKey, InMemoryDpopNonceCache nonceCache,
+        bool requiresDpopTokenType = true)
     {
         HttpClient httpClient = app.Host("default").SharedHttpClient!;
 
         return BuildDpopMachineClient(
             material.Registration.IssuerUri!, tokenUrl, dpopKey, nonceCache, TestHostShell.LoopbackOutboundFetchPolicy,
-            (endpoint, fields, headers, ct) => HttpClientTransport.SendFormPostAsync(httpClient, endpoint, fields, headers, ct));
+            (endpoint, fields, headers, ct) => HttpClientTransport.SendFormPostAsync(httpClient, endpoint, fields, headers, ct),
+            requiresDpopTokenType);
     }
 
 
@@ -3938,6 +4105,10 @@ internal sealed class ClientCredentialsGrantTests
     /// <param name="nonceCache">The client's nonce cache.</param>
     /// <param name="outboundFetchPolicy">The outbound policy every dial is evaluated against.</param>
     /// <param name="sendFormPostAsync">The transport of each form post: the endpoint, fields and headers.</param>
+    /// <param name="requiresDpopTokenType">
+    /// Whether the client refuses a token response whose <c>token_type</c> is not <c>DPoP</c>
+    /// (<see cref="OAuthClientInfrastructure.RequiresDpopTokenType"/>).
+    /// </param>
     /// <returns>The client.</returns>
     private OAuthClient BuildDpopMachineClient(
         Uri issuer,
@@ -3945,7 +4116,8 @@ internal sealed class ClientCredentialsGrantTests
         DpopKey dpopKey,
         InMemoryDpopNonceCache nonceCache,
         OutboundFetchPolicy outboundFetchPolicy,
-        Func<Uri, IReadOnlyCollection<KeyValuePair<string, string>>, OutgoingHeaders, CancellationToken, ValueTask<HttpResponseData>> sendFormPostAsync)
+        Func<Uri, IReadOnlyCollection<KeyValuePair<string, string>>, OutgoingHeaders, CancellationToken, ValueTask<HttpResponseData>> sendFormPostAsync,
+        bool requiresDpopTokenType = true)
     {
         AuthorizationServerMetadata metadata = new()
         {
@@ -3980,7 +4152,8 @@ internal sealed class ClientCredentialsGrantTests
                 MicrosoftCryptographicFunctionsAdapter.SignP256Async, Pool, ct),
             dpopKey: dpopKey,
             lookupDpopNonce: nonceCache.Lookup,
-            storeDpopNonce: nonceCache.Store);
+            storeDpopNonce: nonceCache.Store,
+            requiresDpopTokenType: requiresDpopTokenType);
 
         return new OAuthClient(infrastructure);
     }

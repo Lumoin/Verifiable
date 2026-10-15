@@ -27,9 +27,11 @@ public sealed record Oid4VciRequestFailure
     public Type? FailureKind { get; init; }
 
     /// <summary>
-    /// The HTTP status code the endpoint answered with, or <see langword="null"/> when
-    /// <see cref="Kind"/> is <see cref="Oid4VciRequestFailureKind.OutboundPolicyDenied"/> and no
-    /// response was received.
+    /// The HTTP status code the endpoint answered with, or <see langword="null"/> when no response was
+    /// received: <see cref="Kind"/> is <see cref="Oid4VciRequestFailureKind.OutboundPolicyDenied"/>, or
+    /// <see cref="Oid4VciRequestFailureKind.MalformedResponse"/> for a handed-in access token the Wallet cannot
+    /// present, whose type it does not understand or is <c>DPoP</c> with DPoP not wired, refused before any request
+    /// presented it.
     /// </summary>
     public required int? StatusCode { get; init; }
 
@@ -61,7 +63,9 @@ public sealed record Oid4VciRequestFailure
 
 /// <summary>
 /// The ways an <see cref="Oid4VciWalletClient"/> request fails on input the Wallet does not
-/// control.
+/// control, or on an access token the Wallet is handed whose type it does not understand or cannot
+/// present (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-7.1">RFC 6749 Section 7.1</see>,
+/// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>).
 /// </summary>
 public enum Oid4VciRequestFailureKind
 {
@@ -84,7 +88,14 @@ public enum Oid4VciRequestFailureKind
     /// <summary>
     /// The endpoint answered a success status whose body or content type breaks a rule the section
     /// names, or an error response whose <c>error</c> is empty or holds a char outside RFC 6749
-    /// Section 5.2's set <c>%x20-21 / %x23-5B / %x5D-7E</c>;
+    /// Section 5.2's set <c>%x20-21 / %x23-5B / %x5D-7E</c>. A Token Response the Wallet does not use
+    /// is one: its <c>token_type</c> absent (RFC 6749 Section 5.1), other than <c>DPoP</c> when DPoP is
+    /// wired and required (RFC 9449 Section 5), neither <c>Bearer</c> nor <c>DPoP</c> (RFC 6749 Section 7.1),
+    /// or <c>DPoP</c> with DPoP not wired (RFC 9449 Section 7.1), with <see cref="Oid4VciRequestFailure.Endpoint"/>
+    /// the Token Endpoint and the answer's <see cref="Oid4VciRequestFailure.StatusCode"/>. Or the Wallet was handed
+    /// an access token whose type it does not understand, or typed <c>DPoP</c> with DPoP not wired, and sent nothing,
+    /// with <see cref="Oid4VciRequestFailure.Endpoint"/> the endpoint the token would have been presented at and no
+    /// <see cref="Oid4VciRequestFailure.StatusCode"/>.
     /// <see cref="Oid4VciRequestFailure.ErrorDescription"/> names which one.
     /// </summary>
     MalformedResponse,

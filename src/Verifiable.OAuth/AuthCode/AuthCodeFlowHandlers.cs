@@ -7,6 +7,7 @@ using Verifiable.Core.Assessment;
 using Verifiable.Cryptography;
 using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Client;
+using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Validation;
 
@@ -131,7 +132,10 @@ public static class AuthCodeFlowHandlers
     /// <summary>
     /// Handles a pushed authorization request. Generates PKCE parameters, POSTs to
     /// the PAR endpoint, persists <see cref="ParCompletedState"/> state, and returns a
-    /// redirect URI for the caller to forward to the user agent.
+    /// redirect URI for the caller to forward to the user agent. When DPoP is wired, the pushed body carries
+    /// <c>dpop_jkt</c>, the thumbprint of the client's DPoP key (<see cref="ComputeDpopJkt"/>), beside the PKCE pair:
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10.1">RFC 9449 Section 10.1</see>, "dpop_jkt MUST be
+    /// included alongside other authorization request parameters in the POST body of the PAR request."
     /// </summary>
     /// <remarks>
     /// The send attaches no client authentication: the request carries no <c>client_assertion</c>
@@ -242,11 +246,20 @@ public static class AuthCodeFlowHandlers
         //indicators joined by a space into one occurrence.
         TokenEndpointClientOperations.AddResourceOccurrences(formFields, resource);
 
+        //RFC 9449 Section 10.1: "dpop_jkt MUST be included alongside other authorization request parameters in
+        //the POST body of the PAR request." Sent once, when DPoP is wired; the pushed request itself carries no
+        //DPoP proof.
+        if(ComputeDpopJkt(infrastructure) is string dpopJkt)
+        {
+            formFields[OAuthRequestParameterNames.DpopJkt] = dpopJkt;
+        }
+
         //RFC 9126 section 2: the pushed request carries the whole authorization request, so fields
         //this handler does not own - OID4VCI's authorization_details and issuer_state among them -
         //ride verbatim, exactly as the JAR path already carries them. The flow-owned parameters
         //above always win: an additional field cannot override the client identity, PKCE material,
-        //or state this handler just minted, and scope was already folded in.
+        //or state this handler just minted, and scope was already folded in; a request_uri, which a
+        //pushed request never carries (RFC 9126 Section 2.1), and a request are dropped as well.
         AddAdditionalAuthorizationFields(formFields, fields);
 
         if(TokenEndpointClientOperations.EvaluateOutboundPolicy(metadata.PushedAuthorizationRequestEndpoint!, context, infrastructure) is AuthCodeFlowEndpointResult parPolicyDenial)
@@ -339,7 +352,9 @@ public static class AuthCodeFlowHandlers
     /// does, refuses before building anything when the metadata requires pushed authorization
     /// requests, mints <c>state</c> and a fresh PKCE pair through the same private helpers PAR uses,
     /// and returns a redirect straight to the authorization endpoint carrying the request on the
-    /// front channel instead of a <c>request_uri</c>.
+    /// front channel instead of a <c>request_uri</c>; when DPoP is wired, the request carries <c>dpop_jkt</c>, the
+    /// thumbprint of the client's DPoP key (<see cref="ComputeDpopJkt"/>;
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10">RFC 9449 Section 10</see>).
     /// </summary>
     /// <remarks>
     /// This leg has no PAR response of its own, so — following the precedent
@@ -439,7 +454,8 @@ public static class AuthCodeFlowHandlers
         ImmutableArray<string> requestedResource = ReadNamedResource(resource);
 
         Uri authorizationUri = BuildDirectAuthorizeRedirectUri(
-            metadata.AuthorizationEndpoint!, registration.ClientId.Value, redirectUri, scopes, state, pkce, resource, fields);
+            metadata.AuthorizationEndpoint!, registration.ClientId.Value, redirectUri, scopes, state, pkce,
+            ComputeDpopJkt(infrastructure), resource, fields);
 
         ParCompletedState parCompleted = new()
         {
@@ -469,9 +485,9 @@ public static class AuthCodeFlowHandlers
     /// Builds the direct authorization redirect URI per RFC 6749 §4.1.1: <c>response_type=code</c>,
     /// <c>client_id</c>, <c>redirect_uri</c>, <c>scope</c> when <paramref name="scopes"/> names at
     /// least one value (<see cref="AddScopeWhenNamed"/>), and <c>state</c>, plus the PKCE pair per
-    /// RFC 7636 §4.3, each <paramref name="resource"/> entry as its own repeated occurrence, and the
-    /// caller's <paramref name="additionalFields"/> that are not one of
-    /// <see cref="AuthorizationFlowOwnedFieldNames"/>.
+    /// RFC 7636 Section 4.3, the <c>dpop_jkt</c> of RFC 9449 Section 10 when <paramref name="dpopJkt"/> names one, each
+    /// <paramref name="resource"/> entry as its own repeated occurrence, and the caller's
+    /// <paramref name="additionalFields"/> that are not one of <see cref="AuthorizationFlowOwnedFieldNames"/>.
     /// </summary>
     /// <param name="authorizationEndpoint">The authorization endpoint the redirect targets.</param>
     /// <param name="clientId">The client identifier sent as <c>client_id</c>.</param>
@@ -479,6 +495,10 @@ public static class AuthCodeFlowHandlers
     /// <param name="scopes">The scope values the caller named; empty sends no <c>scope</c> parameter.</param>
     /// <param name="state">The <c>state</c> value this start minted.</param>
     /// <param name="pkce">The PKCE pair whose challenge and method are sent.</param>
+    /// <param name="dpopJkt">
+    /// The thumbprint of the client's DPoP key sent as <c>dpop_jkt</c> (<see cref="ComputeDpopJkt"/>), or
+    /// <see langword="null"/> to send none.
+    /// </param>
     /// <param name="resource">The RFC 8707 resource indicators, each sent as its own occurrence.</param>
     /// <param name="additionalFields">The caller's further fields, flow-owned names skipped.</param>
     /// <returns>The authorization endpoint URI carrying the request on its query.</returns>
@@ -489,6 +509,7 @@ public static class AuthCodeFlowHandlers
         ImmutableArray<string> scopes,
         string state,
         PkceParameters pkce,
+        string? dpopJkt,
         IReadOnlyList<string>? resource,
         IReadOnlyDictionary<string, string> additionalFields)
     {
@@ -503,6 +524,14 @@ public static class AuthCodeFlowHandlers
         query[OAuthRequestParameterNames.State] = state;
         query[OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge;
         query[OAuthRequestParameterNames.CodeChallengeMethod] = pkce.Method.ToString().ToUpperInvariant();
+
+        //RFC 9449 Section 10, Figure 25: the dpop_jkt of the direct authorization request, after the PKCE pair;
+        //Section 10.1: "Allowing both mechanisms ensures that clients using dpop_jkt do not need to distinguish
+        //between front-channel and pushed authorization requests".
+        if(dpopJkt is not null)
+        {
+            query[OAuthRequestParameterNames.DpopJkt] = dpopJkt;
+        }
 
         TokenEndpointClientOperations.AddResourceOccurrences(query, resource);
         AddAdditionalAuthorizationFields(query, additionalFields);
@@ -838,6 +867,15 @@ public static class AuthCodeFlowHandlers
         }
 
         TokenResponse tokenResponse = tokenResult.Value;
+
+        //RFC 9449 Section 5: a token response naming a token_type other than DPoP to a request that carried a
+        //proof is discarded when the protection is deemed important; nothing is saved and no token is surfaced,
+        //so the flow keeps its code-received state.
+        if(TokenEndpointClientOperations.RefuseTokenTypeOtherThanDpop(infrastructure, tokenResponse) is OAuthInvalidFieldValue tokenTypeRefusal)
+        {
+            return TokenEndpointClientOperations.BuildEndpointResultFromParseError(tokenTypeRefusal);
+        }
+
         var tokenReceived = new TokenReceivedState
         {
             FlowId = codeState.FlowId,
@@ -1061,6 +1099,13 @@ public static class AuthCodeFlowHandlers
         }
 
         TokenResponse tokenResponse = refreshResult.Value;
+
+        //RFC 9449 Section 5: the refresh's token response is discarded on the same rule as the code redemption's.
+        if(TokenEndpointClientOperations.RefuseTokenTypeOtherThanDpop(infrastructure, tokenResponse) is OAuthInvalidFieldValue refreshTokenTypeRefusal)
+        {
+            return TokenEndpointClientOperations.BuildEndpointResultFromParseError(refreshTokenTypeRefusal);
+        }
+
         var body = new Dictionary<string, object>
         {
             [OAuthRequestParameterNames.AccessToken] = tokenResponse.AccessToken,
@@ -1097,8 +1142,10 @@ public static class AuthCodeFlowHandlers
     /// §3.1), <c>resource</c> only when <see cref="AuthCodeStartJarParOptions.Resource"/> names an
     /// indicator (a JSON string for one and an array for several, RFC 8707 §2.1), <c>state</c>,
     /// <c>nonce</c>, the PKCE challenge and its method, <c>iat</c>, <c>nbf</c>, <c>exp</c>,
-    /// <c>iss</c> and <c>aud</c> (<see cref="AuthCodeJarSigning"/>), and POSTs it to the PAR endpoint
-    /// with the outer <c>client_id</c> + <c>request</c> body fields. Persists
+    /// <c>iss</c>, <c>aud</c> and, when DPoP is wired, <c>dpop_jkt</c> (<see cref="ComputeDpopJkt"/>;
+    /// <see cref="AuthCodeJarSigning"/>), and POSTs it to the PAR endpoint
+    /// with the outer <c>client_id</c> + <c>request</c> body fields, a caller's additional field under a flow-owned
+    /// name dropped (<see cref="AuthorizationFlowOwnedFieldNames"/>). Persists
     /// <see cref="ParCompletedState"/> with the PKCE verifier and the same resource indicators the
     /// object signs, and returns the authorize redirect URI carrying the issued <c>request_uri</c>.
     /// </summary>
@@ -1165,7 +1212,7 @@ public static class AuthCodeFlowHandlers
         ImmutableArray<string> requestedResource = ReadNamedResource(jarOptions.Resource);
 
         AuthCodeRequestObject requestObject = BuildJarRequestObject(
-            registration, jarOptions, pkce, state, nonce, now, requestedResource);
+            registration, jarOptions, pkce, state, nonce, now, requestedResource, ComputeDpopJkt(infrastructure));
 
         string compactJar = await AuthCodeJarSigning.SignAsync(
             requestObject,
@@ -1177,15 +1224,16 @@ public static class AuthCodeFlowHandlers
             jarOptions.MemoryPool,
             cancellationToken).ConfigureAwait(false);
 
+        //RFC 9126 Section 3: "All other request parameters, i.e., those pertaining to the authorization request
+        //itself, MUST appear as claims of the JWT representing the authorization request." The outer body carries
+        //the client_id and the request this start composes; a caller's field under a flow-owned name, dpop_jkt,
+        //client_id, request and request_uri among them, is dropped rather than sent beside or over them.
         OutgoingFormFields parBody = new()
         {
             [OAuthRequestParameterNames.ClientId] = registration.ClientId.Value,
             [OAuthRequestParameterNames.Request] = compactJar
         };
-        foreach((string key, string value) in jarOptions.AdditionalFields.Fields)
-        {
-            parBody[key] = value;
-        }
+        AddAdditionalAuthorizationFields(parBody, jarOptions.AdditionalFields.Fields);
 
         if(TokenEndpointClientOperations.EvaluateOutboundPolicy(metadata.PushedAuthorizationRequestEndpoint!, context, infrastructure) is AuthCodeFlowEndpointResult jarParPolicyDenial)
         {
@@ -1278,9 +1326,10 @@ public static class AuthCodeFlowHandlers
     /// names a value (RFC 6749 §3.1), <c>resource</c> only when
     /// <see cref="AuthCodeStartJarAuthorizeOptions.Resource"/> names an indicator (a JSON string for
     /// one and an array for several, RFC 8707 §2.1), <c>state</c>, <c>nonce</c>, the PKCE challenge
-    /// and its method, <c>iat</c>, <c>nbf</c>, <c>exp</c>, <c>iss</c> and <c>aud</c>
-    /// (<see cref="AuthCodeJarSigning"/>), and the handler builds a redirect URL carrying
-    /// <c>request=&lt;compact-jws&gt;</c> alongside the outer <c>client_id</c>. The PKCE verifier and
+    /// and its method, <c>iat</c>, <c>nbf</c>, <c>exp</c>, <c>iss</c>, <c>aud</c> and, when DPoP is wired,
+    /// <c>dpop_jkt</c> (<see cref="ComputeDpopJkt"/>; <see cref="AuthCodeJarSigning"/>), and the handler builds a
+    /// redirect URL carrying <c>request=&lt;compact-jws&gt;</c> alongside the outer <c>client_id</c>, a caller's
+    /// additional field under a flow-owned name dropped (<see cref="AuthorizationFlowOwnedFieldNames"/>). The PKCE verifier and
     /// the same resource indicators the object signs are persisted so the eventual token exchange can
     /// complete and name them.
     /// </summary>
@@ -1351,7 +1400,8 @@ public static class AuthCodeFlowHandlers
             Exp = now.Add(jarOptions.JarLifetime),
             Iss = registration.ClientId.Value,
             Aud = registration.AuthorizationServerIssuer.OriginalString,
-            Resource = JoinRequestObjectResource(requestedResource)
+            Resource = JoinRequestObjectResource(requestedResource),
+            DpopJkt = ComputeDpopJkt(infrastructure)
         };
 
         string compactJar = await AuthCodeJarSigning.SignAsync(
@@ -1408,6 +1458,10 @@ public static class AuthCodeFlowHandlers
     /// <param name="nonce">The <c>nonce</c> value this start signs.</param>
     /// <param name="now">The instant the object is issued at.</param>
     /// <param name="resource">The resource indicators the request names, empty when none.</param>
+    /// <param name="dpopJkt">
+    /// The thumbprint of the client's DPoP key the object signs as its <c>dpop_jkt</c> claim
+    /// (<see cref="ComputeDpopJkt"/>), or <see langword="null"/> to sign none.
+    /// </param>
     /// <returns>The request object to sign.</returns>
     private static AuthCodeRequestObject BuildJarRequestObject(
         ClientRegistration registration,
@@ -1416,7 +1470,8 @@ public static class AuthCodeFlowHandlers
         string state,
         string nonce,
         DateTimeOffset now,
-        ImmutableArray<string> resource) => new()
+        ImmutableArray<string> resource,
+        string? dpopJkt) => new()
         {
             ClientId = registration.ClientId.Value,
             ResponseType = WellKnownResponseTypes.Code,
@@ -1431,7 +1486,8 @@ public static class AuthCodeFlowHandlers
             Exp = now.Add(jarOptions.JarLifetime),
             Iss = registration.ClientId.Value,
             Aud = registration.AuthorizationServerIssuer.OriginalString,
-            Resource = JoinRequestObjectResource(resource)
+            Resource = JoinRequestObjectResource(resource),
+            DpopJkt = dpopJkt
         };
 
 
@@ -1525,29 +1581,47 @@ public static class AuthCodeFlowHandlers
     };
 
 
+    /// <summary>
+    /// Builds the authorization redirect URI of a request object passed by value
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9101#section-5.1">RFC 9101 Section 5.1</see>): the outer
+    /// <c>client_id</c> and the <c>request</c> carrying <paramref name="compactJar"/>, then the caller's
+    /// <paramref name="additionalFields"/> that are not one of <see cref="AuthorizationFlowOwnedFieldNames"/>, so the
+    /// query carries the <c>client_id</c>, the <c>request</c> and the caller's fields under names the start does not
+    /// own, and the authorization server uses the parameters of the signed object
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9101#section-6.3">RFC 9101 Section 6.3</see>: "The authorization
+    /// server MUST only use the parameters in the Request Object, even if the same parameter is provided in the query
+    /// parameter. The client ID values in the "client_id" request parameter and in the Request Object "client_id" claim
+    /// MUST be identical.").
+    /// </summary>
+    /// <param name="authorizationEndpoint">The authorization endpoint the redirect targets.</param>
+    /// <param name="clientId">The client identifier sent as the outer <c>client_id</c>.</param>
+    /// <param name="compactJar">The signed request object sent as <c>request</c>.</param>
+    /// <param name="additionalFields">The caller's further fields, flow-owned names skipped.</param>
+    /// <returns>The authorization endpoint URI carrying the request object on its query.</returns>
     private static Uri BuildJarAuthorizeRedirectUri(
         Uri authorizationEndpoint,
         string clientId,
         string compactJar,
         OAuthFormEncodedFields additionalFields)
     {
+        OutgoingFormFields query = new()
+        {
+            [OAuthRequestParameterNames.ClientId] = clientId,
+            [OAuthRequestParameterNames.Request] = compactJar
+        };
+        AddAdditionalAuthorizationFields(query, additionalFields.Fields);
+
         StringBuilder builder = new();
         _ = builder.Append(authorizationEndpoint);
-        _ = builder.Append('?');
-        _ = builder.Append(OAuthRequestParameterNames.ClientId);
-        _ = builder.Append('=');
-        _ = builder.Append(Uri.EscapeDataString(clientId));
-        _ = builder.Append('&');
-        _ = builder.Append(OAuthRequestParameterNames.Request);
-        _ = builder.Append('=');
-        _ = builder.Append(Uri.EscapeDataString(compactJar));
-
-        foreach((string key, string value) in additionalFields.Fields)
+        char separator = '?';
+        foreach((string key, string value) in query)
         {
-            _ = builder.Append('&');
+            _ = builder.Append(separator);
             _ = builder.Append(Uri.EscapeDataString(key));
             _ = builder.Append('=');
             _ = builder.Append(Uri.EscapeDataString(value));
+
+            separator = '&';
         }
 
         return new Uri(builder.ToString());
@@ -1680,10 +1754,39 @@ public static class AuthCodeFlowHandlers
 
 
     /// <summary>
-    /// The parameter names <c>HandleParAsync</c> and <c>HandleDirectAuthorizeStartAsync</c> compose
-    /// themselves. An additional field arriving under one of these names is dropped rather than
-    /// allowed to override what the flow minted - the caller extends the request, never the flow's
-    /// own identity, PKCE, or state.
+    /// The parameter names every authorization start owns: the pushed start (<c>HandleParAsync</c>), the direct start
+    /// (<c>HandleDirectAuthorizeStartAsync</c>) and the two request-object starts (<c>HandleJarParAsync</c>,
+    /// <c>HandleJarAuthorizeAsync</c>). A caller's additional field under one of these names is dropped rather than
+    /// sent beside or over what the start composes, so the caller extends the request and never changes the flow's
+    /// own identity, redirect, scope, resource, PKCE, state or code binding, nor where its parameters are read from.
+    /// The names are the parameters a start composes itself (<c>client_id</c>, <c>response_type</c>,
+    /// <c>redirect_uri</c>, <c>scope</c>, <c>state</c>, <c>code_challenge</c>, <c>code_challenge_method</c>,
+    /// <c>resource</c>), sent once
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-3.1">RFC 6749 Section 3.1</see>: "Request and response
+    /// parameters MUST NOT be included more than once."); <c>dpop_jkt</c>, whose value is the thumbprint of the DPoP
+    /// key the client's own token request proves (<see cref="ComputeDpopJkt"/>), sent when DPoP is wired and never
+    /// otherwise, so a caller's <c>dpop_jkt</c> is dropped whether DPoP is wired or not
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-10">RFC 9449 Section 10</see>: the value "is the JWK
+    /// Thumbprint [RFC7638] of the proof-of-possession public key"); <c>request_uri</c>, which a pushed request never
+    /// carries (<see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.1">RFC 9126 Section 2.1</see>: "The
+    /// "request_uri" authorization request parameter is one exception, and it MUST NOT be provided.") and which on a
+    /// direct start would have the authorization server read another request's parameters in place of the ones the
+    /// start composed; and <c>request</c>, which a request-object start composes and which a pushed or direct start
+    /// does not send, so the request object the server reads is always the start's own
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9101#section-5">RFC 9101 Section 5</see>: "If this parameter is
+    /// present in the authorization request, "request_uri" MUST NOT be present."). The eleven names are the ones
+    /// dropped, at every start. At a request-object start the outer request carries the <c>client_id</c>, the
+    /// <c>request</c> it composes and the caller's fields under names the start does not own; the authorization server
+    /// uses the parameters of the signed object
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9101#section-6.3">RFC 9101 Section 6.3</see>: "The authorization
+    /// server MUST only use the parameters in the Request Object, even if the same parameter is provided in the query
+    /// parameter."), every other parameter of the authorization request being a claim of that object
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9126#section-3">RFC 9126 Section 3</see>: "All other request
+    /// parameters, i.e., those pertaining to the authorization request itself, MUST appear as claims of the JWT
+    /// representing the authorization request.";
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9101#section-5">RFC 9101 Section 5</see>: "However, the
+    /// authorization server supporting this specification MUST only use the parameters included in the Request
+    /// Object.").
     /// </summary>
     private static ImmutableHashSet<string> AuthorizationFlowOwnedFieldNames { get; } = ImmutableHashSet.Create(
         StringComparer.Ordinal,
@@ -1694,15 +1797,39 @@ public static class AuthCodeFlowHandlers
         OAuthRequestParameterNames.State,
         OAuthRequestParameterNames.CodeChallenge,
         OAuthRequestParameterNames.CodeChallengeMethod,
-        OAuthRequestParameterNames.Resource);
+        OAuthRequestParameterNames.Resource,
+        OAuthRequestParameterNames.DpopJkt,
+        OAuthRequestParameterNames.RequestUri,
+        OAuthRequestParameterNames.Request);
 
 
     /// <summary>
-    /// Appends the caller's additional fields to the pushed request body or the direct authorization
-    /// redirect's query, each under its own name, skipping the flow-owned names so the composed
-    /// request stays the flow's.
+    /// The <c>dpop_jkt</c> value this client sends on an authorization request: the JWK SHA-256 Thumbprint of
+    /// <see cref="OAuthClientInfrastructure.DpopKey"/>, the DPoP key every token request of the client proves, when
+    /// DPoP is wired (<see cref="OAuthClientInfrastructure.ConstructDpopProofAsync"/> and the DPoP key set), and
+    /// <see langword="null"/> otherwise. <see href="https://www.rfc-editor.org/rfc/rfc9449#section-10">RFC 9449
+    /// Section 10</see>: "The value of the dpop_jkt authorization request parameter is the JWK Thumbprint [RFC7638] of
+    /// the proof-of-possession public key using the SHA-256 hash function, which is the same value as used for the jkt
+    /// confirmation method defined in Section 6.1." The thumbprint is computed once per DPoP key in the
+    /// infrastructure's pool (<see cref="DpopKey.GetThumbprint"/>), from the same projection the proof's <c>jwk</c>
+    /// header carries.
     /// </summary>
-    /// <param name="formFields">The request fields the flow has composed so far.</param>
+    /// <param name="infrastructure">The infrastructure whose DPoP key is thumbprinted.</param>
+    /// <returns>The thumbprint, or <see langword="null"/> when DPoP is not wired.</returns>
+    private static string? ComputeDpopJkt(OAuthClientInfrastructure infrastructure) =>
+        (infrastructure.ConstructDpopProofAsync, infrastructure.DpopKey) switch
+        {
+            (not null, DpopKey dpopKey) => dpopKey.GetThumbprint(infrastructure.Base64UrlEncoder, infrastructure.MemoryPool),
+            _ => null
+        };
+
+
+    /// <summary>
+    /// Appends the caller's additional fields to what a start composed, the pushed request body, the direct
+    /// authorization redirect's query, or the outer body or query of a request-object start, each under its own name,
+    /// skipping <see cref="AuthorizationFlowOwnedFieldNames"/> so the composed request stays the flow's.
+    /// </summary>
+    /// <param name="formFields">The request fields the start has composed so far.</param>
     /// <param name="fields">The caller's inbound fields, of which the flow-owned names are skipped.</param>
     private static void AddAdditionalAuthorizationFields(OutgoingFormFields formFields, IReadOnlyDictionary<string, string> fields)
     {
@@ -1716,6 +1843,16 @@ public static class AuthCodeFlowHandlers
     }
 
 
+    /// <summary>
+    /// Builds the authorization redirect URI that completes a pushed authorization request: the authorization
+    /// endpoint with the <c>client_id</c> and the <c>request_uri</c> the PAR endpoint issued
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9126#section-4">RFC 9126 Section 4</see>), each value
+    /// percent-encoded as a query component.
+    /// </summary>
+    /// <param name="authorizationEndpoint">The authorization endpoint the redirect targets.</param>
+    /// <param name="clientId">The client identifier sent as <c>client_id</c>.</param>
+    /// <param name="requestUri">The <c>request_uri</c> the PAR endpoint answered.</param>
+    /// <returns>The authorization endpoint URI carrying the two parameters on its query.</returns>
     private static Uri BuildAuthorizationRedirectUri(
         Uri authorizationEndpoint,
         string clientId,
@@ -1723,6 +1860,7 @@ public static class AuthCodeFlowHandlers
     {
         string uri = $"{authorizationEndpoint}?{OAuthRequestParameterNames.ClientId}={Uri.EscapeDataString(clientId)}" +
                      $"&{OAuthRequestParameterNames.RequestUri}={Uri.EscapeDataString(requestUri.ToString())}";
+
         return new Uri(uri);
     }
 
