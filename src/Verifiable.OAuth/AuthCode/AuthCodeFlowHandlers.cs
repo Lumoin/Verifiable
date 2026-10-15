@@ -752,6 +752,12 @@ public static class AuthCodeFlowHandlers
         ArgumentNullException.ThrowIfNull(registration);
         ArgumentNullException.ThrowIfNull(context);
 
+        var assertionKey = TokenEndpointClientOperations.ResolveClientAssertionKey(registration, clientAssertionOptions);
+        if(!assertionKey.IsSuccess)
+        {
+            return assertionKey.Error;
+        }
+
         Result<AuthorizationServerMetadata, AuthCodeFlowEndpointResult> metadataResult =
             await TokenEndpointClientOperations.ResolveValidatedAuthorizationServerMetadataAsync(
                 infrastructure, registration, context, cancellationToken).ConfigureAwait(false);
@@ -812,7 +818,7 @@ public static class AuthCodeFlowHandlers
         Result<HttpResponseData, AuthCodeFlowEndpointResult> tokenSendResult = await TokenEndpointClientOperations.SendTokenRequestWithDpopRetryAsync(
             infrastructure, metadata.TokenEndpoint!, tokenFields,
             (attemptNow, ct) => TokenEndpointClientOperations.AttachClientAuthenticationAsync(
-                tokenFields, registration, metadata.TokenEndpoint!, clientAssertionOptions,
+                tokenFields, registration, metadata.TokenEndpoint!, assertionKey.Value, clientAssertionOptions,
                 infrastructure, attemptNow, context, ct),
             context, cancellationToken)
             .ConfigureAwait(false);
@@ -1010,6 +1016,12 @@ public static class AuthCodeFlowHandlers
         ArgumentNullException.ThrowIfNull(registration);
         ArgumentNullException.ThrowIfNull(context);
 
+        var assertionKey = TokenEndpointClientOperations.ResolveClientAssertionKey(registration, clientAssertionOptions);
+        if(!assertionKey.IsSuccess)
+        {
+            return assertionKey.Error;
+        }
+
         Result<AuthorizationServerMetadata, AuthCodeFlowEndpointResult> metadataResult =
             await TokenEndpointClientOperations.ResolveValidatedAuthorizationServerMetadataAsync(
                 infrastructure, registration, context, cancellationToken).ConfigureAwait(false);
@@ -1026,7 +1038,7 @@ public static class AuthCodeFlowHandlers
         Result<HttpResponseData, AuthCodeFlowEndpointResult> refreshSendResult = await TokenEndpointClientOperations.SendTokenRequestWithDpopRetryAsync(
             infrastructure, metadata.TokenEndpoint!, refreshFields,
             (attemptNow, ct) => TokenEndpointClientOperations.AttachClientAuthenticationAsync(
-                refreshFields, registration, metadata.TokenEndpoint!, clientAssertionOptions,
+                refreshFields, registration, metadata.TokenEndpoint!, assertionKey.Value, clientAssertionOptions,
                 infrastructure, attemptNow, context, ct),
             context, cancellationToken)
             .ConfigureAwait(false);

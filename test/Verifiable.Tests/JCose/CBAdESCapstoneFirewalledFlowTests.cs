@@ -185,7 +185,7 @@ internal sealed class CBAdESCapstoneFirewalledFlowTests
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> placeholderKeyMaterial = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using PrivateKeyMemory placeholderPrivateKey = placeholderKeyMaterial.PrivateKey;
         placeholderKeyMaterial.PublicKey.Dispose();
-        ValueTask<(Signature Signature, CryptoEvent? Event)> signingDelegate(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, System.Collections.Frozen.FrozenDictionary<string, object>? context = null, CancellationToken ct = default) =>
+        ValueTask<SigningResult> signingDelegate(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, System.Collections.Frozen.FrozenDictionary<string, object>? context = null, CancellationToken ct = default) =>
             SignWithEcdsaAsync(signer.SigningKey, dataToSign, signaturePool);
 
         DigestValue signingCertificateDigest = await CryptographicKeyEvents.ComputeDigestAsync(
@@ -319,13 +319,13 @@ internal sealed class CBAdESCapstoneFirewalledFlowTests
         Justification = "Ownership of the minted Signature transfers into the ValueTask tuple this method " +
             "returns, which CBAdESSignatureCreation.SignAsync's own caller (this test's mint scope) disposes " +
             "through the CBAdESSignatureCreationResult it produces.")]
-    private static ValueTask<(Signature Signature, CryptoEvent? Event)> SignWithEcdsaAsync(ECDsa ecdsa, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool)
+    private static ValueTask<SigningResult> SignWithEcdsaAsync(ECDsa ecdsa, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool)
     {
         byte[] signatureBytes = ecdsa.SignData(dataToSign.Span, HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
         IMemoryOwner<byte> owner = signaturePool.Rent(signatureBytes.Length);
         signatureBytes.CopyTo(owner.Memory.Span);
 
-        return ValueTask.FromResult<(Signature, CryptoEvent?)>((new Signature(owner, CryptoTags.P256Signature), null));
+        return ValueTask.FromResult(new SigningResult(new Signature(owner, CryptoTags.P256Signature), null));
     }
 
 

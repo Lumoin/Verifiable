@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Verifiable.Core.Assessment;
+using Verifiable.OAuth.Client;
 
 namespace Verifiable.OAuth.AuthCode;
 
@@ -73,6 +74,13 @@ public sealed class AuthCodeFlowEndpointResult
     /// <see langword="null"/> for other outcomes.
     /// </summary>
     public string? ErrorDescription { get; init; }
+
+    /// <summary>
+    /// The refusal of the client authentication assertion the request was to present, judged before anything was composed
+    /// or sent (<see cref="ClientAssertionKey.Of"/>): the rule broken and the values it was judged
+    /// on, from which <see cref="ErrorDescription"/> was rendered. <see langword="null"/> for every other outcome.
+    /// </summary>
+    public ClientAssertionRefusal? ClientAssertionRefusal { get; init; }
 
     /// <summary>
     /// The individual validation claims produced during callback validation.

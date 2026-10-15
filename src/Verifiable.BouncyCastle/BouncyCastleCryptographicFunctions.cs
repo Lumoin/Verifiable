@@ -215,7 +215,7 @@ namespace Verifiable.BouncyCastle
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
         /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns>A pool-allocated signature tagged with <see cref="CryptoTags.Ed25519Signature"/>.</returns>
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignEd25519Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<SigningResult> SignEd25519Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
 
@@ -244,7 +244,7 @@ namespace Verifiable.BouncyCastle
             CryptoEvent evt = SignatureProducedEvent.Create(
                 CryptoAlgorithm.Ed25519, dataToSign.Length, signature.Length, CryptoLib.Name, timeProvider: timeProvider);
 
-            return ValueTask.FromResult<(Signature, CryptoEvent?)>((signatureResult, evt));
+            return ValueTask.FromResult(new SigningResult(signatureResult, evt));
         }
 
 
@@ -291,7 +291,7 @@ namespace Verifiable.BouncyCastle
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
         /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns>A pool-allocated signature tagged with <see cref="CryptoTags.P256Signature"/>.</returns>
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignP256Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<SigningResult> SignP256Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignEcdsaAsync(privateKeyBytes, dataToSign, signaturePool, "secp256r1", CryptoTags.P256Signature, 32, timeProvider);
@@ -324,7 +324,7 @@ namespace Verifiable.BouncyCastle
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
         /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns>A pool-allocated signature tagged with <see cref="CryptoTags.P384Signature"/>.</returns>
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignP384Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<SigningResult> SignP384Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignEcdsaAsync(privateKeyBytes, dataToSign, signaturePool, "secp384r1", CryptoTags.P384Signature, 48, timeProvider);
@@ -357,7 +357,7 @@ namespace Verifiable.BouncyCastle
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
         /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns>A pool-allocated signature tagged with <see cref="CryptoTags.P521Signature"/>.</returns>
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignP521Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<SigningResult> SignP521Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignEcdsaAsync(privateKeyBytes, dataToSign, signaturePool, "secp521r1", CryptoTags.P521Signature, 66, timeProvider);
@@ -388,7 +388,7 @@ namespace Verifiable.BouncyCastle
         /// here as an ECDH/key-agreement curve, notably for eMRTD Chip Authentication), so there is no COSE
         /// algorithm identifier for this signature; SHA-224 is the field-matched hash.
         /// </remarks>
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignBrainpoolP224r1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<SigningResult> SignBrainpoolP224r1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignEcdsaAsync(privateKeyBytes, dataToSign, signaturePool, "brainpoolP224r1", CryptoTags.BrainpoolP224r1Signature, 28, timeProvider);
@@ -408,7 +408,7 @@ namespace Verifiable.BouncyCastle
         /// Signs data using ECDSA with the Brainpool P-256r1 curve and SHA-256
         /// (RFC 9864 fully-specified ECDSA <c>ESB256</c>, COSE alg <c>-265</c>).
         /// </summary>
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignBrainpoolP256r1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<SigningResult> SignBrainpoolP256r1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignEcdsaAsync(privateKeyBytes, dataToSign, signaturePool, "brainpoolP256r1", CryptoTags.BrainpoolP256r1Signature, 32, timeProvider);
@@ -433,7 +433,7 @@ namespace Verifiable.BouncyCastle
         /// (320 bits, 40 bytes) per RFC 9864 §5; ECDSA truncates the hash to the
         /// field bit length internally during signing.
         /// </remarks>
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignBrainpoolP320r1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<SigningResult> SignBrainpoolP320r1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignEcdsaAsync(privateKeyBytes, dataToSign, signaturePool, "brainpoolP320r1", CryptoTags.BrainpoolP320r1Signature, 40, timeProvider);
@@ -453,7 +453,7 @@ namespace Verifiable.BouncyCastle
         /// Signs data using ECDSA with the Brainpool P-384r1 curve and SHA-384
         /// (RFC 9864 fully-specified ECDSA <c>ESB384</c>, COSE alg <c>-267</c>).
         /// </summary>
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignBrainpoolP384r1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<SigningResult> SignBrainpoolP384r1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignEcdsaAsync(privateKeyBytes, dataToSign, signaturePool, "brainpoolP384r1", CryptoTags.BrainpoolP384r1Signature, 48, timeProvider);
@@ -473,7 +473,7 @@ namespace Verifiable.BouncyCastle
         /// Signs data using ECDSA with the Brainpool P-512r1 curve and SHA-512
         /// (RFC 9864 fully-specified ECDSA <c>ESB512</c>, COSE alg <c>-268</c>).
         /// </summary>
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignBrainpoolP512r1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<SigningResult> SignBrainpoolP512r1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignEcdsaAsync(privateKeyBytes, dataToSign, signaturePool, "brainpoolP512r1", CryptoTags.BrainpoolP512r1Signature, 64, timeProvider);
@@ -499,7 +499,7 @@ namespace Verifiable.BouncyCastle
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
         /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns>A pool-allocated signature tagged with <see cref="CryptoTags.Secp256k1Signature"/>.</returns>
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignSecp256k1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<SigningResult> SignSecp256k1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignEcdsaAsync(privateKeyBytes, dataToSign, signaturePool, "secp256k1", CryptoTags.Secp256k1Signature, 32, timeProvider);
@@ -570,7 +570,7 @@ namespace Verifiable.BouncyCastle
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
         /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns>A pool-allocated signature tagged with <see cref="CryptoTags.Rsa2048Signature"/>.</returns>
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsa2048Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<SigningResult> SignRsa2048Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsaPkcs1Async(privateKeyBytes, dataToSign, signaturePool, new Sha256Digest(), CryptoTags.Rsa2048Signature, timeProvider);
@@ -603,7 +603,7 @@ namespace Verifiable.BouncyCastle
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
         /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns>A pool-allocated signature tagged with <see cref="CryptoTags.Rsa4096Signature"/>.</returns>
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsa4096Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<SigningResult> SignRsa4096Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsaPkcs1Async(privateKeyBytes, dataToSign, signaturePool, new Sha256Digest(), CryptoTags.Rsa4096Signature, timeProvider);
@@ -636,7 +636,7 @@ namespace Verifiable.BouncyCastle
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
         /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns>A pool-allocated signature tagged with <see cref="CryptoTags.RsaSha256Pkcs1Signature"/>.</returns>
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaSha256Pkcs1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<SigningResult> SignRsaSha256Pkcs1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsaPkcs1Async(privateKeyBytes, dataToSign, signaturePool, new Sha256Digest(), CryptoTags.RsaSha256Pkcs1Signature, timeProvider);
@@ -669,7 +669,7 @@ namespace Verifiable.BouncyCastle
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
         /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns>A pool-allocated signature tagged with <see cref="CryptoTags.RsaSha256PssSignature"/>.</returns>
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaSha256PssAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<SigningResult> SignRsaSha256PssAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsaPssAsync(privateKeyBytes, dataToSign, signaturePool, new Sha256Digest(), CryptoTags.RsaSha256PssSignature, timeProvider);
@@ -702,7 +702,7 @@ namespace Verifiable.BouncyCastle
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
         /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns>A pool-allocated signature tagged with <see cref="CryptoTags.RsaSha384Pkcs1Signature"/>.</returns>
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaSha384Pkcs1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<SigningResult> SignRsaSha384Pkcs1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsaPkcs1Async(privateKeyBytes, dataToSign, signaturePool, new Sha384Digest(), CryptoTags.RsaSha384Pkcs1Signature, timeProvider);
@@ -735,7 +735,7 @@ namespace Verifiable.BouncyCastle
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
         /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns>A pool-allocated signature tagged with <see cref="CryptoTags.RsaSha384PssSignature"/>.</returns>
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaSha384PssAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<SigningResult> SignRsaSha384PssAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsaPssAsync(privateKeyBytes, dataToSign, signaturePool, new Sha384Digest(), CryptoTags.RsaSha384PssSignature, timeProvider);
@@ -768,7 +768,7 @@ namespace Verifiable.BouncyCastle
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
         /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns>A pool-allocated signature tagged with <see cref="CryptoTags.RsaSha512Pkcs1Signature"/>.</returns>
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaSha512Pkcs1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<SigningResult> SignRsaSha512Pkcs1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsaPkcs1Async(privateKeyBytes, dataToSign, signaturePool, new Sha512Digest(), CryptoTags.RsaSha512Pkcs1Signature, timeProvider);
@@ -801,7 +801,7 @@ namespace Verifiable.BouncyCastle
         /// <param name="context">Optional context dictionary. Reserved for future use.</param>
         /// <param name="cancellationToken">A token to observe for cancellation.</param>
         /// <returns>A pool-allocated signature tagged with <see cref="CryptoTags.RsaSha512PssSignature"/>.</returns>
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaSha512PssAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<SigningResult> SignRsaSha512PssAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsaPssAsync(privateKeyBytes, dataToSign, signaturePool, new Sha512Digest(), CryptoTags.RsaSha512PssSignature, timeProvider);
@@ -828,7 +828,7 @@ namespace Verifiable.BouncyCastle
         /// Signs data using ML-DSA-44 in deterministic mode (security level 2).
         /// </summary>
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of Signature is transferred to the caller.")]
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignMlDsa44Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<SigningResult> SignMlDsa44Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignMlDsaAsync(MLDsaParameters.ml_dsa_44, privateKeyBytes, dataToSign, signaturePool, CryptoTags.MlDsa44Signature, timeProvider);
@@ -848,7 +848,7 @@ namespace Verifiable.BouncyCastle
         /// Signs data using ML-DSA-65 in deterministic mode (security level 3).
         /// </summary>
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of Signature is transferred to the caller.")]
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignMlDsa65Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<SigningResult> SignMlDsa65Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignMlDsaAsync(MLDsaParameters.ml_dsa_65, privateKeyBytes, dataToSign, signaturePool, CryptoTags.MlDsa65Signature, timeProvider);
@@ -868,7 +868,7 @@ namespace Verifiable.BouncyCastle
         /// Signs data using ML-DSA-87 in deterministic mode (security level 5).
         /// </summary>
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of Signature is transferred to the caller.")]
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignMlDsa87Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<SigningResult> SignMlDsa87Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignMlDsaAsync(MLDsaParameters.ml_dsa_87, privateKeyBytes, dataToSign, signaturePool, CryptoTags.MlDsa87Signature, timeProvider);
@@ -961,7 +961,7 @@ namespace Verifiable.BouncyCastle
         /// <param name="componentSize">The byte length of each signature component (r and s).</param>
         /// <param name="timeProvider">The time source for the <see cref="SignatureProducedEvent"/> timestamp.</param>
         /// <returns>A pool-allocated signature in IEEE P1363 encoding.</returns>
-        private static ValueTask<(Signature Signature, CryptoEvent? Event)> SignEcdsaAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, string curveName, Tag signatureTag, int componentSize, TimeProvider timeProvider)
+        private static ValueTask<SigningResult> SignEcdsaAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, string curveName, Tag signatureTag, int componentSize, TimeProvider timeProvider)
         {
             ProviderOperation operation = new(nameof(SignEcdsaAsync));
             using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.Sign);
@@ -1004,7 +1004,7 @@ namespace Verifiable.BouncyCastle
             CryptoEvent evt = SignatureProducedEvent.Create(
                 signatureTag.Get<CryptoAlgorithm>(), dataToSign.Length, signatureBytes.Length, CryptoLib.Name, timeProvider: timeProvider);
 
-            return ValueTask.FromResult<(Signature, CryptoEvent?)>((signatureResult, evt));
+            return ValueTask.FromResult(new SigningResult(signatureResult, evt));
         }
 
 
@@ -1072,7 +1072,7 @@ namespace Verifiable.BouncyCastle
         /// <param name="signatureTag">The tag identifying the signature algorithm.</param>
         /// <param name="timeProvider">The time source for the <see cref="SignatureProducedEvent"/> timestamp.</param>
         /// <returns>A pool-allocated RSA PKCS#1 v1.5 signature.</returns>
-        private static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaPkcs1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, IDigest digest, Tag signatureTag, TimeProvider timeProvider)
+        private static ValueTask<SigningResult> SignRsaPkcs1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, IDigest digest, Tag signatureTag, TimeProvider timeProvider)
         {
             ProviderOperation operation = new(nameof(SignRsaPkcs1Async));
             using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.Sign);
@@ -1095,7 +1095,7 @@ namespace Verifiable.BouncyCastle
             CryptoEvent evt = SignatureProducedEvent.Create(
                 signatureTag.Get<CryptoAlgorithm>(), dataToSign.Length, signatureBytes.Length, CryptoLib.Name, timeProvider: timeProvider);
 
-            return ValueTask.FromResult<(Signature, CryptoEvent?)>((signatureResult, evt));
+            return ValueTask.FromResult(new SigningResult(signatureResult, evt));
         }
 
 
@@ -1145,7 +1145,7 @@ namespace Verifiable.BouncyCastle
         /// <param name="signatureTag">The tag identifying the signature algorithm.</param>
         /// <param name="timeProvider">The time source for the <see cref="SignatureProducedEvent"/> timestamp.</param>
         /// <returns>A pool-allocated RSA-PSS signature.</returns>
-        private static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaPssAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, IDigest digest, Tag signatureTag, TimeProvider timeProvider)
+        private static ValueTask<SigningResult> SignRsaPssAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, IDigest digest, Tag signatureTag, TimeProvider timeProvider)
         {
             ProviderOperation operation = new(nameof(SignRsaPssAsync));
             using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.Sign);
@@ -1168,7 +1168,7 @@ namespace Verifiable.BouncyCastle
             CryptoEvent evt = SignatureProducedEvent.Create(
                 signatureTag.Get<CryptoAlgorithm>(), dataToSign.Length, signatureBytes.Length, CryptoLib.Name, timeProvider: timeProvider);
 
-            return ValueTask.FromResult<(Signature, CryptoEvent?)>((signatureResult, evt));
+            return ValueTask.FromResult(new SigningResult(signatureResult, evt));
         }
 
 
@@ -1211,7 +1211,7 @@ namespace Verifiable.BouncyCastle
         /// Signs data using the specified ML-DSA parameter set in deterministic mode.
         /// Reconstructs key parameters from raw encoded bytes.
         /// </summary>
-        private static ValueTask<(Signature Signature, CryptoEvent? Event)> SignMlDsaAsync(
+        private static ValueTask<SigningResult> SignMlDsaAsync(
             MLDsaParameters parameters,
             ReadOnlyMemory<byte> privateKeyBytes,
             ReadOnlyMemory<byte> dataToSign,
@@ -1254,7 +1254,7 @@ namespace Verifiable.BouncyCastle
             CryptoEvent evt = SignatureProducedEvent.Create(
                 signatureTag.Get<CryptoAlgorithm>(), dataToSign.Length, signatureBytes.Length, CryptoLib.Name, timeProvider: timeProvider);
 
-            return ValueTask.FromResult<(Signature, CryptoEvent?)>((signatureResult, evt));
+            return ValueTask.FromResult(new SigningResult(signatureResult, evt));
         }
 
 

@@ -334,47 +334,26 @@ internal static class AuthCodeFlowDriver
             return OutgoingHeaders.Empty.WithClientSecretBasic(registration.ClientId.Value, secret.AsReadOnlySpan());
         }
 
-        if(registration.AuthenticationMethod == ClientAuthenticationMethod.PrivateKeyJwt)
-        {
-            if(clientAssertionOptions is not { SigningKeyId: string signingKeyId })
-            {
-                throw new InvalidOperationException(
-                    "ClientAuthenticationMethod.PrivateKeyJwt requires a ClientAssertionOptions instance naming the SigningKeyId to sign the PAR client_assertion.");
-            }
-
-            PrivateKeyMemory signingKey = RequireAuthenticationKey(registration);
-            await ClientTokenEndpointAuthentication.AttachClientAssertionAsync(
-                form,
-                registration,
-                tokenEndpoint,
-                signingKey,
-                signingKeyId,
-                clientAssertionOptions.HeaderSerializer,
-                clientAssertionOptions.PayloadSerializer,
-                clientAssertionOptions.ClientAssertionLifetime,
-                infrastructure,
-                now,
-                context,
-                cancellationToken).ConfigureAwait(false);
-
-            return OutgoingHeaders.Empty;
-        }
-
-        if(registration.AuthenticationMethod == ClientAuthenticationMethod.ClientSecretJwt)
+        if(registration.AuthenticationMethod == ClientAuthenticationMethod.PrivateKeyJwt
+            || registration.AuthenticationMethod == ClientAuthenticationMethod.ClientSecretJwt)
         {
             if(clientAssertionOptions is null)
             {
                 throw new InvalidOperationException(
-                    "ClientAuthenticationMethod.ClientSecretJwt requires a ClientAssertionOptions instance to MAC the PAR client_assertion.");
+                    "An assertion method requires a ClientAssertionOptions instance to compose the PAR client_assertion.");
             }
 
-            PrivateKeyMemory secret = RequireAuthenticationKey(registration);
-            await ClientTokenEndpointAuthentication.AttachClientSecretAssertionAsync(
+            var key = ClientAssertionKey.Of(registration, clientAssertionOptions);
+            if(!key.IsSuccess)
+            {
+                throw new InvalidOperationException(key.Error.Describe());
+            }
+
+            await ClientTokenEndpointAuthentication.AttachClientAssertionAsync(
                 form,
                 registration,
                 tokenEndpoint,
-                secret,
-                clientAssertionOptions.ClientSecretAlgorithm,
+                key.Value,
                 clientAssertionOptions.HeaderSerializer,
                 clientAssertionOptions.PayloadSerializer,
                 clientAssertionOptions.ClientAssertionLifetime,

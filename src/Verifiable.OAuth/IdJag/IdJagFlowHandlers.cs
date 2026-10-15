@@ -89,7 +89,7 @@ public static class IdJagFlowHandlers
             async (attemptNow, ct) =>
             {
                 await ClientTokenEndpointAuthentication.AttachClientAssertionAsync(
-                    form, registration, tokenEndpoint, options.SigningKey, options.SigningKeyId,
+                    form, registration, tokenEndpoint, ClientAssertionKey.OfPrivateKey(options.SigningKey, options.SigningKeyId),
                     options.HeaderSerializer, options.PayloadSerializer, options.ClientAssertionLifetime,
                     infrastructure, attemptNow, context, ct).ConfigureAwait(false);
 
@@ -152,7 +152,7 @@ public static class IdJagFlowHandlers
             async (attemptNow, ct) =>
             {
                 await ClientTokenEndpointAuthentication.AttachClientAssertionAsync(
-                    form, registration, tokenEndpoint, options.SigningKey, options.SigningKeyId,
+                    form, registration, tokenEndpoint, ClientAssertionKey.OfPrivateKey(options.SigningKey, options.SigningKeyId),
                     options.HeaderSerializer, options.PayloadSerializer, options.ClientAssertionLifetime,
                     infrastructure, attemptNow, context, ct).ConfigureAwait(false);
 

@@ -207,7 +207,7 @@ internal sealed class JAdESCapstoneFirewalledFlowTests
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> placeholderKeyMaterial = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using PrivateKeyMemory placeholderPrivateKey = placeholderKeyMaterial.PrivateKey;
         placeholderKeyMaterial.PublicKey.Dispose();
-        ValueTask<(Signature Signature, CryptoEvent? Event)> signingDelegate(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, System.Collections.Frozen.FrozenDictionary<string, object>? context = null, CancellationToken ct = default) =>
+        ValueTask<SigningResult> signingDelegate(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, System.Collections.Frozen.FrozenDictionary<string, object>? context = null, CancellationToken ct = default) =>
             SignWithEcdsaAsync(signer.SigningKey, dataToSign, signaturePool);
 
         DigestValue signingCertificateDigest = await CryptographicKeyEvents.ComputeDigestAsync(
@@ -336,7 +336,7 @@ internal sealed class JAdESCapstoneFirewalledFlowTests
     /// <param name="dataToSign">The bytes to sign.</param>
     /// <param name="signaturePool">The memory pool the returned <see cref="Signature"/> is rented from.</param>
     /// <returns>The JOSE-native (IEEE P1363 fixed-field) signature.</returns>
-    private static async ValueTask<(Signature Signature, CryptoEvent? Event)> SignWithEcdsaAsync(ECDsa ecdsa, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool)
+    private static async ValueTask<SigningResult> SignWithEcdsaAsync(ECDsa ecdsa, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool)
     {
         byte[] privateKeyBytes = ecdsa.ExportParameters(true).D!;
         SigningDelegate sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.P256, Purpose.Signing);

@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
+using System.Buffers.Text;
 using System.Diagnostics.CodeAnalysis;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Verifiable.Core;
@@ -1100,11 +1102,11 @@ internal sealed class AuthCodeClientAuthenticationTests
     [TestMethod]
     public async Task ClientSecretJwtAuthenticatesOverRealWire()
     {
-        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> secretMaterial = BuildSecretKeyMaterial(ClientSecret);
+        var secretMaterial = BuildSecretKeyMaterial(ClientSecret);
         try
         {
-            await using TestHostShell host = new(TimeProvider);
-            using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            await using var host = new TestHostShell(TimeProvider);
+            using var material = await host.RegisterDpopClientAsync(
                 ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
             List<string> verifiedIdentifiers = [];
@@ -1120,7 +1122,7 @@ internal sealed class AuthCodeClientAuthenticationTests
                 host, material, ClientAuthenticationMethod.ClientSecretJwt, assertionSigningAlgorithm: WellKnownJwaValues.Hs256)
                 .ConfigureAwait(false);
 
-            (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
+            var (client, registration, clientFlowStore) =
                 await host.CreateOAuthClientAndRegistrationAsync(
                     material.Registration,
                     RedirectUri.OriginalString,
@@ -1134,11 +1136,7 @@ internal sealed class AuthCodeClientAuthenticationTests
 
             await DriveAndAssertSucceedsAsync(
                 host, client, registration, clientFlowStore, material.Registration.TenantId.Value,
-                clientAssertionOptions: new ClientAssertionOptions
-                {
-                    HeaderSerializer = host.Server.OAuth().Codecs.JwtHeaderSerializer!,
-                    PayloadSerializer = host.Server.OAuth().Codecs.JwtPayloadSerializer!
-                }).ConfigureAwait(false);
+                clientAssertionOptions: SecretAssertionOptionsOf(host)).ConfigureAwait(false);
 
             Assert.HasCount(2, verifiedIdentifiers,
                 "The pushed request and the token exchange must each present one client_assertion MACed under the secret, each with a jti of its own.");
@@ -1153,17 +1151,19 @@ internal sealed class AuthCodeClientAuthenticationTests
 
     /// <summary>
     /// <c>client_secret_jwt</c> names no key identifier (OpenID Connect Core 1.0 §9: the secret is the client's own), so
-    /// options naming a <c>kid</c> were composed for a signing key: the library's token exchange refuses them before
-    /// anything is MACed or sent, and the server sees no token request.
+    /// options naming a <c>kid</c> were composed for a signing key: after a pushed request composed under options naming
+    /// none, the library's token exchange under options naming one answers the typed refusal
+    /// (<see cref="ClientAssertionRefusalReason.ClientSecretNamesAKeyIdentifier"/>) its result carries, rendered from the
+    /// refusal, before anything is MACed or sent, and the server sees no token request.
     /// </summary>
     [TestMethod]
     public async Task ClientSecretJwtRefusesOptionsNamingAKeyIdentifier()
     {
-        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> secretMaterial = BuildSecretKeyMaterial(ClientSecret);
+        var secretMaterial = BuildSecretKeyMaterial(ClientSecret);
         try
         {
-            await using TestHostShell host = new(TimeProvider);
-            using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            await using var host = new TestHostShell(TimeProvider);
+            using var material = await host.RegisterDpopClientAsync(
                 ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
             List<string> verifiedIdentifiers = [];
@@ -1179,7 +1179,7 @@ internal sealed class AuthCodeClientAuthenticationTests
                 host, material, ClientAuthenticationMethod.ClientSecretJwt, assertionSigningAlgorithm: WellKnownJwaValues.Hs256)
                 .ConfigureAwait(false);
 
-            (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
+            var (client, registration, clientFlowStore) =
                 await host.CreateOAuthClientAndRegistrationAsync(
                     material.Registration,
                     RedirectUri.OriginalString,
@@ -1191,16 +1191,21 @@ internal sealed class AuthCodeClientAuthenticationTests
                 AuthenticationKeyMaterial = secretMaterial
             };
 
-            _ = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
-                async () => await DriveAndAssertSucceedsAsync(
-                    host, client, registration, clientFlowStore, material.Registration.TenantId.Value,
-                    clientAssertionOptions: new ClientAssertionOptions
-                    {
-                        SigningKeyId = "a-key-identifier-no-secret-carries",
-                        HeaderSerializer = host.Server.OAuth().Codecs.JwtHeaderSerializer!,
-                        PayloadSerializer = host.Server.OAuth().Codecs.JwtPayloadSerializer!
-                    }).ConfigureAwait(false)).ConfigureAwait(false);
+            var secretOptions = SecretAssertionOptionsOf(host);
+            using var browserClient = LoopbackTls.CreateSingleHopPinnedHttpClient(host.ServerCertificate);
+            var (flowId, _) = await AuthCodeFlowDriver.DriveParAuthorizeAndCallbackAsync(
+                host.Host("default"), client, registration, clientFlowStore, material.Registration.TenantId.Value,
+                RedirectUri, SubjectId, browserClient, clientAssertionOptions: secretOptions,
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
+            var tokenResult = await client.AuthCode.ExchangeTokenAsync(
+                registration, flowId, [], secretOptions with { SigningKeyId = "a-key-identifier-no-secret-carries" },
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.AreEqual(AuthCodeFlowEndpointOutcome.InternalError, tokenResult.Outcome);
+            Assert.IsNotNull(tokenResult.ClientAssertionRefusal, "The result carries the typed refusal.");
+            Assert.AreEqual(ClientAssertionRefusalReason.ClientSecretNamesAKeyIdentifier, tokenResult.ClientAssertionRefusal.Reason);
+            Assert.AreEqual(tokenResult.ClientAssertionRefusal.Describe(), tokenResult.ErrorDescription);
             Assert.HasCount(1, verifiedIdentifiers, "Only the pushed request was sent; the refused token exchange never was.");
         }
         finally
@@ -1212,34 +1217,50 @@ internal sealed class AuthCodeClientAuthenticationTests
 
 
     /// <summary>
+    /// The options a <c>client_secret_jwt</c> assertion is composed under at this class's host: its serializers, no key
+    /// identifier, and the HMAC algorithm the options name by default.
+    /// </summary>
+    /// <param name="host">The host whose codecs serialize the assertion.</param>
+    /// <returns>The options.</returns>
+    private static ClientAssertionOptions SecretAssertionOptionsOf(TestHostShell host) =>
+        new()
+        {
+            HeaderSerializer = host.Server.OAuth().Codecs.JwtHeaderSerializer!,
+            PayloadSerializer = host.Server.OAuth().Codecs.JwtPayloadSerializer!
+        };
+
+
+    /// <summary>
     /// The server's own judgement of a <c>client_secret_jwt</c> assertion, independent of the library that composed it: the
     /// platform's HMAC SHA-256 of the signing input under <see cref="ClientSecret"/>'s UTF-8 octets equals the signature
     /// segment, compared in constant time; the header names <c>alg</c> <c>HS256</c> and no <c>kid</c>; <c>iss</c> and
-    /// <c>sub</c> name the client; and the <c>jti</c> is one no earlier assertion carried. The identifier of an assertion judged so is recorded.
+    /// <c>sub</c> name the client; and the <c>jti</c> is one no earlier assertion carried. The identifier of an assertion
+    /// judged so is recorded.
     /// </summary>
     /// <param name="assertion">The presented assertion.</param>
     /// <param name="verified">The identifiers of the assertions judged so far, which a verified one's joins.</param>
     /// <returns><see langword="true"/> when the assertion is MACed under the secret and names the client.</returns>
     private static bool IsMacedUnderTheClientSecret(string assertion, List<string> verified)
     {
-        string[] parts = assertion.Split('.');
+        var parts = assertion.Split('.');
         if(parts.Length != 3)
         {
             return false;
         }
 
-        byte[] expected = System.Security.Cryptography.HMACSHA256.HashData(
-            Encoding.UTF8.GetBytes(ClientSecret), Encoding.ASCII.GetBytes($"{parts[0]}.{parts[1]}"));
-        byte[] presented = System.Buffers.Text.Base64Url.DecodeFromChars(parts[2]);
-        if(!System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(expected, presented))
+        var expected = HMACSHA256.HashData(Encoding.UTF8.GetBytes(ClientSecret), Encoding.ASCII.GetBytes($"{parts[0]}.{parts[1]}"));
+        var presented = Base64Url.DecodeFromChars(parts[2]);
+        if(!CryptographicOperations.FixedTimeEquals(expected, presented))
         {
             return false;
         }
 
-        using JsonDocument header = JsonDocument.Parse(System.Buffers.Text.Base64Url.DecodeFromChars(parts[0]));
-        using JsonDocument claims = JsonDocument.Parse(System.Buffers.Text.Base64Url.DecodeFromChars(parts[1]));
-        string? jti = claims.RootElement.GetProperty(WellKnownJwtClaimNames.Jti).GetString();
-        bool holds = string.Equals(header.RootElement.GetProperty(WellKnownJwkMemberNames.Alg).GetString(), WellKnownJwaValues.Hs256, StringComparison.Ordinal)
+        using var header = JsonDocument.Parse(Base64Url.DecodeFromChars(parts[0]));
+        using var claims = JsonDocument.Parse(Base64Url.DecodeFromChars(parts[1]));
+        var algorithm = header.RootElement.GetProperty(WellKnownJwkMemberNames.Alg).GetString();
+        var jti = claims.RootElement.GetProperty(WellKnownJwtClaimNames.Jti).GetString();
+        var holds = algorithm is not null
+            && WellKnownJwaValues.IsHs256(algorithm)
             && !header.RootElement.TryGetProperty(WellKnownJwkMemberNames.Kid, out _)
             && string.Equals(claims.RootElement.GetProperty(WellKnownJwtClaimNames.Iss).GetString(), ClientId, StringComparison.Ordinal)
             && string.Equals(claims.RootElement.GetProperty(WellKnownJwtClaimNames.Sub).GetString(), ClientId, StringComparison.Ordinal)

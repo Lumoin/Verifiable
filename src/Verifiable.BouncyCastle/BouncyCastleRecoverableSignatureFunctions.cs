@@ -67,7 +67,7 @@ public static class BouncyCastleRecoverableSignatureFunctions
     /// <see cref="RecoverableSigningDelegate"/>.
     /// </returns>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the returned Signature transfers to the caller.")]
-    public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaIso9796d2Async(
+    public static ValueTask<SigningResult> SignRsaIso9796d2Async(
         ReadOnlyMemory<byte> privateKeyBytes,
         ReadOnlyMemory<byte> nonRecoverableMessage,
         BaseMemoryPool signaturePool,
@@ -120,7 +120,7 @@ public static class BouncyCastleRecoverableSignatureFunctions
         CryptoEvent evt = SignatureProducedEvent.Create(
             CryptoAlgorithm.RsaIso9796d2, recoverableCapacity + nonRecoverableMessage.Length, signatureBytes.Length, CryptoLib.Name, timeProvider: timeProvider);
 
-        return ValueTask.FromResult<(Signature, CryptoEvent?)>((signatureResult, evt));
+        return ValueTask.FromResult(new SigningResult(signatureResult, evt));
     }
 
 

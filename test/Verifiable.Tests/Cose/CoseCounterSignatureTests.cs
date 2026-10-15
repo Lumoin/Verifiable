@@ -864,7 +864,7 @@ internal sealed class CoseCounterSignatureTests
         EncodedCoseProtectedHeader counterSignerProtectedHeader = EncodedCoseProtectedHeader.FromBytes(
             CoseSerialization.SerializeProtectedHeader(new Dictionary<int, object>()), metered.Pool);
 
-        static ValueTask<(Signature Signature, CryptoEvent? Event)> ThrowingSigningDelegate(
+        static ValueTask<SigningResult> ThrowingSigningDelegate(
             ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool,
             FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("Simulated signing-delegate failure (test-only).");

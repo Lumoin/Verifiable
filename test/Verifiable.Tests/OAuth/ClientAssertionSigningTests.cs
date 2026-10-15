@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -156,10 +155,11 @@ internal sealed class ClientAssertionSigningTests
 
     /// <summary>
     /// <c>client_secret_jwt</c> (OpenID Connect Core 1.0 §9): "The HMAC (Hash-based Message Authentication Code) is
-    /// calculated using the octets of the UTF-8 representation of the client_secret as the shared key." The MAC the
-    /// library writes equals the platform's own HMAC of the signing input under the secret, recomputed here independently of
-    /// the library for each of RFC 7518 §3.2's three algorithms; the header names the algorithm and the type and no
-    /// <c>kid</c>; and the claims are RFC 7523 §3's, as the <c>private_key_jwt</c> signer writes them.
+    /// calculated using the octets of the UTF-8 representation of the client_secret as the shared key." The assertion's
+    /// one composition, handed the secret's key (<see cref="ClientAssertionKey.OfClientSecret"/>), writes a MAC equal to the
+    /// platform's own HMAC of the signing input under the secret, recomputed here independently of the library for each of
+    /// RFC 7518 §3.2's three algorithms; the header names the algorithm and the type and no <c>kid</c>; and the claims are
+    /// RFC 7523 §3's, as the <c>private_key_jwt</c> assertion carries them.
     /// </summary>
     [TestMethod]
     [DataRow("HS256")]
@@ -167,18 +167,20 @@ internal sealed class ClientAssertionSigningTests
     [DataRow("HS512")]
     public async Task SignsAClientSecretJwtAssertionWhoseMacIsTheSecretsHmacOfItsSigningInput(string algorithm)
     {
-        byte[] secretOctets = Encoding.UTF8.GetBytes(LongClientSecret);
-        using PrivateKeyMemory secret = SecretOf(secretOctets);
+        var secretOctets = Encoding.UTF8.GetBytes(LongClientSecret);
+        using var secret = SecretOf(secretOctets);
 
-        DateTimeOffset now = TimeProvider.GetUtcNow();
-        string assertion = await ClientAssertionSigning.SignWithClientSecretAsync(
+        var key = ClientAssertionKey.OfClientSecret(secret, algorithm);
+        Assert.IsTrue(key.IsSuccess, "A secret of 64 octets keys every HMAC algorithm of RFC 7518 Section 3.2.");
+
+        var now = TimeProvider.GetUtcNow();
+        var assertion = await ClientAssertionSigning.SignAsync(
             ClientId,
             TokenEndpoint,
             jti: "secret-assertion-jti-1",
             issuedAt: now,
             expiresAt: now.AddMinutes(1),
-            secret,
-            algorithm,
+            key.Value,
             WellKnownMediaTypes.Jwt.ClientAuthenticationJwt,
             HeaderSerializer,
             PayloadSerializer,
@@ -186,27 +188,23 @@ internal sealed class ClientAssertionSigningTests
             Pool,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        string[] parts = assertion.Split('.');
+        var parts = assertion.Split('.');
         Assert.HasCount(3, parts);
 
-        byte[] signingInput = Encoding.ASCII.GetBytes($"{parts[0]}.{parts[1]}");
-        byte[] expected = algorithm switch
-        {
-            "HS256" => HMACSHA256.HashData(secretOctets, signingInput),
-            "HS384" => HMACSHA384.HashData(secretOctets, signingInput),
-            _ => HMACSHA512.HashData(secretOctets, signingInput)
-        };
+        var signingInput = Encoding.ASCII.GetBytes($"{parts[0]}.{parts[1]}");
+        Assert.AreSequenceEqual(
+            PlatformHmacOf(algorithm, secretOctets, signingInput),
+            SecurityEventTestJson.DecodeSegment(parts[2], Pool),
+            "The MAC is the secret's HMAC of the signing input.");
 
-        Assert.AreSequenceEqual(expected, SecurityEventTestJson.DecodeSegment(parts[2], Pool), "The MAC is the secret's HMAC of the signing input.");
-
-        using JsonDocument header = JsonDocument.Parse(SecurityEventTestJson.DecodeSegment(parts[0], Pool));
+        using var header = JsonDocument.Parse(SecurityEventTestJson.DecodeSegment(parts[0], Pool));
         Assert.AreEqual(algorithm, header.RootElement.GetProperty(WellKnownJwkMemberNames.Alg).GetString());
         Assert.AreEqual(WellKnownMediaTypes.Jwt.ClientAuthenticationJwt, header.RootElement.GetProperty(WellKnownJoseHeaderNames.Typ).GetString());
         Assert.IsFalse(header.RootElement.TryGetProperty(WellKnownJwkMemberNames.Kid, out _), "No key identifier names a client secret.");
         Assert.HasCount(2, header.RootElement.EnumerateObject(), "The header names alg and typ alone.");
 
-        using JsonDocument payload = JsonDocument.Parse(SecurityEventTestJson.DecodeSegment(parts[1], Pool));
-        JsonElement claims = payload.RootElement;
+        using var payload = JsonDocument.Parse(SecurityEventTestJson.DecodeSegment(parts[1], Pool));
+        var claims = payload.RootElement;
         Assert.AreEqual(ClientId, claims.GetProperty(WellKnownJwtClaimNames.Iss).GetString());
         Assert.AreEqual(ClientId, claims.GetProperty(WellKnownJwtClaimNames.Sub).GetString());
         Assert.AreEqual(TokenEndpoint, claims.GetProperty(WellKnownJwtClaimNames.Aud).GetString());
@@ -218,8 +216,9 @@ internal sealed class ClientAssertionSigningTests
 
     /// <summary>
     /// RFC 7518 §3.2: "A key of the same size as the hash output (for instance, 256 bits for "HS256") or larger MUST be used
-    /// with this algorithm." A secret one octet shorter than the hash output is refused as an argument before anything is
-    /// MACed, and one of exactly the hash output's length is MACed.
+    /// with this algorithm." A secret one octet shorter than the hash output is refused as the key is formed, a typed
+    /// refusal carrying the algorithm, the octets the secret carries and the octets the algorithm needs, with nothing
+    /// composed; one of exactly the hash output's length forms a key the composition MACs under.
     /// </summary>
     [TestMethod]
     [DataRow("HS256", 32)]
@@ -227,34 +226,92 @@ internal sealed class ClientAssertionSigningTests
     [DataRow("HS512", 64)]
     public async Task AClientSecretShorterThanTheHashOutputIsRefused(string algorithm, int hashOutputLength)
     {
-        using PrivateKeyMemory shortSecret = SecretOf(Encoding.UTF8.GetBytes(new string('s', hashOutputLength - 1)));
-        using PrivateKeyMemory sufficientSecret = SecretOf(Encoding.UTF8.GetBytes(new string('s', hashOutputLength)));
-        DateTimeOffset now = TimeProvider.GetUtcNow();
+        using var shortSecret = SecretOf(Encoding.UTF8.GetBytes(new string('s', hashOutputLength - 1)));
+        using var sufficientSecret = SecretOf(Encoding.UTF8.GetBytes(new string('s', hashOutputLength)));
 
-        ArgumentException refusal = await Assert.ThrowsExactlyAsync<ArgumentException>(
-            async () => await SignWithSecretAsync(shortSecret, algorithm, now).ConfigureAwait(false)).ConfigureAwait(false);
-        Assert.AreEqual("clientSecret", refusal.ParamName);
+        var refused = ClientAssertionKey.OfClientSecret(shortSecret, algorithm);
+        Assert.IsFalse(refused.IsSuccess, "A secret shorter than the hash output keys no assertion.");
+        Assert.AreEqual(ClientAssertionRefusalReason.ClientSecretShorterThanHashOutput, refused.Error.Reason);
+        Assert.AreEqual(algorithm, refused.Error.Algorithm);
+        Assert.AreEqual(hashOutputLength - 1, refused.Error.SecretOctets);
+        Assert.AreEqual(hashOutputLength, refused.Error.RequiredOctets);
 
-        string assertion = await SignWithSecretAsync(sufficientSecret, algorithm, now).ConfigureAwait(false);
+        var accepted = ClientAssertionKey.OfClientSecret(sufficientSecret, algorithm);
+        Assert.IsTrue(accepted.IsSuccess, "A secret of the hash output's length keys the assertion.");
+
+        var assertion = await SignWithKeyAsync(accepted.Value, TimeProvider.GetUtcNow()).ConfigureAwait(false);
         Assert.HasCount(3, assertion.Split('.'));
     }
 
 
     /// <summary>
     /// A <c>client_secret_jwt</c> assertion is MACed under an HMAC algorithm of RFC 7518 §3.2 alone: a signature algorithm
-    /// and <c>none</c> are refused as arguments before anything is composed.
+    /// and <c>none</c> are refused as the key is formed, a typed refusal naming the algorithm, before anything is composed.
     /// </summary>
+    /// <param name="algorithm">An algorithm none of the HMAC algorithms names.</param>
     [TestMethod]
     [DataRow("ES256")]
     [DataRow("RS256")]
     [DataRow("none")]
-    public async Task AClientSecretAssertionUnderAnAlgorithmOtherThanAnHmacIsRefused(string algorithm)
+    public void AClientSecretAssertionUnderAnAlgorithmOtherThanAnHmacIsRefused(string algorithm)
     {
-        using PrivateKeyMemory secret = SecretOf(Encoding.UTF8.GetBytes(LongClientSecret));
+        using var secret = SecretOf(Encoding.UTF8.GetBytes(LongClientSecret));
 
-        ArgumentException refusal = await Assert.ThrowsExactlyAsync<ArgumentException>(
-            async () => await SignWithSecretAsync(secret, algorithm, TimeProvider.GetUtcNow()).ConfigureAwait(false)).ConfigureAwait(false);
-        Assert.AreEqual("algorithm", refusal.ParamName);
+        var refused = ClientAssertionKey.OfClientSecret(secret, algorithm);
+
+        Assert.IsFalse(refused.IsSuccess, "Only an HMAC algorithm keys a client secret assertion.");
+        Assert.AreEqual(ClientAssertionRefusalReason.AlgorithmIsNotAnHmac, refused.Error.Reason);
+        Assert.AreEqual(algorithm, refused.Error.Algorithm);
+    }
+
+
+    /// <summary>
+    /// The options of an assertion name the key identifier its key calls for: a <c>client_secret_jwt</c> registration's
+    /// options naming a <c>kid</c> were composed for a signing key and are refused, typed, as the key is formed (OpenID
+    /// Connect Core 1.0 §9: the secret is the client's own, which its identifier already names), and the same options
+    /// naming none form a key whose header names no <c>kid</c>.
+    /// </summary>
+    [TestMethod]
+    public void AClientSecretAssertionWhoseOptionsNameAKeyIdentifierIsRefused()
+    {
+        using var secret = SecretOf(Encoding.UTF8.GetBytes(LongClientSecret));
+        using var unusedPublicKey = new PublicKeyMemory(Pool.Rent(1), Tag.Empty);
+        var registration = RegistrationOf(ClientAuthenticationMethod.ClientSecretJwt, new(unusedPublicKey, secret));
+
+        var refused = ClientAssertionKey.Of(registration, OptionsNaming("a-key-identifier-no-secret-carries"));
+        Assert.IsFalse(refused.IsSuccess, "Options naming a key identifier were composed for a signing key.");
+        Assert.AreEqual(ClientAssertionRefusalReason.ClientSecretNamesAKeyIdentifier, refused.Error.Reason);
+        Assert.AreEqual(WellKnownJwaValues.Hs256, refused.Error.Algorithm);
+
+        var accepted = ClientAssertionKey.Of(registration, OptionsNaming(keyId: null));
+        Assert.IsTrue(accepted.IsSuccess, "Options naming no key identifier form the secret's key.");
+        Assert.IsNull(accepted.Value.KeyId);
+        Assert.AreEqual(WellKnownJwaValues.Hs256, accepted.Value.Algorithm);
+    }
+
+
+    /// <summary>
+    /// A <c>private_key_jwt</c> registration's options naming no <c>kid</c> are refused, typed, as the key is formed: the
+    /// authorization server resolves the client's key by it (RFC 7515 §4.1.4); the same options naming one form a key whose
+    /// header names it, under the algorithm the key's tag names.
+    /// </summary>
+    [TestMethod]
+    public void APrivateKeyAssertionWhoseOptionsNameNoKeyIdentifierIsRefused()
+    {
+        var keyMaterial = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using var publicKey = keyMaterial.PublicKey;
+        using var privateKey = keyMaterial.PrivateKey;
+        var registration = RegistrationOf(ClientAuthenticationMethod.PrivateKeyJwt, keyMaterial);
+
+        var refused = ClientAssertionKey.Of(registration, OptionsNaming(keyId: null));
+        Assert.IsFalse(refused.IsSuccess, "A private key assertion names the key identifier the server resolves the key by.");
+        Assert.AreEqual(ClientAssertionRefusalReason.PrivateKeyNamesNoKeyIdentifier, refused.Error.Reason);
+        Assert.AreEqual(WellKnownJwaValues.Es256, refused.Error.Algorithm);
+
+        var accepted = ClientAssertionKey.Of(registration, OptionsNaming(SigningKeyId));
+        Assert.IsTrue(accepted.IsSuccess, "Options naming the key identifier form the private key's key.");
+        Assert.AreEqual(SigningKeyId, accepted.Value.KeyId);
+        Assert.AreEqual(WellKnownJwaValues.Es256, accepted.Value.Algorithm);
     }
 
 
@@ -262,16 +319,35 @@ internal sealed class ClientAssertionSigningTests
     private const string LongClientSecret = "client-secret-the-authorization-server-issued-0123456789abcdefgh";
 
 
-    /// <summary>MACs one assertion under a secret and an algorithm with this class's fixed claims.</summary>
-    private ValueTask<string> SignWithSecretAsync(PrivateKeyMemory secret, string algorithm, DateTimeOffset now) =>
-        ClientAssertionSigning.SignWithClientSecretAsync(
+    /// <summary>
+    /// The platform's own HMAC of a signing input under the secret, for the three HMAC algorithms of RFC 7518 §3.2 alone.
+    /// </summary>
+    /// <param name="algorithm">The HMAC algorithm.</param>
+    /// <param name="secret">The secret's octets.</param>
+    /// <param name="signingInput">The JWS signing input.</param>
+    /// <returns>The MAC.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The algorithm is none of <c>HS256</c>, <c>HS384</c> and <c>HS512</c>.</exception>
+    private static byte[] PlatformHmacOf(string algorithm, byte[] secret, byte[] signingInput) => algorithm switch
+    {
+        _ when WellKnownJwaValues.IsHs256(algorithm) => HMACSHA256.HashData(secret, signingInput),
+        _ when WellKnownJwaValues.IsHs384(algorithm) => HMACSHA384.HashData(secret, signingInput),
+        _ when WellKnownJwaValues.IsHs512(algorithm) => HMACSHA512.HashData(secret, signingInput),
+        _ => throw new ArgumentOutOfRangeException(nameof(algorithm), algorithm, "Only the HMAC algorithms of RFC 7518 Section 3.2 MAC a client secret assertion.")
+    };
+
+
+    /// <summary>Composes one assertion under a key with this class's fixed claims.</summary>
+    /// <param name="key">The key.</param>
+    /// <param name="now">The instant the claims are computed from.</param>
+    /// <returns>The compact assertion.</returns>
+    private ValueTask<string> SignWithKeyAsync(ClientAssertionKey key, DateTimeOffset now) =>
+        ClientAssertionSigning.SignAsync(
             ClientId,
             TokenEndpoint,
             "secret-assertion-jti-2",
             now,
             now.AddMinutes(1),
-            secret,
-            algorithm,
+            key,
             WellKnownJwkValues.TypeJwt,
             HeaderSerializer,
             PayloadSerializer,
@@ -280,11 +356,43 @@ internal sealed class ClientAssertionSigningTests
             TestContext.CancellationToken);
 
 
-    /// <summary>A client secret's octets as the library carries one, untagged: a shared secret is no asymmetric key.</summary>
-    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership transfers to the caller, which disposes the key.")]
+    /// <summary>A registration naming a method and carrying its key material, for forming a key from options.</summary>
+    /// <param name="method">The method.</param>
+    /// <param name="keyMaterial">The key material, the private half the key or the secret.</param>
+    /// <returns>The registration.</returns>
+    private static ClientRegistration RegistrationOf(
+        ClientAuthenticationMethod method,
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyMaterial) =>
+        new()
+        {
+            ClientId = new ClientId(ClientId),
+            AuthorizationServerIssuer = new Uri("https://as.example.com"),
+            AuthenticationMethod = method,
+            AuthenticationKeyMaterial = keyMaterial
+        };
+
+
+    /// <summary>Assertion options naming a key identifier, or none, under this class's serializers.</summary>
+    /// <param name="keyId">The key identifier, or <see langword="null"/> for none.</param>
+    /// <returns>The options.</returns>
+    private static ClientAssertionOptions OptionsNaming(string? keyId) =>
+        new()
+        {
+            SigningKeyId = keyId,
+            HeaderSerializer = HeaderSerializer,
+            PayloadSerializer = PayloadSerializer
+        };
+
+
+    /// <summary>
+    /// A client secret's octets as the library carries one, untagged - a shared secret is no asymmetric key - in pooled
+    /// memory the returned key owns and its caller disposes.
+    /// </summary>
+    /// <param name="octets">The secret's octets.</param>
+    /// <returns>The key holding a copy of the octets.</returns>
     private static PrivateKeyMemory SecretOf(byte[] octets)
     {
-        IMemoryOwner<byte> owner = Pool.Rent(octets.Length);
+        var owner = Pool.Rent(octets.Length);
         octets.CopyTo(owner.Memory.Span);
 
         return new PrivateKeyMemory(owner, Tag.Empty);
@@ -330,8 +438,7 @@ internal sealed class ClientAssertionSigningTests
                 form,
                 unsetAudience,
                 new Uri(TokenEndpoint),
-                privateKey,
-                SigningKeyId,
+                ClientAssertionKey.OfPrivateKey(privateKey, SigningKeyId),
                 HeaderSerializer,
                 PayloadSerializer,
                 TimeSpan.FromMinutes(5),

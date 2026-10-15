@@ -11,7 +11,7 @@ namespace Verifiable.Cryptography;
 /// <param name="context">Optional context parameters for the signing operation.</param>
 /// <param name="cancellationToken">Cancellation token for async operations.</param>
 /// <returns>
-/// The signature as pooled memory that the caller must dispose, paired with an optional
+/// A <see cref="SigningResult"/>: the signature as pooled memory that the caller must dispose, and an optional
 /// <see cref="SignatureProducedEvent"/> describing the operation. A backend that does not
 /// support observability returns <see langword="null"/> for the event; every currently
 /// registered backend constructs one using the <c>Backend</c>/<c>Algorithm</c> it already
@@ -78,7 +78,7 @@ namespace Verifiable.Cryptography;
 /// ready-to-use key objects.
 /// </para>
 /// </remarks>
-public delegate ValueTask<(Signature Signature, CryptoEvent? Event)> SigningDelegate(
+public delegate ValueTask<SigningResult> SigningDelegate(
     ReadOnlyMemory<byte> privateKeyBytes,
     ReadOnlyMemory<byte> dataToSign,
     BaseMemoryPool signaturePool,

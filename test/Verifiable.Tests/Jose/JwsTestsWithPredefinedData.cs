@@ -38,13 +38,13 @@ internal sealed class JwsTestsWithPredefinedData
 
         //Signs with framework ECDsa, independent of the project's own crypto drivers — the
         //self-consistency firewall this file's jwt.io cross-checks rely on.
-        ValueTask<(Signature Signature, CryptoEvent? Event)> signingDelegate(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, System.Collections.Frozen.FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        ValueTask<SigningResult> signingDelegate(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, System.Collections.Frozen.FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             using ECDsa key = ECDsa.Create(new ECParameters { Curve = curve, D = privateKeyBytes.ToArray() });
             byte[] signatureBytes = key.SignData(dataToSign.Span, hashAlgorithm);
             IMemoryOwner<byte> memoryOwner = signaturePool.Rent(signatureBytes.Length);
             signatureBytes.CopyTo(memoryOwner.Memory.Span);
-            return ValueTask.FromResult<(Signature, CryptoEvent?)>((new Signature(memoryOwner, signatureTag), null));
+            return ValueTask.FromResult(new SigningResult(new Signature(memoryOwner, signatureTag), null));
         }
 
         JwsMessage jwsMessage = await Jws.SignAsync(
@@ -109,14 +109,14 @@ verificationDelegate,
 
         //RSA-PKCS1 signing is deterministic — this framework implementation recomputes jwt.io's
         //exact signature, the self-consistency firewall the full-JWT assertion below relies on.
-        ValueTask<(Signature Signature, CryptoEvent? Event)> signingDelegate(ReadOnlyMemory<byte> privKey, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, System.Collections.Frozen.FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        ValueTask<SigningResult> signingDelegate(ReadOnlyMemory<byte> privKey, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, System.Collections.Frozen.FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             using RSA key = RSA.Create();
             key.ImportPkcs8PrivateKey(privKey.Span, out _);
             byte[] signatureBytes = key.SignData(dataToSign.Span, hashAlgorithm, RSASignaturePadding.Pkcs1);
             IMemoryOwner<byte> memoryOwner = signaturePool.Rent(signatureBytes.Length);
             signatureBytes.CopyTo(memoryOwner.Memory.Span);
-            return ValueTask.FromResult<(Signature, CryptoEvent?)>((new Signature(memoryOwner, Tag.Empty), null));
+            return ValueTask.FromResult(new SigningResult(new Signature(memoryOwner, Tag.Empty), null));
         }
 
         JwsMessage jwsMessage = await Jws.SignAsync(
@@ -153,14 +153,14 @@ signingDelegate,
 
         //Signs with framework RSA-PSS, independent of the project's own crypto drivers — the
         //self-consistency firewall this file's jwt.io cross-checks rely on.
-        ValueTask<(Signature Signature, CryptoEvent? Event)> signingDelegate(ReadOnlyMemory<byte> privKey, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, System.Collections.Frozen.FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        ValueTask<SigningResult> signingDelegate(ReadOnlyMemory<byte> privKey, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, System.Collections.Frozen.FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             using RSA key = RSA.Create();
             key.ImportPkcs8PrivateKey(privKey.Span, out _);
             byte[] signatureBytes = key.SignData(dataToSign.Span, hashAlgorithm, RSASignaturePadding.Pss);
             IMemoryOwner<byte> memoryOwner = signaturePool.Rent(signatureBytes.Length);
             signatureBytes.CopyTo(memoryOwner.Memory.Span);
-            return ValueTask.FromResult<(Signature, CryptoEvent?)>((new Signature(memoryOwner, Tag.Empty), null));
+            return ValueTask.FromResult(new SigningResult(new Signature(memoryOwner, Tag.Empty), null));
         }
 
         JwsMessage jwsMessage = await Jws.SignAsync(

@@ -143,6 +143,49 @@ internal static class TokenEndpointClientOperations
 
 
     /// <summary>
+    /// Forms, before anything is composed or sent, the key a registration's assertion method composes its assertions under
+    /// (<see cref="ClientAssertionKey.Of"/>): for <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/> and
+    /// <see cref="ClientAuthenticationMethod.ClientSecretJwt"/> the key, or the caller's failure carrying the typed
+    /// <see cref="ClientAssertionRefusal"/> (<see cref="AuthCodeFlowEndpointResult.ClientAssertionRefusal"/>) of options
+    /// or a secret the assertion refuses; for every other method no key.
+    /// </summary>
+    /// <param name="registration">The registration naming the method.</param>
+    /// <param name="clientAssertionOptions">The assertion options, required for an assertion method.</param>
+    /// <returns>The key, <see langword="null"/> for a method presenting no assertion, or the refusal.</returns>
+    /// <exception cref="InvalidOperationException">An assertion method is handed no options.</exception>
+    internal static Result<ClientAssertionKey?, AuthCodeFlowEndpointResult> ResolveClientAssertionKey(
+        ClientRegistration registration,
+        ClientAssertionOptions? clientAssertionOptions)
+    {
+        if(!PresentsAssertion(registration))
+        {
+            return Result<ClientAssertionKey?, AuthCodeFlowEndpointResult>.Success(null);
+        }
+
+        if(clientAssertionOptions is null)
+        {
+            throw new InvalidOperationException(
+                $"ClientAuthenticationMethod.{ClientAuthenticationMethodNames.GetName(registration.AuthenticationMethod)} "
+                + "requires a ClientAssertionOptions instance to compose the client_assertion.");
+        }
+
+        var key = ClientAssertionKey.Of(registration, clientAssertionOptions);
+        if(!key.IsSuccess)
+        {
+            return Result<ClientAssertionKey?, AuthCodeFlowEndpointResult>.Failure(new AuthCodeFlowEndpointResult
+            {
+                Outcome = AuthCodeFlowEndpointOutcome.InternalError,
+                ErrorCode = "server_error",
+                ErrorDescription = key.Error.Describe(),
+                ClientAssertionRefusal = key.Error
+            });
+        }
+
+        return Result<ClientAssertionKey?, AuthCodeFlowEndpointResult>.Success(key.Value);
+    }
+
+
+    /// <summary>
     /// Attaches confidential-client authentication to <paramref name="form"/> (and, for
     /// <c>client_secret_basic</c>, to the returned <see cref="OutgoingHeaders"/>) per
     /// <see cref="ClientRegistration.AuthenticationMethod"/>: <see cref="ClientAuthenticationMethod.None"/>
@@ -151,16 +194,26 @@ internal static class TokenEndpointClientOperations
     /// <see cref="ClientAuthenticationMethod.ClientSecretPost"/> and
     /// <see cref="ClientAuthenticationMethod.ClientSecretBasic"/> present
     /// <see cref="ClientRegistration.AuthenticationKeyMaterial"/>'s private-key bytes as the shared
-    /// secret (RFC 6749 §2.3.1); <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/> signs a
-    /// <c>client_assertion</c> from the same key material via
-    /// <see cref="ClientTokenEndpointAuthentication.AttachClientAssertionAsync"/> (RFC 7523 §2.2); and
-    /// <see cref="ClientAuthenticationMethod.ClientSecretJwt"/> MACs one under the same shared secret via
-    /// <see cref="ClientTokenEndpointAuthentication.AttachClientSecretAssertionAsync"/> (OpenID Connect Core 1.0 §9).
+    /// secret (RFC 6749 §2.3.1); and <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/> and
+    /// <see cref="ClientAuthenticationMethod.ClientSecretJwt"/> attach a <c>client_assertion</c> composed under the key
+    /// <see cref="ResolveClientAssertionKey"/> formed via
+    /// <see cref="ClientTokenEndpointAuthentication.AttachClientAssertionAsync"/> (RFC 7523 §2.2; OpenID Connect Core 1.0 §9).
     /// </summary>
+    /// <param name="form">The outgoing form fields.</param>
+    /// <param name="registration">The registration naming the method.</param>
+    /// <param name="tokenEndpoint">The resolved token endpoint.</param>
+    /// <param name="assertionKey">The key <see cref="ResolveClientAssertionKey"/> formed, <see langword="null"/> for a method presenting no assertion.</param>
+    /// <param name="clientAssertionOptions">The assertion options, read for an assertion method.</param>
+    /// <param name="infrastructure">The client infrastructure.</param>
+    /// <param name="now">The instant of this attempt.</param>
+    /// <param name="context">The per-operation exchange context.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The header fields the authentication adds.</returns>
     internal static ValueTask<OutgoingHeaders> AttachClientAuthenticationAsync(
         OutgoingFormFields form,
         ClientRegistration registration,
         Uri tokenEndpoint,
+        ClientAssertionKey? assertionKey,
         ClientAssertionOptions? clientAssertionOptions,
         OAuthClientInfrastructure infrastructure,
         DateTimeOffset now,
@@ -172,7 +225,7 @@ internal static class TokenEndpointClientOperations
 
         static ValueTask<OutgoingHeaders> AttachClientSecretPost(OutgoingFormFields form, ClientRegistration registration)
         {
-            PrivateKeyMemory secret = RequireAuthenticationKey(registration);
+            var secret = RequireAuthenticationKey(registration);
             _ = form.WithClientSecretPost(registration.ClientId.Value, secret.AsReadOnlySpan());
 
             return ValueTask.FromResult(OutgoingHeaders.Empty);
@@ -180,71 +233,34 @@ internal static class TokenEndpointClientOperations
 
         static ValueTask<OutgoingHeaders> AttachClientSecretBasic(ClientRegistration registration)
         {
-            PrivateKeyMemory secret = RequireAuthenticationKey(registration);
-            OutgoingHeaders headers = OutgoingHeaders.Empty.WithClientSecretBasic(registration.ClientId.Value, secret.AsReadOnlySpan());
+            var secret = RequireAuthenticationKey(registration);
+            var headers = OutgoingHeaders.Empty.WithClientSecretBasic(registration.ClientId.Value, secret.AsReadOnlySpan());
 
             return ValueTask.FromResult(headers);
         }
 
-        static async ValueTask<OutgoingHeaders> AttachPrivateKeyJwt(
+        static async ValueTask<OutgoingHeaders> AttachAssertion(
             OutgoingFormFields form,
             ClientRegistration registration,
             Uri tokenEndpoint,
+            ClientAssertionKey? assertionKey,
             ClientAssertionOptions? clientAssertionOptions,
             OAuthClientInfrastructure infrastructure,
             DateTimeOffset now,
             ExchangeContext context,
             CancellationToken cancellationToken)
         {
-            PrivateKeyMemory signingKey = RequireAuthenticationKey(registration);
-            if(clientAssertionOptions is not { SigningKeyId: string signingKeyId })
+            if(assertionKey is null || clientAssertionOptions is null)
             {
                 throw new InvalidOperationException(
-                    "ClientAuthenticationMethod.PrivateKeyJwt requires a ClientAssertionOptions instance naming the SigningKeyId to sign the client_assertion.");
+                    "A client assertion is attached under the key and the options ResolveClientAssertionKey formed before the request was composed.");
             }
 
             await ClientTokenEndpointAuthentication.AttachClientAssertionAsync(
                 form,
                 registration,
                 tokenEndpoint,
-                signingKey,
-                signingKeyId,
-                clientAssertionOptions.HeaderSerializer,
-                clientAssertionOptions.PayloadSerializer,
-                clientAssertionOptions.ClientAssertionLifetime,
-                infrastructure,
-                now,
-                context,
-                cancellationToken).ConfigureAwait(false);
-
-            return OutgoingHeaders.Empty;
-        }
-
-        //OpenID Connect Core 1.0 Section 9: the assertion is MACed under the client secret, which its identifier already
-        //names, so the header names no kid; options naming one were composed for a signing key, never for a secret.
-        static async ValueTask<OutgoingHeaders> AttachClientSecretJwt(
-            OutgoingFormFields form,
-            ClientRegistration registration,
-            Uri tokenEndpoint,
-            ClientAssertionOptions? clientAssertionOptions,
-            OAuthClientInfrastructure infrastructure,
-            DateTimeOffset now,
-            ExchangeContext context,
-            CancellationToken cancellationToken)
-        {
-            PrivateKeyMemory secret = RequireAuthenticationKey(registration);
-            if(clientAssertionOptions is not { SigningKeyId: null })
-            {
-                throw new InvalidOperationException(
-                    "ClientAuthenticationMethod.ClientSecretJwt requires a ClientAssertionOptions instance naming no SigningKeyId to MAC the client_assertion.");
-            }
-
-            await ClientTokenEndpointAuthentication.AttachClientSecretAssertionAsync(
-                form,
-                registration,
-                tokenEndpoint,
-                secret,
-                clientAssertionOptions.ClientSecretAlgorithm,
+                assertionKey,
                 clientAssertionOptions.HeaderSerializer,
                 clientAssertionOptions.PayloadSerializer,
                 clientAssertionOptions.ClientAssertionLifetime,
@@ -261,15 +277,24 @@ internal static class TokenEndpointClientOperations
             var c when c == ClientAuthenticationMethod.None.Code => AttachNone(),
             var c when c == ClientAuthenticationMethod.ClientSecretPost.Code => AttachClientSecretPost(form, registration),
             var c when c == ClientAuthenticationMethod.ClientSecretBasic.Code => AttachClientSecretBasic(registration),
-            var c when c == ClientAuthenticationMethod.PrivateKeyJwt.Code => AttachPrivateKeyJwt(
-                form, registration, tokenEndpoint, clientAssertionOptions, infrastructure, now, context, cancellationToken),
-            var c when c == ClientAuthenticationMethod.ClientSecretJwt.Code => AttachClientSecretJwt(
-                form, registration, tokenEndpoint, clientAssertionOptions, infrastructure, now, context, cancellationToken),
+            _ when PresentsAssertion(registration) => AttachAssertion(
+                form, registration, tokenEndpoint, assertionKey, clientAssertionOptions, infrastructure, now, context, cancellationToken),
             _ => throw new NotSupportedException(
                 $"Client authentication method '{ClientAuthenticationMethodNames.GetName(registration.AuthenticationMethod)}' " +
                 "is not supported at the token endpoint.")
         };
     }
+
+
+    /// <summary>
+    /// Whether a registration's method presents a client assertion: <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/>
+    /// or <see cref="ClientAuthenticationMethod.ClientSecretJwt"/> (RFC 7523 §2.2).
+    /// </summary>
+    /// <param name="registration">The registration.</param>
+    /// <returns><see langword="true"/> for an assertion method.</returns>
+    private static bool PresentsAssertion(ClientRegistration registration) =>
+        registration.AuthenticationMethod.Code == ClientAuthenticationMethod.PrivateKeyJwt.Code
+        || registration.AuthenticationMethod.Code == ClientAuthenticationMethod.ClientSecretJwt.Code;
 
 
     /// <summary>

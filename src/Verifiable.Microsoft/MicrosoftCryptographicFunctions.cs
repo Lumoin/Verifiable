@@ -161,7 +161,7 @@ namespace Verifiable.Microsoft
         /// <param name="timeProvider">The clock the produced <see cref="CryptoEvent"/> is stamped with.</param>
         /// <param name="context">Optional caller-supplied context forwarded onto telemetry.</param>
         /// <param name="cancellationToken">Cancels the signing operation.</param>
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignP256Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<SigningResult> SignP256Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignECDsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, ECCurve.NamedCurves.nistP256, HashAlgorithmName.SHA256, CryptoTags.P256Signature, timeProvider);
@@ -186,7 +186,7 @@ namespace Verifiable.Microsoft
         /// <param name="timeProvider">The clock the produced <see cref="CryptoEvent"/> is stamped with.</param>
         /// <param name="context">Optional caller-supplied context forwarded onto telemetry.</param>
         /// <param name="cancellationToken">Cancels the signing operation.</param>
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignP384Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<SigningResult> SignP384Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignECDsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, ECCurve.NamedCurves.nistP384, HashAlgorithmName.SHA384, CryptoTags.P384Signature, timeProvider);
@@ -211,7 +211,7 @@ namespace Verifiable.Microsoft
         /// <param name="timeProvider">The clock the produced <see cref="CryptoEvent"/> is stamped with.</param>
         /// <param name="context">Optional caller-supplied context forwarded onto telemetry.</param>
         /// <param name="cancellationToken">Cancels the signing operation.</param>
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignP521Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<SigningResult> SignP521Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignECDsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, ECCurve.NamedCurves.nistP521, HashAlgorithmName.SHA512, CryptoTags.P521Signature, timeProvider);
@@ -236,7 +236,7 @@ namespace Verifiable.Microsoft
         /// <param name="timeProvider">The clock the produced <see cref="CryptoEvent"/> is stamped with.</param>
         /// <param name="context">Optional caller-supplied context forwarded onto telemetry.</param>
         /// <param name="cancellationToken">Cancels the signing operation.</param>
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignSecp256k1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<SigningResult> SignSecp256k1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignECDsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, ECCurve.CreateFromFriendlyName("secP256k1"), HashAlgorithmName.SHA256, CryptoTags.Secp256k1Signature, timeProvider);
@@ -249,7 +249,7 @@ namespace Verifiable.Microsoft
         /// <param name="timeProvider">The clock the produced <see cref="CryptoEvent"/> is stamped with.</param>
         /// <param name="context">Optional caller-supplied context forwarded onto telemetry.</param>
         /// <param name="cancellationToken">Cancels the signing operation.</param>
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsa2048Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<SigningResult> SignRsa2048Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1, CryptoTags.Rsa2048Signature, timeProvider);
@@ -274,7 +274,7 @@ namespace Verifiable.Microsoft
         /// <param name="timeProvider">The clock the produced <see cref="CryptoEvent"/> is stamped with.</param>
         /// <param name="context">Optional caller-supplied context forwarded onto telemetry.</param>
         /// <param name="cancellationToken">Cancels the signing operation.</param>
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsa4096Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<SigningResult> SignRsa4096Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1, CryptoTags.Rsa4096Signature, timeProvider);
@@ -311,7 +311,7 @@ namespace Verifiable.Microsoft
         /// <param name="timeProvider">The clock the produced <see cref="CryptoEvent"/> is stamped with.</param>
         /// <param name="context">Optional caller-supplied context forwarded onto telemetry.</param>
         /// <param name="cancellationToken">Cancels the signing operation.</param>
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaSha256Pkcs1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<SigningResult> SignRsaSha256Pkcs1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1, CryptoTags.RsaSha256Pkcs1Signature, timeProvider);
@@ -336,7 +336,7 @@ namespace Verifiable.Microsoft
         /// <param name="timeProvider">The clock the produced <see cref="CryptoEvent"/> is stamped with.</param>
         /// <param name="context">Optional caller-supplied context forwarded onto telemetry.</param>
         /// <param name="cancellationToken">Cancels the signing operation.</param>
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaSha256PssAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<SigningResult> SignRsaSha256PssAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, HashAlgorithmName.SHA256, RSASignaturePadding.Pss, CryptoTags.RsaSha256PssSignature, timeProvider);
@@ -361,7 +361,7 @@ namespace Verifiable.Microsoft
         /// <param name="timeProvider">The clock the produced <see cref="CryptoEvent"/> is stamped with.</param>
         /// <param name="context">Optional caller-supplied context forwarded onto telemetry.</param>
         /// <param name="cancellationToken">Cancels the signing operation.</param>
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaSha384Pkcs1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<SigningResult> SignRsaSha384Pkcs1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, HashAlgorithmName.SHA384, RSASignaturePadding.Pkcs1, CryptoTags.RsaSha384Pkcs1Signature, timeProvider);
@@ -386,7 +386,7 @@ namespace Verifiable.Microsoft
         /// <param name="timeProvider">The clock the produced <see cref="CryptoEvent"/> is stamped with.</param>
         /// <param name="context">Optional caller-supplied context forwarded onto telemetry.</param>
         /// <param name="cancellationToken">Cancels the signing operation.</param>
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaSha384PssAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<SigningResult> SignRsaSha384PssAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, HashAlgorithmName.SHA384, RSASignaturePadding.Pss, CryptoTags.RsaSha384PssSignature, timeProvider);
@@ -411,7 +411,7 @@ namespace Verifiable.Microsoft
         /// <param name="timeProvider">The clock the produced <see cref="CryptoEvent"/> is stamped with.</param>
         /// <param name="context">Optional caller-supplied context forwarded onto telemetry.</param>
         /// <param name="cancellationToken">Cancels the signing operation.</param>
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaSha512Pkcs1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<SigningResult> SignRsaSha512Pkcs1Async(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, HashAlgorithmName.SHA512, RSASignaturePadding.Pkcs1, CryptoTags.RsaSha512Pkcs1Signature, timeProvider);
@@ -436,7 +436,7 @@ namespace Verifiable.Microsoft
         /// <param name="timeProvider">The clock the produced <see cref="CryptoEvent"/> is stamped with.</param>
         /// <param name="context">Optional caller-supplied context forwarded onto telemetry.</param>
         /// <param name="cancellationToken">Cancels the signing operation.</param>
-        public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsaSha512PssAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
+        public static ValueTask<SigningResult> SignRsaSha512PssAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, TimeProvider timeProvider, FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(signaturePool);
             return SignRsa(privateKeyBytes.Span, dataToSign.Span, signaturePool, HashAlgorithmName.SHA512, RSASignaturePadding.Pss, CryptoTags.RsaSha512PssSignature, timeProvider);
@@ -497,7 +497,7 @@ namespace Verifiable.Microsoft
         }
 
 
-        private static ValueTask<(Signature Signature, CryptoEvent? Event)> SignECDsa(ReadOnlySpan<byte> privateKeyBytes, ReadOnlySpan<byte> dataToSign, BaseMemoryPool signaturePool, ECCurve curve, HashAlgorithmName hashAlgorithmName, Tag signatureTag, TimeProvider timeProvider)
+        private static ValueTask<SigningResult> SignECDsa(ReadOnlySpan<byte> privateKeyBytes, ReadOnlySpan<byte> dataToSign, BaseMemoryPool signaturePool, ECCurve curve, HashAlgorithmName hashAlgorithmName, Tag signatureTag, TimeProvider timeProvider)
         {
             ProviderOperation operation = new(nameof(SignECDsa));
             using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.Sign);
@@ -535,7 +535,7 @@ namespace Verifiable.Microsoft
             CryptoEvent evt = SignatureProducedEvent.Create(
                 signatureTag.Get<CryptoAlgorithm>(), dataToSign.Length, signatureBytes.Length, CryptoLib.Name, timeProvider: timeProvider);
 
-            return ValueTask.FromResult<(Signature, CryptoEvent?)>((signatureResult, evt));
+            return ValueTask.FromResult(new SigningResult(signatureResult, evt));
         }
 
         /// <summary>Verifies an RSA signature using both parameters read from the DER PKCS#1 public key.</summary>
@@ -565,7 +565,7 @@ namespace Verifiable.Microsoft
             }
         }
 
-        private static ValueTask<(Signature Signature, CryptoEvent? Event)> SignRsa(ReadOnlySpan<byte> privateKeyBytes, ReadOnlySpan<byte> dataToSign, BaseMemoryPool signaturePool, HashAlgorithmName hashAlgorithmName, RSASignaturePadding padding, Tag signatureTag, TimeProvider timeProvider)
+        private static ValueTask<SigningResult> SignRsa(ReadOnlySpan<byte> privateKeyBytes, ReadOnlySpan<byte> dataToSign, BaseMemoryPool signaturePool, HashAlgorithmName hashAlgorithmName, RSASignaturePadding padding, Tag signatureTag, TimeProvider timeProvider)
         {
             ProviderOperation operation = new(nameof(SignRsa));
             using Activity? activity = CryptoActivitySource.Source.StartActivity(CryptoTelemetry.ActivityNames.Sign);
@@ -586,7 +586,7 @@ namespace Verifiable.Microsoft
                 CryptoEvent evt = SignatureProducedEvent.Create(
                     signatureTag.Get<CryptoAlgorithm>(), dataToSign.Length, signatureBytes.Length, CryptoLib.Name, timeProvider: timeProvider);
 
-                return ValueTask.FromResult<(Signature, CryptoEvent?)>((signatureResult, evt));
+                return ValueTask.FromResult(new SigningResult(signatureResult, evt));
             }
         }
 

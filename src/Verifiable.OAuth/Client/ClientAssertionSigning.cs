@@ -1,19 +1,19 @@
-using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 
 namespace Verifiable.OAuth.Client;
 
 /// <summary>
-/// Builds and signs a client authentication assertion for the <c>private_key_jwt</c> client
-/// authentication method per
+/// Builds and signs a client authentication assertion per
 /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-2.2">RFC 7523 §2.2</see> and the §3
 /// processing rules (with the assertion-framework requirements of
-/// <see href="https://www.rfc-editor.org/rfc/rfc7521#section-4.2">RFC 7521 §4.2</see>). The client
-/// presents the resulting compact JWS as the <c>client_assertion</c> token-endpoint parameter, paired
-/// with <c>client_assertion_type</c> =
-/// <c>urn:ietf:params:oauth:client-assertion-type:jwt-bearer</c>, proving possession of its registered
-/// signing key without transmitting a shared secret.
+/// <see href="https://www.rfc-editor.org/rfc/rfc7521#section-4.2">RFC 7521 §4.2</see>): the <c>private_key_jwt</c>
+/// assertion signed with the client's registered key, and the <c>client_secret_jwt</c> assertion MACed with the client
+/// secret (OpenID Connect Core 1.0 §9), both composed once, by
+/// <see cref="SignAsync(string, string, string, DateTimeOffset, DateTimeOffset, ClientAssertionKey, string, JwtHeaderSerializer, JwtPayloadSerializer, EncodeDelegate, BaseMemoryPool, CancellationToken)"/>,
+/// the <see cref="ClientAssertionKey"/> supplying the header inputs and the signing operation. The client presents the
+/// resulting compact JWS as the <c>client_assertion</c> token-endpoint parameter, paired with
+/// <c>client_assertion_type</c> = <c>urn:ietf:params:oauth:client-assertion-type:jwt-bearer</c>.
 /// </summary>
 /// <remarks>
 /// This is general confidential-client authentication, reusable by every confidential token call. It is
@@ -21,7 +21,7 @@ namespace Verifiable.OAuth.Client;
 /// the Resource Authorization Server's JWT Bearer endpoint (the redeem), since
 /// draft-ietf-oauth-identity-assertion-authz-grant-04 (21 May 2026) §9.1 supports ID-JAG only for confidential clients
 /// and §4.3.1 illustrates client authentication with a JWT Bearer client assertion. Composes
-/// <see cref="JwtHeaderExtensions.ForSigning"/> and <see cref="JwtSigningExtensions.SignAsync(UnsignedJwt, PrivateKeyMemory, JwtHeaderSerializer, JwtPayloadSerializer, EncodeDelegate, BaseMemoryPool, CancellationToken)"/> — the
+/// <see cref="JwtHeaderExtensions.ForSigning"/> and <see cref="JwtSigningExtensions.SignAsync(UnsignedJwt, PrivateKeyMemory, JwtHeaderSerializer, JwtPayloadSerializer, EncodeDelegate, SigningDelegate, BaseMemoryPool, CryptoEventSink?, CancellationToken)"/> — the
 /// same JCose composition the JAR signer (<see cref="AuthCode.AuthCodeJarSigning"/>) uses.
 /// </remarks>
 public static class ClientAssertionSigning
@@ -69,14 +69,14 @@ public static class ClientAssertionSigning
             jti,
             issuedAt,
             expiresAt,
-            signingKey,
-            signingKeyId,
+            ClientAssertionKey.OfPrivateKey(signingKey, signingKeyId),
             WellKnownJwkValues.TypeJwt,
             headerSerializer,
             payloadSerializer,
             base64UrlEncoder,
             memoryPool,
             cancellationToken);
+
 
     /// <summary>
     /// Signs a <c>private_key_jwt</c> client authentication assertion (RFC 7523 Section 3) with an
@@ -107,8 +107,7 @@ public static class ClientAssertionSigning
     /// <param name="memoryPool">Memory pool for transient signing buffers.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The compact-serialised client assertion (<c>header.payload.signature</c>).</returns>
-    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "JwsMessage is disposed via the using statement before the method returns; the returned string is independent of the message.")]
-    public static async ValueTask<string> SignAsync(
+    public static ValueTask<string> SignAsync(
         string clientId,
         string audience,
         string jti,
@@ -121,58 +120,38 @@ public static class ClientAssertionSigning
         JwtPayloadSerializer payloadSerializer,
         EncodeDelegate base64UrlEncoder,
         BaseMemoryPool memoryPool,
-        CancellationToken cancellationToken)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(clientId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(audience);
-        ArgumentException.ThrowIfNullOrWhiteSpace(jti);
-        ArgumentNullException.ThrowIfNull(signingKey);
-        ArgumentException.ThrowIfNullOrWhiteSpace(signingKeyId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(type);
-        ArgumentNullException.ThrowIfNull(headerSerializer);
-        ArgumentNullException.ThrowIfNull(payloadSerializer);
-        ArgumentNullException.ThrowIfNull(base64UrlEncoder);
-        ArgumentNullException.ThrowIfNull(memoryPool);
-
-        string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(signingKey.Tag);
-        JwtHeader header = JwtHeader.ForSigning(algorithm, type, signingKeyId);
-        JwtPayload payload = ClaimsOf(clientId, audience, jti, issuedAt, expiresAt);
-
-        UnsignedJwt unsigned = new(header, payload);
-        using JwsMessage jws = await unsigned.SignAsync(
-            signingKey,
+        CancellationToken cancellationToken) =>
+        SignAsync(
+            clientId,
+            audience,
+            jti,
+            issuedAt,
+            expiresAt,
+            ClientAssertionKey.OfPrivateKey(signingKey, signingKeyId),
+            type,
             headerSerializer,
             payloadSerializer,
             base64UrlEncoder,
             memoryPool,
-            cancellationToken).ConfigureAwait(false);
-
-        return JwsSerialization.SerializeCompact(jws, base64UrlEncoder);
-    }
+            cancellationToken);
 
 
     /// <summary>
-    /// MACs a <c>client_secret_jwt</c> client authentication assertion (OpenID Connect Core 1.0 Section 9; RFC 7523
-    /// Section 2.2): the same claims <see cref="SignAsync(string, string, string, DateTimeOffset, DateTimeOffset, PrivateKeyMemory, string, string, JwtHeaderSerializer, JwtPayloadSerializer, EncodeDelegate, BaseMemoryPool, CancellationToken)"/>
-    /// writes for <c>private_key_jwt</c> - <c>iss</c> and <c>sub</c> the client identifier, <c>aud</c>, a unique
-    /// <c>jti</c>, <c>iat</c> and <c>exp</c> - in a JWS whose MAC is computed under the client secret the authorization
-    /// server issued: "The JWT MUST be signed using an HMAC SHA algorithm, such as HMAC SHA-256. The HMAC (Hash-based
-    /// Message Authentication Code) is calculated using the octets of the UTF-8 representation of the client_secret as the
-    /// shared key." The protected header names <c>alg</c> and <c>typ</c> alone: the secret is the client's own, which its
-    /// identifier already names, so no <c>kid</c> is written. The MAC is computed through the registered
-    /// <see cref="ComputeHmacDelegate"/> (<see cref="CryptographicKeyEvents.ComputeHmacAsync(ReadOnlyMemory{byte}, ReadOnlyMemory{byte}, int, Tag, BaseMemoryPool, System.Collections.Frozen.FrozenDictionary{string, object}?, string?, CancellationToken)"/>),
-    /// the library's one seam for an HMAC.
+    /// Composes a client authentication assertion under its key, the one composition every client assertion is assembled
+    /// by: the protected header the key supplies - its <c>alg</c>, the <c>typ</c> named here and its <c>kid</c> when it
+    /// names one, a <c>client_secret_jwt</c> secret naming none (OpenID Connect Core 1.0 Section 9) - over RFC 7523
+    /// Section 3's claims, <c>iss</c> and <c>sub</c> the client identifier, <c>aud</c>, a unique <c>jti</c>, <c>iat</c> and
+    /// <c>exp</c>, signed with the key's own signing operation and serialized compact.
     /// </summary>
     /// <param name="clientId">The client identifier, the assertion's <c>iss</c> and <c>sub</c> (RFC 7523 Section 3 rules 1-2).</param>
-    /// <param name="audience">The value the assertion's <c>aud</c> names, written as a single JSON string (RFC 7519 Section 4.1.3).</param>
+    /// <param name="audience">
+    /// The value the assertion's <c>aud</c> names, written as a single JSON string (RFC 7519 Section 4.1.3), so the assertion
+    /// is bound to the AS that authenticates the client (RFC 7523 Section 3 rule 3).
+    /// </param>
     /// <param name="jti">A unique identifier for this assertion, enabling the AS's replay defense (RFC 7523 Section 3 rule 7).</param>
     /// <param name="issuedAt">The <c>iat</c> claim.</param>
     /// <param name="expiresAt">The <c>exp</c> claim limiting the assertion's validity window (RFC 7523 Section 3 rule 4).</param>
-    /// <param name="clientSecret">The octets of the UTF-8 representation of the client secret, the MAC's key.</param>
-    /// <param name="algorithm">
-    /// The JWS <c>alg</c> the assertion is MACed under, one of RFC 7518 Section 3.2's HMAC algorithms:
-    /// <see cref="WellKnownJwaValues.Hs256"/>, <see cref="WellKnownJwaValues.Hs384"/> or <see cref="WellKnownJwaValues.Hs512"/>.
-    /// </param>
+    /// <param name="key">The key the assertion is signed under, supplying the header's <c>alg</c> and <c>kid</c> and the signing operation.</param>
     /// <param name="type">
     /// The <c>typ</c> header parameter value: <see cref="WellKnownJwkValues.TypeJwt"/> (<c>JWT</c>) or the explicit
     /// <see cref="Verifiable.JCose.WellKnownMediaTypes.Jwt.ClientAuthenticationJwt"/> rfc7523bis-11 Section 4 defines.
@@ -180,23 +159,16 @@ public static class ClientAssertionSigning
     /// <param name="headerSerializer">Serialises the protected header to UTF-8 JSON bytes.</param>
     /// <param name="payloadSerializer">Serialises the payload claims to UTF-8 JSON bytes.</param>
     /// <param name="base64UrlEncoder">Base64url encoder for compact JWS serialisation.</param>
-    /// <param name="memoryPool">Memory pool for transient signing buffers and the MAC.</param>
+    /// <param name="memoryPool">Memory pool for transient signing buffers and the signature.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The compact-serialised client assertion (<c>header.payload.signature</c>).</returns>
-    /// <exception cref="ArgumentException">
-    /// <paramref name="algorithm"/> is none of the three HMAC algorithms, or <paramref name="clientSecret"/> is shorter than
-    /// its hash output: RFC 7518 Section 3.2, "A key of the same size as the hash output (for instance, 256 bits for "HS256")
-    /// or larger MUST be used with this algorithm."
-    /// </exception>
-    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "JwsMessage is disposed via the using statement before the method returns; the returned string is independent of the message.")]
-    public static async ValueTask<string> SignWithClientSecretAsync(
+    public static async ValueTask<string> SignAsync(
         string clientId,
         string audience,
         string jti,
         DateTimeOffset issuedAt,
         DateTimeOffset expiresAt,
-        PrivateKeyMemory clientSecret,
-        string algorithm,
+        ClientAssertionKey key,
         string type,
         JwtHeaderSerializer headerSerializer,
         JwtPayloadSerializer payloadSerializer,
@@ -207,46 +179,44 @@ public static class ClientAssertionSigning
         ArgumentException.ThrowIfNullOrWhiteSpace(clientId);
         ArgumentException.ThrowIfNullOrWhiteSpace(audience);
         ArgumentException.ThrowIfNullOrWhiteSpace(jti);
-        ArgumentNullException.ThrowIfNull(clientSecret);
-        ArgumentException.ThrowIfNullOrWhiteSpace(algorithm);
+        ArgumentNullException.ThrowIfNull(key);
         ArgumentException.ThrowIfNullOrWhiteSpace(type);
         ArgumentNullException.ThrowIfNull(headerSerializer);
         ArgumentNullException.ThrowIfNull(payloadSerializer);
         ArgumentNullException.ThrowIfNull(base64UrlEncoder);
         ArgumentNullException.ThrowIfNull(memoryPool);
 
-        ClientSecretMac mac = ClientSecretMac.Of(algorithm);
-        int secretLength = clientSecret.AsReadOnlySpan().Length;
-
-        if(secretLength < mac.Length)
-        {
-            throw new ArgumentException(
-                $"RFC 7518 Section 3.2: a key of the same size as the hash output or larger MUST be used with {algorithm}; "
-                + $"the client secret carries {secretLength} octets and {algorithm} needs {mac.Length}.",
-                nameof(clientSecret));
-        }
-
-        //OpenID Connect Core 1.0 Section 9: the secret is the client's own, named by its identifier, so the header names
-        //no kid; alg names the HMAC algorithm and typ the assertion's type.
-        JwtHeader header = new(capacity: 2)
-        {
-            [WellKnownJwkMemberNames.Alg] = algorithm,
-            [WellKnownJoseHeaderNames.Typ] = type
-        };
-
-        UnsignedJwt unsigned = new(header, ClaimsOf(clientId, audience, jti, issuedAt, expiresAt));
-        using JwsMessage jws = await unsigned.SignAsync(
-            clientSecret,
+        var unsigned = new UnsignedJwt(HeaderOf(key, type), ClaimsOf(clientId, audience, jti, issuedAt, expiresAt));
+        using var jws = await unsigned.SignAsync(
+            key.Key,
             headerSerializer,
             payloadSerializer,
             base64UrlEncoder,
-            mac.SignAsync,
+            key.Sign,
             memoryPool,
             eventSink: null,
             cancellationToken).ConfigureAwait(false);
 
         return JwsSerialization.SerializeCompact(jws, base64UrlEncoder);
     }
+
+
+    /// <summary>
+    /// The protected header of a client authentication assertion: the <c>alg</c> its key names, the <c>typ</c>, and the
+    /// <c>kid</c> of a key naming one (RFC 7515 Section 4.1.4); a client secret names none, being the client's own, which its
+    /// identifier already names (OpenID Connect Core 1.0 Section 9).
+    /// </summary>
+    /// <param name="key">The key the assertion is signed under.</param>
+    /// <param name="type">The <c>typ</c> value.</param>
+    /// <returns>The header.</returns>
+    private static JwtHeader HeaderOf(ClientAssertionKey key, string type) =>
+        key.KeyId is string keyId
+            ? JwtHeader.ForSigning(key.Algorithm, type, keyId)
+            : new JwtHeader(capacity: 2)
+            {
+                [WellKnownJwkMemberNames.Alg] = key.Algorithm,
+                [WellKnownJoseHeaderNames.Typ] = type
+            };
 
 
     /// <summary>

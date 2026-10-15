@@ -58,6 +58,12 @@ internal static class ClientCredentialsFlowHandlers
         ArgumentNullException.ThrowIfNull(infrastructure);
         ArgumentNullException.ThrowIfNull(context);
 
+        var assertionKey = TokenEndpointClientOperations.ResolveClientAssertionKey(registration, clientAssertionOptions);
+        if(!assertionKey.IsSuccess)
+        {
+            return assertionKey.Error;
+        }
+
         Result<AuthorizationServerMetadata, AuthCodeFlowEndpointResult> metadataResult =
             await TokenEndpointClientOperations.ResolveValidatedAuthorizationServerMetadataAsync(
                 infrastructure, registration, context, cancellationToken).ConfigureAwait(false);
@@ -86,7 +92,7 @@ internal static class ClientCredentialsFlowHandlers
             await TokenEndpointClientOperations.SendTokenRequestWithDpopRetryAsync(
                 infrastructure, metadata.TokenEndpoint!, tokenFields,
                 (attemptNow, ct) => TokenEndpointClientOperations.AttachClientAuthenticationAsync(
-                    tokenFields, registration, metadata.TokenEndpoint!, clientAssertionOptions,
+                    tokenFields, registration, metadata.TokenEndpoint!, assertionKey.Value, clientAssertionOptions,
                     infrastructure, attemptNow, context, ct),
                 context, cancellationToken)
                 .ConfigureAwait(false);

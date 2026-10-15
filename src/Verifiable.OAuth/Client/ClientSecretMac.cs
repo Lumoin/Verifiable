@@ -9,8 +9,9 @@ namespace Verifiable.OAuth.Client;
 /// <summary>
 /// One of RFC 7518 Section 3.2's HMAC algorithms a <c>client_secret_jwt</c> assertion is MACed under: the JWS <c>alg</c>
 /// it is named by, the hash the HMAC runs over, the octets the MAC carries and the tags the key and the MAC are computed
-/// and carried under. Its <see cref="SignAsync"/> is the <see cref="SigningDelegate"/> the library's JWS composition is
-/// handed, computing the MAC through the registered <see cref="ComputeHmacDelegate"/>.
+/// and carried under. Its <see cref="SignAsync"/> is the <see cref="SigningDelegate"/> the client assertion's one
+/// composition (<see cref="ClientAssertionSigning"/>) is handed, computing the MAC through the registered
+/// <see cref="ComputeHmacDelegate"/>.
 /// </summary>
 internal sealed class ClientSecretMac
 {
@@ -56,23 +57,22 @@ internal sealed class ClientSecretMac
 
     /// <summary>The HMAC algorithm a JWS <c>alg</c> names (RFC 7518 Section 3.2).</summary>
     /// <param name="algorithm">The <c>alg</c>.</param>
-    /// <returns>The algorithm.</returns>
-    /// <exception cref="ArgumentException">The <c>alg</c> names none of <c>HS256</c>, <c>HS384</c> and <c>HS512</c>.</exception>
-    public static ClientSecretMac Of(string algorithm) => algorithm switch
+    /// <returns>
+    /// The algorithm, or <see langword="null"/> when the <c>alg</c> names none of <c>HS256</c>, <c>HS384</c> and <c>HS512</c>.
+    /// </returns>
+    public static ClientSecretMac? Of(string algorithm) => algorithm switch
     {
         _ when WellKnownJwaValues.IsHs256(algorithm) => Hs256,
         _ when WellKnownJwaValues.IsHs384(algorithm) => Hs384,
         _ when WellKnownJwaValues.IsHs512(algorithm) => Hs512,
-        _ => throw new ArgumentException(
-            $"A client_secret_jwt assertion is MACed under an HMAC algorithm of RFC 7518 Section 3.2 (HS256, HS384 or HS512); '{algorithm}' is none.",
-            nameof(algorithm))
+        _ => null
     };
 
 
     /// <summary>
     /// The MAC of a JWS signing input under the client secret, computed through the registered
     /// <see cref="ComputeHmacDelegate"/> and handed to the JWS composition as its signature, in memory rented from the pool,
-    /// which the signature owns.
+    /// which the signature owns and the composition's caller disposes.
     /// </summary>
     /// <param name="privateKeyBytes">The client secret's octets.</param>
     /// <param name="dataToSign">The JWS signing input.</param>
@@ -80,7 +80,7 @@ internal sealed class ClientSecretMac
     /// <param name="context">The operation context, handed to the HMAC function.</param>
     /// <param name="cancellationToken">Cancels the MAC.</param>
     /// <returns>The MAC as the signature, and no event: the HMAC function's own event is published by its seam.</returns>
-    public async ValueTask<(Signature Signature, CryptoEvent? Event)> SignAsync(
+    public async ValueTask<SigningResult> SignAsync(
         ReadOnlyMemory<byte> privateKeyBytes,
         ReadOnlyMemory<byte> dataToSign,
         BaseMemoryPool signaturePool,
@@ -89,7 +89,7 @@ internal sealed class ClientSecretMac
     {
         ArgumentNullException.ThrowIfNull(signaturePool);
 
-        using HmacValue mac = await CryptographicKeyEvents.ComputeHmacAsync(
+        using var mac = await CryptographicKeyEvents.ComputeHmacAsync(
             dataToSign,
             privateKeyBytes,
             Length,
@@ -99,19 +99,33 @@ internal sealed class ClientSecretMac
             qualifier: null,
             cancellationToken).ConfigureAwait(false);
 
-        IMemoryOwner<byte> owner = signaturePool.Rent(Length);
+        var owner = signaturePool.Rent(Length);
+        mac.AsReadOnlySpan()[..Length].CopyTo(owner.Memory.Span);
 
+        return ResultOf(owner);
+    }
+
+
+    /// <summary>
+    /// The MAC's octets as the signature the result hands to its caller, which owns the signature and disposes it with the
+    /// octets.
+    /// </summary>
+    /// <param name="macOctets">The pooled octets of the MAC.</param>
+    /// <returns>The result carrying the signature and no event.</returns>
+    private SigningResult ResultOf(IMemoryOwner<byte> macOctets)
+    {
+        //The signature is handed on to the result alone; on any path that does not hand it on, it is disposed here.
+        Signature? signature = new(macOctets, ValueTag);
         try
         {
-            mac.AsReadOnlySpan()[..Length].CopyTo(owner.Memory.Span);
+            var result = new SigningResult(signature, null);
+            signature = null;
+
+            return result;
         }
-        catch
+        finally
         {
-            owner.Dispose();
-
-            throw;
+            signature?.Dispose();
         }
-
-        return (new Signature(owner, ValueTag), null);
     }
 }

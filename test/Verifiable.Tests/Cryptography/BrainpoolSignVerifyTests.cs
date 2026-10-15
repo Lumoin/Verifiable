@@ -129,7 +129,7 @@ internal sealed class BrainpoolSignVerifyTests
     /// <see langword="finally"/> block because a <see langword="using"/> declaration cannot target one.</summary>
     private static async Task AssertBcRoundTrip(
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyMaterial,
-        Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>, BaseMemoryPool, System.Collections.Frozen.FrozenDictionary<string, object>?, CancellationToken, ValueTask<(Signature Signature, CryptoEvent? Event)>> signAsync,
+        Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>, BaseMemoryPool, System.Collections.Frozen.FrozenDictionary<string, object>?, CancellationToken, ValueTask<SigningResult>> signAsync,
         Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>, ReadOnlyMemory<byte>, System.Collections.Frozen.FrozenDictionary<string, object>?, CancellationToken, ValueTask<(bool IsVerified, CryptoEvent? Event)>> verifyAsync,
         int expectedSignatureLength,
         CancellationToken cancellationToken)

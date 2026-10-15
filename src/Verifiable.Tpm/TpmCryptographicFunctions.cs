@@ -105,7 +105,7 @@ public static class TpmCryptographicFunctions
     /// parameter's nullable, defaulted declaration.
     /// </remarks>
     [SuppressMessage("Microsoft.Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the returned Signature transfers to the caller.")]
-    public static async ValueTask<(Signature Signature, CryptoEvent? Event)> SignAsync(
+    public static async ValueTask<SigningResult> SignAsync(
         ReadOnlyMemory<byte> handleBytes,
         ReadOnlyMemory<byte> dataToSign,
         BaseMemoryPool signaturePool,
@@ -160,7 +160,7 @@ public static class TpmCryptographicFunctions
         CryptoEvent evt = SignatureProducedEvent.Create(
             signatureTag.Get<Verifiable.Cryptography.Context.CryptoAlgorithm>(), dataToSign.Length, signatureResult.AsReadOnlyMemory().Length, BackendName, timeProvider: timeProvider);
 
-        return (signatureResult, evt);
+        return new SigningResult(signatureResult, evt);
     }
 
     /// <summary>

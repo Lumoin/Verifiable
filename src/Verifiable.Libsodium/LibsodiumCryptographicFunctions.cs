@@ -75,7 +75,7 @@ public static class LibsodiumCryptographicFunctions
     /// given, so a caller-supplied general-purpose pool would drop that guarding silently.
     /// </remarks>
     [SuppressMessage("Microsoft.Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of Signature is transferred to the caller.")]
-    public static ValueTask<(Signature Signature, CryptoEvent? Event)> SignEd25519Async(
+    public static ValueTask<SigningResult> SignEd25519Async(
         ReadOnlyMemory<byte> privateKeyBytes,
         ReadOnlyMemory<byte> dataToSign,
         BaseMemoryPool signaturePool,
@@ -108,7 +108,7 @@ public static class LibsodiumCryptographicFunctions
         CryptoEvent evt = SignatureProducedEvent.Create(
             CryptoAlgorithm.Ed25519, dataToSign.Length, LibsodiumCrypto.Ed25519SignatureLength, CryptoLib.Name, timeProvider: timeProvider);
 
-        return ValueTask.FromResult<(Signature, CryptoEvent?)>((signatureResult, evt));
+        return ValueTask.FromResult(new SigningResult(signatureResult, evt));
 
         //Expands the seed into libsodium's secret key form in guarded scratch memory, signs, and
         //disposes the scratch owner before returning; see this method's own <remarks> for the guarding
