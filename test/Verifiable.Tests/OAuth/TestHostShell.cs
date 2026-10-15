@@ -4045,6 +4045,111 @@ internal sealed class TestHostShell: IAsyncDisposable
 
 
     /// <summary>
+    /// Wraps the server's DPoP nonce validation so each of <paramref name="literals"/> is accepted at every endpoint
+    /// beside the nonces the server issued, and every other nonce is judged by the validation as it was. A row whose
+    /// server emits one of these literals in a <c>DPoP-Nonce</c> field line
+    /// (<see cref="ServeDpopNonceLinesOnAnswer"/>) then finds a proof carrying that literal served.
+    /// <see cref="EnableDpopAsync"/> must have been called first.
+    /// </summary>
+    /// <param name="literals">The nonce texts accepted beside the issued nonces, compared ordinally.</param>
+    /// <returns>A task that completes when the host is altered.</returns>
+    public async Task AcceptDpopNonceLiteralsAsync(params string[] literals)
+    {
+        ArgumentNullException.ThrowIfNull(literals);
+        if(DpopHmacKeySet is null)
+        {
+            throw new InvalidOperationException("EnableDpop must be called before AcceptDpopNonceLiteralsAsync.");
+        }
+
+        await AlterAsync(Server, integration =>
+        {
+            ValidateDpopNonceDelegate validate = integration.ValidateDpopNonceAsync!;
+            integration.ValidateDpopNonceAsync = (presented, audience, tenantId, ctx, ct) =>
+                literals.Contains(presented, StringComparer.Ordinal) switch
+                {
+                    true => ValueTask.FromResult(DpopNonceValidationResult.Success(new DpopNoncePayload { Kid = "accepted-literal", IssuedAt = Time.GetUtcNow() })),
+                    _ => validate(presented, audience, tenantId, ctx, ct)
+                };
+        }).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Has the default host's listener emit <paramref name="nonceLines"/> as <c>DPoP-Nonce</c> field lines, one field
+    /// line each and in order, on one answer: the answer numbered <paramref name="answerNumber"/> among the answers
+    /// the endpoint at <paramref name="endpointPath"/> gives after this call, counted from one. The lines are appended
+    /// at the skin's header writing (<see cref="HostedAuthorizationServer.AppendAnswerFieldLines"/>), after the
+    /// library's own header fields, so they cross the wire and a client reads them through its own HTTP parsing; a
+    /// line may hold any text the listener writes, a value outside <c>1*NQCHAR</c> included, and two lines go out as
+    /// two field lines. Every other answer is written as the library gave it. A hook installed before is kept and its
+    /// lines come first.
+    /// </summary>
+    /// <param name="endpointPath">The request path of the endpoint whose answer carries the lines, compared ordinally.</param>
+    /// <param name="answerNumber">The number of that endpoint's answer, from one, that carries the lines.</param>
+    /// <param name="nonceLines">The <c>DPoP-Nonce</c> field values to emit, one field line each.</param>
+    /// <returns>
+    /// The answers the lines were emitted on, in order, each with its request path, its status and whether the
+    /// library's own answer already carried a <c>DPoP-Nonce</c> field; filled as the answer is written.
+    /// </returns>
+    public List<(string Path, int StatusCode, bool IsCarryingServerNonce)> ServeDpopNonceLinesOnAnswer(
+        string endpointPath, int answerNumber, params string[] nonceLines)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(endpointPath);
+        ArgumentOutOfRangeException.ThrowIfLessThan(answerNumber, 1);
+        ArgumentNullException.ThrowIfNull(nonceLines);
+
+        List<(string Path, int StatusCode, bool IsCarryingServerNonce)> decoratedAnswers = [];
+        int answersAtEndpoint = 0;
+        HostedAuthorizationServer host = Default;
+        Func<string, ServerHttpResponse, IReadOnlyList<KeyValuePair<string, string>>>? installed = host.AppendAnswerFieldLines;
+        host.AppendAnswerFieldLines = (path, response) =>
+        {
+            IReadOnlyList<KeyValuePair<string, string>> earlier = installed?.Invoke(path, response) ?? [];
+            if(!string.Equals(path, endpointPath, StringComparison.Ordinal)
+                || Interlocked.Increment(ref answersAtEndpoint) != answerNumber)
+            {
+                return earlier;
+            }
+
+            lock(decoratedAnswers)
+            {
+                decoratedAnswers.Add((path, response.StatusCode, response.Headers.ContainsKey(WellKnownHttpHeaderNames.DPoPNonce)));
+            }
+
+            return [.. earlier, .. nonceLines.Select(static line => new KeyValuePair<string, string>(WellKnownHttpHeaderNames.DPoPNonce, line))];
+        };
+
+        return decoratedAnswers;
+    }
+
+
+    /// <summary>
+    /// Records every request the default host's listener reads, in arrival order, with its request path and the
+    /// <c>DPoP</c> field lines exactly as they arrived (an empty array when the request carries no <c>DPoP</c>
+    /// field), at the skin's request reading (<see cref="HostedAuthorizationServer.ObserveArrivingRequest"/>) and
+    /// before anything of the library runs for it, so a row reads what an endpoint received over the wire whether or
+    /// not that endpoint validates a proof. An observation installed before is kept and sees each request first.
+    /// </summary>
+    /// <returns>The recorded requests, in arrival order.</returns>
+    public List<(string Path, string[] DpopFieldLines)> RecordArrivingDpopFieldLines()
+    {
+        List<(string Path, string[] DpopFieldLines)> arrivals = [];
+        HostedAuthorizationServer host = Default;
+        Action<string, string[]>? installed = host.ObserveArrivingRequest;
+        host.ObserveArrivingRequest = (path, dpopFieldLines) =>
+        {
+            installed?.Invoke(path, dpopFieldLines);
+            lock(arrivals)
+            {
+                arrivals.Add((path, dpopFieldLines));
+            }
+        };
+
+        return arrivals;
+    }
+
+
+    /// <summary>
     /// Wraps the server's DPoP proof validation so a proof it validates is answered as a success whose
     /// <see cref="DpopProofValidationResult.JwkThumbprint"/> is <paramref name="answeredJwkThumbprint"/> in place of the
     /// thumbprint of the proof's public key: the answer of an application's validator that names no JWK SHA-256

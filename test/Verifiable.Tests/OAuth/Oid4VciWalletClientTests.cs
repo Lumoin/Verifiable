@@ -1291,11 +1291,12 @@ internal sealed class Oid4VciWalletClientTests
     /// use an HTTP 401 (Unauthorized) error code with an accompanying WWW-Authenticate: DPoP value and
     /// DPoP-Nonce value to accomplish this." and §8: "The client will typically retry the request with
     /// the new nonce value supplied upon receiving a use_dpop_nonce error with an accompanying nonce
-    /// value." Pre-Authorized Code → DPoP-bound token → Credential Request over real
-    /// Kestrel HTTP, where the server rotates its nonce key after the token was issued (the old key
-    /// archived), so the nonce the wallet carries from the token endpoint is not one the Credential
-    /// Endpoint accepts. The Credential Endpoint answers the first request with its 401 nonce challenge;
-    /// the wallet retries exactly once with the nonce that challenge supplied, and the Credential is issued.
+    /// value." A Pre-Authorized Code is redeemed for a DPoP-bound token and a Credential Request follows, over the
+    /// loopback HTTP listener. The wallet is wired with no nonce store, so the first proof the Credential Endpoint
+    /// receives carries no nonce. The server rotates its DPoP nonce key when the wallet asks the Nonce Endpoint, the
+    /// old nonce key archived, so the Credential Endpoint's nonce is one issued under the new nonce key. The
+    /// Credential Endpoint answers the first request with its 401 nonce challenge; the wallet retries exactly once,
+    /// its retry's proof carrying the nonce that challenge supplied, and the Credential is issued.
     /// </summary>
     [TestMethod]
     public async Task IssuesCredentialAfterRetryingOnTheCredentialEndpointNonceChallengeOverRealWireAsync()
@@ -1375,7 +1376,7 @@ internal sealed class Oid4VciWalletClientTests
         Assert.IsTrue(resultOutcome.Value.IsIssued);
         Assert.AreEqual(IssuedCredential, resultOutcome.Value.Credentials[0]);
         Assert.AreEqual(2, credentialProofPresentations,
-            "Exactly one retry: the first proof carries the rotated-out nonce and is challenged, the second carries the challenge's nonce.");
+            "Exactly one retry: the first proof carries no nonce and is challenged, the second carries the challenge's nonce.");
     }
 
 
@@ -2426,6 +2427,185 @@ internal sealed class Oid4VciWalletClientTests
         Assert.IsFalse(outcome.IsSuccess, "A DPoP-Nonce value outside 1*NQCHAR is no nonce.");
         Assert.HasCount(1, credentialProofs, "The wallet sends no retry.");
     }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">RFC 9449 Section 9</see>: "Resource servers can also
+    /// choose to provide a nonce value to be included in DPoP proofs sent to them. They provide the nonce using the
+    /// DPoP-Nonce header in the same way that authorization servers do as described in Sections 8 and 8.2."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8.2">Section 8.2</see>: "A more efficient manner of
+    /// supplying a new nonce value is also defined by including a DPoP-Nonce HTTP header in the HTTP 200 (OK) response
+    /// from the previous request." A wallet wired with a DPoP key and a nonce store drives a Pre-Authorized Code
+    /// issuance over the wire: the Credential Endpoint challenges the first Credential Request, and the server emits
+    /// <c>DPoP-Nonce: served-on-a-credential-200</c> on the 200 answering its retry, a field line the wallet's own HTTP
+    /// transport parses; the host accepts that literal as a nonce it issued. The application asks again with the
+    /// access token the Credential Request presented, through
+    /// <see cref="Oid4VciWalletClient.IssueWithAccessTokenDetailedAsync"/>: the Credential Endpoint receives one proof
+    /// for that request, carrying <c>served-on-a-credential-200</c>, and the Credential is issued.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task WalletUsesANonceSuppliedOnASuccessfulCredentialResponseAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Haip10, IssuerCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        _ = await WireIssuerSeamsAsync(host).ConfigureAwait(false);
+        List<(string HttpUrl, string Proof)> receivedProofs = await host.RecordReceivedDpopProofsAsync().ConfigureAwait(false);
+        await host.AcceptDpopNonceLiteralsAsync(NonceServedOnACredential200).ConfigureAwait(false);
+        string credentialPath = TestHostShell.ComposeEndpointPath(
+            WellKnownEndpointNames.Oid4VciCredential, material.Registration.TenantId.Value);
+        List<(string Path, int StatusCode, bool IsCarryingServerNonce)> servingAnswers =
+            host.ServeDpopNonceLinesOnAnswer(credentialPath, 2, NonceServedOnACredential200);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        var walletDpopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory walletDpopPublic = walletDpopKeys.PublicKey;
+        using PrivateKeyMemory walletDpopPrivate = walletDpopKeys.PrivateKey;
+
+        Oid4VciIssuanceEndpoints endpoints = ResolveEndpoints(host, material);
+        InMemoryDpopNonceCache nonceCache = new();
+        string? presentedAccessToken = null;
+        Oid4VciWalletClient walletClient = BuildWalletClient(
+            host,
+            constructDpopProofAsync: BuildWalletDpopProofAsync,
+            dpopKey: new DpopKey(walletDpopKeys, WellKnownJwaValues.Es256),
+            observeResourceRequest: (endpoint, headers) =>
+            {
+                if(endpoint == endpoints.CredentialEndpoint
+                    && headers.Values.TryGetValue(WellKnownHttpHeaderNames.Authorization, out string? authorization))
+                {
+                    presentedAccessToken = authorization[(WellKnownAuthenticationSchemes.DPoP.Length + 1)..];
+                }
+            },
+            lookupDpopNonce: nonceCache.Lookup,
+            storeDpopNonce: nonceCache.Store);
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> first = await IssueOverTheWireAsync(walletClient, host, material, holderPrivate, holderPublic).ConfigureAwait(false);
+        Assert.IsTrue(first.IsSuccess, $"The first issuance is answered with the Credential; got {DescribeOutcome(first)}.");
+        (_, int servingStatus, bool isCarryingServerNonce) = Assert.ContainsSingle(servingAnswers,
+            "The server emitted the DPoP-Nonce field line on one Credential Endpoint answer.");
+        Assert.AreEqual(200, servingStatus, "The answer carrying the field line is the Credential Endpoint's 200.");
+        Assert.IsFalse(isCarryingServerNonce, "The 200 carried no DPoP-Nonce of the library's own.");
+        Assert.IsNotNull(presentedAccessToken, "The Credential Request presented a DPoP-bound access token.");
+
+        int credentialProofsBefore = receivedProofs.Count(received => received.HttpUrl.EndsWith(credentialPath, StringComparison.Ordinal));
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> second = await walletClient.IssueWithAccessTokenDetailedAsync(
+            presentedAccessToken,
+            WellKnownAuthenticationSchemes.DPoP,
+            accessTokenExpiresAt: null,
+            material.Registration.IssuerUri!,
+            CredentialRequestTarget.ForConfiguration(ConfigurationId),
+            holderPrivate,
+            holderPublic,
+            endpoints,
+            responseEncryption: null,
+            TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        List<string> secondCredentialProofs = [.. receivedProofs
+            .Where(received => received.HttpUrl.EndsWith(credentialPath, StringComparison.Ordinal))
+            .Skip(credentialProofsBefore)
+            .Select(static received => received.Proof)];
+        Assert.IsNotEmpty(secondCredentialProofs, "The application's request reached the Credential Endpoint.");
+        Assert.AreEqual(NonceServedOnACredential200, DpopWireReading.ReadPayloadClaim(secondCredentialProofs[0], "nonce", Pool),
+            "The next Credential Request carries the nonce the Credential Endpoint's 200 supplied.");
+        Assert.HasCount(1, secondCredentialProofs, "The Credential Endpoint receives one proof for the application's request.");
+        Assert.IsTrue(second.IsSuccess, $"The application's request is answered with the Credential; got {DescribeOutcome(second)}.");
+        Assert.AreEqual(IssuedCredential, second.Value.Credentials[0]);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">RFC 9449 Section 9</see>: "Note that the nonces
+    /// provided by an authorization server and a resource server are different and should not be confused with one
+    /// another since nonces will be only accepted by the server that issued them. Likewise, should a client use multiple
+    /// authorization servers and/or resource servers, a nonce issued by any of them should be used only at the issuing
+    /// server." An Issuer whose Token, Nonce and Credential Endpoints share one origin and differ in path serves a
+    /// wallet wired with a DPoP key and a nonce store that records every nonce it is handed with the endpoint it is
+    /// kept for. The wallet drives a Pre-Authorized Code issuance over the wire: the nonces kept are, in order, the
+    /// Token Endpoint's under the Token Endpoint URL and the Credential Endpoint's under the Credential Endpoint URL,
+    /// each URL without query or fragment as a proof's <c>htu</c> names it
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.2">Section 4.2</see>: "The HTTP target URI (Section
+    /// 7.1 of [RFC9110]) of the request to which the JWT is attached, without query and fragment parts."), the two
+    /// nonces differ, the Nonce Endpoint receives one request with one <c>DPoP</c> field line whose proof carries no
+    /// <c>nonce</c>, the first proof the Credential Endpoint receives carries no <c>nonce</c>, and the Credential is
+    /// issued.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task WalletKeepsTheTokenEndpointNonceApartFromTheResourceNoncesOnOneOriginAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Haip10, IssuerCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        _ = await WireIssuerSeamsAsync(host).ConfigureAwait(false);
+        List<(string HttpUrl, string Proof)> receivedProofs = await host.RecordReceivedDpopProofsAsync().ConfigureAwait(false);
+        List<(string Path, string[] DpopFieldLines)> arrivals = host.RecordArrivingDpopFieldLines();
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        var walletDpopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory walletDpopPublic = walletDpopKeys.PublicKey;
+        using PrivateKeyMemory walletDpopPrivate = walletDpopKeys.PrivateKey;
+
+        Oid4VciIssuanceEndpoints endpoints = ResolveEndpoints(host, material);
+        Assert.AreEqual(endpoints.TokenEndpoint.GetLeftPart(UriPartial.Authority), endpoints.CredentialEndpoint.GetLeftPart(UriPartial.Authority),
+            "The Token and Credential Endpoints share one origin.");
+        Assert.AreEqual(endpoints.TokenEndpoint.GetLeftPart(UriPartial.Authority), endpoints.NonceEndpoint.GetLeftPart(UriPartial.Authority),
+            "The Token and Nonce Endpoints share one origin.");
+        foreach(Uri endpoint in (Uri[])[endpoints.TokenEndpoint, endpoints.CredentialEndpoint])
+        {
+            Assert.IsTrue(string.IsNullOrEmpty(endpoint.Query) && string.IsNullOrEmpty(endpoint.Fragment), $"'{endpoint}' carries no query or fragment.");
+        }
+
+        InMemoryDpopNonceCache nonceCache = new();
+        List<(string Endpoint, string Nonce)> stored = [];
+        Oid4VciWalletClient walletClient = BuildWalletClient(
+            host,
+            constructDpopProofAsync: BuildWalletDpopProofAsync,
+            dpopKey: new DpopKey(walletDpopKeys, WellKnownJwaValues.Es256),
+            lookupDpopNonce: nonceCache.Lookup,
+            storeDpopNonce: (endpoint, nonce) =>
+            {
+                stored.Add((endpoint, nonce));
+                nonceCache.Store(endpoint, nonce);
+            });
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await IssueOverTheWireAsync(walletClient, host, material, holderPrivate, holderPublic).ConfigureAwait(false);
+
+        Assert.IsNotEmpty(stored, "The wallet kept at least one nonce.");
+        Assert.AreEqual(endpoints.TokenEndpoint.AbsoluteUri, stored[0].Endpoint, "The Token Endpoint's nonce is kept under the Token Endpoint URL.");
+        Assert.HasCount(2, stored, $"Two nonces are kept: {string.Join(" ", stored.Select(static pair => pair.Endpoint))}");
+        Assert.AreEqual(endpoints.CredentialEndpoint.AbsoluteUri, stored[1].Endpoint, "The Credential Endpoint's nonce is kept under the Credential Endpoint URL.");
+        Assert.AreNotEqual(stored[0].Nonce, stored[1].Nonce, "The Token Endpoint's nonce and the Credential Endpoint's differ.");
+        string[] nonceEndpointFieldLines = Assert.ContainsSingle(
+            arrivals.Where(arrival => string.Equals(arrival.Path, endpoints.NonceEndpoint.AbsolutePath, StringComparison.Ordinal)),
+            "The Nonce Endpoint received one request.").DpopFieldLines;
+        string nonceEndpointProof = Assert.ContainsSingle(nonceEndpointFieldLines, "The Nonce Endpoint received one DPoP field line.");
+        Assert.IsNull(DpopWireReading.ReadPayloadClaim(nonceEndpointProof, "nonce", Pool),
+            "The proof the Nonce Endpoint received carries no nonce of the Token Endpoint.");
+        string credentialPath = TestHostShell.ComposeEndpointPath(
+            WellKnownEndpointNames.Oid4VciCredential, material.Registration.TenantId.Value);
+        string firstCredentialProof = receivedProofs.First(received => received.HttpUrl.EndsWith(credentialPath, StringComparison.Ordinal)).Proof;
+        Assert.IsNull(DpopWireReading.ReadPayloadClaim(firstCredentialProof, "nonce", Pool),
+            "The first proof the Credential Endpoint receives carries no nonce of the Token Endpoint.");
+        Assert.IsTrue(outcome.IsSuccess, $"The issuance is answered with the Credential; got {DescribeOutcome(outcome)}.");
+        Assert.AreEqual(IssuedCredential, outcome.Value.Credentials[0]);
+    }
+
+
+    /// <summary>The nonce the server emits on a Credential Endpoint 200.</summary>
+    private static string NonceServedOnACredential200 { get; } = "served-on-a-credential-200";
 
 
     /// <summary>The row whose single field line holds a Bearer challenge and then the DPoP nonce challenge.</summary>
@@ -4880,6 +5060,12 @@ internal sealed class Oid4VciWalletClientTests
     /// The identifier generator the wallet draws its proofs' <c>jti</c> values from, or <see langword="null"/>
     /// for the library's default generator when a DPoP key is given.
     /// </param>
+    /// <param name="lookupDpopNonce">
+    /// The wallet's read of the nonce kept for an endpoint, or <see langword="null"/> to keep none across calls.
+    /// </param>
+    /// <param name="storeDpopNonce">
+    /// The wallet's store of the nonce an endpoint supplied, or <see langword="null"/> to keep none across calls.
+    /// </param>
     /// <returns>The wallet client.</returns>
     private Oid4VciWalletClient BuildWalletClient(
         TestHostShell host,
@@ -4892,7 +5078,9 @@ internal sealed class Oid4VciWalletClientTests
         Func<HttpResponseData, HttpResponseData>? rewriteTokenAnswer = null,
         Func<HttpResponseData, HttpResponseData>? rewriteResourceAnswer = null,
         Action<Uri, OutgoingHeaders>? observeResourceRequest = null,
-        GenerateIdentifierDelegate? generateIdentifierAsync = null)
+        GenerateIdentifierDelegate? generateIdentifierAsync = null,
+        DpopNonceLookupDelegate? lookupDpopNonce = null,
+        DpopNonceStoreDelegate? storeDpopNonce = null)
     {
         HttpClient httpClient = host.Host("default").SharedHttpClient!;
 
@@ -4933,7 +5121,13 @@ internal sealed class Oid4VciWalletClientTests
             OutboundFetchPolicy = TestHostShell.LoopbackOutboundFetchPolicy,
             ConstructDpopProofAsync = constructDpopProofAsync,
             DpopKey = dpopKey,
-            GenerateIdentifierAsync = dpopKey is null ? null : generateIdentifierAsync ?? DpopJtiGenerator
+            GenerateIdentifierAsync = dpopKey switch
+            {
+                null => null,
+                _ => generateIdentifierAsync ?? DpopJtiGenerator
+            },
+            LookupDpopNonce = lookupDpopNonce,
+            StoreDpopNonce = storeDpopNonce
         };
 
         return new Oid4VciWalletClient(configuration);

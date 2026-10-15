@@ -2987,6 +2987,245 @@ internal sealed class ClientCredentialsGrantTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8.2">RFC 9449 Section 8.2</see>: "A more efficient
+    /// manner of supplying a new nonce value is also defined by including a DPoP-Nonce HTTP header in the HTTP 200 (OK)
+    /// response from the previous request. The client MUST use the new nonce value supplied for the next token request
+    /// and for all subsequent token requests until the authorization server supplies a new nonce."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.2">Section 4.2</see>: "When the authentication server
+    /// or resource server provides a DPoP-Nonce HTTP header in a response (see Sections 8 and 9), the DPoP proof MUST
+    /// also contain the following claim: nonce: A recent nonce provided via the DPoP-Nonce HTTP header." A DPoP-wired
+    /// client asks the token endpoint for <c>client_credentials</c> tokens over the wire, and the server emits
+    /// <c>DPoP-Nonce: served-on-a-200</c> on one of its 200 answers, a field line the client's own HTTP transport
+    /// parses; the host accepts that literal as a nonce it issued. The rows: the 200 answering the retry of the first,
+    /// challenged request, then a second request; and the 200 answering the second request, whose one proof carries the
+    /// challenge's nonce, then a third request. The request after that 200 sends one proof, carrying
+    /// <c>served-on-a-200</c>, and every request is answered with a DPoP-bound access token.
+    /// </summary>
+    /// <param name="row">Which 200 answer the server emits the <c>DPoP-Nonce</c> field line on.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(RetryAnswerRow)]
+    [DataRow(FirstAttemptAnswerRow)]
+    public async Task ClientUsesANonceSuppliedOnASuccessfulTokenResponseAsync(string row)
+    {
+        (int requests, int servingAnswer) = row switch
+        {
+            RetryAnswerRow => (2, 2),
+            FirstAttemptAnswerRow => (3, 3),
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown answer row.")
+        };
+
+        ServedNonceLinesRun run = await RequestTokensUnderServedNonceLinesAsync(
+            [.. Enumerable.Repeat(MachineScope, requests)], servingAnswer, [NonceServedOnA200], NonceServedOnA200).ConfigureAwait(false);
+
+        (_, int servingStatus, bool isCarryingServerNonce) = Assert.ContainsSingle(run.ServingAnswers,
+            "The server emitted the DPoP-Nonce field line on one answer.");
+        Assert.AreEqual(200, servingStatus, "The answer carrying the field line is a 200.");
+        Assert.IsFalse(isCarryingServerNonce, "The 200 carried no DPoP-Nonce of the library's own.");
+        Assert.AreSequenceEqual(new[] { NonceServedOnA200 }, run.ReceivedNonceLines[servingAnswer - 1],
+            "The client's transport read the one field line off the wire.");
+        foreach(AuthCodeFlowEndpointResult result in run.Results)
+        {
+            Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, result.Outcome, $"ErrorCode={result.ErrorCode} ErrorDescription={result.ErrorDescription}");
+            Assert.AreEqual(WellKnownAuthenticationSchemes.DPoP, (string)result.Body![OAuthRequestParameterNames.TokenType]);
+        }
+
+        Assert.HasCount(requests + 1, run.ReceivedProofs, "The challenged proof, its retry, and one proof for each further request.");
+        Assert.AreEqual(NonceServedOnA200, DpopWireReading.ReadPayloadClaim(run.ReceivedProofs[^1].Proof, "nonce", Pool),
+            "The request after the 200 carrying the field line carries the nonce that 200 supplied.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">RFC 9449 Section 8</see>: "The rejection response MAY
+    /// include a DPoP-Nonce HTTP header providing a new nonce value to use for subsequent requests." and "With any
+    /// rejection message, the server can send the client the nonce value it wants to use to the client, and the client
+    /// can store that nonce value and retry the request with it."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.2">Section 4.2</see>: "When the authentication server
+    /// or resource server provides a DPoP-Nonce HTTP header in a response (see Sections 8 and 9), the DPoP proof MUST
+    /// also contain the following claim: nonce: A recent nonce provided via the DPoP-Nonce HTTP header." A DPoP-wired
+    /// client asks the token endpoint over the wire for a <c>client_credentials</c> token whose <c>scope</c> lies outside
+    /// the scopes its registration allows, and the server refuses the request with a 400 error response whose
+    /// <c>error</c> is <c>invalid_scope</c>, on which the server emits <c>DPoP-Nonce: served-on-a-refusal</c>, a field
+    /// line the client's own HTTP transport parses; the host accepts that literal as a nonce it issued. The client
+    /// answers the refusal with that code and sends the refused request once; its next request, for an allowed scope,
+    /// is answered at its first attempt, the one proof the endpoint receives for it carrying
+    /// <c>served-on-a-refusal</c>, with a DPoP-bound access token.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ClientUsesANonceSuppliedOnATokenErrorResponseAsync()
+    {
+        ServedNonceLinesRun run = await RequestTokensUnderServedNonceLinesAsync(
+            [WellKnownScopes.SsfManage, MachineScope], 1, [NonceServedOnARefusal], NonceServedOnARefusal).ConfigureAwait(false);
+
+        (_, int servingStatus, bool isCarryingServerNonce) = Assert.ContainsSingle(run.ServingAnswers,
+            "The server emitted the DPoP-Nonce field line on one answer.");
+        Assert.AreEqual(400, servingStatus, "The answer carrying the field line is the refusal.");
+        Assert.IsFalse(isCarryingServerNonce, "The refusal carried no DPoP-Nonce of the library's own.");
+        Assert.AreSequenceEqual(new[] { NonceServedOnARefusal }, run.ReceivedNonceLines[0],
+            "The client's transport read the one field line off the wire.");
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, run.Results[0].Outcome, $"ErrorCode={run.Results[0].ErrorCode}");
+        Assert.AreEqual(OAuthErrors.InvalidScope, run.Results[0].ErrorCode);
+        Assert.AreEqual(1, run.AnswerCounts[0], "The refusal is no nonce challenge, so the client sends the refused request once.");
+        Assert.AreEqual(NonceServedOnARefusal, DpopWireReading.ReadPayloadClaim(run.ReceivedProofs[run.ProofCounts[0]].Proof, "nonce", Pool),
+            "The next request carries the nonce the refusal supplied.");
+        Assert.AreEqual(1, run.ProofCounts[1] - run.ProofCounts[0], "The endpoint receives one proof for the next request.");
+        Assert.AreEqual(2, run.AnswerCounts[1], "The next request is answered at its first attempt.");
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, run.Results[1].Outcome, $"ErrorCode={run.Results[1].ErrorCode} ErrorDescription={run.Results[1].ErrorDescription}");
+        Assert.AreEqual(WellKnownAuthenticationSchemes.DPoP, (string)run.Results[1].Body![OAuthRequestParameterNames.TokenType]);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">RFC 9449 Section 8</see>: "there MUST NOT be more
+    /// than one DPoP-Nonce header."; <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8.2">Section 8.2</see>:
+    /// "The DPoP-Nonce HTTP header field uses the nonce syntax defined in Section 8.1.";
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8.1">Section 8.1</see>, Figure 22: <c>nonce =
+    /// 1*NQCHAR</c>. The clause on the field count binds the server; the library's own rule reads an answer carrying two
+    /// <c>DPoP-Nonce</c> field lines as supplying no nonce, since it names no one nonce. A DPoP-wired client asks the
+    /// token endpoint for <c>client_credentials</c> tokens over the wire; the first request is challenged, and the
+    /// server emits <c>DPoP-Nonce</c> field lines on the 200 answering its retry, which the client's own HTTP transport
+    /// parses; the host accepts their texts as nonces it issued. The rows: the 200 carries <c>served-twice</c> on two
+    /// <c>DPoP-Nonce</c> field lines; and it carries one field line <c>served on a 200</c>, whose spaces are no NQCHAR.
+    /// The second request sends one proof, carrying the nonce the challenge supplied, never the text of those lines,
+    /// and is answered with a DPoP-bound access token.
+    /// </summary>
+    /// <param name="row">Which <c>DPoP-Nonce</c> field lines the server emits on the 200.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(TwoNonceFieldsRow)]
+    [DataRow(NonceOutsideTheSyntaxRow)]
+    public async Task ClientStoresNoNonceFromAnAnswerOutsideTheOneFieldNonceSyntaxAsync(string row)
+    {
+        string[] nonceLines = row switch
+        {
+            TwoNonceFieldsRow => [NonceServedTwice, NonceServedTwice],
+            NonceOutsideTheSyntaxRow => [NonceOutsideTheSyntax],
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown nonce field row.")
+        };
+
+        ServedNonceLinesRun run = await RequestTokensUnderServedNonceLinesAsync(
+            [MachineScope, MachineScope], 2, nonceLines, NonceServedTwice, NonceOutsideTheSyntax).ConfigureAwait(false);
+
+        (_, int servingStatus, bool isCarryingServerNonce) = Assert.ContainsSingle(run.ServingAnswers,
+            "The server emitted the DPoP-Nonce field lines on one answer.");
+        Assert.AreEqual(200, servingStatus, "The answer carrying the field lines is a 200.");
+        Assert.IsFalse(isCarryingServerNonce, "The 200 carried no DPoP-Nonce of the library's own.");
+        Assert.AreSequenceEqual(nonceLines, run.ReceivedNonceLines[1],
+            "The client's transport read each field line off the wire as a value of its own.");
+        string suppliedNonce = Assert.ContainsSingle(run.SuppliedNonces, "The endpoint supplied one nonce, in its challenge.");
+        Assert.HasCount(3, run.ReceivedProofs, "The challenged proof, its retry, and the second request's one proof.");
+        Assert.AreEqual(suppliedNonce, DpopWireReading.ReadPayloadClaim(run.ReceivedProofs[2].Proof, "nonce", Pool),
+            "The second request carries the challenge's nonce, not the text of the field lines.");
+        foreach(AuthCodeFlowEndpointResult result in run.Results)
+        {
+            Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, result.Outcome, $"ErrorCode={result.ErrorCode} ErrorDescription={result.ErrorDescription}");
+            Assert.AreEqual(WellKnownAuthenticationSchemes.DPoP, (string)result.Body![OAuthRequestParameterNames.TokenType]);
+        }
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">RFC 9449 Section 9</see>: "Note that the nonces
+    /// provided by an authorization server and a resource server are different and should not be confused with one
+    /// another since nonces will be only accepted by the server that issued them. Likewise, should a client use multiple
+    /// authorization servers and/or resource servers, a nonce issued by any of them should be used only at the issuing
+    /// server." Two authorization servers on one listener, each a registration with a token endpoint of its own path on
+    /// one origin, serve two DPoP-wired clients that share one nonce store and one DPoP key. The clients ask for
+    /// <c>client_credentials</c> tokens over the wire at the first endpoint, the second and the first again: the second
+    /// endpoint's first proof carries no <c>nonce</c>, the first endpoint's third request sends one proof, carrying the
+    /// nonce the first endpoint's challenge supplied, the first endpoint receives three proofs and the second two, and
+    /// every request is answered with a DPoP-bound access token.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ClientKeepsTheNonceOfEachTokenEndpointOnOneOriginApartAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial firstMaterial = await RegisterMachineClientAsync(app).ConfigureAwait(false);
+        Uri firstTokenUrl = await StartDpopTokenEndpointAsync(app, firstMaterial).ConfigureAwait(false);
+        using VerifierKeyMaterial secondMaterial = await RegisterMachineClientAsync(app, clientId: SecondMachineClientId).ConfigureAwait(false);
+        Uri secondTokenUrl = await StartDpopTokenEndpointAsync(app, secondMaterial).ConfigureAwait(false);
+        Assert.AreEqual(firstTokenUrl.GetLeftPart(UriPartial.Authority), secondTokenUrl.GetLeftPart(UriPartial.Authority),
+            "The two token endpoints share one origin.");
+        Assert.AreNotEqual(firstTokenUrl.AbsolutePath, secondTokenUrl.AbsolutePath, "The two token endpoints differ in path.");
+        List<(string HttpUrl, string Proof)> receivedProofs = await app.RecordReceivedDpopProofsAsync().ConfigureAwait(false);
+        await AdmitTheMachineClientByItsIdentifierAsync(app).ConfigureAwait(false);
+        List<string> supplied = [];
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            IssueDpopNonceDelegate issue = candidateIntegration.IssueDpopNonceAsync!;
+            candidateIntegration.IssueDpopNonceAsync = async (audience, tenantId, context, ct) =>
+            {
+                string nonce = await issue(audience, tenantId, context, ct).ConfigureAwait(false);
+                supplied.Add(nonce);
+
+                return nonce;
+            };
+        }).ConfigureAwait(false);
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+        InMemoryDpopNonceCache sharedNonceCache = new();
+
+        OAuthClient firstClient = BuildDpopMachineClientOverWire(app, firstMaterial, firstTokenUrl, dpopKey, sharedNonceCache);
+        OAuthClient secondClient = BuildDpopMachineClientOverWire(app, secondMaterial, secondTokenUrl, dpopKey, sharedNonceCache);
+        foreach((OAuthClient client, VerifierKeyMaterial material, string clientId) in (List<(OAuthClient, VerifierKeyMaterial, string)>)
+            [(firstClient, firstMaterial, ClientId), (secondClient, secondMaterial, SecondMachineClientId), (firstClient, firstMaterial, ClientId)])
+        {
+            AuthCodeFlowEndpointResult result = await client.ClientCredentials.RequestTokenAsync(
+                MachineClientRegistration(material.Registration.IssuerUri!, clientId), scope: MachineScope, resource: null, [],
+                clientAssertionOptions: null, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, result.Outcome, $"ErrorCode={result.ErrorCode} ErrorDescription={result.ErrorDescription}");
+            Assert.AreEqual(WellKnownAuthenticationSchemes.DPoP, (string)result.Body![OAuthRequestParameterNames.TokenType]);
+        }
+
+        List<string> firstEndpointProofs = [.. receivedProofs
+            .Where(received => received.HttpUrl.EndsWith(firstTokenUrl.AbsolutePath, StringComparison.Ordinal))
+            .Select(static received => received.Proof)];
+        List<string> secondEndpointProofs = [.. receivedProofs
+            .Where(received => received.HttpUrl.EndsWith(secondTokenUrl.AbsolutePath, StringComparison.Ordinal))
+            .Select(static received => received.Proof)];
+        Assert.IsNull(DpopWireReading.ReadPayloadClaim(secondEndpointProofs[0], "nonce", Pool),
+            "The second endpoint's first proof carries no nonce of the first endpoint.");
+        Assert.AreEqual(supplied[0], DpopWireReading.ReadPayloadClaim(firstEndpointProofs[^1], "nonce", Pool),
+            "The first endpoint's third request carries the nonce the first endpoint's challenge supplied.");
+        Assert.HasCount(3, firstEndpointProofs, "The first endpoint: the challenged proof, its retry, and the third request's one proof.");
+        Assert.HasCount(2, secondEndpointProofs, "The second endpoint: the challenged proof and its retry.");
+    }
+
+
+    /// <summary>The row whose <c>DPoP-Nonce</c> field line the server emits on the 200 answering the retry of the challenged request.</summary>
+    private const string RetryAnswerRow = "retry-answer";
+
+    /// <summary>The row whose <c>DPoP-Nonce</c> field line the server emits on the 200 answering a request's first and only attempt.</summary>
+    private const string FirstAttemptAnswerRow = "first-attempt-answer";
+
+    /// <summary>The row whose 200 carries one nonce on two <c>DPoP-Nonce</c> field lines the server emits.</summary>
+    private const string TwoNonceFieldsRow = "two-nonce-fields";
+
+    /// <summary>The row whose 200 carries one <c>DPoP-Nonce</c> field line outside <c>1*NQCHAR</c>, emitted by the server.</summary>
+    private const string NonceOutsideTheSyntaxRow = "nonce-outside-the-syntax";
+
+    /// <summary>The identifier of a second machine client, registered beside <see cref="ClientId"/> under a tenant of its own.</summary>
+    private static string SecondMachineClientId { get; } = "https://second-machine.example.com";
+
+    /// <summary>The nonce the server emits on a 200.</summary>
+    private static string NonceServedOnA200 { get; } = "served-on-a-200";
+
+    /// <summary>The nonce the server emits on a refusal.</summary>
+    private static string NonceServedOnARefusal { get; } = "served-on-a-refusal";
+
+    /// <summary>The nonce the server emits on a 200 on two field lines.</summary>
+    private static string NonceServedTwice { get; } = "served-twice";
+
+    /// <summary>The field value the server emits on a 200 whose spaces are no NQCHAR.</summary>
+    private static string NonceOutsideTheSyntax { get; } = "served on a 200";
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">RFC 9449 Section 8</see>: the nonce challenge is
     /// "an HTTP 400 (Bad Request) error response per Section 5.2 of [RFC6749] using use_dpop_nonce as the error code
     /// value." A DPoP-wired client asks for a <c>client_credentials</c> token over the wire; the token endpoint's 400
@@ -3260,6 +3499,103 @@ internal sealed class ClientCredentialsGrantTests
             clientAssertionOptions: null, TestContext.CancellationToken).ConfigureAwait(false);
 
         return (result, tokenRequests, receivedProofs.Count);
+    }
+
+
+    /// <summary>
+    /// What <see cref="RequestTokensUnderServedNonceLinesAsync"/> observed over the wire.
+    /// </summary>
+    /// <param name="Results">The client's answer to each request, in order.</param>
+    /// <param name="ProofCounts">How many proofs the endpoint had received when each request was answered.</param>
+    /// <param name="ReceivedProofs">Every proof the endpoint received, in arrival order.</param>
+    /// <param name="SuppliedNonces">Every nonce the endpoint issued, in order.</param>
+    /// <param name="ServingAnswers">
+    /// The answers the server emitted the given <c>DPoP-Nonce</c> field lines on, each with its request path, its status
+    /// and whether the library's own answer already carried a <c>DPoP-Nonce</c> field.
+    /// </param>
+    /// <param name="ReceivedNonceLines">
+    /// The <c>DPoP-Nonce</c> values the client's HTTP transport read off each answer, in the order the answers arrived.
+    /// </param>
+    /// <param name="AnswerCounts">How many answers the client's transport had received when each request was answered.</param>
+    private sealed record ServedNonceLinesRun(
+        IReadOnlyList<AuthCodeFlowEndpointResult> Results,
+        IReadOnlyList<int> ProofCounts,
+        List<(string HttpUrl, string Proof)> ReceivedProofs,
+        IReadOnlyList<string> SuppliedNonces,
+        List<(string Path, int StatusCode, bool IsCarryingServerNonce)> ServingAnswers,
+        IReadOnlyList<IReadOnlyList<string>> ReceivedNonceLines,
+        IReadOnlyList<int> AnswerCounts);
+
+
+    /// <summary>
+    /// Asks the token endpoint over the wire for one <c>client_credentials</c> token per entry of
+    /// <paramref name="scopes"/>, one after the other, each request naming that entry as its <c>scope</c>, with a
+    /// DPoP-wired client whose one nonce store keeps across the requests and whose transport is the real HTTP client.
+    /// The server emits <paramref name="nonceLines"/> as <c>DPoP-Nonce</c> field lines on the token endpoint's answer
+    /// numbered <paramref name="servingAnswer"/>, counted from one over the answers that endpoint gives
+    /// (<see cref="TestHostShell.ServeDpopNonceLinesOnAnswer"/>), and its nonce validation also accepts
+    /// <paramref name="acceptedNonces"/>; every nonce the server issues and every proof the endpoint receives is
+    /// recorded, and the <c>DPoP-Nonce</c> values the client's transport reads off each answer are recorded without
+    /// any answer being changed.
+    /// </summary>
+    /// <param name="scopes">The <c>scope</c> of each token request, in order.</param>
+    /// <param name="servingAnswer">The number of the token endpoint's answer, from one, the server emits the lines on.</param>
+    /// <param name="nonceLines">The <c>DPoP-Nonce</c> field values the server emits, one field line each.</param>
+    /// <param name="acceptedNonces">The nonce texts the server accepts beside the nonces it issued.</param>
+    /// <returns>What the run observed.</returns>
+    private async Task<ServedNonceLinesRun> RequestTokensUnderServedNonceLinesAsync(
+        IReadOnlyList<string> scopes, int servingAnswer, string[] nonceLines, params string[] acceptedNonces)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterMachineClientAsync(app).ConfigureAwait(false);
+        Uri tokenUrl = await StartDpopTokenEndpointAsync(app, material).ConfigureAwait(false);
+        List<(string HttpUrl, string Proof)> receivedProofs = await app.RecordReceivedDpopProofsAsync().ConfigureAwait(false);
+        await app.AcceptDpopNonceLiteralsAsync(acceptedNonces).ConfigureAwait(false);
+        await AdmitTheMachineClientByItsIdentifierAsync(app).ConfigureAwait(false);
+        List<string> supplied = [];
+        await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
+        {
+            IssueDpopNonceDelegate issue = candidateIntegration.IssueDpopNonceAsync!;
+            candidateIntegration.IssueDpopNonceAsync = async (audience, tenantId, context, ct) =>
+            {
+                string nonce = await issue(audience, tenantId, context, ct).ConfigureAwait(false);
+                supplied.Add(nonce);
+
+                return nonce;
+            };
+        }).ConfigureAwait(false);
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+
+        List<(string Path, int StatusCode, bool IsCarryingServerNonce)> servingAnswers =
+            app.ServeDpopNonceLinesOnAnswer(tokenUrl.AbsolutePath, servingAnswer, nonceLines);
+        HttpClient httpClient = app.Host("default").SharedHttpClient!;
+        List<IReadOnlyList<string>> receivedNonceLines = [];
+        OAuthClient client = BuildDpopMachineClient(
+            material.Registration.IssuerUri!, tokenUrl, dpopKey, new InMemoryDpopNonceCache(), TestHostShell.LoopbackOutboundFetchPolicy,
+            async (endpoint, fields, headers, ct) =>
+            {
+                HttpResponseData answer = await HttpClientTransport.SendFormPostAsync(httpClient, endpoint, fields, headers, ct).ConfigureAwait(false);
+                receivedNonceLines.Add(answer.Headers.Headers.GetValues(WellKnownHttpHeaderNames.DPoPNonce));
+
+                return answer;
+            });
+
+        List<AuthCodeFlowEndpointResult> results = [];
+        List<int> proofCounts = [];
+        List<int> answerCounts = [];
+        foreach(string scope in scopes)
+        {
+            results.Add(await client.ClientCredentials.RequestTokenAsync(
+                MachineClientRegistration(material.Registration.IssuerUri!), scope: scope, resource: null, [],
+                clientAssertionOptions: null, TestContext.CancellationToken).ConfigureAwait(false));
+            proofCounts.Add(receivedProofs.Count);
+            answerCounts.Add(receivedNonceLines.Count);
+        }
+
+        return new ServedNonceLinesRun(results, proofCounts, receivedProofs, supplied, servingAnswers, receivedNonceLines, answerCounts);
     }
 
 
@@ -3561,12 +3897,13 @@ internal sealed class ClientCredentialsGrantTests
 
     /// <summary>The client side of the machine registration: no client authentication, the HAIP 1.0 profile.</summary>
     /// <param name="issuer">The authorization server's issuer.</param>
+    /// <param name="clientId">The client identifier, <see cref="ClientId"/> unless a row registers a second machine client.</param>
     /// <returns>The client registration.</returns>
-    private static ClientRegistration MachineClientRegistration(Uri issuer) => new()
+    private static ClientRegistration MachineClientRegistration(Uri issuer, string clientId = ClientId) => new()
     {
-        ClientId = new ClientId(ClientId),
+        ClientId = new ClientId(clientId),
         AuthorizationServerIssuer = issuer,
-        RedirectUris = [new Uri(ClientId)],
+        RedirectUris = [new Uri(clientId)],
         AuthenticationMethod = ClientAuthenticationMethod.None,
         Profile = PolicyProfile.Haip10
     };
@@ -3694,13 +4031,15 @@ internal sealed class ClientCredentialsGrantTests
     /// The client's policy profile — <see cref="PolicyProfile.Rfc6749WithPkce"/> unless a DPoP test
     /// selects a profile <see cref="ClientPolicyProfiles.RequiresDpop"/> mandates against.
     /// </param>
-    private static async Task<VerifierKeyMaterial> RegisterMachineClientAsync(TestHostShell app, PolicyProfile? profile = null)
+    /// <param name="clientId">The client identifier, <see cref="ClientId"/> unless a row registers a second machine client.</param>
+    /// <returns>The registration's key material.</returns>
+    private static async Task<VerifierKeyMaterial> RegisterMachineClientAsync(TestHostShell app, PolicyProfile? profile = null, string clientId = ClientId)
     {
         //RegisterDpopClient supplies the AccessTokenIssuance signing keys the
         //token producers resolve; the plain RegisterClient helper does not.
         VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
-            ClientId,
-            new Uri(ClientId),
+            clientId,
+            new Uri(clientId),
             profile: profile ?? PolicyProfile.Rfc6749WithPkce,
             capabilities: ImmutableHashSet.Create(
                 WellKnownCapabilityIdentifiers.OAuthClientCredentials,

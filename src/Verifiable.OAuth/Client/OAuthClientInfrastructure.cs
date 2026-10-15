@@ -224,8 +224,10 @@ public sealed class OAuthClientInfrastructure
     public DpopKey? DpopKey { get; private init; }
 
     /// <summary>
-    /// Looks up the latest server-issued DPoP nonce for a given authority,
-    /// or <see langword="null"/> when none is cached. Library default
+    /// Looks up the latest server-issued DPoP nonce for the endpoint (scheme,
+    /// authority and path) the nonce came from, or <see langword="null"/> when
+    /// none is cached, so a nonce is used only at the endpoint that supplied it
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">RFC 9449 Section 9</see>). Library default
     /// backing: <see cref="InMemoryDpopNonceCache.Lookup(string)"/>. Wired
     /// together with <see cref="StoreDpopNonce"/>; either both null or
     /// both non-null. When DPoP is in use, both must be non-null for the
@@ -234,8 +236,9 @@ public sealed class OAuthClientInfrastructure
     public DpopNonceLookupDelegate? LookupDpopNonce { get; private init; }
 
     /// <summary>
-    /// Stores a server-issued DPoP nonce extracted from a
-    /// <c>DPoP-Nonce</c> response header. Library default backing:
+    /// Stores a server-issued DPoP nonce extracted from the one
+    /// <c>DPoP-Nonce</c> field of an answer, under the endpoint (scheme,
+    /// authority and path) that supplied it. Library default backing:
     /// <see cref="InMemoryDpopNonceCache.Store(string, string)"/>. Wired
     /// together with <see cref="LookupDpopNonce"/>; either both null or
     /// both non-null.

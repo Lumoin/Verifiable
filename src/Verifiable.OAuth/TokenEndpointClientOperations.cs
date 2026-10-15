@@ -332,6 +332,13 @@ internal static class TokenEndpointClientOperations
     /// wrap this call.
     /// </para>
     /// <para>
+    /// The nonce is kept for the token endpoint itself, its scheme, authority and path, and is taken
+    /// from every answer the token endpoint gives, a 200 and a refusal included.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8.2">RFC 9449 Section 8.2</see>: "The client
+    /// MUST use the new nonce value supplied for the next token request and for all subsequent token requests
+    /// until the authorization server supplies a new nonce."
+    /// </para>
+    /// <para>
     /// <paramref name="attachClientAuthenticationAsync"/> runs again on every attempt, including
     /// the retry — RFC 9449 §8's retry is the SAME request re-sent, and re-running the attachment
     /// per attempt is what lets a <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/> assertion
@@ -362,16 +369,14 @@ internal static class TokenEndpointClientOperations
                 .ConfigureAwait(false);
         }
 
-        string authority = InMemoryDpopNonceCache.AuthorityFor(tokenEndpoint);
-
         //RFC 9449 Section 8: 400 + use_dpop_nonce as the JSON object's own error member + a DPoP-Nonce
-        //header is the token endpoint's challenge form; DpopNonceRetry owns the retry-once mechanics
-        //and the reading of the error code, shared with the OID4VCI Wallet client's token and resource
-        //requests.
+        //header is the token endpoint's challenge form; DpopNonceRetry owns the retry-once mechanics,
+        //the reading of the error code and the nonce kept for the token endpoint, shared with the
+        //OID4VCI Wallet client's token and resource requests.
         return await DpopNonceRetry.SendWithNonceRetryAsync(
             (nonce, ct) => SendOnceWithDpopAsync(infrastructure, tokenEndpoint, tokenFields, attachClientAuthenticationAsync, nonce, context, ct),
             candidate => DpopNonceRetry.IsErrorBodyNonceChallenge(candidate, infrastructure.MemoryPool),
-            authority,
+            tokenEndpoint,
             infrastructure.LookupDpopNonce,
             infrastructure.StoreDpopNonce,
             cancellationToken).ConfigureAwait(false);

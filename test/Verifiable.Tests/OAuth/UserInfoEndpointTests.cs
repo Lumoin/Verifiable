@@ -1913,10 +1913,12 @@ internal sealed class UserInfoEndpointTests
     /// receipt of a client's request, a server reconstructs the target URI from the received components in accordance
     /// with their local configuration and incoming connection context." A host whose configuration names its listener's
     /// authority <c>https://as-alias.test</c>, unlike its issuer's, judges a UserInfo proof against that authority: a
-    /// DPoP-bound access token presented over the wire with a proof carrying the provided nonce whose <c>htu</c> is the
-    /// UserInfo path at the listener's authority is served, 200 with the End-User's <c>sub</c>, and one whose <c>htu</c>
-    /// is UserInfo at the issuer's authority is refused, 401 with the one challenge
-    /// <c>DPoP error="invalid_dpop_proof", algs="..."</c> and "DPoP proof validation failed: HtuMismatch." in the body.
+    /// DPoP-bound access token presented over the wire with a proof carrying the nonce UserInfo provides under that
+    /// configuration (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">RFC 9449 Section 9</see>: "nonces
+    /// will be only accepted by the server that issued them") whose <c>htu</c> is the UserInfo path at the listener's
+    /// authority is served, 200 with the End-User's <c>sub</c>, and one whose <c>htu</c> is UserInfo at the issuer's
+    /// authority is refused, 401 with the one challenge <c>DPoP error="invalid_dpop_proof", algs="..."</c> and "DPoP
+    /// proof validation failed: HtuMismatch." in the body.
     /// </summary>
     /// <param name="isHtuAtTheListenerAuthority">Whether the proof's <c>htu</c> names the listener's authority rather than the issuer's.</param>
     /// <returns>A task that completes when the assertions have run.</returns>
@@ -1932,13 +1934,14 @@ internal sealed class UserInfoEndpointTests
 
         Uri listenerAuthority = new("https://as-alias.test");
         host.Host("default").TrustedListenerAuthority = listenerAuthority;
+        string configuredNonce = await ObtainResourceNonceAsync(host, material, presentation.AccessToken).ConfigureAwait(false);
         string htu = isHtuAtTheListenerAuthority switch
         {
             true => new Uri(listenerAuthority, new Uri(presentation.UserInfoUrl).AbsolutePath).OriginalString,
             false => presentation.UserInfoUrl
         };
         string proof = await ResourceDpopProofs.BuildAsync(
-            presentation.DpopKey, "POST", htu, presentation.AccessToken, presentation.Nonce,
+            presentation.DpopKey, "POST", htu, presentation.AccessToken, configuredNonce,
             TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
         using HttpResponseMessage response = await SendUserInfoOverWireAsync(
             host, material, presentation.AccessToken, scheme: "DPoP", dpopProof: proof).ConfigureAwait(false);
@@ -2360,6 +2363,93 @@ internal sealed class UserInfoEndpointTests
             using JsonDocument document = JsonDocument.Parse(body);
             Assert.AreEqual(SubjectId, document.RootElement.GetProperty("sub").GetString());
         }
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">RFC 9449 Section 9</see>: "Note that the nonces
+    /// provided by an authorization server and a resource server are different and should not be confused with one
+    /// another since nonces will be only accepted by the server that issued them. Likewise, should a client use multiple
+    /// authorization servers and/or resource servers, a nonce issued by any of them should be used only at the issuing
+    /// server." The token endpoint's challenge to a token request whose proof carries no <c>nonce</c> supplies a nonce;
+    /// a proof carrying that nonce is presented with its DPoP-bound token at UserInfo over the wire and is refused:
+    /// 401, the one challenge <c>DPoP error="use_dpop_nonce", algs="..."</c>, <c>use_dpop_nonce</c> in the body with
+    /// the description that names the nonce's audience as another endpoint's, and a <c>DPoP-Nonce</c> field supplying
+    /// a nonce other than the one presented.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task UserInfoRefusesTheTokenEndpointNonceAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        using DpopClientFixture fixture = await CreateDpopFixtureAsync(host, material).ConfigureAwait(false);
+        string boundAccessToken = await IssueDpopBoundAccessTokenAsync(host, material, fixture).ConfigureAwait(false);
+        string userInfoUrl = (await UserInfoUrlAsync(host, material).ConfigureAwait(false)).ToString();
+        string tokenEndpointNonce = await RawAuthCodeWirePushers.ObtainTokenEndpointDpopNonceAsync(
+            host, material.Registration.TenantId.Value, ClientId, fixture.DpopKey, TimeProvider.GetUtcNow(),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        string proof = await ResourceDpopProofs.BuildAsync(
+            fixture.DpopKey, "POST", userInfoUrl, boundAccessToken, tokenEndpointNonce,
+            TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+        using HttpResponseMessage response = await SendUserInfoOverWireAsync(
+            host, material, boundAccessToken, scheme: "DPoP", dpopProof: proof).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        AssertRefused(response, body, HttpStatusCode.Unauthorized, ResourceDpopProofs.DpopChallenge("use_dpop_nonce"), "use_dpop_nonce");
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual("DPoP nonce invalid: AudienceMismatch.", document.RootElement.GetProperty("error_description").GetString(), body);
+        string resourceNonce = ResourceDpopProofs.ReadNonce(response);
+        Assert.IsFalse(string.IsNullOrEmpty(resourceNonce), "The refusal supplies a nonce.");
+        Assert.AreNotEqual(tokenEndpointNonce, resourceNonce, "UserInfo supplies a nonce of its own.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">RFC 9449 Section 9</see>: "Note that the nonces
+    /// provided by an authorization server and a resource server are different and should not be confused with one
+    /// another since nonces will be only accepted by the server that issued them. Likewise, should a client use multiple
+    /// authorization servers and/or resource servers, a nonce issued by any of them should be used only at the issuing
+    /// server." and <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">Section 8</see>: "This same error code
+    /// is used when supplying a new nonce value when there was a nonce mismatch." UserInfo's challenge to a DPoP-bound
+    /// token presented with no proof supplies a nonce; a refresh request carrying the client's refresh token and a
+    /// proof by the bound DPoP key carrying that nonce is sent to the token endpoint over the wire and is refused: 400,
+    /// <c>use_dpop_nonce</c>, a <c>DPoP-Nonce</c> field supplying a nonce other than the one presented, and no access
+    /// token.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task TokenEndpointRefusesTheNonceUserInfoProvidedAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        using DpopClientFixture fixture = await CreateDpopFixtureAsync(host, material).ConfigureAwait(false);
+        using HttpClient browserClient = LoopbackTls.CreateSingleHopPinnedHttpClient(host.ServerCertificate);
+        AuthCodeFlowDriveResult drive = await AuthCodeFlowDriver.DriveParAuthorizeCallbackAndTokenAsync(
+            host.Host("default"), fixture.Client, fixture.Registration, fixture.ClientFlowStore,
+            material.Registration.TenantId.Value, RedirectUri, SubjectId, browserClient,
+            scope: WellKnownScopes.OpenId, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+        string boundAccessToken = (string)drive.TokenResult.Body![OAuthRequestParameterNames.AccessToken];
+        Assert.IsTrue(drive.TokenResult.Body.TryGetValue(OAuthRequestParameterNames.RefreshToken, out object? refreshTokenValue),
+            "The code redemption issues a refresh token.");
+        string userInfoNonce = await ObtainResourceNonceAsync(host, material, boundAccessToken).ConfigureAwait(false);
+
+        string segment = material.Registration.TenantId.Value;
+        string proof = await DpopCodeBindingWire.BuildTokenProofAsync(
+            host, segment, fixture.DpopKey, userInfoNonce, TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+        HttpResponseData refresh = await HttpClientTransport.SendFormPostAsync(
+            host.Host("default").SharedHttpClient!, RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment),
+            RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, (string)refreshTokenValue!),
+            OutgoingHeaders.Empty.WithDpop(proof), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, refresh.StatusCode, refresh.Body);
+        using JsonDocument document = JsonDocument.Parse(refresh.Body);
+        Assert.AreEqual(OAuthErrors.UseDpopNonce, document.RootElement.GetProperty("error").GetString(), refresh.Body);
+        Assert.IsFalse(document.RootElement.TryGetProperty(OAuthRequestParameterNames.AccessToken, out _), "The refusal carries no access token.");
+        string tokenEndpointNonce = Assert.ContainsSingle(refresh.Headers.Headers.GetValues(WellKnownHttpHeaderNames.DPoPNonce),
+            "The refusal supplies one nonce.");
+        Assert.AreNotEqual(userInfoNonce, tokenEndpointNonce, "The token endpoint supplies a nonce of its own.");
     }
 
 

@@ -168,6 +168,27 @@ internal sealed class HostedAuthorizationServer: IClientRegistrationStore
 
 
     /// <summary>
+    /// The fixture hook the skin (<see cref="AuthorizationServerHttpApplication"/>) calls once for every request as
+    /// it reads it off the listener, with the request path and the <c>DPoP</c> field lines exactly as they arrived
+    /// (none when the request carries no <c>DPoP</c> field), before anything of the library runs for it. A test sees
+    /// through it what an endpoint received over the wire. <see langword="null"/>, the default, observes nothing.
+    /// Settable so a test installs it on a started host, as <see cref="TrustedListenerAuthority"/> is.
+    /// </summary>
+    public Action<string, string[]>? ObserveArrivingRequest { get; set; }
+
+
+    /// <summary>
+    /// The fixture hook the skin (<see cref="AuthorizationServerHttpApplication"/>) calls once for every answer the
+    /// library gave, with the request path and that answer, before it writes the answer's header fields; the field
+    /// lines it returns are appended after the library's own, one field line each and in order, so the listener
+    /// emits them on the wire and a client reads them through its own HTTP parsing. <see langword="null"/>, the
+    /// default, appends nothing. Settable so a test installs it on a started host, as
+    /// <see cref="TrustedListenerAuthority"/> is.
+    /// </summary>
+    public Func<string, ServerHttpResponse, IReadOnlyList<KeyValuePair<string, string>>>? AppendAnswerFieldLines { get; set; }
+
+
+    /// <summary>
     /// Whether <see cref="AuthorizationServerHttpApplication.ProcessRequestAsync"/> holds an
     /// inbound request the ordering matrix (<see cref="ResolveOrderingKey"/>) can place behind
     /// other requests of the SAME (tenant, grant key) before dispatching it to the library. This is

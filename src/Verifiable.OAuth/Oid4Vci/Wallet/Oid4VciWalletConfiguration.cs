@@ -247,15 +247,19 @@ public sealed record Oid4VciWalletConfiguration
     public GenerateIdentifierDelegate? GenerateIdentifierAsync { get; init; }
 
     /// <summary>
-    /// Looks up the latest server-issued DPoP nonce for a given authority (scheme+host+port),
-    /// shared by the §6 Token Request and every §7/§8/§9/§11 resource request this Wallet sends.
+    /// Looks up the latest server-issued DPoP nonce for the endpoint (scheme, authority and path) the
+    /// nonce came from. The Token Endpoint and each resource endpoint this Wallet sends to (the
+    /// Nonce, Credential, Deferred Credential and Notification Endpoints of OpenID for Verifiable
+    /// Credential Issuance) keep their own nonce, so a nonce is used only at the endpoint that
+    /// supplied it (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">RFC 9449 Section 9</see>).
     /// <see langword="null"/> skips reading a cached nonce — the first attempt against a given
-    /// authority then always carries none, exactly as if no nonce had been cached yet.
+    /// endpoint then always carries none, exactly as if no nonce had been cached yet.
     /// </summary>
     public DpopNonceLookupDelegate? LookupDpopNonce { get; init; }
 
     /// <summary>
-    /// Stores a server-issued DPoP nonce extracted from a <c>DPoP-Nonce</c> response header.
+    /// Stores a server-issued DPoP nonce extracted from the one <c>DPoP-Nonce</c> field of an answer,
+    /// under the endpoint (scheme, authority and path) that supplied it.
     /// <see langword="null"/> skips caching — the one allowed retry (RFC 9449 §8/§9) still happens
     /// with the nonce the challenge just supplied; only persistence across calls is skipped.
     /// </summary>

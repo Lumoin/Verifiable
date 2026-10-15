@@ -235,11 +235,12 @@ internal sealed class DpopBoundRefreshTests
         string originalRefreshToken = (string)tokenResult.Body![OAuthRequestParameterNames.RefreshToken];
         Assert.IsFalse(string.IsNullOrEmpty(originalRefreshToken), "The initial DPoP-bound issuance must include a refresh_token.");
 
-        //Confirm the exchange leg actually left a nonce cached for the token endpoint's authority —
-        //otherwise expiring it below would prove nothing about a genuine retry.
-        string authority = InMemoryDpopNonceCache.AuthorityFor(fixture.Registration.AuthorizationServerIssuer);
-        Assert.IsNotNull(fixture.NonceCache.Lookup(authority),
-            "Token exchange must have cached a DPoP nonce for the token endpoint's authority before the refresh leg runs.");
+        //Confirm the exchange leg actually left a nonce cached for the token endpoint (its scheme,
+        //authority and path); otherwise expiring it below would prove nothing about a genuine retry.
+        string nonceEndpoint = RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, material.Registration.TenantId.Value)
+            .GetLeftPart(UriPartial.Path);
+        Assert.IsNotNull(fixture.NonceCache.Lookup(nonceEndpoint),
+            "Token exchange must have cached a DPoP nonce for the token endpoint before the refresh leg runs.");
 
         //Advance the shared clock (client and server alike) past the nonce's validity window. The
         //client still attaches the cached nonce on its first refresh attempt — LookupDpopNonce still
@@ -524,8 +525,8 @@ internal sealed class DpopBoundRefreshTests
             string segment = material.Registration.TenantId.Value;
             Uri tokenEndpoint = RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment);
 
-            string authority = InMemoryDpopNonceCache.AuthorityFor(fixture.Registration.AuthorizationServerIssuer);
-            string validNonce = fixture.NonceCache.Lookup(authority)
+            string nonceEndpoint = tokenEndpoint.GetLeftPart(UriPartial.Path);
+            string validNonce = fixture.NonceCache.Lookup(nonceEndpoint)
                 ?? throw new AssertFailedException(
                     "Expected a DPoP nonce cached by the legitimate rotation above.");
 
@@ -644,7 +645,7 @@ internal sealed class DpopBoundRefreshTests
         string successorRefreshToken = (string)rotation.Body![OAuthRequestParameterNames.RefreshToken];
 
         string segment = material.Registration.TenantId.Value;
-        string authority = InMemoryDpopNonceCache.AuthorityFor(fixture.Registration.AuthorizationServerIssuer);
+        string nonceEndpoint = RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment).GetLeftPart(UriPartial.Path);
         string proof = await DpopProofConstruction.BuildAsync(
             new DpopProofClaims
             {
@@ -652,7 +653,7 @@ internal sealed class DpopBoundRefreshTests
                 Htu = RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment).OriginalString,
                 Iat = TimeProvider.GetUtcNow(),
                 Jti = Guid.NewGuid().ToString("N"),
-                Nonce = fixture.NonceCache.Lookup(authority)
+                Nonce = fixture.NonceCache.Lookup(nonceEndpoint)
                     ?? throw new AssertFailedException("The legitimate rotation must cache a valid nonce.")
             },
             fixture.DpopKey,
@@ -775,7 +776,7 @@ internal sealed class DpopBoundRefreshTests
         string successorRefreshToken = (string)rotation.Body![OAuthRequestParameterNames.RefreshToken];
 
         string segment = material.Registration.TenantId.Value;
-        string authority = InMemoryDpopNonceCache.AuthorityFor(fixture.Registration.AuthorizationServerIssuer);
+        string nonceEndpoint = RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment).GetLeftPart(UriPartial.Path);
         string proof = await DpopProofConstruction.BuildAsync(
             new DpopProofClaims
             {
@@ -783,7 +784,7 @@ internal sealed class DpopBoundRefreshTests
                 Htu = RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment).OriginalString,
                 Iat = TimeProvider.GetUtcNow(),
                 Jti = Guid.NewGuid().ToString("N"),
-                Nonce = fixture.NonceCache.Lookup(authority)
+                Nonce = fixture.NonceCache.Lookup(nonceEndpoint)
                     ?? throw new AssertFailedException("The legitimate rotation must cache a valid nonce.")
             },
             fixture.DpopKey,

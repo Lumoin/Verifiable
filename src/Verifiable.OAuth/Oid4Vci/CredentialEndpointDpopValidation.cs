@@ -36,6 +36,11 @@ namespace Verifiable.OAuth.Oid4Vci;
 /// proof without its nonce; the first request is answered with the <c>use_dpop_nonce</c> challenge
 /// and a fresh <c>DPoP-Nonce</c>, the shape of
 /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">RFC 9449 §9</see>'s Figure 24.
+/// Each endpoint issues its nonces for the target URI it serves and accepts only those
+/// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">RFC 9449 Section 9</see>: "Note that the nonces
+/// provided by an authorization server and a resource server are different and should not be confused with one
+/// another since nonces will be only accepted by the server that issued them."), so a nonce the token endpoint
+/// issued, or another resource endpoint's, is answered with the nonce challenge and a nonce of this endpoint's own.
 /// </para>
 /// <para>
 /// Every refusal of a presented token is a 401 carrying one challenge, in the scheme the request was
@@ -137,6 +142,16 @@ internal static class CredentialEndpointDpopValidation
         Uri issuerUri = await ResolveIssuerAsync(server, registration, context, cancellationToken)
             .ConfigureAwait(false);
 
+        //RFC 9449 Section 4.3: the htm claim matches the HTTP method of the current request, and the htu
+        //claim its target URI; both are read from the request this endpoint is serving, its
+        //authority the listener authority the host stamped when it names one and the issuer's
+        //otherwise (RFC 9110 Section 7.1). RFC 9449 Section 9: a resource's nonce is accepted only at
+        //the endpoint that issued it, so its nonces are issued for and validated against that same
+        //target URI, never the issuer the token endpoint's nonces are issued for.
+        IncomingRequest request = context.IncomingRequest!;
+        string htu = DpopRequestReading.ComposeTargetUri(request, issuerUri);
+        Uri nonceAudience = new(htu);
+
         //RFC 9449 Section 4.3, check 1: "There is not more than one DPoP HTTP request header field."
         //Two field lines are an invalid proof (Section 7.1: "invalid_dpop_proof is used to indicate
         //that the DPoP proof itself was deemed invalid based on the criteria of Section 4.3"), refused
@@ -151,17 +166,11 @@ internal static class CredentialEndpointDpopValidation
         if(dpopProof is null)
         {
             return await ChallengeForNonceAsync(
-                server, registration, context, issuerUri,
+                server, registration, context, nonceAudience,
                 "A DPoP proof carrying this resource's nonce is required for the sender-constrained Access Token.",
                 cancellationToken).ConfigureAwait(false);
         }
 
-        //RFC 9449 §4.3: the htm claim matches the HTTP method of the current request, and the htu
-        //claim its target URI; both are read from the request this endpoint is serving, its
-        //authority the listener authority the host stamped when it names one and the issuer's
-        //otherwise (RFC 9110 Section 7.1).
-        IncomingRequest request = context.IncomingRequest!;
-        string htu = DpopRequestReading.ComposeTargetUri(request, issuerUri);
         DpopProofValidationResult proofResult = await DpopRequestReading.ValidateProofAsync(
             oauth,
             server.TimeProvider,
@@ -181,7 +190,7 @@ internal static class CredentialEndpointDpopValidation
             return proofResult.FailureReason is DpopProofValidationFailureReason.NonceMissing
                 or DpopProofValidationFailureReason.NonceMismatch
                 ? await ChallengeForNonceAsync(
-                    server, registration, context, issuerUri, "DPoP nonce required.", cancellationToken)
+                    server, registration, context, nonceAudience, "DPoP nonce required.", cancellationToken)
                     .ConfigureAwait(false)
                 : RefuseUnderScheme(isDpopPresentation, OAuthErrors.InvalidDpopProof,
                     $"DPoP proof validation failed: {proofResult.FailureReason}.");
@@ -223,17 +232,17 @@ internal static class CredentialEndpointDpopValidation
         if(proofClaims.Nonce is null)
         {
             return await ChallengeForNonceAsync(
-                server, registration, context, issuerUri, "DPoP nonce required.", cancellationToken)
+                server, registration, context, nonceAudience, "DPoP nonce required.", cancellationToken)
                 .ConfigureAwait(false);
         }
 
         DpopNonceValidationResult nonceResult = await oauth.ValidateDpopNonceAsync(
-            proofClaims.Nonce, issuerUri, registration.TenantId, context, cancellationToken)
+            proofClaims.Nonce, nonceAudience, registration.TenantId, context, cancellationToken)
             .ConfigureAwait(false);
         if(!nonceResult.IsSuccess)
         {
             return await ChallengeForNonceAsync(
-                server, registration, context, issuerUri,
+                server, registration, context, nonceAudience,
                 $"DPoP nonce invalid: {nonceResult.FailureReason}.", cancellationToken).ConfigureAwait(false);
         }
 
@@ -427,7 +436,11 @@ internal static class CredentialEndpointDpopValidation
     /// <param name="server">The authorization server holding the nonce issuance delegate.</param>
     /// <param name="registration">The client (tenant) the request belongs to.</param>
     /// <param name="context">The per-request context.</param>
-    /// <param name="issuerUri">The issuer the nonce is bound to.</param>
+    /// <param name="nonceAudience">
+    /// The target URI of the endpoint serving the request, the one endpoint the nonce is accepted at
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">RFC 9449 Section 9</see>: "nonces will be only
+    /// accepted by the server that issued them").
+    /// </param>
     /// <param name="description">The <c>error_description</c> the body carries.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The 401 nonce challenge.</returns>
@@ -435,12 +448,12 @@ internal static class CredentialEndpointDpopValidation
         EndpointServer server,
         ClientRecord registration,
         ExchangeContext context,
-        Uri issuerUri,
+        Uri nonceAudience,
         string description,
         CancellationToken cancellationToken)
     {
         string freshNonce = await server.OAuth().IssueDpopNonceAsync!(
-            issuerUri, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
+            nonceAudience, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
 
         return ServerHttpResponse
             .Unauthorized(OAuthErrors.UseDpopNonce, description)

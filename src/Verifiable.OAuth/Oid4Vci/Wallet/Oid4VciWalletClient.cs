@@ -917,7 +917,15 @@ public sealed class Oid4VciWalletClient
     /// proof on every attempt and retrying exactly once on an RFC 9449 Section 8 <c>use_dpop_nonce</c>
     /// challenge (HTTP 400 + <c>use_dpop_nonce</c> as the JSON object's own <c>error</c> member + a
     /// <c>DPoP-Nonce</c> response header), read by <see cref="DpopNonceRetry.IsErrorBodyNonceChallenge"/>.
+    /// The token endpoint keeps its own nonce, under its scheme, authority and path, apart from the nonce of
+    /// every resource endpoint (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">RFC 9449 Section 9</see>:
+    /// "a nonce issued by any of them should be used only at the issuing server").
     /// </summary>
+    /// <param name="formFields">The Token Request's form fields.</param>
+    /// <param name="tokenEndpoint">The Token Endpoint the request is sent to.</param>
+    /// <param name="context">The per-operation exchange context threaded into the transport delegate.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The Token Endpoint's answer, the retry's answer when a nonce challenge triggered one.</returns>
     private async ValueTask<HttpResponseData> SendTokenRequestAsync(
         IReadOnlyDictionary<string, string> formFields,
         Uri tokenEndpoint,
@@ -930,12 +938,10 @@ public sealed class Oid4VciWalletClient
                 tokenEndpoint, formFields, OutgoingHeaders.Empty, context, cancellationToken).ConfigureAwait(false);
         }
 
-        string authority = InMemoryDpopNonceCache.AuthorityFor(tokenEndpoint);
-
         return await DpopNonceRetry.SendWithNonceRetryAsync(
             (nonce, ct) => SendFormPostWithDpopAsync(formFields, tokenEndpoint, nonce, context, ct),
             candidate => DpopNonceRetry.IsErrorBodyNonceChallenge(candidate, Configuration.MemoryPool),
-            authority,
+            tokenEndpoint,
             Configuration.LookupDpopNonce,
             Configuration.StoreDpopNonce,
             cancellationToken).ConfigureAwait(false);
@@ -1702,8 +1708,19 @@ public sealed class Oid4VciWalletClient
     /// <c>WWW-Authenticate: DPoP</c> value" carrying <c>error="use_dpop_nonce"</c>
     /// (<see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 §3</see> auth-param
     /// form). This Wallet recognises either so it retries against a conformant Issuer regardless
-    /// of which form its Credential Endpoint chose.
+    /// of which form its Credential Endpoint chose. Each endpoint keeps its own nonce, under its scheme,
+    /// authority and path, so the Nonce, Credential, Deferred and Notification Endpoints and the Token Endpoint
+    /// never carry one another's nonce
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">RFC 9449 Section 9</see>: "a nonce issued by
+    /// any of them should be used only at the issuing server").
     /// </remarks>
+    /// <param name="endpoint">The resource endpoint the request is sent to.</param>
+    /// <param name="jsonBody">The request's JSON body.</param>
+    /// <param name="accessToken">The access token presented.</param>
+    /// <param name="tokenType">The access token's type, <c>DPoP</c> or <c>Bearer</c>.</param>
+    /// <param name="context">The per-operation exchange context threaded into the transport delegate.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The endpoint's answer, the retry's answer when a nonce challenge triggered one.</returns>
     private async ValueTask<HttpResponseData> SendAuthorizedJsonPostAsync(
         Uri endpoint,
         string jsonBody,
@@ -1723,7 +1740,6 @@ public sealed class Oid4VciWalletClient
                 endpoint, jsonBody, bearerHeaders, context, cancellationToken).ConfigureAwait(false);
         }
 
-        string authority = InMemoryDpopNonceCache.AuthorityFor(endpoint);
         string ath = await DpopProofValidator.ComputeAthAsync(
             accessToken, Configuration.Base64UrlEncoder, Configuration.MemoryPool, cancellationToken)
             .ConfigureAwait(false);
@@ -1731,7 +1747,7 @@ public sealed class Oid4VciWalletClient
         return await DpopNonceRetry.SendWithNonceRetryAsync(
             (nonce, ct) => SendJsonPostWithDpopAsync(endpoint, jsonBody, accessToken, ath, nonce, context, ct),
             candidate => IsUseDpopNonceChallenge(candidate, Configuration.MemoryPool),
-            authority,
+            endpoint,
             Configuration.LookupDpopNonce,
             Configuration.StoreDpopNonce,
             cancellationToken).ConfigureAwait(false);

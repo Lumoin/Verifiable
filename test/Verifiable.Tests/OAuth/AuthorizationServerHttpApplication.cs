@@ -126,6 +126,10 @@ internal sealed class AuthorizationServerHttpApplication
         IncomingRequest incomingRequest = await BuildIncomingRequestAsync(
             context.Request, TrustedListenerAuthority, context.RequestAborted).ConfigureAwait(false);
 
+        //The fixture's arrival observation sees the DPoP field lines as the listener received them.
+        Host?.ObserveArrivingRequest?.Invoke(
+            incomingRequest.Path, context.Request.Headers[WellKnownHttpHeaderNames.DPoP].ToArray()!);
+
         ExchangeContext ExchangeContext = [];
         string? tenantSegment = ExtractTenantSegmentFromPath(incomingRequest.Path);
         if(!string.IsNullOrEmpty(tenantSegment))
@@ -199,7 +203,9 @@ internal sealed class AuthorizationServerHttpApplication
                 response = response with { Body = compactJar };
             }
 
-            await WriteResponseAsync(response, context.Response, context.RequestAborted)
+            IReadOnlyList<KeyValuePair<string, string>> appendedFieldLines =
+                Host?.AppendAnswerFieldLines?.Invoke(incomingRequest.Path, response) ?? [];
+            await WriteResponseAsync(response, appendedFieldLines, context.Response, context.RequestAborted)
                 .ConfigureAwait(false);
         }
         finally
@@ -436,9 +442,18 @@ internal sealed class AuthorizationServerHttpApplication
     /// Maps <paramref name="response"/>'s status, content type, location, headers, and body onto
     /// <paramref name="httpResponse"/>, writing the body through the pipe-based
     /// <see cref="HttpResponse.BodyWriter"/> rather than the stream-typed <see cref="HttpResponse.Body"/>.
+    /// The field lines of <paramref name="appendedFieldLines"/> follow the library's own header fields, each
+    /// appended as a field line of its own, so a name the library already wrote, or one given twice, goes out on
+    /// several field lines.
     /// </summary>
+    /// <param name="response">The answer the library gave.</param>
+    /// <param name="appendedFieldLines">The field lines the fixture appends to the answer, empty for none.</param>
+    /// <param name="httpResponse">The HTTP response the listener writes.</param>
+    /// <param name="cancellationToken">Cancels the body write.</param>
+    /// <returns>A task that completes when the answer is written.</returns>
     private static async ValueTask WriteResponseAsync(
         ServerHttpResponse response,
+        IReadOnlyList<KeyValuePair<string, string>> appendedFieldLines,
         HttpResponse httpResponse,
         CancellationToken cancellationToken)
     {
@@ -463,6 +478,11 @@ internal sealed class AuthorizationServerHttpApplication
         foreach(KeyValuePair<string, string> header in response.Headers)
         {
             httpResponse.Headers.Append(header.Key, header.Value);
+        }
+
+        foreach(KeyValuePair<string, string> fieldLine in appendedFieldLines)
+        {
+            httpResponse.Headers.Append(fieldLine.Key, fieldLine.Value);
         }
 
         if(!string.IsNullOrEmpty(response.Body))

@@ -171,6 +171,91 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">RFC 9449 Section 9</see>: "Note that the nonces
+    /// provided by an authorization server and a resource server are different and should not be confused with one
+    /// another since nonces will be only accepted by the server that issued them. Likewise, should a client use multiple
+    /// authorization servers and/or resource servers, a nonce issued by any of them should be used only at the issuing
+    /// server." The token endpoint's challenge to a token request whose proof carries no <c>nonce</c> supplies a nonce;
+    /// a proof by the bound DPoP key carrying that nonce is presented with the DPoP-bound access token at the Credential
+    /// Endpoint over the wire and is refused: 401, the one challenge <c>DPoP error="use_dpop_nonce", algs="..."</c>,
+    /// <c>use_dpop_nonce</c> in the body with the description that names the nonce's audience as another endpoint's,
+    /// and a <c>DPoP-Nonce</c> field supplying a nonce other than the one presented.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task CredentialEndpointRefusesTheTokenEndpointNonceAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        BoundTokenContext ctx = await AcquireAsync(host).ConfigureAwait(false);
+        using DpopClientFixture fixture = ctx.Fixture;
+        string tokenEndpointNonce = await RawAuthCodeWirePushers.ObtainTokenEndpointDpopNonceAsync(
+            host, ctx.Segment, ClientId, fixture.DpopKey, TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        string proof = await BuildCredentialProofAsync(ctx, freshKey: null, tokenEndpointNonce).ConfigureAwait(false);
+        using HttpResponseMessage response = await PostCredentialAsync(ctx, ctx.AccessToken, proof).ConfigureAwait(false);
+
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
+        Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges),
+            "The refusal carries a WWW-Authenticate challenge.");
+        Assert.AreEqual(ResourceDpopProofs.DpopChallenge("use_dpop_nonce"), challenges.Single());
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual("use_dpop_nonce", document.RootElement.GetProperty("error").GetString());
+        Assert.AreEqual("DPoP nonce invalid: AudienceMismatch.", document.RootElement.GetProperty("error_description").GetString());
+        string resourceNonce = ResourceDpopProofs.ReadNonce(response);
+        Assert.IsFalse(string.IsNullOrEmpty(resourceNonce), "The refusal supplies a nonce.");
+        Assert.AreNotEqual(tokenEndpointNonce, resourceNonce, "The Credential Endpoint supplies a nonce of its own.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">RFC 9449 Section 9</see>: "Note that the nonces
+    /// provided by an authorization server and a resource server are different and should not be confused with one
+    /// another since nonces will be only accepted by the server that issued them. Likewise, should a client use multiple
+    /// authorization servers and/or resource servers, a nonce issued by any of them should be used only at the issuing
+    /// server." The Credential Endpoint's challenge to a request that carries no proof supplies a nonce; a proof by the
+    /// bound DPoP key carrying that nonce, its <c>htm</c>, <c>htu</c> and <c>ath</c> those of a Notification Request,
+    /// is presented with the same DPoP-bound access token at the Notification Endpoint over the wire and is refused:
+    /// 401, the one challenge <c>DPoP error="use_dpop_nonce", algs="..."</c>, <c>use_dpop_nonce</c> in the body with
+    /// the description that names the nonce's audience as another endpoint's, and a <c>DPoP-Nonce</c> field supplying
+    /// a nonce other than the one presented.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task NotificationEndpointRefusesTheCredentialEndpointNonceAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        BoundTokenContext ctx = await AcquireAsync(host).ConfigureAwait(false);
+        using DpopClientFixture fixture = ctx.Fixture;
+        string credentialEndpointNonce = await ObtainResourceNonceAsync(ctx).ConfigureAwait(false);
+
+        Uri notificationUrl = new(host.Host("default").HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.Oid4VciNotification, ctx.Segment));
+        string proof = await ResourceDpopProofs.BuildAsync(
+            ctx.Fixture.DpopKey, WellKnownHttpMethods.Post, notificationUrl.ToString(), ctx.AccessToken,
+            credentialEndpointNonce, TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+        using StringContent content = new(
+            "{\"notification_id\":\"3fwe98js\",\"event\":\"credential_accepted\"}", Encoding.UTF8, WellKnownMediaTypes.Application.Json);
+        using HttpRequestMessage request = new(HttpMethod.Post, notificationUrl) { Content = content };
+        _ = request.Headers.TryAddWithoutValidation(WellKnownHttpHeaderNames.Authorization, "DPoP " + ctx.AccessToken);
+        _ = request.Headers.TryAddWithoutValidation(WellKnownHttpHeaderNames.DPoP, proof);
+        using HttpResponseMessage response = await ctx.Http.SendAsync(request, TestContext.CancellationToken).ConfigureAwait(false);
+
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
+        Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges),
+            "The refusal carries a WWW-Authenticate challenge.");
+        Assert.AreEqual(ResourceDpopProofs.DpopChallenge("use_dpop_nonce"), challenges.Single());
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual("use_dpop_nonce", document.RootElement.GetProperty("error").GetString());
+        Assert.AreEqual("DPoP nonce invalid: AudienceMismatch.", document.RootElement.GetProperty("error_description").GetString());
+        string notificationNonce = ResourceDpopProofs.ReadNonce(response);
+        Assert.IsFalse(string.IsNullOrEmpty(notificationNonce), "The refusal supplies a nonce.");
+        Assert.AreNotEqual(credentialEndpointNonce, notificationNonce, "The Notification Endpoint supplies a nonce of its own.");
+    }
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 §7.2</see>: "such a
     /// protected resource MUST reject a DPoP-bound access token received as a bearer token per
     /// [RFC6750]." and <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 §3</see>:
