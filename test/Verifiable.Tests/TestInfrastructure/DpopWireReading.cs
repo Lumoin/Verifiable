@@ -446,7 +446,7 @@ internal static class DpopWireReading
         if(equalsPosition != position)
         {
             throw new AssertFailedException(
-                $"U+{(int)text[position]:X4} at position {position} stands between the auth-param name '{name}' and its '=', where Section 5.6.3 says a sender MUST NOT generate BWS: '{text}'.");
+                $"U+{(int)text[position]:X4} at position {position} stands between the auth-param name '{name}' and its '=', where RFC 9110 Section 5.6.3 says a sender MUST NOT generate BWS: '{text}'.");
         }
 
         position = equalsPosition + 1;
@@ -454,7 +454,7 @@ internal static class DpopWireReading
         if(valuePosition != position)
         {
             throw new AssertFailedException(
-                $"U+{(int)text[position]:X4} at position {position} stands between the '=' of the auth-param '{name}' and its value, where Section 5.6.3 says a sender MUST NOT generate BWS: '{text}'.");
+                $"U+{(int)text[position]:X4} at position {position} stands between the '=' of the auth-param '{name}' and its value, where RFC 9110 Section 5.6.3 says a sender MUST NOT generate BWS: '{text}'.");
         }
 
         bool isQuotedString = position < text.Length && text[position] == '"';

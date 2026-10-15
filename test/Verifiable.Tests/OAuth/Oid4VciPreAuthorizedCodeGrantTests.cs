@@ -1396,7 +1396,9 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
         Assert.AreEqual(HttpStatusCode.Unauthorized, noProofResponse.StatusCode, noProofBody);
         Assert.IsTrue(noProofResponse.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges),
             "RFC 9449 §9: the nonce challenge carries a WWW-Authenticate: DPoP value.");
-        Assert.AreEqual(ResourceDpopProofs.DpopChallenge("use_dpop_nonce"), challenges.Single());
+        Assert.AreEqual(
+            ResourceDpopProofs.DpopChallenge(host.Host("default").Registrations[segment].IssuerUri!.OriginalString, "use_dpop_nonce"),
+            challenges.Single());
         using JsonDocument noProofDocument = JsonDocument.Parse(noProofBody);
         Assert.AreEqual("use_dpop_nonce", noProofDocument.RootElement.GetProperty("error").GetString());
         string resourceNonce = ResourceDpopProofs.ReadNonce(noProofResponse);

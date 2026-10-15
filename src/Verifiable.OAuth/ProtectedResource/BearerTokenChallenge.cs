@@ -71,6 +71,10 @@ public static class BearerTokenChallenge
     private static BearerTokenChallengeParameters EmptyParameters { get; } = new(
         Realm: null, Error: null, ErrorDescription: null, Scope: null, ResourceMetadata: null);
 
+    /// <summary>The all-absent instance <see cref="TryReadDpopChallenge"/> yields when the reading fails.</summary>
+    private static DpopChallengeParameters EmptyDpopParameters { get; } = new(
+        Realm: null, Error: null, ErrorDescription: null, Scope: null, Algorithms: null, ResourceMetadata: null);
+
 
     /// <summary>
     /// Builds a <c>WWW-Authenticate</c> Bearer challenge value from the
@@ -274,19 +278,91 @@ public static class BearerTokenChallenge
         ArgumentException.ThrowIfNullOrEmpty(scheme);
 
         parameters = EmptyParameters;
+        if(!TryReadOneChallengeOf(fieldLines, scheme, out ParsedChallenge? challenge))
+        {
+            return false;
+        }
+
+        return TryReadAttributes(challenge!, out parameters);
+    }
+
+
+    /// <summary>
+    /// Reads the one <c>DPoP</c> challenge out of every <c>WWW-Authenticate</c> field line of a response, into the
+    /// parameters <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see> names for
+    /// the scheme, by the challenge-list reading <see cref="TryReadChallenge"/> states: the lines are combined as one
+    /// field value, any challenge outside the grammar fails the reading, and exactly one challenge of the scheme must be
+    /// present (<see cref="TryReadOneChallengeOf"/>). The challenge carries its parameters as auth-params; a token68 is
+    /// refused. A challenge of the scheme alone, with no auth-param, is read with every parameter absent:
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.3">RFC 9110 Section 11.3</see> writes "challenge
+    /// = auth-scheme [ 1*SP ( token68 / #auth-param ) ]", and RFC 9449 requires no parameter of the <c>DPoP</c>
+    /// scheme. <c>realm</c>, <c>error</c>, <c>error_description</c>, <c>scope</c> and <c>resource_metadata</c> are read
+    /// as <see cref="TryReadAttributes"/> reads them, an unusable <c>resource_metadata</c> refusing the reading;
+    /// <c>algs</c> is read by <see cref="FindParameter"/> and split into its names at each SP, an empty name passed
+    /// over, so a malformed <c>algs</c> never hides the <c>error</c> a client acts on. Section 7.1: "unknown parameters
+    /// MUST be ignored by recipients"; a parameter of any other name is ignored.
+    /// </summary>
+    /// <param name="fieldLines">Every <c>WWW-Authenticate</c> field line of the response, in received order.</param>
+    /// <param name="parameters">The parameters of the one <c>DPoP</c> challenge; all absent when the reading fails.</param>
+    /// <returns><see langword="true"/> when the lines hold exactly one <c>DPoP</c> challenge, read as stated.</returns>
+    internal static bool TryReadDpopChallenge(IReadOnlyList<string> fieldLines, out DpopChallengeParameters parameters)
+    {
+        ArgumentNullException.ThrowIfNull(fieldLines);
+
+        parameters = EmptyDpopParameters;
+        if(!TryReadOneChallengeOf(fieldLines, WellKnownAuthenticationSchemes.DPoP, out ParsedChallenge? challenge)
+            || challenge!.Token68 is not null
+            || !TryReadResourceMetadata(challenge, out Uri? resourceMetadata))
+        {
+            return false;
+        }
+
+        string? algorithmsValue = FindParameter(challenge, DpopChallenge.AlgorithmsParameter);
+        IReadOnlyList<string>? algorithms = algorithmsValue?.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        parameters = new DpopChallengeParameters(
+            FindParameter(challenge, RealmParameter),
+            FindParameter(challenge, ErrorParameter),
+            FindParameter(challenge, ErrorDescriptionParameter),
+            FindParameter(challenge, ScopeParameter),
+            algorithms,
+            resourceMetadata);
+
+        return true;
+    }
+
+
+    /// <summary>
+    /// Selects the one challenge of the scheme <paramref name="scheme"/> from every <c>WWW-Authenticate</c> field line
+    /// of a response: the lines are joined in received order with a comma and SP and read once as a challenge list
+    /// (<see cref="TryReadChallengeList"/>), and the challenges whose scheme equals <paramref name="scheme"/>, compared
+    /// case-insensitively as <see cref="WellKnownAuthenticationSchemes"/> compares a scheme, are selected. Exactly one
+    /// must be present; two of one scheme are no one challenge, the library's own rule <see cref="TryReadChallenge"/>
+    /// states. The one selection both <see cref="TryReadChallenge"/> and <see cref="TryReadDpopChallenge"/> read
+    /// through, so either scheme is read by one grammar.
+    /// </summary>
+    /// <param name="fieldLines">Every <c>WWW-Authenticate</c> field line of the response, in received order.</param>
+    /// <param name="scheme">The authentication scheme whose challenge is selected.</param>
+    /// <param name="challenge">The one challenge of <paramref name="scheme"/>, or <see langword="null"/> when the selection fails.</param>
+    /// <returns><see langword="true"/> when the lines are within the grammar and hold exactly one challenge of <paramref name="scheme"/>.</returns>
+    private static bool TryReadOneChallengeOf(IReadOnlyList<string> fieldLines, string scheme, out ParsedChallenge? challenge)
+    {
+        challenge = null;
         List<ParsedChallenge> challenges = [];
         if(!TryReadChallengeList(string.Join(", ", fieldLines), challenges))
         {
             return false;
         }
 
-        List<ParsedChallenge> ofScheme = [.. challenges.Where(challenge => WellKnownAuthenticationSchemes.Equals(challenge.Scheme, scheme))];
+        List<ParsedChallenge> ofScheme = [.. challenges.Where(candidate => WellKnownAuthenticationSchemes.Equals(candidate.Scheme, scheme))];
         if(ofScheme.Count != 1)
         {
             return false;
         }
 
-        return TryReadAttributes(ofScheme[0], out parameters);
+        challenge = ofScheme[0];
+
+        return true;
     }
 
 
@@ -502,8 +578,8 @@ public static class BearerTokenChallenge
     /// <summary>
     /// Reads the RFC 6750 Section 3 attributes of <paramref name="challenge"/>. The scheme "MUST be followed by one or
     /// more auth-param values", so a challenge carrying a token68 or nothing is refused. Each attribute is read by its
-    /// name (<see cref="FindParameter"/>); a parameter of another name is ignored. <c>resource_metadata</c> must be an
-    /// absolute http or https URL (RFC 9728 Section 5.1).
+    /// name (<see cref="FindParameter"/>); a parameter of another name is ignored. <c>resource_metadata</c> is held to
+    /// an absolute http or https URL, the library's own reading <see cref="TryReadResourceMetadata"/> states.
     /// </summary>
     /// <param name="challenge">The challenge read from the field line.</param>
     /// <param name="parameters">The attributes; all absent when the challenge is refused.</param>
@@ -517,13 +593,7 @@ public static class BearerTokenChallenge
             return false;
         }
 
-        //resource_metadata must be an absolute http(s) URL (RFC 9728): both an absolute URI and an
-        //http or https scheme are required.
-        string? resourceMetadataValue = FindParameter(challenge, ProtectedResourceChallenge.ResourceMetadataParameter);
-        Uri? resourceMetadata = null;
-        if(resourceMetadataValue is not null
-            && (!Uri.TryCreate(resourceMetadataValue, UriKind.Absolute, out resourceMetadata)
-                || (resourceMetadata.Scheme != Uri.UriSchemeHttps && resourceMetadata.Scheme != Uri.UriSchemeHttp)))
+        if(!TryReadResourceMetadata(challenge, out Uri? resourceMetadata))
         {
             return false;
         }
@@ -534,6 +604,40 @@ public static class BearerTokenChallenge
             FindParameter(challenge, ErrorDescriptionParameter),
             FindParameter(challenge, ScopeParameter),
             resourceMetadata);
+
+        return true;
+    }
+
+
+    /// <summary>
+    /// Reads the <c>resource_metadata</c> auth-param of <paramref name="challenge"/>, which the library's own reading
+    /// holds to an absolute http or https URL. <see href="https://www.rfc-editor.org/rfc/rfc9728#section-5.1">RFC 9728
+    /// Section 5.1</see> says only "resource_metadata: The URL of the protected resource metadata."; the https half
+    /// rests on <see href="https://www.rfc-editor.org/rfc/rfc9728#section-1.2">Section 1.2</see>, "Resource Identifier:
+    /// The protected resource's resource identifier, which is a URL that uses the https scheme", from which
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3">Section 3</see> forms the metadata URL "by inserting
+    /// a well-known URI string into the protected resource's resource identifier". An http URL is read as the
+    /// parameter carries it, and the application's fetch policy decides what is fetched.
+    /// </summary>
+    /// <param name="challenge">The challenge read from the field line.</param>
+    /// <param name="resourceMetadata">The URL, or <see langword="null"/> when the challenge carries no such parameter or it is unusable.</param>
+    /// <returns><see langword="false"/> when the parameter is present and not an absolute http or https URL.</returns>
+    private static bool TryReadResourceMetadata(ParsedChallenge challenge, out Uri? resourceMetadata)
+    {
+        resourceMetadata = null;
+        string? resourceMetadataValue = FindParameter(challenge, ProtectedResourceChallenge.ResourceMetadataParameter);
+        if(resourceMetadataValue is null)
+        {
+            return true;
+        }
+
+        if(!Uri.TryCreate(resourceMetadataValue, UriKind.Absolute, out Uri? candidate)
+            || (candidate.Scheme != Uri.UriSchemeHttps && candidate.Scheme != Uri.UriSchemeHttp))
+        {
+            return false;
+        }
+
+        resourceMetadata = candidate;
 
         return true;
     }
@@ -563,11 +667,18 @@ public static class BearerTokenChallenge
 
 
     /// <summary>
-    /// Appends <c>{name}="{value}"</c> preceded by the scheme separator or the
-    /// auth-param list separator, with RFC 9110 §5.6.4 quoted-string escaping
-    /// of <c>"</c> and <c>\</c> in <paramref name="value"/>.
+    /// Appends <c>{name}="{value}"</c> preceded by the scheme separator (one SP, RFC 9110 Section 11.3: "challenge =
+    /// auth-scheme [ 1*SP ( token68 / #auth-param ) ]") or the auth-param list separator (<c>, </c>), with the
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.6.4">RFC 9110 Section 5.6.4</see> quoted-string
+    /// escaping of <c>"</c> and <c>\</c> in <paramref name="value"/> ("quoted-pair = "\" ( HTAB / SP / VCHAR / obs-text
+    /// )"). The one place an auth-param is written for <see cref="BuildChallenge"/> and <see cref="DpopChallenge.BuildChallenge"/>,
+    /// so both schemes write a parameter the same way; the caller has checked the value against its character set.
     /// </summary>
-    private static void AppendQuotedParameter(StringBuilder builder, string name, string value, ref bool isFirstParameter)
+    /// <param name="builder">The challenge being written.</param>
+    /// <param name="name">The auth-param name.</param>
+    /// <param name="value">The value, written as a quoted-string.</param>
+    /// <param name="isFirstParameter">Whether no parameter has been written yet; set to <see langword="false"/> once this one is.</param>
+    internal static void AppendQuotedParameter(StringBuilder builder, string name, string value, ref bool isFirstParameter)
     {
         string escaped = value
             .Replace("\\", "\\\\", StringComparison.Ordinal)
@@ -593,7 +704,18 @@ public static class BearerTokenChallenge
         c is (>= ' ' and <= '!') or (>= '#' and <= '[') or (>= ']' and <= '~');
 
 
-    private static bool IsWithinNqsCharset(string value)
+    /// <summary>
+    /// Whether every character of <paramref name="value"/> is within the set
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 Section 3</see> gives the <c>error</c> and
+    /// <c>error_description</c> attributes: "Values for the "error" and "error_description" attributes ... MUST NOT
+    /// include characters outside the set %x20-21 / %x23-5B / %x5D-7E." The one check of that set for
+    /// <see cref="BuildChallenge"/> and <see cref="DpopChallenge.BuildChallenge"/>, the <c>DPoP</c> challenge naming its
+    /// <c>error</c> by RFC 6750 Section 3 (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449
+    /// Section 7.1</see>).
+    /// </summary>
+    /// <param name="value">The attribute value.</param>
+    /// <returns><see langword="true"/> when every character is within the set.</returns>
+    internal static bool IsWithinNqsCharset(string value)
     {
         foreach(char c in value)
         {
@@ -608,11 +730,16 @@ public static class BearerTokenChallenge
 
 
     /// <summary>
-    /// Whether every character is representable in an RFC 9110 §5.6.4
-    /// quoted-string: HTAB, SP, or a visible ASCII character — <c>"</c> and
-    /// <c>\</c> are representable through quoted-pair escaping.
+    /// Whether every character is representable in an
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.6.4">RFC 9110 Section 5.6.4</see> quoted-string as
+    /// the library writes one: HTAB, SP, or a visible ASCII character, <c>"</c> and <c>\</c> being representable through
+    /// quoted-pair escaping ("qdtext = HTAB / SP / %x21 / %x23-5B / %x5D-7E / obs-text"). The one check of a
+    /// <c>realm</c> value for <see cref="BuildChallenge"/> and <see cref="DpopChallenge.BuildChallenge"/>; RFC 9110
+    /// Section 11.5 says of the realm: "For historical reasons, a sender MUST only generate the quoted-string syntax."
     /// </summary>
-    private static bool IsQuotedStringRepresentable(string value)
+    /// <param name="value">The value.</param>
+    /// <returns><see langword="true"/> when every character is HTAB, SP or visible ASCII.</returns>
+    internal static bool IsQuotedStringRepresentable(string value)
     {
         foreach(char c in value)
         {
@@ -628,9 +755,14 @@ public static class BearerTokenChallenge
 
 
     /// <summary>
-    /// An RFC 9110 §5.6.2 tchar: visible ASCII except delimiters.
+    /// Whether <paramref name="c"/> is a tchar of <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.6.2">RFC
+    /// 9110 Section 5.6.2</see>: "!" / "#" / "$" / "%" / "&amp;" / "'" / "*" / "+" / "-" / "." / "^" / "_" / "`" / "|" /
+    /// "~" / DIGIT / ALPHA, visible ASCII except delimiters. The one check of a token for the challenge-list reader and
+    /// for <see cref="DpopChallenge.BuildChallenge"/>, which holds each name of its <c>algs</c> value to it.
     /// </summary>
-    private static bool IsTokenChar(char c) =>
+    /// <param name="c">The character.</param>
+    /// <returns><see langword="true"/> for a tchar.</returns>
+    internal static bool IsTokenChar(char c) =>
         c is (>= '0' and <= '9') or (>= 'a' and <= 'z') or (>= 'A' and <= 'Z')
         or '!' or '#' or '$' or '%' or '&' or '\'' or '*' or '+' or '-' or '.'
         or '^' or '_' or '`' or '|' or '~';

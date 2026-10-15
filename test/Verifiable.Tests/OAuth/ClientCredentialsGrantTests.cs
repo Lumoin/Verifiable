@@ -1931,6 +1931,39 @@ internal sealed class ClientCredentialsGrantTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">RFC 9449 Section 8</see>: "In order for the
+    /// application to obtain and use the DPoP-Nonce HTTP response header value, the server needs to make it available to
+    /// the application by including DPoP-Nonce in the Access-Control-Expose-Headers response header list value." A
+    /// <c>client_credentials</c> request sent to the token endpoint over a raw TLS connection, naming no <c>Origin</c>,
+    /// with a proof carrying no nonce is answered 400 <c>use_dpop_nonce</c> with one <c>DPoP-Nonce</c> field line and
+    /// exactly one field line <c>Access-Control-Expose-Headers: WWW-Authenticate, DPoP-Nonce</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task TokenEndpointNonceChallengeExposesTheDpopNonceFieldAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterMachineClientAsync(app).ConfigureAwait(false);
+        Uri tokenUrl = await StartDpopTokenEndpointAsync(app, material).ConfigureAwait(false);
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+
+        HttpResponseData response = await PostNonceLessProofOverARawConnectionAsync(app, tokenUrl, dpopKey).ConfigureAwait(false);
+
+        Assert.AreEqual(400, response.StatusCode, response.Body);
+        Assert.Contains(OAuthErrors.UseDpopNonce, response.Body);
+        _ = Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.DPoPNonce),
+            "The challenge carries exactly one DPoP-Nonce field line.");
+        Assert.AreEqual(
+            ResourceDpopProofs.ExposedDpopResponseFields,
+            Assert.ContainsSingle(response.Headers.Headers.GetValues("Access-Control-Expose-Headers")),
+            "The challenge exposes the DPoP-Nonce field in one field line.");
+    }
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8.2">RFC 9449 Section 8.2</see>: "The DPoP-Nonce
     /// HTTP header field uses the nonce syntax defined in Section 8.1.", Figure 22: <c>nonce = 1*NQCHAR</c>. A
     /// <c>client_credentials</c> request sent to the token endpoint over a raw TLS connection with a proof carrying

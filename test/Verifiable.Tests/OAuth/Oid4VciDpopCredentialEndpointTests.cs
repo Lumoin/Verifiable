@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Verifiable.Core;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
@@ -16,6 +17,7 @@ using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Server;
+using Verifiable.OAuth.Server.Metadata;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -90,7 +92,7 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
     /// library's policy, not a rule of the text. A DPoP-bound access token presented at the Credential Endpoint
     /// over the wire with a proof signed with the key pair the token is bound to, carrying the endpoint's nonce and
     /// a <c>jti</c> holding U+0000, is refused with 401, the single challenge
-    /// <c>DPoP error="invalid_dpop_proof", algs="..."</c>, <c>invalid_dpop_proof</c> and the description that names
+    /// <c>DPoP realm="&lt;issuer&gt;", error="invalid_dpop_proof", algs="..."</c>, <c>invalid_dpop_proof</c> and the description that names
     /// both causes, and the store observation records no flow-state store call. A proof with an ordinary
     /// <c>jti</c> is then served with 200, and the observation sees the replay guard read, save, read back and claim
     /// its record.
@@ -118,7 +120,7 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
         Assert.AreEqual(HttpStatusCode.Unauthorized, refused.StatusCode, refusedBody);
         Assert.IsTrue(refused.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges),
             "The refusal carries a WWW-Authenticate challenge.");
-        Assert.AreEqual(ResourceDpopProofs.DpopChallenge("invalid_dpop_proof"), challenges.Single());
+        Assert.AreEqual(CredentialDpopChallenge(ctx, "invalid_dpop_proof"), challenges.Single());
         using JsonDocument document = JsonDocument.Parse(refusedBody);
         Assert.AreEqual("invalid_dpop_proof", document.RootElement.GetProperty("error").GetString());
         Assert.AreEqual(
@@ -144,7 +146,7 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
     /// use an HTTP 401 (Unauthorized) error code with an accompanying WWW-Authenticate: DPoP value and
     /// DPoP-Nonce value to accomplish this." A DPoP-bound access token presented at the Credential
     /// Endpoint over the wire under the <c>DPoP</c> scheme with no proof is answered 401, one challenge
-    /// <c>DPoP error="use_dpop_nonce", algs="…"</c>, <c>use_dpop_nonce</c> in the body and a
+    /// <c>DPoP realm="&lt;issuer&gt;", error="use_dpop_nonce", algs="..."</c>, <c>use_dpop_nonce</c> in the body and a
     /// <c>DPoP-Nonce</c>.
     /// </summary>
     [TestMethod]
@@ -162,7 +164,7 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
         Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
         Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges),
             "RFC 9449 §9: the nonce challenge carries a WWW-Authenticate: DPoP value.");
-        Assert.AreEqual(ResourceDpopProofs.DpopChallenge("use_dpop_nonce"), challenges.Single());
+        Assert.AreEqual(CredentialDpopChallenge(ctx, "use_dpop_nonce"), challenges.Single());
         using JsonDocument document = JsonDocument.Parse(body);
         Assert.AreEqual("use_dpop_nonce", document.RootElement.GetProperty("error").GetString());
         Assert.IsFalse(string.IsNullOrEmpty(ResourceDpopProofs.ReadNonce(response)),
@@ -177,7 +179,7 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
     /// authorization servers and/or resource servers, a nonce issued by any of them should be used only at the issuing
     /// server." The token endpoint's challenge to a token request whose proof carries no <c>nonce</c> supplies a nonce;
     /// a proof by the bound DPoP key carrying that nonce is presented with the DPoP-bound access token at the Credential
-    /// Endpoint over the wire and is refused: 401, the one challenge <c>DPoP error="use_dpop_nonce", algs="..."</c>,
+    /// Endpoint over the wire and is refused: 401, the one challenge <c>DPoP realm="&lt;issuer&gt;", error="use_dpop_nonce", algs="..."</c>,
     /// <c>use_dpop_nonce</c> in the body with the description that names the nonce's audience as another endpoint's,
     /// and a <c>DPoP-Nonce</c> field supplying a nonce other than the one presented.
     /// </summary>
@@ -198,7 +200,7 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
         Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
         Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges),
             "The refusal carries a WWW-Authenticate challenge.");
-        Assert.AreEqual(ResourceDpopProofs.DpopChallenge("use_dpop_nonce"), challenges.Single());
+        Assert.AreEqual(CredentialDpopChallenge(ctx, "use_dpop_nonce"), challenges.Single());
         using JsonDocument document = JsonDocument.Parse(body);
         Assert.AreEqual("use_dpop_nonce", document.RootElement.GetProperty("error").GetString());
         Assert.AreEqual("DPoP nonce invalid: AudienceMismatch.", document.RootElement.GetProperty("error_description").GetString());
@@ -216,7 +218,7 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
     /// server." The Credential Endpoint's challenge to a request that carries no proof supplies a nonce; a proof by the
     /// bound DPoP key carrying that nonce, its <c>htm</c>, <c>htu</c> and <c>ath</c> those of a Notification Request,
     /// is presented with the same DPoP-bound access token at the Notification Endpoint over the wire and is refused:
-    /// 401, the one challenge <c>DPoP error="use_dpop_nonce", algs="..."</c>, <c>use_dpop_nonce</c> in the body with
+    /// 401, the one challenge <c>DPoP realm="&lt;issuer&gt;", error="use_dpop_nonce", algs="..."</c>, <c>use_dpop_nonce</c> in the body with
     /// the description that names the nonce's audience as another endpoint's, and a <c>DPoP-Nonce</c> field supplying
     /// a nonce other than the one presented.
     /// </summary>
@@ -245,7 +247,7 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
         Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
         Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges),
             "The refusal carries a WWW-Authenticate challenge.");
-        Assert.AreEqual(ResourceDpopProofs.DpopChallenge("use_dpop_nonce"), challenges.Single());
+        Assert.AreEqual(CredentialDpopChallenge(ctx, "use_dpop_nonce"), challenges.Single());
         using JsonDocument document = JsonDocument.Parse(body);
         Assert.AreEqual("use_dpop_nonce", document.RootElement.GetProperty("error").GetString());
         Assert.AreEqual("DPoP nonce invalid: AudienceMismatch.", document.RootElement.GetProperty("error_description").GetString());
@@ -312,7 +314,7 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
         Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges));
-        Assert.AreEqual(ResourceDpopProofs.DpopChallenge("invalid_token"), challenges.Single());
+        Assert.AreEqual(CredentialDpopChallenge(ctx, "invalid_token"), challenges.Single());
         using JsonDocument document = JsonDocument.Parse(body);
         Assert.AreEqual("invalid_token", document.RootElement.GetProperty("error").GetString());
     }
@@ -325,7 +327,7 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
     /// SHOULD NOT include an error code or other error information." A Credential Request sent over the
     /// wire with no <c>Authorization</c> header is refused with 401, an empty body and exactly one
     /// challenge that names both schemes the endpoint accepts and no error: a <c>Bearer</c> challenge
-    /// whose <c>realm</c> is the issuer the host serves the endpoint under, then <c>DPoP algs="…"</c>.
+    /// whose <c>realm</c> is the issuer the host serves the endpoint under, then <c>DPoP realm="&lt;issuer&gt;", algs="..."</c>.
     /// </summary>
     [TestMethod]
     public async Task CredentialEndpointChallengesARequestWithoutCredentialsForBothSchemesAsync()
@@ -346,33 +348,89 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
         Assert.IsTrue(response.Headers.NonValidated.TryGetValues("WWW-Authenticate", out HeaderStringValues challenges),
             "RFC 6750 §3: the refusal carries a WWW-Authenticate challenge.");
         Assert.AreEqual(
-            $"Bearer realm=\"{ctx.Fixture.Registration.AuthorizationServerIssuer.OriginalString}\", DPoP algs=\"{ResourceDpopProofs.AcceptedProofAlgorithms}\"",
+            $"Bearer realm=\"{IssuerOf(ctx)}\", {ResourceDpopProofs.DpopChallenge(IssuerOf(ctx), error: null)}",
             Assert.ContainsSingle(challenges));
         Assert.AreEqual(string.Empty, body, "RFC 6750 §3.1: no error code or other error information.");
     }
 
 
     /// <summary>
-    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>:
-    /// "invalid_request The request is missing a required parameter, includes an unsupported parameter or
-    /// parameter value, repeats the same parameter, uses more than one method for including an access
-    /// token, or is otherwise malformed.  The resource server SHOULD respond with the HTTP 400 (Bad
-    /// Request) status code." A Credential Request sent over a raw TLS connection with two
-    /// <c>Authorization: Bearer</c> field lines (<c>Authorization = credentials</c> is no list,
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.6.2">RFC 9110 Section 11.6.2</see>) is
-    /// refused with 400 <c>invalid_request</c> and one <c>WWW-Authenticate</c> field holding the <c>Bearer</c> and
-    /// the <c>DPoP</c> challenge, each with <c>error="invalid_request"</c>,
-    /// <c>Bearer realm="&lt;issuer&gt;", error="invalid_request", DPoP error="invalid_request", algs="..."</c>, the
-    /// realm the issuer the host serves the endpoint under:
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 Section 7.2</see>, "Otherwise, both
-    /// Bearer and DPoP challenges MAY be used to deliver error information (Figure 19)." Both lines name the
-    /// <c>Bearer</c> scheme, where the section recommends "If the mechanism used to attempt authentication could be
-    /// established unambiguously, then the corresponding challenge SHOULD be used to deliver error information
-    /// (Figure 18)."; the both-challenges answer to two lines of one scheme is the library's named deviation, since
-    /// the reading of a repeated field keeps no scheme.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 Section 3</see>: "All challenges defined by
+    /// this specification MUST use the auth-scheme value "Bearer". This scheme MUST be followed by one or more auth-param
+    /// values.", and <see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.6.1">RFC 9110 Section 15.6.1</see>:
+    /// "The 500 (Internal Server Error) status code indicates that the server encountered an unexpected condition that
+    /// prevented it from fulfilling the request." The Credential Endpoint requires no single scope, so the <c>Bearer</c>
+    /// challenge of its answer to a request without credentials carries the realm, the issuer; at a server whose issuer
+    /// does not resolve it has no auth-param to carry. A Credential Request sent over the wire with no
+    /// <c>Authorization</c> field there is answered 500 with exactly the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c>, no
+    /// challenge and no <c>Access-Control-Expose-Headers</c> field. The rows: the registration's issuer replaced by one the default issuer resolver refuses (<c>http</c>
+    /// scheme); an application issuer resolver that answers nothing.
     /// </summary>
+    /// <param name="row">Which part of the wiring fails: <see cref="IssuerUnresolvableRow"/> or <see cref="IssuerResolverAnswersNothingRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
-    public async Task CredentialEndpointRefusesTwoAuthorizationLinesWithBothChallengesAsync()
+    [DataRow(IssuerUnresolvableRow)]
+    [DataRow(IssuerResolverAnswersNothingRow)]
+    public async Task CredentialEndpointAnswersANoCredentialRequestWhoseIssuerDoesNotResolveAsServerErrorAsync(string row)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        BoundTokenContext ctx = await AcquireAsync(host).ConfigureAwait(false);
+        using DpopClientFixture fixture = ctx.Fixture;
+        Action<AuthorizationServerIntegration>? alteration = row switch
+        {
+            IssuerResolverAnswersNothingRow => static candidateIntegration =>
+                candidateIntegration.ResolveIssuerAsync = static (_, _, _) => ValueTask.FromResult<Uri?>(null),
+            IssuerUnresolvableRow => null,
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown wiring row.")
+        };
+        if(alteration is not null)
+        {
+            await TestHostShell.AlterAsync(host.Server, alteration).ConfigureAwait(false);
+        }
+        else
+        {
+            HostedAuthorizationServer served = host.Host("default");
+            ClientRecord replaced = served.Registrations[ctx.Segment] with { IssuerUri = new Uri("http://issuer.test/" + ctx.Segment) };
+            served.Registrations[replaced.TenantId.Value] = replaced;
+            served.Registrations[replaced.ClientId] = replaced;
+        }
+
+        using StringContent content = new(
+            "{\"credential_configuration_id\":\"" + ConfigurationId + "\",\"proofs\":{\"jwt\":[\"p\"]}}",
+            Encoding.UTF8, WellKnownMediaTypes.Application.Json);
+        using HttpRequestMessage request = new(HttpMethod.Post, ctx.CredentialUrl) { Content = content };
+        using HttpResponseMessage response = await ctx.Http.SendAsync(request, TestContext.CancellationToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The request is answered without a server fault.");
+        Assert.AreEqual(HttpStatusCode.InternalServerError, response.StatusCode, body);
+        Assert.AreEqual(
+            /*lang=json,strict*/ "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}", body);
+        Assert.IsFalse(response.Headers.Contains("WWW-Authenticate"), "A fault of the server carries no challenge.");
+        Assert.IsEmpty(
+            response.Headers.NonValidated.Where(static field => string.Equals(field.Key, "Access-Control-Expose-Headers", StringComparison.OrdinalIgnoreCase)),
+            "A fault of the server carries no exposure field.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 Section 7.2</see>: "If the mechanism used
+    /// to attempt authentication could be established unambiguously, then the corresponding challenge SHOULD be used to
+    /// deliver error information (Figure 18).", with
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>: "invalid_request The
+    /// request is missing a required parameter, includes an unsupported parameter or parameter value, repeats the same
+    /// parameter, uses more than one method for including an access token, or is otherwise malformed.  The resource
+    /// server SHOULD respond with the HTTP 400 (Bad Request) status code." A Credential Request sent over a raw TLS
+    /// connection with two <c>Authorization: Bearer</c> field lines (<c>Authorization = credentials</c> is no list,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.6.2">RFC 9110 Section 11.6.2</see>) attempts the
+    /// <c>Bearer</c> mechanism alone: it is refused with 400 <c>invalid_request</c> and the one challenge
+    /// <c>Bearer realm="&lt;issuer&gt;", error="invalid_request"</c>, the realm the issuer the host serves the endpoint
+    /// under, and no <c>DPoP</c> challenge.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task CredentialEndpointRefusesTwoBearerAuthorizationLinesWithTheBearerChallengeAloneAsync()
     {
         await using TestHostShell host = new(TimeProvider);
         BoundTokenContext ctx = await AcquireAsync(host).ConfigureAwait(false);
@@ -390,9 +448,49 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
 
         Assert.AreEqual(400, response.StatusCode, response.Body);
         Assert.AreEqual(
-            $"Bearer realm=\"{ctx.Fixture.Registration.AuthorizationServerIssuer.OriginalString}\", error=\"invalid_request\", "
-            + $"DPoP error=\"invalid_request\", algs=\"{ResourceDpopProofs.AcceptedProofAlgorithms}\"",
+            $"Bearer realm=\"{IssuerOf(ctx)}\", error=\"invalid_request\"",
             Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
+        using JsonDocument document = JsonDocument.Parse(response.Body);
+        Assert.AreEqual("invalid_request", document.RootElement.GetProperty("error").GetString());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 Section 7.2</see>: "If the mechanism used
+    /// to attempt authentication could be established unambiguously, then the corresponding challenge SHOULD be used to
+    /// deliver error information (Figure 18)." A Credential Request sent over a raw TLS connection with two
+    /// <c>Authorization: DPoP</c> field lines attempts the <c>DPoP</c> mechanism alone: it is refused with 400,
+    /// <c>invalid_request</c> in the body, the one challenge
+    /// <c>DPoP realm="&lt;issuer&gt;", error="invalid_request", algs="..."</c>, no <c>scope</c> and no <c>Bearer</c>
+    /// challenge, and the one field line <c>Access-Control-Expose-Headers: WWW-Authenticate, DPoP-Nonce</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">Section 7.1</see>: "including WWW-Authenticate in
+    /// the Access-Control-Expose-Headers response header list value").
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task CredentialEndpointAnswersTwoDpopAuthorizationLinesWithTheDpopChallengeAloneAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        BoundTokenContext ctx = await AcquireAsync(host).ConfigureAwait(false);
+        using DpopClientFixture fixture = ctx.Fixture;
+
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Post, ctx.CredentialUrl,
+            [
+                new(WellKnownHttpHeaderNames.ContentType, WellKnownMediaTypes.Application.Json),
+                new(WellKnownHttpHeaderNames.Authorization, "DPoP " + ctx.AccessToken),
+                new(WellKnownHttpHeaderNames.Authorization, "DPoP " + ctx.AccessToken)
+            ],
+            Encoding.UTF8.GetBytes("{\"credential_configuration_id\":\"" + ConfigurationId + "\",\"proofs\":{\"jwt\":[\"p\"]}}"),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            CredentialDpopChallenge(ctx, "invalid_request"),
+            Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
+        Assert.AreEqual(
+            ResourceDpopProofs.ExposedDpopResponseFields,
+            Assert.ContainsSingle(response.Headers.Headers.GetValues("Access-Control-Expose-Headers")));
         using JsonDocument document = JsonDocument.Parse(response.Body);
         Assert.AreEqual("invalid_request", document.RootElement.GetProperty("error").GetString());
     }
@@ -404,7 +502,7 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
     /// corresponding challenge SHOULD be used to deliver error information". A DPoP-bound access token
     /// whose signature does not verify, presented at the Credential Endpoint over the wire under the
     /// <c>DPoP</c> scheme, is refused with 401 <c>invalid_token</c> and the single challenge
-    /// <c>DPoP error="invalid_token", algs="…"</c>, never a <c>Bearer</c> one.
+    /// <c>DPoP realm="&lt;issuer&gt;", error="invalid_token", algs="..."</c>, never a <c>Bearer</c> one.
     /// </summary>
     [TestMethod]
     public async Task CredentialEndpointAnswersARefusedDpopPresentationWithADpopChallengeAsync()
@@ -425,16 +523,122 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
         Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
         Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges),
             "RFC 6750 §3: the refusal carries a WWW-Authenticate challenge.");
-        Assert.AreEqual(ResourceDpopProofs.DpopChallenge("invalid_token"), challenges.Single());
+        Assert.AreEqual(CredentialDpopChallenge(ctx, "invalid_token"), challenges.Single());
         using JsonDocument document = JsonDocument.Parse(body);
         Assert.AreEqual("invalid_token", document.RootElement.GetProperty("error").GetString());
     }
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>, of the <c>DPoP</c>
+    /// challenge: "The authentication parameter realm MAY be included to indicate the scope of protection in the manner
+    /// described in [RFC9110], Section 11.5." and "A scope authentication parameter MAY be included as defined in
+    /// [RFC6750], Section 3." The Credential Endpoint names the realm of the protection space it serves, the issuer, in
+    /// every <c>DPoP</c> challenge, and no <c>scope</c>, since it requires no single scope when it refuses a
+    /// presentation. The one field line received over a raw TLS connection is, for a DPoP-bound token whose signature
+    /// does not verify, <c>DPoP realm="&lt;issuer&gt;", error="invalid_token", algs="..."</c>, and for a DPoP-bound token
+    /// presented with no proof <c>DPoP realm="&lt;issuer&gt;", error="use_dpop_nonce", algs="..."</c> with one
+    /// <c>DPoP-Nonce</c> field line.
+    /// </summary>
+    /// <param name="row">Which refusal the request meets: <see cref="TamperedTokenRow"/> or <see cref="NonceChallengeRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(TamperedTokenRow)]
+    [DataRow(NonceChallengeRow)]
+    public async Task CredentialEndpointDpopChallengeCarriesTheRealmAndNoScopeAsync(string row)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        BoundTokenContext ctx = await AcquireAsync(host).ConfigureAwait(false);
+        using DpopClientFixture fixture = ctx.Fixture;
+
+        (string presentedToken, string error) = row switch
+        {
+            TamperedTokenRow => (TamperSignature(ctx.AccessToken), "invalid_token"),
+            NonceChallengeRow => (ctx.AccessToken, "use_dpop_nonce"),
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown challenge row.")
+        };
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Post, ctx.CredentialUrl,
+            [
+                new(WellKnownHttpHeaderNames.ContentType, WellKnownMediaTypes.Application.Json),
+                new(WellKnownHttpHeaderNames.Authorization, "DPoP " + presentedToken)
+            ],
+            Encoding.UTF8.GetBytes("{\"credential_configuration_id\":\"" + ConfigurationId + "\",\"proofs\":{\"jwt\":[\"p\"]}}"),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(401, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            $"DPoP realm=\"{IssuerOf(ctx)}\", error=\"{error}\", algs=\"{ResourceDpopProofs.AcceptedProofAlgorithms}\"",
+            Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
+        if(row == NonceChallengeRow)
+        {
+            Assert.IsFalse(string.IsNullOrEmpty(Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.DPoPNonce))),
+                "The nonce challenge carries one DPoP-Nonce field line.");
+        }
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">RFC 9449 Section 4.3</see>, check 5: "The alg JOSE
+    /// Header Parameter indicates a registered asymmetric digital signature algorithm [IANA.JOSE.ALGS], is not none, is
+    /// supported by the application, and is acceptable per local policy.", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">Section 7.1</see>: "An algs parameter SHOULD be
+    /// included to signal to the client the JWS algorithms that are acceptable for the DPoP proof JWT." A host whose
+    /// signing-algorithm resolver answers <c>["ES384"]</c> for DPoP proofs, after the token was issued and the endpoint's
+    /// nonce provided, holds the Credential Endpoint to that list: an ES256 proof presented with its DPoP-bound token over
+    /// the wire, carrying that nonce and correct in every other claim, is refused with 401, the one challenge
+    /// <c>DPoP realm="&lt;issuer&gt;", error="invalid_dpop_proof", algs="ES384"</c> and the description "DPoP proof
+    /// validation failed: InvalidAlg.".
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task CredentialEndpointRefusesAProofOutsideTheAcceptedAlgorithmsAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        BoundTokenContext ctx = await AcquireAsync(host).ConfigureAwait(false);
+        using DpopClientFixture fixture = ctx.Fixture;
+        string nonce = await ObtainResourceNonceAsync(ctx).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, static candidateIntegration =>
+            candidateIntegration.Cryptography.ResolveSupportedSigningAlgorithmsAsync = static (registration, usage, context, cancellationToken) =>
+                usage == KeyUsageContext.DpopProof
+                    ? ValueTask.FromResult<IReadOnlyList<string>>([WellKnownJwaValues.Es384])
+                    : DefaultSupportedSigningAlgorithms.ResolveAsync(
+                        context.RequestServer!.OAuth(), registration, usage, context, cancellationToken)).ConfigureAwait(false);
+
+        string proof = await BuildCredentialProofAsync(ctx, freshKey: null, nonce).ConfigureAwait(false);
+        using HttpResponseMessage response = await PostCredentialAsync(ctx, ctx.AccessToken, proof).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
+        Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges),
+            "The refusal carries a WWW-Authenticate challenge.");
+        Assert.AreEqual($"DPoP realm=\"{IssuerOf(ctx)}\", error=\"invalid_dpop_proof\", algs=\"ES384\"", challenges.Single());
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual("invalid_dpop_proof", document.RootElement.GetProperty("error").GetString());
+        Assert.AreEqual("DPoP proof validation failed: InvalidAlg.", document.RootElement.GetProperty("error_description").GetString());
+    }
+
+
+    /// <summary>
+    /// Flips one character in the middle of a compact JWS's signature segment; it stays base64url, so the token parses
+    /// and its signature deterministically fails to verify.
+    /// </summary>
+    /// <param name="compactJws">The token to tamper.</param>
+    /// <returns>The token with a signature that does not verify.</returns>
+    private static string TamperSignature(string compactJws)
+    {
+        int signatureStart = compactJws.LastIndexOf('.', StringComparison.Ordinal) + 1;
+        int tamperIndex = signatureStart + ((compactJws.Length - signatureStart) / 2);
+        char flipped = compactJws[tamperIndex] == 'A' ? 'B' : 'A';
+
+        return string.Concat(compactJws.AsSpan(0, tamperIndex), flipped.ToString(), compactJws.AsSpan(tamperIndex + 1));
+    }
+
+
+    /// <summary>
     /// Presents the bound token at the Credential Endpoint over the wire with no proof, asserts the
     /// RFC 9449 §9 nonce challenge it is answered with (401, the one challenge
-    /// <c>DPoP error="use_dpop_nonce", algs="…"</c> and <c>use_dpop_nonce</c> in the body), and returns
+    /// <c>DPoP realm="&lt;issuer&gt;", error="use_dpop_nonce", algs="..."</c> and <c>use_dpop_nonce</c> in the body), and returns
     /// the nonce its <c>DPoP-Nonce</c> header provides.
     /// </summary>
     /// <param name="ctx">The bound-token context.</param>
@@ -447,12 +651,30 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
 
         Assert.AreEqual(HttpStatusCode.Unauthorized, challenge.StatusCode, body);
         Assert.IsTrue(challenge.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges));
-        Assert.AreEqual(ResourceDpopProofs.DpopChallenge("use_dpop_nonce"), challenges.Single());
+        Assert.AreEqual(CredentialDpopChallenge(ctx, "use_dpop_nonce"), challenges.Single());
         using JsonDocument document = JsonDocument.Parse(body);
         Assert.AreEqual("use_dpop_nonce", document.RootElement.GetProperty("error").GetString());
 
         return ResourceDpopProofs.ReadNonce(challenge);
     }
+
+
+    /// <summary>The issuer the host serves the registration under, the realm of the endpoints' challenges.</summary>
+    /// <param name="ctx">The bound-token context.</param>
+    /// <returns>The issuer, as written.</returns>
+    private static string IssuerOf(BoundTokenContext ctx) => ctx.Fixture.Registration.AuthorizationServerIssuer.OriginalString;
+
+
+    /// <summary>
+    /// The <c>DPoP</c> challenge the Credential, Deferred Credential and Notification endpoints answer a refused DPoP
+    /// presentation with, written out: <c>DPoP realm="&lt;issuer&gt;", error="&lt;error&gt;", algs="..."</c>, no
+    /// <c>scope</c>, since these endpoints require no single scope when they refuse a presentation.
+    /// </summary>
+    /// <param name="ctx">The bound-token context.</param>
+    /// <param name="error">The challenge's <c>error</c>.</param>
+    /// <returns>The <c>WWW-Authenticate</c> value.</returns>
+    private static string CredentialDpopChallenge(BoundTokenContext ctx, string error) =>
+        ResourceDpopProofs.DpopChallenge(IssuerOf(ctx), error);
 
 
     /// <summary>
@@ -561,7 +783,7 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
     /// token signed again under the registration's access-token key with its <c>aud</c> naming another resource
     /// alone, presented over the wire under the <c>DPoP</c> scheme with a well-formed request body and a proof from
     /// the bound key carrying the nonce the server provided, at the endpoint a row addresses, is refused with 401,
-    /// <c>invalid_token</c> and the one challenge <c>DPoP error="invalid_token", algs="..."</c>.
+    /// <c>invalid_token</c> and the one challenge <c>DPoP realm="&lt;issuer&gt;", error="invalid_token", algs="..."</c>.
     /// </summary>
     /// <param name="endpointName">The protected endpoint addressed: <see cref="CredentialEndpointRow"/>, <see cref="DeferredEndpointRow"/> or <see cref="NotificationEndpointRow"/>.</param>
     /// <returns>A task that completes when the assertions have run.</returns>
@@ -603,7 +825,7 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
         Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
         Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges),
             "RFC 6750 Section 3: the refusal carries a WWW-Authenticate challenge.");
-        Assert.AreEqual(ResourceDpopProofs.DpopChallenge("invalid_token"), challenges.Single());
+        Assert.AreEqual(CredentialDpopChallenge(ctx, "invalid_token"), challenges.Single());
         using JsonDocument document = JsonDocument.Parse(body);
         Assert.AreEqual("invalid_token", document.RootElement.GetProperty("error").GetString());
     }
@@ -648,6 +870,18 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
 
     /// <summary>The identifier of a resource other than this Authorization Server.</summary>
     private static string OtherResourceAudience { get; } = "https://rs.example.com";
+
+    /// <summary>The wiring row whose registration names an issuer the default resolver refuses.</summary>
+    private const string IssuerUnresolvableRow = "issuer-unresolvable";
+
+    /// <summary>The wiring row whose application issuer resolver answers nothing.</summary>
+    private const string IssuerResolverAnswersNothingRow = "issuer-resolver-answers-nothing";
+
+    /// <summary>The challenge row whose access token's signature does not verify.</summary>
+    private const string TamperedTokenRow = "tampered-token";
+
+    /// <summary>The challenge row whose DPoP-bound token is presented with no proof.</summary>
+    private const string NonceChallengeRow = "nonce-challenge";
 
     /// <summary>The row addressing the Credential Endpoint.</summary>
     private const string CredentialEndpointRow = "oid4vci-credential";

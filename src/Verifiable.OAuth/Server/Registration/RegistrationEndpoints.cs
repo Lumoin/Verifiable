@@ -739,7 +739,7 @@ public static class RegistrationEndpoints
         {
 
             return (await CredentialEndpointDpopValidation.RefuseRepeatedAuthorizationAsync(
-                server, registration, context, isDpopAccepted: false, cancellationToken).ConfigureAwait(false), null, null);
+                server, registration, context, cancellationToken).ConfigureAwait(false), null, null);
         }
 
         if(!BearerTokenValidation.TryExtractBearer(authorization, out string? presented))

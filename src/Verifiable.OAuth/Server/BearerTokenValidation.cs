@@ -185,10 +185,11 @@ public static class BearerTokenValidation
 
     /// <summary>
     /// The request's <c>Authorization</c> field, read once through <see cref="AuthorizationFieldReading.Read"/>;
-    /// the absent field for a context that carries no request. A protected resource reads the field here,
-    /// answers a repeated field (<see cref="AuthorizationFieldReading.IsRepeated"/>) through
-    /// <see cref="Oid4Vci.CredentialEndpointDpopValidation.RefuseRepeatedAuthorizationAsync"/>, and extracts the
-    /// token from the same reading.
+    /// the absent field for a context that carries no request. A protected resource reads the field here and extracts
+    /// the token from the same reading. UserInfo and the OID4VCI resources answer a repeated field
+    /// (<see cref="AuthorizationFieldReading.IsRepeated"/>) through
+    /// <see cref="Oid4Vci.CredentialEndpointDpopValidation.ReadPresentationAsync"/>, the client configuration endpoint
+    /// through <see cref="Oid4Vci.CredentialEndpointDpopValidation.RefuseRepeatedAuthorizationAsync"/>.
     /// </summary>
     /// <param name="context">The per-request context carrying the inbound request.</param>
     /// <returns>The reading.</returns>

@@ -48,7 +48,7 @@ internal sealed class WellKnownHttpHeaderNamesTests
     /// of a spelling against a transform of itself.
     /// </param>
     /// <param name="UpperCasedValue">The same field name spelled all-uppercase.</param>
-    /// <param name="Predicate">The table's own <c>Is*</c> predicate for this name.</param>
+    /// <param name="Predicate">The table's own <c>Is*</c> predicate for this name, or its comparison through <see cref="WellKnownHttpHeaderNames.Equals"/> for a name the table gives no predicate.</param>
     private sealed record TabledHeader(
         string FieldName,
         string TabledValue,
@@ -69,6 +69,10 @@ internal sealed class WellKnownHttpHeaderNamesTests
     /// <c>Content-Length</c> (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-8.6">Section 8.6</see>),
     /// <c>DPoP</c> / <c>DPoP-Nonce</c> (RFC 9449 Sections 4 and 8),
     /// <c>Cache-Control</c> (RFC 9111 Section 5.2), <c>WWW-Authenticate</c> (RFC 9110 Section 11.6.1),
+    /// <c>Access-Control-Expose-Headers</c> (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449
+    /// Section 7.1</see>: "by including WWW-Authenticate in the Access-Control-Expose-Headers response header list
+    /// value"), whose row compares through <see cref="WellKnownHttpHeaderNames.Equals"/> since the table gives that name
+    /// no <c>Is*</c> predicate of its own,
     /// <c>Allow</c> (Section 10.2.1), <c>Location</c> (Section 10.2.2), <c>Date</c> (Section 6.6.1),
     /// and <c>Age</c> / <c>Expires</c> (RFC 9111 Sections 5.1 and 5.3).
     /// <see href="https://www.rfc-editor.org/rfc/rfc6265#section-4.1">RFC 6265, Section 4.1</see>
@@ -95,6 +99,7 @@ internal sealed class WellKnownHttpHeaderNamesTests
         new(nameof(WellKnownHttpHeaderNames.DPoPNonce), WellKnownHttpHeaderNames.DPoPNonce, "DPoP-Nonce", "dpop-nonce", "DPOP-NONCE", WellKnownHttpHeaderNames.IsDPoPNonce),
         new(nameof(WellKnownHttpHeaderNames.CacheControl), WellKnownHttpHeaderNames.CacheControl, "Cache-Control", "cache-control", "CACHE-CONTROL", WellKnownHttpHeaderNames.IsCacheControl),
         new(nameof(WellKnownHttpHeaderNames.WwwAuthenticate), WellKnownHttpHeaderNames.WwwAuthenticate, "WWW-Authenticate", "www-authenticate", "WWW-AUTHENTICATE", WellKnownHttpHeaderNames.IsWwwAuthenticate),
+        new(nameof(WellKnownHttpHeaderNames.AccessControlExposeHeaders), WellKnownHttpHeaderNames.AccessControlExposeHeaders, "Access-Control-Expose-Headers", "access-control-expose-headers", "ACCESS-CONTROL-EXPOSE-HEADERS", static name => WellKnownHttpHeaderNames.Equals(name, WellKnownHttpHeaderNames.AccessControlExposeHeaders)),
         new(nameof(WellKnownHttpHeaderNames.Allow), WellKnownHttpHeaderNames.Allow, "Allow", "allow", "ALLOW", WellKnownHttpHeaderNames.IsAllow),
         new(nameof(WellKnownHttpHeaderNames.Location), WellKnownHttpHeaderNames.Location, "Location", "location", "LOCATION", WellKnownHttpHeaderNames.IsLocation),
         new(nameof(WellKnownHttpHeaderNames.Date), WellKnownHttpHeaderNames.Date, "Date", "date", "DATE", WellKnownHttpHeaderNames.IsDate),
@@ -179,6 +184,7 @@ internal sealed class WellKnownHttpHeaderNamesTests
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.DPoPNonce), WellKnownHttpHeaderNames.DPoPNonce, WellKnownHttpHeaderNames.DPoPNonceUtf8);
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.CacheControl), WellKnownHttpHeaderNames.CacheControl, WellKnownHttpHeaderNames.CacheControlUtf8);
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.WwwAuthenticate), WellKnownHttpHeaderNames.WwwAuthenticate, WellKnownHttpHeaderNames.WwwAuthenticateUtf8);
+        AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.AccessControlExposeHeaders), WellKnownHttpHeaderNames.AccessControlExposeHeaders, WellKnownHttpHeaderNames.AccessControlExposeHeadersUtf8);
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.Allow), WellKnownHttpHeaderNames.Allow, WellKnownHttpHeaderNames.AllowUtf8);
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.Location), WellKnownHttpHeaderNames.Location, WellKnownHttpHeaderNames.LocationUtf8);
         AssertUtf8Twin(nameof(WellKnownHttpHeaderNames.Date), WellKnownHttpHeaderNames.Date, WellKnownHttpHeaderNames.DateUtf8);

@@ -3574,8 +3574,8 @@ internal sealed class AuthCodeClientAuthenticationTests
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see> code for a
     /// request that includes multiple credentials. The token endpoint answers a repeated field and a single
     /// malformed value with the same description, so this row does not tell the two branches apart; the bearer
-    /// resource rows do (<see cref="UserInfoEndpointTests.UserInfoRefusesTwoAuthorizationLinesWithBothChallengesAsync"/>,
-    /// <see cref="Oid4VciDpopCredentialEndpointTests.CredentialEndpointRefusesTwoAuthorizationLinesWithBothChallengesAsync"/>),
+    /// resource rows do (<see cref="UserInfoEndpointTests.UserInfoRefusesTwoBearerAuthorizationLinesWithTheBearerChallengeAloneAsync"/>,
+    /// <see cref="Oid4VciDpopCredentialEndpointTests.CredentialEndpointRefusesTwoBearerAuthorizationLinesWithTheBearerChallengeAloneAsync"/>),
     /// where only the repeated field is answered 400 and a single value outside the grammar 401.
     /// </summary>
     [TestMethod]

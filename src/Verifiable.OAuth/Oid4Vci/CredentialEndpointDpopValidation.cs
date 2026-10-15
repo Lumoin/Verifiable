@@ -1,5 +1,6 @@
 using Verifiable.Core;
 using Verifiable.JCose;
+using Verifiable.OAuth.AuthCode.Server;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.ProtectedResource;
 using Verifiable.OAuth.Server;
@@ -52,25 +53,254 @@ namespace Verifiable.OAuth.Oid4Vci;
 /// the corresponding challenge SHOULD be used to deliver error information". The single challenge
 /// sent is that corresponding one. A <c>DPoP</c> challenge carries the <c>error</c> RFC 9449 §7.1 names
 /// (<c>invalid_token</c> for the token or its binding, <c>invalid_dpop_proof</c> for a proof that
-/// fails a §4.3 check, <c>use_dpop_nonce</c> for a missing or stale nonce) and the <c>algs</c>
-/// parameter §7.1 says SHOULD be included, listing
-/// <see cref="WellKnownDpopValues.SupportedSigningAlgorithms"/>. The resource-server shape mirrors
+/// fails a Section 4.3 check, <c>use_dpop_nonce</c> for a missing or stale nonce). The resource-server shape mirrors
 /// <c>DpopTokenEndpointValidation</c> but adds the <c>ath</c> binding and computes <c>htm</c> and
 /// <c>htu</c> from the request being served, so one enforcement serves an endpoint that answers more
 /// than one HTTP method.
+/// </para>
+/// <para>
+/// Every <c>DPoP</c> challenge of one request carries the parameters of its <see cref="ResourceChallengeContext"/>,
+/// written by <see cref="DpopChallenge.BuildChallenge"/> in the order <c>realm</c>, <c>error</c>, <c>scope</c>,
+/// <c>algs</c>: the <c>realm</c> of the protection space the resource serves, the issuer the request is served under
+/// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "The authentication
+/// parameter realm MAY be included to indicate the scope of protection in the manner described in [RFC9110], Section
+/// 11.5."), the <c>scope</c> the resource requires when it names one ("A scope authentication parameter MAY be
+/// included as defined in [RFC6750], Section 3."), and the <c>algs</c> the authorization server accepts for a DPoP
+/// proof, the one slot <see cref="DpopTokenEndpointValidation.ResolveAcceptedProofAlgorithmsAsync"/> answers ("An algs
+/// parameter SHOULD be included to signal to the client the JWS algorithms that are acceptable for the DPoP proof
+/// JWT."), which the resource holds every proof to. No <c>error_description</c> is written into a challenge; the body
+/// carries it. Every answer carrying a <c>DPoP</c> challenge carries the field
+/// <c>Access-Control-Expose-Headers: WWW-Authenticate, DPoP-Nonce</c> (<see cref="WithDpopChallenge"/>; Section 7.1:
+/// "the server needs to make it available to the application by including WWW-Authenticate in the
+/// Access-Control-Expose-Headers response header list value").
 /// </para>
 /// </remarks>
 internal static class CredentialEndpointDpopValidation
 {
     /// <summary>
-    /// The value of the <c>algs</c> challenge parameter: the space-delimited
-    /// <see cref="WellKnownDpopValues.SupportedSigningAlgorithms"/>, per RFC 9449 §7.1 "An algs parameter
-    /// SHOULD be included to signal to the client the JWS algorithms that are acceptable for the DPoP
-    /// proof JWT. The value of the parameter is a space-delimited list of JWS alg (Algorithm) header
-    /// values".
+    /// The parameters every <c>DPoP</c> challenge of one request to a library resource carries, resolved once per
+    /// request by <see cref="ResolveChallengeContextAsync"/>.
     /// </summary>
-    private static string AcceptedProofAlgorithms { get; } =
-        string.Join(' ', WellKnownDpopValues.SupportedSigningAlgorithms);
+    /// <param name="Realm">
+    /// The <c>realm</c>, the issuer the request is served under in its <see cref="HeaderSafeIssuer"/> form, or
+    /// <see langword="null"/> when no issuer resolves or the issuer has no such form (<see cref="HeaderSafeRealm"/>),
+    /// the challenge then sent without it.
+    /// </param>
+    /// <param name="Scope">The <c>scope</c> the resource requires, or <see langword="null"/> when it names none.</param>
+    /// <param name="Algorithms">
+    /// The JWS <c>alg</c> values the authorization server accepts for a DPoP proof, written as <c>algs</c> and held to
+    /// every proof the resource validates; <see langword="null"/> when the host's resolver answered no list or a list
+    /// holding a name outside the token grammar the library holds every <c>algs</c> name to
+    /// (<see cref="DpopChallenge.IsToken"/>), the challenge then sent without <c>algs</c> and a presented proof answered
+    /// <c>server_error</c>.
+    /// </param>
+    /// <param name="IsAlgorithmListUnusable">
+    /// Whether <see cref="Algorithms"/> is <see langword="null"/> because the host's resolver answered a list holding a
+    /// name that is no RFC 9110 Section 5.6.2 token, so a presented proof is answered with
+    /// <see cref="DpopTokenEndpointValidation.AlgorithmResolverAnsweredUnusableListDescription"/> rather than
+    /// <see cref="DpopTokenEndpointValidation.AlgorithmResolverAnsweredNoListDescription"/>.
+    /// </param>
+    internal sealed record ResourceChallengeContext(
+        string? Realm, string? Scope, IReadOnlyList<string>? Algorithms, bool IsAlgorithmListUnusable);
+
+
+    /// <summary>
+    /// The reading of a request's <c>Authorization</c> field at a library resource: the access token and the scheme it
+    /// was presented under, or the refusal a request without one token is answered with, beside the parameters of the
+    /// <c>DPoP</c> challenges the request is answered with.
+    /// </summary>
+    /// <param name="AccessToken">The access token as presented, or <see langword="null"/> when <paramref name="Refusal"/> is set.</param>
+    /// <param name="IsDpopPresentation">Whether the token was presented under the <c>DPoP</c> scheme.</param>
+    /// <param name="Challenge">The parameters of every <c>DPoP</c> challenge of the request.</param>
+    /// <param name="Refusal">The answer to a request that carries no one usable token, or <see langword="null"/>.</param>
+    internal sealed record LibraryResourcePresentation(
+        string? AccessToken, bool IsDpopPresentation, ResourceChallengeContext Challenge, ServerHttpResponse? Refusal);
+
+
+    /// <summary>
+    /// Resolves the parameters every <c>DPoP</c> challenge of the request carries: the <c>realm</c>, the
+    /// <see cref="HeaderSafeIssuer"/> form of the issuer the request is served under; the <c>scope</c> the resource
+    /// requires; and the <c>algs</c>, the algorithms the authorization server accepts for a DPoP proof
+    /// (<see cref="DpopTokenEndpointValidation.ResolveAcceptedProofAlgorithmsAsync"/>, the one slot the token endpoint
+    /// and the metadata read). An issuer that does not resolve, by the default resolver's refusal or by an application
+    /// resolver that answers nothing, leaves the <c>realm</c> out and the challenge is still sent:
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.6.1">RFC 9110 Section 11.6.1</see>, "A server
+    /// generating a 401 (Unauthorized) response MUST send a WWW-Authenticate header field containing at least one
+    /// challenge."
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The issuer and the slot are the host's configuration, not the request's, and three of their answers are answered
+    /// here by a decision rather than by an exception escaping the endpoint. An issuer that does not resolve
+    /// (<see cref="TryResolveIssuerAsync"/>) leaves the <c>realm</c> out. An issuer that resolves to a value with no
+    /// <see cref="HeaderSafeIssuer"/> form, a relative URI or one whose host the IDNA ToASCII operation does not map,
+    /// leaves the <c>realm</c> out the same way (<see cref="HeaderSafeRealm"/>), the library's own reading. A slot answer
+    /// holding a name that is no <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.6.2">RFC 9110 Section
+    /// 5.6.2</see> token ("token = 1*tchar", each name non-empty and every character a tchar,
+    /// <see cref="DpopChallenge.IsToken"/>) is read as no list, so the challenge is sent without <c>algs</c> and a
+    /// presented proof is answered <c>server_error</c> with
+    /// <see cref="DpopTokenEndpointValidation.AlgorithmResolverAnsweredUnusableListDescription"/>
+    /// (<see cref="ResourceChallengeContext.IsAlgorithmListUnusable"/>), as a slot that answers no list is; the
+    /// builder's refusal of a caller's argument (<see cref="DpopChallenge.BuildChallenge"/>) therefore never meets the
+    /// slot's names. An empty list is a usable answer under which no proof is acceptable. Any other exception the
+    /// issuer resolver or the slot's resolver raises passes to the caller.
+    /// </para>
+    /// <para>
+    /// The token bound on an <c>algs</c> name is the library's chosen bound. The clauses that exclude any other name are
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.2">RFC 9449 Section 4.2</see>, "alg: An identifier
+    /// for a JWS asymmetric digital signature algorithm from [IANA.JOSE.ALGS]", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">Section 4.3</see>, check 5, the alg "indicates a
+    /// registered asymmetric digital signature algorithm": every registered name is made of tchar only. A quoted-string
+    /// could carry a Collision-Resistant Name
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7515#section-4.1.1">RFC 7515 Section 4.1.1</see>), which no DPoP
+    /// proof may carry.
+    /// </para>
+    /// </remarks>
+    /// <param name="server">The authorization server holding the issuer resolver and the algorithm slot.</param>
+    /// <param name="registration">The client (tenant) the request belongs to.</param>
+    /// <param name="context">The per-request context.</param>
+    /// <param name="requiredScope">The scope the resource requires, or <see langword="null"/> when it names none.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The challenge parameters of the request.</returns>
+    internal static async ValueTask<ResourceChallengeContext> ResolveChallengeContextAsync(
+        EndpointServer server,
+        ClientRecord registration,
+        ExchangeContext context,
+        string? requiredScope,
+        CancellationToken cancellationToken)
+    {
+        Uri? issuer = await TryResolveIssuerAsync(server, registration, context, cancellationToken).ConfigureAwait(false);
+        IReadOnlyList<string>? algorithms = await DpopTokenEndpointValidation.ResolveAcceptedProofAlgorithmsAsync(
+            server.OAuth(), registration, context, cancellationToken).ConfigureAwait(false);
+        bool isAlgorithmListUnusable = algorithms is not null && !algorithms.All(DpopChallenge.IsToken);
+
+        return new ResourceChallengeContext(
+            issuer is null ? null : HeaderSafeRealm(issuer),
+            requiredScope,
+            isAlgorithmListUnusable ? null : algorithms,
+            isAlgorithmListUnusable);
+    }
+
+
+    /// <summary>
+    /// Resolves the issuer the request is served under through <see cref="ResolveIssuerAsync"/>, answering
+    /// <see langword="null"/> where none resolves: the default resolver refuses with
+    /// <see cref="InvalidOperationException"/> and an application resolver may answer nothing. An application resolver's
+    /// own <see cref="InvalidOperationException"/>, its subclass <see cref="ObjectDisposedException"/> included, is read
+    /// the same way, as no issuer; any other exception the resolver raises passes to the caller.
+    /// </summary>
+    /// <param name="server">The authorization server holding the resolver seam.</param>
+    /// <param name="registration">The client (tenant) the request belongs to.</param>
+    /// <param name="context">The per-request context.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The issuer, or <see langword="null"/>.</returns>
+    private static async ValueTask<Uri?> TryResolveIssuerAsync(
+        EndpointServer server,
+        ClientRecord registration,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            Uri? issuer = await ResolveIssuerAsync(server, registration, context, cancellationToken).ConfigureAwait(false);
+
+            return issuer;
+        }
+        catch(InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+
+    /// <summary>
+    /// The <c>realm</c> the issuer the request is served under is written as, <see cref="HeaderSafeIssuer"/>'s text, or
+    /// <see langword="null"/> where the issuer has no such form: a relative URI, which names no host, and an issuer whose
+    /// host the IDNA ToASCII operation does not map (<see href="https://www.rfc-editor.org/rfc/rfc3987#section-3.1">RFC
+    /// 3987 Section 3.1</see>: the ireg-name "converted using the ToASCII operation specified in section 4.1 of
+    /// [RFC3490]"), for which <see cref="Uri.IdnHost"/> raises <see cref="UriFormatException"/>. The issuer is the
+    /// host's configuration, and the library reads such an issuer as no realm, its own reading, as it reads an issuer
+    /// that does not resolve: the challenge is still sent without <c>realm</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.6.1">RFC 9110 Section 11.6.1</see>: "A server
+    /// generating a 401 (Unauthorized) response MUST send a WWW-Authenticate header field containing at least one
+    /// challenge.").
+    /// </summary>
+    /// <param name="issuer">The issuer the request is served under.</param>
+    /// <returns>The realm text in visible US-ASCII, or <see langword="null"/> where the issuer has no such form.</returns>
+    private static string? HeaderSafeRealm(Uri issuer)
+    {
+        if(!issuer.IsAbsoluteUri)
+        {
+            return null;
+        }
+
+        try
+        {
+            return HeaderSafeIssuer(issuer);
+        }
+        catch(UriFormatException)
+        {
+            return null;
+        }
+    }
+
+
+    /// <summary>
+    /// Attaches the <c>DPoP</c> challenge <paramref name="challenge"/> to <paramref name="response"/> as its
+    /// <c>WWW-Authenticate</c> field, with the field <c>Access-Control-Expose-Headers: WWW-Authenticate, DPoP-Nonce</c>
+    /// (<see cref="WellKnownDpopValues.ExposedDpopResponseFields"/>): the one place a library resource attaches a
+    /// <c>DPoP</c> challenge, so every such answer exposes its fields to a browser application.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "In order for the
+    /// application to obtain and use the WWW-Authenticate HTTP response header value, the server needs to make it
+    /// available to the application by including WWW-Authenticate in the Access-Control-Expose-Headers response header
+    /// list value." and <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">Section 8</see>: "including
+    /// DPoP-Nonce in the Access-Control-Expose-Headers response header list value", which
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">Section 9</see> carries to resource servers.
+    /// </summary>
+    /// <param name="response">The answer the challenge is attached to.</param>
+    /// <param name="challenge">The <c>WWW-Authenticate</c> value, holding a <c>DPoP</c> challenge.</param>
+    /// <returns>The answer with its challenge and the exposure field.</returns>
+    internal static ServerHttpResponse WithDpopChallenge(ServerHttpResponse response, string challenge) =>
+        response
+            .WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, challenge)
+            .WithHeader(WellKnownHttpHeaderNames.AccessControlExposeHeaders, WellKnownDpopValues.ExposedDpopResponseFields);
+
+
+    /// <summary>
+    /// Reads the presentation of a request to a library resource, UserInfo and the OID4VCI Credential, Deferred
+    /// Credential and Notification endpoints: resolves the challenge parameters once
+    /// (<see cref="ResolveChallengeContextAsync"/>), reads the <c>Authorization</c> field once, answers a field sent on
+    /// two or more lines through <see cref="RefuseRepeatedField"/>, a field carrying no access token through
+    /// <see cref="RefuseMissingCredentials"/>, and otherwise answers the token and the scheme it was presented under.
+    /// </summary>
+    /// <param name="server">The authorization server holding the issuer resolver and the algorithm slot.</param>
+    /// <param name="registration">The client (tenant) the request belongs to.</param>
+    /// <param name="context">The per-request context carrying the inbound request.</param>
+    /// <param name="requiredScope">The scope the resource requires, or <see langword="null"/> when it names none.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The presentation, or the refusal it is answered with.</returns>
+    internal static async ValueTask<LibraryResourcePresentation> ReadPresentationAsync(
+        EndpointServer server,
+        ClientRecord registration,
+        ExchangeContext context,
+        string? requiredScope,
+        CancellationToken cancellationToken)
+    {
+        ResourceChallengeContext challenge = await ResolveChallengeContextAsync(
+            server, registration, context, requiredScope, cancellationToken).ConfigureAwait(false);
+        AuthorizationFieldReading authorization = BearerTokenValidation.ReadAuthorizationField(context);
+        if(authorization.IsRepeated)
+        {
+            return new LibraryResourcePresentation(null, false, challenge, RefuseRepeatedField(authorization, challenge.Realm, challenge));
+        }
+
+        if(!BearerTokenValidation.TryExtractAccessToken(authorization, out string? accessToken, out bool isDpopPresentation))
+        {
+            return new LibraryResourcePresentation(null, false, challenge, RefuseMissingCredentials(challenge));
+        }
+
+        return new LibraryResourcePresentation(accessToken, isDpopPresentation, challenge, null);
+    }
 
 
     /// <summary>
@@ -84,6 +314,11 @@ internal static class CredentialEndpointDpopValidation
     /// <param name="accessToken">The validated Access Token's payload.</param>
     /// <param name="rawAccessToken">The Access Token exactly as presented, the value <c>ath</c> hashes.</param>
     /// <param name="isDpopPresentation">Whether the token was presented under the <c>DPoP</c> scheme.</param>
+    /// <param name="challenge">
+    /// The parameters every <c>DPoP</c> challenge of the request carries; its <see cref="ResourceChallengeContext.Algorithms"/>
+    /// are the algorithms a proof is held to (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">RFC 9449
+    /// Section 4.3</see>, check 5: the alg "is supported by the application, and is acceptable per local policy").
+    /// </param>
     /// <param name="now">The instant the proof's <c>jti</c> record is kept from.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The refusal, or <see langword="null"/> to proceed.</returns>
@@ -94,6 +329,7 @@ internal static class CredentialEndpointDpopValidation
         JwtPayload accessToken,
         string rawAccessToken,
         bool isDpopPresentation,
+        ResourceChallengeContext challenge,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
@@ -106,7 +342,7 @@ internal static class CredentialEndpointDpopValidation
             //under the Bearer scheme it is an ordinary bearer token.
             return isDpopPresentation
                 ? RefuseUnderScheme(isDpopPresentation, OAuthErrors.InvalidToken,
-                    "The Access Token is not bound to a DPoP key and cannot be presented under the DPoP scheme.")
+                    "The Access Token is not bound to a DPoP key and cannot be presented under the DPoP scheme.", challenge)
                 : null;
         }
 
@@ -116,7 +352,7 @@ internal static class CredentialEndpointDpopValidation
             //The token is sender-constrained by a confirmation method this resource does not check
             //(cnf without a usable jkt). Serving it as a bearer token would drop that constraint.
             return RefuseUnderScheme(isDpopPresentation, OAuthErrors.InvalidToken,
-                "The Access Token carries a confirmation method this resource cannot enforce.");
+                "The Access Token carries a confirmation method this resource cannot enforce.", challenge);
         }
 
         //RFC 9449 §7.2: a DPoP-bound token received as a bearer token is rejected. Accepting it
@@ -124,7 +360,7 @@ internal static class CredentialEndpointDpopValidation
         if(!isDpopPresentation)
         {
             return RefuseUnderScheme(isDpopPresentation, OAuthErrors.InvalidToken,
-                "The Access Token is sender-constrained and must be presented under the DPoP scheme.");
+                "The Access Token is sender-constrained and must be presented under the DPoP scheme.", challenge);
         }
 
         //A bound token with no DPoP enforcement wired (no validator assigned and no parser for the library
@@ -160,7 +396,7 @@ internal static class CredentialEndpointDpopValidation
         if(isDpopFieldRepeated)
         {
             return RefuseUnderScheme(isDpopPresentation, OAuthErrors.InvalidDpopProof,
-                DpopRequestReading.MoreThanOneDpopFieldDescription);
+                DpopRequestReading.MoreThanOneDpopFieldDescription, challenge);
         }
 
         if(dpopProof is null)
@@ -168,7 +404,22 @@ internal static class CredentialEndpointDpopValidation
             return await ChallengeForNonceAsync(
                 server, registration, context, nonceAudience,
                 "A DPoP proof carrying this resource's nonce is required for the sender-constrained Access Token.",
-                cancellationToken).ConfigureAwait(false);
+                challenge, cancellationToken).ConfigureAwait(false);
+        }
+
+        //RFC 9449 Section 4.3, check 5: the alg is held to the algorithms the authorization server accepts, the one
+        //slot the token endpoint reads. A host resolver that answered no list, or a list holding a name no challenge
+        //can carry, leaves no usable policy to hold it to, so the request fails closed as a server error, as the token
+        //endpoint answers a resolver that answered no list.
+        if(challenge.Algorithms is not IReadOnlyList<string> acceptedAlgorithms)
+        {
+            return ServerHttpResponse.ServerError(
+                OAuthErrors.ServerError,
+                challenge.IsAlgorithmListUnusable switch
+                {
+                    true => DpopTokenEndpointValidation.AlgorithmResolverAnsweredUnusableListDescription,
+                    false => DpopTokenEndpointValidation.AlgorithmResolverAnsweredNoListDescription
+                });
         }
 
         DpopProofValidationResult proofResult = await DpopRequestReading.ValidateProofAsync(
@@ -181,7 +432,8 @@ internal static class CredentialEndpointDpopValidation
                 HttpUrl = htu,
                 //ath binds the proof to THIS access token (RFC 9449 §4.2 / §7).
                 AccessToken = rawAccessToken,
-                NonceRequired = false
+                NonceRequired = false,
+                AcceptedAlgorithms = acceptedAlgorithms
             },
             cancellationToken).ConfigureAwait(false);
 
@@ -190,10 +442,10 @@ internal static class CredentialEndpointDpopValidation
             return proofResult.FailureReason is DpopProofValidationFailureReason.NonceMissing
                 or DpopProofValidationFailureReason.NonceMismatch
                 ? await ChallengeForNonceAsync(
-                    server, registration, context, nonceAudience, "DPoP nonce required.", cancellationToken)
+                    server, registration, context, nonceAudience, "DPoP nonce required.", challenge, cancellationToken)
                     .ConfigureAwait(false)
                 : RefuseUnderScheme(isDpopPresentation, OAuthErrors.InvalidDpopProof,
-                    $"DPoP proof validation failed: {proofResult.FailureReason}.");
+                    $"DPoP proof validation failed: {proofResult.FailureReason}.", challenge);
         }
 
         //A validation that answers success names the base64url JWK SHA-256 Thumbprint of the proof's
@@ -224,7 +476,7 @@ internal static class CredentialEndpointDpopValidation
         if(!FixedTimeComparison.AreEqual(proofThumbprint, boundThumbprint))
         {
             return RefuseUnderScheme(isDpopPresentation, OAuthErrors.InvalidToken,
-                "The DPoP proof key does not match the Access Token's cnf.jkt binding.");
+                "The DPoP proof key does not match the Access Token's cnf.jkt binding.", challenge);
         }
 
         //RFC 9449 §11.3: no proof without the nonce claim is accepted once a nonce has been
@@ -232,7 +484,7 @@ internal static class CredentialEndpointDpopValidation
         if(proofClaims.Nonce is null)
         {
             return await ChallengeForNonceAsync(
-                server, registration, context, nonceAudience, "DPoP nonce required.", cancellationToken)
+                server, registration, context, nonceAudience, "DPoP nonce required.", challenge, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -243,7 +495,7 @@ internal static class CredentialEndpointDpopValidation
         {
             return await ChallengeForNonceAsync(
                 server, registration, context, nonceAudience,
-                $"DPoP nonce invalid: {nonceResult.FailureReason}.", cancellationToken).ConfigureAwait(false);
+                $"DPoP nonce invalid: {nonceResult.FailureReason}.", challenge, cancellationToken).ConfigureAwait(false);
         }
 
         //jti replay — the same shared correlation store, the proof's jti recorded in the context of
@@ -258,9 +510,9 @@ internal static class CredentialEndpointDpopValidation
         {
             JtiReplayOutcome.FirstUse => null,
             JtiReplayOutcome.Replayed => RefuseUnderScheme(isDpopPresentation,
-                OAuthErrors.InvalidDpopProof, "The DPoP proof jti has been presented previously."),
+                OAuthErrors.InvalidDpopProof, "The DPoP proof jti has been presented previously.", challenge),
             JtiReplayOutcome.Unacceptable => RefuseUnderScheme(isDpopPresentation,
-                OAuthErrors.InvalidDpopProof, "DPoP proof jti is too long or carries a character the replay guard cannot store."),
+                OAuthErrors.InvalidDpopProof, "DPoP proof jti is too long or carries a character the replay guard cannot store.", challenge),
             JtiReplayOutcome.StoreUnavailable => ServerHttpResponse.ServerError(
                 OAuthErrors.ServerError,
                 "DPoP proof jti replay defense is required by policy but no jti store is configured."),
@@ -272,27 +524,24 @@ internal static class CredentialEndpointDpopValidation
 
     /// <summary>
     /// Composes the <c>DPoP</c> challenge
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 §7.1</see> describes:
-    /// "The scheme name is DPoP.", "An error parameter ([RFC6750], Section 3) SHOULD be included to
-    /// indicate the reason why the request was declined, if the request included an access token but
-    /// failed authentication.", "A scope authentication parameter MAY be included as defined in
-    /// [RFC6750], Section 3." and "An algs parameter SHOULD be included". The <paramref name="error"/>
-    /// and <paramref name="scope"/> are the library's own OAuth error and scope tokens, within the
-    /// RFC 6750 §3 attribute charsets, so they need no quoted-pair escaping.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see> describes through
+    /// <see cref="DpopChallenge.BuildChallenge"/>: "The scheme name is DPoP.", the <c>realm</c> and the <c>scope</c> of
+    /// <paramref name="challenge"/>, "An error parameter ([RFC6750], Section 3) SHOULD be included to indicate the reason
+    /// why the request was declined, if the request included an access token but failed authentication." and "An algs
+    /// parameter SHOULD be included", the algorithms of <paramref name="challenge"/>. The <paramref name="error"/> is one
+    /// of the library's own OAuth error codes, within the RFC 6750 Section 3 attribute charset.
     /// </summary>
-    /// <param name="error">The error code, for example <see cref="OAuthErrors.InvalidToken"/>.</param>
-    /// <param name="scope">The scope the resource requires, or <see langword="null"/> for none.</param>
+    /// <param name="error">The error code, for example <see cref="OAuthErrors.InvalidToken"/>, or <see langword="null"/> for none.</param>
+    /// <param name="challenge">The parameters every <c>DPoP</c> challenge of the request carries.</param>
     /// <returns>The <c>WWW-Authenticate</c> value.</returns>
-    internal static string BuildDpopChallenge(string error, string? scope = null) =>
-        scope is null
-            ? $"{WellKnownAuthenticationSchemes.DPoP} error=\"{error}\", algs=\"{AcceptedProofAlgorithms}\""
-            : $"{WellKnownAuthenticationSchemes.DPoP} error=\"{error}\", scope=\"{scope}\", algs=\"{AcceptedProofAlgorithms}\"";
+    internal static string BuildDpopChallenge(string? error, ResourceChallengeContext challenge) =>
+        DpopChallenge.BuildChallenge(challenge.Realm, error, challenge.Scope, challenge.Algorithms);
 
 
     /// <summary>
     /// Composes the challenge a request that carries no usable <c>Authorization</c> header is answered
     /// with: one value naming both schemes the resource accepts,
-    /// <c>Bearer &lt;parameter&gt;, DPoP algs="…"</c>, with no <c>error</c>.
+    /// <c>Bearer &lt;parameter&gt;, DPoP realm="...", algs="..."</c>, with no <c>error</c>.
     /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 §3.1</see>: "If the
     /// request lacks any authentication information (e.g., the client was unaware that authentication
     /// is necessary or attempted using an unsupported authentication method), the resource server
@@ -302,40 +551,43 @@ internal static class CredentialEndpointDpopValidation
     /// include an error code or other error information". The <c>Bearer</c> challenge keeps the auth-param
     /// RFC 6750 §3 requires ("This scheme MUST be followed by one or more auth-param values"): the
     /// <c>scope</c> the resource requires when it names one, and otherwise the <c>realm</c> of the
-    /// issuer the request is served under.
+    /// issuer the request is served under. The <c>DPoP</c> challenge is <see cref="BuildDpopChallenge"/>'s with no
+    /// <c>error</c>.
     /// </summary>
-    /// <param name="bearerParameter">The <c>Bearer</c> challenge, <c>scope</c> or <c>realm</c>, composed by <see cref="BearerTokenChallenge.BuildChallenge"/>.</param>
+    /// <param name="bearerChallenge">The <c>Bearer</c> challenge, <c>scope</c> or <c>realm</c>, composed by <see cref="BearerTokenChallenge.BuildChallenge"/>.</param>
+    /// <param name="challenge">The parameters every <c>DPoP</c> challenge of the request carries.</param>
     /// <returns>The <c>WWW-Authenticate</c> value.</returns>
-    internal static string BuildMissingCredentialsChallenge(string bearerParameter) =>
-        $"{bearerParameter}, {WellKnownAuthenticationSchemes.DPoP} algs=\"{AcceptedProofAlgorithms}\"";
+    internal static string BuildMissingCredentialsChallenge(string bearerChallenge, ResourceChallengeContext challenge) =>
+        $"{bearerChallenge}, {BuildDpopChallenge(null, challenge)}";
 
 
     /// <summary>
-    /// Answers a request to an OID4VCI protected endpoint that carries no usable <c>Authorization</c>
-    /// header: 401 with an empty body, since
-    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 §3.1</see> says the
-    /// resource server "SHOULD NOT include an error code or other error information", and the challenge
-    /// of <see cref="BuildMissingCredentialsChallenge"/> whose <c>Bearer</c> part names the issuer the
-    /// request is served under as its <c>realm</c> (the endpoints require no single scope).
+    /// Answers a request to a library resource that carries no usable <c>Authorization</c> field: 401 with an empty
+    /// body, since <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see> says the resource
+    /// server "SHOULD NOT include an error code or other error information", and the challenge of
+    /// <see cref="BuildMissingCredentialsChallenge"/>, attached through <see cref="WithDpopChallenge"/>, whose
+    /// <c>Bearer</c> part names the scope the resource requires or, where it names none, the realm. A resource that names
+    /// no scope at a server where no issuer resolves leaves the <c>Bearer</c> challenge no auth-param to carry
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 Section 3</see>: "This scheme MUST be
+    /// followed by one or more auth-param values."): the fault is the server's own wiring, and the request is answered
+    /// 500 <c>server_error</c> with <see cref="WellKnownOAuthErrorDescriptions.ServerNotReady"/> and no challenge, as a
+    /// token validation answers an issuer that does not resolve.
     /// </summary>
-    /// <param name="server">The authorization server whose issuer resolver names the realm.</param>
-    /// <param name="registration">The client (tenant) the request belongs to.</param>
-    /// <param name="context">The per-request context.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The 401 refusal.</returns>
-    internal static async ValueTask<ServerHttpResponse> RefuseMissingCredentialsAsync(
-        EndpointServer server,
-        ClientRecord registration,
-        ExchangeContext context,
-        CancellationToken cancellationToken)
+    /// <param name="challenge">The parameters every <c>DPoP</c> challenge of the request carries.</param>
+    /// <returns>The 401 refusal, or the 500 answer to an unresolved issuer.</returns>
+    private static ServerHttpResponse RefuseMissingCredentials(ResourceChallengeContext challenge)
     {
-        Uri issuerUri = await ResolveIssuerAsync(server, registration, context, cancellationToken)
-            .ConfigureAwait(false);
-        string challenge = BuildMissingCredentialsChallenge(
-            BearerTokenChallenge.BuildChallenge(realm: HeaderSafeIssuer(issuerUri)));
+        string? bearerChallenge = challenge switch
+        {
+            { Scope: string scope } => BearerTokenChallenge.BuildChallenge(scope: scope),
+            { Realm: string realm } => BearerTokenChallenge.BuildChallenge(realm: realm),
 
-        return ServerHttpResponse.Unauthorized()
-            .WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, challenge);
+            _ => null
+        };
+
+        return bearerChallenge is null
+            ? ServerHttpResponse.ServerError(OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady)
+            : WithDpopChallenge(ServerHttpResponse.Unauthorized(), BuildMissingCredentialsChallenge(bearerChallenge, challenge));
     }
 
 
@@ -397,33 +649,37 @@ internal static class CredentialEndpointDpopValidation
     /// that <see cref="BearerTokenValidation"/> built with its <c>Bearer error="invalid_token"</c>
     /// challenge is answered, for a <c>DPoP</c>-scheme presentation, with the <c>DPoP</c> challenge
     /// carrying the same error instead (RFC 9449 §7.2, "the corresponding challenge SHOULD be used to
-    /// deliver error information"). Any other response is returned unchanged; a 500 server fault
-    /// carries no challenge.
+    /// deliver error information"), attached through <see cref="WithDpopChallenge"/>. Any other response is returned
+    /// unchanged; a 500 server fault carries no challenge.
     /// </summary>
     /// <param name="refusal">The refusal <see cref="BearerTokenValidation"/> returned.</param>
     /// <param name="isDpopPresentation">Whether the token was presented under the <c>DPoP</c> scheme.</param>
+    /// <param name="challenge">The parameters every <c>DPoP</c> challenge of the request carries.</param>
     /// <returns>The refusal with the challenge of the presentation's scheme.</returns>
-    internal static ServerHttpResponse InPresentationScheme(ServerHttpResponse refusal, bool isDpopPresentation) =>
+    internal static ServerHttpResponse InPresentationScheme(
+        ServerHttpResponse refusal, bool isDpopPresentation, ResourceChallengeContext challenge) =>
         isDpopPresentation && refusal.StatusCode == 401
-            ? refusal.WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, BuildDpopChallenge(OAuthErrors.InvalidToken))
+            ? WithDpopChallenge(refusal, BuildDpopChallenge(OAuthErrors.InvalidToken, challenge))
             : refusal;
 
 
     /// <summary>
     /// Builds a 401 refusal carrying <paramref name="error"/> in the body and a challenge in the
-    /// presentation's scheme: the <c>DPoP</c> challenge with the same error, or
-    /// <c>Bearer error="invalid_token"</c> for a <c>Bearer</c> presentation (whose refusals here are all
-    /// <c>invalid_token</c>).
+    /// presentation's scheme: the <c>DPoP</c> challenge with the same error, attached through
+    /// <see cref="WithDpopChallenge"/>, or <c>Bearer error="invalid_token"</c> for a <c>Bearer</c> presentation (whose
+    /// refusals here are all <c>invalid_token</c>).
     /// </summary>
     /// <param name="isDpopPresentation">Whether the token was presented under the <c>DPoP</c> scheme.</param>
     /// <param name="error">The error code.</param>
     /// <param name="description">The <c>error_description</c> the body carries.</param>
+    /// <param name="challenge">The parameters every <c>DPoP</c> challenge of the request carries.</param>
     /// <returns>The 401 response.</returns>
-    private static ServerHttpResponse RefuseUnderScheme(bool isDpopPresentation, string error, string description) =>
-        ServerHttpResponse.Unauthorized(error, description)
-            .WithHeader(
-                WellKnownHttpHeaderNames.WwwAuthenticate,
-                isDpopPresentation ? BuildDpopChallenge(error) : BearerTokenValidation.InvalidTokenChallenge);
+    private static ServerHttpResponse RefuseUnderScheme(
+        bool isDpopPresentation, string error, string description, ResourceChallengeContext challenge) =>
+        isDpopPresentation
+            ? WithDpopChallenge(ServerHttpResponse.Unauthorized(error, description), BuildDpopChallenge(error, challenge))
+            : ServerHttpResponse.Unauthorized(error, description)
+                .WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, BearerTokenValidation.InvalidTokenChallenge);
 
 
     /// <summary>
@@ -442,6 +698,7 @@ internal static class CredentialEndpointDpopValidation
     /// accepted by the server that issued them").
     /// </param>
     /// <param name="description">The <c>error_description</c> the body carries.</param>
+    /// <param name="challenge">The parameters every <c>DPoP</c> challenge of the request carries.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The 401 nonce challenge.</returns>
     private static async ValueTask<ServerHttpResponse> ChallengeForNonceAsync(
@@ -450,14 +707,15 @@ internal static class CredentialEndpointDpopValidation
         ExchangeContext context,
         Uri nonceAudience,
         string description,
+        ResourceChallengeContext challenge,
         CancellationToken cancellationToken)
     {
         string freshNonce = await server.OAuth().IssueDpopNonceAsync!(
             nonceAudience, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
 
-        return ServerHttpResponse
-            .Unauthorized(OAuthErrors.UseDpopNonce, description)
-            .WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, BuildDpopChallenge(OAuthErrors.UseDpopNonce))
+        return WithDpopChallenge(
+                ServerHttpResponse.Unauthorized(OAuthErrors.UseDpopNonce, description),
+                BuildDpopChallenge(OAuthErrors.UseDpopNonce, challenge))
             .WithHeader(WellKnownHttpHeaderNames.DPoPNonce, freshNonce);
     }
 
@@ -532,50 +790,77 @@ internal static class CredentialEndpointDpopValidation
 
 
     /// <summary>
-    /// Answers a protected resource request whose <c>Authorization</c> field is sent on two or more field
-    /// lines (<see cref="AuthorizationFieldReading.IsRepeated"/>): 400 <c>invalid_request</c> with
-    /// <see cref="WellKnownOAuthErrorDescriptions.MalformedAuthorizationField"/> and the challenge
-    /// <c>Bearer realm="&lt;issuer&gt;", error="invalid_request"</c> through <see cref="Challenged"/>, followed, at a
-    /// resource that accepts the <c>DPoP</c> scheme, by the <c>DPoP</c> challenge with the same error,
-    /// <c>DPoP error="invalid_request", algs="..."</c>, in the same field, the shape
-    /// <see cref="RefuseMissingCredentialsAsync"/> composes the two in.
+    /// Answers a request to the client configuration endpoint (<see cref="Server.Registration.RegistrationEndpoints"/>),
+    /// which reads a Bearer token only, whose <c>Authorization</c> field is sent on two or more field lines
+    /// (<see cref="AuthorizationFieldReading.IsRepeated"/>): 400 <c>invalid_request</c>,
+    /// <see cref="WellKnownOAuthErrorDescriptions.MalformedAuthorizationField"/> and the one challenge
+    /// <c>Bearer realm="&lt;issuer&gt;", error="invalid_request"</c> (<see cref="RefuseRepeatedField"/> with no
+    /// <c>DPoP</c> challenge), the realm the issuer <see cref="ResolveIssuerAsync"/> resolves.
     /// <c>Authorization = credentials</c> is no list
-    /// (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.6.2">RFC 9110 Section 11.6.2</see>), and
-    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see> names the code:
-    /// "invalid_request The request is missing a required parameter, includes an unsupported parameter or
-    /// parameter value, repeats the same parameter, uses more than one method for including an access
-    /// token, or is otherwise malformed.  The resource server SHOULD respond with the HTTP 400 (Bad
-    /// Request) status code."
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 Section 7.2</see> places the error in
-    /// both challenges when the mechanism is ambiguous: "Otherwise, both Bearer and DPoP challenges MAY be used to
-    /// deliver error information (Figure 19)." The reading of a repeated field keeps no scheme, so both are sent
-    /// for every repeated field, also two lines of one scheme, where the section's "If the mechanism used to attempt
-    /// authentication could be established unambiguously, then the corresponding challenge SHOULD be used to deliver
-    /// error information (Figure 18)." is not applied: a named deviation. UserInfo, the OID4VCI resources and the
-    /// client configuration endpoint, which reads a Bearer token only, answer a repeated field through this one body.
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.6.2">RFC 9110 Section 11.6.2</see>). UserInfo and the
+    /// OID4VCI resources, which accept the <c>DPoP</c> scheme, answer a repeated field through
+    /// <see cref="ReadPresentationAsync"/>, which reads the scope they require.
     /// </summary>
     /// <param name="server">The authorization server whose issuer resolver names the realm.</param>
     /// <param name="registration">The client (tenant) the request belongs to.</param>
     /// <param name="context">The per-request context.</param>
-    /// <param name="isDpopAccepted">Whether the resource accepts the <c>DPoP</c> scheme, so its challenge is sent too.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The 400 refusal with its challenge.</returns>
     internal static async ValueTask<ServerHttpResponse> RefuseRepeatedAuthorizationAsync(
         EndpointServer server,
         ClientRecord registration,
         ExchangeContext context,
-        bool isDpopAccepted,
         CancellationToken cancellationToken)
     {
+        AuthorizationFieldReading authorization = BearerTokenValidation.ReadAuthorizationField(context);
         Uri issuer = await ResolveIssuerAsync(server, registration, context, cancellationToken).ConfigureAwait(false);
-        string bearerChallenge = BearerTokenChallenge.BuildChallenge(
-            realm: HeaderSafeIssuer(issuer), error: OAuthErrors.InvalidRequest);
-        string challenge = isDpopAccepted
-            ? $"{bearerChallenge}, {BuildDpopChallenge(OAuthErrors.InvalidRequest)}"
-            : bearerChallenge;
 
-        return ServerHttpResponse.BadRequest(OAuthErrors.InvalidRequest, WellKnownOAuthErrorDescriptions.MalformedAuthorizationField)
-            .WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, challenge);
+        return RefuseRepeatedField(authorization, HeaderSafeIssuer(issuer), dpopChallenge: null);
+    }
+
+
+    /// <summary>
+    /// The 400 <c>invalid_request</c> answer to an <c>Authorization</c> field sent on two or more field lines, with
+    /// <see cref="WellKnownOAuthErrorDescriptions.MalformedAuthorizationField"/> and the challenge of the mechanism the
+    /// lines attempt. <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see> names
+    /// the code: "invalid_request The request is missing a required parameter, includes an unsupported parameter or
+    /// parameter value, repeats the same parameter, uses more than one method for including an access token, or is
+    /// otherwise malformed.  The resource server SHOULD respond with the HTTP 400 (Bad Request) status code."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 Section 7.2</see> says which challenge
+    /// carries the error: "If the mechanism used to attempt authentication could be established unambiguously, then the
+    /// corresponding challenge SHOULD be used to deliver error information (Figure 18)." and "Otherwise, both Bearer and
+    /// DPoP challenges MAY be used to deliver error information (Figure 19)." At a resource that accepts the
+    /// <c>DPoP</c> scheme, lines that all name <c>DPoP</c> (<see cref="AuthorizationFieldReading.RepeatedScheme"/>) are
+    /// answered with the <c>DPoP</c> challenge alone, lines that all name <c>Bearer</c> with the <c>Bearer</c> challenge
+    /// alone, and any other lines with both, the <c>Bearer</c> one first; a <c>DPoP</c> challenge is attached through
+    /// <see cref="WithDpopChallenge"/>. Without a <c>DPoP</c> challenge the <c>Bearer</c> one is sent alone.
+    /// </summary>
+    /// <param name="authorization">The request's <c>Authorization</c> field reading, a repeated field.</param>
+    /// <param name="bearerRealm">The <c>realm</c> of the <c>Bearer</c> challenge, or <see langword="null"/> where no issuer resolves.</param>
+    /// <param name="dpopChallenge">The parameters of the <c>DPoP</c> challenge, or <see langword="null"/> at a resource that accepts no <c>DPoP</c> scheme.</param>
+    /// <returns>The 400 refusal with its challenge.</returns>
+    private static ServerHttpResponse RefuseRepeatedField(
+        AuthorizationFieldReading authorization, string? bearerRealm, ResourceChallengeContext? dpopChallenge)
+    {
+        ServerHttpResponse refusal = ServerHttpResponse.BadRequest(
+            OAuthErrors.InvalidRequest, WellKnownOAuthErrorDescriptions.MalformedAuthorizationField);
+        string bearerChallenge = BearerTokenChallenge.BuildChallenge(realm: bearerRealm, error: OAuthErrors.InvalidRequest);
+        if(dpopChallenge is null)
+        {
+            return refusal.WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, bearerChallenge);
+        }
+
+        string challenge = BuildDpopChallenge(OAuthErrors.InvalidRequest, dpopChallenge);
+
+        return authorization.RepeatedScheme switch
+        {
+            string scheme when WellKnownAuthenticationSchemes.Equals(scheme, WellKnownAuthenticationSchemes.DPoP) =>
+                WithDpopChallenge(refusal, challenge),
+            string scheme when WellKnownAuthenticationSchemes.Equals(scheme, WellKnownAuthenticationSchemes.Bearer) =>
+                refusal.WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, bearerChallenge),
+
+            _ => WithDpopChallenge(refusal, $"{bearerChallenge}, {challenge}")
+        };
     }
 
 

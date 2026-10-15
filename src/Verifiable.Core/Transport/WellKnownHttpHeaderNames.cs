@@ -22,7 +22,7 @@ namespace Verifiable.Core.Transport;
 /// <see cref="ContentType"/>, <see cref="DPoP"/>, <see cref="DPoPNonce"/>,
 /// <see cref="CacheControl"/>, <see cref="WwwAuthenticate"/>, <see cref="Allow"/>,
 /// <see cref="Location"/>, <see cref="Date"/>, <see cref="Age"/>, <see cref="Expires"/>,
-/// and <see cref="RetryAfter"/>. Hosts that read or write content length, cookies, proxy
+/// <see cref="RetryAfter"/>, and <see cref="AccessControlExposeHeaders"/>. Hosts that read or write content length, cookies, proxy
 /// credentials, trace context and rate limits beside the library can use <see cref="ContentLength"/>,
 /// <see cref="Cookie"/>, <see cref="SetCookie"/>, <see cref="ProxyAuthorization"/>,
 /// <see cref="TraceParent"/>, <see cref="TraceState"/>,
@@ -36,7 +36,9 @@ namespace Verifiable.Core.Transport;
 /// (<see href="https://www.w3.org/TR/2024/CR-baggage-20240530/#header-name">Section 3.1</see>).
 /// Comparisons remain case-insensitive per
 /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.1">RFC 9110 §5.1</see>.
-/// Each entry carries its own <c>IsXxx</c> predicate and a row in <see cref="GetCanonicalizedValue"/>.
+/// Each entry carries its own <c>IsXxx</c> predicate and a row in <see cref="GetCanonicalizedValue"/>, except
+/// <see cref="AccessControlExposeHeaders"/>, which carries its row and no predicate of its own and is compared through
+/// <see cref="Equals"/>.
 /// This transport vocabulary lives beside <see cref="HttpHeaderSet"/>.
 /// </para>
 /// </remarks>
@@ -184,6 +186,21 @@ public static class WellKnownHttpHeaderNames
     /// protected resource's metadata document.
     /// </summary>
     public static string WwwAuthenticate { get; } = Utf8Constants.ToInternedString(WwwAuthenticateUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="AccessControlExposeHeaders"/>.</summary>
+    public static ReadOnlySpan<byte> AccessControlExposeHeadersUtf8 => "Access-Control-Expose-Headers"u8;
+
+    /// <summary>
+    /// The <c>Access-Control-Expose-Headers</c> response header of the CORS protocol, the list of response field names
+    /// a browser makes available to a cross-origin application beside the CORS-safelisted ones.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "In order for the
+    /// application to obtain and use the WWW-Authenticate HTTP response header value, the server needs to make it
+    /// available to the application by including WWW-Authenticate in the Access-Control-Expose-Headers response header
+    /// list value." and <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">Section 8</see>: "In order for the
+    /// application to obtain and use the DPoP-Nonce HTTP response header value, the server needs to make it available
+    /// to the application by including DPoP-Nonce in the Access-Control-Expose-Headers response header list value."
+    /// </summary>
+    public static string AccessControlExposeHeaders { get; } = Utf8Constants.ToInternedString(AccessControlExposeHeadersUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Allow"/>.</summary>
     public static ReadOnlySpan<byte> AllowUtf8 => "Allow"u8;
@@ -544,6 +561,7 @@ public static class WellKnownHttpHeaderNames
         var n when IsDPoPNonce(n) => DPoPNonce,
         var n when IsCacheControl(n) => CacheControl,
         var n when IsWwwAuthenticate(n) => WwwAuthenticate,
+        var n when Equals(n, AccessControlExposeHeaders) => AccessControlExposeHeaders,
         var n when IsAllow(n) => Allow,
         var n when IsLocation(n) => Location,
         var n when IsDate(n) => Date,

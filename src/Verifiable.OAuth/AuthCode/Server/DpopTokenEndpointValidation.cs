@@ -84,6 +84,13 @@ namespace Verifiable.OAuth.AuthCode.Server;
 /// present; a host resolver answering no list is answered <c>server_error</c>. A validation that answers success
 /// without the thumbprint or without the claims a success carries is answered <c>server_error</c>.
 /// </para>
+/// <para>
+/// Every nonce challenge, a required proof that is absent among them, carries one <c>DPoP-Nonce</c> field and the
+/// field <c>Access-Control-Expose-Headers: WWW-Authenticate, DPoP-Nonce</c>, written whether or not the request names
+/// an <c>Origin</c> (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">RFC 9449 Section 8</see>: "the
+/// server needs to make it available to the application by including DPoP-Nonce in the Access-Control-Expose-Headers
+/// response header list value").
+/// </para>
 /// </remarks>
 internal static class DpopTokenEndpointValidation
 {
@@ -188,9 +195,8 @@ internal static class DpopTokenEndpointValidation
             //Required by the registration but absent — issue a fresh nonce challenge.
             string freshNonce = await oauth.IssueDpopNonceAsync(
                 issuerUri, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
-            return ServerHttpResponse
-                .BadRequest(OAuthErrors.UseDpopNonce, "DPoP proof required.")
-                .WithHeader(WellKnownHttpHeaderNames.DPoPNonce, freshNonce);
+
+            return NonceChallenge("DPoP proof required.", freshNonce);
         }
 
         //RFC 9449 Section 4.3, check 9, against the target URI the server reconstructs from its own
@@ -224,10 +230,10 @@ internal static class DpopTokenEndpointValidation
             {
                 string freshNonce = await oauth.IssueDpopNonceAsync(
                     issuerUri, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
-                return ServerHttpResponse
-                    .BadRequest(OAuthErrors.UseDpopNonce, "DPoP nonce required.")
-                    .WithHeader(WellKnownHttpHeaderNames.DPoPNonce, freshNonce);
+
+                return NonceChallenge("DPoP nonce required.", freshNonce);
             }
+
             return ServerHttpResponse.BadRequest(
                 OAuthErrors.InvalidDpopProof,
                 $"DPoP proof validation failed: {proofResult.FailureReason}.");
@@ -262,10 +268,8 @@ internal static class DpopTokenEndpointValidation
             {
                 string freshNonce = await oauth.IssueDpopNonceAsync(
                     issuerUri, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
-                return ServerHttpResponse
-                    .BadRequest(OAuthErrors.UseDpopNonce,
-                        $"DPoP nonce invalid: {nonceResult.FailureReason}.")
-                    .WithHeader(WellKnownHttpHeaderNames.DPoPNonce, freshNonce);
+
+                return NonceChallenge($"DPoP nonce invalid: {nonceResult.FailureReason}.", freshNonce);
             }
         }
         else
@@ -276,9 +280,8 @@ internal static class DpopTokenEndpointValidation
             //nonce answer independent of the stored record for an unknown and a live grant alike.
             string freshNonce = await oauth.IssueDpopNonceAsync(
                 issuerUri, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
-            return ServerHttpResponse
-                .BadRequest(OAuthErrors.UseDpopNonce, "DPoP nonce required.")
-                .WithHeader(WellKnownHttpHeaderNames.DPoPNonce, freshNonce);
+
+            return NonceChallenge("DPoP nonce required.", freshNonce);
         }
 
         //JTI replay check — the same shared correlation store the JAR path uses, the proof's jti
@@ -519,9 +522,8 @@ internal static class DpopTokenEndpointValidation
             //Required but absent — issue a fresh nonce challenge.
             string freshNonce = await oauth.IssueDpopNonceAsync(
                 issuerUri, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
-            return DpopValidationOutcome.Failure(ServerHttpResponse
-                .BadRequest(OAuthErrors.UseDpopNonce, "DPoP proof required.")
-                .WithHeader(WellKnownHttpHeaderNames.DPoPNonce, freshNonce));
+
+            return DpopValidationOutcome.Failure(NonceChallenge("DPoP proof required.", freshNonce));
         }
 
         //RFC 9449 Section 4.3, check 9, against the target URI the server reconstructs from its own
@@ -556,10 +558,10 @@ internal static class DpopTokenEndpointValidation
             {
                 string freshNonce = await oauth.IssueDpopNonceAsync(
                     issuerUri, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
-                return DpopValidationOutcome.Failure(ServerHttpResponse
-                    .BadRequest(OAuthErrors.UseDpopNonce, "DPoP nonce required.")
-                    .WithHeader(WellKnownHttpHeaderNames.DPoPNonce, freshNonce));
+
+                return DpopValidationOutcome.Failure(NonceChallenge("DPoP nonce required.", freshNonce));
             }
+
             return DpopValidationOutcome.Failure(ServerHttpResponse.BadRequest(
                 OAuthErrors.InvalidDpopProof,
                 $"DPoP proof validation failed: {proofResult.FailureReason}."));
@@ -610,10 +612,9 @@ internal static class DpopTokenEndpointValidation
             {
                 string freshNonce = await oauth.IssueDpopNonceAsync(
                     issuerUri, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
-                return DpopValidationOutcome.Failure(ServerHttpResponse
-                    .BadRequest(OAuthErrors.UseDpopNonce,
-                        $"DPoP nonce invalid: {nonceResult.FailureReason}.")
-                    .WithHeader(WellKnownHttpHeaderNames.DPoPNonce, freshNonce));
+
+                return DpopValidationOutcome.Failure(
+                    NonceChallenge($"DPoP nonce invalid: {nonceResult.FailureReason}.", freshNonce));
             }
         }
         else
@@ -624,9 +625,8 @@ internal static class DpopTokenEndpointValidation
             //(the same policy ValidatePresentedProofAsync applies at the two step endpoints).
             string freshNonce = await oauth.IssueDpopNonceAsync(
                 issuerUri, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
-            return DpopValidationOutcome.Failure(ServerHttpResponse
-                .BadRequest(OAuthErrors.UseDpopNonce, "DPoP nonce required.")
-                .WithHeader(WellKnownHttpHeaderNames.DPoPNonce, freshNonce));
+
+            return DpopValidationOutcome.Failure(NonceChallenge("DPoP nonce required.", freshNonce));
         }
 
         //JTI replay check — the same shared correlation store the JAR path uses, the proof's jti
@@ -670,10 +670,49 @@ internal static class DpopTokenEndpointValidation
     /// then holds no policy to check a proof's <c>alg</c> against
     /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">RFC 9449 Section 4.3</see>, check 5: the alg "is
     /// supported by the application, and is acceptable per local policy"), so the request fails closed rather than
-    /// holding the proof to the structural rule alone.
+    /// holding the proof to the structural rule alone. The library's protected resources answer the same fault with it.
     /// </summary>
-    private static string AlgorithmResolverAnsweredNoListDescription { get; } =
+    internal static string AlgorithmResolverAnsweredNoListDescription { get; } =
         "The signing-algorithm resolver answered no list for DPoP proofs.";
+
+
+    /// <summary>
+    /// The description a request to a library protected resource is answered with under <c>server_error</c> when the
+    /// host's <see cref="AuthorizationServerCryptography.ResolveSupportedSigningAlgorithmsAsync"/> answers, for
+    /// <see cref="KeyUsageContext.DpopProof"/>, a list holding a name that is no RFC 9110 Section 5.6.2 token. The library
+    /// holds every <c>algs</c> name to the token grammar, its chosen bound
+    /// (<see cref="ProtectedResource.DpopChallenge.IsToken"/>): the clauses that exclude any other name are
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.2">RFC 9449 Section 4.2</see>, "alg: An identifier for
+    /// a JWS asymmetric digital signature algorithm from [IANA.JOSE.ALGS]", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">Section 4.3</see>, check 5, the alg "indicates a
+    /// registered asymmetric digital signature algorithm", every registered name being made of tchar only; a
+    /// quoted-string could carry a Collision-Resistant Name (RFC 7515 Section 4.1.1), which no DPoP proof may carry. The
+    /// resource reads such an answer as no list
+    /// (<see cref="Oid4Vci.CredentialEndpointDpopValidation.ResolveChallengeContextAsync"/>) and holds no proof to it, as
+    /// it answers a resolver that answered no list (<see cref="AlgorithmResolverAnsweredNoListDescription"/>). The text
+    /// is fixed and names no value of the list.
+    /// </summary>
+    internal static string AlgorithmResolverAnsweredUnusableListDescription { get; } =
+        "The signing-algorithm resolver answered a name for DPoP proofs that a challenge cannot carry.";
+
+
+    /// <summary>
+    /// The token endpoint's nonce challenge: 400 <c>use_dpop_nonce</c> with <paramref name="description"/> in the body,
+    /// one <c>DPoP-Nonce</c> field carrying <paramref name="freshNonce"/>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">RFC 9449 Section 8</see>: "there MUST NOT be more
+    /// than one DPoP-Nonce header"), and the <c>Access-Control-Expose-Headers</c> field naming the fields a browser
+    /// application reads (<see cref="WellKnownDpopValues.ExposedDpopResponseFields"/>; Section 8: "In order for the
+    /// application to obtain and use the DPoP-Nonce HTTP response header value, the server needs to make it available
+    /// to the application by including DPoP-Nonce in the Access-Control-Expose-Headers response header list value.").
+    /// Every nonce challenge of this file, the pushed authorization request's among them, answers through it.
+    /// </summary>
+    /// <param name="description">The <c>error_description</c> the body carries.</param>
+    /// <param name="freshNonce">The nonce the challenge supplies.</param>
+    /// <returns>The 400 nonce challenge.</returns>
+    private static ServerHttpResponse NonceChallenge(string description, string freshNonce) =>
+        ServerHttpResponse.BadRequest(OAuthErrors.UseDpopNonce, description)
+            .WithHeader(WellKnownHttpHeaderNames.DPoPNonce, freshNonce)
+            .WithHeader(WellKnownHttpHeaderNames.AccessControlExposeHeaders, WellKnownDpopValues.ExposedDpopResponseFields);
 
 
     /// <summary>

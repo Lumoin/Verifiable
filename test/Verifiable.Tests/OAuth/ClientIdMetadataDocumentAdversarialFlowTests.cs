@@ -1621,7 +1621,7 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
     /// <c>Authorization</c> field line, authenticates no client, so the materialization leaves it to UserInfo, which
     /// reads it as a request without the authentication information it reads and answers 401 with an empty body and
     /// the one challenge naming the two schemes it accepts and no error,
-    /// <c>Bearer scope="openid", DPoP algs="..."</c>:
+    /// <c>Bearer scope="openid", DPoP realm="&lt;issuer&gt;", scope="openid", algs="..."</c>:
     /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>, "If the request
     /// lacks any authentication information (e.g., the client was unaware that authentication is necessary or
     /// attempted using an unsupported authentication method), the resource server SHOULD NOT include an error code
@@ -1644,7 +1644,7 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
 
         Assert.AreEqual(401, response.StatusCode, response.Body);
         Assert.AreEqual(
-            $"Bearer scope=\"openid\", DPoP algs=\"{ResourceDpopProofs.AcceptedProofAlgorithms}\"",
+            $"Bearer scope=\"openid\", {ResourceDpopProofs.DpopChallenge(stub.IssuerUri!.OriginalString, error: null, scope: "openid")}",
             Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
         Assert.AreEqual(string.Empty, response.Body, "No error code or other error information.");
     }
@@ -1660,7 +1660,7 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
     /// identifies and authenticates no OAuth client and the materialization fetches nothing for it. The rule refuses
     /// only a materialized registration, so the resource answers as it answers the same request without the rule: 401
     /// with an empty body and the one challenge naming the two schemes it accepts,
-    /// <c>Bearer scope="openid", DPoP algs="..."</c>, where a rule that refused the stored registration would answer
+    /// <c>Bearer scope="openid", DPoP realm="&lt;issuer&gt;", scope="openid", algs="..."</c>, where a rule that refused the stored registration would answer
     /// 400 without that challenge.
     /// </summary>
     [TestMethod]
@@ -1681,7 +1681,7 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
 
         Assert.AreEqual(401, response.StatusCode, response.Body);
         Assert.AreEqual(
-            $"Bearer scope=\"openid\", DPoP algs=\"{ResourceDpopProofs.AcceptedProofAlgorithms}\"",
+            $"Bearer scope=\"openid\", {ResourceDpopProofs.DpopChallenge(stub.IssuerUri!.OriginalString, error: null, scope: "openid")}",
             Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
         Assert.AreEqual(string.Empty, response.Body, "The resource's own answer carries no body.");
     }
@@ -1694,18 +1694,15 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
     /// token, or is otherwise malformed.  The resource server SHOULD respond with the HTTP 400 (Bad
     /// Request) status code." A UserInfo request of a client whose registration names a Client ID Metadata Document,
     /// sent over a raw TLS connection with two <c>Authorization: Bearer</c> field lines, authenticates no client, so
-    /// the materialization leaves it to UserInfo, which refuses it 400 <c>invalid_request</c> with one
-    /// <c>WWW-Authenticate</c> field holding the <c>Bearer</c> and the <c>DPoP</c> challenge,
-    /// <c>Bearer realm="&lt;issuer&gt;", error="invalid_request", DPoP error="invalid_request", algs="..."</c>, as it
-    /// refuses two lines of any client: <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449
-    /// Section 7.2</see>, "Otherwise, both Bearer and DPoP challenges MAY be used to deliver error information
-    /// (Figure 19)." Both lines name one scheme, where the section recommends "If the mechanism used to attempt
-    /// authentication could be established unambiguously, then the corresponding challenge SHOULD be used to deliver
-    /// error information (Figure 18)."; the both-challenges answer to two lines of one scheme is the library's named
-    /// deviation, since the reading of a repeated field keeps no scheme.
+    /// the materialization leaves it to UserInfo, which refuses it 400 <c>invalid_request</c> with the one challenge
+    /// <c>Bearer realm="&lt;issuer&gt;", error="invalid_request"</c> and no <c>DPoP</c> challenge, as it refuses two
+    /// lines of one scheme of any client: <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449
+    /// Section 7.2</see>, "If the mechanism used to attempt authentication could be established unambiguously, then the
+    /// corresponding challenge SHOULD be used to deliver error information (Figure 18)."
     /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
-    public async Task TwoAuthorizationLinesAtUserInfoCarryBothChallengesAsync()
+    public async Task TwoAuthorizationLinesAtUserInfoAreAnsweredWithTheBearerChallengeAloneAsync()
     {
         await using StaticContentHost documentHost = await StaticContentHost.StartAsync(
             TestContext.CancellationToken).ConfigureAwait(false);
@@ -1724,8 +1721,7 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
 
         Assert.AreEqual(400, response.StatusCode, response.Body);
         Assert.AreEqual(
-            $"Bearer realm=\"{stub.IssuerUri!.OriginalString}\", error=\"invalid_request\", "
-            + $"DPoP error=\"invalid_request\", algs=\"{ResourceDpopProofs.AcceptedProofAlgorithms}\"",
+            $"Bearer realm=\"{stub.IssuerUri!.OriginalString}\", error=\"invalid_request\"",
             Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
         Assert.AreEqual(Bad("invalid_request", "The Authorization header is not a single well-formed credential."), response.Body);
     }

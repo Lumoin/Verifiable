@@ -500,7 +500,7 @@ internal sealed class Oid4VciDeferredAndNotificationTests
     /// any authentication information ... the resource server SHOULD NOT include an error code or other
     /// error information." A request to the Deferred Credential or the Notification endpoint sent over the
     /// wire with no <c>Authorization</c> header is refused with 401, an empty body and the one challenge
-    /// <c>Bearer realm="&lt;issuer&gt;", DPoP algs="…"</c>, naming both schemes and no error.
+    /// <c>Bearer realm="&lt;issuer&gt;", DPoP realm="&lt;issuer&gt;", algs="..."</c>, naming both schemes and no error.
     /// </summary>
     /// <param name="endpointName">The protected endpoint addressed.</param>
     [TestMethod]
@@ -539,7 +539,7 @@ internal sealed class Oid4VciDeferredAndNotificationTests
     /// UTF-8 octets of each path character as "%HH" (<c>%E7%A7%9F%E6%88%B7</c>) and the host by the IDNA
     /// ToASCII operation (<c>xn--bcher-kva.example</c>, RFC 3492's encoding of the label). A request to the
     /// Deferred Credential endpoint sent over the wire with no <c>Authorization</c> header is answered 401,
-    /// with an empty body and the one challenge <c>Bearer realm="&lt;that URI&gt;", DPoP algs="…"</c>.
+    /// with an empty body and the one challenge <c>Bearer realm="&lt;that URI&gt;", DPoP realm="&lt;that URI&gt;", algs="..."</c>.
     /// </summary>
     /// <param name="issuerRow">Where the configured issuer holds Unicode text.</param>
     [TestMethod]
@@ -582,7 +582,7 @@ internal sealed class Oid4VciDeferredAndNotificationTests
         Assert.IsTrue(response.Headers.NonValidated.TryGetValues("WWW-Authenticate", out HeaderStringValues challenges),
             "RFC 6750 §3: the refusal carries a WWW-Authenticate challenge.");
         Assert.AreEqual(
-            $"Bearer realm=\"{expectedRealm}\", DPoP algs=\"{ResourceDpopProofs.AcceptedProofAlgorithms}\"",
+            $"Bearer realm=\"{expectedRealm}\", {ResourceDpopProofs.DpopChallenge(expectedRealm, error: null)}",
             Assert.ContainsSingle(challenges));
         Assert.AreEqual(string.Empty, body, "RFC 6750 §3.1: no error code or other error information.");
     }
@@ -594,7 +594,7 @@ internal sealed class Oid4VciDeferredAndNotificationTests
     /// corresponding challenge SHOULD be used to deliver error information". An access token whose
     /// signature does not verify, presented under the <c>DPoP</c> scheme at the Deferred Credential or
     /// the Notification endpoint over the wire, is refused with 401 <c>invalid_token</c> and the one
-    /// challenge <c>DPoP error="invalid_token", algs="…"</c>, never a <c>Bearer</c> one.
+    /// challenge <c>DPoP realm="&lt;issuer&gt;", error="invalid_token", algs="..."</c>, never a <c>Bearer</c> one.
     /// </summary>
     /// <param name="endpointName">The protected endpoint addressed.</param>
     [TestMethod]
@@ -620,35 +620,32 @@ internal sealed class Oid4VciDeferredAndNotificationTests
         Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
         Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges),
             "RFC 6750 §3: the refusal carries a WWW-Authenticate challenge.");
-        Assert.AreEqual(ResourceDpopProofs.DpopChallenge("invalid_token"), challenges.Single());
+        Assert.AreEqual(ResourceDpopProofs.DpopChallenge(IssuerOf(host, material), "invalid_token"), challenges.Single());
         using JsonDocument document = JsonDocument.Parse(body);
         Assert.AreEqual("invalid_token", document.RootElement.GetProperty("error").GetString());
     }
 
 
     /// <summary>
-    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>:
-    /// "invalid_request The request is missing a required parameter, includes an unsupported parameter or
-    /// parameter value, repeats the same parameter, uses more than one method for including an access
-    /// token, or is otherwise malformed.  The resource server SHOULD respond with the HTTP 400 (Bad
-    /// Request) status code." A request to the Deferred Credential or the Notification endpoint sent over a raw
-    /// TLS connection with two <c>Authorization: Bearer</c> field lines (<c>Authorization = credentials</c> is no
-    /// list, <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.6.2">RFC 9110 Section 11.6.2</see>) is
-    /// refused with 400 <c>invalid_request</c> and one <c>WWW-Authenticate</c> field holding the <c>Bearer</c> and
-    /// the <c>DPoP</c> challenge, each with <c>error="invalid_request"</c>,
-    /// <c>Bearer realm="&lt;issuer&gt;", error="invalid_request", DPoP error="invalid_request", algs="..."</c>:
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 Section 7.2</see>, "Otherwise, both
-    /// Bearer and DPoP challenges MAY be used to deliver error information (Figure 19)." Both lines name the
-    /// <c>Bearer</c> scheme, where the section recommends "If the mechanism used to attempt authentication could be
-    /// established unambiguously, then the corresponding challenge SHOULD be used to deliver error information
-    /// (Figure 18)."; the both-challenges answer to two lines of one scheme is the library's named deviation, since
-    /// the reading of a repeated field keeps no scheme.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 Section 7.2</see>: "If the mechanism used
+    /// to attempt authentication could be established unambiguously, then the corresponding challenge SHOULD be used to
+    /// deliver error information (Figure 18).", with
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>: "invalid_request The
+    /// request is missing a required parameter, includes an unsupported parameter or parameter value, repeats the same
+    /// parameter, uses more than one method for including an access token, or is otherwise malformed.  The resource
+    /// server SHOULD respond with the HTTP 400 (Bad Request) status code." A request to the Deferred Credential or the
+    /// Notification endpoint sent over a raw TLS connection with two <c>Authorization: Bearer</c> field lines
+    /// (<c>Authorization = credentials</c> is no list,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.6.2">RFC 9110 Section 11.6.2</see>) attempts the
+    /// <c>Bearer</c> mechanism alone: it is refused with 400 <c>invalid_request</c> and the one challenge
+    /// <c>Bearer realm="&lt;issuer&gt;", error="invalid_request"</c>, and no <c>DPoP</c> challenge.
     /// </summary>
     /// <param name="endpointName">The protected endpoint addressed.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
     [DataRow(DeferredEndpointRow)]
     [DataRow(NotificationEndpointRow)]
-    public async Task ProtectedEndpointRefusesTwoAuthorizationLinesWithBothChallengesAsync(string endpointName)
+    public async Task ProtectedEndpointRefusesTwoBearerAuthorizationLinesWithTheBearerChallengeAloneAsync(string endpointName)
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
@@ -670,7 +667,7 @@ internal sealed class Oid4VciDeferredAndNotificationTests
 
         Assert.AreEqual(400, response.StatusCode, response.Body);
         Assert.AreEqual(
-            $"Bearer realm=\"{issuer}\", error=\"invalid_request\", DPoP error=\"invalid_request\", algs=\"{ResourceDpopProofs.AcceptedProofAlgorithms}\"",
+            $"Bearer realm=\"{issuer}\", error=\"invalid_request\"",
             Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
         using JsonDocument document = JsonDocument.Parse(response.Body);
         Assert.AreEqual("invalid_request", document.RootElement.GetProperty("error").GetString());
@@ -868,15 +865,22 @@ internal sealed class Oid4VciDeferredAndNotificationTests
 
     /// <summary>
     /// The challenge the protected endpoints answer a request without usable credentials with:
-    /// <c>Bearer realm="&lt;issuer&gt;", DPoP algs="…"</c>, the realm being the issuer the server holds
-    /// for the registration.
+    /// <c>Bearer realm="&lt;issuer&gt;", DPoP realm="&lt;issuer&gt;", algs="..."</c>, the realm of both being the issuer
+    /// the server holds for the registration.
     /// </summary>
     /// <param name="host">The host holding the registration.</param>
     /// <param name="material">The registration.</param>
     /// <returns>The literal <c>WWW-Authenticate</c> value.</returns>
     private static string MissingCredentialsChallenge(TestHostShell host, VerifierKeyMaterial material) =>
-        $"Bearer realm=\"{host.Host("default").Registrations[material.Registration.TenantId.Value].IssuerUri!.OriginalString}\", "
-        + $"DPoP algs=\"{ResourceDpopProofs.AcceptedProofAlgorithms}\"";
+        $"Bearer realm=\"{IssuerOf(host, material)}\", {ResourceDpopProofs.DpopChallenge(IssuerOf(host, material), error: null)}";
+
+
+    /// <summary>The issuer the host holds for the registration, the realm of the protected endpoints' challenges.</summary>
+    /// <param name="host">The host holding the registration.</param>
+    /// <param name="material">The registration.</param>
+    /// <returns>The issuer, as written.</returns>
+    private static string IssuerOf(TestHostShell host, VerifierKeyMaterial material) =>
+        host.Host("default").Registrations[material.Registration.TenantId.Value].IssuerUri!.OriginalString;
 
 
     /// <summary>

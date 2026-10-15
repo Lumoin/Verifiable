@@ -114,6 +114,23 @@ public static class WellKnownDpopValues
     ];
 
     /// <summary>
+    /// The value of the <c>Access-Control-Expose-Headers</c> field (<see cref="WellKnownHttpHeaderNames.AccessControlExposeHeaders"/>)
+    /// the library writes on every response that carries a <c>DPoP-Nonce</c> field or a <c>DPoP</c> challenge,
+    /// <c>WWW-Authenticate, DPoP-Nonce</c>: the two field names, joined by <c>, </c>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "In order for the
+    /// application to obtain and use the WWW-Authenticate HTTP response header value, the server needs to make it
+    /// available to the application by including WWW-Authenticate in the Access-Control-Expose-Headers response header
+    /// list value." and <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">Section 8</see>: "In order for the
+    /// application to obtain and use the DPoP-Nonce HTTP response header value, the server needs to make it available
+    /// to the application by including DPoP-Nonce in the Access-Control-Expose-Headers response header list value."
+    /// The field is written whether or not the request names an <c>Origin</c>: the library reads no <c>Origin</c>, and
+    /// the CORS policy, <c>Access-Control-Allow-Origin</c> among it, is the host's, so the field has effect only where
+    /// the host's CORS layer admits the origin.
+    /// </summary>
+    internal static string ExposedDpopResponseFields { get; } =
+        $"{WellKnownHttpHeaderNames.WwwAuthenticate}, {WellKnownHttpHeaderNames.DPoPNonce}";
+
+    /// <summary>
     /// Default replay-protection window for the <c>(jti, iat)</c> cache.
     /// RFC 9449 §11.1 recommends a small window; 5 minutes matches typical
     /// deployments.

@@ -73,6 +73,21 @@ public readonly record struct AuthorizationFieldReading
     public bool IsRepeated { get; }
 
     /// <summary>
+    /// The scheme every field line names when the field is repeated, as the first line sends it; <see langword="null"/>
+    /// when the lines name two schemes, when a line holds no scheme token, and for an absent or a single field. Each
+    /// line is read without the whitespace around it, as <see cref="Read"/> reads one line, and its scheme is the token
+    /// of at most 20 characters before its first SP (the whole line when it holds no SP); the schemes are compared ASCII
+    /// case-insensitively, as <see cref="IsScheme"/> compares. Two field lines are no credential
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.3">RFC 9110 Section 5.3</see>: "a sender MUST NOT
+    /// generate multiple field lines with the same name in a message ... unless that field's definition allows multiple
+    /// field line values to be recombined as a comma-separated list"), yet the scheme they all name tells which
+    /// mechanism the client attempted: <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 Section
+    /// 7.2</see>, "If the mechanism used to attempt authentication could be established unambiguously, then the
+    /// corresponding challenge SHOULD be used to deliver error information (Figure 18)."
+    /// </summary>
+    public string? RepeatedScheme { get; }
+
+    /// <summary>
     /// The authentication scheme of the one field line, the text before its first SP, as sent; empty for
     /// an empty field line; <see langword="null"/> when the field is absent or repeated.
     /// </summary>
@@ -120,6 +135,7 @@ public readonly record struct AuthorizationFieldReading
     /// </summary>
     private string DebuggerDisplay => this switch
     {
+        { IsRepeated: true, RepeatedScheme: not null } => $"AuthorizationFieldReading(Repeated(Scheme={RepeatedScheme}))",
         { IsRepeated: true } => "AuthorizationFieldReading(Repeated)",
         { Scheme: null } => "AuthorizationFieldReading(Absent)",
         { IsWellFormed: true } => $"AuthorizationFieldReading(Scheme={Scheme})",
@@ -142,14 +158,16 @@ public readonly record struct AuthorizationFieldReading
     /// <param name="credentials">The credentials of the one field line.</param>
     /// <param name="isWellFormed">Whether the one field line matches the grammar.</param>
     /// <param name="hasToken68Credentials">Whether the one well-formed field line's credentials are a token68.</param>
+    /// <param name="repeatedScheme">The scheme every line of a repeated field names, or <see langword="null"/>.</param>
     private AuthorizationFieldReading(
-        bool isRepeated, string? scheme, string? credentials, bool isWellFormed, bool hasToken68Credentials)
+        bool isRepeated, string? scheme, string? credentials, bool isWellFormed, bool hasToken68Credentials, string? repeatedScheme)
     {
         IsRepeated = isRepeated;
         Scheme = scheme;
         Credentials = credentials;
         IsWellFormed = isWellFormed;
         HasToken68Credentials = hasToken68Credentials;
+        RepeatedScheme = repeatedScheme;
     }
 
 
@@ -174,21 +192,84 @@ public readonly record struct AuthorizationFieldReading
         if(values.Count > 1)
         {
             return new AuthorizationFieldReading(
-                isRepeated: true, scheme: null, credentials: null, isWellFormed: false, hasToken68Credentials: false);
+                isRepeated: true, scheme: null, credentials: null, isWellFormed: false, hasToken68Credentials: false,
+                repeatedScheme: ReadOneSchemeOfEveryLine(values));
         }
 
         string value = values[0].Trim(' ', '\t');
+        string scheme = SchemeOf(value);
         int separator = value.IndexOf(' ', StringComparison.Ordinal);
-        string scheme = separator < 0 ? value : value[..separator];
         string credentials = separator < 0 ? string.Empty : value[separator..].TrimStart(' ');
-        bool isSchemeAccepted = scheme.Length <= MaximumSchemeLength && IsToken(scheme);
+        bool isSchemeAccepted = IsAcceptedScheme(scheme);
         bool isToken68 = credentials.Length > 0 && IsToken68(credentials);
         bool isWellFormed = isSchemeAccepted
             && (credentials.Length == 0 || isToken68 || IsAuthParamList(credentials));
 
         return new AuthorizationFieldReading(
-            isRepeated: false, scheme, credentials, isWellFormed, hasToken68Credentials: isWellFormed && isToken68);
+            isRepeated: false, scheme, credentials, isWellFormed, hasToken68Credentials: isWellFormed && isToken68,
+            repeatedScheme: null);
     }
+
+
+    /// <summary>
+    /// The scheme every line of a repeated field names, as the first line sends it, or <see langword="null"/> when a
+    /// line holds no accepted scheme token (<see cref="IsAcceptedScheme"/>) or two lines name different schemes,
+    /// compared ASCII case-insensitively (<see cref="RepeatedScheme"/>).
+    /// </summary>
+    /// <param name="values">The field lines, two or more, as received.</param>
+    /// <returns>The one scheme, or <see langword="null"/>.</returns>
+    private static string? ReadOneSchemeOfEveryLine(IReadOnlyList<string> values)
+    {
+        string? firstScheme = null;
+        foreach(string line in values)
+        {
+            string scheme = SchemeOf(line.Trim(' ', '\t'));
+            if(!IsAcceptedScheme(scheme))
+            {
+                return null;
+            }
+
+            if(firstScheme is null)
+            {
+                firstScheme = scheme;
+
+                continue;
+            }
+
+            if(!Ascii.EqualsIgnoreCase(firstScheme, scheme))
+            {
+                return null;
+            }
+        }
+
+        return firstScheme;
+    }
+
+
+    /// <summary>
+    /// The scheme of one field line value already read without its surrounding whitespace: the text before its first
+    /// SP, or the whole value when it holds no SP ("credentials = auth-scheme [ 1*SP ( token68 / #auth-param ) ]",
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.4">RFC 9110 Section 11.4</see>).
+    /// </summary>
+    /// <param name="value">The field line value.</param>
+    /// <returns>The text in the scheme's place.</returns>
+    private static string SchemeOf(string value)
+    {
+        int separator = value.IndexOf(' ', StringComparison.Ordinal);
+
+        return separator < 0 ? value : value[..separator];
+    }
+
+
+    /// <summary>
+    /// Whether <paramref name="scheme"/> is a scheme the reading accepts: an
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.1">RFC 9110 Section 11.1</see> token, "auth-scheme
+    /// = token", of at most <see cref="MaximumSchemeLength"/> characters.
+    /// </summary>
+    /// <param name="scheme">The text in the scheme's place.</param>
+    /// <returns><see langword="true"/> when the text is such a token.</returns>
+    private static bool IsAcceptedScheme(string scheme) =>
+        scheme.Length <= MaximumSchemeLength && IsToken(scheme);
 
 
     /// <summary>

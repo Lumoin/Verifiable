@@ -33,10 +33,37 @@ internal static class ResourceDpopProofs
     public static string AcceptedProofAlgorithms { get; } = "ES256 ES384 ES512 ES256K RS256 RS384 RS512 PS256 PS384 PS512 EdDSA Ed25519";
 
 
-    /// <summary>The literal <c>DPoP</c> challenge carrying <paramref name="error"/> and the <c>algs</c> parameter.</summary>
-    /// <param name="error">The challenge's <c>error</c>.</param>
+    /// <summary>
+    /// The value of the <c>Access-Control-Expose-Headers</c> field line every answer of the library carrying a
+    /// <c>DPoP</c> challenge or a <c>DPoP-Nonce</c> field writes, written out: RFC 9449 Section 7.1, "including
+    /// WWW-Authenticate in the Access-Control-Expose-Headers response header list value", and Section 8, "including
+    /// DPoP-Nonce in the Access-Control-Expose-Headers response header list value".
+    /// </summary>
+    public static string ExposedDpopResponseFields { get; } = "WWW-Authenticate, DPoP-Nonce";
+
+
+    /// <summary>
+    /// The literal <c>DPoP</c> challenge a library resource answers with, written out in the order
+    /// <c>realm</c>, <c>error</c>, <c>scope</c>, <c>algs</c>, <c>resource_metadata</c>, each a quoted-string
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>; RFC 9110 Section
+    /// 11.5: "For historical reasons, a sender MUST only generate the quoted-string syntax."), the <c>algs</c> value
+    /// <see cref="AcceptedProofAlgorithms"/>.
+    /// </summary>
+    /// <param name="realm">The challenge's <c>realm</c>, the registration's issuer.</param>
+    /// <param name="error">The challenge's <c>error</c>, or <see langword="null"/> for a challenge carrying none.</param>
+    /// <param name="scope">The challenge's <c>scope</c>, or <see langword="null"/> for none.</param>
+    /// <param name="resourceMetadata">The challenge's <c>resource_metadata</c>, or <see langword="null"/> for none.</param>
     /// <returns>The <c>WWW-Authenticate</c> value.</returns>
-    public static string DpopChallenge(string error) => $"DPoP error=\"{error}\", algs=\"{AcceptedProofAlgorithms}\"";
+    public static string DpopChallenge(string realm, string? error, string? scope = null, Uri? resourceMetadata = null)
+    {
+        ArgumentNullException.ThrowIfNull(realm);
+
+        string errorParameter = error is null ? string.Empty : $", error=\"{error}\"";
+        string scopeParameter = scope is null ? string.Empty : $", scope=\"{scope}\"";
+        string resourceMetadataParameter = resourceMetadata is null ? string.Empty : $", resource_metadata=\"{resourceMetadata.OriginalString}\"";
+
+        return $"DPoP realm=\"{realm}\"{errorParameter}{scopeParameter}, algs=\"{AcceptedProofAlgorithms}\"{resourceMetadataParameter}";
+    }
 
 
     /// <summary>

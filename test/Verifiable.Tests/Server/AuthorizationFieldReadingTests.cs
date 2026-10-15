@@ -105,6 +105,40 @@ internal sealed class AuthorizationFieldReadingTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 Section 7.2</see>: "If the mechanism used
+    /// to attempt authentication could be established unambiguously, then the corresponding challenge SHOULD be used to
+    /// deliver error information (Figure 18).", over two field lines that
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.6.2">RFC 9110 Section 11.6.2</see>'s
+    /// <c>Authorization = credentials</c> does not make a list, each line's scheme compared case-insensitively ("It uses
+    /// a case-insensitive token to identify the authentication scheme", Section 11.1). The scheme every line names is
+    /// read as the first line sends it: <c>Bearer a</c> and <c>Bearer b</c> name <c>Bearer</c>; <c>DPoP a</c> and
+    /// <c>dpop b</c> name <c>DPoP</c>; <c>Bearer a</c> and <c>DPoP b</c> name no one scheme; <c>Bearer a</c> and a line
+    /// holding no scheme token, <c>=a</c>, name no one scheme. The reading is in process: the field lines are its input.
+    /// </summary>
+    /// <param name="first">The first field line.</param>
+    /// <param name="second">The second field line.</param>
+    /// <param name="expectedScheme">The scheme every line names, or <see langword="null"/> for none.</param>
+    [TestMethod]
+    [DataRow("Bearer a", "Bearer b", "Bearer", DisplayName = "two Bearer lines")]
+    [DataRow("DPoP a", "dpop b", "DPoP", DisplayName = "DPoP and dpop")]
+    [DataRow("Bearer a", "DPoP b", null, DisplayName = "Bearer and DPoP")]
+    [DataRow("Bearer a", "=a", null, DisplayName = "a line with no scheme token")]
+    public void RepeatedLinesNameTheirOneScheme(string first, string second, string? expectedScheme)
+    {
+        RequestHeaders headers = new(new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            [WellKnownHttpHeaderNames.Authorization] = [first, second]
+        });
+
+        AuthorizationFieldReading reading = AuthorizationFieldReading.Read(headers);
+
+        Assert.IsTrue(reading.IsRepeated);
+        Assert.IsNull(reading.Scheme);
+        Assert.AreEqual(expectedScheme, reading.RepeatedScheme);
+    }
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.4">RFC 9110 Section 11.4</see>: a value
     /// whose credentials are neither a token68 nor a list of auth-params, here a token68 followed by a
     /// second word, is outside the grammar.

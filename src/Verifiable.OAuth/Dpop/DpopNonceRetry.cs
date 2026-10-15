@@ -235,8 +235,9 @@ public static class DpopNonceRetry
     /// The <c>WWW-Authenticate</c> field lines, combined into one field value as
     /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.3">RFC 9110 Section 5.3</see> combines them, are read
     /// as the challenge list <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.6.1">RFC 9110 Section
-    /// 11.6.1</see> defines, "WWW-Authenticate = #challenge", by the library's challenge reader,
-    /// <see cref="BearerTokenChallenge.TryReadChallenge"/>, which selects the one <c>DPoP</c> challenge wherever the
+    /// 11.6.1</see> defines, "WWW-Authenticate = #challenge", by
+    /// <see cref="DpopChallenge.TryRead"/>, the public reader of the scheme and the one parser the library's clients and
+    /// an application read a <c>DPoP</c> challenge with, which selects the one <c>DPoP</c> challenge wherever the
     /// list places it, beside a <c>Bearer</c> challenge or on another field line
     /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 Section 7.2</see>). The reader holds
     /// the <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.2">RFC 9110 Section 11.2</see> grammar,
@@ -257,7 +258,7 @@ public static class DpopNonceRetry
 
         IReadOnlyList<string> challengeLines = response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate);
 
-        return BearerTokenChallenge.TryReadChallenge(challengeLines, WellKnownAuthenticationSchemes.DPoP, out BearerTokenChallengeParameters parameters)
+        return DpopChallenge.TryRead(challengeLines, out DpopChallengeParameters parameters)
             && string.Equals(parameters.Error, OAuthErrors.UseDpopNonce, StringComparison.Ordinal);
     }
 

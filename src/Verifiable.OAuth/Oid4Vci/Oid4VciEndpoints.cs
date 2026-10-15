@@ -362,37 +362,34 @@ public static class Oid4VciEndpoints
                 //applies, before any minting.
                 //The Authorization field is read once; sent on two lines it is no credential
                 //(RFC 9110 Section 11.6.2) and the request is refused 400 invalid_request with
-                //the Bearer and the DPoP challenge (RFC 9449 Section 7.2, Figure 19).
-                AuthorizationFieldReading authorization = BearerTokenValidation.ReadAuthorizationField(context);
-                if(authorization.IsRepeated)
+                //the challenge of the scheme the lines name, or both where they name two
+                //(RFC 9449 Section 7.2).
+                CredentialEndpointDpopValidation.LibraryResourcePresentation presentation =
+                    await CredentialEndpointDpopValidation.ReadPresentationAsync(
+                        server, registration, context, requiredScope: null, ct).ConfigureAwait(false);
+                if(presentation.Refusal is not null)
                 {
-                    return Respond(await CredentialEndpointDpopValidation.RefuseRepeatedAuthorizationAsync(
-                        server, registration, context, isDpopAccepted: true, ct).ConfigureAwait(false));
+                    return Respond(presentation.Refusal);
                 }
 
-                if(!BearerTokenValidation.TryExtractAccessToken(
-                    authorization, out string? bearerToken, out bool isDpopPresentation))
-                {
-                    return Respond(await CredentialEndpointDpopValidation.RefuseMissingCredentialsAsync(
-                        server, registration, context, ct).ConfigureAwait(false));
-                }
-
+                string bearerToken = presentation.AccessToken!;
+                bool isDpopPresentation = presentation.IsDpopPresentation;
                 (JwtPayload? accessToken, ServerHttpResponse? validationFailure) =
-                    await BearerTokenValidation.ValidateAtLibraryResourceAsync(bearerToken!, server, registration, context, ct)
+                    await BearerTokenValidation.ValidateAtLibraryResourceAsync(bearerToken, server, registration, context, ct)
                         .ConfigureAwait(false);
                 //RFC 9449 §7.2: the refusal of a token presented under the DPoP scheme is delivered
                 //in that scheme's challenge.
                 if(validationFailure is not null)
                 {
                     return Respond(CredentialEndpointDpopValidation.InPresentationScheme(
-                        validationFailure, isDpopPresentation));
+                        validationFailure, isDpopPresentation, presentation.Challenge));
                 }
 
                 //RFC 9449 §7.1: when the Access Token carries a cnf.jkt binding, a DPoP proof
                 //bound to the same key MUST accompany it — the sender constraint the token
                 //endpoint minted is verified here, never silently dropped to bearer.
                 ServerHttpResponse? dpopFailure = await CredentialEndpointDpopValidation.EnforceAsync(
-                    server, context, registration, accessToken!, bearerToken!, isDpopPresentation,
+                    server, context, registration, accessToken!, bearerToken, isDpopPresentation, presentation.Challenge,
                     server.TimeProvider.GetUtcNow(), ct).ConfigureAwait(false);
                 if(dpopFailure is not null)
                 {
@@ -709,37 +706,34 @@ public static class Oid4VciEndpoints
                 //requested at the Credential Endpoint — the same protected-resource boundary.
                 //The Authorization field is read once; sent on two lines it is no credential
                 //(RFC 9110 Section 11.6.2) and the request is refused 400 invalid_request with
-                //the Bearer and the DPoP challenge (RFC 9449 Section 7.2, Figure 19).
-                AuthorizationFieldReading authorization = BearerTokenValidation.ReadAuthorizationField(context);
-                if(authorization.IsRepeated)
+                //the challenge of the scheme the lines name, or both where they name two
+                //(RFC 9449 Section 7.2).
+                CredentialEndpointDpopValidation.LibraryResourcePresentation presentation =
+                    await CredentialEndpointDpopValidation.ReadPresentationAsync(
+                        server, registration, context, requiredScope: null, ct).ConfigureAwait(false);
+                if(presentation.Refusal is not null)
                 {
-                    return Respond(await CredentialEndpointDpopValidation.RefuseRepeatedAuthorizationAsync(
-                        server, registration, context, isDpopAccepted: true, ct).ConfigureAwait(false));
+                    return Respond(presentation.Refusal);
                 }
 
-                if(!BearerTokenValidation.TryExtractAccessToken(
-                    authorization, out string? bearerToken, out bool isDpopPresentation))
-                {
-                    return Respond(await CredentialEndpointDpopValidation.RefuseMissingCredentialsAsync(
-                        server, registration, context, ct).ConfigureAwait(false));
-                }
-
+                string bearerToken = presentation.AccessToken!;
+                bool isDpopPresentation = presentation.IsDpopPresentation;
                 (JwtPayload? accessToken, ServerHttpResponse? validationFailure) =
-                    await BearerTokenValidation.ValidateAtLibraryResourceAsync(bearerToken!, server, registration, context, ct)
+                    await BearerTokenValidation.ValidateAtLibraryResourceAsync(bearerToken, server, registration, context, ct)
                         .ConfigureAwait(false);
                 //RFC 9449 §7.2: the refusal of a token presented under the DPoP scheme is delivered
                 //in that scheme's challenge.
                 if(validationFailure is not null)
                 {
                     return Respond(CredentialEndpointDpopValidation.InPresentationScheme(
-                        validationFailure, isDpopPresentation));
+                        validationFailure, isDpopPresentation, presentation.Challenge));
                 }
 
                 //RFC 9449 §7.1: when the Access Token carries a cnf.jkt binding, a DPoP proof
                 //bound to the same key MUST accompany it — the sender constraint the token
                 //endpoint minted is verified here, never silently dropped to bearer.
                 ServerHttpResponse? dpopFailure = await CredentialEndpointDpopValidation.EnforceAsync(
-                    server, context, registration, accessToken!, bearerToken!, isDpopPresentation,
+                    server, context, registration, accessToken!, bearerToken, isDpopPresentation, presentation.Challenge,
                     server.TimeProvider.GetUtcNow(), ct).ConfigureAwait(false);
                 if(dpopFailure is not null)
                 {
@@ -1817,37 +1811,34 @@ public static class Oid4VciEndpoints
                 //Authorization Error Response.
                 //The Authorization field is read once; sent on two lines it is no credential
                 //(RFC 9110 Section 11.6.2) and the request is refused 400 invalid_request with
-                //the Bearer and the DPoP challenge (RFC 9449 Section 7.2, Figure 19).
-                AuthorizationFieldReading authorization = BearerTokenValidation.ReadAuthorizationField(context);
-                if(authorization.IsRepeated)
+                //the challenge of the scheme the lines name, or both where they name two
+                //(RFC 9449 Section 7.2).
+                CredentialEndpointDpopValidation.LibraryResourcePresentation presentation =
+                    await CredentialEndpointDpopValidation.ReadPresentationAsync(
+                        server, registration, context, requiredScope: null, ct).ConfigureAwait(false);
+                if(presentation.Refusal is not null)
                 {
-                    return Respond(await CredentialEndpointDpopValidation.RefuseRepeatedAuthorizationAsync(
-                        server, registration, context, isDpopAccepted: true, ct).ConfigureAwait(false));
+                    return Respond(presentation.Refusal);
                 }
 
-                if(!BearerTokenValidation.TryExtractAccessToken(
-                    authorization, out string? bearerToken, out bool isDpopPresentation))
-                {
-                    return Respond(await CredentialEndpointDpopValidation.RefuseMissingCredentialsAsync(
-                        server, registration, context, ct).ConfigureAwait(false));
-                }
-
+                string bearerToken = presentation.AccessToken!;
+                bool isDpopPresentation = presentation.IsDpopPresentation;
                 (JwtPayload? accessToken, ServerHttpResponse? validationFailure) =
-                    await BearerTokenValidation.ValidateAtLibraryResourceAsync(bearerToken!, server, registration, context, ct)
+                    await BearerTokenValidation.ValidateAtLibraryResourceAsync(bearerToken, server, registration, context, ct)
                         .ConfigureAwait(false);
                 //RFC 9449 §7.2: the refusal of a token presented under the DPoP scheme is delivered
                 //in that scheme's challenge.
                 if(validationFailure is not null)
                 {
                     return Respond(CredentialEndpointDpopValidation.InPresentationScheme(
-                        validationFailure, isDpopPresentation));
+                        validationFailure, isDpopPresentation, presentation.Challenge));
                 }
 
                 //RFC 9449 §7.1: when the Access Token carries a cnf.jkt binding, a DPoP proof
                 //bound to the same key MUST accompany it — the sender constraint the token
                 //endpoint minted is verified here, never silently dropped to bearer.
                 ServerHttpResponse? dpopFailure = await CredentialEndpointDpopValidation.EnforceAsync(
-                    server, context, registration, accessToken!, bearerToken!, isDpopPresentation,
+                    server, context, registration, accessToken!, bearerToken, isDpopPresentation, presentation.Challenge,
                     server.TimeProvider.GetUtcNow(), ct).ConfigureAwait(false);
                 if(dpopFailure is not null)
                 {

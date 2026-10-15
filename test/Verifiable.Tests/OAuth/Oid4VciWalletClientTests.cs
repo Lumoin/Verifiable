@@ -4649,7 +4649,7 @@ internal sealed class Oid4VciWalletClientTests
                 return credentialInvocations == 1
                     ? ValueTask.FromResult(JsonResponse(
                         401, "{\"error\":\"use_dpop_nonce\"}",
-                        (WellKnownHttpHeaderNames.WwwAuthenticate, ResourceDpopProofs.DpopChallenge("use_dpop_nonce")),
+                        (WellKnownHttpHeaderNames.WwwAuthenticate, ResourceDpopProofs.DpopChallenge("https://issuer.example.com", "use_dpop_nonce")),
                         (WellKnownHttpHeaderNames.DPoPNonce, "rs-nonce-1")))
                     : ValueTask.FromResult(JsonResponse(200, "{\"credentials\":[{\"credential\":\"cred-after-retry\"}]}"));
             },
@@ -4706,7 +4706,7 @@ internal sealed class Oid4VciWalletClientTests
 
                 return ValueTask.FromResult(JsonResponse(
                     401, "{\"error\":\"use_dpop_nonce\"}",
-                    (WellKnownHttpHeaderNames.WwwAuthenticate, ResourceDpopProofs.DpopChallenge("use_dpop_nonce")),
+                    (WellKnownHttpHeaderNames.WwwAuthenticate, ResourceDpopProofs.DpopChallenge("https://issuer.example.com", "use_dpop_nonce")),
                     (WellKnownHttpHeaderNames.DPoPNonce, $"rs-nonce-{credentialInvocations}")));
             },
             constructDpopProofAsync: (_, _, _) => ValueTask.FromResult("fake-dpop-proof"),
