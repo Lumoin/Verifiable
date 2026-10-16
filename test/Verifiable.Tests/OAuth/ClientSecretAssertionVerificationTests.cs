@@ -218,6 +218,127 @@ internal sealed class ClientSecretAssertionVerificationTests
     }
 
 
+    /// <summary>
+    /// Before any secret is read, an assertion the client's composition MACed under an accepted HMAC algorithm is admitted under
+    /// that algorithm, and the header's own words are judged: an assertion type other than RFC 7523 Section 2.2's JWT bearer
+    /// is refused <see cref="ClientSecretAssertionHeaderRefusal.NotJwtBearer"/>; no compact JWS
+    /// <see cref="ClientSecretAssertionHeaderRefusal.NotACompactJws"/>; a header that is no JSON object or repeats a member
+    /// <see cref="ClientSecretAssertionHeaderRefusal.HeaderNotAnObject"/>; a header naming no algorithm, <c>none</c> in any letter
+    /// case, or an algorithm that is no string <see cref="ClientSecretAssertionHeaderRefusal.SignatureAlgorithmNotNamed"/>; and a
+    /// signature algorithm of the other family or an HMAC algorithm off the list
+    /// <see cref="ClientSecretAssertionHeaderRefusal.SignatureAlgorithmNotAccepted"/>. None throws.
+    /// </summary>
+    [TestMethod]
+    public async Task TheHeaderIsJudgedBeforeAnySecretIsRead()
+    {
+        using var secret = SecretOf(LongClientSecret);
+        var accepted = new ClientSecretAssertionAlgorithms([WellKnownJwaValues.Hs256]);
+        var assertion = await ComposeAsync(secret, WellKnownJwaValues.Hs256).ConfigureAwait(false);
+        var hs512 = await ComposeAsync(secret, WellKnownJwaValues.Hs512).ConfigureAwait(false);
+        var parts = assertion.Split('.');
+
+        var admitted = AdmitHeader(WellKnownClientAssertionTypes.JwtBearer, assertion, accepted);
+
+        Assert.IsTrue(admitted.IsAdmitted, "The composition's own HS256 assertion is admitted.");
+        Assert.AreEqual(WellKnownJwaValues.Hs256, admitted.Algorithm);
+
+        Assert.AreEqual(ClientSecretAssertionHeaderRefusal.NotJwtBearer, AdmitHeader(null, assertion, accepted).Refusal);
+        Assert.AreEqual(ClientSecretAssertionHeaderRefusal.NotJwtBearer, AdmitHeader("urn:ietf:params:oauth:client-assertion-type:saml2-bearer", assertion, accepted).Refusal);
+
+        foreach(var malformed in new[] { $"{parts[0]}.{parts[1]}", $"{parts[0]}.{parts[1]}.", $".{parts[1]}.{parts[2]}", $"{parts[0]}.{parts[1]}.{parts[2]}=", $"{parts[0]}.{new string('A', Jws.DefaultMaxJwsLength)}.{parts[2]}" })
+        {
+            Assert.AreEqual(ClientSecretAssertionHeaderRefusal.NotACompactJws, AdmitHeader(WellKnownClientAssertionTypes.JwtBearer, malformed, accepted).Refusal, malformed);
+        }
+
+        foreach(var header in new[] { "[\"HS256\"]", "\"HS256\"", /*lang=json*/ "{\"alg\":\"HS256\",\"alg\":\"RS256\"}" })
+        {
+            Assert.AreEqual(ClientSecretAssertionHeaderRefusal.HeaderNotAnObject,
+                AdmitHeader(WellKnownClientAssertionTypes.JwtBearer, WithHeader(header, parts), accepted).Refusal, header);
+        }
+
+        foreach(var header in new[] { /*lang=json*/ "{\"typ\":\"JWT\"}", /*lang=json*/ "{\"alg\":\"none\"}", /*lang=json*/ "{\"alg\":\"NoNe\"}", /*lang=json*/ "{\"alg\":\"\"}", /*lang=json*/ "{\"alg\":256}" })
+        {
+            Assert.AreEqual(ClientSecretAssertionHeaderRefusal.SignatureAlgorithmNotNamed,
+                AdmitHeader(WellKnownClientAssertionTypes.JwtBearer, WithHeader(header, parts), accepted).Refusal, header);
+        }
+
+        foreach(var header in new[] { /*lang=json*/ "{\"alg\":\"RS256\"}", /*lang=json*/ "{\"alg\":\"ES256\"}", /*lang=json*/ "{\"alg\":\"hs256\"}" })
+        {
+            Assert.AreEqual(ClientSecretAssertionHeaderRefusal.SignatureAlgorithmNotAccepted,
+                AdmitHeader(WellKnownClientAssertionTypes.JwtBearer, WithHeader(header, parts), accepted).Refusal, header);
+        }
+
+        Assert.AreEqual(ClientSecretAssertionHeaderRefusal.SignatureAlgorithmNotAccepted,
+            AdmitHeader(WellKnownClientAssertionTypes.JwtBearer, hs512, accepted).Refusal, "An HMAC algorithm off the list is not accepted.");
+    }
+
+
+    /// <summary>
+    /// The accepted algorithms are named once and hold HMAC algorithms alone: a list naming a signature algorithm, <c>none</c>,
+    /// a name in another letter case, a name twice, or nothing is refused when it is made; a list of HMAC algorithms accepts
+    /// exactly the names it holds, in the order it names them.
+    /// </summary>
+    [TestMethod]
+    public void TheAcceptedAlgorithmsHoldHmacAlgorithmsAlone()
+    {
+        string[][] refused = [["RS256"], ["HS256", "ES256"], ["none"], ["hs256"], ["HS256", "HS256"], []];
+
+        foreach(var algorithms in refused)
+        {
+            _ = Assert.ThrowsExactly<ArgumentException>(() => new ClientSecretAssertionAlgorithms(algorithms), string.Join(',', algorithms));
+        }
+
+        var accepted = new ClientSecretAssertionAlgorithms([WellKnownJwaValues.Hs512, WellKnownJwaValues.Hs256]);
+
+        Assert.AreSequenceEqual(new List<string> { WellKnownJwaValues.Hs512, WellKnownJwaValues.Hs256 }, accepted.Algorithms.ToList(), "The list keeps the order it names.");
+        Assert.IsTrue(accepted.Accepts(WellKnownJwaValues.Hs256));
+        Assert.IsTrue(accepted.Accepts(WellKnownJwaValues.Hs512));
+        Assert.IsFalse(accepted.Accepts(WellKnownJwaValues.Hs384), "An HMAC algorithm the list does not name is not accepted.");
+        Assert.IsFalse(accepted.Accepts("hs256"), "The comparison is exact.");
+        Assert.IsFalse(accepted.Accepts(null));
+    }
+
+
+    /// <summary>
+    /// The registered method chooses the family an assertion is verified under: <c>client_secret_jwt</c> the MAC family,
+    /// <c>private_key_jwt</c> the signature family, and every method that presents no assertion neither.
+    /// </summary>
+    [TestMethod]
+    public void TheRegisteredMethodChoosesTheFamily()
+    {
+        Assert.AreEqual(ClientAssertionFamily.MessageAuthenticationCode, ClientAssertionFamilies.Of(ClientAuthenticationMethod.ClientSecretJwt));
+        Assert.AreEqual(ClientAssertionFamily.DigitalSignature, ClientAssertionFamilies.Of(ClientAuthenticationMethod.PrivateKeyJwt));
+
+        foreach(var method in new[] { ClientAuthenticationMethod.None, ClientAuthenticationMethod.ClientSecretBasic, ClientAuthenticationMethod.ClientSecretPost })
+        {
+            Assert.AreEqual(ClientAssertionFamily.None, ClientAssertionFamilies.Of(method), ClientAuthenticationMethodNames.GetName(method));
+        }
+    }
+
+
+    /// <summary>Judges an assertion's header as the authorization server does before any secret is read.</summary>
+    /// <param name="assertionType">The request's assertion type.</param>
+    /// <param name="assertion">The assertion.</param>
+    /// <param name="accepted">The accepted algorithms.</param>
+    /// <returns>The admission.</returns>
+    private static ClientSecretAssertionHeaderAdmission AdmitHeader(string? assertionType, string assertion, ClientSecretAssertionAlgorithms accepted) =>
+        ClientSecretAssertionVerification.AdmitHeader(assertionType, assertion, accepted, TestSetup.Base64UrlDecoder, HeaderDeserializer, Pool);
+
+
+    /// <summary>An assertion's segments with its protected header replaced by the JSON text given, base64url-encoded.</summary>
+    /// <param name="header">The header's JSON text.</param>
+    /// <param name="parts">The assertion's segments.</param>
+    /// <returns>The compact value.</returns>
+    private static string WithHeader(string header, string[] parts) =>
+        $"{TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(header))}.{parts[1]}.{parts[2]}";
+
+
+    /// <summary>Reads a protected header.</summary>
+    private static Verifiable.OAuth.JwtHeaderDeserializer HeaderDeserializer { get; } =
+        static bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(bytes, TestSetup.DefaultSerializationOptions)
+            ?? throw new FormatException("The header parsed to null.");
+
+
     /// <summary>Composes an assertion through the client's one composition under a secret and an algorithm.</summary>
     /// <param name="secret">The secret.</param>
     /// <param name="algorithm">The HMAC algorithm.</param>

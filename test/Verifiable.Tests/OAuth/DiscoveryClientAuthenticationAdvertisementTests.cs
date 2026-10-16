@@ -536,6 +536,92 @@ internal sealed class DiscoveryClientAuthenticationAdvertisementTests
 
 
     /// <summary>
+    /// RFC 8414 §2 names the methods "supported by this token endpoint": where the deployment
+    /// resolves them per registration (<see cref="AuthorizationServerIntegration.ResolveClientAuthenticationMethodsAsync"/>),
+    /// the document is composed with the registration's own list before it is serialized - the
+    /// resolver is handed the registration the document is served for - and the signing
+    /// algorithms beside them come from the per-registration algorithm seam
+    /// (<see cref="AuthorizationServerCryptography.ResolveSupportedSigningAlgorithmsAsync"/>) asked
+    /// for <see cref="Verifiable.Cryptography.Context.KeyUsageContext.ClientAssertion"/>, so a
+    /// registration narrower than the deployment is advertised exactly as narrow.
+    /// </summary>
+    [TestMethod]
+    public async Task TheRegistrationsOwnMethodsAndAlgorithmsAreComposedBeforeTheDocumentIsServed()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        var resolvedFor = new List<string>();
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ClientAuthenticationMethodsSupported =
+                [ClientAuthenticationMethod.None, ClientAuthenticationMethod.PrivateKeyJwt, ClientAuthenticationMethod.ClientSecretJwt];
+            candidateIntegration.ClientAssertionSigningAlgorithmsSupported = [WellKnownJwaValues.Es256, WellKnownJwaValues.Hs256];
+            candidateIntegration.ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+                ValueTask.FromResult(true);
+            candidateIntegration.ResolveClientAuthenticationMethodsAsync = (registration, context, ct) =>
+            {
+                resolvedFor.Add(registration.ClientId);
+
+                return ValueTask.FromResult<IReadOnlyList<ClientAuthenticationMethod>>(
+                    [ClientAuthenticationMethod.None, ClientAuthenticationMethod.PrivateKeyJwt]);
+            };
+            candidateIntegration.Cryptography.ResolveSupportedSigningAlgorithmsAsync = (registration, usage, context, ct) =>
+                usage == Verifiable.Cryptography.Context.KeyUsageContext.ClientAssertion
+                    ? ValueTask.FromResult<IReadOnlyList<string>>([WellKnownJwaValues.Es256])
+                    : ValueTask.FromResult<IReadOnlyList<string>>([]);
+        }).ConfigureAwait(false);
+
+        var response = await DispatchDiscoveryAsync(host, material).ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+        Assert.AreSequenceEqual(new List<string> { material.Registration.ClientId }, resolvedFor, "The resolver is handed the registration the document is served for.");
+
+        using var body = JsonDocument.Parse(response.Body);
+
+        Assert.AreSequenceEqual(
+            new List<string> { "none", "private_key_jwt" },
+            EnumerateStrings(body.RootElement.GetProperty(AuthorizationServerMetadataParameterNames.TokenEndpointAuthMethodsSupported)),
+            "The registration's own methods, not the deployment's, are advertised.");
+        Assert.AreSequenceEqual(
+            new List<string> { "ES256" },
+            EnumerateStrings(body.RootElement.GetProperty(AuthorizationServerMetadataParameterNames.TokenEndpointAuthSigningAlgValuesSupported)),
+            "The registration's own client assertion algorithms, not the deployment's, are advertised.");
+    }
+
+
+    /// <summary>
+    /// A resolver naming a method the deployment does not declare, or naming none, is a
+    /// composition defect: the document is answered as a server error rather than advertise a
+    /// method the token endpoint never judges.
+    /// </summary>
+    /// <param name="namesNone">Whether the resolver names no method at all, rather than an undeclared one.</param>
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task AResolvedMethodTheDeploymentDoesNotDeclareIsNeverAdvertised(bool namesNone)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveClientAuthenticationMethodsAsync = (registration, context, ct) =>
+                ValueTask.FromResult<IReadOnlyList<ClientAuthenticationMethod>>(
+                    namesNone ? [] : [ClientAuthenticationMethod.None, ClientAuthenticationMethod.ClientSecretBasic]);
+        }).ConfigureAwait(false);
+
+        var response = await DispatchDiscoveryAsync(host, material).ConfigureAwait(false);
+
+        Assert.AreEqual(500, response.StatusCode, response.Body);
+        Assert.DoesNotContain("client_secret_basic", response.Body, StringComparison.Ordinal, "The undeclared method is advertised nowhere.");
+    }
+
+
+    /// <summary>
     /// Dispatches a GET to the tenant's discovery endpoint on the hosted test
     /// server, the same recipe <see cref="DiscoveryEndpointTests"/> uses.
     /// </summary>

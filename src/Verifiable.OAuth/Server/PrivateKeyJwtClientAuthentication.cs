@@ -201,101 +201,18 @@ public static class PrivateKeyJwtClientAuthentication
         ArgumentException.ThrowIfNullOrWhiteSpace(clientId);
         ArgumentNullException.ThrowIfNull(acceptedAudiences);
 
-        //RFC 7523 §3 item 1 / item 2.B: iss and sub both identify the OAuth client for the
-        //private_key_jwt shape — the assertion's issuer and subject are the client_id.
-        if(!TryReadString(payload, WellKnownJwtClaimNames.Iss, out string? iss)
-            || !string.Equals(iss, clientId, StringComparison.Ordinal))
+        //RFC 7523 Section 3: the claim rules every client assertion is judged by, whatever key or secret verified it, are the
+        //library's one judgement of them.
+        var judged = ClientAssertionClaimRules.Judge(payload, clientId, acceptedAudiences, now, clockSkew);
+
+        if(judged.Refusal is not null
+            || ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Exp, payload[WellKnownJwtClaimNames.Exp]) is not DateTimeOffset expiry)
         {
             return PrivateKeyJwtClientAuthenticationResult.Rejected(
-                "The client assertion iss must equal the client_id (RFC 7523 §3 item 1).");
+                $"The client assertion breaks the RFC 7523 Section 3 rule {judged.Refusal}.");
         }
 
-        if(!TryReadString(payload, WellKnownJwtClaimNames.Sub, out string? sub)
-            || !string.Equals(sub, clientId, StringComparison.Ordinal))
-        {
-            return PrivateKeyJwtClientAuthenticationResult.Rejected(
-                "The client assertion sub must equal the client_id (RFC 7523 §3 item 2.B).");
-        }
-
-        //§3 item 3: aud MUST name this AS; every element present must be an accepted AS identity
-        //and at least one must be present. Rejecting any non-AS element (rather than accepting on a
-        //single match) prevents an assertion crafted to also be valid at another audience.
-        if(!payload.TryGetValue(WellKnownJwtClaimNames.Aud, out object? audienceRaw))
-        {
-            return PrivateKeyJwtClientAuthenticationResult.Rejected(
-                "The client assertion is missing the aud claim (RFC 7523 §3 item 3).");
-        }
-
-        if(!IsAudienceAccepted(audienceRaw, acceptedAudiences))
-        {
-            return PrivateKeyJwtClientAuthenticationResult.Rejected(
-                "The client assertion aud must name only this authorization server's issuer identifier "
-                + "or token endpoint (RFC 7523 §3 item 3).");
-        }
-
-        //jti presence: draft-ietf-oauth-client-id-metadata-document-02's confidential-client model
-        //needs a replayable identifier for every assertion, stricter than RFC 7523 §3 item 7's MAY.
-        if(!TryReadString(payload, WellKnownJwtClaimNames.Jti, out string? jti))
-        {
-            return PrivateKeyJwtClientAuthenticationResult.Rejected(
-                "The client assertion is missing the jti claim.");
-        }
-
-        if(!TryReadEpochSeconds(payload, WellKnownJwtClaimNames.Exp, out bool expPresent, out DateTimeOffset exp)
-            || !expPresent)
-        {
-            return PrivateKeyJwtClientAuthenticationResult.Rejected(
-                "The client assertion is missing or has a malformed exp claim (RFC 7523 §3 item 4).");
-        }
-
-        if(!TryReadEpochSeconds(payload, WellKnownJwtClaimNames.Iat, out bool iatPresent, out DateTimeOffset iat))
-        {
-            return PrivateKeyJwtClientAuthenticationResult.Rejected(
-                "The client assertion iat claim is malformed.");
-        }
-
-        if(iatPresent && exp <= iat)
-        {
-            return PrivateKeyJwtClientAuthenticationResult.Rejected(
-                "The client assertion exp is at or before iat (non-positive lifetime).");
-        }
-
-        //iat sanity: an assertion claiming to have been issued in the future is nonsensical
-        //regardless of its exp.
-        if(iatPresent && iat > now + clockSkew)
-        {
-            return PrivateKeyJwtClientAuthenticationResult.Rejected(
-                "The client assertion iat is in the future beyond the skew tolerance.");
-        }
-
-        if(!TryReadEpochSeconds(payload, WellKnownJwtClaimNames.Nbf, out bool nbfPresent, out DateTimeOffset nbf))
-        {
-            return PrivateKeyJwtClientAuthenticationResult.Rejected(
-                "The client assertion nbf claim is malformed.");
-        }
-
-        if(nbfPresent)
-        {
-            if(exp <= nbf)
-            {
-                return PrivateKeyJwtClientAuthenticationResult.Rejected(
-                    "The client assertion exp is at or before nbf (the validity window never opens).");
-            }
-
-            if(nbf > now + clockSkew)
-            {
-                return PrivateKeyJwtClientAuthenticationResult.Rejected(
-                    "The client assertion is not yet valid (nbf is in the future beyond the skew tolerance).");
-            }
-        }
-
-        if(exp + clockSkew <= now)
-        {
-            return PrivateKeyJwtClientAuthenticationResult.Rejected(
-                "The client assertion has expired (RFC 7523 §3 item 4).");
-        }
-
-        return PrivateKeyJwtClientAuthenticationResult.Authenticated(clientId, jti!, exp);
+        return PrivateKeyJwtClientAuthenticationResult.Authenticated(clientId, judged.Jti!, expiry);
     }
 
 
@@ -697,7 +614,7 @@ public static class PrivateKeyJwtClientAuthentication
                         //assertion's timing under, not the bare exp.
                         JtiReplayOutcome outcome = await checkJtiReplayAsync(
                             server, context, registration.TenantId, result.ClientId!, result.Jti!,
-                            result.Expiration!.Value + context.ClockSkewTolerance, cancellationToken).ConfigureAwait(false);
+                            ClientAssertionClaimRules.AcceptedUntil(result.Expiration!.Value, context.ClockSkewTolerance), cancellationToken).ConfigureAwait(false);
 
                         //Any outcome other than FirstUse refuses the assertion: Replayed is the
                         //defense doing its job, StoreUnavailable is a policy that cannot prove
@@ -717,144 +634,6 @@ public static class PrivateKeyJwtClientAuthentication
 
 
     /// <summary>
-    /// Reads a non-empty string claim, or returns <see langword="false"/> when it is absent or not a
-    /// non-empty string.
-    /// </summary>
-    private static bool TryReadString(JwtPayload payload, string claimName, out string? value)
-    {
-        if(payload.TryGetValue(claimName, out object? raw) && raw is string text && text.Length > 0)
-        {
-            value = text;
-
-            return true;
-        }
-
-        value = null;
-
-        return false;
-    }
-
-
-    /// <summary>
-    /// Reads an epoch-seconds temporal claim. Returns <see langword="false"/> when the claim is
-    /// present but not a numeric timestamp; sets <paramref name="present"/> to whether the claim was
-    /// there at all. The <c>== Math.Floor(…)</c> checks test whether a directly-deserialized
-    /// <see cref="double"/>/<see cref="float"/> already holds an exact integer value — no arithmetic
-    /// is performed on the claim, so the exact comparison carries no floating-point rounding risk.
-    /// </summary>
-    private static bool TryReadEpochSeconds(
-        JwtPayload payload, string claimName, out bool present, out DateTimeOffset value)
-    {
-        value = default;
-        if(!payload.TryGetValue(claimName, out object? raw))
-        {
-            present = false;
-
-            return true;
-        }
-
-        present = true;
-        long? seconds = raw switch
-        {
-            long l => l,
-            int i => i,
-            short s => s,
-            byte b => b,
-            ulong u when u <= long.MaxValue => (long)u,
-            uint ui => ui,
-            double d when d >= long.MinValue && d <= long.MaxValue && d == Math.Floor(d) => (long)d,
-            float f when f >= long.MinValue && f <= long.MaxValue && f == Math.Floor(f) => (long)f,
-            string text when long.TryParse(text, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out long parsed) => parsed,
-            _ => null,
-        };
-
-        if(seconds is null)
-        {
-            return false;
-        }
-
-        value = DateTimeOffset.FromUnixTimeSeconds(seconds.Value);
-
-        return true;
-    }
-
-
-    /// <summary>
-    /// Returns <see langword="true"/> when <paramref name="audienceRaw"/> (a string or an array of
-    /// strings) contains at least one entry and every entry ordinal-equals one of
-    /// <paramref name="acceptedAudiences"/> — RFC 7523 §3 item 3's "MUST reject any JWT that does not
-    /// contain its own identity as the intended audience," hardened so a mixed-in foreign audience
-    /// value rejects the whole assertion rather than being ignored.
-    /// </summary>
-    private static bool IsAudienceAccepted(object audienceRaw, IReadOnlyCollection<string> acceptedAudiences)
-    {
-        if(acceptedAudiences.Count == 0)
-        {
-            return false;
-        }
-
-        return audienceRaw switch
-        {
-            string single => single.Length > 0 && ContainsOrdinal(acceptedAudiences, single),
-            IEnumerable<string> typed => AreAllAccepted(typed, acceptedAudiences),
-            IEnumerable<object> mixed => AreAllAccepted(mixed, acceptedAudiences),
-            _ => false
-        };
-    }
-
-
-    /// <summary>
-    /// Returns <see langword="true"/> when <paramref name="values"/> holds at least one element and
-    /// every element is non-empty and ordinal-equal to one of <paramref name="acceptedAudiences"/>.
-    /// This is the typed-array shape of an <c>aud</c> claim, judged by the rule in
-    /// <see cref="IsAudienceAccepted"/>.
-    /// </summary>
-    /// <param name="values">The <c>aud</c> array elements.</param>
-    /// <param name="acceptedAudiences">The values <c>aud</c> may name.</param>
-    private static bool AreAllAccepted(IEnumerable<string> values, IReadOnlyCollection<string> acceptedAudiences)
-    {
-        bool sawAny = false;
-        foreach(string value in values)
-        {
-            if(value.Length == 0 || !ContainsOrdinal(acceptedAudiences, value))
-            {
-                return false;
-            }
-
-            sawAny = true;
-        }
-
-        return sawAny;
-    }
-
-
-    /// <summary>
-    /// Returns <see langword="true"/> when <paramref name="values"/> holds at least one element and
-    /// every element is a non-empty <see cref="string"/> ordinal-equal to one of
-    /// <paramref name="acceptedAudiences"/>; an element of any other type refuses the whole array.
-    /// This is the mixed-array shape of an <c>aud</c> claim, judged by the rule in
-    /// <see cref="IsAudienceAccepted"/>.
-    /// </summary>
-    /// <param name="values">The <c>aud</c> array elements.</param>
-    /// <param name="acceptedAudiences">The values <c>aud</c> may name.</param>
-    private static bool AreAllAccepted(IEnumerable<object> values, IReadOnlyCollection<string> acceptedAudiences)
-    {
-        bool sawAny = false;
-        foreach(object value in values)
-        {
-            if(value is not string text || text.Length == 0 || !ContainsOrdinal(acceptedAudiences, text))
-            {
-                return false;
-            }
-
-            sawAny = true;
-        }
-
-        return sawAny;
-    }
-
-
-    /// <summary>
     /// Returns <see langword="true"/> when <paramref name="audienceRaw"/> is exactly the issuer
     /// identifier, a bare string equal to <paramref name="issuerIdentifier"/>, or an array holding
     /// exactly that one string and nothing else. rfc7523bis-11
@@ -865,7 +644,7 @@ public static class PrivateKeyJwtClientAuthentication
     /// array of two or more elements is refused regardless of what it holds, including a duplicated
     /// issuer. An array is matched as <see cref="IEnumerable{T}"/> of <see cref="string"/> or of
     /// <see cref="object"/> and counted to exactly one element, the same shapes
-    /// <see cref="IsAudienceAccepted"/> matches, so a one-element array is judged the same way under
+    /// <see cref="ClientAssertionClaimRules.AudienceNamesOnly"/> matches, so a one-element array is judged the same way under
     /// both audience policies.
     /// </summary>
     /// <remarks>
@@ -890,31 +669,6 @@ public static class PrivateKeyJwtClientAuthentication
                 && string.Equals(soleValue, issuerIdentifier, StringComparison.Ordinal),
             _ => false
         };
-    }
-
-
-    /// <summary>
-    /// Returns <see langword="true"/> when <paramref name="candidate"/> is ordinal-equal to one of
-    /// <paramref name="values"/>. An ordinal comparison is the Simple String Comparison method that
-    /// rfc7523bis-11
-    /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-4">Section
-    /// 4</see> and RFC 7523
-    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">Section 3</see> item 3 name for
-    /// comparing audience values (Section 6.2.1 of RFC 3986).
-    /// </summary>
-    /// <param name="values">The accepted values.</param>
-    /// <param name="candidate">The value to look for.</param>
-    private static bool ContainsOrdinal(IReadOnlyCollection<string> values, string candidate)
-    {
-        foreach(string value in values)
-        {
-            if(string.Equals(value, candidate, StringComparison.Ordinal))
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
 

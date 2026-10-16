@@ -1580,6 +1580,33 @@ public sealed class AuthorizationServerIntegration : ServerIntegration
         [ClientAuthenticationMethod.None];
 
     /// <summary>
+    /// Supplies the client authentication methods a registration's token endpoint takes, which discovery names in
+    /// <c>token_endpoint_auth_methods_supported</c> (RFC 8414, Section 2) for that registration. Optional. When
+    /// <see langword="null"/>, discovery names <see cref="ClientAuthenticationMethodsSupported"/> itself; when set, every method it
+    /// resolves must be one <see cref="ClientAuthenticationMethodsSupported"/> declares, and discovery answers a server error
+    /// rather than advertise a method the deployment does not judge.
+    /// </summary>
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ResolveClientAuthenticationMethodsDelegate? ResolveClientAuthenticationMethodsAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
+    /// <summary>
     /// The JWA <c>alg</c> names (<see cref="WellKnownJwaValues"/>) this token endpoint
     /// accepts on the client-assertion JWT for <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/>
     /// and <see cref="ClientAuthenticationMethod.ClientSecretJwt"/> — the declaration

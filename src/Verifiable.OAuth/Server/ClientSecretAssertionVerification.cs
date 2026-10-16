@@ -104,25 +104,20 @@ public static class ClientSecretAssertionVerification
 
         var signatureSegment = clientAssertion.AsSpan(signingInputLength + 1);
 
-        if(signatureSegment.IsEmpty || signatureSegment.ContainsAnyExcept(Base64UrlCharacters))
+        if(!IsSignatureSegment(signatureSegment))
         {
             return refused;
         }
 
-        IMemoryOwner<byte> presentedMac;
+        using var presentedMac = DecodedOrNull(signatureSegment, base64UrlDecoder, pool);
 
-        try
-        {
-            presentedMac = base64UrlDecoder(signatureSegment, pool);
-        }
-        catch(FormatException)
+        if(presentedMac is null)
         {
             return refused;
         }
 
-        using(presentedMac)
+        using(var signingInput = pool.Rent(signingInputLength))
         {
-            using var signingInput = pool.Rent(signingInputLength);
             _ = Encoding.ASCII.GetBytes(clientAssertion.AsSpan(0, signingInputLength), signingInput.Memory.Span);
 
             var verified = await mac.VerifyAsync(
@@ -137,6 +132,144 @@ public static class ClientSecretAssertionVerification
         }
     }
 
+
+    /// <summary>
+    /// The authorization server's judgement of a <c>client_secret_jwt</c> assertion before its client's secret is read, by the
+    /// rules nothing of the secret decides: the assertion is presented under RFC 7523 Section 2.2's JWT bearer assertion type
+    /// (RFC 7521 Section 4.2), it is a compact JWS of three non-empty base64url segments (RFC 7515 Section 7.1) no longer than
+    /// <see cref="Jws.DefaultMaxJwsLength"/>, its protected header is one JSON object naming each member once (RFC 7515 Section 4),
+    /// that header names a signature algorithm and not <c>none</c> in any letter case (RFC 7515 Section 4.1.1; RFC 7518 Section
+    /// 3.6; RFC 8725 Section 3.2), and the algorithm is one the server accepts such an assertion under - an HMAC algorithm, since
+    /// the client's registered method chose that family (<see cref="ClientAssertionFamilies"/>), whatever the header names. An
+    /// admitted assertion's MAC is then checked under the secret (<see cref="VerifyAsync"/>) and its claims judged
+    /// (<see cref="ClientAssertionClaimRules"/>). Nothing the assertion presents throws.
+    /// </summary>
+    /// <param name="assertionType">The request's <c>client_assertion_type</c>, or <see langword="null"/> when it carries none.</param>
+    /// <param name="clientAssertion">The request's <c>client_assertion</c>.</param>
+    /// <param name="accepted">The HMAC algorithms the server accepts a <c>client_secret_jwt</c> assertion under.</param>
+    /// <param name="base64UrlDecoder">Decodes the protected header segment.</param>
+    /// <param name="headerDeserializer">Reads the protected header's members.</param>
+    /// <param name="pool">The pool the decoded header is rented from.</param>
+    /// <returns>The algorithm admitted, or the rule refused.</returns>
+    public static ClientSecretAssertionHeaderAdmission AdmitHeader(
+        string? assertionType,
+        string clientAssertion,
+        ClientSecretAssertionAlgorithms accepted,
+        DecodeDelegate base64UrlDecoder,
+        JwtHeaderDeserializer headerDeserializer,
+        BaseMemoryPool pool)
+    {
+        ArgumentNullException.ThrowIfNull(clientAssertion);
+        ArgumentNullException.ThrowIfNull(accepted);
+        ArgumentNullException.ThrowIfNull(base64UrlDecoder);
+        ArgumentNullException.ThrowIfNull(headerDeserializer);
+        ArgumentNullException.ThrowIfNull(pool);
+
+        if(assertionType is null || !WellKnownClientAssertionTypes.IsJwtBearer(assertionType))
+        {
+            return ClientSecretAssertionHeaderAdmission.Refused(ClientSecretAssertionHeaderRefusal.NotJwtBearer);
+        }
+
+        if(clientAssertion.Length > Jws.DefaultMaxJwsLength
+            || SigningInputLengthOf(clientAssertion) is not int signingInputLength
+            || !IsSignatureSegment(clientAssertion.AsSpan(signingInputLength + 1)))
+        {
+            return ClientSecretAssertionHeaderAdmission.Refused(ClientSecretAssertionHeaderRefusal.NotACompactJws);
+        }
+
+        if(ReadHeader(clientAssertion.AsSpan(0, clientAssertion.IndexOf('.', StringComparison.Ordinal)), base64UrlDecoder, headerDeserializer, pool)
+            is not { } header)
+        {
+            return ClientSecretAssertionHeaderAdmission.Refused(ClientSecretAssertionHeaderRefusal.HeaderNotAnObject);
+        }
+
+        if(SignatureAlgorithmNamedBy(header) is not string algorithm)
+        {
+            return ClientSecretAssertionHeaderAdmission.Refused(ClientSecretAssertionHeaderRefusal.SignatureAlgorithmNotNamed);
+        }
+
+        return accepted.Accepts(algorithm)
+            ? ClientSecretAssertionHeaderAdmission.Admitted(algorithm)
+            : ClientSecretAssertionHeaderAdmission.Refused(ClientSecretAssertionHeaderRefusal.SignatureAlgorithmNotAccepted);
+    }
+
+
+    /// <summary>
+    /// The signature algorithm a protected header names, or <see langword="null"/> when it names none: its <c>alg</c> is absent,
+    /// is no string, is empty, or is <c>none</c> in any letter case. RFC 7518 registers the one spelling of <c>none</c>; a header
+    /// spelling it otherwise names no algorithm either, so the name is compared with the registered one without regard to case.
+    /// </summary>
+    /// <param name="header">The protected header's members.</param>
+    /// <returns>The algorithm's name as the header spells it, or <see langword="null"/>.</returns>
+    private static string? SignatureAlgorithmNamedBy(IReadOnlyDictionary<string, object> header)
+    {
+        return header.TryGetValue(WellKnownJoseHeaderNames.Alg, out var value)
+            && value is string { Length: > 0 } algorithm
+            && !string.Equals(algorithm, WellKnownJwaValues.None, StringComparison.OrdinalIgnoreCase)
+                ? algorithm
+                : null;
+    }
+
+
+    /// <summary>
+    /// The protected header of a compact JWS, read unverified: the segment base64url-decoded, exactly one JSON object naming each
+    /// member once, parsed by the header reader given; <see langword="null"/> for a segment of any other content, never throwing.
+    /// </summary>
+    /// <param name="segment">The header segment.</param>
+    /// <param name="base64UrlDecoder">Decodes the segment.</param>
+    /// <param name="headerDeserializer">Reads the object's members.</param>
+    /// <param name="pool">The pool the decoded segment is rented from.</param>
+    /// <returns>The members, or <see langword="null"/>.</returns>
+    private static IReadOnlyDictionary<string, object>? ReadHeader(
+        ReadOnlySpan<char> segment, DecodeDelegate base64UrlDecoder, JwtHeaderDeserializer headerDeserializer, BaseMemoryPool pool)
+    {
+        using var decoded = DecodedOrNull(segment, base64UrlDecoder, pool);
+
+        if(decoded is null)
+        {
+            return null;
+        }
+
+        var octets = decoded.Memory.Span[..DecodedLengthOf(segment.Length)];
+
+        if(octets.TrimStart(" \t\n\r"u8) is not [(byte)'{', ..] || !JwkJsonReader.IsWellFormedJsonDocument(octets))
+        {
+            return null;
+        }
+
+        try
+        {
+            return headerDeserializer(octets);
+        }
+        catch(Exception exception) when(exception is FormatException or InvalidOperationException or System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
+
+
+    /// <summary>A base64url segment's octets, or <see langword="null"/> when the decoder refuses it; the caller disposes them.</summary>
+    /// <param name="segment">The segment.</param>
+    /// <param name="base64UrlDecoder">The decoder.</param>
+    /// <param name="pool">The pool the octets are rented from.</param>
+    /// <returns>The octets, or <see langword="null"/>.</returns>
+    private static IMemoryOwner<byte>? DecodedOrNull(ReadOnlySpan<char> segment, DecodeDelegate base64UrlDecoder, BaseMemoryPool pool)
+    {
+        try
+        {
+            return base64UrlDecoder(segment, pool);
+        }
+        catch(FormatException)
+        {
+            return null;
+        }
+    }
+
+
+    /// <summary>Whether a compact JWS's signature segment is non-empty and written in the base64url alphabet (RFC 7515 Section 2).</summary>
+    /// <param name="segment">The segment after the signing input's last period.</param>
+    /// <returns><see langword="true"/> for a segment that could carry a MAC.</returns>
+    private static bool IsSignatureSegment(ReadOnlySpan<char> segment) => !segment.IsEmpty && !segment.ContainsAnyExcept(Base64UrlCharacters);
 
     /// <summary>The characters of the base64url alphabet (RFC 4648 Section 5), unpadded as RFC 7515 Section 2 writes a segment.</summary>
     private static SearchValues<char> Base64UrlCharacters { get; } =
@@ -175,4 +308,80 @@ public static class ClientSecretAssertionVerification
     /// <param name="characters">The segment's length.</param>
     /// <returns>The decoded length.</returns>
     private static int DecodedLengthOf(int characters) => characters * 3 / 4;
+}
+
+/// <summary>
+/// The rules a <c>client_secret_jwt</c> assertion breaks before its client's secret is read
+/// (<see cref="ClientSecretAssertionVerification.AdmitHeader"/>), each naming one fact about the request, never a value judged.
+/// </summary>
+public enum ClientSecretAssertionHeaderRefusal
+{
+    /// <summary>The request's <c>client_assertion_type</c> is not RFC 7523 Section 2.2's JWT bearer assertion type (RFC 7521 Section 4.2).</summary>
+    NotJwtBearer,
+
+    /// <summary>
+    /// The assertion is not a compact JWS of three non-empty base64url segments (RFC 7515 Section 7.1), or it is longer than the
+    /// verifier reads: no valid JWT, which RFC 7523 Section 3.2 answers <c>invalid_client</c>.
+    /// </summary>
+    NotACompactJws,
+
+    /// <summary>The assertion's protected header is not one JSON object naming each member once (RFC 7515 Section 4).</summary>
+    HeaderNotAnObject,
+
+    /// <summary>
+    /// The protected header names no signature algorithm: its <c>alg</c> is absent, is no string, is empty, or is <c>none</c> in
+    /// any letter case (RFC 7515 Section 4.1.1: the parameter "MUST be present"; RFC 7518 Section 3.6; RFC 8725 Section 3.2).
+    /// </summary>
+    SignatureAlgorithmNotNamed,
+
+    /// <summary>
+    /// The protected header names an algorithm the server accepts no <c>client_secret_jwt</c> assertion under - a signature
+    /// algorithm of the other family among them - so no secret is read for it (RFC 8725 Section 3.1).
+    /// </summary>
+    SignatureAlgorithmNotAccepted
+}
+
+
+/// <summary>
+/// The admission of a <c>client_secret_jwt</c> assertion before its client's secret is read
+/// (<see cref="ClientSecretAssertionVerification.AdmitHeader"/>): the HMAC algorithm its MAC is to be checked under, or the rule
+/// refused.
+/// </summary>
+public sealed record ClientSecretAssertionHeaderAdmission
+{
+    /// <summary>Creates an admission.</summary>
+    /// <param name="algorithm">The algorithm admitted, or <see langword="null"/> for a refusal.</param>
+    /// <param name="refusal">The rule refused, or <see langword="null"/> for an admission.</param>
+    private ClientSecretAssertionHeaderAdmission(string? algorithm, ClientSecretAssertionHeaderRefusal? refusal)
+    {
+        Algorithm = algorithm;
+        Refusal = refusal;
+    }
+
+
+    /// <summary>The HMAC algorithm admitted; <see langword="null"/> for a refusal.</summary>
+    public string? Algorithm { get; }
+
+    /// <summary>The rule refused; <see langword="null"/> for an admission.</summary>
+    public ClientSecretAssertionHeaderRefusal? Refusal { get; }
+
+    /// <summary>Whether the assertion is admitted to the MAC check.</summary>
+    public bool IsAdmitted => Algorithm is not null;
+
+
+    /// <summary>The admission of an assertion under an algorithm.</summary>
+    /// <param name="algorithm">The HMAC algorithm.</param>
+    /// <returns>The admission.</returns>
+    public static ClientSecretAssertionHeaderAdmission Admitted(string algorithm)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(algorithm);
+
+        return new ClientSecretAssertionHeaderAdmission(algorithm, refusal: null);
+    }
+
+
+    /// <summary>The refusal of an assertion under a rule.</summary>
+    /// <param name="refusal">The rule.</param>
+    /// <returns>The refusal.</returns>
+    public static ClientSecretAssertionHeaderAdmission Refused(ClientSecretAssertionHeaderRefusal refusal) => new(algorithm: null, refusal);
 }

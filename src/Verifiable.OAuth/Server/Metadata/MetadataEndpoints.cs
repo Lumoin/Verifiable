@@ -684,8 +684,21 @@ public static class MetadataEndpoints
                     //seam, never a built-in client_secret_basic path).
                     if(tokenEndpointOnChain)
                     {
-                        string[] authMethodNames = [.. oauth.ClientAuthenticationMethodsSupported
-                            .Select(ClientAuthenticationMethodNames.GetName)];
+                        //The registration's own methods where the deployment resolves them per registration, composed
+                        //before the document is serialized; each one the deployment declares, or the document is not
+                        //served at all.
+                        var authMethods = oauth.ResolveClientAuthenticationMethodsAsync is { } resolveMethods
+                            ? await resolveMethods(registration, context, ct).ConfigureAwait(false)
+                            : oauth.ClientAuthenticationMethodsSupported;
+
+                        if(authMethods.Count == 0 || authMethods.Any(method => !oauth.ClientAuthenticationMethodsSupported.Contains(method)))
+                        {
+                            return (null, ServerHttpResponse.ServerError(
+                                OAuthErrors.ServerError,
+                                "The registration's client authentication methods are not all among the deployment's declaration."));
+                        }
+
+                        string[] authMethodNames = [.. authMethods.Select(ClientAuthenticationMethodNames.GetName)];
                         AppendStringArrayField(
                             sb,
                             AuthorizationServerMetadataParameterNames.TokenEndpointAuthMethodsSupported,

@@ -1,0 +1,513 @@
+using Verifiable.Cryptography;
+using Verifiable.JCose;
+
+namespace Verifiable.OAuth.Server;
+
+/// <summary>
+/// The rules of RFC 7523 Section 3 a client assertion's claims break, each naming one fact about the claims - and, where a
+/// claim is the fact's subject, the claim - never the value judged. A client authentication by an assertion that breaks one is
+/// answered <c>invalid_client</c> (RFC 7523 Section 3.2).
+/// </summary>
+public enum ClientAssertionClaimRefusal
+{
+    /// <summary>
+    /// The assertion's <c>iss</c> or <c>sub</c> is absent, is no string, or is not the client's identifier (RFC 7523 Section 3
+    /// items 1 and 2.B: "For client authentication, the subject MUST be the "client_id" of the OAuth client").
+    /// </summary>
+    NotTheClient,
+
+    /// <summary>
+    /// The assertion's <c>aud</c> is absent, is neither a string nor a non-empty array of strings, or names any value beside the
+    /// authorization server's own identities (RFC 7523 Section 3 item 3; RFC 9126 Section 2).
+    /// </summary>
+    AudienceNotThisServer,
+
+    /// <summary>The assertion carries no <c>exp</c> (RFC 7523 Section 3 item 4: "The JWT MUST contain an "exp" (expiration time) claim").</summary>
+    ExpiryNotPresented,
+
+    /// <summary>The assertion's <c>exp</c> is no NumericDate: a JSON number naming an instant a clock represents (RFC 7519 Sections 2 and 4.1.4).</summary>
+    ExpiryNotANumericDate,
+
+    /// <summary>The assertion carries an <c>iat</c> that is no NumericDate (RFC 7519 Section 4.1.6: its value "MUST be a number containing a NumericDate value").</summary>
+    IssuedAtNotANumericDate,
+
+    /// <summary>The assertion's <c>exp</c> is at or before its <c>iat</c>: an assertion issued with no lifetime, whose window never opens.</summary>
+    ExpiryNotAfterIssuedAt,
+
+    /// <summary>The assertion's <c>iat</c> lies after the current instant beyond the clock-skew tolerance (RFC 7519 Section 4.1.6).</summary>
+    IssuedInTheFuture,
+
+    /// <summary>The assertion carries an <c>nbf</c> that is no NumericDate (RFC 7519 Section 4.1.5: its value "MUST be a number containing a NumericDate value").</summary>
+    NotBeforeNotANumericDate,
+
+    /// <summary>The assertion's <c>exp</c> is at or before its <c>nbf</c>: a window that never opens (RFC 7519 Sections 4.1.4 and 4.1.5).</summary>
+    ExpiryNotAfterNotBefore,
+
+    /// <summary>
+    /// The assertion's <c>nbf</c> lies after the current instant beyond the clock-skew tolerance (RFC 7519 Section 4.1.5: "the
+    /// current date/time MUST be after or equal to the not-before date/time"; RFC 7523 Section 3 item 5).
+    /// </summary>
+    NotYetValid,
+
+    /// <summary>
+    /// The assertion's <c>exp</c> has passed by the clock-skew tolerance or more (RFC 7523 Section 3 item 4; RFC 7519 Section
+    /// 4.1.4: "the current date/time MUST be before the expiration date/time", with "some small leeway ... to account for clock
+    /// skew").
+    /// </summary>
+    Expired,
+
+    /// <summary>
+    /// The assertion carries no <c>jti</c>, or one that is no non-empty string: nothing a replay guard could hold it to a single
+    /// use by (RFC 7523 Section 3 item 7; OpenID Connect Core 1.0 Section 9 has the claim REQUIRED).
+    /// </summary>
+    IdentifierNotPresented,
+
+    /// <summary>The replay guard found the assertion's <c>jti</c> presented before within the window it is accepted in (RFC 7523 Section 3 item 7).</summary>
+    IdentifierReplayed,
+
+    /// <summary>The replay guard tracks no such <c>jti</c>, so the assertion cannot be held to a single use (<see cref="JtiReplayOutcome.Unacceptable"/>).</summary>
+    IdentifierNotTrackable,
+
+    /// <summary>The replay guard could not prove the record of the assertion's <c>jti</c> (<see cref="JtiReplayOutcome.StoreUnavailable"/>), so no first use is assumed.</summary>
+    ReplayRecordUnavailable,
+
+    /// <summary>The replay guard answered an outcome no rule here reads: nothing established a first use.</summary>
+    ReplayOutcomeNotRecognised
+}
+
+
+/// <summary>
+/// Consults the replay guard for the first use of a client assertion's <c>jti</c>, the record kept until the instant the
+/// assertion stops being accepted (RFC 7523 Section 3 item 7: kept "for the length of time for which the JWT would be considered
+/// valid"). The caller binds the guard, the tenant and the assertion's issuer; <see cref="JtiReplayGuard.ConsultClientAssertionAsync"/>
+/// is the library's own.
+/// </summary>
+/// <param name="jti">The assertion's <c>jti</c>.</param>
+/// <param name="acceptedUntil">The instant the assertion stops being accepted, until which its first use is kept.</param>
+/// <param name="cancellationToken">Cancels the consultation.</param>
+/// <returns>The guard's outcome.</returns>
+public delegate ValueTask<JtiReplayOutcome> ConsultClientAssertionFirstUseDelegate(string jti, DateTimeOffset acceptedUntil, CancellationToken cancellationToken);
+
+
+/// <summary>
+/// The judgement of a client assertion's claims (<see cref="ClientAssertionClaimRules"/>): accepted, naming its <c>jti</c> and
+/// the instant it stops being accepted, or refused under the one rule it broke first.
+/// </summary>
+public sealed record ClientAssertionClaimsJudgement
+{
+    /// <summary>Creates a judgement.</summary>
+    /// <param name="refusal">The rule broken, or <see langword="null"/> for an accepted assertion.</param>
+    /// <param name="jti">The accepted assertion's <c>jti</c>.</param>
+    /// <param name="acceptedUntil">The instant the accepted assertion stops being accepted.</param>
+    private ClientAssertionClaimsJudgement(ClientAssertionClaimRefusal? refusal, string? jti, DateTimeOffset? acceptedUntil)
+    {
+        Refusal = refusal;
+        Jti = jti;
+        AcceptedUntil = acceptedUntil;
+    }
+
+
+    /// <summary>The rule the claims broke first, or <see langword="null"/> when every rule holds.</summary>
+    public ClientAssertionClaimRefusal? Refusal { get; }
+
+    /// <summary>The accepted assertion's <c>jti</c>; <see langword="null"/> for a refused one.</summary>
+    public string? Jti { get; }
+
+    /// <summary>
+    /// The instant the accepted assertion stops being accepted, its <c>exp</c> plus the clock-skew tolerance
+    /// (<see cref="ClientAssertionClaimRules.AcceptedUntil"/>); <see langword="null"/> for a refused one.
+    /// </summary>
+    public DateTimeOffset? AcceptedUntil { get; }
+
+    /// <summary>Whether every rule holds.</summary>
+    public bool IsAccepted => Refusal is null;
+
+
+    /// <summary>The judgement of claims every rule holds for.</summary>
+    /// <param name="jti">The assertion's <c>jti</c>.</param>
+    /// <param name="acceptedUntil">The instant it stops being accepted.</param>
+    /// <returns>The judgement.</returns>
+    public static ClientAssertionClaimsJudgement Accepted(string jti, DateTimeOffset acceptedUntil)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(jti);
+
+        return new ClientAssertionClaimsJudgement(refusal: null, jti, acceptedUntil);
+    }
+
+
+    /// <summary>The judgement of claims that broke a rule.</summary>
+    /// <param name="refusal">The rule.</param>
+    /// <returns>The judgement.</returns>
+    public static ClientAssertionClaimsJudgement Refused(ClientAssertionClaimRefusal refusal) => new(refusal, jti: null, acceptedUntil: null);
+}
+
+
+/// <summary>
+/// The claim rules of RFC 7523 Section 3 a client assertion is judged by once its signature or MAC verified (RFC 7519 Section 7.2
+/// validates a JWS before its payload is read), the one judgement every key source and every assertion method shares - an
+/// assertion under a key the client registered or published (<c>private_key_jwt</c>) and one MACed under its secret
+/// (<c>client_secret_jwt</c>, OpenID Connect Core 1.0 Section 9) alike:
+/// <list type="number">
+/// <item><description><c>iss</c> and <c>sub</c> are the client's identifier (items 1 and 2.B);</description></item>
+/// <item><description><c>aud</c> names the authorization server's own identities and nothing else - one string, or a non-empty array
+/// every element of which is one (item 3; RFC 9126 Section 2 has the server accept its issuer identifier, its token endpoint URL and
+/// its pushed authorization request endpoint URL), since an assertion audienced at another server as well is one that server could
+/// replay here;</description></item>
+/// <item><description><c>exp</c> is present and a NumericDate (item 4), an <c>iat</c> or an <c>nbf</c> the assertion carries is one,
+/// lies before <c>exp</c> and no further ahead of the current instant than the clock-skew tolerance (item 5), and <c>exp</c> has not
+/// passed by the tolerance;</description></item>
+/// <item><description>a <c>jti</c> is present (OpenID Connect Core 1.0 Section 9 makes it REQUIRED, and replay protection is a property
+/// of accepting an assertion at all) and, where a replay guard is consulted, its first use (item 7), kept until the assertion stops
+/// being accepted.</description></item>
+/// </list>
+/// The rules are judged in that order and the first broken is named.
+/// </summary>
+/// <remarks>
+/// A NumericDate is a JSON number of seconds since the epoch, which may carry a fraction (RFC 7519 Section 2); a string of digits is
+/// none. A fraction is taken to the whole second on the side that never widens the window the claim bounds - an <c>nbf</c> up, an
+/// <c>exp</c> and an <c>iat</c> down - and a count naming an instant no <see cref="DateTimeOffset"/> represents is none.
+/// </remarks>
+public static class ClientAssertionClaimRules
+{
+    /// <summary>The earliest whole second a <see cref="DateTimeOffset"/> represents, as seconds since the epoch.</summary>
+    private const long EarliestRepresentableSeconds = -62_135_596_800;
+
+    /// <summary>The latest whole second a <see cref="DateTimeOffset"/> represents, as seconds since the epoch.</summary>
+    private const long LatestRepresentableSeconds = 253_402_300_799;
+
+
+    /// <summary>
+    /// The JWT Claims Set of a client assertion whose signature or MAC verified, read as RFC 7519 Section 7.2 reads one once the
+    /// JWS validated: the payload segment base64url-decoded, exactly one JSON object naming each member once (step 10: "a
+    /// completely valid JSON object"; Section 4: claim names are unique), parsed by the payload reader given; <see langword="null"/>
+    /// for a payload of any other content, never throwing.
+    /// </summary>
+    /// <param name="compactJws">The compact JWS, three base64url segments, whose signature or MAC verified.</param>
+    /// <param name="base64UrlDecoder">Decodes the payload segment.</param>
+    /// <param name="payloadDeserializer">Reads the object's members.</param>
+    /// <param name="pool">The pool the decoded payload is rented from.</param>
+    /// <returns>The claims, or <see langword="null"/>.</returns>
+    public static IReadOnlyDictionary<string, object>? ReadClaimsSet(
+        string compactJws, DecodeDelegate base64UrlDecoder, JwtPayloadDeserializer payloadDeserializer, BaseMemoryPool pool)
+    {
+        ArgumentNullException.ThrowIfNull(compactJws);
+        ArgumentNullException.ThrowIfNull(base64UrlDecoder);
+        ArgumentNullException.ThrowIfNull(payloadDeserializer);
+        ArgumentNullException.ThrowIfNull(pool);
+
+        var payloadStart = compactJws.IndexOf('.', StringComparison.Ordinal) + 1;
+        var payloadEnd = compactJws.LastIndexOf('.', StringComparison.Ordinal);
+
+        if(payloadStart <= 0 || payloadEnd <= payloadStart)
+        {
+            return null;
+        }
+
+        try
+        {
+            using var decoded = base64UrlDecoder(compactJws.AsSpan(payloadStart, payloadEnd - payloadStart), pool);
+            var octets = decoded.Memory.Span[..((payloadEnd - payloadStart) * 3 / 4)];
+
+            return octets.TrimStart(" \t\n\r"u8) is [(byte)'{', ..] && JwkJsonReader.IsWellFormedJsonDocument(octets)
+                ? payloadDeserializer(octets)
+                : null;
+        }
+        catch(Exception exception) when(exception is FormatException or InvalidOperationException or System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
+
+
+    /// <summary>
+    /// Judges a client assertion's verified claims by every rule but the replay guard's: the identity, the audience, the dates and
+    /// the presence of a <c>jti</c>.
+    /// </summary>
+    /// <param name="claims">The claims set of an assertion whose signature or MAC verified.</param>
+    /// <param name="clientId">The client the assertion authenticates, which its <c>iss</c> and <c>sub</c> must both be.</param>
+    /// <param name="acceptedAudiences">The authorization server's identities its <c>aud</c> may name.</param>
+    /// <param name="now">The current instant, by the authorization server's clock.</param>
+    /// <param name="clockSkewTolerance">The tolerance the dates are judged under.</param>
+    /// <returns>The judgement.</returns>
+    public static ClientAssertionClaimsJudgement Judge(
+        IReadOnlyDictionary<string, object> claims,
+        string clientId,
+        IReadOnlyCollection<string> acceptedAudiences,
+        DateTimeOffset now,
+        TimeSpan clockSkewTolerance)
+    {
+        ArgumentNullException.ThrowIfNull(claims);
+        ArgumentException.ThrowIfNullOrEmpty(clientId);
+        ArgumentNullException.ThrowIfNull(acceptedAudiences);
+
+        if(StringClaimOf(claims, WellKnownJwtClaimNames.Iss) is not string issuer
+            || StringClaimOf(claims, WellKnownJwtClaimNames.Sub) is not string subject
+            || !string.Equals(issuer, clientId, StringComparison.Ordinal)
+            || !string.Equals(subject, clientId, StringComparison.Ordinal))
+        {
+            return ClientAssertionClaimsJudgement.Refused(ClientAssertionClaimRefusal.NotTheClient);
+        }
+
+        if(!claims.TryGetValue(WellKnownJwtClaimNames.Aud, out var audience) || !AudienceNamesOnly(audience, acceptedAudiences))
+        {
+            return ClientAssertionClaimsJudgement.Refused(ClientAssertionClaimRefusal.AudienceNotThisServer);
+        }
+
+        if(!claims.TryGetValue(WellKnownJwtClaimNames.Exp, out var expiryValue))
+        {
+            return ClientAssertionClaimsJudgement.Refused(ClientAssertionClaimRefusal.ExpiryNotPresented);
+        }
+
+        if(NumericDateOf(WellKnownJwtClaimNames.Exp, expiryValue) is not DateTimeOffset expiry)
+        {
+            return ClientAssertionClaimsJudgement.Refused(ClientAssertionClaimRefusal.ExpiryNotANumericDate);
+        }
+
+        //RFC 7519 Section 4.1.6: an iat names the instant the assertion was issued, so it lies before exp and, by this server's
+        //clock, no further ahead than the tolerance.
+        if(claims.TryGetValue(WellKnownJwtClaimNames.Iat, out var issuedAtValue))
+        {
+            if(NumericDateOf(WellKnownJwtClaimNames.Iat, issuedAtValue) is not DateTimeOffset issuedAt)
+            {
+                return ClientAssertionClaimsJudgement.Refused(ClientAssertionClaimRefusal.IssuedAtNotANumericDate);
+            }
+
+            if(expiry <= issuedAt)
+            {
+                return ClientAssertionClaimsJudgement.Refused(ClientAssertionClaimRefusal.ExpiryNotAfterIssuedAt);
+            }
+
+            if(issuedAt > now + clockSkewTolerance)
+            {
+                return ClientAssertionClaimsJudgement.Refused(ClientAssertionClaimRefusal.IssuedInTheFuture);
+            }
+        }
+
+        //RFC 7519 Section 4.1.5 with RFC 7523 Section 3 item 5: an nbf names the instant the assertion may first be accepted, so it
+        //lies before exp and, by this server's clock, is reached within the tolerance.
+        if(claims.TryGetValue(WellKnownJwtClaimNames.Nbf, out var notBeforeValue))
+        {
+            if(NumericDateOf(WellKnownJwtClaimNames.Nbf, notBeforeValue) is not DateTimeOffset notBefore)
+            {
+                return ClientAssertionClaimsJudgement.Refused(ClientAssertionClaimRefusal.NotBeforeNotANumericDate);
+            }
+
+            if(expiry <= notBefore)
+            {
+                return ClientAssertionClaimsJudgement.Refused(ClientAssertionClaimRefusal.ExpiryNotAfterNotBefore);
+            }
+
+            if(notBefore > now + clockSkewTolerance)
+            {
+                return ClientAssertionClaimsJudgement.Refused(ClientAssertionClaimRefusal.NotYetValid);
+            }
+        }
+
+        var acceptedUntil = AcceptedUntil(expiry, clockSkewTolerance);
+
+        if(acceptedUntil <= now)
+        {
+            return ClientAssertionClaimsJudgement.Refused(ClientAssertionClaimRefusal.Expired);
+        }
+
+        if(StringClaimOf(claims, WellKnownJwtClaimNames.Jti) is not { Length: > 0 } jti)
+        {
+            return ClientAssertionClaimsJudgement.Refused(ClientAssertionClaimRefusal.IdentifierNotPresented);
+        }
+
+        return ClientAssertionClaimsJudgement.Accepted(jti, acceptedUntil);
+    }
+
+
+    /// <summary>
+    /// Judges a client assertion's verified claims by every rule (<see cref="Judge"/>), the replay guard's last: an assertion every
+    /// other rule accepts is accepted only on the first use of its <c>jti</c>, kept until the assertion stops being accepted.
+    /// </summary>
+    /// <param name="claims">The claims set of an assertion whose signature or MAC verified.</param>
+    /// <param name="clientId">The client the assertion authenticates.</param>
+    /// <param name="acceptedAudiences">The authorization server's identities its <c>aud</c> may name.</param>
+    /// <param name="now">The current instant, by the authorization server's clock.</param>
+    /// <param name="clockSkewTolerance">The tolerance the dates are judged under.</param>
+    /// <param name="consultFirstUse">The replay guard, bound to the tenant and the assertion's issuer.</param>
+    /// <param name="cancellationToken">Cancels the consultation.</param>
+    /// <returns>The judgement.</returns>
+    public static async ValueTask<ClientAssertionClaimsJudgement> JudgeAsync(
+        IReadOnlyDictionary<string, object> claims,
+        string clientId,
+        IReadOnlyCollection<string> acceptedAudiences,
+        DateTimeOffset now,
+        TimeSpan clockSkewTolerance,
+        ConsultClientAssertionFirstUseDelegate consultFirstUse,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(consultFirstUse);
+
+        var judged = Judge(claims, clientId, acceptedAudiences, now, clockSkewTolerance);
+
+        if(judged is not { IsAccepted: true, Jti: { } jti, AcceptedUntil: { } acceptedUntil })
+        {
+            return judged;
+        }
+
+        var outcome = await consultFirstUse(jti, acceptedUntil, cancellationToken).ConfigureAwait(false);
+
+        return RefusalOf(outcome) is ClientAssertionClaimRefusal refusal ? ClientAssertionClaimsJudgement.Refused(refusal) : judged;
+    }
+
+
+    /// <summary>
+    /// The rule a replay guard's outcome breaks, or <see langword="null"/> for a first use: every outcome but a first use refuses
+    /// the assertion (RFC 7523 Section 3 item 7), each under its own name.
+    /// </summary>
+    /// <param name="outcome">The guard's outcome.</param>
+    /// <returns>The rule, or <see langword="null"/>.</returns>
+    public static ClientAssertionClaimRefusal? RefusalOf(JtiReplayOutcome outcome) => outcome switch
+    {
+        JtiReplayOutcome.FirstUse => null,
+        JtiReplayOutcome.Replayed => ClientAssertionClaimRefusal.IdentifierReplayed,
+        JtiReplayOutcome.Unacceptable => ClientAssertionClaimRefusal.IdentifierNotTrackable,
+        JtiReplayOutcome.StoreUnavailable => ClientAssertionClaimRefusal.ReplayRecordUnavailable,
+        _ => ClientAssertionClaimRefusal.ReplayOutcomeNotRecognised
+    };
+
+
+    /// <summary>
+    /// The instant a client assertion stops being accepted: its <c>exp</c> plus the clock-skew tolerance (RFC 7519 Section 4.1.4
+    /// lets a reader "provide for some small leeway, usually no more than a few minutes, to account for clock skew"), or the latest
+    /// instant a <see cref="DateTimeOffset"/> represents where the tolerance would carry it past that. The expiry rule and the
+    /// replay record read this one instant, so an assertion is never accepted past the record of its first use.
+    /// </summary>
+    /// <param name="expiry">The assertion's <c>exp</c>.</param>
+    /// <param name="clockSkewTolerance">The tolerance.</param>
+    /// <returns>The instant from which the assertion is refused as expired.</returns>
+    public static DateTimeOffset AcceptedUntil(DateTimeOffset expiry, TimeSpan clockSkewTolerance) =>
+        expiry <= DateTimeOffset.MaxValue - clockSkewTolerance ? expiry + clockSkewTolerance : DateTimeOffset.MaxValue;
+
+
+    /// <summary>
+    /// Whether an <c>aud</c> claim names the authorization server's own identities and nothing else (RFC 7523 Section 3 item 3):
+    /// one string that is one of them, or a non-empty array - a sequence of strings or of values, as the claims set holds it - every
+    /// element of which is a string that is one of them. A value of any other shape names nothing. The comparison is ordinal: RFC
+    /// 7519 Section 2 compares a StringOrURI "as case-sensitive strings with no transformations or canonicalizations applied".
+    /// </summary>
+    /// <param name="audience">The claim's value as the claims set holds it.</param>
+    /// <param name="acceptedAudiences">The authorization server's identities.</param>
+    /// <returns><see langword="true"/> when every value the claim names is one of the identities.</returns>
+    public static bool AudienceNamesOnly(object? audience, IReadOnlyCollection<string> acceptedAudiences)
+    {
+        ArgumentNullException.ThrowIfNull(acceptedAudiences);
+
+        return audience switch
+        {
+            string single => IsAccepted(single, acceptedAudiences),
+            IEnumerable<string> strings => AreAllAccepted(strings, acceptedAudiences),
+            IEnumerable<object> values => AreAllAccepted(values.Select(StringOf), acceptedAudiences),
+            _ => false
+        };
+    }
+
+
+    /// <summary>
+    /// The instant a NumericDate claim names, at the whole second on the side that never widens the window the claim bounds - the
+    /// second at or after it for <c>nbf</c>, at or before it for every other claim - or <see langword="null"/> when the value is no
+    /// JSON number or names an instant no <see cref="DateTimeOffset"/> represents.
+    /// </summary>
+    /// <param name="claimName">The claim the value was read from, which decides the side.</param>
+    /// <param name="value">The claim's value as the claims set holds it.</param>
+    /// <returns>The instant, or <see langword="null"/>.</returns>
+    public static DateTimeOffset? NumericDateOf(string claimName, object? value)
+    {
+        ArgumentNullException.ThrowIfNull(claimName);
+
+        var roundsUp = string.Equals(claimName, WellKnownJwtClaimNames.Nbf, StringComparison.Ordinal);
+        var whole = value switch
+        {
+            long seconds => seconds,
+            int seconds => seconds,
+            short seconds => seconds,
+            byte seconds => seconds,
+            uint seconds => seconds,
+            ulong seconds when seconds <= long.MaxValue => (long)seconds,
+            decimal seconds => WholeSecondsOf(seconds, roundsUp),
+            double seconds => WholeSecondsOf(seconds, roundsUp),
+            float seconds => WholeSecondsOf(seconds, roundsUp),
+            _ => null
+        };
+
+        return whole is long count && count is >= EarliestRepresentableSeconds and <= LatestRepresentableSeconds
+            ? DateTimeOffset.FromUnixTimeSeconds(count)
+            : null;
+    }
+
+
+    /// <summary>A string claim's value, or <see langword="null"/> for any other value or none.</summary>
+    /// <param name="claims">The claims set.</param>
+    /// <param name="claimName">The claim.</param>
+    /// <returns>The string, or <see langword="null"/>.</returns>
+    private static string? StringClaimOf(IReadOnlyDictionary<string, object> claims, string claimName) =>
+        claims.TryGetValue(claimName, out var value) ? StringOf(value) : null;
+
+
+    /// <summary>A value as a string, or <see langword="null"/> for any other value.</summary>
+    /// <param name="value">The value.</param>
+    /// <returns>The string, or <see langword="null"/>.</returns>
+    private static string? StringOf(object? value) => value switch
+    {
+        string text => text,
+        _ => null
+    };
+
+
+    /// <summary>Whether one value is one of the identities.</summary>
+    /// <param name="value">The value, or <see langword="null"/> for one that is no string.</param>
+    /// <param name="acceptedAudiences">The identities.</param>
+    /// <returns><see langword="true"/> when it is one.</returns>
+    private static bool IsAccepted(string? value, IReadOnlyCollection<string> acceptedAudiences) =>
+        value is { Length: > 0 } && acceptedAudiences.Any(identity => string.Equals(identity, value, StringComparison.Ordinal));
+
+
+    /// <summary>Whether a sequence holds at least one value and every value is one of the identities.</summary>
+    /// <param name="values">The values, each <see langword="null"/> where it is no string.</param>
+    /// <param name="acceptedAudiences">The identities.</param>
+    /// <returns><see langword="true"/> when every value is one, and there is one.</returns>
+    private static bool AreAllAccepted(IEnumerable<string?> values, IReadOnlyCollection<string> acceptedAudiences)
+    {
+        var sawAny = false;
+
+        foreach(var value in values)
+        {
+            if(!IsAccepted(value, acceptedAudiences))
+            {
+                return false;
+            }
+
+            sawAny = true;
+        }
+
+        return sawAny;
+    }
+
+
+    /// <summary>The whole seconds a count with a fraction names on the side given, or <see langword="null"/> past what a <see cref="long"/> holds.</summary>
+    /// <param name="seconds">The count.</param>
+    /// <param name="roundsUp">Whether the count is taken up rather than down.</param>
+    /// <returns>The whole count, or <see langword="null"/>.</returns>
+    private static long? WholeSecondsOf(decimal seconds, bool roundsUp)
+    {
+        var whole = roundsUp ? decimal.Ceiling(seconds) : decimal.Floor(seconds);
+
+        return whole is >= long.MinValue and <= long.MaxValue ? (long)whole : null;
+    }
+
+
+    /// <summary>The whole seconds a floating count names on the side given, or <see langword="null"/> for no finite count within the representable range.</summary>
+    /// <param name="seconds">The count.</param>
+    /// <param name="roundsUp">Whether the count is taken up rather than down.</param>
+    /// <returns>The whole count, or <see langword="null"/>.</returns>
+    private static long? WholeSecondsOf(double seconds, bool roundsUp)
+    {
+        var whole = roundsUp ? Math.Ceiling(seconds) : Math.Floor(seconds);
+
+        return double.IsFinite(whole) && whole is >= EarliestRepresentableSeconds and <= LatestRepresentableSeconds ? (long)whole : null;
+    }
+}
