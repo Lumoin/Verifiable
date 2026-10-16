@@ -116,6 +116,7 @@ namespace Verifiable.BouncyCastle
 
             Purpose evtPurpose = stamped.TryGet<Purpose>(out Purpose p)
                 ? p : Purpose.Digest;
+
             CryptoEvent evt = DigestComputedEvent.Create(
                 algorithmName.Name ?? "Unknown", input.Length, outputByteLength, evtPurpose, timeProvider: timeProvider);
 
@@ -198,6 +199,7 @@ namespace Verifiable.BouncyCastle
 
             Purpose evtPurpose = stamped.TryGet<Purpose>(out Purpose p)
                 ? p : Purpose.Digest;
+
             CryptoEvent evt = DigestComputedEvent.Create(
                 nameof(CryptoAlgorithm.Blake3), (int)input.Length, outputByteLength, evtPurpose, timeProvider: timeProvider);
 
@@ -545,6 +547,7 @@ namespace Verifiable.BouncyCastle
         public static ValueTask<IMemoryOwner<byte>> DeriveX25519SharedSecretAsync(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> publicKeyBytes, BaseMemoryPool memoryPool)
         {
             ArgumentNullException.ThrowIfNull(memoryPool);
+
             //The span ctors copy the scalar and the peer's point into BouncyCastle's own buffers —
             //no naked byte[] of private-key material for us to track and zero.
             var privateKeyParams = new X25519PrivateKeyParameters(privateKeyBytes.Span);

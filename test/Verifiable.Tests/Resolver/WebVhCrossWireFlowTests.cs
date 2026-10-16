@@ -316,8 +316,10 @@ internal sealed class WebVhCrossWireFlowTests
 
         Assert.IsTrue(resolution.IsSuccessful,
             $"Resolving a did:webvh DID by its pre-move name MUST succeed across the wire. Error: {resolution.ResolutionMetadata.Error?.Type}.");
+
         Assert.AreEqual(log.Did, resolution.Document!.Id?.ToString(),
             "The resolved document id MUST be the CURRENT (moved) DID, not the pre-move name that was requested.");
+
         Assert.AreEqual(log.Did, resolution.DocumentMetadata.CanonicalId,
             "canonicalId MUST be the resolved document's own id.");
         Assert.IsNotNull(resolution.DocumentMetadata.EquivalentId, "A moved did:webvh DID MUST carry equivalentId.");
@@ -361,6 +363,7 @@ internal sealed class WebVhCrossWireFlowTests
 
         Assert.IsTrue(resolution.IsSuccessful,
             $"A portable moved did:webvh DID MUST resolve across the wire by its current name. Error: {resolution.ResolutionMetadata.Error?.Type}.");
+
         Assert.AreEqual(log.Did, resolution.DocumentMetadata.CanonicalId,
             "canonicalId MUST be the resolved (moved) document's own id.");
         Assert.IsNotNull(resolution.DocumentMetadata.EquivalentId, "A moved did:webvh DID MUST carry equivalentId.");
@@ -409,8 +412,10 @@ internal sealed class WebVhCrossWireFlowTests
 
         Assert.IsTrue(result.IsSuccessful,
             $"Dereferencing a verification method through the pre-move DID URL MUST succeed. Error: {result.DereferencingMetadata.Error?.Type}.");
+
         _ = Assert.IsInstanceOfType<VerificationMethod>(result.ContentStream,
             "The dereferenced fragment MUST be the current document's verification method.");
+
         Assert.AreEqual(expectedVerificationMethodId, ((VerificationMethod)result.ContentStream).Id,
             "The returned verification method MUST be the CURRENT document's own method.");
     }
@@ -463,8 +468,10 @@ internal sealed class WebVhCrossWireFlowTests
 
         Assert.IsFalse(resolution.IsSuccessful,
             "A DID that is only named in alsoKnownAs, and was never a verified state.id, MUST NOT resolve.");
+
         Assert.AreEqual<DidProblemDetails>(DidResolutionErrors.InvalidDid, resolution.ResolutionMetadata.Error,
             "The refusal MUST be invalidDid (did:webvh Read: didIdMatchCount MUST be greater than 0).");
+
         Assert.Contains("does not match the top-level id of any verified version", resolution.ResolutionMetadata.Error!.Detail!, StringComparison.Ordinal,
             "The refusal's detail MUST say the DID matches no verified version.");
     }
@@ -495,8 +502,10 @@ internal sealed class WebVhCrossWireFlowTests
 
         Assert.IsTrue(resolution.IsSuccessful,
             $"A never-moved did:webvh DID MUST resolve across the wire. Error: {resolution.ResolutionMetadata.Error?.Type}.");
+
         Assert.IsNull(resolution.DocumentMetadata.CanonicalId,
             "A did:webvh DID that never moved MUST NOT carry canonicalId.");
+
         Assert.IsNull(resolution.DocumentMetadata.EquivalentId,
             "A did:webvh DID that never moved MUST NOT carry equivalentId.");
     }
@@ -648,6 +657,7 @@ transport,
             IServerAddressesFeature addresses = app.Services.GetRequiredService<IServer>()
                 .Features.Get<IServerAddressesFeature>()
                 ?? throw new InvalidOperationException("Kestrel exposed no server addresses feature.");
+
             string boundAddress = addresses.Addresses.FirstOrDefault()
                 ?? throw new InvalidOperationException("Kestrel bound no address.");
 

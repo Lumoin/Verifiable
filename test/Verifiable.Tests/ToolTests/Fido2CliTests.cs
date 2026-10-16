@@ -140,6 +140,7 @@ internal sealed class Fido2CliTests
         //Cert-factory: CertificateRequest-based X.509 CA minting needs a real ECDsa key.
         using ECDsa mdsRootKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using X509Certificate2 mdsRootCertificate = MetadataBlobTestVectors.CreateMdsRootCa("CN=Test MDS Root Fido2CliTests", mdsRootKey);
+
         //Cert-factory (leaf) and independent oracle: also signs the MDS blob JWS the CLI verifies.
         using ECDsa mdsSigningKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using X509Certificate2 mdsSigningCertificate = MetadataBlobTestVectors.CreateMdsSigningCertificate(mdsRootCertificate, mdsSigningKey);
@@ -182,6 +183,7 @@ internal sealed class Fido2CliTests
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> credentialKeyMaterial = TestKeyMaterialProvider.CreateP256KeyMaterial();
         credentialKeyMaterial.PrivateKey.Dispose();
         using PublicKeyMemory credentialPublicKey = credentialKeyMaterial.PublicKey;
+
         //Oracle: computed independently of the CLI so its own rpIdHash derivation from --rp-id is
         //exercised against a value it did not produce, then corrupted to force a mismatch.
         byte[] tamperedRpIdHash = SHA256.HashData(Encoding.UTF8.GetBytes(RpId));
@@ -346,6 +348,7 @@ internal sealed class Fido2CliTests
         //Oracle: recomputed independently of the CLI so its own rpIdHash derivation from --rp-id is
         //exercised against a value it did not produce.
         byte[] rpIdHash = SHA256.HashData(Encoding.UTF8.GetBytes(RpId));
+
         //UP set, UV clear — the axis this test exercises.
         byte[] authenticatorData = Fido2TestVectors.BuildAuthenticatorData(rpIdHash, flags: AuthenticatorDataFlags.UserPresentBit, signCount: 1);
         byte[] clientDataJson = WebAuthnClientDataFixtures.BuildClientDataJson(WellKnownClientDataTypes.Get, Challenge, Origin);
@@ -640,9 +643,11 @@ internal sealed class Fido2CliTests
         CoseKey credentialPublicKey, byte[]? rpIdHash = null, byte[]? credentialPublicKeyCbor = null)
     {
         Guid aaguid = Guid.NewGuid();
+
         //Oracle: recomputed independently of the CLI so its own rpIdHash derivation from --rp-id is
         //exercised against a value it did not produce.
         byte[] effectiveRpIdHash = rpIdHash ?? SHA256.HashData(Encoding.UTF8.GetBytes(RpId));
+
         //Opaque random credential identifier — a junk payload, not key material.
         FillEntropyDelegate fillEntropy = RandomNumberGenerator.Fill;
         byte[] credentialId = new byte[16];
@@ -653,6 +658,7 @@ internal sealed class Fido2CliTests
         byte[] authenticatorData = Fido2TestVectors.BuildAuthenticatorData(effectiveRpIdHash, flags, signCount: 0, attestedCredentialData);
 
         byte[] clientDataJson = WebAuthnClientDataFixtures.BuildClientDataJson(WellKnownClientDataTypes.Create, Challenge, Origin);
+
         //0xA0 is the canonical CBOR encoding of an empty map — the `none` format's attStmt.
         byte[] attestationObject = EncodeAttestationObject(WellKnownWebAuthnAttestationFormats.None, [0xA0], authenticatorData);
 
@@ -678,6 +684,7 @@ internal sealed class Fido2CliTests
         {
             attestationRootKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
             attestationRootCertificate = Fido2AttestationTestVectors.CreateSelfSignedCa("CN=Test Fido2CliTests Attestation Root", attestationRootKey);
+
             //Cert-factory (leaf) and independent oracle: also signs the packed attStmt below, which the
             //CLI verifies against the leaf certificate's public key.
             attestationLeafKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
@@ -692,8 +699,10 @@ internal sealed class Fido2CliTests
             credentialKeyMaterial.PrivateKey.Dispose();
             using PublicKeyMemory credentialPublicKeyMaterial = credentialKeyMaterial.PublicKey;
             CoseKey credentialPublicKey = BuildP256CoseKey(credentialPublicKeyMaterial, WellKnownCoseAlgorithms.Es256);
+
             //Opaque random credential identifier — a junk payload, not key material.
             byte[] credentialId = RandomNumberGenerator.GetBytes(16);
+
             //Oracle: recomputed independently of the CLI so its own rpIdHash derivation from --rp-id is
             //exercised against a value it did not produce.
             byte[] rpIdHash = SHA256.HashData(Encoding.UTF8.GetBytes(RpId));

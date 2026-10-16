@@ -135,6 +135,7 @@ namespace Verifiable.Microsoft
 
             Purpose evtPurpose = stamped.TryGet<Purpose>(out Purpose p)
                 ? p : Purpose.Digest;
+
             CryptoEvent evt = DigestComputedEvent.Create(
                 algorithmName.Name ?? "Unknown", (int)input.Length, outputByteLength, evtPurpose, timeProvider: timeProvider);
 

@@ -55,6 +55,7 @@ internal sealed class MetadataBlobVerificationTests
         //Cert-factory carve-out: this key is signing input to CreateMdsRootCa's CertificateRequest.
         using ECDsa rootKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using X509Certificate2 rootCertificate = MetadataBlobTestVectors.CreateMdsRootCa("CN=Test MDS Root Rsa", rootKey);
+
         //Cert-factory carve-out (signing input to CreateMdsSigningCertificateRsa's CertificateRequest) and independent
         //oracle: SignRs256Async below signs the BLOB with this raw RSA key, and the library's own RS256 verifier is proven
         //against that independent signature.
@@ -466,9 +467,11 @@ internal sealed class MetadataBlobVerificationTests
         //Cert-factory carve-out: this key is signing input to CreateMdsRootCa's CertificateRequest.
         using ECDsa rootKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using X509Certificate2 rootCertificate = MetadataBlobTestVectors.CreateMdsRootCa("CN=Test MDS Root Intermediate", rootKey);
+
         //Cert-factory carve-out: this key is signing input to CreateIntermediateCaCertificate's CertificateRequest.
         using ECDsa intermediateKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using X509Certificate2 intermediateCertificate = Fido2AttestationTestVectors.CreateIntermediateCaCertificate(rootCertificate, intermediateKey, "CN=Test MDS Intermediate");
+
         //Cert-factory carve-out (signing input to CreateMdsSigningCertificate's CertificateRequest) and independent
         //oracle: SignEs256Async below signs the BLOB with this raw ECDsa key, and the library's own ES256 verifier is
         //proven against that independent signature.

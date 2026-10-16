@@ -64,6 +64,7 @@ internal sealed class CardVerifiableCertificateChainTests
         using var cvca = await MintCvcaAsync(cvcaKey, "UTCVCA00001", TestContext.CancellationToken).ConfigureAwait(false);
         Tag curve = cvca.PublicKey.EllipticCurvePoint!.Tag;
         using var documentVerifier = await MintDocumentVerifierAsync(cvcaKey, documentVerifierKey, "UTCVCA00001", "UTDVDE00001", curve, TestContext.CancellationToken).ConfigureAwait(false);
+
         //The terminal certificate is signed by its own key, not the Document Verifier's, so the signature
         //does not verify against the Document Verifier public key.
         using var terminal = await MintTerminalAsync(terminalKey, terminalKey, "UTDVDE00001", "UTISDE00001", curve, TestContext.CancellationToken).ConfigureAwait(false);
@@ -87,6 +88,7 @@ internal sealed class CardVerifiableCertificateChainTests
 
         using var cvca = await MintCvcaAsync(cvcaKey, "UTCVCA00001", TestContext.CancellationToken).ConfigureAwait(false);
         Tag curve = cvca.PublicKey.EllipticCurvePoint!.Tag;
+
         //The Document Verifier names a different authority than the CVCA holder reference.
         using var documentVerifier = await MintDocumentVerifierAsync(cvcaKey, documentVerifierKey, "UTCVCA99999", "UTDVDE00001", curve, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -109,6 +111,7 @@ internal sealed class CardVerifiableCertificateChainTests
 
         using var cvca = await MintCvcaAsync(cvcaKey, "UTCVCA00001", TestContext.CancellationToken).ConfigureAwait(false);
         Tag curve = cvca.PublicKey.EllipticCurvePoint!.Tag;
+
         //Linked and validly signed by the CVCA, but a terminal role: a CVCA may only issue Document Verifiers.
         using var terminal = await MintTerminalAsync(cvcaKey, terminalKey, "UTCVCA00001", "UTISDE00001", curve, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -131,6 +134,7 @@ internal sealed class CardVerifiableCertificateChainTests
 
         using var cvca = await MintCvcaAsync(cvcaKey, "UTCVCA00001", TestContext.CancellationToken).ConfigureAwait(false);
         Tag curve = cvca.PublicKey.EllipticCurvePoint!.Tag;
+
         //A validly signed, correctly linked, role-narrowing chain that stops at the Document Verifier: every link
         //verifies, but no terminal certificate was presented, so the terminal proved possession of no key.
         using var documentVerifier = await MintDocumentVerifierAsync(cvcaKey, documentVerifierKey, "UTCVCA00001", "UTDVDE00001", curve, TestContext.CancellationToken).ConfigureAwait(false);

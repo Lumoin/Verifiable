@@ -163,6 +163,7 @@ internal sealed class CardSimulatorTerminalAuthenticationAccessControlTests
 
             (StatusWord dataGroup3Status, bool dataGroup3Matches) = await ReadSensitiveFileAsync(
                 device, reKeyed, DataGroup3.FileIdentifier, dataGroup3.AsReadOnlyMemory(), TestContext.CancellationToken);
+
             (StatusWord dataGroup4Status, bool dataGroup4Matches) = await ReadSensitiveFileAsync(
                 device, reKeyed, DataGroup4.FileIdentifier, dataGroup4.AsReadOnlyMemory(), TestContext.CancellationToken);
 
@@ -316,6 +317,7 @@ internal sealed class CardSimulatorTerminalAuthenticationAccessControlTests
 
             (StatusWord dataGroup3Status, bool dataGroup3Matches) = await ReadSensitiveFileAsync(
                 device, reKeyed, DataGroup3.FileIdentifier, dataGroup3.AsReadOnlyMemory(), TestContext.CancellationToken);
+
             (StatusWord dataGroup4Status, bool dataGroup4Matches) = await ReadSensitiveFileAsync(
                 device, reKeyed, DataGroup4.FileIdentifier, dataGroup4.AsReadOnlyMemory(), TestContext.CancellationToken);
 

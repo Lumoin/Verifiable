@@ -402,8 +402,10 @@ internal static class SyntheticPassportFactory
 
         using X509Certificate2 csca = MintCsca(cscaKey);
         using X509Certificate2 documentSigner = MintDocumentSigner(documentSignerKey, csca);
+
         //The CSCA's subject name but a different key — the source of the forged CRLs below.
         using X509Certificate2 impostorCsca = MintCsca(impostorCscaKey);
+
         //The CSCA's subject name and key but a Key Usage lacking cRLSign. Presented as a candidate it can verify a
         //genuine CSCA CRL (same key), but it is not authorised to sign CRLs, so the checker must still reject it.
         using X509Certificate2 nonCrlSigner = MintCscaWithoutCrlSign(cscaKey);

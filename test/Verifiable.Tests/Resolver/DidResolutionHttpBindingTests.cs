@@ -86,8 +86,10 @@ internal sealed class DidResolutionHttpBindingTests
 
         Assert.AreEqual(log.Did, root.GetProperty("didDocument").GetProperty("id").GetString(),
             "The envelope's didDocument.id MUST equal the resolved DID.");
+
         Assert.IsTrue(root.GetProperty("didDocumentMetadata").TryGetProperty("versionId", out _),
             "The didDocumentMetadata MUST carry the versionId.");
+
         Assert.AreEqual(JsonValueKind.Object, root.GetProperty("didResolutionMetadata").ValueKind,
             "The envelope MUST carry didResolutionMetadata.");
     }
@@ -112,12 +114,16 @@ internal sealed class DidResolutionHttpBindingTests
 
         Assert.AreEqual(log.Did, root.GetProperty("id").GetString(),
             "The bare-accept body MUST be the DID document itself (with an id).");
+
         Assert.IsFalse(root.TryGetProperty("didResolutionMetadata", out _),
             "The bare-accept body MUST NOT be wrapped in a resolution-result envelope.");
+
         Assert.IsFalse(root.TryGetProperty("didDocument", out _),
             "The bare-accept body IS the document, so it MUST NOT carry a nested didDocument wrapper key.");
+
         Assert.IsFalse(root.TryGetProperty("didDocumentMetadata", out _),
             "The bare-accept body MUST NOT carry the didDocumentMetadata wrapper key.");
+
         Assert.IsTrue(root.TryGetProperty("service", out _),
             "The bare-accept body MUST be a real DID document carrying the resolver's implicit #files/#whois services.");
     }
@@ -145,6 +151,7 @@ internal sealed class DidResolutionHttpBindingTests
         using JsonDocument body = await ReadJsonAsync(response).ConfigureAwait(false);
         Assert.AreEqual(log.Did, body.RootElement.GetProperty("id").GetString(),
             "A q=0 exclusion of the envelope MUST select the DID document.");
+
         Assert.IsFalse(body.RootElement.TryGetProperty("didResolutionMetadata", out _),
             "The q=0-excluded envelope MUST NOT be returned.");
     }
@@ -197,6 +204,7 @@ internal sealed class DidResolutionHttpBindingTests
         JsonElement notFoundMetadata = root.GetProperty("didResolutionMetadata");
         Assert.AreEqual("notFound", notFoundMetadata.GetProperty("error").GetString(),
             "A NOT_FOUND failure MUST carry the 'notFound' string error code.");
+
         Assert.AreEqual(DidErrorTypes.NotFound.AbsoluteUri,
             notFoundMetadata.GetProperty("problemDetails").GetProperty("type").GetString(),
             "A NOT_FOUND failure's problemDetails MUST carry the W3C NOT_FOUND error type.");
@@ -237,8 +245,10 @@ internal sealed class DidResolutionHttpBindingTests
         JsonElement contentStream = root.GetProperty("contentStream");
         Assert.IsTrue(contentStream.TryGetProperty("proof", out _),
             "The dereferenced whois content stream MUST be the verified presentation (carrying a proof).");
+
         Assert.IsTrue(contentStream.TryGetProperty("verifiableCredential", out _),
             "The dereferenced whois content stream MUST carry the verifiable credential about the DID.");
+
         Assert.AreEqual(JsonValueKind.Object, root.GetProperty("dereferencingMetadata").ValueKind,
             "The envelope MUST carry dereferencingMetadata.");
     }
@@ -258,6 +268,7 @@ internal sealed class DidResolutionHttpBindingTests
 
         Assert.AreEqual(HttpStatusCode.Gone, response.StatusCode,
             "A deactivated DID MUST resolve to HTTP 410 Gone.");
+
         Assert.AreEqual(WellKnownDidResolutionMediaTypes.DidResolution, response.Content.Headers.ContentType?.MediaType,
             "A 410 Gone MUST keep the resolution-result envelope media type.");
 
@@ -290,6 +301,7 @@ internal sealed class DidResolutionHttpBindingTests
         JsonElement methodMetadata = body.RootElement.GetProperty("didResolutionMetadata");
         Assert.AreEqual("methodNotSupported", methodMetadata.GetProperty("error").GetString(),
             "An unsupported method MUST carry the 'methodNotSupported' string error code.");
+
         Assert.AreEqual(DidErrorTypes.MethodNotSupported.AbsoluteUri,
             methodMetadata.GetProperty("problemDetails").GetProperty("type").GetString());
     }
@@ -340,6 +352,7 @@ internal sealed class DidResolutionHttpBindingTests
 
         Assert.AreNotEqual(HttpStatusCode.OK, response.StatusCode,
             "A whois.vp with a tampered proof MUST NOT dereference to 200.");
+
         Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode,
             "A tampered whois proof MUST surface as the spec's INVALID_DID -> 400 mapping.");
 
@@ -347,6 +360,7 @@ internal sealed class DidResolutionHttpBindingTests
         JsonElement derefMetadata = body.RootElement.GetProperty("dereferencingMetadata");
         Assert.AreEqual("invalidDid", derefMetadata.GetProperty("error").GetString(),
             "A tampered whois proof MUST carry the 'invalidDid' string error code.");
+
         Assert.AreEqual(DidErrorTypes.InvalidDid.AbsoluteUri,
             derefMetadata.GetProperty("problemDetails").GetProperty("type").GetString(),
             "A tampered whois proof's problemDetails MUST carry the W3C INVALID_DID error type.");
@@ -378,8 +392,10 @@ internal sealed class DidResolutionHttpBindingTests
 
         Assert.IsTrue(root.TryGetProperty("issuers", out _),
             "The bare-accept body MUST be the dereferenced file itself.");
+
         Assert.IsFalse(root.TryGetProperty("contentStream", out _),
             "The bare-accept body MUST NOT be wrapped in a dereferencing-result envelope.");
+
         Assert.IsFalse(root.TryGetProperty("dereferencingMetadata", out _),
             "The bare-accept body MUST NOT carry the dereferencingMetadata wrapper key.");
     }
@@ -607,6 +623,7 @@ internal sealed class DidResolutionHttpBindingTests
             IServerAddressesFeature addresses = app.Services.GetRequiredService<IServer>()
                 .Features.Get<IServerAddressesFeature>()
                 ?? throw new InvalidOperationException("Kestrel exposed no server addresses feature.");
+
             string boundAddress = addresses.Addresses.FirstOrDefault()
                 ?? throw new InvalidOperationException("Kestrel bound no address.");
 
