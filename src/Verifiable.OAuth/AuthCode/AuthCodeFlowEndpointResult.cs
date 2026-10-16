@@ -44,13 +44,15 @@ public enum AuthCodeFlowRefusalOrigin
     /// <summary>
     /// The authorization server answered with the error the refusal carries: an error response of its token or pushed
     /// authorization request endpoint (RFC 6749 section 5.2, RFC 9126 section 2.3), or the error of its authorization
-    /// response that every check of that response the library made accepted (RFC 6749 section 4.1.2.1).
+    /// response whose state names this client's pending authorization request and which passed every callback check that
+    /// request holds it to (RFC 6749 section 4.1.2.1, RFC 9207 section 2.4).
     /// </summary>
     AuthorizationServerAnswer,
 
     /// <summary>
     /// The library refused on its own judgement: a request it would not compose or send, an answer it could not read as the
-    /// specification shapes one, or an authorization response one of its checks refused.
+    /// specification shapes one, an authorization response one of its checks refused, or an authorization error response
+    /// that names no pending authorization request of this client, so no authorization server is established as its author.
     /// </summary>
     ClientJudgement
 }

@@ -307,6 +307,147 @@ internal sealed class OAuthAttackMitigationTests
             "A correctly-issued error callback must surface the authorization server's own error code.");
         Assert.AreEqual("User declined consent.", result.ErrorDescription);
         Assert.AreEqual(AuthCodeFlowRefusalOrigin.AuthorizationServerAnswer, result.RefusalOrigin, "An error response every check accepted is the authorization server's own answer.");
+        AssertAllClaimsSucceeded(result.ValidationClaims);
+        AssertClaimSucceeded(result.ValidationClaims, ValidationClaimIds.StateMatchesActiveFlow,
+            "The error is attributed only after its state was matched to the pending flow.");
+    }
+
+
+    //RFC 9207 §2.4 — an error response that names no pending request has no established author.
+    //
+    //Attacker capability: a web attacker (A1) able to make the victim's browser deliver a
+    //callback carrying error/error_description with no state, an invented state, or the state of
+    //a flow that has already left its authorization step.
+    //
+    //Mitigation: the error is the authorization server's answer only once the callback is tied to
+    //this client's pending authorization request and every check that request holds a response to
+    //accepted it; anything else is the library's own refusal and never the server's word.
+
+    [TestMethod]
+    public async Task Rfc9207Section2Point4ErrorCallbackWithoutStateIsTheLibrarysJudgement()
+    {
+        var store = new Dictionary<string, FlowState>();
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, PolicyProfile.Haip10);
+        _ = await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleCallbackAsync(
+            new Dictionary<string, string>
+            {
+                [OAuthRequestParameterNames.Error] = "access_denied",
+                [OAuthRequestParameterNames.ErrorDescription] = "User declined consent.",
+                [OAuthRequestParameterNames.Iss] = "https://as.example.com"
+                //state deliberately absent.
+            },
+            infrastructure,
+            registration,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, result.Outcome);
+        Assert.AreEqual("invalid_request", result.ErrorCode, "An error without state is refused, never passed through as access_denied.");
+        Assert.AreEqual(AuthCodeFlowRefusalOrigin.ClientJudgement, result.RefusalOrigin, "An error tied to no request of this client has no authorization server as its author.");
+    }
+
+
+    [TestMethod]
+    public async Task Rfc9207Section2Point4ErrorCallbackWithUnknownStateIsTheLibrarysJudgement()
+    {
+        var store = new Dictionary<string, FlowState>();
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, PolicyProfile.Haip10);
+        _ = await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleCallbackAsync(
+            new Dictionary<string, string>
+            {
+                [OAuthRequestParameterNames.Error] = "access_denied",
+                [OAuthRequestParameterNames.ErrorDescription] = "User declined consent.",
+                [OAuthRequestParameterNames.State] = "no-such-flow-id",
+                [OAuthRequestParameterNames.Iss] = "https://as.example.com"
+            },
+            infrastructure,
+            registration,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, result.Outcome);
+        Assert.AreEqual("invalid_request", result.ErrorCode, "An error with an unknown state is refused, never passed through as access_denied.");
+        Assert.AreEqual(AuthCodeFlowRefusalOrigin.ClientJudgement, result.RefusalOrigin, "An error tied to no request of this client has no authorization server as its author.");
+    }
+
+
+    [TestMethod]
+    public async Task Rfc9207Section2Point4ErrorCallbackWithStateOfAFlowPastItsAuthorizationStepIsTheLibrarysJudgement()
+    {
+        var store = new Dictionary<string, FlowState>();
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, PolicyProfile.Haip10);
+        _ = await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        string flowId = GetSingleFlowId(store);
+        AuthCodeFlowEndpointResult received = await AuthCodeFlowHandlers.HandleCallbackAsync(
+            new Dictionary<string, string>
+            {
+                [OAuthRequestParameterNames.Code] = "auth-code",
+                [OAuthRequestParameterNames.State] = flowId,
+                [OAuthRequestParameterNames.Iss] = "https://as.example.com"
+            },
+            infrastructure,
+            registration,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, received.Outcome, "The flow first leaves its authorization step with a received code.");
+        _ = Assert.IsInstanceOfType<AuthorizationCodeReceivedState>(store[flowId], "The state the error names now holds a received code, not a pending authorization request.");
+
+        AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleCallbackAsync(
+            new Dictionary<string, string>
+            {
+                [OAuthRequestParameterNames.Error] = "access_denied",
+                [OAuthRequestParameterNames.ErrorDescription] = "User declined consent.",
+                [OAuthRequestParameterNames.State] = flowId,
+                [OAuthRequestParameterNames.Iss] = "https://as.example.com"
+            },
+            infrastructure,
+            registration,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, result.Outcome);
+        Assert.AreEqual("invalid_request", result.ErrorCode, "An error naming a state that is no pending authorization request is refused.");
+        Assert.AreEqual(AuthCodeFlowRefusalOrigin.ClientJudgement, result.RefusalOrigin, "An error tied to no pending request of this client has no authorization server as its author.");
+    }
+
+
+    [TestMethod]
+    public async Task Rfc9207Section2Point4ErrorCallbackOnAnExpiredFlowIsTheLibrarysJudgement()
+    {
+        var store = new Dictionary<string, FlowState>();
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
+            store,
+            PolicyProfile.Haip10,
+            parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:expired", 1));
+        _ = await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        string flowId = GetSingleFlowId(store);
+
+        //Past the pushed request's expires_in of 1 second.
+        TimeProvider.Advance(TimeSpan.FromSeconds(10));
+
+        AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleCallbackAsync(
+            new Dictionary<string, string>
+            {
+                [OAuthRequestParameterNames.Error] = "access_denied",
+                [OAuthRequestParameterNames.State] = flowId,
+                [OAuthRequestParameterNames.Iss] = "https://as.example.com"
+            },
+            infrastructure,
+            registration,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, result.Outcome);
+        Assert.AreEqual("invalid_request", result.ErrorCode);
+        Assert.AreEqual(AuthCodeFlowRefusalOrigin.ClientJudgement, result.RefusalOrigin, "An error the expiry check refused is the library's own judgement.");
+        AssertClaimFailed(result.ValidationClaims, ValidationClaimIds.FlowStateNotExpired,
+            "The expired flow produces a failed FlowStateNotExpired claim on the error path as on the success path.");
     }
 
 
@@ -774,6 +915,25 @@ internal sealed class OAuthAttackMitigationTests
         }
         Assert.IsNotNull(found, $"Expected claim {expectedId} to be present. {message}");
         Assert.AreEqual(ClaimOutcome.Failure, found.Outcome, message);
+    }
+
+    private static void AssertClaimSucceeded(
+        IReadOnlyList<Claim> claims,
+        ClaimId expectedId,
+        string message)
+    {
+        Claim? found = null;
+        foreach(Claim c in claims)
+        {
+            if(c.Id.Code == expectedId.Code)
+            {
+                found = c;
+                break;
+            }
+        }
+
+        Assert.IsNotNull(found, $"Expected claim {expectedId} to be present. {message}");
+        Assert.AreEqual(ClaimOutcome.Success, found.Outcome, message);
     }
 
     private static void AssertAllClaimsSucceeded(

@@ -556,7 +556,7 @@ public static class AuthCodeFlowHandlers
         if(fields.TryGetValue(OAuthRequestParameterNames.Error, out string? errorCode))
         {
             return await BuildCallbackErrorResultAsync(
-                fields, infrastructure, context, errorCode, cancellationToken).ConfigureAwait(false);
+                fields, infrastructure, registration, context, errorCode, cancellationToken).ConfigureAwait(false);
         }
 
         if(!fields.TryGetValue(OAuthRequestParameterNames.Code, out string? code) ||
@@ -1728,69 +1728,132 @@ public static class AuthCodeFlowHandlers
 
     /// <summary>
     /// Builds the result for an OAuth 2.0 Authorization Error Response callback
-    /// (<paramref name="errorCode"/> present per RFC 6749 §4.1.2.1). Applies the RFC 9207
-    /// §2.4 / §4 mix-up defense to the error path: when <paramref name="fields"/>' <c>state</c>
-    /// correlates to a pending <see cref="ParCompletedState"/> flow and the callback carries a
-    /// PRESENT <c>iss</c> that does not match that flow's recorded issuer
-    /// (<see cref="ValidationChecks.CheckCallbackIssuerMatchesWhenPresent"/>), the response is
-    /// rejected as tampering — an attacker able to inject <c>iss</c> on a forged success
-    /// response is equally able to inject <c>error</c> and <c>iss</c> together, and RFC 9207 §4
-    /// draws no distinction between success and error responses for this defense. When
-    /// <c>state</c> does not correlate to a pending flow, or the callback carries no <c>iss</c>,
-    /// there is no expected-issuer value to validate against and the authorization server's
-    /// error is returned as received.
+    /// (<paramref name="errorCode"/> present per RFC 6749 §4.1.2.1). RFC 9207 §2.4 says a client
+    /// must not assume the error originates from the intended authorization server, so the error
+    /// is attributed to that server only once the callback is tied to it: its <c>state</c> names a
+    /// pending <see cref="ParCompletedState"/> of this client, and the callback checks that flow
+    /// holds every response to accepted it — the state matches the flow, a PRESENT <c>iss</c>
+    /// matches the flow's recorded issuer
+    /// (<see cref="ValidationChecks.CheckCallbackIssuerMatchesWhenPresent"/>), the flow has not
+    /// expired, and a present <c>iss</c> resolves to a known authorization server when the
+    /// application supplies that resolver. A callback with no <c>state</c>, with a <c>state</c>
+    /// naming no flow, or with one naming a flow of another kind or step, establishes no
+    /// authorization server as its author; it is refused as the library's own judgement, as is a
+    /// callback one of the checks refused — an attacker able to inject <c>iss</c> on a forged
+    /// success response is equally able to inject <c>error</c> and <c>iss</c> together, and
+    /// RFC 9207 §4 draws no distinction between success and error responses for this defense.
     /// </summary>
+    /// <param name="fields">The callback parameters, carrying <c>error</c>.</param>
+    /// <param name="infrastructure">The infrastructure carrying flow-state persistence, time and the known-issuer resolver.</param>
+    /// <param name="registration">The registration whose pinned issuer a present <c>iss</c> resolves against.</param>
+    /// <param name="context">The per-operation exchange context threaded into the flow-state delegate.</param>
+    /// <param name="errorCode">The <c>error</c> value the callback carries.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The authorization server's error when the callback is tied to it, else the library's refusal.</returns>
     private static async ValueTask<AuthCodeFlowEndpointResult> BuildCallbackErrorResultAsync(
         IReadOnlyDictionary<string, string> fields,
         OAuthClientInfrastructure infrastructure,
+        ClientRegistration registration,
         ExchangeContext context,
         string errorCode,
         CancellationToken cancellationToken)
     {
         _ = fields.TryGetValue(OAuthRequestParameterNames.ErrorDescription, out string? errorDescription);
 
-        if(fields.TryGetValue(OAuthRequestParameterNames.State, out string? errorState))
+        //Every authorization request this flow composes carries state, and RFC 6749 §4.1.2.1 has the error
+        //response return it, so an error without one cannot be tied to any request of this client.
+        if(!fields.TryGetValue(OAuthRequestParameterNames.State, out string? errorState))
         {
-            FlowState? errorFlowState = await infrastructure.LoadStateAsync(
-                errorState, context, cancellationToken).ConfigureAwait(false);
-
-            if(errorFlowState is ParCompletedState errorParCompleted)
+            return new AuthCodeFlowEndpointResult
             {
-                ValidationContext issuerCheckContext = new()
-                {
-                    Context = [],
-                    Fields = fields,
-                    FlowState = errorParCompleted,
-                    Now = infrastructure.TimeProvider.GetUtcNow()
-                };
-
-                List<Claim> issuerClaims = await ValidationChecks.CheckCallbackIssuerMatchesWhenPresent(
-                    issuerCheckContext, cancellationToken).ConfigureAwait(false);
-
-                if(issuerClaims.Exists(static c => c.Outcome != ClaimOutcome.Success))
-                {
-                    return new AuthCodeFlowEndpointResult
-                    {
-                        Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
-                        RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
-                        ErrorCode = "invalid_request",
-                        ErrorDescription =
-                            "The iss parameter on the error callback does not match the recorded issuer; " +
-                            "the response is not trusted as originating from the intended authorization " +
-                            "server (RFC 9207 §2.4, RFC 9700 §4.4).",
-                        ValidationClaims = issuerClaims
-                    };
-                }
-            }
+                Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
+                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
+                ErrorCode = "invalid_request",
+                ErrorDescription =
+                    "The error callback carries no state, so it cannot be tied to an authorization request " +
+                    "of this client and no authorization server is established as its author " +
+                    "(RFC 6749 §4.1.2.1, RFC 9207 §2.4)."
+            };
         }
 
-        //Every check this error response could be held to accepted it, so its error is the authorization server's answer.
+        FlowState? errorFlowState = await infrastructure.LoadStateAsync(
+            errorState, context, cancellationToken).ConfigureAwait(false);
+
+        if(errorFlowState is not ParCompletedState errorParCompleted)
+        {
+            return new AuthCodeFlowEndpointResult
+            {
+                Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
+                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
+                ErrorCode = "invalid_request",
+                ErrorDescription =
+                    "The error callback's state names no pending authorization request of this client, so " +
+                    "no authorization server is established as its author (RFC 9207 §2.4)."
+            };
+        }
+
+        ValidationContext correlationContext = new()
+        {
+            Context = [],
+            Fields = fields,
+            FlowState = errorParCompleted,
+            TimeProvider = infrastructure.TimeProvider,
+            Now = infrastructure.TimeProvider.GetUtcNow()
+        };
+
+        List<Claim> correlationClaims = [];
+        correlationClaims.AddRange(await ValidationChecks.CheckCallbackStateMatchesFlow(
+            correlationContext, cancellationToken).ConfigureAwait(false));
+        correlationClaims.AddRange(await ValidationChecks.CheckCallbackIssuerMatchesWhenPresent(
+            correlationContext, cancellationToken).ConfigureAwait(false));
+        correlationClaims.AddRange(await ValidationChecks.CheckCallbackFlowNotExpired(
+            correlationContext, cancellationToken).ConfigureAwait(false));
+
+        if(correlationClaims.Exists(static c => c.Outcome != ClaimOutcome.Success))
+        {
+            return new AuthCodeFlowEndpointResult
+            {
+                Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
+                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
+                ErrorCode = "invalid_request",
+                ErrorDescription =
+                    "The error callback failed a check that ties it to this client's authorization request; " +
+                    "the response is not trusted as originating from the intended authorization " +
+                    "server (RFC 9207 §2.4, RFC 9700 §4.4).",
+                ValidationClaims = correlationClaims
+            };
+        }
+
+        string? iss = fields.TryGetValue(OAuthRequestParameterNames.Iss, out string? issValue)
+            ? issValue
+            : null;
+
+        if(iss is not null
+            && infrastructure.IsKnownAuthorizationServerIssuer is not null
+            && !AuthorizationServerIssuerValidation.IsAuthorizationResponseIssuerValid(
+                iss, registration.AuthorizationServerIssuer, infrastructure.IsKnownAuthorizationServerIssuer))
+        {
+            return new AuthCodeFlowEndpointResult
+            {
+                Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
+                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
+                ErrorCode = "invalid_request",
+                ErrorDescription =
+                    "The iss parameter on the error callback does not resolve to a known, uniquely-configured " +
+                    "authorization server matching this registration (RFC 9207 §2.4, §4).",
+                ValidationClaims = correlationClaims
+            };
+        }
+
+        //The error names this client's pending request and every callback check that request holds it to accepted it,
+        //so it is the authorization server's answer.
         return new AuthCodeFlowEndpointResult
         {
             Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
             RefusalOrigin = AuthCodeFlowRefusalOrigin.AuthorizationServerAnswer,
             ErrorCode = errorCode,
-            ErrorDescription = errorDescription
+            ErrorDescription = errorDescription,
+            ValidationClaims = correlationClaims
         };
     }
 

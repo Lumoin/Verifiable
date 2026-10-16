@@ -1,7 +1,7 @@
 #Packs every Verifiable.* package a consumer pins from a local feed, at one version for the whole
 #family, so a consumer never mixes assemblies of two builds.
 #
-#The version is 0.0.2-local.<publication>.<sha>.
+#The version is 0.0.2-local.<publication>.g<sha>.
 #
 #  0.0.2         The library's next release. A prerelease of it sorts below the release itself, so
 #                the published 0.0.2 replaces every local build without a pin having to move down.
@@ -10,9 +10,13 @@
 #                prerelease label as a number and any other label as text, so this number alone
 #                decides which build is newer: 1002 follows 1001, and with no leading zero allowed
 #                the four digits keep that order up to 9999.
-#  <sha>         The commit the packages were built from. It identifies the build and never orders
-#                it: a hexadecimal commit id compares as text, so a later commit can sort below an
-#                earlier one, which is why it stands after the publication number and never alone.
+#  g<sha>        The commit the packages were built from, written as git describe writes it: the
+#                letter g before the short commit id. The letter makes the label an alphanumeric
+#                identifier for every commit, so a short id of digits alone with a leading zero,
+#                which SemVer 2.0.0 section 9 forbids in a numeric identifier, is still a valid
+#                version. It identifies the build and never orders it: an alphanumeric label
+#                compares as text, so a later commit can sort below an earlier one, which is why it
+#                stands after the publication number and never alone.
 #
 #The informational version carries the same version and the full commit id as build metadata.
 #The sha must name exactly what was packed, so the packing is refused when git names no commit or
@@ -36,14 +40,6 @@ $commitId = git -C $repositoryRoot rev-parse HEAD 2>$null
 if([string]::IsNullOrWhiteSpace($sha) -or [string]::IsNullOrWhiteSpace($commitId))
 {
     Write-Error "Packing is refused: git names no commit for $repositoryRoot, and the package version must carry the commit the packages are built from."
-    exit 1
-}
-
-#A prerelease identifier of digits alone is a number, and SemVer 2.0.0 (section 9) forbids a number with a leading zero, so
-#NuGet refuses a version whose short commit id is all digits and starts with zero.
-if($sha -match '^0[0-9]+$')
-{
-    Write-Error "Packing is refused: the short commit id $sha is all digits with a leading zero, which SemVer 2.0.0 section 9 forbids in a prerelease identifier, so 0.0.2-local.$Publication.$sha is no valid package version. Pack from a commit whose short id carries a letter or no leading zero."
     exit 1
 }
 
@@ -81,7 +77,7 @@ $projects = @(
 
 $outputDir = Join-Path $repositoryRoot 'generated-nugets'
 $baseVersion = '0.0.2'
-$packageVersion = "$baseVersion-local.$Publication.$sha"
+$packageVersion = "$baseVersion-local.$Publication.g$sha"
 $informationalVersion = "$packageVersion+$commitId"
 
 #Remove all existing packages before generating new ones so stale or malformed
