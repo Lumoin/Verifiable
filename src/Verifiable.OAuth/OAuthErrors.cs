@@ -47,6 +47,15 @@ public static class OAuthErrors
     /// </summary>
     public static string UnsupportedGrantType { get; } = Utf8Constants.ToInternedString(UnsupportedGrantTypeUtf8);
 
+    /// <summary>The UTF-8 source literal of <see cref="UnsupportedTokenType"/>.</summary>
+    public static ReadOnlySpan<byte> UnsupportedTokenTypeUtf8 => "unsupported_token_type"u8;
+
+    /// <summary>
+    /// The authorization server does not support the revocation of the presented token type, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7009#section-2.2.1">RFC 7009 §2.2.1</see>.
+    /// </summary>
+    public static string UnsupportedTokenType { get; } = Utf8Constants.ToInternedString(UnsupportedTokenTypeUtf8);
+
     /// <summary>The UTF-8 source literal of <see cref="ServerError"/>.</summary>
     public static ReadOnlySpan<byte> ServerErrorUtf8 => "server_error"u8;
 

@@ -30,6 +30,8 @@ public enum AuthCodeFlowEndpointOutcome
 
     /// <summary>
     /// An internal error occurred. The caller should return HTTP 500.
+    /// <see cref="AuthCodeFlowEndpointResult.ErrorCode"/> and
+    /// <see cref="AuthCodeFlowEndpointResult.ErrorDescription"/> carry the error the refusal states.
     /// </summary>
     InternalError
 }
@@ -131,16 +133,19 @@ public sealed class AuthCodeFlowEndpointResult
     public Uri? RedirectUri { get; }
 
     /// <summary>
-    /// The OAuth error code for <see cref="AuthCodeFlowEndpointOutcome.BadRequest"/> outcomes,
-    /// e.g. <c>invalid_request</c> or <c>invalid_client</c>.
-    /// <see langword="null"/> for other outcomes.
+    /// The OAuth error code a refusal carries, for <see cref="AuthCodeFlowEndpointOutcome.BadRequest"/> and
+    /// <see cref="AuthCodeFlowEndpointOutcome.InternalError"/> outcomes alike, e.g. <c>invalid_request</c> for a request
+    /// refused or <c>server_error</c> for a request the library could not complete. <see langword="null"/> for
+    /// <see cref="AuthCodeFlowEndpointOutcome.Ok"/> and <see cref="AuthCodeFlowEndpointOutcome.Redirect"/> outcomes, and for
+    /// a refusal constructed without one.
     /// </summary>
     public string? ErrorCode { get; }
 
     /// <summary>
-    /// A human-readable description of the error for
-    /// <see cref="AuthCodeFlowEndpointOutcome.BadRequest"/> outcomes.
-    /// <see langword="null"/> for other outcomes.
+    /// A human-readable description of the error a refusal carries, for <see cref="AuthCodeFlowEndpointOutcome.BadRequest"/>
+    /// and <see cref="AuthCodeFlowEndpointOutcome.InternalError"/> outcomes alike. <see langword="null"/> for
+    /// <see cref="AuthCodeFlowEndpointOutcome.Ok"/> and <see cref="AuthCodeFlowEndpointOutcome.Redirect"/> outcomes, and for
+    /// a refusal constructed without one.
     /// </summary>
     public string? ErrorDescription { get; }
 
@@ -162,9 +167,12 @@ public sealed class AuthCodeFlowEndpointResult
     public ClientAssertionCredentialRefusal? ClientAssertionCredentialRefusal { get; }
 
     /// <summary>
-    /// The individual validation claims produced during callback validation.
-    /// Populated when the callback <see cref="ClaimIssuer{TInput}"/> was invoked — i.e., for
-    /// all outcomes of <see cref="AuthCodeClient.HandleCallbackAsync(Verifiable.OAuth.Client.ClientRegistration, OAuthFormEncodedFields, CancellationToken)"/>. Empty for other handlers.
+    /// The individual validation claims the callback <see cref="ClaimIssuer{TInput}"/> produced, carried by a refusal of
+    /// <see cref="AuthCodeClient.HandleCallbackAsync(Verifiable.OAuth.Client.ClientRegistration, OAuthFormEncodedFields, CancellationToken)"/>
+    /// constructed with them through
+    /// <see cref="Refused(AuthCodeFlowEndpointOutcome, AuthCodeFlowRefusalOrigin, string?, string?, IReadOnlyList{Claim})"/>.
+    /// Empty on every successful and redirecting result, a successful callback among them, and on every refusal
+    /// constructed without claims.
     /// </summary>
     /// <remarks>
     /// Callers can inspect this list to feed per-check outcomes into monitoring,

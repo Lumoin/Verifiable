@@ -57,7 +57,7 @@ internal static class TokenEndpointClientOperations
                 AuthCodeFlowEndpointResult.Refused(
                     AuthCodeFlowEndpointOutcome.BadRequest,
                     AuthCodeFlowRefusalOrigin.ClientJudgement,
-                    "invalid_request",
+                    OAuthErrors.InvalidRequest,
                     "The authorization server metadata issuer does not match this registration's " +
                     "pinned AuthorizationServerIssuer (RFC 8414 §3.3 / RFC 9207 §2.4)."));
         }
@@ -84,7 +84,7 @@ internal static class TokenEndpointClientOperations
         return AuthCodeFlowEndpointResult.Refused(
             AuthCodeFlowEndpointOutcome.InternalError,
             AuthCodeFlowRefusalOrigin.ClientJudgement,
-            "server_error",
+            OAuthErrors.ServerError,
             "The authorization server metadata could not be resolved.");
     }
 
@@ -133,7 +133,7 @@ internal static class TokenEndpointClientOperations
         return AuthCodeFlowEndpointResult.Refused(
             AuthCodeFlowEndpointOutcome.InternalError,
             AuthCodeFlowRefusalOrigin.ClientJudgement,
-            "server_error",
+            OAuthErrors.ServerError,
             "The endpoint was refused by the outbound fetch policy.");
     }
 
@@ -172,7 +172,7 @@ internal static class TokenEndpointClientOperations
             return Result<ClientAssertionCredential?, AuthCodeFlowEndpointResult>.Failure(AuthCodeFlowEndpointResult.Refused(
                 AuthCodeFlowEndpointOutcome.InternalError,
                 AuthCodeFlowRefusalOrigin.ClientJudgement,
-                "server_error",
+                OAuthErrors.ServerError,
                 key.Error.Describe(),
                 key.Error));
         }
@@ -499,12 +499,12 @@ internal static class TokenEndpointClientOperations
             OAuthMalformedResponse mr => AuthCodeFlowEndpointResult.Refused(
                 AuthCodeFlowEndpointOutcome.InternalError,
                 AuthCodeFlowRefusalOrigin.ClientJudgement,
-                "server_error",
+                OAuthErrors.ServerError,
                 mr.Support.Summary),
             _ => AuthCodeFlowEndpointResult.Refused(
                 AuthCodeFlowEndpointOutcome.InternalError,
                 AuthCodeFlowRefusalOrigin.ClientJudgement,
-                "server_error",
+                OAuthErrors.ServerError,
                 error.Support.Summary)
         };
     }

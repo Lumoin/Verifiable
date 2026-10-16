@@ -1,5 +1,6 @@
 using System.Globalization;
 using Verifiable.Core.Assessment;
+using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.Client;
 
@@ -14,7 +15,7 @@ namespace Verifiable.Tests.OAuth;
 internal sealed class AuthCodeFlowEndpointResultTests
 {
     /// <summary>The error code every refusal row carries.</summary>
-    private const string RefusalErrorCode = "invalid_grant";
+    private static string RefusalErrorCode { get; } = OAuthErrors.InvalidGrant;
 
     /// <summary>The error description every refusal row carries.</summary>
     private const string RefusalErrorDescription = "The grant was refused.";
@@ -68,8 +69,10 @@ internal sealed class AuthCodeFlowEndpointResultTests
 
         AssertOriginRefused(() => AuthCodeFlowEndpointResult.Refused(
             AuthCodeFlowEndpointOutcome.BadRequest, origin, RefusalErrorCode, RefusalErrorDescription));
+
         AssertOriginRefused(() => AuthCodeFlowEndpointResult.Refused(
             AuthCodeFlowEndpointOutcome.BadRequest, origin, RefusalErrorCode, RefusalErrorDescription, NoClaims));
+
         AssertOriginRefused(() => AuthCodeFlowEndpointResult.Refused(
             AuthCodeFlowEndpointOutcome.InternalError, origin, RefusalErrorCode, RefusalErrorDescription, CredentialRefusal));
     }
@@ -129,7 +132,7 @@ internal sealed class AuthCodeFlowEndpointResultTests
     [TestMethod]
     public void ASuccessAndARedirectCarryNoRefusalOrigin()
     {
-        var success = AuthCodeFlowEndpointResult.Succeeded(new Dictionary<string, object> { ["flow_id"] = "flow-1" });
+        var success = AuthCodeFlowEndpointResult.Succeeded(new Dictionary<string, object> { [AuthCodeFlowRoutes.FlowIdField] = "flow-1" });
         var redirect = AuthCodeFlowEndpointResult.Redirected(RedirectTarget);
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, success.Outcome, "The success is an Ok outcome.");
