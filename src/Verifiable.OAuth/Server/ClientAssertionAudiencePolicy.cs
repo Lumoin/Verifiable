@@ -50,9 +50,9 @@ namespace Verifiable.OAuth.Server;
 /// state.
 /// </para>
 /// <para>
-/// This policy governs <see cref="PrivateKeyJwtClientAuthentication"/> only. The library ships no
-/// <c>client_secret_jwt</c> validator, so a <c>client_secret_jwt</c> validator is the application's and
-/// applies the audience rule itself.
+/// This policy governs <see cref="PrivateKeyJwtClientAuthentication"/> only. For a <c>client_secret_jwt</c>
+/// assertion the library verifies the MAC (<see cref="ClientSecretAssertionVerification"/>) and the
+/// application judges the claims set, the audience rule among them, once the MAC verified.
 /// </para>
 /// <para>
 /// The accepted values are the issuer identifier the application's issuer resolution yields and the

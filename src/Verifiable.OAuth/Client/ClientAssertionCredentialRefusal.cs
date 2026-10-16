@@ -48,7 +48,15 @@ public enum ClientAssertionCredentialRefusalReason
     /// <c>private_key_jwt</c> assertion is signed with nor the client secret a <c>client_secret_jwt</c> assertion is MACed
     /// with.
     /// </summary>
-    RegistrationCarriesNoKey
+    RegistrationCarriesNoKey,
+
+    /// <summary>
+    /// The MAC a <c>client_secret_jwt</c> assertion carries is not the client secret's HMAC of the assertion's signing input
+    /// under the algorithm judged, or the assertion is no compact JWS carrying one: RFC 7523 Section 3 item 9, "The
+    /// authorization server MUST reject any JWT with an invalid signature or Message Authentication Code". The authorization
+    /// server's verification of the assertion refuses by it (<see cref="Verifiable.OAuth.Server.ClientSecretAssertionVerification"/>).
+    /// </summary>
+    MacDoesNotVerify
 }
 
 
@@ -111,6 +119,9 @@ public sealed record ClientAssertionCredentialRefusal
         ClientAssertionCredentialRefusalReason.RegistrationCarriesNoKey => string.Create(
             CultureInfo.InvariantCulture,
             $"The registration names {MethodName()} but carries no authentication key material to sign or MAC its assertion with."),
+        ClientAssertionCredentialRefusalReason.MacDoesNotVerify => string.Create(
+            CultureInfo.InvariantCulture,
+            $"The client_secret_jwt assertion carries no MAC the client secret verifies under {Algorithm} (RFC 7523 Section 3 item 9)."),
         _ => throw new UnreachableException($"The refusal reason '{Reason}' has no description.")
     };
 

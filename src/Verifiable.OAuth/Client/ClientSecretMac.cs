@@ -107,6 +107,48 @@ internal sealed class ClientSecretMac
 
 
     /// <summary>
+    /// Whether a MAC a JWS carries is the client secret's HMAC of its signing input under this algorithm: recomputed and
+    /// compared through the registered <see cref="VerifyHmacDelegate"/>, whose comparison runs in constant time (RFC 7518
+    /// Section 3.2: "The comparison of the computed HMAC value to the JWS Signature value MUST be done in a constant-time
+    /// manner to thwart timing attacks"), under the key tag <see cref="SignAsync"/> computes the MAC under, so the server's
+    /// check and the client's composition read one table. A MAC of any length but the hash output's is no MAC of this
+    /// algorithm and verifies nothing.
+    /// </summary>
+    /// <param name="secretOctets">The client secret's octets.</param>
+    /// <param name="signingInput">The JWS signing input (RFC 7515 Section 5.2).</param>
+    /// <param name="presentedMac">The MAC the JWS carries as its signature, decoded.</param>
+    /// <param name="pool">The pool the recomputed MAC's octets are rented from.</param>
+    /// <param name="context">The operation context, handed to the HMAC function.</param>
+    /// <param name="cancellationToken">Cancels the verification.</param>
+    /// <returns><see langword="true"/> when the MAC is the secret's HMAC of the signing input.</returns>
+    public async ValueTask<bool> VerifyAsync(
+        ReadOnlyMemory<byte> secretOctets,
+        ReadOnlyMemory<byte> signingInput,
+        ReadOnlyMemory<byte> presentedMac,
+        BaseMemoryPool pool,
+        FrozenDictionary<string, object>? context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(pool);
+
+        if(presentedMac.Length != Length)
+        {
+            return false;
+        }
+
+        return await CryptographicKeyEvents.VerifyHmacAsync(
+            signingInput,
+            secretOctets,
+            presentedMac,
+            KeyTag,
+            pool,
+            context,
+            qualifier: null,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
     /// The MAC's octets as the signature the result hands to its caller, which owns the signature and disposes it with the
     /// octets.
     /// </summary>
