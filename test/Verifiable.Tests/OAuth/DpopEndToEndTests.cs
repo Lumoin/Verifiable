@@ -304,8 +304,8 @@ internal sealed class DpopEndToEndTests
     /// <c>jti</c> but never resolves what it saved under <c>FlowKind.JtiReplay</c> cannot maintain the
     /// used-<c>jti</c> set, so <see cref="JtiReplayGuard"/> answers
     /// <see cref="JtiReplayOutcome.StoreUnavailable"/> and the token endpoint refuses the exchange with
-    /// <c>server_error</c> — the silent no-op the half-wiring would otherwise produce is caught rather
-    /// than admitted.
+    /// <c>server_error</c> and the description "The DPoP proof jti replay defense could not record the proof.": the
+    /// silent no-op the half-wiring would otherwise produce is caught rather than admitted.
     /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449, Section 11.1</see>.
     /// </summary>
     [TestMethod]
@@ -372,6 +372,7 @@ internal sealed class DpopEndToEndTests
         Assert.AreNotEqual(AuthCodeFlowEndpointOutcome.Ok, tokenResult.Outcome, "The half-wired store must refuse the exchange.");
         Assert.AreEqual(OAuthErrors.ServerError, tokenResult.ErrorCode,
             $"RFC 9449 §11.1: a store that cannot prove it recorded the DPoP jti fails the exchange closed. Description: {tokenResult.ErrorDescription}");
+        Assert.AreEqual("The DPoP proof jti replay defense could not record the proof.", tokenResult.ErrorDescription);
     }
 
 
@@ -2136,7 +2137,7 @@ internal sealed class DpopEndToEndTests
     /// real resolver. This is the half-wired store the guard's post-save self-check must catch.
     /// </summary>
     /// <param name="server">The hosted server whose OAuth integration resolver is wrapped.</param>
-    private static async Task HalfWireJtiReplayStoreAsync(EndpointServer server)
+    internal static async Task HalfWireJtiReplayStoreAsync(EndpointServer server)
     {
         ResolveCorrelationKeyDelegate original = server.OAuth().ResolveCorrelationKeyAsync!;
         await TestHostShell.AlterAsync(server, candidateIntegration =>

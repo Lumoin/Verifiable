@@ -43,11 +43,15 @@ namespace Verifiable.OAuth;
 /// values.
 /// </para>
 /// <para>
-/// The confirmation claim <c>cnf</c> fails closed the same way: a token carrying <c>cnf</c> with no string
-/// <c>jkt</c> member (a certificate thumbprint <c>x5t#S256</c> alone, a <c>jkt</c> that is not a string, or a value
-/// that is no JSON object) is rejected with <see cref="JwsAccessTokenValidationFailureReason.Malformed"/>, so a
-/// validated token's <see cref="JwsAccessTokenClaims.Confirmation"/> is <see langword="null"/> exactly when the token
-/// carries no <c>cnf</c>. Only <c>jkt</c> is enforced, and a member beside a <c>jkt</c> is not read. A certificate
+/// The confirmation claim <c>cnf</c> fails closed the same way, so a validated token's
+/// <see cref="JwsAccessTokenClaims.Confirmation"/> is <see langword="null"/> exactly when the token carries no
+/// <c>cnf</c>: a <c>cnf</c> that is no JSON object, a <c>jkt</c> that is not a string and a blank <c>jkt</c>, which
+/// encodes no thumbprint and binds the token to no key, are refused with
+/// <see cref="JwsAccessTokenValidationFailureReason.Malformed"/>; a well-formed <c>cnf</c> carrying no <c>jkt</c> (a
+/// certificate thumbprint <c>x5t#S256</c> alone, or a member the validator does not understand) is refused with
+/// <see cref="JwsAccessTokenValidationFailureReason.UnsupportedConfirmationMethod"/>. A blank <c>jkt</c> is one whose
+/// text is empty or white space, the one rule the library's own resources hold a presented token's <c>cnf</c> to
+/// (<see cref="IsBlankJwkThumbprint"/>). Only <c>jkt</c> is enforced, and a member beside a <c>jkt</c> is not read. A certificate
 /// thumbprint is a binding the resource cannot verify without the client certificate
 /// (<see href="https://www.rfc-editor.org/rfc/rfc8705#section-3">RFC 8705 Section 3</see>: "The protected resource
 /// MUST obtain, from its TLS implementation layer, the client certificate used for mutual TLS and MUST verify that the
@@ -106,6 +110,22 @@ public static class JwsAccessTokenValidator
     /// reject such a token.
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The validated claims, or the reason the token is refused and its description.</returns>
+    /// <remarks>
+    /// A token whose <c>cnf</c> carries no <c>jkt</c> the validator enforces is refused with
+    /// <see cref="JwsAccessTokenValidationFailureReason.UnsupportedConfirmationMethod"/>, never served as a bearer token.
+    /// A certificate thumbprint binds the token to a client certificate a resource verifies only against the connection
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8705#section-3">RFC 8705 Section 3</see>: "The protected resource
+    /// MUST obtain, from its TLS implementation layer, the client certificate used for mutual TLS and MUST verify that the
+    /// certificate matches the certificate associated with the access token."), and no resource of this library does.
+    /// Refusing a <c>cnf</c> whose members the validator does not understand departs from
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7800#section-3.1">RFC 7800 Section 3.1</see>: "However, in the
+    /// absence of such requirements, all confirmation members that are not understood by implementations MUST be
+    /// ignored." It is the library's fail-closed choice, the reading that section leaves to an application of JWTs
+    /// ("Specific applications of JWTs will require implementations to understand and process some confirmation members
+    /// in particular ways."). A <c>cnf</c> that is no object, a <c>jkt</c> that is not a string and a blank <c>jkt</c>
+    /// are refused with <see cref="JwsAccessTokenValidationFailureReason.Malformed"/>.
+    /// </remarks>
     public static async ValueTask<JwsAccessTokenValidationResult> ValidateAsync(
         string accessToken,
         string expectedIssuer,
@@ -151,17 +171,21 @@ public static class JwsAccessTokenValidator
         _ = TryReadString(outcome.Payload!, WellKnownJwtClaimNames.Jti, out string? jti);
         ConfirmationMethod? confirmation = TryReadConfirmation(outcome.Payload!);
 
-        //A present cnf binds the token to a key its presenter must prove possession of. A cnf this validator cannot read
-        //as a jkt names a confirmation no resource of this library enforces: a certificate thumbprint the resource cannot
-        //verify (RFC 8705 Section 3: "MUST verify that the certificate matches the certificate associated with the access
-        //token"), or a member it does not understand, which RFC 7800 Section 3.1 would have ignored ("all confirmation
-        //members that are not understood by implementations MUST be ignored") and which the library refuses, failing
-        //closed, rather than serve the token unbound. Only jkt is enforced; a member beside a jkt is not read.
-        if(confirmation is null && outcome.Payload!.TryGetValue(WellKnownJwtClaimNames.Cnf, out _))
+        //A present cnf binds the token to a key its presenter must prove possession of. A cnf carrying no jkt names a
+        //confirmation no resource of this library enforces: a certificate thumbprint the resource cannot verify (RFC 8705
+        //Section 3: "MUST verify that the certificate matches the certificate associated with the access token"), or a
+        //member it does not understand, which RFC 7800 Section 3.1 would have ignored ("all confirmation members that are
+        //not understood by implementations MUST be ignored") and which the library refuses, failing closed, rather than
+        //serve the token unbound. A blank jkt encodes no thumbprint (RFC 9449 Section 6.1) and is malformed. Only jkt is
+        //enforced; a member beside a jkt is not read.
+        if(outcome.Payload!.TryGetValue(WellKnownJwtClaimNames.Cnf, out object? confirmationValue)
+            && ReadConfirmationFailure(confirmationValue) is JwsAccessTokenValidationFailureReason confirmationFailure)
         {
             return JwsAccessTokenValidationResult.Failure(
-                JwsAccessTokenValidationFailureReason.Malformed,
-                "Access token cnf claim carries no jkt confirmation this validator reads.");
+                confirmationFailure,
+                IsBlankJwkThumbprint(confirmationValue)
+                    ? BlankJwkThumbprintDescription
+                    : "Access token cnf claim carries no jkt confirmation this validator reads.");
         }
 
         //RFC 8693 §4.1/§4.4: act and may_act are nested JSON objects whose members identify a party.
@@ -688,6 +712,86 @@ public static class JwsAccessTokenValidator
 
         return jkt is null ? null : new ConfirmationMethod { JwkThumbprint = jkt };
     }
+
+
+    /// <summary>
+    /// The description a token whose <c>cnf</c> carries a blank <c>jkt</c> is refused with, by this validator as
+    /// <see cref="JwsAccessTokenValidationFailureReason.Malformed"/> and by the library's own resources as
+    /// <c>invalid_token</c>.
+    /// </summary>
+    internal static string BlankJwkThumbprintDescription { get; } = "Access token cnf claim carries a blank jkt.";
+
+
+    /// <summary>
+    /// Whether a present <c>cnf</c> claim value carries a blank <c>jkt</c>: a JSON object, read through either
+    /// dictionary view, whose <c>jkt</c> member is a string that is empty or white space. Such a <c>jkt</c> encodes no JWK
+    /// SHA-256 Thumbprint (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.1">RFC 9449 Section 6.1</see>: the
+    /// value "MUST be the base64url encoding (as defined in [RFC7515]) of the JWK SHA-256 Thumbprint (according to
+    /// [RFC7638]) of the DPoP public key (in JWK format) to which the access token is bound.") and binds the token to no
+    /// key, so the token is malformed. The one rule this validator and the library's own resources hold a <c>cnf</c> to.
+    /// </summary>
+    /// <param name="confirmation">The <c>cnf</c> claim's value.</param>
+    /// <returns><see langword="true"/> when the <c>cnf</c> carries a blank string <c>jkt</c>.</returns>
+    internal static bool IsBlankJwkThumbprint(object? confirmation) =>
+        ReadJwkThumbprintMember(confirmation) is string thumbprint && IsBlank(thumbprint);
+
+
+    /// <summary>Whether a <c>jkt</c> text is blank, empty or white space only.</summary>
+    /// <param name="thumbprint">The <c>jkt</c> text.</param>
+    /// <returns><see langword="true"/> when the text names no thumbprint.</returns>
+    private static bool IsBlank(string thumbprint) => string.IsNullOrWhiteSpace(thumbprint);
+
+
+    /// <summary>
+    /// The value of the <c>jkt</c> member of a <c>cnf</c> claim value read through either dictionary view a JSON object
+    /// materialises as, or <see langword="null"/> when the value is no object or carries no <c>jkt</c>.
+    /// </summary>
+    /// <param name="confirmation">The <c>cnf</c> claim's value.</param>
+    /// <returns>The member's value, of whatever type it was read as, or <see langword="null"/>.</returns>
+    private static object? ReadJwkThumbprintMember(object? confirmation) => confirmation switch
+    {
+        IReadOnlyDictionary<string, object> members when members.TryGetValue(WellKnownJwtClaimNames.JwkThumbprint, out object? value) => value,
+        IDictionary<string, object> members when members.TryGetValue(WellKnownJwtClaimNames.JwkThumbprint, out object? value) => value,
+
+        _ => null
+    };
+
+
+    /// <summary>
+    /// The reason a present <c>cnf</c> claim value refuses the token, or <see langword="null"/> when it carries a
+    /// <c>jkt</c> this validator enforces: <see cref="JwsAccessTokenValidationFailureReason.Malformed"/> for a value that
+    /// is no JSON object, a <c>jkt</c> that is not a string and a blank <c>jkt</c> (<see cref="IsBlankJwkThumbprint"/>);
+    /// <see cref="JwsAccessTokenValidationFailureReason.UnsupportedConfirmationMethod"/> for an object carrying no
+    /// <c>jkt</c>, a confirmation method no resource of this library enforces.
+    /// </summary>
+    /// <param name="confirmation">The <c>cnf</c> claim's value.</param>
+    /// <returns>The failure reason, or <see langword="null"/> for an enforceable <c>jkt</c>.</returns>
+    private static JwsAccessTokenValidationFailureReason? ReadConfirmationFailure(object? confirmation) => confirmation switch
+    {
+        IReadOnlyDictionary<string, object> members => JwkThumbprintMemberFailure(
+            members.TryGetValue(WellKnownJwtClaimNames.JwkThumbprint, out object? readOnlyValue), readOnlyValue),
+        IDictionary<string, object> members => JwkThumbprintMemberFailure(
+            members.TryGetValue(WellKnownJwtClaimNames.JwkThumbprint, out object? writableValue), writableValue),
+
+        _ => JwsAccessTokenValidationFailureReason.Malformed
+    };
+
+
+    /// <summary>
+    /// The reason a confirmation object's <c>jkt</c> member refuses the token, or <see langword="null"/> when it is a
+    /// non-blank string.
+    /// </summary>
+    /// <param name="isPresent">Whether the object carries a <c>jkt</c> member.</param>
+    /// <param name="value">The member's value.</param>
+    /// <returns>The failure reason, or <see langword="null"/>.</returns>
+    private static JwsAccessTokenValidationFailureReason? JwkThumbprintMemberFailure(bool isPresent, object? value) => (isPresent, value) switch
+    {
+        (false, _) => JwsAccessTokenValidationFailureReason.UnsupportedConfirmationMethod,
+        (true, string thumbprint) when IsBlank(thumbprint) => JwsAccessTokenValidationFailureReason.Malformed,
+        (true, string) => null,
+
+        _ => JwsAccessTokenValidationFailureReason.Malformed
+    };
 
 
     /// <summary>

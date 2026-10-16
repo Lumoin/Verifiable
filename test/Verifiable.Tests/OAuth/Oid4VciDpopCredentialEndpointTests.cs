@@ -504,6 +504,67 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "credentials = "DPoP"
+    /// 1*SP token68", and <see href="https://www.rfc-editor.org/rfc/rfc6750#section-2.1">RFC 6750 Section 2.1</see>:
+    /// "credentials = "Bearer" 1*SP b64token"; a credential outside that form is malformed,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>: "invalid_request The
+    /// request is missing a required parameter, includes an unsupported parameter or parameter value, repeats the same
+    /// parameter, uses more than one method for including an access token, or is otherwise malformed. The resource server
+    /// SHOULD respond with the HTTP 400 (Bad Request) status code.", and the mechanism it attempts is named,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 Section 7.2</see>: "If the mechanism used
+    /// to attempt authentication could be established unambiguously, then the corresponding challenge SHOULD be used to
+    /// deliver error information (Figure 18)." A Credential Request sent over a raw TLS connection whose one
+    /// <c>Authorization</c> field line names a scheme with the credentials <c>abc def</c>, no token68, is answered 400
+    /// with the body
+    /// <c>{"error":"invalid_request","error_description":"The Authorization header credentials are not a token68."}</c>.
+    /// The rows: the <c>DPoP</c> scheme, the one challenge <c>DPoP realm="&lt;issuer&gt;", error="invalid_request", algs="..."</c>
+    /// and the one field line <c>Access-Control-Expose-Headers: WWW-Authenticate, DPoP-Nonce</c>; the <c>Bearer</c>
+    /// scheme, the one challenge <c>Bearer realm="&lt;issuer&gt;", error="invalid_request"</c> and no
+    /// <c>Access-Control-Expose-Headers</c> field.
+    /// </summary>
+    /// <param name="scheme">The scheme the field line names.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("DPoP")]
+    [DataRow("Bearer")]
+    public async Task CredentialEndpointAnswersACredentialOutsideToken68WithInvalidRequestAsync(string scheme)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        BoundTokenContext ctx = await AcquireAsync(host).ConfigureAwait(false);
+        using DpopClientFixture fixture = ctx.Fixture;
+
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Post, ctx.CredentialUrl,
+            [
+                new(WellKnownHttpHeaderNames.ContentType, WellKnownMediaTypes.Application.Json),
+                new(WellKnownHttpHeaderNames.Authorization, $"{scheme} abc def")
+            ],
+            Encoding.UTF8.GetBytes("{\"credential_configuration_id\":\"" + ConfigurationId + "\",\"proofs\":{\"jwt\":[\"p\"]}}"),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The request is answered without a server fault.");
+        Assert.AreEqual(400, response.StatusCode, response.Body);
+        bool isDpopScheme = string.Equals(scheme, "DPoP", StringComparison.Ordinal);
+        Assert.AreEqual(
+            isDpopScheme ? CredentialDpopChallenge(ctx, "invalid_request") : $"Bearer realm=\"{IssuerOf(ctx)}\", error=\"invalid_request\"",
+            Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
+        IReadOnlyList<string> exposureFields = response.Headers.Headers.GetValues("Access-Control-Expose-Headers");
+        if(isDpopScheme)
+        {
+            Assert.AreEqual(ResourceDpopProofs.ExposedDpopResponseFields, Assert.ContainsSingle(exposureFields));
+        }
+        else
+        {
+            Assert.IsEmpty(exposureFields, "A Bearer challenge alone exposes no field.");
+        }
+
+        Assert.AreEqual(
+            "{\"error\":\"invalid_request\",\"error_description\":\"The Authorization header credentials are not a token68.\"}",
+            response.Body);
+    }
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 Section 7.2</see>: "If the mechanism used
     /// to attempt authentication could be established unambiguously, then the corresponding challenge SHOULD be used to
     /// deliver error information (Figure 18)." A Credential Request sent over a raw TLS connection with two

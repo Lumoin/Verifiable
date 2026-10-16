@@ -23,8 +23,7 @@ namespace Verifiable.Fido2;
 /// <see cref="MetadataBlobVerification.VerifyAsync"/> invokes this delegate under
 /// <see cref="MetadataBlobSerialNumberPolicy.Required"/>, exactly once, immediately before returning
 /// an accepted result — never on any rejection path — so a caller can never observe a persisted
-/// serial number for a BLOB that did not actually verify. Mirrors <c>PersistDpopProofJtiDelegate</c>'s
-/// "the validator calls this once per accepted proof" contract; implementations SHOULD be idempotent
-/// for the same reason.
+/// serial number for a BLOB that did not actually verify. Implementations SHOULD be idempotent, so a
+/// repeated persist of one accepted BLOB records it once.
 /// </remarks>
 public delegate ValueTask PersistVerifiedMetadataBlobAsyncDelegate(TenantId tenantId, VerifiedMetadataBlobResult result, CancellationToken cancellationToken);

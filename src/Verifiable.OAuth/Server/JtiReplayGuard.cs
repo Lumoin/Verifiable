@@ -25,20 +25,26 @@ public enum JtiReplayOutcome
     Replayed,
 
     /// <summary>
-    /// No replay store is wired under <see cref="JtiReplayPolicy.Required"/>, or the wired
-    /// store has no atomic claim or cannot resolve what it recorded, under either
-    /// <see cref="JtiReplayPolicy.Required"/> or <see cref="JtiReplayPolicy.OptionalIfStorePresent"/>
-    /// — the caller must fail closed rather than proceed on a defense that cannot prove it is working.
+    /// The replay defense cannot record the <c>jti</c>, so the caller must fail closed rather than proceed on a defense
+    /// that cannot prove it is working. Two producers answer it: the library's guard, when no replay store is wired under
+    /// <see cref="JtiReplayPolicy.Required"/>, or the wired store has no atomic claim or cannot resolve what it recorded,
+    /// under either <see cref="JtiReplayPolicy.Required"/> or <see cref="JtiReplayPolicy.OptionalIfStorePresent"/>; and an
+    /// application's own store answering through <see cref="ConsultDpopProofJtiDelegate"/>, when it cannot record the
+    /// claim or cannot resolve what it recorded.
     /// </summary>
     StoreUnavailable,
 
     /// <summary>
-    /// The <c>jti</c> exceeds <see cref="JtiReplayGuard.MaxJtiLength"/>, or the <c>jti</c> or the issuer holds a
-    /// character of the Unicode general category Cc (the C0 and C1 controls and U+007F) or an unpaired surrogate,
-    /// so the guard cannot track it; the caller must reject the presentation as malformed, and no store has been
-    /// consulted. The length bound answers
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449, Section 11.1</see>; the character
-    /// rule is this library's policy, since the application's store may not hold such a character.
+    /// The <c>jti</c> is one no record can hold, so the caller must reject the presentation as malformed. Two producers
+    /// answer it: the library's guard, before any store is consulted, when the <c>jti</c> is empty or exceeds
+    /// <see cref="JtiReplayGuard.MaxJtiLength"/>, or the <c>jti</c> or the issuer holds a character of the Unicode general
+    /// category Cc (the C0 and C1 controls and U+007F) or an unpaired surrogate; and an application's own store answering
+    /// through <see cref="ConsultDpopProofJtiDelegate"/>, after it was consulted, for a <c>jti</c> it cannot hold by a rule
+    /// of its own. The length bound answers
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449, Section 11.1</see>: "In order to guard
+    /// against memory exhaustion attacks, a server that is tracking jti values should reject DPoP proof JWTs with
+    /// unnecessarily large jti values or store only a hash thereof."; the character rule is this library's policy, since
+    /// the application's store may not hold such a character.
     /// </summary>
     Unacceptable
 }
@@ -105,6 +111,16 @@ public static class JtiReplayGuard
         jti.Length > 0
         && jti.Length <= MaxJtiLength
         && TextHygiene.Inspect(jti, UnstorableCharacterRule) is null;
+
+
+    /// <summary>
+    /// The one description every DPoP endpoint of the library answers a proof's <c>jti</c> no record can hold with
+    /// (<see cref="JtiReplayOutcome.Unacceptable"/>, <c>invalid_dpop_proof</c>): the token endpoint, the library's own
+    /// resources and an application's resource through <see cref="ProtectedResource.DpopResourceAccess.DecideAsync"/>
+    /// name the same three causes of <see cref="IsStorableJti"/>, so one refusal reads the same at every endpoint.
+    /// </summary>
+    internal static string UnstorableDpopProofJtiDescription { get; } =
+        "DPoP proof jti is empty, too long or carries a character the replay guard cannot store.";
 
     /// <summary>
     /// Composes the <c>(purpose, issuer, jti)</c> correlation key of a purpose whose identifiers are not

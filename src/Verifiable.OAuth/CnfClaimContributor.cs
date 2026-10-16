@@ -24,10 +24,14 @@ namespace Verifiable.OAuth;
 /// when the token endpoint validates a DPoP proof, the ID Token receives
 /// the same <c>cnf.jkt</c> binding as the access token) and to
 /// <see cref="AccessTokenTarget"/> (the primary RFC 9449 §6.1 binding
-/// surface). Confirmation is bound to issued tokens, not to
-/// introspection-style responses, so
+/// surface). Confirmation is bound to issued tokens, so
 /// <see cref="UserInfoTarget"/> and <see cref="IntrospectionTarget"/>
-/// return <see cref="ClaimOutcome.NotApplicable"/>.
+/// return <see cref="ClaimOutcome.NotApplicable"/>. The introspection
+/// response's confirmation is the application's
+/// <see cref="Introspection.TokenIntrospectionResult.Confirmation"/>, which the
+/// introspection endpoint writes as the top-level <c>cnf</c> member in the
+/// shape this contributor writes into an issued token
+/// (<see cref="BuildConfirmationMember"/>).
 /// </para>
 /// </remarks>
 public static class CnfClaimContributor
@@ -62,17 +66,29 @@ public static class CnfClaimContributor
                 [new Claim(WellKnownClaimIds.CnfBinding, ClaimOutcome.NotApplicable)]);
         }
 
-        Dictionary<string, object> cnf = new(StringComparer.Ordinal)
-        {
-            [WellKnownJwtClaimNames.JwkThumbprint] = confirmation.JwkThumbprint
-        };
-
         Claim cnfClaim = new(
             WellKnownClaimIds.CnfBinding,
             ClaimOutcome.Success,
-            new ClaimContributionContext(WellKnownJwtClaimNames.Cnf, cnf),
+            new ClaimContributionContext(WellKnownJwtClaimNames.Cnf, BuildConfirmationMember(confirmation.JwkThumbprint)),
             Claim.NoSubClaims);
 
         return new ValueTask<List<Claim>>([cnfClaim]);
     }
+
+
+    /// <summary>
+    /// The <c>cnf</c> object of a JWK Thumbprint confirmation, <c>{"jkt":"&lt;thumbprint&gt;"}</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.1">RFC 9449 Section 6.1</see>: "the JWT Claims
+    /// Set MUST contain a cnf claim with a jkt member"): the one writer of the shape an issued token carries and an
+    /// introspection response conveys as its top-level <c>cnf</c> member
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.2">Section 6.2</see>: "using the same cnf
+    /// content with jkt member structure as the JWK Thumbprint confirmation method").
+    /// </summary>
+    /// <param name="jwkThumbprint">The base64url JWK SHA-256 Thumbprint the token is bound to.</param>
+    /// <returns>The <c>cnf</c> object.</returns>
+    internal static Dictionary<string, object> BuildConfirmationMember(string jwkThumbprint) =>
+        new(StringComparer.Ordinal)
+        {
+            [WellKnownJwtClaimNames.JwkThumbprint] = jwkThumbprint
+        };
 }

@@ -28,9 +28,16 @@ namespace Verifiable.OAuth.ProtectedResource;
 /// request to a protected resource within the protection space requiring DPoP authentication, the server can respond
 /// with a challenge to the client to provide DPoP authentication information if the request does not include valid
 /// credentials or does not contain an access token sufficient for access."; RFC 6750 Section 3.1). A request that
-/// reaches no validated token, one without credentials, with a malformed <c>Authorization</c> field or with a
-/// <c>Bearer</c> presentation the caller refuses before validating its token, is the caller's to answer so; a
-/// <c>Bearer</c> presentation of a validated token is answered so by <see cref="DpopResourceAccess.DecideAsync"/>. An
+/// reaches no validated token, one without credentials, with an <c>Authorization</c> field naming a scheme alone or a
+/// scheme other than <c>Bearer</c> and <c>DPoP</c>, or with a <c>Bearer</c> presentation of any shape the caller refuses
+/// before validating its token, is the caller's to answer so; a <c>Bearer</c> presentation of a validated token is
+/// answered so by <see cref="DpopResourceAccess.DecideAsync"/>. A single <c>Authorization</c> field line naming the
+/// <c>DPoP</c> scheme with non-empty credentials that are no token68 is no missing credential: the caller answers it 400
+/// <c>invalid_request</c> with the <c>DPoP</c> challenge carrying that error, under the requirement as without it, and
+/// without the requirement a <c>Bearer</c> line so with the <c>Bearer</c> challenge alone, as the library's resources
+/// answer both (<see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>:
+/// "invalid_request ... or is otherwise malformed."; <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC
+/// 9449 Section 7.1</see>: "credentials = "DPoP" 1*SP token68"). An
 /// <c>Authorization</c> field sent on two or more lines is the caller's to answer 400 <c>invalid_request</c> before any
 /// token is validated, as the library's resources answer it
 /// (<see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>: "invalid_request The
@@ -86,8 +93,11 @@ public sealed record DpopResourceRequest
     /// any query and fragment parts."), and the endpoint the resource's nonces are issued for and accepted at. It is the
     /// configured origin followed by the route's path, never the request path resolved as a relative reference, and a
     /// request whose path would put a query or fragment into it is the application's to refuse before calling
-    /// <see cref="DpopResourceAccess.DecideAsync"/>. A proof's <c>jti</c> is recorded through the integration's
-    /// <c>jti</c> slots, which carry no target URI, so it is keyed as the application keys it. A value that is not an
+    /// <see cref="DpopResourceAccess.DecideAsync"/>. A proof's <c>jti</c> is claimed in the context of this target URI
+    /// (<see cref="ResourceServerIntegration.ConsultDpopProofJtiAsync"/>; RFC 9449 Section 11.1: "In the context of the
+    /// target URI, servers can store the jti value of each DPoP proof"), handed to the claim in the one normalized form
+    /// the <c>htu</c> comparison reads, stated once at <see cref="ConsultDpopProofJtiDelegate"/>, so two spellings of one
+    /// target name one record. A value that is not an
     /// absolute http or https URI, or that carries userinfo
     /// (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-4.2.4">RFC 9110 Section 4.2.4</see>: "A sender MUST NOT
     /// generate the userinfo subcomponent (and its "@" delimiter) when an "http" or "https" URI reference is generated

@@ -9840,6 +9840,20 @@ public static class AuthCodeEndpoints
                 TokenIntrospectionResult result = await oauth.IntrospectTokenAsync!(
                     token, tokenTypeHint, registration, context, ct).ConfigureAwait(false);
 
+                //RFC 9449 Section 6.2: "If the token_type member is included in the introspection response, it MUST
+                //contain the value DPoP." for a token whose binding the response conveys as cnf, "using the same cnf
+                //content with jkt member structure as the JWK Thumbprint confirmation method, described in Section
+                //6.1", whose jkt "MUST be the base64url encoding (as defined in [RFC7515]) of the JWK SHA-256
+                //Thumbprint". An answer whose token type contradicts its confirmation, whose confirmation names no
+                //thumbprint spelling, or whose extension members would overwrite a member written from typed state is a
+                //fault of the application's wiring, and the server conveys no binding it cannot state consistently.
+                if(IsIntrospectionTokenTypeContradicting(result)
+                    || IsIntrospectionConfirmationMisspelled(result)
+                    || IsIntrospectionExtensionMemberReserved(result))
+                {
+                    return (null, ServerHttpResponse.ServerError(OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady));
+                }
+
                 //RFC 9701 §4: a resource server asks for a signed JWT response by sending
                 //Accept: application/token-introspection+jwt. The caller is authenticated
                 //above — the §5 precondition for serving the JWT form.
@@ -9918,9 +9932,13 @@ public static class AuthCodeEndpoints
             members["username"] = result.Username;
         }
 
-        if(result.TokenType is not null)
+        //RFC 9449 Section 6.2: "If the token_type member is included in the introspection response, it MUST contain the
+        //value DPoP." A confirmed token is written with that one value as the text spells it, whether its answer states no
+        //type or a case variant of it (RFC 6749 Section 5.1: "Value is case insensitive.").
+        string? tokenType = IsConfirmedByJwkThumbprint(result) ? WellKnownAuthenticationSchemes.DPoP : result.TokenType;
+        if(tokenType is not null)
         {
-            members["token_type"] = result.TokenType;
+            members["token_type"] = tokenType;
         }
 
         if(result.ExpiresAt is { } expiresAt)
@@ -9965,6 +9983,16 @@ public static class AuthCodeEndpoints
             members["jti"] = result.JwtId;
         }
 
+        //RFC 9449 Section 6.2: "For a DPoP-bound access token, the hash of the public key to which the token is bound is
+        //conveyed to the protected resource as metainformation in a token introspection response. The hash is conveyed
+        //using the same cnf content with jkt member structure as the JWK Thumbprint confirmation method, described in
+        //Section 6.1, as a top-level member of the introspection response JSON." The one writer of that shape is the one
+        //that writes it into an issued token.
+        if(result.Confirmation is { JwkThumbprint: string jwkThumbprint })
+        {
+            members[WellKnownJwtClaimNames.Cnf] = CnfClaimContributor.BuildConfirmationMember(jwkThumbprint);
+        }
+
         //RFC 9396 §9.2: "If the AS includes authorization detail information for the token in its
         //response, the information MUST be conveyed with authorization_details as a top-level
         //member of the introspection response JSON object." The application supplies the granted
@@ -9989,6 +10017,83 @@ public static class AuthCodeEndpoints
 
         return members;
     }
+
+
+    /// <summary>
+    /// Whether the application's introspection answer carries a JWK Thumbprint confirmation, the binding
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.2">RFC 9449 Section 6.2</see> conveys as the top-level
+    /// <c>cnf</c> member.
+    /// </summary>
+    /// <param name="result">The application's answer.</param>
+    /// <returns><see langword="true"/> when the answer names a <c>jkt</c>.</returns>
+    private static bool IsConfirmedByJwkThumbprint(TokenIntrospectionResult result) =>
+        result.Confirmation is { JwkThumbprint: not null };
+
+
+    /// <summary>
+    /// Whether an active introspection answer states a token type that contradicts its confirmation: a type other than
+    /// <c>DPoP</c> beside a JWK Thumbprint confirmation, or <c>DPoP</c> with none
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.2">RFC 9449 Section 6.2</see>: "If the token_type
+    /// member is included in the introspection response, it MUST contain the value DPoP."). The type is compared
+    /// case-insensitively, as an access token type value is
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 Section 5.1</see>: "Value is case
+    /// insensitive."). An inactive answer conveys no member and contradicts nothing.
+    /// </summary>
+    /// <param name="result">The application's answer.</param>
+    /// <returns><see langword="true"/> when the answer contradicts itself.</returns>
+    private static bool IsIntrospectionTokenTypeContradicting(TokenIntrospectionResult result) =>
+        result.IsActive && (IsConfirmedByJwkThumbprint(result), result.TokenType) switch
+        {
+            (true, string tokenType) => !string.Equals(tokenType, WellKnownAuthenticationSchemes.DPoP, StringComparison.OrdinalIgnoreCase),
+            (false, string tokenType) => string.Equals(tokenType, WellKnownAuthenticationSchemes.DPoP, StringComparison.OrdinalIgnoreCase),
+
+            _ => false
+        };
+
+
+    /// <summary>
+    /// Whether an active introspection answer confirms its token by a value that is no JWK SHA-256 Thumbprint spelling,
+    /// the base64url encoding of 32 octets (<see cref="DpopJwkUtilities.IsJwkSha256ThumbprintSpelling"/>, the rule an
+    /// application's resource holds a proof's thumbprint to), a blank value included
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.1">RFC 9449 Section 6.1</see>: "The value of the jkt
+    /// member MUST be the base64url encoding (as defined in [RFC7515]) of the JWK SHA-256 Thumbprint (according to
+    /// [RFC7638]) of the DPoP public key (in JWK format) to which the access token is bound."; Section 6.2: the binding "is
+    /// conveyed using the same cnf content with jkt member structure as the JWK Thumbprint confirmation method"). Such a
+    /// confirmation binds the token to no key, and the server conveys no such binding.
+    /// </summary>
+    /// <param name="result">The application's answer.</param>
+    /// <returns><see langword="true"/> when the answer's confirmation names no thumbprint spelling.</returns>
+    private static bool IsIntrospectionConfirmationMisspelled(TokenIntrospectionResult result) =>
+        result.IsActive
+        && result.Confirmation is { JwkThumbprint: string jwkThumbprint }
+        && !DpopJwkUtilities.IsJwkSha256ThumbprintSpelling(jwkThumbprint);
+
+
+    /// <summary>
+    /// Whether an active introspection answer carries, among its extension members, a member the server writes from the
+    /// answer's typed state (<see cref="IntrospectionTypedMemberNames"/>), which would overwrite that member after the
+    /// typed state was checked (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.2">RFC 9449 Section 6.2</see>:
+    /// "If the token_type member is included in the introspection response, it MUST contain the value DPoP."). An inactive
+    /// answer conveys no extension member.
+    /// </summary>
+    /// <param name="result">The application's answer.</param>
+    /// <returns><see langword="true"/> when an extension member names a typed member.</returns>
+    private static bool IsIntrospectionExtensionMemberReserved(TokenIntrospectionResult result) =>
+        result.IsActive
+        && result.AdditionalClaims is { } additionalClaims
+        && additionalClaims.Keys.Any(static name => IntrospectionTypedMemberNames.Contains(name, StringComparer.Ordinal));
+
+
+    /// <summary>
+    /// The introspection response members the server writes from a <see cref="TokenIntrospectionResult"/>'s typed state in
+    /// <see cref="BuildIntrospectionMembers"/>, which no extension member may name: <c>active</c>, the RFC 7662 Section 2.2
+    /// members, the RFC 9449 Section 6.2 <c>cnf</c> and the RFC 9396 Section 9.2 <c>authorization_details</c>.
+    /// </summary>
+    private static IReadOnlyList<string> IntrospectionTypedMemberNames { get; } =
+    [
+        "active", "scope", "client_id", "username", "token_type", "exp", "iat", "nbf", "sub", "aud", "iss", "jti",
+        WellKnownJwtClaimNames.Cnf, OAuthRequestParameterNames.AuthorizationDetails
+    ];
 
 
     /// <summary>

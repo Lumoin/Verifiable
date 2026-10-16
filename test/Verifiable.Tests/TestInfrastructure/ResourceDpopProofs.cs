@@ -196,6 +196,44 @@ internal static class ResourceDpopProofs
 
 
     /// <summary>
+    /// The compact proof <paramref name="proof"/> with its signature part replaced by the base64url text
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7515#section-2">RFC 7515 Section 2</see>) of thirty-two arbitrary
+    /// octets, the octets 0 to 31 in order, rented from the test pool: the length of an HMAC with SHA-256, signed by no key,
+    /// so a refusal of the proof is a refusal of its header before any signature is checked.
+    /// </summary>
+    /// <param name="proof">The compact proof whose protected header and payload are kept.</param>
+    /// <returns>The proof with the arbitrary signature part.</returns>
+    public static string WithArbitrarySignature(string proof)
+    {
+        ArgumentNullException.ThrowIfNull(proof);
+
+        using IMemoryOwner<byte> signatureOwner = TestHostShell.MemoryPool.Rent(HmacSha256OctetCount);
+        Span<byte> signature = signatureOwner.Memory.Span[..HmacSha256OctetCount];
+        for(int i = 0; i < signature.Length; i++)
+        {
+            signature[i] = (byte)i;
+        }
+
+        return string.Concat(proof.AsSpan(0, proof.LastIndexOf('.', StringComparison.Ordinal) + 1), TestHostShell.Base64UrlEncoder(signature));
+    }
+
+
+    /// <summary>
+    /// The compact proof <paramref name="proof"/> with an empty signature part, the form of an unsecured JWS
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7519#section-6.1">RFC 7519 Section 6.1</see>: "An Unsecured JWT is a
+    /// JWS using the "alg" Header Parameter value "none" and with the empty string for its JWS Signature value").
+    /// </summary>
+    /// <param name="proof">The compact proof whose protected header and payload are kept.</param>
+    /// <returns>The proof ending in its second <c>.</c>.</returns>
+    public static string WithoutSignature(string proof)
+    {
+        ArgumentNullException.ThrowIfNull(proof);
+
+        return proof[..(proof.LastIndexOf('.', StringComparison.Ordinal) + 1)];
+    }
+
+
+    /// <summary>
     /// Computes the <c>ath</c> claim of a proof presented with <paramref name="accessToken"/> from its definition in
     /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.2">RFC 9449 Section 4.2</see>: "The value MUST be the
     /// result of a base64url encoding (as defined in Section 2 of [RFC7515]) the SHA-256 [SHS] hash of the ASCII encoding

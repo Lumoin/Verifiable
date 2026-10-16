@@ -68,8 +68,8 @@ public sealed record DpopProofValidationRequest
     /// MAC) is the validator's own; this list is the application's half, the identifiers it supports and
     /// its local policy accepts. The library's authorization server fills it from
     /// <see cref="Verifiable.OAuth.Server.AuthorizationServerCryptography.ResolveSupportedSigningAlgorithmsAsync"/>
-    /// for <see cref="Verifiable.Cryptography.Context.KeyUsageContext.DpopProof"/>, the list its metadata
-    /// publishes as <c>dpop_signing_alg_values_supported</c>
+    /// for <see cref="Verifiable.Cryptography.Context.KeyUsageContext.DpopProof"/>, the list whose identifiers of the
+    /// structural half its metadata publishes as <c>dpop_signing_alg_values_supported</c>
     /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-5.1">RFC 9449 Section 5.1</see>). Each
     /// entry is compared with the proof's <c>alg</c> exactly, as a JWS <c>alg</c> value is case-sensitive
     /// (<see href="https://www.rfc-editor.org/rfc/rfc7515#section-4.1.1">RFC 7515 Section 4.1.1</see>).

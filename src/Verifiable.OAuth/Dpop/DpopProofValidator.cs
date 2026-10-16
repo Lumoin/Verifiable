@@ -599,6 +599,22 @@ public static class DpopProofValidator
 
 
     /// <summary>
+    /// The identifiers of <paramref name="acceptedAlgorithms"/> a DPoP proof can be accepted under, in their order: those
+    /// <see cref="IsDpopProofAlg"/> admits. What a server advertises for DPoP proofs, the <c>algs</c> of its challenge and
+    /// the authorization server's <c>dpop_signing_alg_values_supported</c>, is this list, never the accepted list as the
+    /// host answers it, since a proof under any other identifier is refused whatever the host lists
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "An algs parameter
+    /// SHOULD be included to signal to the client the JWS algorithms that are acceptable for the DPoP proof JWT.";
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.6">Section 11.6</see>: "In particular, the algorithm
+    /// none MUST NOT be allowed."). An empty answer advertises nothing.
+    /// </summary>
+    /// <param name="acceptedAlgorithms">The algorithms the host accepts for DPoP proofs.</param>
+    /// <returns>The acceptable identifiers, in the host's order.</returns>
+    internal static IReadOnlyList<string> AcceptableProofAlgorithms(IReadOnlyList<string> acceptedAlgorithms) =>
+        [.. acceptedAlgorithms.Where(IsDpopProofAlg)];
+
+
+    /// <summary>
     /// Whether the declared <paramref name="alg"/> is an algorithm of the public key reconstructed from the
     /// proof's <c>jwk</c>: <c>ES256</c> over P-256, <c>ES384</c> over P-384, <c>ES512</c> over P-521,
     /// <c>ES256K</c> over secp256k1, <c>EdDSA</c> and the fully-specified <c>Ed25519</c> over Ed25519, and each RSA
@@ -644,11 +660,18 @@ public static class DpopProofValidator
 
 
     /// <summary>
-    /// The URI components the <c>htu</c> comparison covers: scheme, host, port and path, never query
+    /// The URI components of a target URI read as written by the parser: scheme, host and port, never userinfo, query
     /// or fragment.
     /// </summary>
-    private static UriComponents TargetUriComponents { get; } =
-        UriComponents.Scheme | UriComponents.Host | UriComponents.Port | UriComponents.Path;
+    private static UriComponents TargetAuthorityComponents { get; } =
+        UriComponents.Scheme | UriComponents.Host | UriComponents.Port;
+
+
+    /// <summary>
+    /// The path of a target URI with its leading <c>/</c>, so an empty path reads as the root.
+    /// </summary>
+    private static UriComponents TargetPathComponents { get; } =
+        UriComponents.Path | UriComponents.KeepDelimiter;
 
 
     /// <summary>
@@ -659,16 +682,10 @@ public static class DpopProofValidator
     /// any query and fragment parts.", and "To reduce the likelihood of false negatives, servers SHOULD
     /// employ syntax-based normalization (Section 6.2.2 of [RFC3986]) and scheme-based normalization
     /// (Section 6.2.3 of [RFC3986]) before comparing the htu claim." Both values are parsed as absolute
-    /// <c>http</c> or <c>https</c> URIs. The parser lowercases the scheme and host, drops a default
-    /// port and any userinfo, removes dot segments and gives an empty path the root; the scheme, host,
-    /// port and path are then read with <see cref="UriFormat.SafeUnescaped"/>, which keeps the
-    /// percent-encoding of a reserved character (and of <c>%</c> itself) and decodes every other one.
-    /// The hexadecimal digits of each percent-encoding kept are uppercased, per RFC 3986 §6.2.2.1: "For
-    /// all URIs, the hexadecimal digits within a percent-encoding triplet (e.g., "%3a" versus "%3A") are
-    /// case-insensitive and therefore should be normalized to use uppercase letters for the digits A-F." The two
-    /// strings are then compared ordinally, so the path's case stays significant, an encoded reserved
-    /// character never equals its literal form, a host in Unicode and in punycode compare as written,
-    /// and the query and fragment take no part.
+    /// <c>http</c> or <c>https</c> URIs and read in the one normalized form of <see cref="NormalizedTarget"/>, and the
+    /// two strings are compared ordinally, so the path's case stays significant, an encoded reserved character never
+    /// equals its literal form, a host in Unicode and in punycode compare as written, and the query and fragment take no
+    /// part.
     /// </summary>
     /// <param name="presentedHtu">The proof's <c>htu</c> claim.</param>
     /// <param name="expectedHtu">The target URI of the request being served.</param>
@@ -688,11 +705,14 @@ public static class DpopProofValidator
 
 
     /// <summary>
-    /// The form of a target URI the <c>htu</c> comparison of <see cref="IsSameTargetUri"/> reads: the
-    /// normalized scheme, host, port and path of an absolute <c>http</c> or <c>https</c> URI, so a replay
-    /// record kept per target (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449
-    /// §11.1</see>) names one target by one string whatever its spelling. A value that is not such a URI
-    /// is returned unchanged and compared as written.
+    /// The form of a target URI the <c>htu</c> comparison of <see cref="IsSameTargetUri"/> reads, the one form the
+    /// replay guard, an application's <c>jti</c> slot and <see cref="InMemoryDpopReplayCache"/> key a target by: the
+    /// normalized scheme, host, port and path of an absolute <c>http</c> or <c>https</c> URI
+    /// (<see cref="NormalizedTarget"/>), so a replay record kept per target
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449 Section 11.1</see>) names one target by one
+    /// string whatever its spelling. The form is idempotent and safe to parse again: normalized again it is the same
+    /// text, and <c>new Uri(form).OriginalString</c> is the same text. A value that is not such a URI is returned
+    /// unchanged and compared as written.
     /// </summary>
     /// <param name="targetUri">The target URI of a served request.</param>
     /// <returns>The normalized target.</returns>
@@ -703,36 +723,127 @@ public static class DpopProofValidator
 
 
     /// <summary>
-    /// The scheme, host, port and path of <paramref name="uri"/> read with
-    /// <see cref="UriFormat.SafeUnescaped"/>, with the hexadecimal digits of every percent-encoding
-    /// left in them uppercased (RFC 3986 §6.2.2.1).
+    /// The syntax-based and scheme-based normal form of <paramref name="uri"/>'s scheme, host, port and path
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2">RFC 3986 Section 6.2.2</see> and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.3">Section 6.2.3</see>). The parser lowercases the
+    /// scheme and host, drops a default port and any userinfo, removes dot segments (Section 6.2.2.3) and gives an empty
+    /// path the root ("a URI that uses the generic syntax for authority with an empty path should be normalized to a path
+    /// of "/""); the scheme, host and port are then read as the parser writes them, a host in Unicode kept as written, and
+    /// the path with every percent-encoding kept (<see cref="UriFormat.UriEscaped"/>), each then put in its normal form by
+    /// <see cref="NormalizedPercentEncodings"/>. No character the form holds is one the parser trims, decodes or encodes
+    /// when the form is parsed again, so the form is idempotent and its <see cref="Uri.OriginalString"/> is itself.
     /// </summary>
     /// <param name="uri">The parsed absolute URI.</param>
     /// <returns>The normalized target.</returns>
-    private static string NormalizedTarget(Uri uri)
+    private static string NormalizedTarget(Uri uri) =>
+        string.Concat(
+            uri.GetComponents(TargetAuthorityComponents, UriFormat.SafeUnescaped),
+            NormalizedPercentEncodings(uri.GetComponents(TargetPathComponents, UriFormat.UriEscaped)));
+
+
+    /// <summary>
+    /// The percent-encoding normal form of <paramref name="path"/>: every triplet that encodes an unreserved character
+    /// decoded to that character (<see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.2">RFC 3986 Section
+    /// 6.2.2.2</see>: "These URIs should be normalized by decoding any percent-encoded octet that corresponds to an
+    /// unreserved character, as described in Section 2.3."), and the hexadecimal digits of every other triplet in upper
+    /// case (<see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.1">Section 6.2.2.1</see>: "For all URIs,
+    /// the hexadecimal digits within a percent-encoding triplet (e.g., "%3a" versus "%3A") are case-insensitive and
+    /// therefore should be normalized to use uppercase letters for the digits A-F."). A space, a control character, an
+    /// octet outside US-ASCII and every reserved character therefore stay encoded.
+    /// </summary>
+    /// <param name="path">The path as the parser escapes it.</param>
+    /// <returns>The path in its percent-encoding normal form.</returns>
+    private static string NormalizedPercentEncodings(string path)
     {
-        string target = uri.GetComponents(TargetUriComponents, UriFormat.SafeUnescaped);
-        if(!target.Contains('%', StringComparison.Ordinal))
+        if(!path.Contains('%', StringComparison.Ordinal))
         {
-            return target;
+            return path;
         }
 
-        return string.Create(target.Length, target, static (destination, source) =>
+        int decodedCount = 0;
+        for(int i = 0; i + 2 < path.Length; i++)
         {
-            source.AsSpan().CopyTo(destination);
-            for(int i = 0; i + 2 < destination.Length; i++)
+            if(IsPercentEncodingAt(path, i))
             {
-                if(destination[i] == '%'
-                    && char.IsAsciiHexDigit(destination[i + 1])
-                    && char.IsAsciiHexDigit(destination[i + 2]))
+                if(IsUnreservedCharacter(DecodedOctet(path, i)))
                 {
-                    destination[i + 1] = char.ToUpperInvariant(destination[i + 1]);
-                    destination[i + 2] = char.ToUpperInvariant(destination[i + 2]);
+                    decodedCount++;
+                }
+
+                i += 2;
+            }
+        }
+
+        return string.Create(path.Length - (2 * decodedCount), path, static (destination, source) =>
+        {
+            int written = 0;
+            for(int i = 0; i < source.Length; i++)
+            {
+                if(i + 2 < source.Length && IsPercentEncodingAt(source, i))
+                {
+                    char decoded = DecodedOctet(source, i);
+                    if(IsUnreservedCharacter(decoded))
+                    {
+                        destination[written++] = decoded;
+                    }
+                    else
+                    {
+                        destination[written++] = '%';
+                        destination[written++] = char.ToUpperInvariant(source[i + 1]);
+                        destination[written++] = char.ToUpperInvariant(source[i + 2]);
+                    }
+
                     i += 2;
+                }
+                else
+                {
+                    destination[written++] = source[i];
                 }
             }
         });
     }
+
+
+    /// <summary>
+    /// Whether <paramref name="text"/> holds a percent-encoding triplet at <paramref name="index"/>: <c>%</c> followed by
+    /// two hexadecimal digits (<see href="https://www.rfc-editor.org/rfc/rfc3986#section-2.1">RFC 3986 Section 2.1</see>:
+    /// "pct-encoded = "%" HEXDIG HEXDIG").
+    /// </summary>
+    /// <param name="text">The text read.</param>
+    /// <param name="index">The index of the candidate <c>%</c>; the two characters after it lie within the text.</param>
+    /// <returns><see langword="true"/> when a triplet starts at the index.</returns>
+    private static bool IsPercentEncodingAt(ReadOnlySpan<char> text, int index) =>
+        text[index] == '%' && char.IsAsciiHexDigit(text[index + 1]) && char.IsAsciiHexDigit(text[index + 2]);
+
+
+    /// <summary>The octet the percent-encoding triplet at <paramref name="index"/> of <paramref name="text"/> encodes, as a character.</summary>
+    /// <param name="text">The text read.</param>
+    /// <param name="index">The index of the triplet's <c>%</c>.</param>
+    /// <returns>The encoded octet.</returns>
+    private static char DecodedOctet(ReadOnlySpan<char> text, int index) =>
+        (char)((HexDigitValue(text[index + 1]) << 4) | HexDigitValue(text[index + 2]));
+
+
+    /// <summary>The value of the hexadecimal digit <paramref name="digit"/>, upper or lower case.</summary>
+    /// <param name="digit">An ASCII hexadecimal digit.</param>
+    /// <returns>The digit's value, 0 to 15.</returns>
+    private static int HexDigitValue(char digit) => digit switch
+    {
+        >= '0' and <= '9' => digit - '0',
+        >= 'a' and <= 'f' => digit - 'a' + 10,
+        _ => digit - 'A' + 10
+    };
+
+
+    /// <summary>
+    /// Whether <paramref name="character"/> is an unreserved character
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc3986#section-2.3">RFC 3986 Section 2.3</see>: "unreserved  = ALPHA /
+    /// DIGIT / "-" / "." / "_" / "~"").
+    /// </summary>
+    /// <param name="character">The decoded octet.</param>
+    /// <returns><see langword="true"/> for an unreserved character.</returns>
+    private static bool IsUnreservedCharacter(char character) =>
+        char.IsAsciiLetterOrDigit(character) || character is '-' or '.' or '_' or '~';
 
 
     /// <summary>Whether <paramref name="uri"/> is an <c>http</c> or <c>https</c> URI, the schemes an <c>htu</c> names.</summary>

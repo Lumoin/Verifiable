@@ -111,7 +111,10 @@ internal sealed class ResourceServerChallengeTests
 
         Assert.AreEqual(HttpStatusCode.Unauthorized, denied.StatusCode);
         Assert.IsTrue(denied.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges));
-        string challenge = challenges!.Single();
+
+        //RFC 9110 Section 11.6.1: the field value "might contain more than one challenge"; a request without
+        //credentials is challenged for each scheme the resource accepts, and the Bearer one is read here.
+        string challenge = challenges!.Single(static value => value.StartsWith(WellKnownAuthenticationSchemes.Bearer, StringComparison.OrdinalIgnoreCase));
 
         //RFC 6750 §3 grammar, asserted through the challenge parser.
         Assert.StartsWith(WellKnownAuthenticationSchemes.Bearer, challenge);

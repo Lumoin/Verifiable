@@ -126,9 +126,9 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
 
 
     /// <summary>
-    /// Whether the resource server wires the <c>jti</c> record, the seen query and the record of
-    /// <see cref="ReplayCache"/>, into <see cref="Integration"/>; without them a DPoP-bound token is answered
-    /// <c>server_error</c>.
+    /// Whether the resource server wires the <c>jti</c> claim of <see cref="ReplayCache"/>
+    /// (<see cref="InMemoryDpopReplayCache.ConsultAsync"/>) into <see cref="Integration"/>; without it a DPoP-bound token
+    /// is answered <c>server_error</c>.
     /// </summary>
     public bool IsDpopProofJtiRecordWired { get; }
 
@@ -156,10 +156,14 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
     /// <param name="advertisedAuthorizationServers">The <c>authorization_servers</c> the document advertises, or <see langword="null"/> for the trusted issuer alone.</param>
     /// <param name="requiresDpop">Whether <c>/protected</c> always requires DPoP-bound access tokens.</param>
     /// <param name="isDpopProofValidationWired">Whether the DPoP proof validation, the nonce slots and the accepted algorithms are wired.</param>
-    /// <param name="isDpopProofJtiRecordWired">Whether the <c>jti</c> seen query and record are wired.</param>
+    /// <param name="isDpopProofJtiRecordWired">Whether the <c>jti</c> claim is wired.</param>
     /// <param name="wrapDpopProofValidation">
     /// Wraps the wired DPoP proof validation, so a row can answer the library validator's result rewritten or wire a
     /// validation of its own in its place, or <see langword="null"/> to wire it as it is.
+    /// </param>
+    /// <param name="wrapDpopProofJtiClaim">
+    /// Wraps the wired <c>jti</c> claim of <see cref="ReplayCache"/>, so a row can answer an outcome of an application's
+    /// own store in its place, or <see langword="null"/> to wire it as it is.
     /// </param>
     public TestResourceServerShell(
         Uri trustedIssuer,
@@ -172,7 +176,8 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
         bool requiresDpop = false,
         bool isDpopProofValidationWired = true,
         bool isDpopProofJtiRecordWired = true,
-        Func<ValidateDpopProofDelegate, ValidateDpopProofDelegate>? wrapDpopProofValidation = null)
+        Func<ValidateDpopProofDelegate, ValidateDpopProofDelegate>? wrapDpopProofValidation = null,
+        Func<ConsultDpopProofJtiDelegate, ConsultDpopProofJtiDelegate>? wrapDpopProofJtiClaim = null)
     {
         ArgumentNullException.ThrowIfNull(trustedIssuer);
         ArgumentException.ThrowIfNullOrWhiteSpace(expectedAudience);
@@ -206,8 +211,9 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
             ExpectedAudience = expectedAudience,
             ResolveVerificationKeyAsync = resolveVerificationKey,
             TimeProvider = timeProvider,
-            IsDpopProofJtiSeenAsync = isDpopProofJtiRecordWired ? ReplayCache.IsSeenAsync : null,
-            PersistDpopProofJtiAsync = isDpopProofJtiRecordWired ? ReplayCache.PersistAsync : null
+            ConsultDpopProofJtiAsync = isDpopProofJtiRecordWired
+                ? (wrapDpopProofJtiClaim ?? (static claim => claim))(ReplayCache.ConsultAsync)
+                : null
         };
         Integration = isDpopProofValidationWired
             ? WireDpopChecks(integration, verifySignature, wrapDpopProofValidation ?? (static validate => validate))
@@ -228,7 +234,8 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
     /// over <paramref name="verifySignature"/>, with the integration's clock and its freshness window as the
     /// <c>iat</c> skew, as <see cref="TestHostShell.VerifyDpopProofsWithAsync"/> wires the authorization server's; the
     /// library's default nonce issuance and validation (<see cref="DefaultDpopNonceIssuance.IssueAsync"/>,
-    /// <see cref="DefaultDpopNonceValidation.ValidateAsync"/>) over <see cref="NonceKeySet"/>; and the accepted
+    /// <see cref="DefaultDpopNonceValidation.ValidateAsync"/>) over <see cref="NonceKeySet"/> for the target's
+    /// <see cref="NonceAudience"/>; and the accepted
     /// algorithms <see cref="WellKnownDpopValues.SupportedSigningAlgorithms"/>.
     /// </summary>
     /// <param name="integration">The integration holding the trust, the clock and the <c>jti</c> record.</param>
@@ -251,25 +258,38 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
             ExpectedAudience = integration.ExpectedAudience,
             ResolveVerificationKeyAsync = integration.ResolveVerificationKeyAsync,
             TimeProvider = timeProvider,
-            IsDpopProofJtiSeenAsync = integration.IsDpopProofJtiSeenAsync,
-            PersistDpopProofJtiAsync = integration.PersistDpopProofJtiAsync,
+            ConsultDpopProofJtiAsync = integration.ConsultDpopProofJtiAsync,
             ValidateDpopProofAsync = wrapDpopProofValidation((request, ct) => DpopProofValidator.ValidateAsync(
                 request, verifySignature, DpopTestSupport.Parser, TestSetup.Base64UrlEncoder, TestSetup.Base64UrlDecoder,
                 timeProvider, BaseMemoryPool.Shared, iatSkew, ct)),
             IssueDpopNonceAsync = (audience, tenantId, ctx, ct) => DefaultDpopNonceIssuance.IssueAsync(
-                audience, tenantId, ctx,
+                NonceAudience(audience), tenantId, ctx,
                 (_, _, _) => ValueTask.FromResult(keySet.Snapshot()),
                 selectHmacKey: null,
                 (kid, _, _, _) => ValueTask.FromResult(keySet.ResolveMaterial(kid)),
                 timeProvider, TestSetup.Base64UrlEncoder, nonceEntropy, BaseMemoryPool.Shared, ct),
             ValidateDpopNonceAsync = (presented, audience, tenantId, ctx, ct) => DefaultDpopNonceValidation.ValidateAsync(
-                presented, audience, tenantId, ctx,
+                presented, NonceAudience(audience), tenantId, ctx,
                 (_, _, _) => ValueTask.FromResult(keySet.Snapshot()),
                 (kid, _, _, _) => ValueTask.FromResult(keySet.ResolveMaterial(kid)),
                 timeProvider, WellKnownDpopValues.DefaultNonceValidityWindow, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, ct),
             AcceptedDpopProofAlgorithms = WellKnownDpopValues.SupportedSigningAlgorithms
         };
     }
+
+
+    /// <summary>
+    /// The audience the resource server issues and validates a nonce for: the target URI in the one normalized form its
+    /// <c>htu</c> comparison and its <c>jti</c> record read (<see cref="DpopProofValidator.NormalizeTargetUri"/>), so the
+    /// resource names one target by one string and a nonce it provided at one spelling of a target URI is accepted at
+    /// every spelling of that target
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">RFC 9449 Section 4.3</see>: "servers SHOULD employ
+    /// syntax-based normalization (Section 6.2.2 of [RFC3986]) and scheme-based normalization (Section 6.2.3 of
+    /// [RFC3986]) before comparing the htu claim.").
+    /// </summary>
+    /// <param name="targetUri">The target URI the nonce is issued or validated for.</param>
+    /// <returns>The target URI in its normalized form.</returns>
+    private static Uri NonceAudience(Uri targetUri) => new(DpopProofValidator.NormalizeTargetUri(targetUri.OriginalString));
 
 
     /// <summary>

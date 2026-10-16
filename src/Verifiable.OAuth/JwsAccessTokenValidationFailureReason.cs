@@ -97,4 +97,22 @@ public enum JwsAccessTokenValidationFailureReason
     /// audience set to <see cref="Oidc10IdTokenValidator.ValidateAsync"/>.
     /// </summary>
     UntrustedAudience,
+
+    /// <summary>
+    /// The access token's <c>cnf</c> claim is a well-formed confirmation object that carries no <c>jkt</c> member the
+    /// validator enforces: a certificate thumbprint <c>x5t#S256</c> alone, or a member the validator does not understand.
+    /// The token is sender-constrained by a method no resource of this library verifies; a certificate thumbprint is a
+    /// binding a resource checks only against the client certificate of the connection
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8705#section-3">RFC 8705 Section 3</see>: "The protected resource
+    /// MUST obtain, from its TLS implementation layer, the client certificate used for mutual TLS and MUST verify that
+    /// the certificate matches the certificate associated with the access token."), so serving the token as a bearer
+    /// token would drop the constraint its issuer wrote. Refusing such a token departs from
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7800#section-3.1">RFC 7800 Section 3.1</see>'s "However, in the
+    /// absence of such requirements, all confirmation members that are not understood by implementations MUST be
+    /// ignored.": the library's fail-closed choice, which the same section leaves to an application of JWTs ("Specific
+    /// applications of JWTs will require implementations to understand and process some confirmation members in
+    /// particular ways."). A <c>cnf</c> that is no object, a <c>jkt</c> that is no string and a blank <c>jkt</c> are
+    /// <see cref="Malformed"/>.
+    /// </summary>
+    UnsupportedConfirmationMethod,
 }

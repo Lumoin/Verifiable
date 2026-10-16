@@ -292,6 +292,54 @@ internal sealed class DpopProofValidatorTests
     }
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">RFC 9449 Section 4.3</see>: "servers SHOULD employ
+    /// syntax-based normalization (Section 6.2.2 of [RFC3986]) and scheme-based normalization (Section 6.2.3 of
+    /// [RFC3986]) before comparing the htu claim." The form of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2">RFC 3986 Section 6.2.2</see>: the scheme and host
+    /// "should be normalized to lowercase" and the hexadecimal digits of a percent-encoding "should be normalized to use
+    /// uppercase letters for the digits A-F" (Section 6.2.2.1); "These URIs should be normalized by decoding any
+    /// percent-encoded octet that corresponds to an unreserved character, as described in Section 2.3." (Section 6.2.2.2),
+    /// every other percent-encoding kept; dot segments removed (Section 6.2.2.3); an explicit default port removed and
+    /// "a URI that uses the generic syntax for authority with an empty path should be normalized to a path of "/""
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.3">Section 6.2.3</see>); and no query or fragment
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.2">RFC 9449 Section 4.2</see>, htu: "without query
+    /// and fragment parts"). The host is kept as written, a host in Unicode and its punycode form compared as written. A
+    /// target URI normalized once is the expected text; normalized again it is the same text; parsed again its original
+    /// string is the same text. The rows name each rule.
+    /// </summary>
+    /// <param name="target">The target URI as a request names it.</param>
+    /// <param name="expected">The target URI in its normalized form.</param>
+    [TestMethod]
+    [DataRow("https://rs.example/a%20", "https://rs.example/a%20", DisplayName = "an encoded space ending the path")]
+    [DataRow("https://rs.example/a%20%20", "https://rs.example/a%20%20", DisplayName = "two encoded spaces ending the path")]
+    [DataRow("https://rs.example/%20", "https://rs.example/%20", DisplayName = "an encoded space alone")]
+    [DataRow("https://rs.example/a%41b", "https://rs.example/aAb", DisplayName = "an encoded unreserved letter")]
+    [DataRow("https://rs.example/a%7e%5F", "https://rs.example/a~_", DisplayName = "an encoded tilde and underscore")]
+    [DataRow("https://rs.example/%E2%82%AC", "https://rs.example/%E2%82%AC", DisplayName = "an encoded character outside US-ASCII")]
+    [DataRow("https://rs.example/a%e2%82%ac", "https://rs.example/a%E2%82%AC", DisplayName = "lower-case hexadecimal digits outside US-ASCII")]
+    [DataRow("https://rs.example/a%7Bb", "https://rs.example/a%7Bb", DisplayName = "an encoded character outside the unreserved set")]
+    [DataRow("https://rs.example/a/./b/../c", "https://rs.example/a/c", DisplayName = "dot segments")]
+    [DataRow("https://RS.example:443/p", "https://rs.example/p", DisplayName = "the host's case and the default port")]
+    [DataRow("https://rs.example/items/a%2Fb", "https://rs.example/items/a%2Fb", DisplayName = "an encoded reserved slash")]
+    [DataRow("https://rs.example/items/a%2fb", "https://rs.example/items/a%2Fb", DisplayName = "an encoded reserved slash in lower case")]
+    [DataRow("https://rs.example", "https://rs.example/", DisplayName = "an empty path")]
+    [DataRow("https://rs.example/p?q=1", "https://rs.example/p", DisplayName = "a query")]
+    [DataRow("https://rs.example/p#f", "https://rs.example/p", DisplayName = "a fragment")]
+    [DataRow("https://[::1]:8443/p", "https://[::1]:8443/p", DisplayName = "an IPv6 literal with a port")]
+    [DataRow("https://b\u00FCcher.example/p", "https://b\u00FCcher.example/p", DisplayName = "a host in Unicode")]
+    [DataRow("https://xn--bcher-kva.example/p", "https://xn--bcher-kva.example/p", DisplayName = "a host in punycode")]
+    [DataRow("http://rs.example:80/p", "http://rs.example/p", DisplayName = "the http default port")]
+    public void NormalizeTargetUriAnswersOneReparseSafeFormOfATarget(string target, string expected)
+    {
+        string normalized = DpopProofValidator.NormalizeTargetUri(target);
+
+        Assert.AreEqual(expected, normalized, "The target is read in its normalized form.");
+        Assert.AreEqual(normalized, DpopProofValidator.NormalizeTargetUri(normalized), "The normalized form normalized again is itself.");
+        Assert.AreEqual(normalized, new Uri(normalized).OriginalString, "The normalized form parsed again keeps its text.");
+    }
+
+
     [TestMethod]
     public async Task ValidateAsyncRejectsOldIat()
     {

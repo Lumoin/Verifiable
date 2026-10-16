@@ -1,7 +1,10 @@
 using Microsoft.Extensions.Time.Testing;
+using System.Collections.Concurrent;
 using Verifiable.Cryptography;
 using Verifiable.OAuth;
+using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.ProtectedResource;
+using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -10,7 +13,8 @@ namespace Verifiable.Tests.OAuth;
 /// In-process rows for <see cref="DpopResourceAccess.DecideAsync"/>: the arguments an application passes that are its
 /// own configuration, which it is answered for with an exception before any decision, never with a decision on the
 /// request; and the decision on a <c>Bearer</c> presentation of a validated token where DPoP-bound access tokens are
-/// required, which no application answering that presentation before validating the token reaches over the wire.
+/// required, which no application answering that presentation before validating the token reaches over the wire; and
+/// the target URI a proof's <c>jti</c> is claimed at when the application names one target by two spellings.
 /// </summary>
 [TestClass]
 internal sealed class DpopResourceAccessTests
@@ -187,6 +191,157 @@ internal sealed class DpopResourceAccessTests
             response.Headers["WWW-Authenticate"]);
         Assert.AreEqual("WWW-Authenticate, DPoP-Nonce", response.Headers["Access-Control-Expose-Headers"]);
     }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449 Section 11.1</see>: "In the context of
+    /// the target URI, servers can store the jti value of each DPoP proof for the time window in which the respective DPoP
+    /// proof JWT would be accepted to prevent multiple uses of the same DPoP proof. HTTP requests to the same URI for
+    /// which the jti value has been seen before would be declined.", with
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">Section 4.3</see>: "servers SHOULD employ
+    /// syntax-based normalization (Section 6.2.2 of [RFC3986]) and scheme-based normalization (Section 6.2.3 of
+    /// [RFC3986]) before comparing the htu claim.", where
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.1">RFC 3986 Section 6.2.2.1</see> reads "the
+    /// scheme and host are case-insensitive and therefore should be normalized to lowercase" and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.3">Section 6.2.3</see> names the scheme's default
+    /// port. <c>https://RS.example:443/protected</c> and <c>https://rs.example/protected</c> name one target URI. One
+    /// validated proof carrying the <c>jti</c> <c>shared-jti</c>, decided with its DPoP-bound access token first at the
+    /// one spelling and then at the other, is claimed through the application's slot at the one normalized target
+    /// <c>https://rs.example/protected</c> both times: the first decision permits, the second is denied with 401 and
+    /// <c>invalid_dpop_proof</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task DecideClaimsAProofJtiAtTheNormalizedTargetUriAsync()
+    {
+        FakeTimeProvider time = new(TestClock.CanonicalEpoch);
+        InMemoryDpopReplayCache cache = new(time);
+        ConcurrentQueue<string> claimedTargets = new();
+        ResourceServerIntegration integration = new()
+        {
+            TrustedIssuer = new Uri("https://issuer.test/tenant-a"),
+            ExpectedAudience = "test-resource-server",
+            ResolveVerificationKeyAsync = static (_, _, _, _, _) => ValueTask.FromResult<PublicKeyMemory?>(null),
+            TimeProvider = time,
+            ValidateDpopProofAsync = (request, _) => ValueTask.FromResult(DpopProofValidationResult.Success(
+                new DpopProofClaims
+                {
+                    Htm = request.HttpMethod,
+                    Htu = request.HttpUrl,
+                    Iat = time.GetUtcNow(),
+                    Jti = "shared-jti",
+                    Nonce = ResourceNonce
+                },
+                BoundThumbprint)),
+            IssueDpopNonceAsync = static (_, _, _, _) => ValueTask.FromResult(ResourceNonce),
+            ValidateDpopNonceAsync = (_, _, _, _, _) => ValueTask.FromResult(DpopNonceValidationResult.Success(
+                new DpopNoncePayload { Kid = "resource-nonce-key", IssuedAt = time.GetUtcNow() })),
+            ConsultDpopProofJtiAsync = (jti, targetUri, recordUntil, context, cancellationToken) =>
+            {
+                claimedTargets.Enqueue(targetUri.OriginalString);
+
+                return cache.ConsultAsync(jti, targetUri, recordUntil, context, cancellationToken);
+            }
+        };
+
+        DpopResourceDecision first = await DpopResourceAccess.DecideAsync(
+            integration, BoundPresentationAt(new Uri("https://RS.example:443/protected")), [], TestContext.CancellationToken).ConfigureAwait(false);
+        DpopResourceDecision second = await DpopResourceAccess.DecideAsync(
+            integration, BoundPresentationAt(new Uri("https://rs.example/protected")), [], TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(DpopResourceDecisionKind.Permit, first.Kind, "The first presentation of the proof is served.");
+        Assert.AreEqual(DpopResourceDecisionKind.Deny, second.Kind, "The proof presented again at the same target URI is refused.");
+        ServerHttpResponse refusal = Assert.IsInstanceOfType<ServerHttpResponse>(second.Response);
+        Assert.AreEqual(401, refusal.StatusCode);
+        Assert.AreEqual(
+            "{\"error\":\"invalid_dpop_proof\",\"error_description\":\"The DPoP proof jti has been presented previously.\"}", refusal.Body);
+        string[] targets = [.. claimedTargets];
+        Assert.HasCount(2, targets, "Each decision claims the proof's jti once.");
+        Assert.AreEqual("https://rs.example/protected", targets[0], "The first claim names the normalized target URI.");
+        Assert.AreEqual("https://rs.example/protected", targets[1], "The second claim names the same normalized target URI.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449 Section 11.1</see>: "HTTP requests to
+    /// the same URI for which the jti value has been seen before would be declined.", with
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">Section 4.3</see>: "servers SHOULD employ
+    /// syntax-based normalization (Section 6.2.2 of [RFC3986]) and scheme-based normalization (Section 6.2.3 of
+    /// [RFC3986]) before comparing the htu claim.", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.2">RFC 3986 Section 6.2.2.2</see>: "These URIs
+    /// should be normalized by decoding any percent-encoded octet that corresponds to an unreserved character, as
+    /// described in Section 2.3.", a space being no unreserved character. <c>https://rs.example/a%20</c> and
+    /// <c>https://RS.example:443/a%20</c> name one target URI. One validated proof carrying the <c>jti</c>
+    /// <c>shared-jti</c>, decided with its DPoP-bound access token at <c>https://rs.example/a%20</c> over an application
+    /// whose slot is an <see cref="InMemoryDpopReplayCache"/>, is permitted; the same <c>jti</c> then claimed directly at
+    /// that cache at <c>https://RS.example:443/a%20</c> is answered <see cref="JtiReplayOutcome.Replayed"/>,
+    /// and the cache holds one record.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task DecideAndADirectClaimNameATargetEndingInAnEncodedSpaceByOneRecordAsync()
+    {
+        FakeTimeProvider time = new(TestClock.CanonicalEpoch);
+        InMemoryDpopReplayCache cache = new(time);
+        ResourceServerIntegration integration = new()
+        {
+            TrustedIssuer = new Uri("https://issuer.test/tenant-a"),
+            ExpectedAudience = "test-resource-server",
+            ResolveVerificationKeyAsync = static (_, _, _, _, _) => ValueTask.FromResult<PublicKeyMemory?>(null),
+            TimeProvider = time,
+            ValidateDpopProofAsync = (request, _) => ValueTask.FromResult(DpopProofValidationResult.Success(
+                new DpopProofClaims
+                {
+                    Htm = request.HttpMethod,
+                    Htu = request.HttpUrl,
+                    Iat = time.GetUtcNow(),
+                    Jti = "shared-jti",
+                    Nonce = ResourceNonce
+                },
+                BoundThumbprint)),
+            IssueDpopNonceAsync = static (_, _, _, _) => ValueTask.FromResult(ResourceNonce),
+            ValidateDpopNonceAsync = (_, _, _, _, _) => ValueTask.FromResult(DpopNonceValidationResult.Success(
+                new DpopNoncePayload { Kid = "resource-nonce-key", IssuedAt = time.GetUtcNow() })),
+            ConsultDpopProofJtiAsync = cache.ConsultAsync
+        };
+
+        DpopResourceDecision decision = await DpopResourceAccess.DecideAsync(
+            integration, BoundPresentationAt(new Uri("https://rs.example/a%20")), [], TestContext.CancellationToken).ConfigureAwait(false);
+        JtiReplayOutcome directClaim = await cache.ConsultAsync(
+            "shared-jti", new Uri("https://RS.example:443/a%20"), time.GetUtcNow() + TimeSpan.FromMinutes(1), [],
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(DpopResourceDecisionKind.Permit, decision.Kind, "The first presentation of the proof is served.");
+        Assert.AreEqual(
+            JtiReplayOutcome.Replayed, directClaim, "The direct claim names the target the decision claimed the jti at.");
+        Assert.AreEqual(1, cache.Count, "One target URI is one record.");
+    }
+
+
+    /// <summary>
+    /// A presentation of a DPoP-bound access token bound to <see cref="BoundThumbprint"/> under the <c>DPoP</c> scheme,
+    /// a GET of <paramref name="targetUri"/> carrying one proof.
+    /// </summary>
+    /// <param name="targetUri">The target URI the resource names the request by.</param>
+    /// <returns>The presentation.</returns>
+    private static DpopResourceRequest BoundPresentationAt(Uri targetUri) => new()
+    {
+        AccessToken = "access-token",
+        IsDpopPresentation = true,
+        IsSenderConstrained = true,
+        BoundThumbprint = BoundThumbprint,
+        HttpMethod = "GET",
+        TargetUri = targetUri,
+        DpopFieldLines = ["proof"],
+        Realm = "protected"
+    };
+
+
+    /// <summary>The JWK SHA-256 Thumbprint the presented token is bound to and the proof's key has, the value of RFC 9449 Figure 11.</summary>
+    private static string BoundThumbprint { get; } = "0ZcOCORZNYy-DWpqq30jZyJGHTN0d2HglBV3uiguA4I";
+
+    /// <summary>The nonce the resource issues and every proof carries.</summary>
+    private static string ResourceNonce { get; } = "resource-nonce";
 
 
     /// <summary>

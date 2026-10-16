@@ -36,11 +36,10 @@ namespace Verifiable.OAuth.ProtectedResource;
 /// validated against the target URI; its <c>jti</c>, one a record can hold, is recorded for as long as the proof is
 /// accepted (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">Section 11.1</see>: "In the context of the
 /// target URI, servers can store the jti value of each DPoP proof for the time window in which the respective DPoP proof
-/// JWT would be accepted to prevent multiple uses of the same DPoP proof."). The library's own resources record it in
-/// the context of the target URI with the replay guard's atomic claim; an application's resource records it through
-/// the application's <c>jti</c> slots, keyed as the application keys them, which carry no target URI
-/// (<see cref="Dpop.InMemoryDpopReplayCache"/> keys by the <c>jti</c> alone, one record across every target URI of the
-/// resource server).
+/// JWT would be accepted to prevent multiple uses of the same DPoP proof."), with one atomic claim in the context of the
+/// target URI: the library's own resources through the replay guard, an application's resource through
+/// <see cref="ResourceServerIntegration.ConsultDpopProofJtiAsync"/> (<see cref="Dpop.InMemoryDpopReplayCache"/> keys
+/// its records by the target URI and the <c>jti</c>).
 /// </para>
 /// <para>
 /// Every <c>DPoP</c> challenge is written by <see cref="DpopChallenge.BuildChallenge"/> with the resource's realm, scope,
@@ -71,17 +70,39 @@ public static class DpopResourceAccess
 
 
     /// <summary>
+    /// The description an application's resource answers under <c>server_error</c> when its wired <c>jti</c> store
+    /// answers <see cref="JtiReplayOutcome.StoreUnavailable"/>: the application's own store was consulted and could not
+    /// record the proof's first use or resolve what it recorded, so the proof cannot be held to one use and is not served
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "The resource server
+    /// MUST NOT grant access to the resource unless all checks are successful.").
+    /// </summary>
+    internal static string JtiStoreCouldNotRecordDescription { get; } = "The DPoP proof jti store could not record the proof.";
+
+
+    /// <summary>
+    /// The description every library endpoint that consults the replay guard for a DPoP proof's <c>jti</c> answers under
+    /// <c>server_error</c> when the guard answers <see cref="JtiReplayOutcome.StoreUnavailable"/>: the library's own
+    /// resources and the token endpoint. The guard answers it for three causes, one text true for each: no replay store is
+    /// wired under <see cref="JtiReplayPolicy.Required"/>; a wired store has no atomic claim; a wired store cannot resolve
+    /// what it recorded (<see cref="JtiReplayGuard.ConsultDpopProofAsync"/>). In each the proof cannot be held to one use
+    /// and is not served (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "The
+    /// resource server MUST NOT grant access to the resource unless all checks are successful.").
+    /// </summary>
+    internal static string JtiReplayDefenseCouldNotRecordDescription { get; } = "The DPoP proof jti replay defense could not record the proof.";
+
+
+    /// <summary>
     /// Decides on one presentation of an access token at an application's own protected resource, running the checks of
     /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see> over the slots of
     /// <paramref name="integration"/>: <see cref="ResourceServerIntegration.ValidateDpopProofAsync"/>, the nonce
     /// issuance and validation (<see cref="ResourceServerIntegration.IssueDpopNonceAsync"/>,
     /// <see cref="ResourceServerIntegration.ValidateDpopNonceAsync"/>, both called with the default
     /// <see cref="TenantId"/> and with <see cref="DpopResourceRequest.TargetUri"/> as the nonce's audience),
-    /// <see cref="ResourceServerIntegration.AcceptedDpopProofAlgorithms"/> and the <c>jti</c> record
-    /// (<see cref="ResourceServerIntegration.IsDpopProofJtiSeenAsync"/> then
-    /// <see cref="ResourceServerIntegration.PersistDpopProofJtiAsync"/>, kept for the proof's whole acceptance window:
-    /// past the later of the integration's clock and the proof's <c>iat</c> plus
-    /// <see cref="ResourceServerIntegration.DpopFreshnessWindow"/>), holding a validated proof's <c>iat</c> to
+    /// <see cref="ResourceServerIntegration.AcceptedDpopProofAlgorithms"/> and the <c>jti</c> claim
+    /// (<see cref="ResourceServerIntegration.ConsultDpopProofJtiAsync"/>, called once with
+    /// <see cref="DpopResourceRequest.TargetUri"/> and kept for the proof's whole acceptance window: past the later of the
+    /// integration's clock and the proof's <c>iat</c> plus <see cref="ResourceServerIntegration.DpopFreshnessWindow"/>),
+    /// holding a validated proof's <c>iat</c> to
     /// <see cref="ResourceServerIntegration.DpopFreshnessWindow"/> of the integration's clock either way, whatever
     /// tolerance the wired proof validation applies.
     /// </summary>
@@ -98,9 +119,19 @@ public static class DpopResourceAccess
     /// lacks any authentication information (e.g., the client was unaware that authentication is necessary or attempted
     /// using an unsupported authentication method), the resource server SHOULD NOT include an error code or other error
     /// information."). This method answers a <c>Bearer</c> presentation of a validated token so; a request without
-    /// credentials, a malformed <c>Authorization</c> field and a <c>Bearer</c> presentation the caller refuses before
-    /// validating its token never reach it, and the caller answers them with the same challenge
-    /// (<see cref="DpopChallenge.BuildChallenge"/> with no error), whatever its own refusal of a token would say. An
+    /// credentials, an <c>Authorization</c> field naming a scheme alone or a scheme other than <c>Bearer</c> and
+    /// <c>DPoP</c>, and a <c>Bearer</c> presentation of any shape the caller refuses before validating its token never
+    /// reach it, and the caller answers them with the same challenge (<see cref="DpopChallenge.BuildChallenge"/> with no
+    /// error), whatever its own refusal of a token would say. A single <c>Authorization</c> field line naming the
+    /// <c>DPoP</c> scheme with non-empty credentials that are no token68 is no missing credential: it never reaches this
+    /// method, and the caller answers it 400 <c>invalid_request</c> with the <c>DPoP</c> challenge carrying that error,
+    /// under the requirement as without it; without the requirement a <c>Bearer</c> line so is answered the same way with
+    /// the <c>Bearer</c> challenge alone, as the library's resources answer both
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6750#section-2.1">RFC 6750 Section 2.1</see>: "credentials =
+    /// "Bearer" 1*SP b64token"; RFC 9449 Section 7.1: "credentials = "DPoP" 1*SP token68"; RFC 6750 Section 3.1:
+    /// "invalid_request ... or is otherwise malformed."; RFC 9449 Section 7.2: "If the mechanism used to attempt
+    /// authentication could be established unambiguously, then the corresponding challenge SHOULD be used to deliver error
+    /// information (Figure 18)."). An
     /// <c>Authorization</c> field sent on two or more lines never reaches it either: the caller answers it 400
     /// <c>invalid_request</c> before any token is validated, as the library's resources answer it
     /// (<see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>: "invalid_request The
@@ -135,16 +166,23 @@ public static class DpopResourceAccess
     /// answered with the nonce challenge; a resource that wants no nonce does not use it.
     /// </para>
     /// <para>
-    /// The <c>jti</c> is consulted with two calls, the seen query and then the record, so two concurrent presentations of
-    /// one proof can both pass the query before either is recorded; the library's own resources record the <c>jti</c>
-    /// with one atomic claim. The slots carry no target URI, so the <c>jti</c> is recorded as the application's store keys
-    /// it, not in the context of <see cref="DpopResourceRequest.TargetUri"/>. A <c>jti</c> no record can hold, one that
-    /// is empty, longer than <see cref="JtiReplayGuard.MaxJtiLength"/> UTF-16 code units, or holding a character of
-    /// general category Cc or an unpaired surrogate, is refused <c>invalid_dpop_proof</c> with the description "DPoP
-    /// proof jti is empty, too long or carries a character the replay guard cannot store." before either slot is called:
-    /// the rule the library's resources hold a <c>jti</c> to wherever the replay guard reads it, which under
+    /// The <c>jti</c> is consulted once, with one atomic claim in the context of
+    /// <see cref="DpopResourceRequest.TargetUri"/> (<see cref="ResourceServerIntegration.ConsultDpopProofJtiAsync"/>),
+    /// handed in the one normalized form the <c>htu</c> comparison reads, stated once at
+    /// <see cref="ConsultDpopProofJtiDelegate"/>, so every spelling of one target URI names one record, of concurrent
+    /// presentations of one proof at one target URI one is served and the others are refused as replays, and the same
+    /// <c>jti</c> in a proof for another target URI is another proof's. The claim's
+    /// <see cref="JtiReplayOutcome.Replayed"/> is refused <c>invalid_dpop_proof</c> with the description "The DPoP proof
+    /// jti has been presented previously.", its <see cref="JtiReplayOutcome.Unacceptable"/> <c>invalid_dpop_proof</c>
+    /// with the description below, and its <see cref="JtiReplayOutcome.StoreUnavailable"/> fails closed as
+    /// <see cref="DpopResourceDecisionKind.IndeterminateDeny"/>, 500 <c>server_error</c> with the description "The DPoP
+    /// proof jti store could not record the proof.". A <c>jti</c> no record can hold, one that is empty,
+    /// longer than <see cref="JtiReplayGuard.MaxJtiLength"/> UTF-16 code units, or holding a character of general
+    /// category Cc or an unpaired surrogate, is refused <c>invalid_dpop_proof</c> with the description "DPoP proof jti is
+    /// empty, too long or carries a character the replay guard cannot store." before the slot is called: the rule the
+    /// library's resources hold a <c>jti</c> to wherever the replay guard reads it, which under
     /// <see cref="JtiReplayPolicy.Disabled"/> it does not, answering a first use before the rule. A slot left unwired,
-    /// the proof validation, either nonce slot or either <c>jti</c> slot, answers a DPoP-bound token
+    /// the proof validation, either nonce slot or the <c>jti</c> claim, answers a DPoP-bound token
     /// <see cref="DpopResourceDecisionKind.IndeterminateDeny"/>.
     /// </para>
     /// <para>
@@ -217,8 +255,7 @@ public static class DpopResourceAccess
         ValidateDpopProofDelegate? validateProof = integration.ValidateDpopProofAsync;
         IssueDpopNonceDelegate? issueNonce = integration.IssueDpopNonceAsync;
         ValidateDpopNonceDelegate? validateNonce = integration.ValidateDpopNonceAsync;
-        IsDpopProofJtiSeenDelegate? isJtiSeen = integration.IsDpopProofJtiSeenAsync;
-        PersistDpopProofJtiDelegate? persistJti = integration.PersistDpopProofJtiAsync;
+        ConsultDpopProofJtiDelegate? consultJti = integration.ConsultDpopProofJtiAsync;
         TenantId tenantId = default;
 
         DpopResourceChecks checks = new()
@@ -233,14 +270,15 @@ public static class DpopResourceAccess
             ValidateNonceAsync = validateNonce is null
                 ? null
                 : (nonce, audience, ct) => validateNonce(nonce, audience, tenantId, context, ct),
-            ConsultJtiAsync = isJtiSeen is null || persistJti is null
+            ConsultJtiAsync = consultJti is null
                 ? null
-                : (_, jti, issuedAt, ct) => ConsultSeenThenPersistAsync(
-                    integration, isJtiSeen, persistJti, jti, issuedAt, freshnessWindow, context, ct),
+                : (targetUri, jti, issuedAt, ct) => ClaimJtiAsync(
+                    integration, consultJti, targetUri, jti, issuedAt, freshnessWindow, context, ct),
             IsIssuedAtWithinFreshnessWindow = issuedAt => IsWithinFreshnessWindow(
                 integration.TimeProvider.GetUtcNow(), issuedAt, freshnessWindow),
             AcceptedAlgorithms = acceptedAlgorithms,
             AlgorithmListFailureDescription = DpopTokenEndpointValidation.AlgorithmResolverAnsweredNoListDescription,
+            JtiStoreUnavailableDescription = JtiStoreCouldNotRecordDescription,
             BearerChallenge = BearerTokenChallenge.BuildChallenge(
                 realm: request.Realm, error: OAuthErrors.InvalidToken, resourceMetadata: request.ResourceMetadata),
             Realm = request.Realm,
@@ -360,6 +398,16 @@ public static class DpopResourceAccess
 
         /// <summary>The description a presented proof is answered with under <c>server_error</c> when <see cref="AcceptedAlgorithms"/> is <see langword="null"/>.</summary>
         public required string AlgorithmListFailureDescription { get; init; }
+
+        /// <summary>
+        /// The description a presented proof is answered with under <c>server_error</c> when <see cref="ConsultJtiAsync"/>
+        /// answers <see cref="JtiReplayOutcome.StoreUnavailable"/>: what that answer means where the checks are composed,
+        /// the application's own store that could not record the proof at an application's resource
+        /// (<see cref="JtiStoreCouldNotRecordDescription"/>), and at the library's resources the replay guard's answer for
+        /// any of its three causes, no store wired under <see cref="JtiReplayPolicy.Required"/>, a store with no atomic
+        /// claim, a store that cannot resolve what it recorded (<see cref="JtiReplayDefenseCouldNotRecordDescription"/>).
+        /// </summary>
+        public required string JtiStoreUnavailableDescription { get; init; }
 
         /// <summary>The <c>WWW-Authenticate</c> value of a refusal of a token presented under the <c>Bearer</c> scheme.</summary>
         public required string BearerChallenge { get; init; }
@@ -542,9 +590,9 @@ public static class DpopResourceAccess
             JtiReplayOutcome.Replayed => DpopResourceDecision.Deny(RefuseUnderScheme(true,
                 OAuthErrors.InvalidDpopProof, "The DPoP proof jti has been presented previously.", checks)),
             JtiReplayOutcome.Unacceptable => DpopResourceDecision.Deny(RefuseUnderScheme(true,
-                OAuthErrors.InvalidDpopProof, "DPoP proof jti is empty, too long or carries a character the replay guard cannot store.", checks)),
+                OAuthErrors.InvalidDpopProof, JtiReplayGuard.UnstorableDpopProofJtiDescription, checks)),
             JtiReplayOutcome.StoreUnavailable => DpopResourceDecision.IndeterminateDeny(ServerHttpResponse.ServerError(
-                OAuthErrors.ServerError, "DPoP proof jti replay defense is required by policy but no jti store is configured.")),
+                OAuthErrors.ServerError, checks.JtiStoreUnavailableDescription)),
 
             _ => DpopResourceDecision.IndeterminateDeny(ServerHttpResponse.ServerError(
                 OAuthErrors.ServerError, UnrecognizedJtiOutcomeDescription))
@@ -577,13 +625,21 @@ public static class DpopResourceAccess
     /// The <c>DPoP</c> challenge of <paramref name="checks"/> with <paramref name="error"/>, written by
     /// <see cref="DpopChallenge.BuildChallenge"/>: <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449
     /// Section 7.1</see>, "The scheme name is DPoP.", the realm, the error, the scope, the <c>algs</c> and the metadata URL
-    /// of the resource.
+    /// of the resource. The <c>algs</c> are the resource's accepted algorithms a proof can be accepted under
+    /// (<see cref="DpopProofValidator.AcceptableProofAlgorithms"/>; Section 7.1: "An algs parameter SHOULD be included to
+    /// signal to the client the JWS algorithms that are acceptable for the DPoP proof JWT."), and the parameter is absent
+    /// when none remains.
     /// </summary>
     /// <param name="error">The error code, or <see langword="null"/> for none.</param>
     /// <param name="checks">The challenge parameters.</param>
     /// <returns>The <c>WWW-Authenticate</c> value.</returns>
     private static string BuildChallenge(string? error, DpopResourceChecks checks) =>
-        DpopChallenge.BuildChallenge(checks.Realm, error, checks.Scope, checks.AcceptedAlgorithms, checks.ResourceMetadata);
+        DpopChallenge.BuildChallenge(
+            checks.Realm,
+            error,
+            checks.Scope,
+            checks.AcceptedAlgorithms is IReadOnlyList<string> acceptedAlgorithms ? DpopProofValidator.AcceptableProofAlgorithms(acceptedAlgorithms) : null,
+            checks.ResourceMetadata);
 
 
     /// <summary>
@@ -636,29 +692,31 @@ public static class DpopResourceAccess
 
     /// <summary>
     /// The <c>jti</c> step of <see cref="DecideAsync"/>: refuses a <c>jti</c> no record can hold
-    /// (<see cref="JtiReplayGuard.IsStorableJti"/>) with <see cref="JtiReplayOutcome.Unacceptable"/> before either slot is
-    /// called, asks <paramref name="isJtiSeen"/> whether the proof's <c>jti</c> was presented before, answering
-    /// <see cref="JtiReplayOutcome.Replayed"/> when it was, and otherwise records it through <paramref name="persistJti"/>
-    /// until <see cref="RecordExpiry"/> and answers <see cref="JtiReplayOutcome.FirstUse"/>
-    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449 Section 11.1</see>: "servers can store
-    /// the jti value of each DPoP proof for the time window in which the respective DPoP proof JWT would be accepted to
-    /// prevent multiple uses of the same DPoP proof.", which the section opens with "In the context of the target URI":
-    /// the slots are called with no target URI, so the <c>jti</c> is keyed as the application's store keys it). The two
-    /// calls are not one atomic claim.
+    /// (<see cref="JtiReplayGuard.IsStorableJti"/>) with <see cref="JtiReplayOutcome.Unacceptable"/> before the slot is
+    /// called, and otherwise claims the proof's <c>jti</c> through <paramref name="consultJti"/> once, in the context of
+    /// <paramref name="targetUri"/> and until <see cref="RecordExpiry"/>, answering the claim's outcome
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449 Section 11.1</see>: "In the context of
+    /// the target URI, servers can store the jti value of each DPoP proof for the time window in which the respective DPoP
+    /// proof JWT would be accepted to prevent multiple uses of the same DPoP proof."). The slot is handed the target URI in
+    /// the one normalized form the <c>htu</c> comparison reads (<see cref="DpopProofValidator.NormalizeTargetUri"/>), the
+    /// form the library's replay guard keys by, so every spelling of one target the proof's <c>htu</c> matches names one
+    /// record (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">Section 4.3</see>: "servers SHOULD employ
+    /// syntax-based normalization (Section 6.2.2 of [RFC3986]) and scheme-based normalization (Section 6.2.3 of [RFC3986])
+    /// before comparing the htu claim.").
     /// </summary>
     /// <param name="integration">The resource server's slots and clock.</param>
-    /// <param name="isJtiSeen">The seen query.</param>
-    /// <param name="persistJti">The record.</param>
+    /// <param name="consultJti">The atomic claim.</param>
+    /// <param name="targetUri">The request's target URI, the claim's context once normalized.</param>
     /// <param name="jti">The proof's <c>jti</c>.</param>
     /// <param name="issuedAt">The proof's <c>iat</c>.</param>
     /// <param name="freshnessWindow">The window the proof's <c>iat</c> is held to, read once per decision.</param>
     /// <param name="context">The per-request context.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The outcome.</returns>
-    private static async ValueTask<JtiReplayOutcome> ConsultSeenThenPersistAsync(
+    private static async ValueTask<JtiReplayOutcome> ClaimJtiAsync(
         ResourceServerIntegration integration,
-        IsDpopProofJtiSeenDelegate isJtiSeen,
-        PersistDpopProofJtiDelegate persistJti,
+        ConsultDpopProofJtiDelegate consultJti,
+        Uri targetUri,
         string jti,
         DateTimeOffset issuedAt,
         TimeSpan freshnessWindow,
@@ -670,16 +728,10 @@ public static class DpopResourceAccess
             return JtiReplayOutcome.Unacceptable;
         }
 
-        bool isSeen = await isJtiSeen(jti, context, cancellationToken).ConfigureAwait(false);
-        if(isSeen)
-        {
-            return JtiReplayOutcome.Replayed;
-        }
+        DateTimeOffset recordUntil = RecordExpiry(integration.TimeProvider.GetUtcNow(), issuedAt, freshnessWindow);
+        Uri normalizedTargetUri = new(DpopProofValidator.NormalizeTargetUri(targetUri.OriginalString));
 
-        DateTimeOffset expiresAt = RecordExpiry(integration.TimeProvider.GetUtcNow(), issuedAt, freshnessWindow);
-        await persistJti(jti, expiresAt, context, cancellationToken).ConfigureAwait(false);
-
-        return JtiReplayOutcome.FirstUse;
+        return await consultJti(jti, normalizedTargetUri, recordUntil, context, cancellationToken).ConfigureAwait(false);
     }
 
 
@@ -690,7 +742,8 @@ public static class DpopResourceAccess
     /// (<see cref="IsWithinFreshnessWindow"/>), whatever the wired validation's tolerance, so it is accepted until
     /// <c>iat + window</c> and is never accepted after <c>max(now, iat) + window</c>; the record lasts one tick past that
     /// instant, which a store reading its expiry as the last instant the entry counts and one reading it as the first
-    /// instant the entry does not count (<see cref="Dpop.InMemoryDpopReplayCache"/>'s <c>expiresAt &gt; now</c>) both
+    /// instant the entry does not count (<see cref="Dpop.InMemoryDpopReplayCache"/>, whose record counts while its instant
+    /// is after the clock) both
     /// hold through the window. An instant past the latest a <see cref="DateTimeOffset"/> holds reads as that latest instant.
     /// </summary>
     /// <param name="now">The resource server's clock.</param>

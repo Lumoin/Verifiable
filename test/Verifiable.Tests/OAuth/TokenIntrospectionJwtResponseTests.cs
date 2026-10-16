@@ -6,6 +6,7 @@ using System.Text.Json;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.OAuth;
+using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Introspection;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestInfrastructure;
@@ -139,6 +140,197 @@ internal sealed class TokenIntrospectionJwtResponseTests
             details[0].GetProperty("credential_configuration_id").GetString());
         Assert.AreEqual("CivilEngineeringDegree-2026",
             details[0].GetProperty("credential_identifiers")[0].GetString());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9701#section-5">RFC 9701 Section 5</see>: "token_introspection A JSON
+    /// object containing the members of the token introspection response, as specified in [RFC7662], Section 2.2.", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.2">RFC 9449 Section 6.2</see>: the hash of the bound
+    /// public key "is conveyed using the same cnf content with jkt member structure as the JWK Thumbprint confirmation
+    /// method, described in Section 6.1, as a top-level member of the introspection response JSON." and "If the
+    /// token_type member is included in the introspection response, it MUST contain the value DPoP." An introspection
+    /// request posted over the wire with <c>Accept: application/token-introspection+jwt</c> for a token the application
+    /// answers as active and bound to the thumbprint <c>0ZcOCORZNYy-DWpqq30jZyJGHTN0d2HglBV3uiguA4I</c>, stating no token
+    /// type, is answered 200 with a JWT signed by the server's introspection key whose <c>token_introspection</c> claim
+    /// carries <c>"cnf":{"jkt":"0ZcOCORZNYy-DWpqq30jZyJGHTN0d2HglBV3uiguA4I"}</c> and <c>"token_type":"DPoP"</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task SignedResponseConveysTheJwkThumbprintBindingInsideTheClaimAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterSigningCapableResourceServerAsync(host).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, static candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) =>
+                ValueTask.FromResult(true);
+
+            candidateIntegration.IntrospectTokenAsync = static (_, _, _, _, _) =>
+                ValueTask.FromResult(new TokenIntrospectionResult
+                {
+                    IsActive = true,
+                    Scope = "read write",
+                    Confirmation = new ConfirmationMethod { JwkThumbprint = "0ZcOCORZNYy-DWpqq30jZyJGHTN0d2HglBV3uiguA4I" }
+                });
+        }).ConfigureAwait(false);
+
+        HttpResponseData response = await IntrospectSignedOverTheWireAsync(host, material).ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+        bool isSignatureValid = await Jws.VerifyAsync(
+            response.Body, TestSetup.Base64UrlDecoder, Pool, material.SigningPublicKey, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(isSignatureValid, "The response is signed by the server's introspection key.");
+        using JsonDocument payload = ParseSegment(response.Body, segmentIndex: 1);
+        JsonElement introspection = payload.RootElement.GetProperty("token_introspection");
+        Assert.IsTrue(introspection.TryGetProperty("cnf", out JsonElement confirmation), $"The claim carries the cnf member: {response.Body}");
+        Assert.IsTrue(confirmation.TryGetProperty("jkt", out JsonElement thumbprint), $"The cnf member carries jkt: {response.Body}");
+        Assert.AreEqual("0ZcOCORZNYy-DWpqq30jZyJGHTN0d2HglBV3uiguA4I", thumbprint.GetString(), response.Body);
+        Assert.IsTrue(introspection.TryGetProperty("token_type", out JsonElement tokenType), $"The claim carries the token_type member: {response.Body}");
+        Assert.AreEqual("DPoP", tokenType.GetString(), response.Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.1">RFC 9449 Section 6.1</see>: "The value of the jkt
+    /// member MUST be the base64url encoding (as defined in [RFC7515]) of the JWK SHA-256 Thumbprint (according to
+    /// [RFC7638]) of the DPoP public key (in JWK format) to which the access token is bound.", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9701#section-5">RFC 9701 Section 5</see>: "token_introspection A
+    /// JSON object containing the members of the token introspection response, as specified in [RFC7662], Section 2.2."
+    /// An application answer confirming the token by an empty thumbprint binds it to no key, a fault of the application's
+    /// wiring: an introspection request posted over the wire with <c>Accept: application/token-introspection+jwt</c> is
+    /// answered 500 with exactly the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c> and no signed
+    /// response.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task SignedResponseAnswersAConfirmationWithoutAThumbprintSpellingAsAServerErrorAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterSigningCapableResourceServerAsync(host).ConfigureAwait(false);
+        await WireIntrospectionAnswerAsync(host, new TokenIntrospectionResult
+        {
+            IsActive = true,
+            Scope = "read write",
+            Confirmation = new ConfirmationMethod { JwkThumbprint = string.Empty }
+        }).ConfigureAwait(false);
+
+        HttpResponseData response = await IntrospectSignedOverTheWireAsync(host, material).ConfigureAwait(false);
+
+        Assert.AreEqual(500, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}", response.Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.2">RFC 9449 Section 6.2</see>: "If the token_type
+    /// member is included in the introspection response, it MUST contain the value DPoP.", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9701#section-5">RFC 9701 Section 5</see>: "token_introspection A
+    /// JSON object containing the members of the token introspection response, as specified in [RFC7662], Section 2.2."
+    /// An application answer confirming the token by the thumbprint <c>0ZcOCORZNYy-DWpqq30jZyJGHTN0d2HglBV3uiguA4I</c>
+    /// whose extension members name a member the server writes from the confirmation would state the binding twice, a
+    /// fault of the application's wiring: an introspection request posted over the wire with
+    /// <c>Accept: application/token-introspection+jwt</c> is answered 500 with exactly the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c> and no signed
+    /// response. The rows: the extension member <c>"token_type":"Bearer"</c>; the extension member
+    /// <c>"cnf":{"jkt":"NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs"}</c>.
+    /// </summary>
+    /// <param name="row">
+    /// The extension member: <see cref="TokenIntrospectionServerTests.TokenTypeExtensionRow"/> or
+    /// <see cref="TokenIntrospectionServerTests.ConfirmationExtensionRow"/>.
+    /// </param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(TokenIntrospectionServerTests.TokenTypeExtensionRow)]
+    [DataRow(TokenIntrospectionServerTests.ConfirmationExtensionRow)]
+    public async Task SignedResponseAnswersAnExtensionMemberNamingAWrittenMemberAsAServerErrorAsync(string row)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterSigningCapableResourceServerAsync(host).ConfigureAwait(false);
+        await WireIntrospectionAnswerAsync(host, TokenIntrospectionServerTests.ConfirmedAnswerWithExtensionMember(row)).ConfigureAwait(false);
+
+        HttpResponseData response = await IntrospectSignedOverTheWireAsync(host, material).ConfigureAwait(false);
+
+        Assert.AreEqual(500, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}", response.Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9701#section-5">RFC 9701 Section 5</see>: "If the access token is
+    /// invalid, expired, revoked, or not intended for the calling resource server (audience), the authorization server
+    /// MUST set the value of the active member in the token_introspection claim to false and MUST NOT include other
+    /// members." An application answer for an inactive token that carries a confirmation by an empty thumbprint and
+    /// extension members naming <c>active</c> (<see langword="true"/>), <c>cnf</c> and <c>token_type</c> (<c>Bearer</c>)
+    /// is answered as an inactive token: an introspection request posted over the wire with
+    /// <c>Accept: application/token-introspection+jwt</c> is answered 200 with a JWT signed by the server's introspection
+    /// key whose <c>token_introspection</c> claim is exactly <c>{"active":false}</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task SignedResponseOfAnInactiveTokenCarriesNothingTheAnswerAddsAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterSigningCapableResourceServerAsync(host).ConfigureAwait(false);
+        await WireIntrospectionAnswerAsync(host, TokenIntrospectionServerTests.InactiveAnswerCarryingFurtherMembers()).ConfigureAwait(false);
+
+        HttpResponseData response = await IntrospectSignedOverTheWireAsync(host, material).ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+        bool isSignatureValid = await Jws.VerifyAsync(
+            response.Body, TestSetup.Base64UrlDecoder, Pool, material.SigningPublicKey, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsTrue(isSignatureValid, "The response is signed by the server's introspection key.");
+        using JsonDocument payload = ParseSegment(response.Body, segmentIndex: 1);
+        Assert.IsTrue(
+            payload.RootElement.TryGetProperty("token_introspection", out JsonElement introspection), $"The response carries the claim: {response.Body}");
+        Assert.AreEqual("{\"active\":false}", introspection.GetRawText());
+    }
+
+
+    /// <summary>
+    /// Wires client authentication to admit every caller and the introspection seam to answer <paramref name="result"/>
+    /// for every token.
+    /// </summary>
+    /// <param name="host">The host whose integration is altered.</param>
+    /// <param name="result">The application's answer.</param>
+    /// <returns>A task that completes when the alteration is published.</returns>
+    private static Task WireIntrospectionAnswerAsync(TestHostShell host, TokenIntrospectionResult result) =>
+        TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) => ValueTask.FromResult(true);
+            candidateIntegration.IntrospectTokenAsync = (_, _, _, _, _) => ValueTask.FromResult(result);
+        });
+
+
+    /// <summary>
+    /// Starts the host's listener and posts an introspection request for the token <c>introspected-access-token</c> over
+    /// the wire with <c>Accept: application/token-introspection+jwt</c>, the caller naming itself by
+    /// <see cref="ClientId"/>, and asserts the host captured no fault in the exchange.
+    /// </summary>
+    /// <param name="host">The host serving the endpoint.</param>
+    /// <param name="material">The calling resource's registration.</param>
+    /// <returns>The answer as received.</returns>
+    private async Task<HttpResponseData> IntrospectSignedOverTheWireAsync(TestHostShell host, VerifierKeyMaterial material)
+    {
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer hosted = host.Host("default");
+        Uri endpoint = new(hosted.HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeIntrospect, material.Registration.TenantId.Value));
+        HttpResponseData response = await HttpClientTransport.SendFormPostAsync(
+            hosted.SharedHttpClient!, endpoint,
+            new Dictionary<string, string>
+            {
+                [OAuthRequestParameterNames.Token] = "introspected-access-token",
+                [OAuthRequestParameterNames.ClientId] = ClientId
+            },
+            OutgoingHeaders.Empty.With(WellKnownHttpHeaderNames.Accept, WellKnownMediaTypes.Application.TokenIntrospectionJwt),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsEmpty(hosted.ConsumeHttpFaults(), "The introspection request is answered without a server fault.");
+
+        return response;
     }
 
 

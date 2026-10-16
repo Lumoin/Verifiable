@@ -674,14 +674,19 @@ internal sealed class AgenticFlowCapstoneTests
 
 
     /// <summary>
-    /// Reads the single <c>WWW-Authenticate</c> value and parses it under the RFC 6750 §3 grammar,
-    /// failing the test when the header is absent or does not parse.
+    /// Reads the one <c>Bearer</c> challenge among the <c>WWW-Authenticate</c> challenges and parses it under the
+    /// RFC 6750 Section 3 grammar, failing the test when the header is absent, carries no <c>Bearer</c> challenge or more
+    /// than one, or the challenge does not parse. A resource answering a request without credentials challenges each
+    /// scheme it accepts (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.6.1">RFC 9110 Section
+    /// 11.6.1</see>: the field value "might contain more than one challenge").
     /// </summary>
+    /// <param name="response">The refusal as received.</param>
+    /// <returns>The <c>Bearer</c> challenge's parameters.</returns>
     private static BearerTokenChallengeParameters ParseBearerChallenge(HttpResponseMessage response)
     {
         Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges),
             "The refusal must carry a WWW-Authenticate challenge.");
-        string challenge = challenges.Single();
+        string challenge = challenges.Single(static value => value.StartsWith(WellKnownAuthenticationSchemes.Bearer, StringComparison.OrdinalIgnoreCase));
         Assert.IsTrue(BearerTokenChallenge.TryParse(challenge, out BearerTokenChallengeParameters parameters),
             $"The challenge must parse under the RFC 6750 §3 grammar. Header: {challenge}");
 

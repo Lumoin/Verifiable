@@ -16,10 +16,9 @@ namespace Verifiable.Fido2;
 /// MUST be consecutive and strictly monotonic." <see cref="MetadataBlobVerification.VerifyAsync"/>
 /// invokes this delegate under <see cref="MetadataBlobSerialNumberPolicy.Required"/>, immediately
 /// before comparing its result against the parsed payload's <c>no</c> — the read half of the
-/// resolve/persist pair <see cref="PersistVerifiedMetadataBlobAsyncDelegate"/> completes. Mirrors
-/// <c>IsDpopProofJtiSeenDelegate</c>'s shape: the application supplies storage, the library supplies
-/// the monotonicity decision. A thrown exception is treated identically to an unwired delegate —
-/// <see cref="MetadataBlobVerification.VerifyAsync"/> fails closed to
+/// resolve/persist pair <see cref="PersistVerifiedMetadataBlobAsyncDelegate"/> completes. The
+/// application supplies storage, the library supplies the monotonicity decision. A thrown exception
+/// is treated identically to an unwired delegate: <see cref="MetadataBlobVerification.VerifyAsync"/> fails closed to
 /// <see cref="MetadataBlobStoreUnavailableResult"/> rather than letting a storage failure surface as
 /// an unhandled exception mid-verification.
 /// </remarks>

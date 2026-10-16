@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Collections.Immutable;
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
@@ -1415,6 +1417,76 @@ internal sealed class Oid4VciWalletClientTests
         Assert.IsEmpty(dialed, "No request, and so no DPoP proof, is sent to an http endpoint.");
         Assert.IsFalse(outcome.IsSuccess, "The request is refused before any dial.");
         Assert.AreEqual(Oid4VciRequestFailureKind.OutboundPolicyDenied, outcome.Error.Kind);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-2">RFC 9449 Section 2</see>: "DPoP is not, however, a
+    /// substitute for a secure transport and MUST always be used in conjunction with HTTPS." A plain TCP listener on the
+    /// loopback, with no TLS, serves the <c>http://127.0.0.1:&lt;port&gt;</c> Nonce and Credential Endpoints a wallet wired
+    /// with a DPoP key, a real HTTP transport and an outbound policy admitting loopback addresses is pointed at, holding a
+    /// DPoP-bound access token. Asked for a Credential, the wallet refuses before dialing: the request answers the
+    /// outbound policy's refusal and the listener has received no connection by then, so no DPoP proof leaves the wallet
+    /// outside HTTPS.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task WalletNeverDialsAPlainHttpResourceListeningOnTheLoopbackAsync()
+    {
+        using TcpListener listener = new(IPAddress.Loopback, 0);
+        listener.Start();
+        using CancellationTokenSource acceptCancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
+        Task<TcpClient> connection = listener.AcceptTcpClientAsync(acceptCancellation.Token).AsTask();
+        try
+        {
+            int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+            using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+            using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+            var walletDpopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+            using PublicKeyMemory walletDpopPublic = walletDpopKeys.PublicKey;
+            using PrivateKeyMemory walletDpopPrivate = walletDpopKeys.PrivateKey;
+            using HttpClient plainHttpClient = new();
+            Oid4VciWalletClient walletClient = BuildInProcessWalletClient(
+                sendJsonPost: (endpoint, body, headers, _, ct) => HttpClientTransport.SendJsonPostAsync(plainHttpClient, endpoint, body, headers, ct),
+                outboundFetchPolicy: TestHostShell.LoopbackOutboundFetchPolicy,
+                constructDpopProofAsync: BuildWalletDpopProofAsync,
+                dpopKey: new DpopKey(walletDpopKeys, WellKnownJwaValues.Es256));
+
+            Task<Result<CredentialIssuanceResult, Oid4VciRequestFailure>> issuance = walletClient.IssueWithAccessTokenDetailedAsync(
+                "access-token",
+                WellKnownAuthenticationSchemes.DPoP,
+                accessTokenExpiresAt: null,
+                new Uri("https://issuer.example.com"),
+                CredentialRequestTarget.ForConfiguration(ConfigurationId),
+                holderPrivate,
+                holderPublic,
+                new Oid4VciIssuanceEndpoints
+                {
+                    TokenEndpoint = new Uri($"http://127.0.0.1:{port}/token"),
+                    NonceEndpoint = new Uri($"http://127.0.0.1:{port}/nonce"),
+                    CredentialEndpoint = new Uri($"http://127.0.0.1:{port}/credential")
+                },
+                responseEncryption: null,
+                new ExchangeContext(),
+                TestContext.CancellationToken).AsTask();
+            Task answered = await Task.WhenAny(issuance, connection).ConfigureAwait(false);
+
+            Assert.AreSame(issuance, answered, "The wallet refuses before it dials: the listener receives no connection.");
+            Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await issuance.ConfigureAwait(false);
+            Assert.IsFalse(outcome.IsSuccess, "The request is refused before any dial.");
+            Assert.AreEqual(Oid4VciRequestFailureKind.OutboundPolicyDenied, outcome.Error.Kind);
+        }
+        finally
+        {
+            //A connection the listener did receive is closed so the wallet's dial ends; an accept still pending is
+            //cancelled with the listener.
+            await acceptCancellation.CancelAsync().ConfigureAwait(false);
+            if(connection.IsCompletedSuccessfully)
+            {
+                (await connection.ConfigureAwait(false)).Dispose();
+            }
+        }
     }
 
 

@@ -2118,7 +2118,8 @@ internal sealed class DpopBoundRefreshTests
     /// or written, since the application's store may not hold such a character; the character rule is this
     /// library's policy, not a rule of the text. At REFRESH, whose DPoP proof the token endpoint validates before it
     /// correlates the stored refresh token, a valid proof carrying the server's nonce and a <c>jti</c> holding U+0000
-    /// is answered 400 with <c>invalid_dpop_proof</c> and the description that names both causes, and the store
+    /// is answered 400 with <c>invalid_dpop_proof</c> and the one description every DPoP endpoint of the library
+    /// gives that refusal (naming the empty, the over-long and the unstorable <c>jti</c>), and the store
     /// observation records no flow-state store call. The refresh token is unconsumed: a proof with an ordinary
     /// <c>jti</c> then refreshes it with 200, and the observation sees the replay guard read, save, read back and
     /// claim its record.
@@ -2201,7 +2202,7 @@ internal sealed class DpopBoundRefreshTests
             using JsonDocument refusedDocument = JsonDocument.Parse(refused.Body);
             Assert.AreEqual("invalid_dpop_proof", refusedDocument.RootElement.GetProperty("error").GetString());
             Assert.AreEqual(
-                "DPoP proof jti is too long or carries a character the replay guard cannot store.",
+                "DPoP proof jti is empty, too long or carries a character the replay guard cannot store.",
                 refusedDocument.RootElement.GetProperty("error_description").GetString());
             Assert.IsEmpty(refusalOperations,
                 $"The refused jti must never reach the store; it observed: {string.Join(", ", refusalOperations)}.");

@@ -110,4 +110,20 @@ public static class WellKnownOAuthErrorDescriptions
     /// </summary>
     public static string MalformedAuthorizationField { get; } =
         Utf8Constants.ToInternedString(MalformedAuthorizationFieldUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="CredentialOutsideToken68"/>.</summary>
+    internal static ReadOnlySpan<byte> CredentialOutsideToken68Utf8 => "The Authorization header credentials are not a token68."u8;
+
+    /// <summary>
+    /// The description the library's resources answer with beside <see cref="OAuthErrors.InvalidRequest"/> when the one
+    /// <c>Authorization</c> field line names the <c>Bearer</c> or <c>DPoP</c> scheme with credentials outside its grammar:
+    /// "credentials = "Bearer" 1*SP b64token" (<see href="https://www.rfc-editor.org/rfc/rfc6750#section-2.1">RFC 6750
+    /// Section 2.1</see>) and "credentials = "DPoP" 1*SP token68"
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>), a request that is
+    /// otherwise malformed under the <c>invalid_request</c> code of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>. The text carries no
+    /// part of the field's value.
+    /// </summary>
+    internal static string CredentialOutsideToken68 { get; } =
+        Utf8Constants.ToInternedString(CredentialOutsideToken68Utf8);
 }

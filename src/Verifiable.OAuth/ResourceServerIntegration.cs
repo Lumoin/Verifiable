@@ -61,7 +61,7 @@ public sealed class ResourceServerIntegration
     /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449 Section 11.1</see>: "servers MUST only
     /// accept DPoP proofs for a limited time after their creation"), and so the time a proof's <c>jti</c> is recorded
     /// for beyond the later of the clock and its <c>iat</c>: <see cref="ProtectedResource.DpopResourceAccess.DecideAsync"/>
-    /// records it through <see cref="PersistDpopProofJtiAsync"/> until the first instant after that window. A negative
+    /// claims it through <see cref="ConsultDpopProofJtiAsync"/> until the first instant after that window. A negative
     /// window names no time at all and is refused by <see cref="ProtectedResource.DpopResourceAccess.DecideAsync"/> as
     /// the caller's argument (<see cref="ArgumentException"/> naming the integration). Defaults to 60 seconds.
     /// </summary>
@@ -75,34 +75,25 @@ public sealed class ResourceServerIntegration
     public TimeSpan AccessTokenIatSkew { get; init; } = TimeSpan.FromSeconds(60);
 
     /// <summary>
-    /// Replay tracker query for DPoP proof <c>jti</c> values presented to this resource server
-    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449 Section 11.1</see>: "HTTP requests to
-    /// the same URI for which the jti value has been seen before would be declined.").
-    /// <see cref="ProtectedResource.DpopResourceAccess.DecideAsync"/> calls it with no target URI, so the <c>jti</c> is
-    /// looked up as the store keys it, not in the context of the target URI that section names; a <c>jti</c> that is
-    /// empty, longer than <see cref="Server.JtiReplayGuard.MaxJtiLength"/> UTF-16 code units, or holding a character of
-    /// general category Cc or an unpaired surrogate is refused before this slot is called. Required when the RS accepts
-    /// DPoP-bound tokens; unused on Bearer-only deployments.
+    /// Claims the first use of an accepted DPoP proof's <c>jti</c> at the target URI it was presented at, in one atomic
+    /// operation, so its every later presentation there within the proof's acceptance window is refused
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449 Section 11.1</see>: "In the context of
+    /// the target URI, servers can store the jti value of each DPoP proof for the time window in which the respective DPoP
+    /// proof JWT would be accepted to prevent multiple uses of the same DPoP proof. HTTP requests to the same URI for which
+    /// the jti value has been seen before would be declined."); for example
+    /// <see cref="Dpop.InMemoryDpopReplayCache.ConsultAsync"/>. <see cref="ProtectedResource.DpopResourceAccess.DecideAsync"/>
+    /// calls it once per validated proof with <see cref="ProtectedResource.DpopResourceRequest.TargetUri"/> in the one
+    /// normalized form the library compares a proof's <c>htu</c> in, stated once at <see cref="ConsultDpopProofJtiDelegate"/>,
+    /// so every spelling of one target names one record, and a record lifetime one tick past the later of the clock and the proof's <c>iat</c> plus <see cref="DpopFreshnessWindow"/>,
+    /// the window it holds the <c>iat</c> to, so a store reading the instant either as the last one the record counts or
+    /// as the first one it does not count refuses a replay at the window's last instant. A <c>jti</c> that is empty,
+    /// longer than <see cref="Server.JtiReplayGuard.MaxJtiLength"/> UTF-16 code units, or holding a character of general
+    /// category Cc or an unpaired surrogate is refused <c>invalid_dpop_proof</c> before this slot is called, the rule the
+    /// library's resources hold a <c>jti</c> to wherever their replay guard reads it, which under
+    /// <see cref="Server.JtiReplayPolicy.Disabled"/> it does not. Required when the resource server accepts DPoP-bound
+    /// tokens; with it unwired a DPoP-bound token is answered <c>server_error</c>.
     /// </summary>
-    public IsDpopProofJtiSeenDelegate? IsDpopProofJtiSeenAsync { get; init; }
-
-    /// <summary>
-    /// Persists an accepted DPoP proof <c>jti</c> so its every later presentation within the proof's acceptance window is
-    /// refused (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449 Section 11.1</see>: "In the
-    /// context of the target URI, servers can store the jti value of each DPoP proof for the time window in which the
-    /// respective DPoP proof JWT would be accepted to prevent multiple uses of the same DPoP proof.").
-    /// <see cref="ProtectedResource.DpopResourceAccess.DecideAsync"/> calls it with no target URI, so the <c>jti</c> is
-    /// recorded as the store keys it, not in the context of the target URI, and with an expiry one tick past the later
-    /// of the clock and the proof's <c>iat</c> plus <see cref="DpopFreshnessWindow"/>, the window it holds the
-    /// <c>iat</c> to, so a store reading the expiry either as the last instant the entry counts or as the first instant
-    /// it does not count refuses a replay at the window's last instant. A <c>jti</c> that is empty, longer than
-    /// <see cref="Server.JtiReplayGuard.MaxJtiLength"/> UTF-16 code units, or holding a character of general category Cc
-    /// or an unpaired surrogate is refused <c>invalid_dpop_proof</c> before this slot is called, the rule the library's
-    /// resources hold a <c>jti</c> to wherever their replay guard reads it, which under
-    /// <see cref="Server.JtiReplayPolicy.Disabled"/> it does not. Required alongside
-    /// <see cref="IsDpopProofJtiSeenAsync"/> when the RS accepts DPoP-bound tokens.
-    /// </summary>
-    public PersistDpopProofJtiDelegate? PersistDpopProofJtiAsync { get; init; }
+    public ConsultDpopProofJtiDelegate? ConsultDpopProofJtiAsync { get; init; }
 
     /// <summary>
     /// Validates a DPoP proof presented with an access token at this resource server, every check of

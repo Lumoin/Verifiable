@@ -90,8 +90,9 @@ internal static class CredentialEndpointDpopValidation
     /// </param>
     /// <param name="Scope">The <c>scope</c> the resource requires, or <see langword="null"/> when it names none.</param>
     /// <param name="Algorithms">
-    /// The JWS <c>alg</c> values the authorization server accepts for a DPoP proof, written as <c>algs</c> and held to
-    /// every proof the resource validates; <see langword="null"/> when the host's resolver answered no list or a list
+    /// The JWS <c>alg</c> values the authorization server accepts for a DPoP proof, held to every proof the resource
+    /// validates and written as <c>algs</c> where a proof can be accepted under them
+    /// (<see cref="DpopProofValidator.AcceptableProofAlgorithms"/>); <see langword="null"/> when the host's resolver answered no list or a list
     /// holding a name outside the token grammar the library holds every <c>algs</c> name to
     /// (<see cref="DpopChallenge.IsToken"/>), the challenge then sent without <c>algs</c> and a presented proof answered
     /// <c>server_error</c>.
@@ -270,7 +271,9 @@ internal static class CredentialEndpointDpopValidation
     /// Reads the presentation of a request to a library resource, UserInfo and the OID4VCI Credential, Deferred
     /// Credential and Notification endpoints: resolves the challenge parameters once
     /// (<see cref="ResolveChallengeContextAsync"/>), reads the <c>Authorization</c> field once, answers a field sent on
-    /// two or more lines through <see cref="RefuseRepeatedField"/>, a field carrying no access token through
+    /// two or more lines through <see cref="RefuseRepeatedField"/>, a line naming <c>Bearer</c> or <c>DPoP</c> with
+    /// credentials outside token68 through <see cref="RefuseCredentialOutsideToken68"/> (400 <c>invalid_request</c> under
+    /// the named scheme's challenge alone), a field carrying no access token through
     /// <see cref="RefuseMissingCredentials"/>, and otherwise answers the token and the scheme it was presented under.
     /// </summary>
     /// <remarks>
@@ -280,7 +283,9 @@ internal static class CredentialEndpointDpopValidation
     /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>;
     /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-2">RFC 9728 Section 2</see>,
     /// <c>dpop_bound_access_tokens_required</c>) and the <c>DPoP</c> scheme is the one mechanism it accepts, so every
-    /// answer here carries the <c>DPoP</c> challenge alone, before any token is validated
+    /// answer here carries the <c>DPoP</c> challenge alone, before any token is validated: a <c>DPoP</c> credential outside
+    /// token68 is answered 400 <c>invalid_request</c> as without the requirement, and a <c>Bearer</c> credential of any
+    /// shape as a <c>Bearer</c> presentation
     /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "Upon receipt of a
     /// request to a protected resource within the protection space requiring DPoP authentication, the server can respond
     /// with a challenge to the client to provide DPoP authentication information if the request does not include valid
@@ -324,6 +329,16 @@ internal static class CredentialEndpointDpopValidation
             return new LibraryResourcePresentation(null, false, challenge, repeatedFieldRefusal);
         }
 
+        //RFC 6750 Section 3.1: a credential of an access token scheme outside the token68 form is "otherwise malformed",
+        //invalid_request; RFC 9449 Section 7.2: the scheme the line names establishes the mechanism, whose challenge
+        //delivers the error. Under the requirement a Bearer credential of any shape attempted a method the resource does
+        //not accept and is answered below with the DPoP challenge alone.
+        bool isDpopScheme = authorization.IsScheme(WellKnownAuthenticationSchemes.DPoP);
+        if(IsAccessTokenCredentialOutsideToken68(authorization) && (isDpopScheme || !isDpopBoundAccessTokenRequired))
+        {
+            return new LibraryResourcePresentation(null, false, challenge, RefuseCredentialOutsideToken68(isDpopScheme, challenge));
+        }
+
         bool hasAccessToken = BearerTokenValidation.TryExtractAccessToken(authorization, out string? accessToken, out bool isDpopPresentation);
         if(isDpopBoundAccessTokenRequired && (!hasAccessToken || !isDpopPresentation))
         {
@@ -337,6 +352,50 @@ internal static class CredentialEndpointDpopValidation
         }
 
         return new LibraryResourcePresentation(accessToken, isDpopPresentation, challenge, null);
+    }
+
+
+    /// <summary>
+    /// Whether the one <c>Authorization</c> field line names an access token scheme, <c>Bearer</c> or <c>DPoP</c>
+    /// compared case-insensitively, with credentials that are no token68: "credentials = "Bearer" 1*SP b64token"
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6750#section-2.1">RFC 6750 Section 2.1</see>) and "credentials =
+    /// "DPoP" 1*SP token68" (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>).
+    /// A line naming the scheme alone carries no credentials and is no such attempt.
+    /// </summary>
+    /// <param name="authorization">The request's <c>Authorization</c> field reading, a single line or none.</param>
+    /// <returns><see langword="true"/> when the line attempts an access token scheme with a malformed credential.</returns>
+    private static bool IsAccessTokenCredentialOutsideToken68(AuthorizationFieldReading authorization) =>
+        (authorization.IsScheme(WellKnownAuthenticationSchemes.Bearer) || authorization.IsScheme(WellKnownAuthenticationSchemes.DPoP))
+        && authorization.Credentials is { Length: > 0 }
+        && !authorization.HasToken68Credentials;
+
+
+    /// <summary>
+    /// The answer to an access token credential outside the token68 form: 400 <c>invalid_request</c> with
+    /// <see cref="WellKnownOAuthErrorDescriptions.CredentialOutsideToken68"/>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>: "invalid_request The
+    /// request is missing a required parameter, includes an unsupported parameter or parameter value, repeats the same
+    /// parameter, uses more than one method for including an access token, or is otherwise malformed. The resource server
+    /// SHOULD respond with the HTTP 400 (Bad Request) status code."), and the challenge of the scheme the line names alone
+    /// carrying that error (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 Section 7.2</see>:
+    /// "If the mechanism used to attempt authentication could be established unambiguously, then the corresponding
+    /// challenge SHOULD be used to deliver error information (Figure 18)."): the <c>DPoP</c> challenge through
+    /// <see cref="WithDpopChallenge"/>, or the <c>Bearer</c> challenge with the realm where the resource has one.
+    /// </summary>
+    /// <param name="isDpopScheme">Whether the line names the <c>DPoP</c> scheme.</param>
+    /// <param name="challenge">The parameters every <c>DPoP</c> challenge of the request carries.</param>
+    /// <returns>The 400 refusal with its challenge.</returns>
+    private static ServerHttpResponse RefuseCredentialOutsideToken68(bool isDpopScheme, ResourceChallengeContext challenge)
+    {
+        ServerHttpResponse refusal = ServerHttpResponse.BadRequest(OAuthErrors.InvalidRequest, WellKnownOAuthErrorDescriptions.CredentialOutsideToken68);
+
+        return isDpopScheme switch
+        {
+            true => WithDpopChallenge(refusal, BuildDpopChallenge(OAuthErrors.InvalidRequest, challenge)),
+            false => refusal.WithHeader(
+                WellKnownHttpHeaderNames.WwwAuthenticate,
+                BearerTokenChallenge.BuildChallenge(realm: challenge.Realm, error: OAuthErrors.InvalidRequest))
+        };
     }
 
 
@@ -355,7 +414,10 @@ internal static class CredentialEndpointDpopValidation
     /// composed by <see cref="DpopRequestReading.ComposeTargetUri"/> from the issuer resolved only once the checks reach
     /// the proof, and is the audience of the resource's nonces
     /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">RFC 9449 Section 9</see>: "nonces will be only
-    /// accepted by the server that issued them").
+    /// accepted by the server that issued them"). A token whose <c>cnf</c> carries a blank <c>jkt</c>
+    /// (<see cref="JwsAccessTokenValidator.IsBlankJwkThumbprint"/>, the rule the token validator refuses it by as
+    /// malformed) is refused 401 <c>invalid_token</c> with <see cref="JwsAccessTokenValidator.BlankJwkThumbprintDescription"/>
+    /// in the challenge of the scheme it was presented under (<see cref="InPresentationScheme"/>), before the checks run.
     /// </summary>
     /// <param name="server">The authorization server holding the DPoP delegates and the issuer resolver.</param>
     /// <param name="context">The per-request context carrying the inbound request.</param>
@@ -385,6 +447,20 @@ internal static class CredentialEndpointDpopValidation
         var oauth = server.OAuth();
         IncomingRequest? request = context.IncomingRequest;
         bool isSenderConstrained = accessToken.TryGetValue(WellKnownJwtClaimNames.Cnf, out object? confirmation);
+
+        //RFC 9449 Section 6.1: a jkt "MUST be the base64url encoding (as defined in [RFC7515]) of the JWK SHA-256
+        //Thumbprint"; a blank one binds the token to no key and the token is malformed (RFC 6750 Section 3.1,
+        //invalid_token), refused in the scheme it was presented under before any proof is judged, under the one rule the
+        //token validator holds a cnf to.
+        if(isSenderConstrained && JwsAccessTokenValidator.IsBlankJwkThumbprint(confirmation))
+        {
+            return InPresentationScheme(
+                ServerHttpResponse.Unauthorized(OAuthErrors.InvalidToken, JwsAccessTokenValidator.BlankJwkThumbprintDescription)
+                    .WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, BearerTokenValidation.InvalidTokenChallenge),
+                isDpopPresentation,
+                challenge);
+        }
+
         IReadOnlyList<string>? dpopFieldLines = null;
         _ = request?.Headers.TryGetAll(WellKnownHttpHeaderNames.DPoP, out dpopFieldLines);
 
@@ -432,6 +508,7 @@ internal static class CredentialEndpointDpopValidation
                 true => DpopTokenEndpointValidation.AlgorithmResolverAnsweredUnusableListDescription,
                 false => DpopTokenEndpointValidation.AlgorithmResolverAnsweredNoListDescription
             },
+            JtiStoreUnavailableDescription = DpopResourceAccess.JtiReplayDefenseCouldNotRecordDescription,
             BearerChallenge = BearerTokenValidation.InvalidTokenChallenge,
             Realm = challenge.Realm,
             Scope = challenge.Scope
@@ -449,14 +526,21 @@ internal static class CredentialEndpointDpopValidation
     /// <see cref="DpopChallenge.BuildChallenge"/>: "The scheme name is DPoP.", the <c>realm</c> and the <c>scope</c> of
     /// <paramref name="challenge"/>, "An error parameter ([RFC6750], Section 3) SHOULD be included to indicate the reason
     /// why the request was declined, if the request included an access token but failed authentication." and "An algs
-    /// parameter SHOULD be included", the algorithms of <paramref name="challenge"/>. The <paramref name="error"/> is one
-    /// of the library's own OAuth error codes, within the RFC 6750 Section 3 attribute charset.
+    /// parameter SHOULD be included to signal to the client the JWS algorithms that are acceptable for the DPoP proof
+    /// JWT.", the algorithms of <paramref name="challenge"/> a proof can be accepted under
+    /// (<see cref="DpopProofValidator.AcceptableProofAlgorithms"/>), the parameter absent when none remains. The
+    /// <paramref name="error"/> is one of the library's own OAuth error codes, within the RFC 6750 Section 3 attribute
+    /// charset.
     /// </summary>
     /// <param name="error">The error code, for example <see cref="OAuthErrors.InvalidToken"/>, or <see langword="null"/> for none.</param>
     /// <param name="challenge">The parameters every <c>DPoP</c> challenge of the request carries.</param>
     /// <returns>The <c>WWW-Authenticate</c> value.</returns>
     internal static string BuildDpopChallenge(string? error, ResourceChallengeContext challenge) =>
-        DpopChallenge.BuildChallenge(challenge.Realm, error, challenge.Scope, challenge.Algorithms);
+        DpopChallenge.BuildChallenge(
+            challenge.Realm,
+            error,
+            challenge.Scope,
+            challenge.Algorithms is IReadOnlyList<string> algorithms ? DpopProofValidator.AcceptableProofAlgorithms(algorithms) : null);
 
 
     /// <summary>

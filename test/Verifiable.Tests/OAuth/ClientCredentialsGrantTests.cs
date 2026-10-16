@@ -4,6 +4,8 @@ using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using Verifiable.Core.Outbound;
@@ -17,6 +19,7 @@ using Verifiable.OAuth.Client;
 using Verifiable.OAuth.ClientCredentials;
 using Verifiable.OAuth.Diagnostics;
 using Verifiable.OAuth.Dpop;
+using Verifiable.OAuth.Introspection;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
@@ -1065,6 +1068,72 @@ internal sealed class ClientCredentialsGrantTests
             holderKeys.PublicKey.Dispose();
             holderKeys.PrivateKey.Dispose();
         }
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.2">RFC 9449 Section 6.2</see>: "For a DPoP-bound
+    /// access token, the hash of the public key to which the token is bound is conveyed to the protected resource as
+    /// metainformation in a token introspection response. The hash is conveyed using the same cnf content with jkt member
+    /// structure as the JWK Thumbprint confirmation method, described in Section 6.1, as a top-level member of the
+    /// introspection response JSON." and "If the token_type member is included in the introspection response, it MUST
+    /// contain the value DPoP." A machine client is issued an access token at the token endpoint over the wire with a
+    /// DPoP proof carrying the supplied nonce; a resource posts that token to the introspection endpoint over the wire,
+    /// the application answering from its own record of the token, the binding it issued. The answer is 200 with
+    /// <c>"active":true</c>, <c>"token_type":"DPoP"</c> and the top-level <c>cnf</c> whose <c>jkt</c> is the JWK SHA-256
+    /// Thumbprint of the proof's public key, computed by the test from the key itself.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ADpopBoundAccessTokenIsIntrospectedWithTheThumbprintOfItsProofKeyAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterMachineClientAsync(app, isTokenIntrospectionAllowed: true).ConfigureAwait(false);
+        Uri tokenUrl = await StartDpopTokenEndpointAsync(app, material).ConfigureAwait(false);
+        using FreshDpopKey dpopKey = new();
+        string nonce = await ObtainTokenEndpointNonceAsync(app, tokenUrl, dpopKey.Key).ConfigureAwait(false);
+        string proof = await BuildTokenProofAsync(dpopKey.Key, tokenUrl, nonce).ConfigureAwait(false);
+        (int statusCode, string body, _) = await PostMachineTokenRequestAsync(app, tokenUrl, proof).ConfigureAwait(false);
+        Assert.IsEmpty(app.Host("default").ConsumeHttpFaults(), "The token is issued without a server fault.");
+        Assert.AreEqual(200, statusCode, body);
+        using JsonDocument tokenResponse = JsonDocument.Parse(body);
+        string accessToken = tokenResponse.RootElement.GetProperty(WellKnownTokenTypes.AccessToken).GetString()!;
+
+        await TestHostShell.AlterAsync(app.Server, static candidateIntegration =>
+            candidateIntegration.IntrospectTokenAsync = static (token, _, _, _, _) =>
+                ValueTask.FromResult(JwtPayloadReader.ReadCnfJkt(token) switch
+                {
+                    string issuedThumbprint => new TokenIntrospectionResult
+                    {
+                        IsActive = true,
+                        Confirmation = new ConfirmationMethod { JwkThumbprint = issuedThumbprint }
+                    },
+                    null => TokenIntrospectionResult.Inactive
+                })).ConfigureAwait(false);
+        HttpResponseData introspection = await HttpClientTransport.SendFormPostAsync(
+            app.Host("default").SharedHttpClient!,
+            new Uri(app.Host("default").HttpBaseAddress!,
+                TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeIntrospect, material.Registration.TenantId.Value)),
+            new Dictionary<string, string>
+            {
+                [OAuthRequestParameterNames.Token] = accessToken,
+                [OAuthRequestParameterNames.ClientId] = ClientId,
+                ["client_secret"] = ClientSecret
+            },
+            OutgoingHeaders.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(app.Host("default").ConsumeHttpFaults(), "The token is introspected without a server fault.");
+        Assert.AreEqual(200, introspection.StatusCode, introspection.Body);
+        using JsonDocument document = JsonDocument.Parse(introspection.Body);
+        Assert.IsTrue(document.RootElement.GetProperty("active").GetBoolean(), introspection.Body);
+        Assert.IsTrue(document.RootElement.TryGetProperty("token_type", out JsonElement tokenType), $"The response carries the token_type member: {introspection.Body}");
+        Assert.AreEqual("DPoP", tokenType.GetString(), introspection.Body);
+        Assert.IsTrue(document.RootElement.TryGetProperty("cnf", out JsonElement confirmation), $"The response carries the cnf member: {introspection.Body}");
+        Assert.IsTrue(confirmation.TryGetProperty("jkt", out JsonElement thumbprint), $"The cnf member carries jkt: {introspection.Body}");
+        Assert.AreEqual(
+            await ResourceDpopProofs.ComputeJwkThumbprintAsync(dpopKey.Key, TestContext.CancellationToken).ConfigureAwait(false),
+            thumbprint.GetString(),
+            introspection.Body);
     }
 
 
@@ -2838,6 +2907,160 @@ internal sealed class ClientCredentialsGrantTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.6">RFC 9449 Section 11.6</see>: "Implementers MUST
+    /// ensure that only asymmetric digital signature algorithms (such as ES256) that are deemed secure can be used for
+    /// signing DPoP proofs. In particular, the algorithm none MUST NOT be allowed." The rule holds whatever list of
+    /// algorithms the host answers: at a server whose signing-algorithm resolver answers <c>ES256</c> beside a further
+    /// algorithm for DPoP proofs, a <c>client_credentials</c> request sent to the token endpoint over a raw TLS connection
+    /// with a proof carrying the supplied nonce under an algorithm that is no asymmetric signature is refused 400 with
+    /// <c>invalid_dpop_proof</c> and no access token is issued. The rows: the host answering <c>["ES256","HS256"]</c>, a
+    /// header declaring <c>HS256</c> over thirty-two arbitrary signature octets, refused on its algorithm before any
+    /// signature is checked, the description "DPoP proof validation failed: InvalidAlg."; the host answering
+    /// <c>["ES256","none"]</c>, a header declaring <c>none</c> over thirty-two arbitrary signature octets, refused on its
+    /// algorithm, the description "DPoP proof validation failed: InvalidAlg."; the host answering
+    /// <c>["ES256","HS256"]</c>, a header declaring <c>none</c> with an empty signature part, the form of an unsecured
+    /// JWS, refused by the structural parse of a signed proof before its algorithm is read
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">Section 4.3</see>, check 2: "The DPoP HTTP request
+    /// header field value is a single and well-formed JWT."),
+    /// the description "DPoP proof validation failed: Malformed.".
+    /// </summary>
+    /// <param name="row">
+    /// The proof: <see cref="MacAlgorithmProofRow"/>, <see cref="NoneAlgorithmSignedProofRow"/> or
+    /// <see cref="NoneAlgorithmProofRow"/>.
+    /// </param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(MacAlgorithmProofRow)]
+    [DataRow(NoneAlgorithmSignedProofRow)]
+    [DataRow(NoneAlgorithmProofRow)]
+    public async Task TokenEndpointRefusesAProofUnderNoAsymmetricSignatureAlgorithmTheHostListsAsync(string row)
+    {
+        (string algorithm, bool isSignaturePartKept, string expectedDescription) = row switch
+        {
+            MacAlgorithmProofRow => ("HS256", true, "DPoP proof validation failed: InvalidAlg."),
+            NoneAlgorithmSignedProofRow => ("none", true, "DPoP proof validation failed: InvalidAlg."),
+            NoneAlgorithmProofRow => ("none", false, "DPoP proof validation failed: Malformed."),
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown proof row.")
+        };
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterMachineClientAsync(app).ConfigureAwait(false);
+        Uri tokenUrl = await StartDpopTokenEndpointAsync(app, material).ConfigureAwait(false);
+        using FreshDpopKey dpopKey = new();
+        string nonce = await ObtainTokenEndpointNonceAsync(app, tokenUrl, dpopKey.Key).ConfigureAwait(false);
+        await app.AcceptDpopProofsUnderAsync(
+            [WellKnownJwaValues.Es256, row == NoneAlgorithmSignedProofRow ? "none" : "HS256"]).ConfigureAwait(false);
+
+        string signedProof = await BuildTokenProofAsync(
+            dpopKey.Key, tokenUrl, nonce, alterHeader: header => header["alg"] = algorithm).ConfigureAwait(false);
+        string proof = isSignaturePartKept
+            ? ResourceDpopProofs.WithArbitrarySignature(signedProof)
+            : ResourceDpopProofs.WithoutSignature(signedProof);
+        HttpResponseData response = await PostMachineTokenRequestOverARawConnectionAsync(app, tokenUrl, [proof]).ConfigureAwait(false);
+
+        Assert.IsEmpty(app.Host("default").ConsumeHttpFaults(), "The proof is refused without a server fault.");
+        DpopCodeBindingWire.AssertError(response.StatusCode, response.Body, 400, "invalid_dpop_proof", expectedDescription);
+        Assert.DoesNotContain(WellKnownTokenTypes.AccessToken, response.Body, "A proof under no asymmetric signature never mints an access token.");
+    }
+
+
+    /// <summary>
+    /// The proof row whose header declares the MAC algorithm <c>HS256</c>. A constant, not a property, because a DataRow
+    /// attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string MacAlgorithmProofRow = "mac-algorithm-proof";
+
+    /// <summary>
+    /// The proof row whose header declares <c>none</c> over thirty-two arbitrary signature octets at a host listing
+    /// <c>none</c>. A constant, not a property, because a DataRow attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string NoneAlgorithmSignedProofRow = "none-algorithm-proof-with-a-signature";
+
+    /// <summary>
+    /// The proof row whose header declares <c>none</c> with an empty signature part. A constant, not a property, because a
+    /// DataRow attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string NoneAlgorithmProofRow = "none-algorithm-proof";
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-5.1">RFC 9449 Section 5.1</see>:
+    /// "dpop_signing_alg_values_supported: A JSON array containing a list of the JWS alg values (from the
+    /// [IANA.JOSE.ALGS] registry) supported by the authorization server for DPoP proof JWTs.", with
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.6">Section 11.6</see>: "Implementers MUST ensure that
+    /// only asymmetric digital signature algorithms (such as ES256) that are deemed secure can be used for signing DPoP
+    /// proofs. In particular, the algorithm none MUST NOT be allowed." A server supports no DPoP proof under an algorithm
+    /// that is no asymmetric signature whatever list its signing-algorithm resolver answers, so its discovery document,
+    /// fetched over the wire, publishes only the asymmetric ones. The rows: the host answering <c>["ES256","HS256"]</c>
+    /// publishes exactly <c>["ES256"]</c>; <c>["ES256","none"]</c> publishes exactly <c>["ES256"]</c>; <c>["none"]</c>
+    /// publishes no <c>dpop_signing_alg_values_supported</c> member.
+    /// </summary>
+    /// <param name="hostList">The algorithms the host answers, space-delimited.</param>
+    /// <param name="publishedList">The algorithms the document publishes, space-delimited, or empty for no member.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("ES256 HS256", "ES256", DisplayName = "ES256 beside HS256")]
+    [DataRow("ES256 none", "ES256", DisplayName = "ES256 beside none")]
+    [DataRow("none", "", DisplayName = "none alone")]
+    public async Task DiscoveryPublishesOnlyTheAsymmetricDpopAlgorithmsTheHostListsAsync(string hostList, string publishedList)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterMachineClientAsync(app).ConfigureAwait(false);
+        _ = await StartDpopTokenEndpointAsync(app, material).ConfigureAwait(false);
+        await app.AcceptDpopProofsUnderAsync(hostList.Split(' ')).ConfigureAwait(false);
+
+        HostedAuthorizationServer host = app.Host("default");
+        Uri discoveryUrl = new(host.HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.MetadataDiscovery, material.Registration.TenantId.Value));
+        using HttpResponseMessage discovery = await host.SharedHttpClient!.GetAsync(discoveryUrl, TestContext.CancellationToken).ConfigureAwait(false);
+        string discoveryBody = await discovery.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)discovery.StatusCode, discoveryBody);
+        using JsonDocument discoveryDocument = JsonDocument.Parse(discoveryBody);
+        bool isPublished = discoveryDocument.RootElement.TryGetProperty(
+            AuthorizationServerMetadataParameterNames.DpopSigningAlgValuesSupported, out JsonElement published);
+        string publishedAlgorithms = isPublished
+            ? string.Join(' ', published.EnumerateArray().Select(static element => element.GetString()))
+            : string.Empty;
+
+        Assert.AreEqual(publishedList.Length > 0, isPublished, discoveryBody);
+        Assert.AreEqual(publishedList, publishedAlgorithms, discoveryBody);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449 Section 11.1</see>: "In the context of
+    /// the target URI, servers can store the jti value of each DPoP proof for the time window in which the respective DPoP
+    /// proof JWT would be accepted to prevent multiple uses of the same DPoP proof.", with
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.6.1">RFC 9110 Section 15.6.1</see>: "The 500
+    /// (Internal Server Error) status code indicates that the server encountered an unexpected condition that prevented
+    /// it from fulfilling the request." At a server whose replay store records a DPoP proof's <c>jti</c> but cannot
+    /// resolve what it recorded, a <c>client_credentials</c> request sent to the token endpoint over a raw TLS connection
+    /// with a valid proof carrying the supplied nonce is not served: 500 with exactly the body
+    /// <c>{"error":"server_error","error_description":"The DPoP proof jti replay defense could not record the proof."}</c>,
+    /// and no access token is issued.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task TokenEndpointAnswersAReplayStoreThatCannotRecordTheProofWithAServerErrorAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterMachineClientAsync(app).ConfigureAwait(false);
+        Uri tokenUrl = await StartDpopTokenEndpointAsync(app, material).ConfigureAwait(false);
+        using FreshDpopKey dpopKey = new();
+        string nonce = await ObtainTokenEndpointNonceAsync(app, tokenUrl, dpopKey.Key).ConfigureAwait(false);
+        await DpopEndToEndTests.HalfWireJtiReplayStoreAsync(app.Server).ConfigureAwait(false);
+
+        string proof = await BuildTokenProofAsync(dpopKey.Key, tokenUrl, nonce).ConfigureAwait(false);
+        HttpResponseData response = await PostMachineTokenRequestOverARawConnectionAsync(app, tokenUrl, [proof]).ConfigureAwait(false);
+
+        Assert.IsEmpty(app.Host("default").ConsumeHttpFaults(), "The request is answered without a server fault.");
+        Assert.AreEqual(500, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            "{\"error\":\"server_error\",\"error_description\":\"The DPoP proof jti replay defense could not record the proof.\"}",
+            response.Body);
+    }
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.2">RFC 9449 Section 4.2</see>, <c>jwk</c>: "It MUST
     /// NOT contain a private key.", the private members of a JWK being those
     /// <see href="https://www.rfc-editor.org/rfc/rfc7518#section-6.2.2">RFC 7518 Section 6.2.2</see> (<c>d</c>),
@@ -3317,6 +3540,59 @@ internal sealed class ClientCredentialsGrantTests
         Assert.IsEmpty(dialed, "No request, and so no DPoP proof, is sent to an http endpoint.");
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.InternalError, result.Outcome,
             $"ErrorCode={result.ErrorCode} ErrorDescription={result.ErrorDescription}");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-2">RFC 9449 Section 2</see>: "DPoP is not, however, a
+    /// substitute for a secure transport and MUST always be used in conjunction with HTTPS." A plain TCP listener on the
+    /// loopback, with no TLS, serves the <c>http://127.0.0.1:&lt;port&gt;/token</c> a client wired with a DPoP key, a real
+    /// HTTP transport and an outbound policy admitting loopback addresses is pointed at. Asked for a
+    /// <c>client_credentials</c> token, the client refuses before dialing: the request answers the client's internal
+    /// error and the listener has received no connection by then, so no DPoP proof leaves the client outside HTTPS.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ClientNeverDialsAPlainHttpTokenEndpointListeningOnTheLoopbackAsync()
+    {
+        using TcpListener listener = new(IPAddress.Loopback, 0);
+        listener.Start();
+        using CancellationTokenSource acceptCancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
+        Task<TcpClient> connection = listener.AcceptTcpClientAsync(acceptCancellation.Token).AsTask();
+        try
+        {
+            int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            Uri issuer = new("https://as.example.com");
+            Uri plainHttpTokenEndpoint = new($"http://127.0.0.1:{port}/token");
+            var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+            using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+            using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+            DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
+            using HttpClient plainHttpClient = new();
+            OAuthClient client = BuildDpopMachineClient(
+                issuer, plainHttpTokenEndpoint, dpopKey, new InMemoryDpopNonceCache(), TestHostShell.LoopbackOutboundFetchPolicy,
+                (endpoint, fields, headers, ct) => HttpClientTransport.SendFormPostAsync(plainHttpClient, endpoint, fields, headers, ct));
+
+            Task<AuthCodeFlowEndpointResult> tokenRequest = client.ClientCredentials.RequestTokenAsync(
+                MachineClientRegistration(issuer), scope: MachineScope, resource: null, [], clientAssertionOptions: null,
+                TestContext.CancellationToken).AsTask();
+            Task answered = await Task.WhenAny(tokenRequest, connection).ConfigureAwait(false);
+
+            Assert.AreSame(tokenRequest, answered, "The client refuses before it dials: the listener receives no connection.");
+            AuthCodeFlowEndpointResult result = await tokenRequest.ConfigureAwait(false);
+            Assert.AreEqual(AuthCodeFlowEndpointOutcome.InternalError, result.Outcome,
+                $"ErrorCode={result.ErrorCode} ErrorDescription={result.ErrorDescription}");
+        }
+        finally
+        {
+            //A connection the listener did receive is closed so the client's dial ends; an accept still pending is
+            //cancelled with the listener.
+            await acceptCancellation.CancelAsync().ConfigureAwait(false);
+            if(connection.IsCompletedSuccessfully)
+            {
+                (await connection.ConfigureAwait(false)).Dispose();
+            }
+        }
     }
 
 
@@ -4772,19 +5048,29 @@ internal sealed class ClientCredentialsGrantTests
     /// selects a profile <see cref="ClientPolicyProfiles.RequiresDpop"/> mandates against.
     /// </param>
     /// <param name="clientId">The client identifier, <see cref="ClientId"/> unless a row registers a second machine client.</param>
+    /// <param name="isTokenIntrospectionAllowed">
+    /// Whether the registration also allows the token introspection endpoint
+    /// (<see cref="WellKnownCapabilityIdentifiers.OAuthTokenIntrospection"/>), for a row whose resource introspects the
+    /// token the machine client was issued.
+    /// </param>
     /// <returns>The registration's key material.</returns>
-    private static async Task<VerifierKeyMaterial> RegisterMachineClientAsync(TestHostShell app, PolicyProfile? profile = null, string clientId = ClientId)
+    private static async Task<VerifierKeyMaterial> RegisterMachineClientAsync(
+        TestHostShell app, PolicyProfile? profile = null, string clientId = ClientId, bool isTokenIntrospectionAllowed = false)
     {
+        ImmutableHashSet<CapabilityIdentifier> capabilities = ImmutableHashSet.Create(
+            WellKnownCapabilityIdentifiers.OAuthClientCredentials,
+            WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
+            WellKnownCapabilityIdentifiers.OAuthJwksEndpoint);
+
         //RegisterDpopClient supplies the AccessTokenIssuance signing keys the
         //token producers resolve; the plain RegisterClient helper does not.
         VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
             clientId,
             new Uri(clientId),
             profile: profile ?? PolicyProfile.Rfc6749WithPkce,
-            capabilities: ImmutableHashSet.Create(
-                WellKnownCapabilityIdentifiers.OAuthClientCredentials,
-                WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
-                WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
+            capabilities: isTokenIntrospectionAllowed
+                ? capabilities.Add(WellKnownCapabilityIdentifiers.OAuthTokenIntrospection)
+                : capabilities).ConfigureAwait(false);
 
         //RegisterDpopClient fixes AllowedScopes to the OIDC identity scope set; add MachineScope
         //(the register-then-upgrade pattern — the routing dictionaries are host-internal) so a

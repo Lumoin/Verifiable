@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Verifiable.Core;
 using Verifiable.Cryptography.Context;
 using Verifiable.OAuth.Dpop;
+using Verifiable.OAuth.ProtectedResource;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Metadata;
 using Verifiable.OAuth.Server.Pipeline;
@@ -304,10 +305,10 @@ internal static class DpopTokenEndpointValidation
                 "DPoP proof jti has been seen previously."),
             JtiReplayOutcome.Unacceptable => ServerHttpResponse.BadRequest(
                 OAuthErrors.InvalidDpopProof,
-                "DPoP proof jti is too long or carries a character the replay guard cannot store."),
+                JtiReplayGuard.UnstorableDpopProofJtiDescription),
             JtiReplayOutcome.StoreUnavailable => ServerHttpResponse.ServerError(
                 OAuthErrors.ServerError,
-                "DPoP proof jti replay defense is required by policy but no jti store is configured."),
+                DpopResourceAccess.JtiReplayDefenseCouldNotRecordDescription),
 
             _ => null
         };
@@ -649,10 +650,10 @@ internal static class DpopTokenEndpointValidation
                 "DPoP proof jti has been seen previously."),
             JtiReplayOutcome.Unacceptable => ServerHttpResponse.BadRequest(
                 OAuthErrors.InvalidDpopProof,
-                "DPoP proof jti is too long or carries a character the replay guard cannot store."),
+                JtiReplayGuard.UnstorableDpopProofJtiDescription),
             JtiReplayOutcome.StoreUnavailable => ServerHttpResponse.ServerError(
                 OAuthErrors.ServerError,
-                "DPoP proof jti replay defense is required by policy but no jti store is configured."),
+                DpopResourceAccess.JtiReplayDefenseCouldNotRecordDescription),
 
             _ => null
         };
@@ -721,7 +722,8 @@ internal static class DpopTokenEndpointValidation
     /// The JWS <c>alg</c> values the authorization server accepts for a DPoP proof: the host's
     /// <see cref="AuthorizationServerCryptography.ResolveSupportedSigningAlgorithmsAsync"/> answer for
     /// <see cref="KeyUsageContext.DpopProof"/> where it is wired, otherwise
-    /// <see cref="DefaultSupportedSigningAlgorithms.ResolveAsync"/>, the one list the authorization server metadata
+    /// <see cref="DefaultSupportedSigningAlgorithms.ResolveAsync"/>, the one list whose identifiers a proof can be
+    /// accepted under (<see cref="DpopProofValidator.AcceptableProofAlgorithms"/>) the authorization server metadata
     /// publishes as <c>dpop_signing_alg_values_supported</c>
     /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-5.1">RFC 9449 Section 5.1</see>), so what is published
     /// is what is accepted. <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">Section 4.3</see>, check 5:

@@ -1176,7 +1176,8 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
     /// character rule is this library's policy, not a rule of the text. A DPoP proof presented with a Pre-Authorized
     /// Code Token Request, a grant whose DPoP proof the token endpoint validates without a pre-correlation step, whose
     /// <c>jti</c> holds U+0000, U+001F, U+007F or U+0085 is answered 400 with <c>invalid_dpop_proof</c> and the
-    /// description that names both causes, the store observation records no flow-state store call, and the
+    /// one description every DPoP endpoint of the library gives that refusal (naming the empty, the over-long and the
+    /// unstorable <c>jti</c>), the store observation records no flow-state store call, and the
     /// code-validation seam is never consulted. A lone surrogate is refused earlier, as a malformed proof; see
     /// <see cref="ADpopProofWhoseJtiCarriesALoneSurrogateIsRefusedAsMalformedBeforeAnyStoreCall"/>.
     /// </summary>
@@ -1195,7 +1196,7 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
         using JsonDocument document = JsonDocument.Parse(body);
         Assert.AreEqual("invalid_dpop_proof", document.RootElement.GetProperty("error").GetString());
         Assert.AreEqual(
-            "DPoP proof jti is too long or carries a character the replay guard cannot store.",
+            "DPoP proof jti is empty, too long or carries a character the replay guard cannot store.",
             document.RootElement.GetProperty("error_description").GetString());
         Assert.IsEmpty(storeOperations,
             $"The refused jti must never reach the store; it observed: {string.Join(", ", storeOperations)}.");

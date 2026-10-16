@@ -254,6 +254,342 @@ internal sealed class TokenIntrospectionServerTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.2">RFC 9449 Section 6.2</see>: "For a DPoP-bound
+    /// access token, the hash of the public key to which the token is bound is conveyed to the protected resource as
+    /// metainformation in a token introspection response. The hash is conveyed using the same cnf content with jkt member
+    /// structure as the JWK Thumbprint confirmation method, described in Section 6.1, as a top-level member of the
+    /// introspection response JSON." and "If the token_type member is included in the introspection response, it MUST
+    /// contain the value DPoP." An introspection request posted over the wire for a token the application answers as
+    /// active and bound to the thumbprint <c>0ZcOCORZNYy-DWpqq30jZyJGHTN0d2HglBV3uiguA4I</c> is answered 200 with the
+    /// top-level member <c>"cnf":{"jkt":"0ZcOCORZNYy-DWpqq30jZyJGHTN0d2HglBV3uiguA4I"}</c>, the object carrying that one
+    /// member, and <c>"token_type":"DPoP"</c>, the text's literal. The rows: the application states no token type, so the
+    /// library writes <c>DPoP</c>; the application states <c>DPoP</c>; the application states <c>dpop</c>, the same type
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 Section 5.1</see>: "Value is case
+    /// insensitive."), written as <c>DPoP</c>.
+    /// </summary>
+    /// <param name="tokenType">The token type the application states, or <see langword="null"/> for none.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(null, DisplayName = "no token type stated")]
+    [DataRow("DPoP", DisplayName = "the token type DPoP stated")]
+    [DataRow("dpop", DisplayName = "the token type dpop stated")]
+    public async Task IntrospectionConveysTheJwkThumbprintBindingOfADpopBoundTokenAsync(string? tokenType)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, IntrospectionCapabilities).ConfigureAwait(false);
+        await WireIntrospectionAsync(host, new TokenIntrospectionResult
+        {
+            IsActive = true,
+            Subject = "Z5O3upPC88QrAjx00dis",
+            TokenType = tokenType,
+            Confirmation = new ConfirmationMethod { JwkThumbprint = BoundThumbprint }
+        }).ConfigureAwait(false);
+
+        HttpResponseData response = await IntrospectOverTheWireAsync(host, material, OutgoingHeaders.Empty).ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+        using JsonDocument document = JsonDocument.Parse(response.Body);
+        Assert.IsTrue(document.RootElement.TryGetProperty("cnf", out JsonElement confirmation), $"The response carries the cnf member: {response.Body}");
+        Assert.AreEqual(JsonValueKind.Object, confirmation.ValueKind, response.Body);
+        Assert.IsTrue(confirmation.TryGetProperty("jkt", out JsonElement thumbprint), $"The cnf member carries jkt: {response.Body}");
+        Assert.AreEqual("0ZcOCORZNYy-DWpqq30jZyJGHTN0d2HglBV3uiguA4I", thumbprint.GetString(), response.Body);
+        Assert.HasCount(1, confirmation.EnumerateObject().ToList(), "The cnf object carries the jkt member alone.");
+        Assert.IsTrue(document.RootElement.TryGetProperty("token_type", out JsonElement writtenTokenType), $"The response carries the token_type member: {response.Body}");
+        Assert.AreEqual("DPoP", writtenTokenType.GetString(), response.Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7662#section-2.2">RFC 7662 Section 2.2</see>: "token_type OPTIONAL.
+    /// Type of the token as defined in Section 5.1 of OAuth 2.0 [RFC6749].", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.2">RFC 9449 Section 6.2</see>, whose <c>cnf</c> is
+    /// conveyed "For a DPoP-bound access token" only. An introspection request posted over the wire for a token the
+    /// application answers as active, bound to no key and of the type <c>Bearer</c>, is answered 200 with
+    /// <c>"token_type":"Bearer"</c> and no <c>cnf</c> member.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task IntrospectionOfATokenBoundToNoKeyCarriesNoConfirmationAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, IntrospectionCapabilities).ConfigureAwait(false);
+        await WireIntrospectionAsync(host, new TokenIntrospectionResult
+        {
+            IsActive = true,
+            Subject = "Z5O3upPC88QrAjx00dis",
+            TokenType = "Bearer"
+        }).ConfigureAwait(false);
+
+        HttpResponseData response = await IntrospectOverTheWireAsync(host, material, OutgoingHeaders.Empty).ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+        using JsonDocument document = JsonDocument.Parse(response.Body);
+        Assert.IsFalse(document.RootElement.TryGetProperty("cnf", out _), "A token bound to no key carries no cnf.");
+        Assert.IsTrue(document.RootElement.TryGetProperty("token_type", out JsonElement writtenTokenType), $"The response carries the token_type member: {response.Body}");
+        Assert.AreEqual("Bearer", writtenTokenType.GetString(), response.Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.2">RFC 9449 Section 6.2</see>: "If the token_type
+    /// member is included in the introspection response, it MUST contain the value DPoP.", for a token whose binding is
+    /// conveyed as the <c>cnf</c> member, and <see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.6.1">RFC 9110
+    /// Section 15.6.1</see>: "The 500 (Internal Server Error) status code indicates that the server encountered an
+    /// unexpected condition that prevented it from fulfilling the request." An application answer whose token type
+    /// contradicts its confirmation is a fault of the application's wiring, and the server conveys no binding it cannot
+    /// state consistently: an introspection request posted over the wire is answered 500 with exactly the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c> and no
+    /// introspection member. The rows: the token type <c>Bearer</c> beside a <c>jkt</c> confirmation; the token type
+    /// <c>DPoP</c> with no confirmation.
+    /// </summary>
+    /// <param name="row">The contradiction: <see cref="BearerBesideAConfirmationRow"/> or <see cref="DpopWithoutAConfirmationRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(BearerBesideAConfirmationRow)]
+    [DataRow(DpopWithoutAConfirmationRow)]
+    public async Task IntrospectionAnswersATokenTypeContradictingTheConfirmationAsAServerErrorAsync(string row)
+    {
+        (string tokenType, ConfirmationMethod? confirmation) = row switch
+        {
+            BearerBesideAConfirmationRow => ("Bearer", new ConfirmationMethod { JwkThumbprint = BoundThumbprint }),
+            DpopWithoutAConfirmationRow => ("DPoP", null),
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown contradiction row.")
+        };
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, IntrospectionCapabilities).ConfigureAwait(false);
+        await WireIntrospectionAsync(host, new TokenIntrospectionResult
+        {
+            IsActive = true,
+            Subject = "Z5O3upPC88QrAjx00dis",
+            TokenType = tokenType,
+            Confirmation = confirmation
+        }).ConfigureAwait(false);
+
+        HttpResponseData response = await IntrospectOverTheWireAsync(host, material, OutgoingHeaders.Empty).ConfigureAwait(false);
+
+        Assert.AreEqual(500, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}", response.Body);
+    }
+
+
+    /// <summary>
+    /// The row whose application states the token type <c>Bearer</c> beside a <c>jkt</c> confirmation. A constant, not a
+    /// property, because a DataRow attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string BearerBesideAConfirmationRow = "bearer-beside-a-confirmation";
+
+    /// <summary>
+    /// The row whose application states the token type <c>DPoP</c> with no confirmation. A constant, not a property,
+    /// because a DataRow attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string DpopWithoutAConfirmationRow = "dpop-without-a-confirmation";
+
+    /// <summary>The JWK SHA-256 Thumbprint the introspected tokens are bound to, the value of RFC 9449 Figure 11.</summary>
+    private static string BoundThumbprint { get; } = "0ZcOCORZNYy-DWpqq30jZyJGHTN0d2HglBV3uiguA4I";
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.1">RFC 9449 Section 6.1</see>: "The value of the jkt
+    /// member MUST be the base64url encoding (as defined in [RFC7515]) of the JWK SHA-256 Thumbprint (according to
+    /// [RFC7638]) of the DPoP public key (in JWK format) to which the access token is bound.", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.2">Section 6.2</see>: the hash "is conveyed using the
+    /// same cnf content with jkt member structure as the JWK Thumbprint confirmation method, described in Section 6.1".
+    /// A SHA-256 hash is 32 octets, whose base64url encoding is 43 characters. An application answer confirming the token
+    /// by a value that is no such encoding binds it to no key, a fault of the application's wiring: an introspection
+    /// request posted over the wire is answered 500 with exactly the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c> and no
+    /// <c>cnf</c> member. The rows: the empty value; three spaces; <c>not-a-thumbprint</c>; the 42 characters of the RFC
+    /// 9449 Figure 11 thumbprint without its last.
+    /// </summary>
+    /// <param name="jwkThumbprint">The confirmation's thumbprint as the application answers it.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("", DisplayName = "an empty thumbprint")]
+    [DataRow("   ", DisplayName = "three spaces")]
+    [DataRow("not-a-thumbprint", DisplayName = "not-a-thumbprint")]
+    [DataRow("0ZcOCORZNYy-DWpqq30jZyJGHTN0d2HglBV3uiguA4", DisplayName = "42 characters")]
+    public async Task IntrospectionAnswersAConfirmationWithoutAThumbprintSpellingAsAServerErrorAsync(string jwkThumbprint)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, IntrospectionCapabilities).ConfigureAwait(false);
+        await WireIntrospectionAsync(host, new TokenIntrospectionResult
+        {
+            IsActive = true,
+            Subject = "Z5O3upPC88QrAjx00dis",
+            Confirmation = new ConfirmationMethod { JwkThumbprint = jwkThumbprint }
+        }).ConfigureAwait(false);
+
+        HttpResponseData response = await IntrospectOverTheWireAsync(host, material, OutgoingHeaders.Empty).ConfigureAwait(false);
+
+        Assert.AreEqual(500, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}", response.Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.2">RFC 9449 Section 6.2</see>: "If the token_type
+    /// member is included in the introspection response, it MUST contain the value DPoP.", and the bound key's hash "is
+    /// conveyed using the same cnf content with jkt member structure as the JWK Thumbprint confirmation method, described
+    /// in Section 6.1, as a top-level member of the introspection response JSON." An application answer confirming the
+    /// token by the thumbprint <c>0ZcOCORZNYy-DWpqq30jZyJGHTN0d2HglBV3uiguA4I</c> whose extension members name a member
+    /// the server writes from the confirmation would state the binding twice, a fault of the application's wiring: an
+    /// introspection request posted over the wire is answered 500 with exactly the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c> and no
+    /// introspection member. The rows: the extension member <c>"token_type":"Bearer"</c>; the extension member
+    /// <c>"cnf":{"jkt":"NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs"}</c>, the RFC 7638 example thumbprint.
+    /// </summary>
+    /// <param name="row">The extension member: <see cref="TokenTypeExtensionRow"/> or <see cref="ConfirmationExtensionRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(TokenTypeExtensionRow)]
+    [DataRow(ConfirmationExtensionRow)]
+    public async Task IntrospectionAnswersAnExtensionMemberNamingAWrittenMemberAsAServerErrorAsync(string row)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, IntrospectionCapabilities).ConfigureAwait(false);
+        await WireIntrospectionAsync(host, ConfirmedAnswerWithExtensionMember(row)).ConfigureAwait(false);
+
+        HttpResponseData response = await IntrospectOverTheWireAsync(host, material, OutgoingHeaders.Empty).ConfigureAwait(false);
+
+        Assert.AreEqual(500, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}", response.Body);
+    }
+
+
+    /// <summary>
+    /// The row whose extension members carry <c>"token_type":"Bearer"</c>. A constant, not a property, because a DataRow
+    /// attribute argument must be a compile-time constant.
+    /// </summary>
+    internal const string TokenTypeExtensionRow = "token-type-extension";
+
+    /// <summary>
+    /// The row whose extension members carry a <c>cnf</c> object. A constant, not a property, because a DataRow attribute
+    /// argument must be a compile-time constant.
+    /// </summary>
+    internal const string ConfirmationExtensionRow = "cnf-extension";
+
+
+    /// <summary>
+    /// An active application answer confirming the token by the RFC 9449 Figure 11 thumbprint, whose extension members
+    /// carry the member <paramref name="row"/> names: <c>"token_type":"Bearer"</c> for <see cref="TokenTypeExtensionRow"/>,
+    /// <c>"cnf":{"jkt":"NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs"}</c> for <see cref="ConfirmationExtensionRow"/>.
+    /// </summary>
+    /// <param name="row">The extension member's row.</param>
+    /// <returns>The application's answer.</returns>
+    internal static TokenIntrospectionResult ConfirmedAnswerWithExtensionMember(string row) => new()
+    {
+        IsActive = true,
+        Subject = "Z5O3upPC88QrAjx00dis",
+        Confirmation = new ConfirmationMethod { JwkThumbprint = "0ZcOCORZNYy-DWpqq30jZyJGHTN0d2HglBV3uiguA4I" },
+        AdditionalClaims = row switch
+        {
+            TokenTypeExtensionRow => new Dictionary<string, object>(StringComparer.Ordinal) { ["token_type"] = "Bearer" },
+            ConfirmationExtensionRow => new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                ["cnf"] = new Dictionary<string, object>(StringComparer.Ordinal) { ["jkt"] = "NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs" }
+            },
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown extension member row.")
+        }
+    };
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7662#section-2.2">RFC 7662 Section 2.2</see>: "Note that to avoid
+    /// disclosing too much of the authorization server's state to a third party, the authorization server SHOULD NOT
+    /// include any additional information about an inactive token, including why the token is inactive." An application
+    /// answer for an inactive token that carries a confirmation by an empty thumbprint and extension members naming
+    /// <c>active</c> (<see langword="true"/>), <c>cnf</c> and <c>token_type</c> (<c>Bearer</c>) is answered as an inactive
+    /// token: an introspection request posted over the wire is answered 200 with exactly the body
+    /// <c>{"active":false}</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task IntrospectionOfAnInactiveTokenCarriesNothingTheAnswerAddsAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, IntrospectionCapabilities).ConfigureAwait(false);
+        await WireIntrospectionAsync(host, InactiveAnswerCarryingFurtherMembers()).ConfigureAwait(false);
+
+        HttpResponseData response = await IntrospectOverTheWireAsync(host, material, OutgoingHeaders.Empty).ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+        Assert.AreEqual("{\"active\":false}", response.Body);
+    }
+
+
+    /// <summary>
+    /// An application answer for an inactive token that carries further members: a confirmation by an empty thumbprint,
+    /// and extension members naming <c>active</c> (<see langword="true"/>), <c>cnf</c> (the RFC 7638 example thumbprint
+    /// as <c>jkt</c>) and <c>token_type</c> (<c>Bearer</c>).
+    /// </summary>
+    /// <returns>The application's answer.</returns>
+    internal static TokenIntrospectionResult InactiveAnswerCarryingFurtherMembers() => new()
+    {
+        IsActive = false,
+        Confirmation = new ConfirmationMethod { JwkThumbprint = string.Empty },
+        AdditionalClaims = new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            ["active"] = true,
+            ["cnf"] = new Dictionary<string, object>(StringComparer.Ordinal) { ["jkt"] = "NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs" },
+            ["token_type"] = "Bearer"
+        }
+    };
+
+
+    /// <summary>
+    /// Wires client authentication to admit every caller and the introspection seam to answer <paramref name="result"/>
+    /// for every token.
+    /// </summary>
+    /// <param name="host">The host whose integration is altered.</param>
+    /// <param name="result">The application's answer.</param>
+    /// <returns>A task that completes when the alteration is published.</returns>
+    private static Task WireIntrospectionAsync(TestHostShell host, TokenIntrospectionResult result) =>
+        TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) => ValueTask.FromResult(true);
+            candidateIntegration.IntrospectTokenAsync = (_, _, _, _, _) => ValueTask.FromResult(result);
+        });
+
+
+    /// <summary>
+    /// Starts the host's listener and posts an introspection request for the token <c>introspected-access-token</c> over
+    /// the wire with <paramref name="headers"/>, the caller naming itself by <see cref="ClientId"/>, and asserts the host
+    /// captured no fault in the exchange.
+    /// </summary>
+    /// <param name="host">The host serving the endpoint.</param>
+    /// <param name="material">The calling resource's registration.</param>
+    /// <param name="headers">The request's further header fields.</param>
+    /// <returns>The answer as received.</returns>
+    private async Task<HttpResponseData> IntrospectOverTheWireAsync(TestHostShell host, VerifierKeyMaterial material, OutgoingHeaders headers)
+    {
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer hosted = host.Host("default");
+        Uri endpoint = new(hosted.HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeIntrospect, material.Registration.TenantId.Value));
+        HttpResponseData response = await HttpClientTransport.SendFormPostAsync(
+            hosted.SharedHttpClient!, endpoint,
+            new Dictionary<string, string>
+            {
+                [OAuthRequestParameterNames.Token] = "introspected-access-token",
+                [OAuthRequestParameterNames.ClientId] = ClientId
+            },
+            headers, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsEmpty(hosted.ConsumeHttpFaults(), "The introspection request is answered without a server fault.");
+
+        return response;
+    }
+
+
+    /// <summary>
     /// Multiple audiences are written as a JSON array, a single audience as a string — both
     /// valid <c>aud</c> shapes per RFC 7519, which RFC 7662 §2.2 inherits.
     /// </summary>

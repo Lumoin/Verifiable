@@ -364,6 +364,91 @@ internal sealed class JwsAccessTokenValidatorTests
     }
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.1">RFC 9449 Section 6.1</see>: "the JWT Claims Set
+    /// MUST contain a cnf claim with a jkt member" whose value "MUST be the base64url encoding (as defined in [RFC7515])
+    /// of the JWK SHA-256 Thumbprint (according to [RFC7638]) of the DPoP public key (in JWK format) to which the access
+    /// token is bound." A blank <c>jkt</c> encodes no thumbprint and binds the token to no key a proof could carry. A
+    /// signed access token whose <c>cnf</c> carries a blank <c>jkt</c> is refused as
+    /// <see cref="JwsAccessTokenValidationFailureReason.Malformed"/> with the description "Access token cnf claim carries
+    /// a blank jkt.", and no claims are surfaced. The rows: an empty <c>jkt</c>; a <c>jkt</c> of three spaces.
+    /// </summary>
+    /// <param name="blankThumbprint">The blank <c>jkt</c> the <c>cnf</c> carries.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("", DisplayName = "an empty jkt")]
+    [DataRow("   ", DisplayName = "a jkt of three spaces")]
+    public async Task ValidatorRefusesACnfWhoseJktIsBlankAsMalformedAsync(string blankThumbprint)
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
+            subject: DefaultSubject,
+            scope: DefaultScope,
+            clientId: DefaultClientId,
+            issuedAt: NowInstant - TimeSpan.FromMinutes(1),
+            expiresAt: NowInstant + TimeSpan.FromHours(1),
+            issuer: DefaultIssuer,
+            audience: [DefaultAudience]);
+        payload[WellKnownJwtClaimNames.Cnf] = new Dictionary<string, object>
+        {
+            [WellKnownJwtClaimNames.JwkThumbprint] = blankThumbprint
+        };
+        string token = await BuildSignedAccessTokenAsync(keys.PrivateKey, payload).ConfigureAwait(false);
+
+        JwsAccessTokenValidationResult result = await ValidateAsync(token, keys.PublicKey).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccess, "A blank jkt binds the token to no key.");
+        Assert.AreEqual(JwsAccessTokenValidationFailureReason.Malformed, result.FailureReason);
+        Assert.AreEqual("Access token cnf claim carries a blank jkt.", result.FailureDescription);
+        Assert.IsNull(result.Claims, "A refused token surfaces no claims.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8705#section-3">RFC 8705 Section 3</see>: "The protected resource
+    /// MUST obtain, from its TLS implementation layer, the client certificate used for mutual TLS and MUST verify that
+    /// the certificate matches the certificate associated with the access token.", a binding the validator cannot verify,
+    /// and <see href="https://www.rfc-editor.org/rfc/rfc7800#section-3.1">RFC 7800 Section 3.1</see>: "Specific
+    /// applications of JWTs will require implementations to understand and process some confirmation members in particular
+    /// ways." A signed access token whose <c>cnf</c> is a well-formed object carrying no <c>jkt</c> is refused with
+    /// <see cref="JwsAccessTokenValidationFailureReason.UnsupportedConfirmationMethod"/> and the description "Access token
+    /// cnf claim carries no jkt confirmation this validator reads.", and no claims are surfaced: the library's fail-closed
+    /// reading, which departs from RFC 7800 Section 3.1's "all confirmation members that are not understood by
+    /// implementations MUST be ignored". The rows: a certificate thumbprint <c>x5t#S256</c> alone; a key identifier
+    /// <c>kid</c> alone, a member the validator does not understand.
+    /// </summary>
+    /// <param name="memberName">The one member the <c>cnf</c> carries.</param>
+    /// <param name="memberValue">Its value.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("x5t#S256", "bwcK0esc3ACC3DB2Y5_lESsXE8o9ltc05O89jdN-dg2", DisplayName = "a certificate thumbprint alone")]
+    [DataRow("kid", "dfd1aa97-6d8d-4575-a0fe-34b96de2bfad", DisplayName = "a key identifier alone")]
+    public async Task ValidatorRefusesACnfWithoutJktAsAnUnsupportedConfirmationMethodAsync(string memberName, string memberValue)
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
+            subject: DefaultSubject,
+            scope: DefaultScope,
+            clientId: DefaultClientId,
+            issuedAt: NowInstant - TimeSpan.FromMinutes(1),
+            expiresAt: NowInstant + TimeSpan.FromHours(1),
+            issuer: DefaultIssuer,
+            audience: [DefaultAudience]);
+        payload[WellKnownJwtClaimNames.Cnf] = new Dictionary<string, object>
+        {
+            [memberName] = memberValue
+        };
+        string token = await BuildSignedAccessTokenAsync(keys.PrivateKey, payload).ConfigureAwait(false);
+
+        JwsAccessTokenValidationResult result = await ValidateAsync(token, keys.PublicKey).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccess, "A token constrained by a method the validator cannot enforce is not served unbound.");
+        Assert.AreEqual(JwsAccessTokenValidationFailureReason.UnsupportedConfirmationMethod, result.FailureReason);
+        Assert.AreEqual("Access token cnf claim carries no jkt confirmation this validator reads.", result.FailureDescription);
+        Assert.IsNull(result.Claims, "A refused token surfaces no claims.");
+    }
+
+
     [TestMethod]
     public async Task ValidatorRejectsAuthorizedPartyMismatch()
     {

@@ -675,6 +675,55 @@ internal sealed class Oid4VciDeferredAndNotificationTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-2.1">RFC 6750 Section 2.1</see>: "credentials =
+    /// "Bearer" 1*SP b64token"; a credential outside that form is malformed,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>: "invalid_request The
+    /// request is missing a required parameter, includes an unsupported parameter or parameter value, repeats the same
+    /// parameter, uses more than one method for including an access token, or is otherwise malformed. The resource server
+    /// SHOULD respond with the HTTP 400 (Bad Request) status code.", and the mechanism it attempts is named,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 Section 7.2</see>: "If the mechanism used
+    /// to attempt authentication could be established unambiguously, then the corresponding challenge SHOULD be used to
+    /// deliver error information (Figure 18)." A request to the Deferred Credential or the Notification endpoint sent
+    /// over a raw TLS connection with a well-formed request body and one <c>Authorization</c> field line naming the
+    /// <c>Bearer</c> scheme with the credentials <c>abc def</c>, no token68, is answered 400 with the body
+    /// <c>{"error":"invalid_request","error_description":"The Authorization header credentials are not a token68."}</c>,
+    /// the one challenge <c>Bearer realm="&lt;issuer&gt;", error="invalid_request"</c> and no <c>DPoP</c> challenge.
+    /// </summary>
+    /// <param name="endpointName">The protected endpoint addressed.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(DeferredEndpointRow)]
+    [DataRow(NotificationEndpointRow)]
+    public async Task ProtectedEndpointAnswersACredentialOutsideToken68WithInvalidRequestAsync(string endpointName)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, EndpointCapabilities).ConfigureAwait(false);
+        await WireProtectedEndpointSeamsAsync(host).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Uri url = new(host.Host("default").HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(EndpointNameOf(endpointName), material.Registration.TenantId.Value));
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Post, url,
+            [
+                new(WellKnownHttpHeaderNames.ContentType, WellKnownMediaTypes.Application.Json),
+                new(WellKnownHttpHeaderNames.Authorization, "Bearer abc def")
+            ],
+            Encoding.UTF8.GetBytes(ProtectedRequestBody(endpointName)), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The request is answered without a server fault.");
+        Assert.AreEqual(400, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            $"Bearer realm=\"{IssuerOf(host, material)}\", error=\"invalid_request\"",
+            Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
+        Assert.AreEqual(
+            "{\"error\":\"invalid_request\",\"error_description\":\"The Authorization header credentials are not a token68.\"}",
+            response.Body);
+    }
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-2">RFC 9728 Section 2</see>:
     /// "dpop_bound_access_tokens_required OPTIONAL. Boolean value specifying whether the protected resource always
     /// requires the use of DPoP-bound access tokens [RFC9449]."; <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC

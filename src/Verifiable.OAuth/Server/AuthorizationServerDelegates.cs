@@ -1166,6 +1166,23 @@ public delegate ValueTask<IReadOnlyList<(string FlowId, FlowState State, int Ste
 /// present — an optimization the application MAY use to locate the token faster; an
 /// unrecognized hint MUST NOT cause a failure.
 /// </para>
+/// <para>
+/// A DPoP-bound token's binding is answered as <see cref="Introspection.TokenIntrospectionResult.Confirmation"/>, which
+/// the library writes as the top-level <c>cnf</c> member with <c>token_type</c> written <c>DPoP</c>, as the text spells
+/// it, where the answer states no type or a case variant of it
+/// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.2">RFC 9449 Section 6.2</see>: "If the token_type
+/// member is included in the introspection response, it MUST contain the value DPoP."). Three active answers contradict
+/// that section and are a fault of the application's wiring: a
+/// <see cref="Introspection.TokenIntrospectionResult.TokenType"/> other than <c>DPoP</c> beside a confirmation, or
+/// <c>DPoP</c> without one; a confirmation whose <see cref="ConfirmationMethod.JwkThumbprint"/> is no JWK SHA-256
+/// Thumbprint spelling, the base64url encoding of 32 octets, a blank value included (Section 6.1: "The value of the jkt
+/// member MUST be the base64url encoding (as defined in [RFC7515]) of the JWK SHA-256 Thumbprint"); and
+/// <see cref="Introspection.TokenIntrospectionResult.AdditionalClaims"/> naming a member the library writes from typed
+/// state (<c>active</c>, <c>scope</c>, <c>client_id</c>, <c>username</c>, <c>token_type</c>, <c>exp</c>, <c>iat</c>,
+/// <c>nbf</c>, <c>sub</c>, <c>aud</c>, <c>iss</c>, <c>jti</c>, <c>cnf</c>, <c>authorization_details</c>). Each is
+/// answered 500 <c>server_error</c> with <see cref="WellKnownOAuthErrorDescriptions.ServerNotReady"/> and no
+/// introspection member, before either response form, in the plain and the signed response alike.
+/// </para>
 /// </remarks>
 /// <param name="token">The token to introspect, exactly as presented on the wire.</param>
 /// <param name="tokenTypeHint">The <c>token_type_hint</c> form value, or <see langword="null"/> when omitted.</param>

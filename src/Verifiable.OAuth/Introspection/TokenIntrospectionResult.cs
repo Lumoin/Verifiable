@@ -24,8 +24,8 @@ namespace Verifiable.OAuth.Introspection;
 /// The standard members are typed; <see cref="AdditionalClaims"/> carries any
 /// service-specific extension members the deployment adds (RFC 7662 §2.2 permits these as
 /// top-level members) — for instance the <c>acr</c> and <c>auth_time</c> an RFC 9470
-/// step-up deployment records on its access tokens, or a <c>cnf</c> proof-of-possession
-/// confirmation.
+/// step-up deployment records on its access tokens. A proof-of-possession binding is
+/// <see cref="Confirmation"/>, written as the top-level <c>cnf</c> member.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("TokenIntrospectionResult IsActive={IsActive} Subject={Subject}")]
@@ -121,10 +121,36 @@ public sealed record TokenIntrospectionResult
     public IReadOnlyList<AuthorizationDetail>? AuthorizationDetails { get; init; }
 
     /// <summary>
+    /// The proof-of-possession binding of a sender-constrained token, or <see langword="null"/> for a token bound to no
+    /// key. The library writes a confirmation carrying a <see cref="Server.ConfirmationMethod.JwkThumbprint"/> as the
+    /// top-level <c>cnf</c> member <c>{"jkt":"&lt;thumbprint&gt;"}</c>, the shape it writes into the tokens it issues
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.2">RFC 9449 Section 6.2</see>: "For a DPoP-bound
+    /// access token, the hash of the public key to which the token is bound is conveyed to the protected resource as
+    /// metainformation in a token introspection response. The hash is conveyed using the same cnf content with jkt
+    /// member structure as the JWK Thumbprint confirmation method, described in Section 6.1, as a top-level member of the
+    /// introspection response JSON."), and with it <c>token_type</c> written <c>DPoP</c> where <see cref="TokenType"/>
+    /// is <see langword="null"/> or a case variant of it (Section 6.2: "If the token_type member is included in the
+    /// introspection response, it MUST contain the value DPoP."). A <see cref="TokenType"/> other than <c>DPoP</c> beside a
+    /// confirmation, or <c>DPoP</c> without one, contradicts that section, and so does a
+    /// <see cref="Server.ConfirmationMethod.JwkThumbprint"/> that is no JWK SHA-256 Thumbprint spelling, the base64url
+    /// encoding of 32 octets, a blank value included
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.1">Section 6.1</see>: "The value of the jkt member MUST
+    /// be the base64url encoding (as defined in [RFC7515]) of the JWK SHA-256 Thumbprint"); each is answered as a fault of
+    /// the application's wiring (<see cref="Server.IntrospectTokenDelegate"/>).
+    /// </summary>
+    public Server.ConfirmationMethod? Confirmation { get; init; }
+
+    /// <summary>
     /// Service-specific extension members written as additional top-level members of the
     /// response object (RFC 7662 §2.2). Each value is serialised by its runtime type
     /// (string, boolean, number, nested object, or array). <see langword="null"/> when the
-    /// deployment surfaces no extensions.
+    /// deployment surfaces no extensions. A key naming a member the library writes from the typed
+    /// members above, <c>active</c>, <c>scope</c>, <c>client_id</c>, <c>username</c>,
+    /// <c>token_type</c>, <c>exp</c>, <c>iat</c>, <c>nbf</c>, <c>sub</c>, <c>aud</c>, <c>iss</c>,
+    /// <c>jti</c>, <c>cnf</c> or <c>authorization_details</c>, would overwrite it after the typed
+    /// members were checked, so an active answer carrying one is answered as a fault of the
+    /// application's wiring (<see cref="Server.IntrospectTokenDelegate"/>); the binding is
+    /// <see cref="Confirmation"/> and the token type <see cref="TokenType"/>.
     /// </summary>
     public IReadOnlyDictionary<string, object>? AdditionalClaims { get; init; }
 
