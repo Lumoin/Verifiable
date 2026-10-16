@@ -39,7 +39,15 @@ if([string]::IsNullOrWhiteSpace($sha) -or [string]::IsNullOrWhiteSpace($commitId
     exit 1
 }
 
-$changedBuildInputs = git -C $repositoryRoot status --porcelain -- src Directory.Build.props Directory.Build.targets Directory.Packages.props global.json NuGet.config
+#A prerelease identifier of digits alone is a number, and SemVer 2.0.0 (section 9) forbids a number with a leading zero, so
+#NuGet refuses a version whose short commit id is all digits and starts with zero.
+if($sha -match '^0[0-9]+$')
+{
+    Write-Error "Packing is refused: the short commit id $sha is all digits with a leading zero, which SemVer 2.0.0 section 9 forbids in a prerelease identifier, so 0.0.2-local.$Publication.$sha is no valid package version. Pack from a commit whose short id carries a letter or no leading zero."
+    exit 1
+}
+
+$changedBuildInputs =git -C $repositoryRoot status --porcelain -- src Directory.Build.props Directory.Build.targets Directory.Packages.props global.json NuGet.config
 if(-not [string]::IsNullOrWhiteSpace(($changedBuildInputs -join '')))
 {
     Write-Error "Packing is refused: the sources or the build files differ from commit $sha, so the version would name a commit that did not build these packages. Changed:`n$($changedBuildInputs -join "`n")"
