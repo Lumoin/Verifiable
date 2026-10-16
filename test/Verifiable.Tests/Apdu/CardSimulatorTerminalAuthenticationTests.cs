@@ -38,6 +38,7 @@ internal sealed class CardSimulatorTerminalAuthenticationTests
 
     /// <summary>The effective date every minted certificate carries unless a row names its own.</summary>
     private static DateOnly Effective { get; } = new(2024, 1, 1);
+
     /// <summary>The expiration date every minted certificate carries unless a row names its own.</summary>
     private static DateOnly Expiration { get; } = new(2026, 1, 1);
 
@@ -78,6 +79,7 @@ internal sealed class CardSimulatorTerminalAuthenticationTests
         using var trustAnchor = await MintCvcaAsync(cvcaKey, CvcaReference, TestContext.CancellationToken).ConfigureAwait(false);
         Tag curve = trustAnchor.PublicKey.EllipticCurvePoint!.Tag;
         using var documentVerifier = await MintDocumentVerifierAsync(cvcaKey, documentVerifierKey, CvcaReference, curve, TestContext.CancellationToken).ConfigureAwait(false);
+
         //The terminal certificate's signature is corrupted, so it does not verify against the Document Verifier key.
         using var terminal = await CardVerifiableCertificateMinter.MintWithTamperedSignatureAsync(
             documentVerifierKey, terminalKey, DocumentVerifierReference, TerminalReference, CardVerifiableCertificateMinter.TerminalRole, includeDomainParameters: false, Effective, Expiration, curve, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
@@ -118,6 +120,7 @@ internal sealed class CardSimulatorTerminalAuthenticationTests
 
         using var trustAnchor = await MintCvcaAsync(cvcaKey, CvcaReference, TestContext.CancellationToken).ConfigureAwait(false);
         Tag curve = trustAnchor.PublicKey.EllipticCurvePoint!.Tag;
+
         //Linked to and validly signed by the CVCA, but a terminal role: a CVCA may issue only Document Verifiers.
         using var terminal = await CardVerifiableCertificateMinter.MintAsync(
             cvcaKey, terminalKey, CvcaReference, TerminalReference, CardVerifiableCertificateMinter.TerminalRole, includeDomainParameters: false, Effective, Expiration, curve, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
@@ -140,11 +143,15 @@ internal sealed class CardSimulatorTerminalAuthenticationTests
         //A realistic chain: each certificate is issued after its parent, so the children's effective dates are
         //later than the trust anchor's. The chip starts from the trust anchor's effective date and advances.
         DateOnly expiration = new(2030, 1, 1);
+
         using var trustAnchor = await CardVerifiableCertificateMinter.MintAsync(
             cvcaKey, cvcaKey, CvcaReference, CvcaReference, CardVerifiableCertificateMinter.CvcaRole, includeDomainParameters: true, new DateOnly(2023, 1, 1), expiration, inheritedCurve: null, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
+
         Tag curve = trustAnchor.PublicKey.EllipticCurvePoint!.Tag;
+
         using var documentVerifier = await CardVerifiableCertificateMinter.MintAsync(
             cvcaKey, documentVerifierKey, CvcaReference, DocumentVerifierReference, CardVerifiableCertificateMinter.DocumentVerifierRole, includeDomainParameters: false, new DateOnly(2024, 6, 1), expiration, curve, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
+
         using var terminal = await CardVerifiableCertificateMinter.MintAsync(
             documentVerifierKey, terminalKey, DocumentVerifierReference, TerminalReference, CardVerifiableCertificateMinter.TerminalRole, includeDomainParameters: false, new DateOnly(2025, 6, 1), expiration, curve, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -167,9 +174,12 @@ internal sealed class CardSimulatorTerminalAuthenticationTests
         //2024, before that date, so the chip rejects it as expired.
         using var trustAnchor = await CardVerifiableCertificateMinter.MintAsync(
             cvcaKey, cvcaKey, CvcaReference, CvcaReference, CardVerifiableCertificateMinter.CvcaRole, includeDomainParameters: true, new DateOnly(2023, 1, 1), new DateOnly(2030, 1, 1), inheritedCurve: null, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
+
         Tag curve = trustAnchor.PublicKey.EllipticCurvePoint!.Tag;
+
         using var documentVerifier = await CardVerifiableCertificateMinter.MintAsync(
             cvcaKey, documentVerifierKey, CvcaReference, DocumentVerifierReference, CardVerifiableCertificateMinter.DocumentVerifierRole, includeDomainParameters: false, new DateOnly(2026, 1, 1), new DateOnly(2030, 1, 1), curve, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
+
         using var terminal = await CardVerifiableCertificateMinter.MintAsync(
             documentVerifierKey, terminalKey, DocumentVerifierReference, TerminalReference, CardVerifiableCertificateMinter.TerminalRole, includeDomainParameters: false, new DateOnly(2024, 1, 1), new DateOnly(2024, 6, 1), curve, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
 

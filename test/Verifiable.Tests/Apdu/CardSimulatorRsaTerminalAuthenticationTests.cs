@@ -110,8 +110,10 @@ internal sealed class CardSimulatorRsaTerminalAuthenticationTests
         //through the RSA terminal path. Every certificate exceeds the short-Lc limit, exercising extended Lc.
         using var trustAnchor = await CardVerifiableCertificateMinter.MintAsync(
             cvcaKey, cvcaKey, CvcaReference, CvcaReference, CardVerifiableCertificateMinter.CvcaRole, Effective, Expiration, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
+
         using var documentVerifier = await CardVerifiableCertificateMinter.MintAsync(
             cvcaKey, documentVerifierKey, CvcaReference, DocumentVerifierReference, CardVerifiableCertificateMinter.DocumentVerifierRole, Effective, Expiration, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
+
         using var terminal = await CardVerifiableCertificateMinter.MintAsync(
             documentVerifierKey, terminalKey, DocumentVerifierReference, TerminalReference, CardVerifiableCertificateMinter.TerminalRole, Effective, Expiration, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -139,9 +141,12 @@ internal sealed class CardSimulatorRsaTerminalAuthenticationTests
 
         using var trustAnchor = await CardVerifiableCertificateMinter.MintAsync(
             cvcaKey, cvcaKey, CvcaReference, CvcaReference, CardVerifiableCertificateMinter.CvcaRole, includeDomainParameters: true, Effective, Expiration, inheritedCurve: null, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
+
         Tag certificateCurve = trustAnchor.PublicKey.EllipticCurvePoint!.Tag;
+
         using var documentVerifier = await CardVerifiableCertificateMinter.MintAsync(
             cvcaKey, documentVerifierKey, CvcaReference, DocumentVerifierReference, CardVerifiableCertificateMinter.DocumentVerifierRole, includeDomainParameters: false, Effective, Expiration, certificateCurve, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
+
         //The terminal certificate carries an RSA subject key but is signed by the Document Verifier with ECDSA.
         using var terminal = await CardVerifiableCertificateMinter.MintAsync(
             documentVerifierKey, certificateKey, DocumentVerifierReference, TerminalReference, CardVerifiableCertificateMinter.TerminalRole, Effective, Expiration, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);

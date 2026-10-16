@@ -108,9 +108,12 @@ internal sealed class TpmBackedTerminalAuthenticationTests
 
         using var trustAnchor = await CardVerifiableCertificateMinter.MintAsync(
             cvcaKey, cvcaKey, CvcaReference, CvcaReference, CardVerifiableCertificateMinter.CvcaRole, includeDomainParameters: true, Effective, Expiration, inheritedCurve: null, pool, TerminalType.InspectionSystem, TestContext.CancellationToken).ConfigureAwait(false);
+
         Tag certificateCurve = trustAnchor.PublicKey.EllipticCurvePoint!.Tag;
+
         using var documentVerifier = await CardVerifiableCertificateMinter.MintAsync(
             cvcaKey, documentVerifierKey, CvcaReference, DocumentVerifierReference, CardVerifiableCertificateMinter.DocumentVerifierRole, includeDomainParameters: false, Effective, Expiration, certificateCurve, pool, TerminalType.InspectionSystem, TestContext.CancellationToken).ConfigureAwait(false);
+
         using var terminal = await CardVerifiableCertificateMinter.MintAsync(
             documentVerifierKey, terminalPublicPoint.AsReadOnlyMemory(), DocumentVerifierReference, TerminalReference, CardVerifiableCertificateMinter.TerminalRole, Effective, Expiration, certificateCurve, pool, TerminalType.InspectionSystem, TestContext.CancellationToken).ConfigureAwait(false);
 

@@ -15,8 +15,10 @@ internal sealed class CardVerifiableCertificateChainTests
 {
     /// <summary>The effective date every minted certificate carries unless a row names its own.</summary>
     private static DateOnly Effective { get; } = new(2024, 1, 1);
+
     /// <summary>The expiration date every minted certificate carries unless a row names its own.</summary>
     private static DateOnly Expiration { get; } = new(2026, 1, 1);
+
     /// <summary>A reference date within every minted certificate's validity.</summary>
     private static DateOnly WithinValidity { get; } = new(2025, 1, 1);
 
@@ -156,8 +158,10 @@ internal sealed class CardVerifiableCertificateChainTests
         //no domain parameters, so the chain needs no inherited curve.
         using var cvca = await CardVerifiableCertificateMinter.MintAsync(
             cvcaKey, cvcaKey, "UTCVCA00001", "UTCVCA00001", CardVerifiableCertificateMinter.CvcaRole, Effective, Expiration, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
+
         using var documentVerifier = await CardVerifiableCertificateMinter.MintAsync(
             cvcaKey, documentVerifierKey, "UTCVCA00001", "UTDVDE00001", CardVerifiableCertificateMinter.DocumentVerifierRole, Effective, Expiration, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
+
         using var terminal = await CardVerifiableCertificateMinter.MintAsync(
             documentVerifierKey, terminalKey, "UTDVDE00001", "UTISDE00001", CardVerifiableCertificateMinter.TerminalRole, Effective, Expiration, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -180,6 +184,7 @@ internal sealed class CardVerifiableCertificateChainTests
 
         using var cvca = await CardVerifiableCertificateMinter.MintAsync(
             cvcaKey, cvcaKey, "UTCVCA00001", "UTCVCA00001", CardVerifiableCertificateMinter.CvcaRole, Effective, Expiration, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
+
         //The Document Verifier's RSA signature is corrupted, so it does not verify against the RSA CVCA key.
         using var documentVerifier = await CardVerifiableCertificateMinter.MintWithTamperedSignatureAsync(
             cvcaKey, documentVerifierKey, "UTCVCA00001", "UTDVDE00001", CardVerifiableCertificateMinter.DocumentVerifierRole, Effective, Expiration, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);

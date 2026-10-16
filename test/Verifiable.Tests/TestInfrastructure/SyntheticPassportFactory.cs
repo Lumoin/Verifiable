@@ -443,6 +443,7 @@ internal static class SyntheticPassportFactory
                 NoNextUpdateCrl = noNextUpdateCrl,
                 MalformedCrl = malformedCrl
             };
+
             constructed = true;
 
             return scenario;

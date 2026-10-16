@@ -38,6 +38,11 @@ internal sealed class WebVhProofVerificationTests
     public TestContext TestContext { get; set; } = null!;
 
 
+    /// <summary>
+    /// A genesis entry minted by the specification's Create steps self-certifies its SCID and carries a controller
+    /// proof the active <c>updateKeys</c> verify.
+    /// </summary>
+    /// <returns>A task completing once the entry's verification is judged.</returns>
     [TestMethod]
     public async Task GenesisVerifies()
     {
@@ -50,6 +55,10 @@ internal sealed class WebVhProofVerificationTests
     }
 
 
+    /// <summary>
+    /// A genesis entry whose <c>proofValue</c> has one character changed no longer verifies under the controller's key.
+    /// </summary>
+    /// <returns>A task completing once the entry's verification is judged.</returns>
     [TestMethod]
     public async Task TamperedProofValueFails()
     {
@@ -64,6 +73,10 @@ internal sealed class WebVhProofVerificationTests
     }
 
 
+    /// <summary>
+    /// A genesis entry changed after it was signed fails, because the controller proof no longer covers its bytes.
+    /// </summary>
+    /// <returns>A task completing once the entry's verification is judged.</returns>
     [TestMethod]
     public async Task TamperedDocumentFails()
     {
@@ -79,6 +92,10 @@ internal sealed class WebVhProofVerificationTests
     }
 
 
+    /// <summary>
+    /// A controller proof that names a verification method outside the active <c>updateKeys</c> fails.
+    /// </summary>
+    /// <returns>A task completing once the entry's verification is judged.</returns>
     [TestMethod]
     public async Task VerificationMethodNotInUpdateKeysFails()
     {
@@ -95,6 +112,10 @@ internal sealed class WebVhProofVerificationTests
     }
 
 
+    /// <summary>
+    /// A controller proof that declares a cryptosuite other than <c>eddsa-jcs-2022</c> fails under did:webvh v1.0.
+    /// </summary>
+    /// <returns>A task completing once the entry's verification is judged.</returns>
     [TestMethod]
     public async Task WrongCryptosuiteFails()
     {
@@ -109,6 +130,10 @@ internal sealed class WebVhProofVerificationTests
     }
 
 
+    /// <summary>
+    /// A genesis entry whose <c>scid</c> is replaced by another well-formed multihash fails self-certification.
+    /// </summary>
+    /// <returns>A task completing once the entry's verification is judged.</returns>
     [TestMethod]
     public async Task TamperedScidFails()
     {
@@ -125,6 +150,10 @@ internal sealed class WebVhProofVerificationTests
     }
 
 
+    /// <summary>
+    /// A genesis entry whose <c>versionTime</c> lies after the validating clock's instant fails.
+    /// </summary>
+    /// <returns>A task completing once the entry's verification is judged.</returns>
     [TestMethod]
     public async Task FutureVersionTimeFails()
     {
@@ -137,6 +166,10 @@ internal sealed class WebVhProofVerificationTests
     }
 
 
+    /// <summary>
+    /// A log whose state is deactivated refuses any further entry, even one carrying a valid controller proof.
+    /// </summary>
+    /// <returns>A task completing once the entry's verification is judged.</returns>
     [TestMethod]
     public async Task DeactivatedStateRejectsFurtherEntries()
     {
@@ -226,6 +259,10 @@ internal sealed class WebVhProofVerificationTests
     }
 
 
+    /// <summary>
+    /// A genesis entry whose <c>versionTime</c> is a date without a time and a <c>Z</c> designator fails.
+    /// </summary>
+    /// <returns>A task completing once the entry's verification is judged.</returns>
     [TestMethod]
     public async Task DateOnlyVersionTimeRejected()
     {

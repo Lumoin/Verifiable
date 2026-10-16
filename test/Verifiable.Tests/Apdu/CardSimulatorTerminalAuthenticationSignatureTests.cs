@@ -122,9 +122,12 @@ internal sealed class CardSimulatorTerminalAuthenticationSignatureTests
 
         using var trustAnchor = await CardVerifiableCertificateMinter.MintAsync(
             cvcaKey, cvcaKey, CvcaReference, CvcaReference, CardVerifiableCertificateMinter.CvcaRole, includeDomainParameters: true, Effective, Expiration, inheritedCurve: null, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
+
         Tag certificateCurve = trustAnchor.PublicKey.EllipticCurvePoint!.Tag;
+
         using var documentVerifier = await CardVerifiableCertificateMinter.MintAsync(
             cvcaKey, documentVerifierKey, CvcaReference, DocumentVerifierReference, CardVerifiableCertificateMinter.DocumentVerifierRole, includeDomainParameters: false, Effective, Expiration, certificateCurve, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
+
         using var terminal = await CardVerifiableCertificateMinter.MintAsync(
             documentVerifierKey, terminalKey, DocumentVerifierReference, TerminalReference, CardVerifiableCertificateMinter.TerminalRole, includeDomainParameters: false, Effective, Expiration, certificateCurve, BaseMemoryPool.Shared, TerminalType.AuthenticationTerminal, TestContext.CancellationToken).ConfigureAwait(false);
 
