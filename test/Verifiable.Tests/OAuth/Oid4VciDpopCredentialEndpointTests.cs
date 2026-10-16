@@ -117,6 +117,7 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
         List<string> refusalOperations = [.. hosted.StorageObservations.Skip(beforeRefusal).Select(static entry => entry.Operation)];
         string refusedBody = await refused.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
+        Assert.IsEmpty(hosted.ConsumeHttpFaults(), "The proof is refused without a server fault.");
         Assert.AreEqual(HttpStatusCode.Unauthorized, refused.StatusCode, refusedBody);
         Assert.IsTrue(refused.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges),
             "The refusal carries a WWW-Authenticate challenge.");
@@ -124,7 +125,7 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
         using JsonDocument document = JsonDocument.Parse(refusedBody);
         Assert.AreEqual("invalid_dpop_proof", document.RootElement.GetProperty("error").GetString());
         Assert.AreEqual(
-            "DPoP proof jti is too long or carries a character the replay guard cannot store.",
+            "DPoP proof jti is empty, too long or carries a character the replay guard cannot store.",
             document.RootElement.GetProperty("error_description").GetString());
         Assert.IsEmpty(refusalOperations,
             $"The refused jti must never reach the store; it observed: {string.Join(", ", refusalOperations)}.");
@@ -135,6 +136,7 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
         List<string> acceptanceOperations = [.. hosted.StorageObservations.Skip(beforeAcceptance).Select(static entry => entry.Operation)];
         string acceptedBody = await accepted.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
+        Assert.IsEmpty(hosted.ConsumeHttpFaults(), "The proof is accepted without a server fault.");
         Assert.AreEqual(HttpStatusCode.OK, accepted.StatusCode, acceptedBody);
         Assert.IsTrue(HostedAuthorizationServer.IsReplayGuardFirstUseObserved(acceptanceOperations),
             $"The store observation must see the replay guard's read, save, read-back and claim; it observed: {string.Join(", ", acceptanceOperations)}.");
@@ -286,6 +288,52 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
         Assert.AreEqual("Bearer error=\"invalid_token\"", challenges.Single());
         using JsonDocument document = JsonDocument.Parse(body);
         Assert.AreEqual("invalid_token", document.RootElement.GetProperty("error").GetString());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-2">RFC 9728 Section 2</see>:
+    /// "dpop_bound_access_tokens_required OPTIONAL. Boolean value specifying whether the protected resource always
+    /// requires the use of DPoP-bound access tokens [RFC9449]."; <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC
+    /// 9449 Section 7.1</see>: "Upon receipt of a request to a protected resource within the protection space requiring
+    /// DPoP authentication, the server can respond with a challenge to the client to provide DPoP authentication
+    /// information"; and <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>: "If
+    /// the request lacks any authentication information (e.g., the client was unaware that authentication is necessary
+    /// or attempted using an unsupported authentication method), the resource server SHOULD NOT include an error code or
+    /// other error information." At a server whose resources require DPoP-bound access tokens, an access token presented
+    /// at the Credential Endpoint over a raw TLS connection under the <c>Bearer</c> scheme is refused before the token is
+    /// judged: 401, an empty body, the one challenge <c>DPoP realm="&lt;issuer&gt;", algs="..."</c> with no
+    /// <c>error</c>, no <c>scope</c> and no <c>Bearer</c> challenge, and the one field line
+    /// <c>Access-Control-Expose-Headers: WWW-Authenticate, DPoP-Nonce</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task CredentialEndpointRequiringDpopBoundAccessTokensRefusesABearerPresentationAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        BoundTokenContext ctx = await AcquireAsync(host).ConfigureAwait(false);
+        using DpopClientFixture fixture = ctx.Fixture;
+        await TestHostShell.AlterAsync(host.Server, static candidateIntegration =>
+            candidateIntegration.IsDpopBoundAccessTokenRequiredAtResources = true).ConfigureAwait(false);
+
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Post, ctx.CredentialUrl,
+            [
+                new(WellKnownHttpHeaderNames.ContentType, WellKnownMediaTypes.Application.Json),
+                new(WellKnownHttpHeaderNames.Authorization, "Bearer " + ctx.AccessToken)
+            ],
+            Encoding.UTF8.GetBytes("{\"credential_configuration_id\":\"" + ConfigurationId + "\",\"proofs\":{\"jwt\":[\"p\"]}}"),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The presentation is refused without a server fault.");
+        Assert.AreEqual(401, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            CredentialDpopChallenge(ctx, error: null),
+            Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
+        Assert.AreEqual(
+            ResourceDpopProofs.ExposedDpopResponseFields,
+            Assert.ContainsSingle(response.Headers.Headers.GetValues("Access-Control-Expose-Headers")));
+        Assert.AreEqual(string.Empty, response.Body, "No error code or other error information.");
     }
 
 
@@ -671,9 +719,9 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
     /// <c>scope</c>, since these endpoints require no single scope when they refuse a presentation.
     /// </summary>
     /// <param name="ctx">The bound-token context.</param>
-    /// <param name="error">The challenge's <c>error</c>.</param>
+    /// <param name="error">The challenge's <c>error</c>, or <see langword="null"/> for a challenge carrying none.</param>
     /// <returns>The <c>WWW-Authenticate</c> value.</returns>
-    private static string CredentialDpopChallenge(BoundTokenContext ctx, string error) =>
+    private static string CredentialDpopChallenge(BoundTokenContext ctx, string? error) =>
         ResourceDpopProofs.DpopChallenge(IssuerOf(ctx), error);
 
 

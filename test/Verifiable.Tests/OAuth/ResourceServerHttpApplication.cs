@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.Extensions.Primitives;
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
@@ -19,8 +20,8 @@ namespace Verifiable.Tests.OAuth;
 /// <see cref="AuthorizationServerHttpApplication"/>; minimal mapping
 /// layer, no DI container, no middleware pipeline. Hosts the
 /// <c>/protected</c> endpoint that exercises
-/// <see cref="JwsAccessTokenValidator"/> and (for DPoP-bound tokens)
-/// <see cref="DpopProofValidator"/>, plus the RFC 9728 §3
+/// <see cref="JwsAccessTokenValidator"/> and presents the token's binding to
+/// <see cref="DpopResourceAccess.DecideAsync"/>, plus the RFC 9728 Section 3
 /// <c>/.well-known/oauth-protected-resource</c> location whose document
 /// bytes come from the library's
 /// <see cref="ProtectedResourceMetadataEndpoints"/> builder through
@@ -33,11 +34,20 @@ namespace Verifiable.Tests.OAuth;
 /// <c>WWW-Authenticate</c> value built by
 /// <see cref="BearerTokenChallenge.BuildChallenge"/> (RFC 6750 §3) with the
 /// RFC 9728 §5.1 <c>resource_metadata</c> parameter pointing at this
-/// resource server's own metadata URL. DPoP-scheme challenges (RFC 9449 §7.1)
-/// cannot ride that builder — its scheme is <c>Bearer</c> by definition — so
-/// they compose <see cref="ProtectedResourceChallenge.BuildChallenge"/> for
-/// the <c>resource_metadata</c> parameter and format their own auth-params
-/// over values restricted to the RFC 6750 §3 charset.
+/// resource server's own metadata URL. Every answer to a DPoP-bound token, and
+/// every DPoP-scheme challenge (RFC 9449 Section 7.1), is the decision's response the
+/// library composed, with this resource's realm, scope and metadata URL. The one <c>Authorization</c> field line is
+/// read through <see cref="AuthorizationFieldReading"/> as the library's resources read it: the scheme compared
+/// case-insensitively (RFC 9110 Section 11.1) and the credentials held to a token68 (RFC 6750 Section 2.1, RFC 9449
+/// Section 7.1), a field that is neither carrying no access token. When the resource
+/// requires DPoP-bound access tokens, the answers that never reach the decision, a request
+/// without credentials, a malformed field, a <c>Bearer</c> presentation, refused before its
+/// token is validated, and a token failing validation, carry the same <c>DPoP</c> challenge
+/// alone, as the library's resources answer them. An <c>Authorization</c> field sent on two or
+/// more lines is answered 400 <c>invalid_request</c> before any token is validated, as the
+/// library's resources answer it: with the <c>DPoP</c> challenge under the requirement or where
+/// every line names <c>DPoP</c>, the <c>Bearer</c> challenge where every line names
+/// <c>Bearer</c>, and both for lines naming two schemes.
 /// </para>
 /// <para>
 /// Span decoration: token-validated and scope-checked outcomes are attached
@@ -60,6 +70,12 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
     private VerificationDelegate VerifySignature { get; }
     private string? RequiredScope { get; }
 
+    /// <summary>Whether <c>/protected</c> always requires DPoP-bound access tokens (RFC 9728 Section 2, <c>dpop_bound_access_tokens_required</c>).</summary>
+    private bool RequiresDpop { get; }
+
+    /// <summary>Answers the scheme and authority the resource names its target URIs under, the configured origin, never the request's <c>Host</c>.</summary>
+    private Func<Uri?> ResolveTargetAuthority { get; }
+
     /// <summary>
     /// The RFC 9728 serving surface, assigned by
     /// <see cref="TestResourceServerShell.StartHttpHostAsync"/> once the
@@ -73,16 +89,30 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
     public ResourceServerMetadataEndpoint? MetadataEndpoint { get; set; }
 
 
+    /// <summary>
+    /// Creates the application over the resource server's slots: the access tokens it validates, the target URIs it
+    /// names its resource by, the scope it requires and whether it requires DPoP-bound access tokens.
+    /// </summary>
+    /// <param name="integration">The resource server's trust, clock and DPoP slots.</param>
+    /// <param name="verifySignature">The signature verification access tokens are checked with.</param>
+    /// <param name="resolveTargetAuthority">Answers the configured origin the resource's target URIs are named under.</param>
+    /// <param name="requiredScope">The scope a token must carry, or <see langword="null"/> for none.</param>
+    /// <param name="requiresDpop">Whether <c>/protected</c> always requires DPoP-bound access tokens.</param>
     public ResourceServerHttpApplication(
         ResourceServerIntegration integration,
         VerificationDelegate verifySignature,
-        string? requiredScope = null)
+        Func<Uri?> resolveTargetAuthority,
+        string? requiredScope = null,
+        bool requiresDpop = false)
     {
         ArgumentNullException.ThrowIfNull(integration);
         ArgumentNullException.ThrowIfNull(verifySignature);
+        ArgumentNullException.ThrowIfNull(resolveTargetAuthority);
         this.Integration = integration;
         this.VerifySignature = verifySignature;
+        this.ResolveTargetAuthority = resolveTargetAuthority;
         this.RequiredScope = requiredScope;
+        this.RequiresDpop = requiresDpop;
     }
 
 
@@ -109,6 +139,19 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
     }
 
 
+    /// <summary>
+    /// Answers one request: the metadata document at its location, 404 for any other path than <c>/protected</c>, and
+    /// at <c>/protected</c> the token validated by <see cref="JwsAccessTokenValidator"/>, its binding presented to
+    /// <see cref="DpopResourceAccess.DecideAsync"/> and the decision's refusal written, then the scope checked and the
+    /// claims served. Under <see cref="RequiresDpop"/> a request without credentials, a malformed
+    /// <c>Authorization</c> field and a <c>Bearer</c> presentation, before its token is validated, are answered with the
+    /// <c>DPoP</c> challenge alone and no error, and a <c>DPoP</c> presentation of a token that fails validation with the
+    /// <c>DPoP</c> challenge carrying <c>invalid_token</c>, as the library's resources answer them; otherwise with the
+    /// <c>Bearer</c> challenge. An <c>Authorization</c> field sent on two or more lines is answered 400
+    /// <c>invalid_request</c> before any token is validated (<see cref="WriteRepeatedAuthorizationRefusalAsync"/>).
+    /// </summary>
+    /// <param name="context">The request's context.</param>
+    /// <returns>A task that completes when the answer is written.</returns>
     private async Task ProcessRequestCoreAsync(HttpContext context)
     {
         if(MetadataEndpoint is { } metadataEndpoint
@@ -130,19 +173,59 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
             //challenged WITHOUT an error code; the RFC 9728 §5.1
             //resource_metadata parameter still rides the challenge so the
             //client can start metadata discovery from this response alone.
+            //RFC 9449 Section 7.1: a protection space requiring DPoP
+            //authentication challenges for DPoP alone.
+            if(RequiresDpop)
+            {
+                await WriteDpopChallengeAsync(context, ServerHttpResponse.Unauthorized(), error: null).ConfigureAwait(false);
+
+                return;
+            }
+
             await WriteBearerChallengeAsync(
                 context, StatusCodes.Status401Unauthorized,
                 error: null, errorDescription: null, scope: null).ConfigureAwait(false);
             return;
         }
 
+        //RFC 9110 Section 11.6.2: "Authorization = credentials" is no list, so a field on two or more lines is a
+        //malformed request, answered before any token is validated (RFC 6750 Section 3.1, invalid_request).
+        StringValues authorizationLines = context.Request.Headers.Authorization;
+        if(authorizationLines.Count > 1)
+        {
+            await WriteRepeatedAuthorizationRefusalAsync(context, authorizationLines).ConfigureAwait(false);
+
+            return;
+        }
+
         if(!TryExtractAuthorization(context.Request, out string scheme, out string? accessToken))
         {
+            //A field naming no supported scheme carries no access token: under the requirement the attempt used no
+            //method this resource accepts (RFC 6750 Section 3.1), answered with no error.
+            if(RequiresDpop)
+            {
+                await WriteDpopChallengeAsync(context, ServerHttpResponse.Unauthorized(), error: null).ConfigureAwait(false);
+
+                return;
+            }
+
             await WriteBearerChallengeAsync(
                 context, StatusCodes.Status401Unauthorized,
                 OAuthErrors.InvalidToken,
                 "Authorization header is malformed or uses an unsupported scheme.",
                 scope: null).ConfigureAwait(false);
+            return;
+        }
+
+        bool isDpopPresentation = string.Equals(scheme, DpopScheme, StringComparison.OrdinalIgnoreCase);
+
+        //RFC 9449 Section 7.1 and RFC 6750 Section 3.1: under the requirement a Bearer presentation attempted a method
+        //this resource does not accept, answered with the DPoP challenge alone and no error before its token is
+        //validated, as the library's resources answer it.
+        if(RequiresDpop && !isDpopPresentation)
+        {
+            await WriteDpopChallengeAsync(context, ServerHttpResponse.Unauthorized(), error: null).ConfigureAwait(false);
+
             return;
         }
 
@@ -168,6 +251,20 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
         {
             _ = (Activity.Current?.SetTag(ResourceServerTagNames.TokenValidated, false));
             _ = (Activity.Current?.AddEvent(new ActivityEvent(ResourceServerEventNames.TokenRejected)));
+
+            //Under the requirement only a DPoP presentation reaches validation, and a token failing it is answered with
+            //invalid_token in the DPoP challenge (RFC 9449 Section 7.1: an error parameter "if the request included an
+            //access token but failed authentication").
+            if(RequiresDpop)
+            {
+                await WriteDpopChallengeAsync(
+                    context,
+                    ServerHttpResponse.Unauthorized(OAuthErrors.InvalidToken, tokenResult.FailureDescription ?? "Access token validation failed."),
+                    OAuthErrors.InvalidToken).ConfigureAwait(false);
+
+                return;
+            }
+
             await WriteBearerChallengeAsync(
                 context, StatusCodes.Status401Unauthorized,
                 OAuthErrors.InvalidToken,
@@ -181,79 +278,37 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
 
         JwsAccessTokenClaims claims = tokenResult.Claims!;
 
-        if(claims.Confirmation is { JwkThumbprint: not null } confirmation)
-        {
-            if(!string.Equals(scheme, DpopScheme, StringComparison.Ordinal))
+        //RFC 9449 Section 7.1: the token's binding, the request's DPoP field lines and the resource's own protection
+        //space go to the library's composition of the resource checks, which answers a permit or the exact refusal.
+        Uri targetAuthority = ResolveTargetAuthority()
+            ?? throw new InvalidOperationException("The resource server names no target authority before its listener is bound.");
+        DpopResourceDecision decision = await DpopResourceAccess.DecideAsync(
+            Integration,
+            new DpopResourceRequest
             {
-                await WriteDpopChallengeAsync(context, OAuthErrors.InvalidToken,
-                    "Access token is DPoP-bound but was presented under Bearer scheme.")
-                    .ConfigureAwait(false);
-                return;
-            }
-
-            if(!TryExtractDpopProof(context.Request, out string? proofJwt))
-            {
-                await WriteDpopChallengeAsync(context, OAuthErrors.InvalidDpopProof,
-                    "DPoP header is missing.").ConfigureAwait(false);
-                return;
-            }
-
-            string requestUrl = BuildRequestUrl(context.Request);
-
-            DpopProofValidationRequest proofRequest = new()
-            {
-                Proof = proofJwt!,
+                AccessToken = accessToken!,
+                IsDpopPresentation = isDpopPresentation,
+                IsSenderConstrained = claims.Confirmation is not null,
+                BoundThumbprint = claims.Confirmation?.JwkThumbprint,
                 HttpMethod = context.Request.Method,
-                HttpUrl = requestUrl,
-                AccessToken = accessToken,
-                NonceRequired = false
-            };
+                TargetUri = new Uri(targetAuthority.GetLeftPart(UriPartial.Authority) + context.Request.Path.ToUriComponent()),
+                DpopFieldLines = context.Request.Headers.TryGetValue("DPoP", out StringValues dpopFieldLines)
+                    ? [.. dpopFieldLines.Select(static line => line ?? string.Empty)]
+                    : [],
+                IsDpopBoundAccessTokenRequired = RequiresDpop,
+                Realm = ProtectedRealm,
+                Scope = RequiredScope,
+                ResourceMetadata = MetadataEndpoint?.MetadataUrl
+            },
+            exchangeContext,
+            context.RequestAborted).ConfigureAwait(false);
+        if(!decision.IsPermitted)
+        {
+            ServerHttpResponse refusal = decision.Response!;
+            _ = (Activity.Current?.SetTag(ResourceServerTagNames.ChallengeError, refusal.ErrorCode));
+            await WriteServerResponseAsync(context, refusal).ConfigureAwait(false);
 
-            DpopProofValidationResult proofResult = await DpopProofValidator.ValidateAsync(
-                proofRequest,
-                VerifySignature,
-                DpopTestSupport.Parser,
-                TestSetup.Base64UrlEncoder,
-                TestSetup.Base64UrlDecoder,
-                Integration.TimeProvider,
-                BaseMemoryPool.Shared,
-                Integration.DpopFreshnessWindow,
-                context.RequestAborted).ConfigureAwait(false);
-
-            if(!proofResult.IsSuccess)
-            {
-                await WriteDpopChallengeAsync(context, OAuthErrors.InvalidDpopProof,
-                    $"DPoP proof validation failed: {proofResult.FailureReason}.")
-                    .ConfigureAwait(false);
-                return;
-            }
-
-            if(!string.Equals(proofResult.JwkThumbprint, confirmation.JwkThumbprint, StringComparison.Ordinal))
-            {
-                await WriteDpopChallengeAsync(context, OAuthErrors.InvalidDpopProof,
-                    "DPoP proof thumbprint does not match the access token's cnf.jkt binding.")
-                    .ConfigureAwait(false);
-                return;
-            }
-
-            if(Integration.IsDpopProofJtiSeenAsync is not null
-                && Integration.PersistDpopProofJtiAsync is not null)
-            {
-                string jti = proofResult.Claims!.Jti;
-                bool isReplayed = await Integration.IsDpopProofJtiSeenAsync(
-                    jti, exchangeContext, context.RequestAborted).ConfigureAwait(false);
-                if(isReplayed)
-                {
-                    await WriteDpopChallengeAsync(context, OAuthErrors.InvalidDpopProof,
-                        "DPoP proof jti has been seen previously.").ConfigureAwait(false);
-                    return;
-                }
-
-                DateTimeOffset expiresAt = Integration.TimeProvider.GetUtcNow()
-                    + Integration.DpopFreshnessWindow;
-                await Integration.PersistDpopProofJtiAsync(
-                    jti, expiresAt, exchangeContext, context.RequestAborted).ConfigureAwait(false);
-            }
+            return;
         }
 
         if(RequiredScope is not null)
@@ -306,6 +361,19 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
         ServerHttpResponse response = await metadataEndpoint.Server.DispatchAsync(
             incomingRequest, [], context.RequestAborted).ConfigureAwait(false);
 
+        await WriteServerResponseAsync(context, response).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Maps a library <see cref="ServerHttpResponse"/> onto the wire: its status, content type, location, every header
+    /// field it carries and its body, so the answer the library composed is the answer sent.
+    /// </summary>
+    /// <param name="context">The request's context.</param>
+    /// <param name="response">The answer to write.</param>
+    /// <returns>A task that completes when the answer is written.</returns>
+    private static async Task WriteServerResponseAsync(HttpContext context, ServerHttpResponse response)
+    {
         context.Response.StatusCode = response.StatusCode;
         if(!string.IsNullOrEmpty(response.ContentType))
         {
@@ -329,52 +397,48 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
     }
 
 
+    /// <summary>
+    /// Reads the access token of the request's one <c>Authorization</c> field line as the library's resources read it,
+    /// through <see cref="AuthorizationFieldReading"/>: the scheme is <c>Bearer</c> or <c>DPoP</c>, compared
+    /// case-insensitively (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.1">RFC 9110 Section 11.1</see>:
+    /// "It uses a case-insensitive token to identify the authentication scheme:"), and the credentials are a token68
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6750#section-2.1">RFC 6750 Section 2.1</see>: "credentials =
+    /// "Bearer" 1*SP b64token"; <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>:
+    /// "credentials = "DPoP" 1*SP token68"). A field naming another scheme, or credentials that are no token68, carries
+    /// no access token.
+    /// </summary>
+    /// <param name="request">The request.</param>
+    /// <param name="scheme">The scheme the field names, as sent, or empty when the field carries no access token.</param>
+    /// <param name="token">The access token, or <see langword="null"/> when the field carries none.</param>
+    /// <returns><see langword="true"/> when the field carries an access token under <c>Bearer</c> or <c>DPoP</c>.</returns>
     private static bool TryExtractAuthorization(
         HttpRequest request, out string scheme, out string? token)
     {
         scheme = string.Empty;
         token = null;
 
-        if(!request.Headers.TryGetValue("Authorization", out var values) || values.Count == 0)
+        StringValues lines = request.Headers.Authorization;
+        if(lines.Count == 0)
         {
             return false;
         }
 
-        string header = values[0]!;
-        int sep = header.IndexOf(' ', StringComparison.Ordinal);
-        if(sep <= 0 || sep == header.Length - 1)
+        Dictionary<string, string[]> fieldLines = new(StringComparer.Ordinal)
+        {
+            [WellKnownHttpHeaderNames.Authorization] = [.. lines.Select(static line => line ?? string.Empty)]
+        };
+        AuthorizationFieldReading reading = AuthorizationFieldReading.Read(new RequestHeaders(fieldLines));
+        bool isAccessTokenScheme = reading.IsScheme(BearerScheme) || reading.IsScheme(DpopScheme);
+        if(!isAccessTokenScheme || !reading.HasToken68Credentials)
         {
             return false;
         }
 
-        scheme = header[..sep];
-        token = header[(sep + 1)..];
+        scheme = reading.Scheme!;
+        token = reading.Credentials;
 
-        return !string.IsNullOrEmpty(token)
-            && (string.Equals(scheme, BearerScheme, StringComparison.Ordinal)
-                || string.Equals(scheme, DpopScheme, StringComparison.Ordinal));
+        return true;
     }
-
-
-    private static bool TryExtractDpopProof(HttpRequest request, out string? proof)
-    {
-        if(request.Headers.TryGetValue("DPoP", out var values)
-            && values.Count > 0
-            && !string.IsNullOrEmpty(values[0]))
-        {
-            proof = values[0];
-
-            return true;
-        }
-
-        proof = null;
-
-        return false;
-    }
-
-
-    private static string BuildRequestUrl(HttpRequest request) =>
-        $"{request.Scheme}://{request.Host}{request.Path}";
 
 
     /// <summary>
@@ -431,42 +495,135 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
 
 
     /// <summary>
-    /// Writes a DPoP-scheme <c>401</c> (RFC 9449 §7.1).
-    /// <see cref="BearerTokenChallenge"/> is Bearer-scheme by definition, so
-    /// this challenge composes
-    /// <see cref="ProtectedResourceChallenge.BuildChallenge"/> for the
-    /// RFC 9728 §5.1 <c>resource_metadata</c> parameter and appends its own
-    /// <c>error</c>/<c>error_description</c> auth-params over values
-    /// restricted to the RFC 6750 §3 charset, which needs no quoted-pair
-    /// escaping.
+    /// Writes <paramref name="refusal"/> with the resource's <c>DPoP</c> challenge as its one <c>WWW-Authenticate</c>
+    /// value, built by <see cref="DpopChallenge.BuildChallenge"/> with this resource's realm, <paramref name="error"/>, its
+    /// scope, the algorithms it accepts and its metadata URL, the challenge <see cref="DpopResourceAccess.DecideAsync"/>
+    /// writes, and the field <c>Access-Control-Expose-Headers: WWW-Authenticate, DPoP-Nonce</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "including
+    /// WWW-Authenticate in the Access-Control-Expose-Headers response header list value").
     /// </summary>
-    private Task WriteDpopChallengeAsync(HttpContext context, string error, string? errorDescription)
+    /// <param name="context">The request's context.</param>
+    /// <param name="refusal">The refusal's status and body.</param>
+    /// <param name="error">The challenge's <c>error</c>, or <see langword="null"/> for none.</param>
+    /// <returns>A task that completes when the answer is written.</returns>
+    private Task WriteDpopChallengeAsync(HttpContext context, ServerHttpResponse refusal, string? error)
     {
-        StringBuilder sb = new();
-        if(MetadataEndpoint is { } metadataEndpoint)
+        string challenge = BuildDpopChallenge(error);
+        if(error is not null)
         {
-            _ = sb.Append(ProtectedResourceChallenge.BuildChallenge(
-                WellKnownAuthenticationSchemes.DPoP, metadataEndpoint.MetadataUrl));
-            _ = sb.Append(", ");
-        }
-        else
-        {
-            _ = sb.Append(DpopScheme);
-            _ = sb.Append(' ');
+            _ = (Activity.Current?.SetTag(ResourceServerTagNames.ChallengeError, error));
         }
 
-        _ = sb.Append("error=\"").Append(error).Append('"');
-        if(SanitizeErrorDescription(errorDescription) is { Length: > 0 } sanitizedDescription)
-        {
-            _ = sb.Append(", error_description=\"").Append(sanitizedDescription).Append('"');
-        }
-
-        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-        context.Response.Headers.Append(WellKnownHttpHeaderNames.WwwAuthenticate, sb.ToString());
-        _ = (Activity.Current?.SetTag(ResourceServerTagNames.ChallengeError, error));
-
-        return Task.CompletedTask;
+        return WriteServerResponseAsync(
+            context,
+            refusal
+                .WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, challenge)
+                .WithHeader(WellKnownHttpHeaderNames.AccessControlExposeHeaders, ExposedDpopResponseFields));
     }
+
+
+    /// <summary>
+    /// The <c>DPoP</c> challenge of this resource: <see cref="DpopChallenge.BuildChallenge"/> with its realm
+    /// <see cref="ProtectedRealm"/>, <paramref name="error"/>, its scope, the algorithms its integration accepts and its
+    /// metadata URL.
+    /// </summary>
+    /// <param name="error">The challenge's <c>error</c>, or <see langword="null"/> for none.</param>
+    /// <returns>The challenge.</returns>
+    private string BuildDpopChallenge(string? error) =>
+        DpopChallenge.BuildChallenge(
+            ProtectedRealm,
+            error,
+            RequiredScope,
+            Integration.AcceptedDpopProofAlgorithms ?? WellKnownDpopValues.SupportedSigningAlgorithms,
+            MetadataEndpoint?.MetadataUrl);
+
+
+    /// <summary>
+    /// Writes the answer to an <c>Authorization</c> field sent on two or more lines, before any token is validated: 400,
+    /// <c>invalid_request</c> and <see cref="WellKnownOAuthErrorDescriptions.MalformedAuthorizationField"/> in the body,
+    /// as the library's resources answer it
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>: "invalid_request The
+    /// request is missing a required parameter, includes an unsupported parameter or parameter value, repeats the same
+    /// parameter, uses more than one method for including an access token, or is otherwise malformed. The resource
+    /// server SHOULD respond with the HTTP 400 (Bad Request) status code."). The challenge carrying the error is the
+    /// <c>DPoP</c> one alone under <see cref="RequiresDpop"/>, a protection space accepting the <c>DPoP</c> mechanism
+    /// alone, and otherwise the challenge of the mechanism the lines attempt
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 Section 7.2</see>: "If the mechanism
+    /// used to attempt authentication could be established unambiguously, then the corresponding challenge SHOULD be
+    /// used to deliver error information (Figure 18)."): the <c>DPoP</c> one alone, with the exposure field, where every
+    /// line names <c>DPoP</c>, the <c>Bearer</c> one alone where every line names <c>Bearer</c>, and for lines naming
+    /// two schemes both in one field line, the <c>Bearer</c> one first, with the exposure field (Section 7.2:
+    /// "Otherwise, both Bearer and DPoP challenges MAY be used to deliver error information (Figure 19).").
+    /// </summary>
+    /// <param name="context">The request's context.</param>
+    /// <param name="authorizationLines">The request's <c>Authorization</c> field lines, two or more.</param>
+    /// <returns>A task that completes when the answer is written.</returns>
+    private Task WriteRepeatedAuthorizationRefusalAsync(HttpContext context, StringValues authorizationLines)
+    {
+        ServerHttpResponse refusal = ServerHttpResponse.BadRequest(
+            OAuthErrors.InvalidRequest, WellKnownOAuthErrorDescriptions.MalformedAuthorizationField);
+        string? sharedScheme = ReadSharedScheme(authorizationLines);
+        if(RequiresDpop || string.Equals(sharedScheme, DpopScheme, StringComparison.OrdinalIgnoreCase))
+        {
+            return WriteDpopChallengeAsync(context, refusal, OAuthErrors.InvalidRequest);
+        }
+
+        string bearerChallenge = BearerTokenChallenge.BuildChallenge(
+            realm: ProtectedRealm, error: OAuthErrors.InvalidRequest, resourceMetadata: MetadataEndpoint?.MetadataUrl);
+        _ = (Activity.Current?.SetTag(ResourceServerTagNames.ChallengeError, OAuthErrors.InvalidRequest));
+        ServerHttpResponse answer = string.Equals(sharedScheme, BearerScheme, StringComparison.OrdinalIgnoreCase) switch
+        {
+            true => refusal.WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, bearerChallenge),
+            false => refusal
+                .WithHeader(
+                    WellKnownHttpHeaderNames.WwwAuthenticate,
+                    $"{bearerChallenge}, {BuildDpopChallenge(OAuthErrors.InvalidRequest)}")
+                .WithHeader(WellKnownHttpHeaderNames.AccessControlExposeHeaders, ExposedDpopResponseFields)
+        };
+
+        return WriteServerResponseAsync(context, answer);
+    }
+
+
+    /// <summary>
+    /// The authentication scheme every <c>Authorization</c> field line names, as the first line sends it, or
+    /// <see langword="null"/> when two lines name different schemes, compared case-insensitively
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.1">RFC 9110 Section 11.1</see>: "It uses a
+    /// case-insensitive token to identify the authentication scheme"), as the library's resources read a repeated field.
+    /// </summary>
+    /// <param name="lines">The field lines, two or more.</param>
+    /// <returns>The one scheme, or <see langword="null"/>.</returns>
+    private static string? ReadSharedScheme(StringValues lines)
+    {
+        string firstScheme = ReadLineScheme(lines[0]);
+        bool isSchemeShared = firstScheme.Length > 0
+            && lines.All(line => string.Equals(ReadLineScheme(line), firstScheme, StringComparison.OrdinalIgnoreCase));
+
+        return isSchemeShared ? firstScheme : null;
+    }
+
+
+    /// <summary>
+    /// The authentication scheme an <c>Authorization</c> field line names: the token before its first SP, the whole line
+    /// without the whitespace around it when it holds none.
+    /// </summary>
+    /// <param name="line">The field line's value.</param>
+    /// <returns>The scheme token, empty for an empty line.</returns>
+    private static string ReadLineScheme(string? line)
+    {
+        ReadOnlySpan<char> value = line.AsSpan().Trim();
+        int separator = value.IndexOf(' ');
+
+        return (separator < 0 ? value : value[..separator]).ToString();
+    }
+
+
+    /// <summary>
+    /// The value of the <c>Access-Control-Expose-Headers</c> field an answer carrying a <c>DPoP</c> challenge writes: the
+    /// challenge's field and the field a resource's nonce rides in, <c>WWW-Authenticate, DPoP-Nonce</c>.
+    /// </summary>
+    private static string ExposedDpopResponseFields { get; } =
+        $"{WellKnownHttpHeaderNames.WwwAuthenticate}, {WellKnownHttpHeaderNames.DPoPNonce}";
 
 
     /// <summary>

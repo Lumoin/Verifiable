@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using System.Buffers;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Security.Cryptography.X509Certificates;
@@ -12,6 +13,7 @@ using Verifiable.OAuth;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.ProtectedResource;
 using Verifiable.OAuth.Server;
+using Verifiable.OAuth.Server.Keys;
 using Verifiable.OAuth.Server.Pipeline;
 using Verifiable.Server.Pipeline;
 using Verifiable.Tests.TestInfrastructure;
@@ -106,6 +108,59 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
     public InMemoryDpopReplayCache ReplayCache { get; }
 
 
+    /// <summary>
+    /// Whether <c>/protected</c> always requires DPoP-bound access tokens, so a token presented under the
+    /// <c>Bearer</c> scheme is refused with the <c>DPoP</c> challenge alone
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-2">RFC 9728 Section 2</see>,
+    /// <c>dpop_bound_access_tokens_required</c>).
+    /// </summary>
+    public bool RequiresDpop { get; }
+
+
+    /// <summary>
+    /// Whether the resource server wires its DPoP proof validation, its nonce issuance and validation and its accepted
+    /// algorithms into <see cref="Integration"/>; without them a DPoP-bound token is answered <c>server_error</c>. The
+    /// <c>jti</c> record is wired apart from them, by <see cref="IsDpopProofJtiRecordWired"/>.
+    /// </summary>
+    public bool IsDpopProofValidationWired { get; }
+
+
+    /// <summary>
+    /// Whether the resource server wires the <c>jti</c> record, the seen query and the record of
+    /// <see cref="ReplayCache"/>, into <see cref="Integration"/>; without them a DPoP-bound token is answered
+    /// <c>server_error</c>.
+    /// </summary>
+    public bool IsDpopProofJtiRecordWired { get; }
+
+
+    /// <summary>
+    /// The scheme and authority the resource server names its own target URIs under, the configured origin a DPoP
+    /// proof's <c>htu</c> is held to whatever <c>Host</c> a request names; <see langword="null"/> until
+    /// <see cref="StartHttpHostAsync"/> sets it to the bound listener's origin, and settable after that so a row can
+    /// configure another origin.
+    /// </summary>
+    public Uri? TargetAuthority { get; set; }
+
+
+    /// <summary>
+    /// Creates the resource server: its integration trusting <paramref name="trustedIssuer"/>'s tokens for
+    /// <paramref name="expectedAudience"/>, its <c>jti</c> record over <see cref="ReplayCache"/> and its DPoP checks as
+    /// the arguments wire them. The listener starts with <see cref="StartHttpHostAsync"/>.
+    /// </summary>
+    /// <param name="trustedIssuer">The issuer whose access tokens the resource accepts, among the advertised authorization servers.</param>
+    /// <param name="expectedAudience">The audience the resource's access tokens name.</param>
+    /// <param name="resolveVerificationKey">Resolves the issuer's access token verification key.</param>
+    /// <param name="verifySignature">The signature verification access tokens and DPoP proofs are checked with.</param>
+    /// <param name="timeProvider">The resource server's clock.</param>
+    /// <param name="requiredScope">The scope a token must carry, or <see langword="null"/> for none.</param>
+    /// <param name="advertisedAuthorizationServers">The <c>authorization_servers</c> the document advertises, or <see langword="null"/> for the trusted issuer alone.</param>
+    /// <param name="requiresDpop">Whether <c>/protected</c> always requires DPoP-bound access tokens.</param>
+    /// <param name="isDpopProofValidationWired">Whether the DPoP proof validation, the nonce slots and the accepted algorithms are wired.</param>
+    /// <param name="isDpopProofJtiRecordWired">Whether the <c>jti</c> seen query and record are wired.</param>
+    /// <param name="wrapDpopProofValidation">
+    /// Wraps the wired DPoP proof validation, so a row can answer the library validator's result rewritten or wire a
+    /// validation of its own in its place, or <see langword="null"/> to wire it as it is.
+    /// </param>
     public TestResourceServerShell(
         Uri trustedIssuer,
         string expectedAudience,
@@ -113,7 +168,11 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
         VerificationDelegate verifySignature,
         TimeProvider timeProvider,
         string? requiredScope = null,
-        IReadOnlyList<string>? advertisedAuthorizationServers = null)
+        IReadOnlyList<string>? advertisedAuthorizationServers = null,
+        bool requiresDpop = false,
+        bool isDpopProofValidationWired = true,
+        bool isDpopProofJtiRecordWired = true,
+        Func<ValidateDpopProofDelegate, ValidateDpopProofDelegate>? wrapDpopProofValidation = null)
     {
         ArgumentNullException.ThrowIfNull(trustedIssuer);
         ArgumentException.ThrowIfNullOrWhiteSpace(expectedAudience);
@@ -135,20 +194,132 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
         VerifySignature = verifySignature;
         RequiredScope = requiredScope;
         AdvertisedAuthorizationServers = advertised;
+        RequiresDpop = requiresDpop;
+        IsDpopProofValidationWired = isDpopProofValidationWired;
+        IsDpopProofJtiRecordWired = isDpopProofJtiRecordWired;
         ReplayCache = new InMemoryDpopReplayCache(timeProvider);
+        NonceKeySet = CreateNonceKeySet();
 
-        Integration = new ResourceServerIntegration
+        ResourceServerIntegration integration = new()
         {
             TrustedIssuer = trustedIssuer,
             ExpectedAudience = expectedAudience,
             ResolveVerificationKeyAsync = resolveVerificationKey,
             TimeProvider = timeProvider,
-            IsDpopProofJtiSeenAsync = ReplayCache.IsSeenAsync,
-            PersistDpopProofJtiAsync = ReplayCache.PersistAsync
+            IsDpopProofJtiSeenAsync = isDpopProofJtiRecordWired ? ReplayCache.IsSeenAsync : null,
+            PersistDpopProofJtiAsync = isDpopProofJtiRecordWired ? ReplayCache.PersistAsync : null
+        };
+        Integration = isDpopProofValidationWired
+            ? WireDpopChecks(integration, verifySignature, wrapDpopProofValidation ?? (static validate => validate))
+            : integration;
+    }
+
+
+    /// <summary>
+    /// The HMAC key set the resource server's nonces are issued and validated under, one current key; disposed with
+    /// the shell.
+    /// </summary>
+    private InProcessKeySet NonceKeySet { get; }
+
+
+    /// <summary>
+    /// The resource server's DPoP slots over <paramref name="integration"/>: the proof validation
+    /// <see cref="DpopProofValidator.ValidateAsync(DpopProofValidationRequest, VerificationDelegate, DpopJwsPartParser, EncodeDelegate, DecodeDelegate, TimeProvider, BaseMemoryPool, TimeSpan, CancellationToken)"/>
+    /// over <paramref name="verifySignature"/>, with the integration's clock and its freshness window as the
+    /// <c>iat</c> skew, as <see cref="TestHostShell.VerifyDpopProofsWithAsync"/> wires the authorization server's; the
+    /// library's default nonce issuance and validation (<see cref="DefaultDpopNonceIssuance.IssueAsync"/>,
+    /// <see cref="DefaultDpopNonceValidation.ValidateAsync"/>) over <see cref="NonceKeySet"/>; and the accepted
+    /// algorithms <see cref="WellKnownDpopValues.SupportedSigningAlgorithms"/>.
+    /// </summary>
+    /// <param name="integration">The integration holding the trust, the clock and the <c>jti</c> record.</param>
+    /// <param name="verifySignature">The signature verification every proof is checked with.</param>
+    /// <param name="wrapDpopProofValidation">Wraps the proof validation before it is wired.</param>
+    /// <returns>The integration with its DPoP slots wired.</returns>
+    private ResourceServerIntegration WireDpopChecks(
+        ResourceServerIntegration integration,
+        VerificationDelegate verifySignature,
+        Func<ValidateDpopProofDelegate, ValidateDpopProofDelegate> wrapDpopProofValidation)
+    {
+        TimeProvider timeProvider = integration.TimeProvider;
+        TimeSpan iatSkew = integration.DpopFreshnessWindow;
+        InProcessKeySet keySet = NonceKeySet;
+        FillEntropyDelegate nonceEntropy = TestEntropy.NewCounterStream();
+
+        return new ResourceServerIntegration
+        {
+            TrustedIssuer = integration.TrustedIssuer,
+            ExpectedAudience = integration.ExpectedAudience,
+            ResolveVerificationKeyAsync = integration.ResolveVerificationKeyAsync,
+            TimeProvider = timeProvider,
+            IsDpopProofJtiSeenAsync = integration.IsDpopProofJtiSeenAsync,
+            PersistDpopProofJtiAsync = integration.PersistDpopProofJtiAsync,
+            ValidateDpopProofAsync = wrapDpopProofValidation((request, ct) => DpopProofValidator.ValidateAsync(
+                request, verifySignature, DpopTestSupport.Parser, TestSetup.Base64UrlEncoder, TestSetup.Base64UrlDecoder,
+                timeProvider, BaseMemoryPool.Shared, iatSkew, ct)),
+            IssueDpopNonceAsync = (audience, tenantId, ctx, ct) => DefaultDpopNonceIssuance.IssueAsync(
+                audience, tenantId, ctx,
+                (_, _, _) => ValueTask.FromResult(keySet.Snapshot()),
+                selectHmacKey: null,
+                (kid, _, _, _) => ValueTask.FromResult(keySet.ResolveMaterial(kid)),
+                timeProvider, TestSetup.Base64UrlEncoder, nonceEntropy, BaseMemoryPool.Shared, ct),
+            ValidateDpopNonceAsync = (presented, audience, tenantId, ctx, ct) => DefaultDpopNonceValidation.ValidateAsync(
+                presented, audience, tenantId, ctx,
+                (_, _, _) => ValueTask.FromResult(keySet.Snapshot()),
+                (kid, _, _, _) => ValueTask.FromResult(keySet.ResolveMaterial(kid)),
+                timeProvider, WellKnownDpopValues.DefaultNonceValidityWindow, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, ct),
+            AcceptedDpopProofAlgorithms = WellKnownDpopValues.SupportedSigningAlgorithms
         };
     }
 
 
+    /// <summary>
+    /// Creates the HMAC key set the resource server's nonces are issued under: one current 256-bit HMAC-SHA-256 key whose
+    /// octets come from the suite's deterministic entropy stream (<see cref="TestEntropy.NewCounterStream"/>).
+    /// </summary>
+    /// <returns>The key set; the shell disposes it.</returns>
+    private static InProcessKeySet CreateNonceKeySet()
+    {
+        IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(HmacKeyOctetCount);
+        SymmetricKeyMemory? material = null;
+        SymmetricKey? key = null;
+        InProcessKeySet? keySet = null;
+        try
+        {
+            TestEntropy.NewCounterStream()(owner.Memory.Span[..HmacKeyOctetCount]);
+            material = new SymmetricKeyMemory(owner, CryptoTags.HmacSha256Key);
+            key = new SymmetricKey(material, "resource-server-nonce-1", MicrosoftHmacFunctionsAdapter.ComputeHmacAsync, MicrosoftHmacFunctionsAdapter.VerifyHmacAsync);
+            material = null;
+            keySet = new InProcessKeySet();
+            keySet.AddCurrent(new KeyId("resource-server-nonce-1"), key);
+            key = null;
+            InProcessKeySet created = keySet;
+            keySet = null;
+
+            return created;
+        }
+        finally
+        {
+            //Whatever was created and not handed on to its owner is released here: the key set owns the key, the key
+            //its material, the material the rented octets.
+            keySet?.Dispose();
+            key?.Dispose();
+            material?.Dispose();
+        }
+    }
+
+
+    /// <summary>The octet count of the resource server's HMAC-SHA-256 nonce key.</summary>
+    private static int HmacKeyOctetCount => 32;
+
+
+    /// <summary>
+    /// Starts the loopback HTTPS listener with a certificate of its own and the
+    /// <see cref="ResourceServerHttpApplication"/> over <see cref="Integration"/>, then derives the resource identity
+    /// and the metadata URL from the bound address, serves the RFC 9728 document there and sets
+    /// <see cref="TargetAuthority"/> to the listener's origin unless a row set it. A second call does nothing.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A task that completes when the listener is bound.</returns>
     public async Task StartHttpHostAsync(CancellationToken cancellationToken = default)
     {
         if(webApplication is not null)
@@ -172,7 +343,7 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
 
         global::Microsoft.AspNetCore.Builder.WebApplication app = builder.Build();
 
-        ResourceServerHttpApplication application = new(Integration, VerifySignature, RequiredScope);
+        ResourceServerHttpApplication application = new(Integration, VerifySignature, () => TargetAuthority, RequiredScope, RequiresDpop);
         app.Run(application.ProcessRequestAsync);
 
         await app.StartAsync(cancellationToken).ConfigureAwait(false);
@@ -201,6 +372,7 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
         HttpBaseAddress = baseAddress;
         ResourceIdentity = resourceIdentity;
         MetadataUrl = metadataUrl;
+        TargetAuthority ??= resourceIdentity;
     }
 
 
@@ -355,6 +527,7 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
         metadataServer?.Dispose();
         metadataServer = null;
 
+        NonceKeySet.Dispose();
         HttpCertificate?.Dispose();
     }
 }

@@ -16,7 +16,14 @@ namespace Verifiable.OAuth.ProtectedResource;
 /// The library derives what it can and cannot get wrong: <c>resource</c> is
 /// the resolved issuer identity — the same identifier the §3 well-known URL is
 /// formed from, keeping the §3.3 validation invariant true by construction —
-/// and <c>jwks_uri</c> is read off the per-request endpoint chain. Everything
+/// and <c>jwks_uri</c> is read off the per-request endpoint chain. Where the
+/// server validates DPoP proofs, <c>dpop_signing_alg_values_supported</c> is the
+/// one list it holds every proof to; where its resources require DPoP-bound
+/// access tokens
+/// (<see cref="AuthorizationServerIntegration.IsDpopBoundAccessTokenRequiredAtResources"/>),
+/// the document states <c>dpop_bound_access_tokens_required: true</c> and
+/// <c>bearer_methods_supported: []</c>, and a contribution stating otherwise is
+/// answered <c>server_error</c> with no document. Everything
 /// else is application data supplied through the
 /// <see cref="AuthorizationServerIntegration.ContributeProtectedResourceMetadataAsync"/>
 /// seam, and <c>signed_metadata</c> (§2.2) is produced by dropping the
@@ -129,11 +136,46 @@ public static class ProtectedResourceMetadataEndpoints
                 }
 
                 //Application-supplied §2 values the library cannot derive.
-                ProtectedResourceMetadataContribution contribution =
+                ProtectedResourceMetadataContribution contributed =
                     oauth.ContributeProtectedResourceMetadataAsync is null
                         ? ProtectedResourceMetadataContribution.Empty
                         : await oauth.ContributeProtectedResourceMetadataAsync(
                             registration, context, ct).ConfigureAwait(false);
+
+                //RFC 9728 Section 2: dpop_bound_access_tokens_required states "whether the protected resource
+                //always requires the use of DPoP-bound access tokens"; when the server's resources do, a contribution
+                //stating otherwise contradicts them, a fault of the host's own configuration, and no document is served.
+                bool isDpopBoundAccessTokenRequired = oauth.IsDpopBoundAccessTokenRequiredAtResources;
+                if(isDpopBoundAccessTokenRequired
+                    && (contributed.DpopBoundAccessTokensRequired is false || contributed.BearerMethodsSupported is { Count: > 0 }))
+                {
+                    return (null, ServerHttpResponse.ServerError(
+                        OAuthErrors.ServerError, WellKnownOAuthErrorDescriptions.ServerNotReady));
+                }
+
+                //RFC 9728 Section 2: dpop_signing_alg_values_supported lists the algorithms "supported by the resource
+                //server for validating Demonstrating Proof of Possession (DPoP) proof JWTs". Where the server validates
+                //proofs, that is the one list it holds every proof to; the contribution's member is read only where it
+                //validates none.
+                IReadOnlyList<string>? dpopSigningAlgorithms = Dpop.DpopRequestReading.IsProofValidationWired(oauth)
+                    ? await AuthCode.Server.DpopTokenEndpointValidation.ResolveAcceptedProofAlgorithmsAsync(
+                        oauth, registration, context, ct).ConfigureAwait(false)
+                    : contributed.DpopSigningAlgValuesSupported;
+
+                ProtectedResourceMetadataContribution contribution = contributed with
+                {
+                    DpopSigningAlgValuesSupported = dpopSigningAlgorithms,
+                    DpopBoundAccessTokensRequired = isDpopBoundAccessTokenRequired switch
+                    {
+                        true => true,
+                        false => contributed.DpopBoundAccessTokensRequired
+                    },
+                    BearerMethodsSupported = isDpopBoundAccessTokenRequired switch
+                    {
+                        true => [],
+                        false => contributed.BearerMethodsSupported
+                    }
+                };
 
                 //§2 jwks_uri — read off the chain the dispatcher built, so the
                 //advertised URL is the one the matcher binds to.
@@ -171,7 +213,10 @@ public static class ProtectedResourceMetadataEndpoints
 
     /// <summary>
     /// Serialises the RFC 9728 §2 metadata document. Parameters with zero
-    /// values are omitted per §3.2. Built by hand through
+    /// values are omitted per Section 3.2, but for a stated empty
+    /// <c>bearer_methods_supported</c>, written as <c>[]</c> (RFC 9728 Section 2:
+    /// "The empty array [] can be used to indicate that no bearer methods are
+    /// supported."). Built by hand through
     /// <see cref="JsonAppender"/> to honour the <c>Verifiable.OAuth</c>
     /// serialization firewall.
     /// </summary>
@@ -201,7 +246,7 @@ public static class ProtectedResourceMetadataEndpoints
 
             AppendArrayField(sb, ProtectedResourceMetadataParameterNames.ScopesSupported,
                 contribution.ScopesSupported, ref first);
-            AppendArrayField(sb, ProtectedResourceMetadataParameterNames.BearerMethodsSupported,
+            AppendStatedListField(sb, ProtectedResourceMetadataParameterNames.BearerMethodsSupported,
                 contribution.BearerMethodsSupported, ref first);
             AppendArrayField(sb, ProtectedResourceMetadataParameterNames.ResourceSigningAlgValuesSupported,
                 contribution.ResourceSigningAlgValuesSupported, ref first);
@@ -292,7 +337,9 @@ public static class ProtectedResourceMetadataEndpoints
             claims[ProtectedResourceMetadataParameterNames.ScopesSupported] = scopes;
         }
 
-        if(contribution.BearerMethodsSupported is { Count: > 0 } bearerMethods)
+        //RFC 9728 Section 2: "The empty array [] can be used to indicate that no bearer methods are supported.", the
+        //named exception to Section 3.2's omission of zero values, so a stated empty list is carried as stated.
+        if(contribution.BearerMethodsSupported is { } bearerMethods)
         {
             claims[ProtectedResourceMetadataParameterNames.BearerMethodsSupported] = bearerMethods;
         }
@@ -354,6 +401,15 @@ public static class ProtectedResourceMetadataEndpoints
     }
 
 
+    /// <summary>
+    /// Appends the string member <paramref name="name"/> when <paramref name="value"/> holds text, and nothing for a
+    /// <see langword="null"/> or empty value: <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.2">RFC 9728
+    /// Section 3.2</see>, "Parameters with zero values MUST be omitted from the response."
+    /// </summary>
+    /// <param name="sb">The document being written.</param>
+    /// <param name="name">The member name.</param>
+    /// <param name="value">The member value, or <see langword="null"/>.</param>
+    /// <param name="first">Whether no member has been written yet; cleared when this one is.</param>
     private static void AppendOptionalString(StringBuilder sb, string name, string? value, ref bool first)
     {
         if(!string.IsNullOrEmpty(value))
@@ -363,10 +419,41 @@ public static class ProtectedResourceMetadataEndpoints
     }
 
 
+    /// <summary>
+    /// Appends the JSON array member <paramref name="name"/> when <paramref name="values"/> holds at least one value, and
+    /// nothing for a <see langword="null"/> or empty list: <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.2">RFC
+    /// 9728 Section 3.2</see>, "Parameters with multiple values are represented as JSON arrays. Parameters with zero values
+    /// MUST be omitted from the response."
+    /// </summary>
+    /// <param name="sb">The document being written.</param>
+    /// <param name="name">The member name.</param>
+    /// <param name="values">The member values, or <see langword="null"/>.</param>
+    /// <param name="first">Whether no member has been written yet; cleared when this one is.</param>
     private static void AppendArrayField(
         StringBuilder sb, string name, IReadOnlyList<string>? values, ref bool first)
     {
         if(values is { Count: > 0 })
+        {
+            JsonAppender.AppendStringArrayField(sb, name, values, ref first);
+        }
+    }
+
+
+    /// <summary>
+    /// Appends the JSON array member <paramref name="name"/> whenever <paramref name="values"/> is stated, an empty list
+    /// as <c>[]</c>, and nothing for <see langword="null"/>: the member whose empty array has a meaning of its own,
+    /// <c>bearer_methods_supported</c> (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-2">RFC 9728 Section
+    /// 2</see>: "The empty array [] can be used to indicate that no bearer methods are supported."), the named exception
+    /// to Section 3.2's omission of zero values.
+    /// </summary>
+    /// <param name="sb">The document being written.</param>
+    /// <param name="name">The member name.</param>
+    /// <param name="values">The member values, or <see langword="null"/> when the member is not stated.</param>
+    /// <param name="first">Whether no member has been written yet; cleared when this one is.</param>
+    private static void AppendStatedListField(
+        StringBuilder sb, string name, IReadOnlyList<string>? values, ref bool first)
+    {
+        if(values is not null)
         {
             JsonAppender.AppendStringArrayField(sb, name, values, ref first);
         }

@@ -4098,6 +4098,38 @@ countingMetadataBuilder
 
 
     /// <summary>
+    /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Live configuration Section 4.1</see>:
+    /// "The named `InvalidOperationException` identifies missing or incoherent wiring.", for a server whose resources
+    /// require DPoP-bound access tokens (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-2">RFC 9728 Section
+    /// 2</see>: "dpop_bound_access_tokens_required OPTIONAL. Boolean value specifying whether the protected resource
+    /// always requires the use of DPoP-bound access tokens [RFC9449].") and so must check every DPoP proof
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "check the DPoP proof
+    /// according to the rules in Section 4.3"). A composition requiring DPoP-bound access tokens at its resources with no
+    /// DPoP proof validation, neither <c>ValidateDpopProofAsync</c> nor the codecs' proof parser, would refuse every token,
+    /// and is refused at construction with the named fault; the same composition with the parser and the nonce and HMAC
+    /// delegates wired is admitted.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task DpopBoundAccessTokensRequiredWithoutProofValidationIsRefusedAtConstructionAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        AuthorizationServerIntegration family = app.Server.OAuth();
+        family.IsDpopBoundAccessTokenRequiredAtResources = true;
+
+        InvalidOperationException construction = Assert.ThrowsExactly<InvalidOperationException>(app.Server.Validate);
+        Assert.AreEqual(
+            "AuthorizationServerIntegration.IsDpopBoundAccessTokenRequiredAtResources requires DPoP proof validation, by ValidateDpopProofAsync or by the library default over Codecs.DpopProofParser, Encoder and Decoder.",
+            construction.Message);
+        Assert.IsFalse(app.Server.IsValidated, "A refused construction is not admitted.");
+
+        _ = await app.EnableDpopAsync().ConfigureAwait(false);
+        Assert.IsTrue(app.Server.IsValidated, "The composition validating DPoP proofs is admitted with the requirement set.");
+        Assert.IsTrue(app.Server.OAuth().IsDpopBoundAccessTokenRequiredAtResources, "The admitted composition keeps the requirement.");
+    }
+
+
+    /// <summary>
     /// Proves authenticated management under <see href="https://www.rfc-editor.org/rfc/rfc7592#section-2">RFC 7592 section 2</see>.
     /// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Section 4.1</see>:
     /// "Observer failure reports receive a detached context containing no request, headers, body, live registration or management bearer."

@@ -1933,25 +1933,40 @@ internal sealed class ClientCredentialsGrantTests
     /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8">RFC 9449 Section 8</see>: "In order for the
     /// application to obtain and use the DPoP-Nonce HTTP response header value, the server needs to make it available to
-    /// the application by including DPoP-Nonce in the Access-Control-Expose-Headers response header list value." A
-    /// <c>client_credentials</c> request sent to the token endpoint over a raw TLS connection, naming no <c>Origin</c>,
-    /// with a proof carrying no nonce is answered 400 <c>use_dpop_nonce</c> with one <c>DPoP-Nonce</c> field line and
-    /// exactly one field line <c>Access-Control-Expose-Headers: WWW-Authenticate, DPoP-Nonce</c>.
+    /// the application by including DPoP-Nonce in the Access-Control-Expose-Headers response header list value." A token
+    /// request sent to the token endpoint over a raw TLS connection, naming no <c>Origin</c>, with a proof carrying no
+    /// nonce is answered 400 <c>use_dpop_nonce</c> with one <c>DPoP-Nonce</c> field line and exactly one field line
+    /// <c>Access-Control-Expose-Headers: WWW-Authenticate, DPoP-Nonce</c>. The rows: a <c>client_credentials</c> request
+    /// of a machine client; the redemption of an authorization code, answered before any code is looked up.
     /// </summary>
+    /// <param name="grantRow">The token request sent: <see cref="ClientCredentialsRequestRow"/> or <see cref="CodeRedemptionRow"/>.</param>
     /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
-    public async Task TokenEndpointNonceChallengeExposesTheDpopNonceFieldAsync()
+    [DataRow(ClientCredentialsRequestRow)]
+    [DataRow(CodeRedemptionRow)]
+    public async Task TokenEndpointNonceChallengeExposesTheDpopNonceFieldAsync(string grantRow)
     {
         await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial material = await RegisterMachineClientAsync(app).ConfigureAwait(false);
+        using VerifierKeyMaterial material = grantRow switch
+        {
+            ClientCredentialsRequestRow => await RegisterMachineClientAsync(app).ConfigureAwait(false),
+            CodeRedemptionRow => await app.RegisterDpopClientAsync(
+                CodeClientId, new Uri(CodeClientId), PolicyProfile.Rfc6749WithPkce, CodeClientCapabilities).ConfigureAwait(false),
+            _ => throw new ArgumentOutOfRangeException(nameof(grantRow), grantRow, "Unknown token request row.")
+        };
         Uri tokenUrl = await StartDpopTokenEndpointAsync(app, material).ConfigureAwait(false);
         var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         using PublicKeyMemory holderPublic = holderKeys.PublicKey;
         using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
         DpopKey dpopKey = new(holderKeys, WellKnownJwaValues.Es256);
 
-        HttpResponseData response = await PostNonceLessProofOverARawConnectionAsync(app, tokenUrl, dpopKey).ConfigureAwait(false);
+        HttpResponseData response = grantRow switch
+        {
+            CodeRedemptionRow => await PostNonceLessCodeRedemptionOverARawConnectionAsync(app, tokenUrl, dpopKey).ConfigureAwait(false),
+            _ => await PostNonceLessProofOverARawConnectionAsync(app, tokenUrl, dpopKey).ConfigureAwait(false)
+        };
 
+        Assert.IsEmpty(app.Host("default").ConsumeHttpFaults(), "The token request is challenged without a server fault.");
         Assert.AreEqual(400, response.StatusCode, response.Body);
         Assert.Contains(OAuthErrors.UseDpopNonce, response.Body);
         _ = Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.DPoPNonce),
@@ -4497,6 +4512,57 @@ internal sealed class ClientCredentialsGrantTests
                 new(WellKnownHttpHeaderNames.DPoP, proof)
             ],
             Encoding.ASCII.GetBytes(MachineTokenRequestForm()), TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// The row of a token request that is the machine client's <c>client_credentials</c> request. A constant, not a
+    /// property, because a DataRow attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string ClientCredentialsRequestRow = "client-credentials-request";
+
+    /// <summary>
+    /// The row of a token request that redeems an authorization code. A constant, not a property, because a DataRow
+    /// attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string CodeRedemptionRow = "code-redemption";
+
+    /// <summary>The identifier of the public client whose token request redeems an authorization code.</summary>
+    private static string CodeClientId { get; } = "https://code.client.test";
+
+
+    /// <summary>
+    /// The capabilities of the client whose token request redeems an authorization code: the authorization code grant,
+    /// pushed authorization requests and OpenID Connect.
+    /// </summary>
+    private static ImmutableHashSet<CapabilityIdentifier> CodeClientCapabilities { get; } = ImmutableHashSet.Create(
+        WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
+        WellKnownCapabilityIdentifiers.OAuthPushedAuthorization,
+        WellKnownCapabilityIdentifiers.OidcOpenIdConnect);
+
+
+    /// <summary>
+    /// Sends the code client's redemption of an authorization code no authorization request issued over a raw TLS
+    /// connection with a proof carrying no nonce, so every field line of the answer is read as received; the nonce
+    /// challenge answers the redemption before any code is looked up.
+    /// </summary>
+    /// <param name="app">The host.</param>
+    /// <param name="tokenUrl">The token endpoint URL.</param>
+    /// <param name="dpopKey">The DPoP key that signs the proof.</param>
+    /// <returns>The wire response.</returns>
+    private async Task<HttpResponseData> PostNonceLessCodeRedemptionOverARawConnectionAsync(TestHostShell app, Uri tokenUrl, DpopKey dpopKey)
+    {
+        string proof = await BuildTokenProofAsync(dpopKey, tokenUrl, nonce: null).ConfigureAwait(false);
+
+        return await RawHttpsRequest.SendAsync(
+            app, WellKnownHttpMethods.Post, tokenUrl,
+            [
+                new(WellKnownHttpHeaderNames.ContentType, WellKnownMediaTypes.Application.FormUrlEncoded),
+                new(WellKnownHttpHeaderNames.DPoP, proof)
+            ],
+            RawHttpsRequest.FormBody(RawAuthCodeWirePushers.BuildTokenFields(
+                CodeClientId, "never-issued-authorization-code", "never-issued-code-verifier-of-forty-three-or-more", redirectUri: null)),
+            TestContext.CancellationToken).ConfigureAwait(false);
     }
 
 

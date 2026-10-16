@@ -675,6 +675,60 @@ internal sealed class Oid4VciDeferredAndNotificationTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-2">RFC 9728 Section 2</see>:
+    /// "dpop_bound_access_tokens_required OPTIONAL. Boolean value specifying whether the protected resource always
+    /// requires the use of DPoP-bound access tokens [RFC9449]."; <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC
+    /// 9449 Section 7.1</see>: "Upon receipt of a request to a protected resource within the protection space requiring
+    /// DPoP authentication, the server can respond with a challenge to the client to provide DPoP authentication
+    /// information"; and <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>: "If
+    /// the request lacks any authentication information (e.g., the client was unaware that authentication is necessary
+    /// or attempted using an unsupported authentication method), the resource server SHOULD NOT include an error code or
+    /// other error information." At a server whose resources require DPoP-bound access tokens, an access token bound to
+    /// no key, presented under the <c>Bearer</c> scheme over a raw TLS connection with a well-formed request body at the
+    /// Deferred Credential or the Notification endpoint, is refused: 401, an empty body, the one challenge
+    /// <c>DPoP realm="&lt;issuer&gt;", algs="..."</c> with no <c>error</c> and no <c>Bearer</c> challenge, and the one
+    /// field line <c>Access-Control-Expose-Headers: WWW-Authenticate, DPoP-Nonce</c>.
+    /// </summary>
+    /// <param name="endpointName">The protected endpoint addressed.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(DeferredEndpointRow)]
+    [DataRow(NotificationEndpointRow)]
+    public async Task ProtectedEndpointRequiringDpopBoundAccessTokensRefusesABearerPresentationAsync(string endpointName)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, EndpointCapabilities).ConfigureAwait(false);
+        await WireProtectedEndpointSeamsAsync(host).ConfigureAwait(false);
+        string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, static candidateIntegration =>
+            candidateIntegration.IsDpopBoundAccessTokenRequiredAtResources = true).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Uri url = new(host.Host("default").HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(EndpointNameOf(endpointName), material.Registration.TenantId.Value));
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Post, url,
+            [
+                new(WellKnownHttpHeaderNames.ContentType, WellKnownMediaTypes.Application.Json),
+                new(WellKnownHttpHeaderNames.Authorization, "Bearer " + accessToken)
+            ],
+            Encoding.UTF8.GetBytes(ProtectedRequestBody(endpointName)), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The presentation is refused without a server fault.");
+        Assert.AreEqual(401, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            ResourceDpopProofs.DpopChallenge(IssuerOf(host, material), error: null),
+            Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
+        Assert.AreEqual(
+            ResourceDpopProofs.ExposedDpopResponseFields,
+            Assert.ContainsSingle(response.Headers.Headers.GetValues("Access-Control-Expose-Headers")));
+        Assert.AreEqual(string.Empty, response.Body, "No error code or other error information.");
+    }
+
+
+    /// <summary>
     /// A request to the Credential, the Deferred Credential or the Notification endpoint sent over the wire, whose
     /// registration the application's materialization seam replaces with a record that is not an OAuth client
     /// registration, is answered 500 with the body's error <c>server_error</c> and no challenge, and the endpoint's

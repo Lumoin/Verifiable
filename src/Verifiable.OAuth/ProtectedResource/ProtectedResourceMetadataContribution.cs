@@ -14,8 +14,10 @@ namespace Verifiable.OAuth.ProtectedResource;
 /// <remarks>
 /// Per §3.2, parameters with zero values are omitted from the document: a
 /// <see langword="null"/> or empty member here simply does not appear on the
-/// wire. URL-valued members stay wire strings per the document's comparison
-/// rules (§6).
+/// wire, but for an empty <see cref="BearerMethodsSupported"/>, which is
+/// written as <c>[]</c> (RFC 9728 Section 2: "The empty array [] can be used to
+/// indicate that no bearer methods are supported."). URL-valued members stay
+/// wire strings per the document's comparison rules (Section 6).
 /// </remarks>
 [DebuggerDisplay("ProtectedResourceMetadataContribution Scopes={ScopesSupported?.Count}")]
 [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
@@ -31,7 +33,14 @@ public sealed record ProtectedResourceMetadataContribution
     /// <summary>The <c>scopes_supported</c> values (§2, RECOMMENDED).</summary>
     public IReadOnlyList<string>? ScopesSupported { get; init; }
 
-    /// <summary>The <c>bearer_methods_supported</c> values; see <see cref="BearerMethodValues"/>.</summary>
+    /// <summary>
+    /// The <c>bearer_methods_supported</c> values; see <see cref="BearerMethodValues"/>. An empty list is written as
+    /// <c>[]</c>, no bearer method supported, and <see langword="null"/> omits the member. When the server's resources
+    /// require DPoP-bound access tokens
+    /// (<see cref="Server.AuthorizationServerIntegration.IsDpopBoundAccessTokenRequiredAtResources"/>) the requirement
+    /// governs it: the document states <c>[]</c>, and a list naming any method is answered <c>server_error</c> with no
+    /// document.
+    /// </summary>
     public IReadOnlyList<string>? BearerMethodsSupported { get; init; }
 
     /// <summary>The <c>resource_signing_alg_values_supported</c> values. The value <c>none</c> MUST NOT be used (§2).</summary>
@@ -55,10 +64,20 @@ public sealed record ProtectedResourceMetadataContribution
     /// <summary>The <c>authorization_details_types_supported</c> values (§2).</summary>
     public IReadOnlyList<string>? AuthorizationDetailsTypesSupported { get; init; }
 
-    /// <summary>The <c>dpop_signing_alg_values_supported</c> values (§2).</summary>
+    /// <summary>
+    /// The <c>dpop_signing_alg_values_supported</c> values (RFC 9728 Section 2), read only when the server validates no DPoP proof (an
+    /// application validating proofs itself); where the server validates proofs, the document carries the one list it
+    /// holds every proof to and this member is not read.
+    /// </summary>
     public IReadOnlyList<string>? DpopSigningAlgValuesSupported { get; init; }
 
-    /// <summary>The <c>dpop_bound_access_tokens_required</c> boolean; omitted when <see langword="null"/>.</summary>
+    /// <summary>
+    /// The <c>dpop_bound_access_tokens_required</c> boolean; omitted when <see langword="null"/>. When the server's
+    /// resources require DPoP-bound access tokens
+    /// (<see cref="Server.AuthorizationServerIntegration.IsDpopBoundAccessTokenRequiredAtResources"/>) the requirement
+    /// governs it: the document states <see langword="true"/>, and a contribution stating <see langword="false"/> is
+    /// answered <c>server_error</c> with no document.
+    /// </summary>
     public bool? DpopBoundAccessTokensRequired { get; init; }
 
     /// <summary>

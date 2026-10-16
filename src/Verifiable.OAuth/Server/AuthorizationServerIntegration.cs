@@ -2629,6 +2629,55 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
 
 
     /// <summary>
+    /// Whether the library's own protected resources, UserInfo and the OID4VCI Credential, Deferred Credential and
+    /// Notification endpoints, always require DPoP-bound access tokens: a protection space requiring DPoP
+    /// authentication. <see href="https://www.rfc-editor.org/rfc/rfc9728#section-2">RFC 9728 Section 2</see>:
+    /// "dpop_bound_access_tokens_required OPTIONAL. Boolean value specifying whether the protected resource always
+    /// requires the use of DPoP-bound access tokens [RFC9449]. If omitted, the default value is false."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "Upon receipt of a
+    /// request to a protected resource within the protection space requiring DPoP authentication, the server can
+    /// respond with a challenge to the client to provide DPoP authentication information if the request does not
+    /// include valid credentials or does not contain an access token sufficient for access."
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When set, those resources refuse every <c>Bearer</c> presentation before the token is judged and answer a
+    /// request without credentials, and one presenting a token under the <c>Bearer</c> scheme, with 401, an empty body
+    /// and the <c>DPoP</c> challenge alone with no <c>error</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>: "If the request
+    /// lacks any authentication information (e.g., the client was unaware that authentication is necessary or attempted
+    /// using an unsupported authentication method), the resource server SHOULD NOT include an error code or other error
+    /// information."), and an <c>Authorization</c> field sent on two or more lines with 400 <c>invalid_request</c> and
+    /// the <c>DPoP</c> challenge alone. The protected resource metadata then states
+    /// <c>dpop_bound_access_tokens_required: true</c> and <c>bearer_methods_supported: []</c>, and a contribution that
+    /// states otherwise is answered <c>server_error</c> with no document. The token endpoint is not governed by it: a
+    /// client issued an unbound token cannot use the resources. Defaults to <see langword="false"/>.
+    /// </para>
+    /// <para>
+    /// Set it only with DPoP proof validation wired, by <see cref="ValidateDpopProofAsync"/> or by the library default
+    /// over the codecs: <see cref="Validate"/> refuses the composition otherwise, since every token would be refused.
+    /// </para>
+    /// <para>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// </para>
+    /// </remarks>
+    public bool IsDpopBoundAccessTokenRequiredAtResources
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
+
+    /// <summary>
     /// Loads the HMAC key material for a kid chosen by
     /// <see cref="SelectHmacKeyAsync"/> at issuance or extracted from the
     /// wire artefact at validation. Library default backing:
@@ -3229,6 +3278,11 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
             && (IssueDpopNonceAsync is null || ValidateDpopNonceAsync is null || ResolveServerHmacKeyAsync is null || GetHmacKeySetAsync is null))
         {
             throw new InvalidOperationException("AuthorizationServerIntegration DPoP proof validation, by ValidateDpopProofAsync or by the library default over Codecs.DpopProofParser, Encoder and Decoder, requires IssueDpopNonceAsync, ValidateDpopNonceAsync, ResolveServerHmacKeyAsync and GetHmacKeySetAsync.");
+        }
+
+        if(IsDpopBoundAccessTokenRequiredAtResources && !Verifiable.OAuth.Dpop.DpopRequestReading.IsProofValidationWired(this))
+        {
+            throw new InvalidOperationException("AuthorizationServerIntegration.IsDpopBoundAccessTokenRequiredAtResources requires DPoP proof validation, by ValidateDpopProofAsync or by the library default over Codecs.DpopProofParser, Encoder and Decoder.");
         }
 
         if(IssueCredentialAsync is not null && ParseCredentialRequestAsync is null)

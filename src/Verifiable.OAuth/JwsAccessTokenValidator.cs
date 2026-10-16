@@ -43,6 +43,24 @@ namespace Verifiable.OAuth;
 /// values.
 /// </para>
 /// <para>
+/// The confirmation claim <c>cnf</c> fails closed the same way: a token carrying <c>cnf</c> with no string
+/// <c>jkt</c> member (a certificate thumbprint <c>x5t#S256</c> alone, a <c>jkt</c> that is not a string, or a value
+/// that is no JSON object) is rejected with <see cref="JwsAccessTokenValidationFailureReason.Malformed"/>, so a
+/// validated token's <see cref="JwsAccessTokenClaims.Confirmation"/> is <see langword="null"/> exactly when the token
+/// carries no <c>cnf</c>. Only <c>jkt</c> is enforced, and a member beside a <c>jkt</c> is not read. A certificate
+/// thumbprint is a binding the resource cannot verify without the client certificate
+/// (<see href="https://www.rfc-editor.org/rfc/rfc8705#section-3">RFC 8705 Section 3</see>: "The protected resource
+/// MUST obtain, from its TLS implementation layer, the client certificate used for mutual TLS and MUST verify that the
+/// certificate matches the certificate associated with the access token."), so serving the token as a bearer token
+/// would drop the constraint its issuer wrote. The library reads <c>cnf</c> as
+/// <see href="https://www.rfc-editor.org/rfc/rfc7800#section-3.1">RFC 7800 Section 3.1</see> leaves to an application
+/// of JWTs: "Specific applications of JWTs will require implementations to understand and process some confirmation
+/// members in particular ways." Refusing a <c>cnf</c> whose members it does not understand departs from that
+/// section's "However, in the absence of such requirements, all confirmation members that are not understood by
+/// implementations MUST be ignored.": the library's fail-closed choice, a token carrying a confirmation it cannot
+/// enforce refused rather than served unbound.
+/// </para>
+/// <para>
 /// DPoP binding (RFC 9449 §6.1) is NOT validated here. When the validated
 /// token carries <see cref="ConfirmationMethod.JwkThumbprint"/>, the
 /// resource-server caller chains
@@ -132,6 +150,19 @@ public static class JwsAccessTokenValidator
         _ = TryReadString(outcome.Payload!, WellKnownJwtClaimNames.Scope, out string? scope);
         _ = TryReadString(outcome.Payload!, WellKnownJwtClaimNames.Jti, out string? jti);
         ConfirmationMethod? confirmation = TryReadConfirmation(outcome.Payload!);
+
+        //A present cnf binds the token to a key its presenter must prove possession of. A cnf this validator cannot read
+        //as a jkt names a confirmation no resource of this library enforces: a certificate thumbprint the resource cannot
+        //verify (RFC 8705 Section 3: "MUST verify that the certificate matches the certificate associated with the access
+        //token"), or a member it does not understand, which RFC 7800 Section 3.1 would have ignored ("all confirmation
+        //members that are not understood by implementations MUST be ignored") and which the library refuses, failing
+        //closed, rather than serve the token unbound. Only jkt is enforced; a member beside a jkt is not read.
+        if(confirmation is null && outcome.Payload!.TryGetValue(WellKnownJwtClaimNames.Cnf, out _))
+        {
+            return JwsAccessTokenValidationResult.Failure(
+                JwsAccessTokenValidationFailureReason.Malformed,
+                "Access token cnf claim carries no jkt confirmation this validator reads.");
+        }
 
         //RFC 8693 §4.1/§4.4: act and may_act are nested JSON objects whose members identify a party.
         //A present-but-unparseable claim is a rejection, not an omission — the token asserts a

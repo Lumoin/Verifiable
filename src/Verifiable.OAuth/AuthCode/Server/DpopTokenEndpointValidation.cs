@@ -72,8 +72,10 @@ namespace Verifiable.OAuth.AuthCode.Server;
 /// </para>
 /// <para>
 /// Both <see cref="ValidatePresentedProofAsync"/> and <see cref="ValidateAsync"/> read the request through
-/// <see cref="DpopRequestReading"/>, the reading every DPoP-checked endpoint shares with the library's protected
-/// resources. They read the <c>DPoP</c> field by its field lines (<see cref="DpopRequestReading.ReadDpopField"/>) and
+/// <see cref="DpopRequestReading"/>, the reading of the target and the proof validation every DPoP-checked endpoint
+/// shares with the library's protected resources, which pass every <c>DPoP</c> field line to
+/// <see cref="ProtectedResource.DpopResourceAccess"/>'s checks. They read the <c>DPoP</c> field by its field lines
+/// (<see cref="DpopRequestReading.ReadDpopField"/>), as the pushed authorization request does, and
 /// refuse two or more as <c>invalid_dpop_proof</c> before the absent-or-required decision
 /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">RFC 9449 Section 4.3</see>, check 1: "There is not
 /// more than one DPoP HTTP request header field."). They hold the proof's <c>htu</c> to the request's path at

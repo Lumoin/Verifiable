@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
@@ -58,7 +59,7 @@ internal static class RawHttpsRequest
     /// listener does not serve under.
     /// </param>
     /// <returns>The status, every received field line and the body.</returns>
-    internal static async Task<HttpResponseData> SendAsync(
+    internal static Task<HttpResponseData> SendAsync(
         TestHostShell host,
         string method,
         Uri target,
@@ -68,6 +69,35 @@ internal static class RawHttpsRequest
         string? hostFieldValue = null)
     {
         ArgumentNullException.ThrowIfNull(host);
+
+        return SendPinnedAsync(host.ServerCertificate, method, target, fieldLines, body, cancellationToken, hostFieldValue);
+    }
+
+
+    /// <summary>
+    /// Sends <paramref name="method"/> to <paramref name="target"/> on a loopback listener presenting
+    /// <paramref name="serverCertificate"/>, the form for a listener that is not a <see cref="TestHostShell"/>'s, such as
+    /// a <see cref="TestResourceServerShell"/>'s: <c>Host</c>, then each of <paramref name="fieldLines"/> as its own field
+    /// line in the order given, then <c>Content-Length</c> and <c>Connection: close</c>, and <paramref name="body"/>.
+    /// </summary>
+    /// <param name="serverCertificate">The certificate the listener presents, which the connection pins.</param>
+    /// <param name="method">The request method.</param>
+    /// <param name="target">The absolute URI of the request, on the loopback listener.</param>
+    /// <param name="fieldLines">The request's field lines besides <c>Host</c>, <c>Content-Length</c> and <c>Connection</c>, each sent on its own line.</param>
+    /// <param name="body">The body bytes, sent as given.</param>
+    /// <param name="cancellationToken">Cancels the exchange.</param>
+    /// <param name="hostFieldValue">The value of the <c>Host</c> field line, or <see langword="null"/> for the authority of <paramref name="target"/>.</param>
+    /// <returns>The status, every received field line and the body.</returns>
+    internal static async Task<HttpResponseData> SendPinnedAsync(
+        X509Certificate2 serverCertificate,
+        string method,
+        Uri target,
+        IReadOnlyList<KeyValuePair<string, string>> fieldLines,
+        ReadOnlyMemory<byte> body,
+        CancellationToken cancellationToken,
+        string? hostFieldValue = null)
+    {
+        ArgumentNullException.ThrowIfNull(serverCertificate);
         ArgumentException.ThrowIfNullOrWhiteSpace(method);
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(fieldLines);
@@ -85,7 +115,7 @@ internal static class RawHttpsRequest
 
         using Socket socket = await LoopbackConnect.ConnectAsync(
             new IPEndPoint(IPAddress.Loopback, target.Port), cancellationToken).ConfigureAwait(false);
-        WebSocketCertificatePinning pinning = new(host.ServerCertificate);
+        WebSocketCertificatePinning pinning = new(serverCertificate);
         await using NetworkStream socketStream = new(socket, ownsSocket: false);
         await using SslStream tlsStream = new(socketStream, leaveInnerStreamOpen: true, pinning.Create());
         await tlsStream.AuthenticateAsClientAsync(

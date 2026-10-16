@@ -942,6 +942,58 @@ internal sealed class UserInfoEndpointTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-2">RFC 9728 Section 2</see>:
+    /// "dpop_bound_access_tokens_required OPTIONAL. Boolean value specifying whether the protected resource always
+    /// requires the use of DPoP-bound access tokens [RFC9449]."; <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC
+    /// 9449 Section 7.1</see>: "Upon receipt of a request to a protected resource within the protection space requiring
+    /// DPoP authentication, the server can respond with a challenge to the client to provide DPoP authentication
+    /// information"; and <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>: "If
+    /// the request lacks any authentication information (e.g., the client was unaware that authentication is necessary
+    /// or attempted using an unsupported authentication method), the resource server SHOULD NOT include an error code or
+    /// other error information." At a server whose resources require DPoP-bound access tokens, a UserInfo POST sent over
+    /// a raw TLS connection with one <c>Authorization: Bearer</c> field line is refused whatever the credentials:
+    /// 401, an empty body, the one challenge
+    /// <c>DPoP realm="&lt;issuer&gt;", scope="openid", algs="ES256 ES384 ES512 ES256K RS256 RS384 RS512 PS256 PS384 PS512 EdDSA Ed25519"</c>
+    /// with no <c>error</c> and no <c>Bearer</c> challenge, and the one field line
+    /// <c>Access-Control-Expose-Headers: WWW-Authenticate, DPoP-Nonce</c>. The rows: an access token bound to no key; an
+    /// access token bound to the client's DPoP key; the value <c>x</c>.
+    /// </summary>
+    /// <param name="row">The credentials presented: <see cref="UnboundTokenRow"/>, <see cref="DpopBoundTokenRow"/> or <see cref="NonTokenValueRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(UnboundTokenRow)]
+    [DataRow(DpopBoundTokenRow)]
+    [DataRow(NonTokenValueRow)]
+    public async Task UserInfoRequiringDpopBoundAccessTokensRefusesEveryBearerPresentationAsync(string row)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        PolicyProfile? profile = row switch
+        {
+            DpopBoundTokenRow => null,
+            _ => PolicyProfile.Rfc6749WithPkce
+        };
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri, profile).ConfigureAwait(false);
+        string credentials = await ArrangeBearerPresentationAsync(host, material, row).ConfigureAwait(false);
+        await RequireDpopBoundAccessTokensAtResourcesAsync(host).ConfigureAwait(false);
+
+        Uri userInfoUrl = await UserInfoUrlAsync(host, material).ConfigureAwait(false);
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Post, userInfoUrl,
+            [new(WellKnownHttpHeaderNames.Authorization, $"Bearer {credentials}")],
+            ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The presentation is refused without a server fault.");
+        Assert.AreEqual(401, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            ResourceDpopProofs.DpopChallenge(IssuerOf(host, material), error: null, scope: "openid"),
+            Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
+        Assert.AreEqual(
+            ResourceDpopProofs.ExposedDpopResponseFields, Assert.ContainsSingle(response.Headers.Headers.GetValues("Access-Control-Expose-Headers")));
+        Assert.AreEqual(string.Empty, response.Body, "No error code or other error information.");
+    }
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 §7.1</see>: "A
     /// DPoP-bound access token is sent using the Authorization request header field per Section 11.6.2
     /// of [RFC9110] with an authentication scheme of DPoP." and "For such an access token, a resource
@@ -1020,6 +1072,41 @@ internal sealed class UserInfoEndpointTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "For such an access
+    /// token, a resource server MUST check that a DPoP proof was also received in the DPoP header field of the HTTP
+    /// request, check the DPoP proof according to the rules in Section 4.3, and check that the public key of the DPoP
+    /// proof matches the public key to which the access token is bound per Section 6." and "The resource server MUST NOT
+    /// grant access to the resource unless all checks are successful." A DPoP-bound access token and the nonce UserInfo
+    /// provides are obtained; once the server's resources require DPoP-bound access tokens, the token presented at
+    /// UserInfo over the wire under the <c>DPoP</c> scheme with a proof signed by the bound key and carrying that nonce
+    /// passes every check and is served: 200 with the End-User's <c>sub</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task UserInfoRequiringDpopBoundAccessTokensServesADpopPresentationAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        using DpopClientFixture fixture = await CreateDpopFixtureAsync(host, material).ConfigureAwait(false);
+        DpopPresentationContext presentation = await PrepareDpopPresentationAsync(host, material, fixture).ConfigureAwait(false);
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The token and the nonce are obtained without a server fault.");
+
+        await RequireDpopBoundAccessTokensAtResourcesAsync(host).ConfigureAwait(false);
+        string proof = await ResourceDpopProofs.BuildAsync(
+            fixture.DpopKey, "POST", presentation.UserInfoUrl, presentation.AccessToken, presentation.Nonce, TimeProvider.GetUtcNow(),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        using HttpResponseMessage response = await SendUserInfoOverWireAsync(
+            host, material, presentation.AccessToken, scheme: "DPoP", dpopProof: proof).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The presentation is answered without a server fault.");
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode, body);
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual(SubjectId, document.RootElement.GetProperty("sub").GetString());
+    }
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 §3</see>: "If the
     /// protected resource request does not include authentication credentials or does not contain an
     /// access token that enables access to the protected resource, the resource server MUST include the
@@ -1062,6 +1149,41 @@ internal sealed class UserInfoEndpointTests
             "RFC 6750 §3: the refusal carries a WWW-Authenticate challenge.");
         Assert.AreEqual(MissingCredentialsChallenge(IssuerOf(host, material)), Assert.ContainsSingle(challenges));
         Assert.AreEqual(string.Empty, body, "RFC 6750 §3.1: no error code or other error information.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 Section 7.2</see>: "If no authentication
+    /// information has been included with the request, then the challenges SHOULD NOT include an error code or other
+    /// error information, as per Section 3.1 of [RFC6750] (Figure 17).", at a resource within
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">Section 7.1</see>'s "protection space requiring
+    /// DPoP authentication". At a server whose resources require DPoP-bound access tokens, a UserInfo POST sent over a
+    /// raw TLS connection with no <c>Authorization</c> field is answered 401 with an empty body, the one challenge
+    /// <c>DPoP realm="&lt;issuer&gt;", scope="openid", algs="..."</c> alone, no <c>Bearer</c> challenge, and the one
+    /// field line <c>Access-Control-Expose-Headers: WWW-Authenticate, DPoP-Nonce</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task UserInfoRequiringDpopBoundAccessTokensChallengesARequestWithoutCredentialsWithTheDpopChallengeAloneAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        await RequireDpopBoundAccessTokensAtResourcesAsync(host).ConfigureAwait(false);
+
+        Uri userInfoUrl = await UserInfoUrlAsync(host, material).ConfigureAwait(false);
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Post, userInfoUrl, [], ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The request is challenged without a server fault.");
+        Assert.AreEqual(401, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            ResourceDpopProofs.DpopChallenge(IssuerOf(host, material), error: null, scope: "openid"),
+            Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
+        Assert.AreEqual(
+            ResourceDpopProofs.ExposedDpopResponseFields, Assert.ContainsSingle(response.Headers.Headers.GetValues("Access-Control-Expose-Headers")));
+        Assert.AreEqual(string.Empty, response.Body, "No error code or other error information.");
     }
 
 
@@ -1147,6 +1269,52 @@ internal sealed class UserInfoEndpointTests
         Assert.AreEqual(
             "Bearer realm=\"https://userinfo-realm.issuer.test/\", error=\"invalid_request\"",
             Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
+        using JsonDocument document = JsonDocument.Parse(response.Body);
+        Assert.AreEqual("invalid_request", document.RootElement.GetProperty("error").GetString());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "Upon receipt of a
+    /// request to a protected resource within the protection space requiring DPoP authentication, the server can respond
+    /// with a challenge to the client to provide DPoP authentication information if the request does not include valid
+    /// credentials or does not contain an access token sufficient for access.", so the <c>DPoP</c> challenge is the one
+    /// such a space answers with, and <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750
+    /// Section 3.1</see>: "invalid_request The request is missing a required parameter, includes an unsupported parameter
+    /// or parameter value, repeats the same parameter, uses more than one method for including an access token, or is
+    /// otherwise malformed.  The resource server SHOULD respond with the HTTP 400 (Bad Request) status code." At a server
+    /// whose resources require DPoP-bound access tokens the <c>DPoP</c> scheme is the one mechanism the resource accepts:
+    /// a UserInfo POST sent over a raw TLS connection with two <c>Authorization: Bearer</c> field lines is refused with
+    /// 400, <c>invalid_request</c> in the body, the one challenge
+    /// <c>DPoP realm="&lt;issuer&gt;", error="invalid_request", scope="openid", algs="..."</c> alone and no <c>Bearer</c>
+    /// challenge, and the one field line <c>Access-Control-Expose-Headers: WWW-Authenticate, DPoP-Nonce</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task UserInfoRequiringDpopBoundAccessTokensAnswersTwoBearerLinesWithTheDpopChallengeAloneAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        await RequireDpopBoundAccessTokensAtResourcesAsync(host).ConfigureAwait(false);
+
+        Uri userInfoUrl = await UserInfoUrlAsync(host, material).ConfigureAwait(false);
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Post, userInfoUrl,
+            [
+                new(WellKnownHttpHeaderNames.Authorization, "Bearer first-access-token"),
+                new(WellKnownHttpHeaderNames.Authorization, "Bearer second-access-token")
+            ],
+            ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The repeated field is answered without a server fault.");
+        Assert.AreEqual(400, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            UserInfoDpopChallenge(host, material, "invalid_request"),
+            Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
+        Assert.AreEqual(
+            ResourceDpopProofs.ExposedDpopResponseFields, Assert.ContainsSingle(response.Headers.Headers.GetValues("Access-Control-Expose-Headers")));
         using JsonDocument document = JsonDocument.Parse(response.Body);
         Assert.AreEqual("invalid_request", document.RootElement.GetProperty("error").GetString());
     }
@@ -1487,7 +1655,7 @@ internal sealed class UserInfoEndpointTests
     /// 1024 the library's replay guard stores (<see cref="JtiReplayGuard.MaxJtiLength"/>), is refused with 401, the one
     /// challenge <c>DPoP realm="&lt;issuer&gt;", error="invalid_dpop_proof", scope="openid", algs="..."</c>, the one
     /// field line <c>Access-Control-Expose-Headers: WWW-Authenticate, DPoP-Nonce</c>, <c>invalid_dpop_proof</c> in the
-    /// body and the description "DPoP proof jti is too long or carries a character the replay guard cannot store.".
+    /// body and the description "DPoP proof jti is empty, too long or carries a character the replay guard cannot store.".
     /// </summary>
     /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
@@ -1520,7 +1688,7 @@ internal sealed class UserInfoEndpointTests
         using JsonDocument document = JsonDocument.Parse(response.Body);
         Assert.AreEqual("invalid_dpop_proof", document.RootElement.GetProperty("error").GetString(), response.Body);
         Assert.AreEqual(
-            "DPoP proof jti is too long or carries a character the replay guard cannot store.",
+            "DPoP proof jti is empty, too long or carries a character the replay guard cannot store.",
             document.RootElement.GetProperty("error_description").GetString(), response.Body);
     }
 
@@ -4404,6 +4572,93 @@ internal sealed class UserInfoEndpointTests
 
     /// <summary>The DPoP-scheme refusal row whose token carries no <c>sub</c>.</summary>
     private const string WithoutSubjectRow = "without-subject";
+
+    /// <summary>
+    /// The <c>Bearer</c> presentation row of an access token bound to no key. A constant, not a property, because a
+    /// DataRow attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string UnboundTokenRow = "unbound-token";
+
+    /// <summary>
+    /// The <c>Bearer</c> presentation row of an access token bound to the client's DPoP key by its <c>cnf.jkt</c>. A
+    /// constant, not a property, because a DataRow attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string DpopBoundTokenRow = "dpop-bound-token";
+
+    /// <summary>
+    /// The <c>Bearer</c> presentation row whose credentials are the value <c>x</c>, which is no access token. A constant,
+    /// not a property, because a DataRow attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string NonTokenValueRow = "non-token-value";
+
+
+    /// <summary>
+    /// Sets <see cref="AuthorizationServerIntegration.IsDpopBoundAccessTokenRequiredAtResources"/> on the host, so UserInfo
+    /// and the OID4VCI resources are a protection space requiring DPoP authentication. DPoP must be enabled first.
+    /// </summary>
+    /// <param name="host">The host whose integration is altered.</param>
+    /// <returns>A task that completes when the alteration is published.</returns>
+    private static Task RequireDpopBoundAccessTokensAtResourcesAsync(TestHostShell host) =>
+        TestHostShell.AlterAsync(host.Server, static candidateIntegration =>
+            candidateIntegration.IsDpopBoundAccessTokenRequiredAtResources = true);
+
+
+    /// <summary>
+    /// Arranges the value a <c>Bearer</c> presentation row sends and enables DPoP on the host: an unbound access token
+    /// issued before DPoP is enabled, a DPoP-bound access token issued to a DPoP-wired client, or the value <c>x</c>.
+    /// </summary>
+    /// <param name="host">The host whose registration and listener serve the flow.</param>
+    /// <param name="material">The registration the token is issued under.</param>
+    /// <param name="row">The row: <see cref="UnboundTokenRow"/>, <see cref="DpopBoundTokenRow"/> or <see cref="NonTokenValueRow"/>.</param>
+    /// <returns>The credentials the row presents under the <c>Bearer</c> scheme.</returns>
+    private Task<string> ArrangeBearerPresentationAsync(TestHostShell host, VerifierKeyMaterial material, string row) => row switch
+    {
+        UnboundTokenRow => IssueUnboundTokenThenEnableDpopAsync(host, material),
+        DpopBoundTokenRow => IssueDpopBoundTokenToAFreshClientAsync(host, material),
+        NonTokenValueRow => EnableDpopAndAnswerAValueAsync(host, "x"),
+        _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown presentation row.")
+    };
+
+
+    /// <summary>
+    /// Seeds the End-User, issues an access token bound to no key through the authorization code flow, then enables DPoP
+    /// on the host.
+    /// </summary>
+    /// <param name="host">The host.</param>
+    /// <param name="material">The registration the token is issued under.</param>
+    /// <returns>The unbound access token.</returns>
+    private async Task<string> IssueUnboundTokenThenEnableDpopAsync(TestHostShell host, VerifierKeyMaterial material)
+    {
+        _ = host.SeedTestSubject(subject: SubjectId);
+        string accessToken = await IssueAccessTokenAsync(host, material, WellKnownScopes.OpenId).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+
+        return accessToken;
+    }
+
+
+    /// <summary>Enables DPoP on the host and issues a DPoP-wired client a DPoP-bound access token over the wire.</summary>
+    /// <param name="host">The host.</param>
+    /// <param name="material">The registration the token is issued under.</param>
+    /// <returns>The DPoP-bound access token.</returns>
+    private async Task<string> IssueDpopBoundTokenToAFreshClientAsync(TestHostShell host, VerifierKeyMaterial material)
+    {
+        using DpopClientFixture fixture = await CreateDpopFixtureAsync(host, material).ConfigureAwait(false);
+
+        return await IssueDpopBoundAccessTokenAsync(host, material, fixture).ConfigureAwait(false);
+    }
+
+
+    /// <summary>Enables DPoP on the host and answers <paramref name="value"/>.</summary>
+    /// <param name="host">The host.</param>
+    /// <param name="value">The value answered.</param>
+    /// <returns>The value.</returns>
+    private static async Task<string> EnableDpopAndAnswerAValueAsync(TestHostShell host, string value)
+    {
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+
+        return value;
+    }
 
 
     /// <summary>

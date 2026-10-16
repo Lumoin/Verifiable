@@ -7,6 +7,7 @@ using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.Json;
+using Verifiable.OAuth;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestDataProviders;
@@ -189,6 +190,16 @@ internal sealed class ResourceServerEndToEndTests
     }
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 Section 7.2</see>: "such a protected
+    /// resource MUST reject a DPoP-bound access token received as a bearer token per [RFC6750]." and "If the mechanism
+    /// used to attempt authentication could be established unambiguously, then the corresponding challenge SHOULD be
+    /// used to deliver error information (Figure 18)." An access token bound by <c>cnf.jkt</c>, presented at the
+    /// application's resource over the wire under the <c>Bearer</c> scheme, is refused with 401, <c>invalid_token</c> in
+    /// the body and the one challenge of the mechanism used,
+    /// <c>Bearer realm="protected", error="invalid_token", resource_metadata="..."</c>, no <c>DPoP</c> challenge.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
     public async Task DpopBoundTokenPresentedUnderBearerSchemeReturns401()
     {
@@ -224,24 +235,393 @@ internal sealed class ResourceServerEndToEndTests
 
         using HttpResponseMessage response = await client.SendAsync(request, TestContext.CancellationToken)
             .ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out var values));
-        string challenge = values!.First();
-        Assert.IsTrue(challenge.Contains("DPoP", StringComparison.Ordinal),
-            $"Challenge for DPoP-bound token must name DPoP scheme; got: {challenge}");
+        Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
+        Assert.IsTrue(response.Headers.NonValidated.TryGetValues("WWW-Authenticate", out HeaderStringValues values),
+            "The refusal carries a WWW-Authenticate challenge.");
+        Assert.AreEqual(
+            $"Bearer realm=\"protected\", error=\"invalid_token\", resource_metadata=\"{rs.MetadataUrl!.OriginalString}\"",
+            Assert.ContainsSingle(values));
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual("invalid_token", document.RootElement.GetProperty("error").GetString());
     }
 
 
     /// <summary>
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 §7.1</see>: "a resource
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8705#section-3">RFC 8705 Section 3</see>: "The protected resource
+    /// MUST obtain, from its TLS implementation layer, the client certificate used for mutual TLS and MUST verify that the
+    /// certificate matches the certificate associated with the access token.", which a resource reading no client
+    /// certificate cannot do, and <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section
+    /// 3.1</see>: "invalid_token The access token provided is expired, revoked, malformed, or invalid for other reasons."
+    /// An access token from the trusted issuer whose <c>cnf</c> carries the certificate thumbprint <c>x5t#S256</c> and no
+    /// <c>jkt</c>, a confirmation this resource cannot verify, presented at the application's resource over the wire under the
+    /// <c>Bearer</c> scheme is refused: 401 and the one challenge <c>Bearer realm="protected", error="invalid_token",
+    /// error_description="Access token cnf claim carries no jkt confirmation this validator reads.",
+    /// resource_metadata="..."</c>, and no claim served.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task AccessTokenConfirmedByAMethodOtherThanJktIsRefusedUnderBearerAsync()
+    {
+        var asKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        await using TestResourceServerShell rs = await StartResourceServerAsync(asKeys.PublicKey).ConfigureAwait(false);
+        JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
+            subject: Subject,
+            scope: Scope,
+            clientId: ClientId,
+            issuedAt: NowInstant - TimeSpan.FromMinutes(1),
+            expiresAt: NowInstant + TimeSpan.FromHours(1),
+            issuer: Issuer,
+            audience: [Audience]);
+        payload[WellKnownJwtClaimNames.Cnf] = new Dictionary<string, object>
+        {
+            ["x5t#S256"] = "bwcK0esc3ACC3DB2Y5_lESsXE8o9ltc05O89jdN-dg2"
+        };
+        string token = await BuildAccessTokenAsync(asKeys.PrivateKey, payload).ConfigureAwait(false);
+
+        using HttpResponseMessage response = await SendProtectedRequestAsync(rs, token).ConfigureAwait(false);
+
+        await AssertInvalidTokenChallengeAsync(
+            rs, response, "Access token cnf claim carries no jkt confirmation this validator reads.").ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-2">RFC 9728 Section 2</see>:
+    /// "dpop_bound_access_tokens_required OPTIONAL. Boolean value specifying whether the protected resource always
+    /// requires the use of DPoP-bound access tokens [RFC9449].", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>: "If the request lacks
+    /// any authentication information (e.g., the client was unaware that authentication is necessary or attempted using
+    /// an unsupported authentication method), the resource server SHOULD NOT include an error code or other error
+    /// information." At an application's resource that requires DPoP-bound access tokens, an access token bound to no
+    /// key, presented over a raw TLS connection under the <c>Bearer</c> scheme, is refused: 401, an empty body, the one
+    /// challenge <c>DPoP realm="protected", algs="ES256 ES384 ES512 ES256K RS256 RS384 RS512 PS256 PS384 PS512 EdDSA Ed25519", resource_metadata="..."</c>
+    /// with no <c>error</c> and no <c>Bearer</c> challenge, and the one field line
+    /// <c>Access-Control-Expose-Headers: WWW-Authenticate, DPoP-Nonce</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ResourceServerRequiringDpopRefusesABearerPresentationAsync()
+    {
+        var asKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        await using TestResourceServerShell rs = await StartResourceServerAsync(asKeys.PublicKey, requiresDpop: true).ConfigureAwait(false);
+        string token = await IssueTokenAsync(asKeys.PrivateKey, boundThumbprint: null).ConfigureAwait(false);
+
+        HttpResponseData response = await SendProtectedOverARawConnectionAsync(rs, $"Bearer {token}", []).ConfigureAwait(false);
+
+        Assert.AreEqual(401, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            ResourceDpopChallenge(rs, error: null),
+            Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
+        Assert.AreEqual(
+            ResourceDpopProofs.ExposedDpopResponseFields, Assert.ContainsSingle(response.Headers.Headers.GetValues("Access-Control-Expose-Headers")));
+        Assert.AreEqual(string.Empty, response.Body, "No error code or other error information.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "Upon receipt of a
+    /// request to a protected resource within the protection space requiring DPoP authentication, the server can respond
+    /// with a challenge to the client to provide DPoP authentication information if the request does not include valid
+    /// credentials or does not contain an access token sufficient for access.", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>: "If the request lacks
+    /// any authentication information (e.g., the client was unaware that authentication is necessary or attempted using
+    /// an unsupported authentication method), the resource server SHOULD NOT include an error code or other error
+    /// information." At an application's resource that requires DPoP-bound access tokens, an access token bound by
+    /// <c>cnf.jkt</c> to a key, presented over a raw TLS connection under the <c>Bearer</c> scheme, is refused before the
+    /// token is validated: 401, an empty body, the one challenge
+    /// <c>DPoP realm="protected", algs="ES256 ES384 ES512 ES256K RS256 RS384 RS512 PS256 PS384 PS512 EdDSA Ed25519", resource_metadata="..."</c>
+    /// with no <c>error</c> and no <c>Bearer</c> challenge, the one field line
+    /// <c>Access-Control-Expose-Headers: WWW-Authenticate, DPoP-Nonce</c>, and the resource never asks its
+    /// verification-key resolver for the token's key.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ResourceServerRequiringDpopRefusesABearerPresentationBeforeValidatingTheTokenAsync()
+    {
+        var asKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey dpopKey = new(TestKeyMaterialProvider.CreateFreshP256KeyMaterial(), WellKnownJwaValues.Es256);
+        ConcurrentQueue<KeyUsageContext> resolverCalls = new();
+        await using TestResourceServerShell rs = new(
+            trustedIssuer: new Uri(Issuer),
+            expectedAudience: Audience,
+            resolveVerificationKey: BuildResolver(asKeys.PublicKey, resolverCalls),
+            verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
+            timeProvider: new FakeTimeProvider(NowInstant),
+            requiresDpop: true);
+        await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string token = await IssueTokenAsync(asKeys.PrivateKey, ThumbprintOf(dpopKey)).ConfigureAwait(false);
+
+        HttpResponseData response = await SendProtectedOverARawConnectionAsync(rs, $"Bearer {token}", []).ConfigureAwait(false);
+
+        Assert.AreEqual(401, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            ResourceDpopChallenge(rs, error: null),
+            Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
+        Assert.AreEqual(
+            ResourceDpopProofs.ExposedDpopResponseFields, Assert.ContainsSingle(response.Headers.Headers.GetValues("Access-Control-Expose-Headers")));
+        Assert.AreEqual(string.Empty, response.Body, "No error code or other error information.");
+        Assert.IsEmpty(resolverCalls, "The token is refused before it is validated: its key is never resolved.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "Upon receipt of a
+    /// request to a protected resource within the protection space requiring DPoP authentication, the server can respond
+    /// with a challenge to the client to provide DPoP authentication information if the request does not include valid
+    /// credentials or does not contain an access token sufficient for access.", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>: "If the request lacks
+    /// any authentication information (e.g., the client was unaware that authentication is necessary or attempted using
+    /// an unsupported authentication method), the resource server SHOULD NOT include an error code or other error
+    /// information." At an application's resource that requires DPoP-bound access tokens, a request over a raw TLS
+    /// connection with no <c>Authorization</c> field is answered 401 with an empty body, the one challenge
+    /// <c>DPoP realm="protected", algs="ES256 ES384 ES512 ES256K RS256 RS384 RS512 PS256 PS384 PS512 EdDSA Ed25519", resource_metadata="..."</c>
+    /// with no <c>error</c> and no <c>Bearer</c> challenge, and the one field line
+    /// <c>Access-Control-Expose-Headers: WWW-Authenticate, DPoP-Nonce</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ResourceServerRequiringDpopChallengesARequestWithoutCredentialsWithTheDpopChallengeAloneAsync()
+    {
+        var asKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        await using TestResourceServerShell rs = await StartResourceServerAsync(asKeys.PublicKey, requiresDpop: true).ConfigureAwait(false);
+
+        HttpResponseData response = await RawHttpsRequest.SendPinnedAsync(
+            rs.HttpCertificate!, WellKnownHttpMethods.Get, new Uri(rs.HttpBaseAddress!, "/protected"), [],
+            ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(401, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            ResourceDpopChallenge(rs, error: null),
+            Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
+        Assert.AreEqual(
+            ResourceDpopProofs.ExposedDpopResponseFields, Assert.ContainsSingle(response.Headers.Headers.GetValues("Access-Control-Expose-Headers")));
+        Assert.AreEqual(string.Empty, response.Body, "No error code or other error information.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.1">RFC 9110 Section 11.1</see>: "It uses a
+    /// case-insensitive token to identify the authentication scheme:", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "A DPoP-bound access
+    /// token is sent using the Authorization request header field per Section 11.6.2 of [RFC9110] with an authentication
+    /// scheme of DPoP." At an application's resource that requires DPoP-bound access tokens, an access token bound by
+    /// <c>cnf.jkt</c> to a key, presented over a raw TLS connection under the scheme spelled <c>dpop</c> with a proof
+    /// signed by that key and carrying the nonce the resource provided, is read as a <c>DPoP</c> presentation and served:
+    /// 200 with the token's <c>cnf</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ResourceServerRequiringDpopReadsALowerCaseDpopSchemeAsTheDpopSchemeAsync()
+    {
+        var asKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey dpopKey = new(TestKeyMaterialProvider.CreateFreshP256KeyMaterial(), WellKnownJwaValues.Es256);
+        await using TestResourceServerShell rs = await StartResourceServerAsync(asKeys.PublicKey, requiresDpop: true).ConfigureAwait(false);
+        string token = await IssueTokenAsync(asKeys.PrivateKey, ThumbprintOf(dpopKey)).ConfigureAwait(false);
+        string nonce = await ObtainResourceNonceWithANonceLessProofAsync(rs, dpopKey, token).ConfigureAwait(false);
+        string proof = await BuildResourceProofAsync(rs, dpopKey, token, nonce).ConfigureAwait(false);
+
+        HttpResponseData response = await SendProtectedOverARawConnectionAsync(rs, $"dpop {token}", [proof]).ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+        using JsonDocument document = JsonDocument.Parse(response.Body);
+        Assert.AreEqual(ThumbprintOf(dpopKey), document.RootElement.GetProperty("cnf").GetProperty("jkt").GetString(), response.Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "credentials = "DPoP"
+    /// 1*SP token68", with <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.2">RFC 9110 Section 11.2</see>:
+    /// "token68        = 1*( ALPHA / DIGIT / "-" / "." / "_" / "~" / "+" / "/" ) *"="", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>: "If the request lacks
+    /// any authentication information (e.g., the client was unaware that authentication is necessary or attempted using
+    /// an unsupported authentication method), the resource server SHOULD NOT include an error code or other error
+    /// information." At an application's resource that requires DPoP-bound access tokens, an <c>Authorization</c> field
+    /// over a raw TLS connection naming the <c>DPoP</c> scheme with credentials that are no token68, <c>abc def</c>,
+    /// carries no access token: it is answered 401 with an empty body, the one challenge
+    /// <c>DPoP realm="protected", algs="...", resource_metadata="..."</c> with no <c>error</c>, and the one field line
+    /// <c>Access-Control-Expose-Headers: WWW-Authenticate, DPoP-Nonce</c>, and the resource never asks its
+    /// verification-key resolver for a key.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ResourceServerRequiringDpopChallengesACredentialThatIsNoToken68WithTheDpopChallengeAloneAsync()
+    {
+        var asKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        ConcurrentQueue<KeyUsageContext> resolverCalls = new();
+        await using TestResourceServerShell rs = new(
+            trustedIssuer: new Uri(Issuer),
+            expectedAudience: Audience,
+            resolveVerificationKey: BuildResolver(asKeys.PublicKey, resolverCalls),
+            verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
+            timeProvider: new FakeTimeProvider(NowInstant),
+            requiresDpop: true);
+        await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        HttpResponseData response = await SendProtectedOverARawConnectionAsync(rs, "DPoP abc def", []).ConfigureAwait(false);
+
+        Assert.AreEqual(401, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            ResourceDpopChallenge(rs, error: null),
+            Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
+        Assert.AreEqual(
+            ResourceDpopProofs.ExposedDpopResponseFields, Assert.ContainsSingle(response.Headers.Headers.GetValues("Access-Control-Expose-Headers")));
+        Assert.AreEqual(string.Empty, response.Body, "No error code or other error information.");
+        Assert.IsEmpty(resolverCalls, "The field carries no token: no key is resolved.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.1">RFC 9110 Section 11.1</see>: "It uses a
+    /// case-insensitive token to identify the authentication scheme:", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-2.1">RFC 6750 Section 2.1</see>: "credentials =
+    /// "Bearer" 1*SP b64token". At an application's resource that does not require DPoP-bound access tokens, an access
+    /// token bound to no key, presented over a raw TLS connection under the scheme spelled <c>bearer</c>, is read as a
+    /// <c>Bearer</c> presentation and served: 200 with the token's claims.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ResourceServerReadsALowerCaseBearerSchemeAsTheBearerSchemeAsync()
+    {
+        var asKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        await using TestResourceServerShell rs = await StartResourceServerAsync(asKeys.PublicKey).ConfigureAwait(false);
+        string token = await IssueTokenAsync(asKeys.PrivateKey, boundThumbprint: null).ConfigureAwait(false);
+
+        HttpResponseData response = await SendProtectedOverARawConnectionAsync(rs, $"bearer {token}", []).ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+        using JsonDocument document = JsonDocument.Parse(response.Body);
+        Assert.AreEqual(Subject, document.RootElement.GetProperty("sub").GetString(), response.Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>: "invalid_request The
+    /// request is missing a required parameter, includes an unsupported parameter or parameter value, repeats the same
+    /// parameter, uses more than one method for including an access token, or is otherwise malformed. The resource
+    /// server SHOULD respond with the HTTP 400 (Bad Request) status code.", with
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.6.2">RFC 9110 Section 11.6.2</see>'s
+    /// "Authorization = credentials", no list, and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 Section 7.2</see>: "If the mechanism used
+    /// to attempt authentication could be established unambiguously, then the corresponding challenge SHOULD be used to
+    /// deliver error information (Figure 18)." and "Otherwise, both Bearer and DPoP challenges MAY be used to deliver
+    /// error information (Figure 19).", where a protection space requiring DPoP authentication
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">Section 7.1</see>) accepts the <c>DPoP</c>
+    /// mechanism alone. A request over a raw TLS connection to the application's resource with two
+    /// <c>Authorization</c> field lines, each carrying an access token bound by <c>cnf.jkt</c>, is refused before any
+    /// token is validated: 400, <c>invalid_request</c> and the description "The Authorization header is not a single
+    /// well-formed credential." in the body, and one challenge carrying <c>error="invalid_request"</c>. The rows: at a
+    /// resource requiring DPoP-bound access tokens, the lines <c>DPoP</c> then <c>Bearer</c>, answered with the
+    /// <c>DPoP</c> challenge alone and the one field line
+    /// <c>Access-Control-Expose-Headers: WWW-Authenticate, DPoP-Nonce</c>; at a resource that does not, the lines
+    /// <c>DPoP</c> then <c>Bearer</c>, two mechanisms, answered with both challenges in the one field line
+    /// <c>Bearer realm="protected", error="invalid_request", resource_metadata="...", DPoP realm="protected", error="invalid_request", algs="...", resource_metadata="..."</c>
+    /// and the exposure field; at a resource that does not, the lines <c>DPoP</c> then <c>DPoP</c>, the one mechanism
+    /// <c>DPoP</c>, answered with the <c>DPoP</c> challenge alone and the exposure field; at a resource that does not,
+    /// the lines <c>Bearer</c> then <c>Bearer</c>, the one mechanism <c>Bearer</c>, answered with the <c>Bearer</c>
+    /// challenge alone, <c>Bearer realm="protected", error="invalid_request", resource_metadata="..."</c>, and no
+    /// <c>Access-Control-Expose-Headers</c> field.
+    /// </summary>
+    /// <param name="row">The resource and the lines: <see cref="RequiredDpopThenBearerLinesRow"/>, <see cref="DpopThenBearerLinesRow"/>, <see cref="TwoDpopLinesRow"/> or <see cref="TwoBearerLinesRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(RequiredDpopThenBearerLinesRow)]
+    [DataRow(DpopThenBearerLinesRow)]
+    [DataRow(TwoDpopLinesRow)]
+    [DataRow(TwoBearerLinesRow)]
+    public async Task ResourceServerAnswersAnAuthorizationFieldOnTwoLinesWithInvalidRequestAsync(string row)
+    {
+        (bool requiresDpop, string firstScheme, string secondScheme) = row switch
+        {
+            RequiredDpopThenBearerLinesRow => (true, "DPoP", "Bearer"),
+            DpopThenBearerLinesRow => (false, "DPoP", "Bearer"),
+            TwoDpopLinesRow => (false, "DPoP", "DPoP"),
+            TwoBearerLinesRow => (false, "Bearer", "Bearer"),
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown field lines row.")
+        };
+        var asKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey dpopKey = new(TestKeyMaterialProvider.CreateFreshP256KeyMaterial(), WellKnownJwaValues.Es256);
+        await using TestResourceServerShell rs = await StartResourceServerAsync(asKeys.PublicKey, requiresDpop: requiresDpop).ConfigureAwait(false);
+        string token = await IssueTokenAsync(asKeys.PrivateKey, ThumbprintOf(dpopKey)).ConfigureAwait(false);
+
+        HttpResponseData response = await RawHttpsRequest.SendPinnedAsync(
+            rs.HttpCertificate!, WellKnownHttpMethods.Get, new Uri(rs.HttpBaseAddress!, "/protected"),
+            [
+                new(WellKnownHttpHeaderNames.Authorization, $"{firstScheme} {token}"),
+                new(WellKnownHttpHeaderNames.Authorization, $"{secondScheme} {token}")
+            ],
+            ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, response.StatusCode, response.Body);
+        string bearerChallenge =
+            $"Bearer realm=\"protected\", error=\"invalid_request\", resource_metadata=\"{rs.MetadataUrl!.OriginalString}\"";
+        string expectedChallenge = row switch
+        {
+            DpopThenBearerLinesRow => $"{bearerChallenge}, {ResourceDpopChallenge(rs, "invalid_request")}",
+            TwoBearerLinesRow => bearerChallenge,
+            _ => ResourceDpopChallenge(rs, "invalid_request")
+        };
+        Assert.AreEqual(
+            expectedChallenge,
+            Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
+        IReadOnlyList<string> exposureFields = response.Headers.Headers.GetValues("Access-Control-Expose-Headers");
+        if(row == TwoBearerLinesRow)
+        {
+            Assert.IsEmpty(exposureFields, "A Bearer challenge alone exposes no field.");
+        }
+        else
+        {
+            Assert.AreEqual(ResourceDpopProofs.ExposedDpopResponseFields, Assert.ContainsSingle(exposureFields));
+        }
+
+        AssertRefusalDescription(response, "The Authorization header is not a single well-formed credential.");
+        using JsonDocument document = JsonDocument.Parse(response.Body);
+        Assert.AreEqual("invalid_request", document.RootElement.GetProperty("error").GetString(), response.Body);
+    }
+
+
+    /// <summary>
+    /// The row whose resource requires DPoP-bound access tokens and whose second field line names <c>Bearer</c>. A
+    /// constant, not a property, because a DataRow attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string RequiredDpopThenBearerLinesRow = "required-dpop-then-bearer-lines";
+
+    /// <summary>
+    /// The row whose resource does not require DPoP-bound access tokens and whose second field line names <c>Bearer</c>.
+    /// A constant, not a property, because a DataRow attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string DpopThenBearerLinesRow = "dpop-then-bearer-lines";
+
+    /// <summary>
+    /// The row whose resource does not require DPoP-bound access tokens and whose second field line names <c>DPoP</c>. A
+    /// constant, not a property, because a DataRow attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string TwoDpopLinesRow = "two-dpop-lines";
+
+    /// <summary>
+    /// The row whose resource does not require DPoP-bound access tokens and whose two field lines both name <c>Bearer</c>.
+    /// A constant, not a property, because a DataRow attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string TwoBearerLinesRow = "two-bearer-lines";
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "a resource
     /// server MUST check that a DPoP proof was also received in the DPoP header field of the HTTP
     /// request, check the DPoP proof according to the rules in Section 4.3, and check that the public key
-    /// of the DPoP proof matches the public key to which the access token is bound". An access token
-    /// bound by <c>cnf.jkt</c> to a key, presented over the wire under the <c>DPoP</c> scheme with a proof
-    /// signed by that key, is served: 200 with the token's <c>cnf</c>, and the proof's <c>jti</c> is
-    /// recorded.
+    /// of the DPoP proof matches the public key to which the access token is bound" and "The resource server MUST NOT
+    /// grant access to the resource unless all checks are successful."; the nonce is the resource's own
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">Section 9</see>: "Resource servers can also choose
+    /// to provide a nonce value to be included in DPoP proofs sent to them."), and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.3">Section 11.3</see>: "A server MUST NOT accept any
+    /// DPoP proofs without the nonce claim when a DPoP nonce has been provided to the client." An access token bound by
+    /// <c>cnf.jkt</c> to a key, presented at the application's resource over the wire under the <c>DPoP</c> scheme with
+    /// a proof signed by that key and carrying no nonce, is answered with the nonce challenge; presented again with a
+    /// proof carrying the nonce the resource provided, it is served: 200 with the token's <c>cnf</c>, and the proof's
+    /// <c>jti</c> is recorded.
     /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
     public async Task DpopBoundProtectedRequestWithMatchingProofReturns200()
     {
@@ -275,9 +655,8 @@ internal sealed class ResourceServerEndToEndTests
         };
         string token = await BuildAccessTokenAsync(asKeys.PrivateKey, payload).ConfigureAwait(false);
 
-        string resourceUrl = new Uri(rs.HttpBaseAddress!, "/protected").ToString();
-        string proof = await ResourceDpopProofs.BuildAsync(
-            dpopKey, "GET", resourceUrl, token, nonce: null, NowInstant, TestContext.CancellationToken).ConfigureAwait(false);
+        string nonce = await ObtainResourceNonceWithANonceLessProofAsync(rs, dpopKey, token).ConfigureAwait(false);
+        string proof = await BuildResourceProofAsync(rs, dpopKey, token, nonce).ConfigureAwait(false);
 
         using HttpClient client = LoopbackTls.CreatePinnedHttpClient(rs.HttpCertificate!, rs.HttpBaseAddress);
         using HttpRequestMessage request = new(HttpMethod.Get, "/protected");
@@ -300,11 +679,274 @@ internal sealed class ResourceServerEndToEndTests
 
 
     /// <summary>
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449 §11.1</see>: "HTTP
-    /// requests to the same URI for which the jti value has been seen before would be declined." A proof
-    /// the resource server served once, presented again over the wire with the same token, is refused
-    /// with 401 and a challenge carrying <c>invalid_dpop_proof</c>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "a resource server
+    /// MUST check that a DPoP proof was also received in the DPoP header field of the HTTP request", with
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">Section 9</see>: "Resource servers use an HTTP 401
+    /// (Unauthorized) error code with an accompanying WWW-Authenticate: DPoP value and DPoP-Nonce value to accomplish
+    /// this." A DPoP-bound access token presented at the application's resource over a raw TLS connection under the
+    /// <c>DPoP</c> scheme with no <c>DPoP</c> field is answered with the resource's nonce challenge: 401,
+    /// <c>use_dpop_nonce</c> in the body, the one challenge
+    /// <c>DPoP realm="protected", error="use_dpop_nonce", algs="ES256 ES384 ES512 ES256K RS256 RS384 RS512 PS256 PS384 PS512 EdDSA Ed25519", resource_metadata="..."</c>,
+    /// one <c>DPoP-Nonce</c> field line carrying a nonce, and the one field line
+    /// <c>Access-Control-Expose-Headers: WWW-Authenticate, DPoP-Nonce</c>.
     /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ResourceServerChallengesADpopPresentationWithoutAProofForItsNonceAsync()
+    {
+        var asKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey dpopKey = new(TestKeyMaterialProvider.CreateFreshP256KeyMaterial(), WellKnownJwaValues.Es256);
+        await using TestResourceServerShell rs = await StartResourceServerAsync(asKeys.PublicKey).ConfigureAwait(false);
+        string token = await IssueTokenAsync(asKeys.PrivateKey, ThumbprintOf(dpopKey)).ConfigureAwait(false);
+
+        HttpResponseData response = await SendProtectedOverARawConnectionAsync(rs, $"DPoP {token}", []).ConfigureAwait(false);
+
+        AssertResourceRefusal(rs, response, "use_dpop_nonce");
+        Assert.IsFalse(
+            string.IsNullOrEmpty(Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.DPoPNonce))),
+            "The one DPoP-Nonce field line carries a nonce.");
+        Assert.AreEqual(
+            ResourceDpopProofs.ExposedDpopResponseFields, Assert.ContainsSingle(response.Headers.Headers.GetValues("Access-Control-Expose-Headers")));
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.3">RFC 9449 Section 11.3</see>: "A server MUST NOT
+    /// accept any DPoP proofs without the nonce claim when a DPoP nonce has been provided to the client.", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">Section 9</see>: "Resource servers use an HTTP 401
+    /// (Unauthorized) error code with an accompanying WWW-Authenticate: DPoP value and DPoP-Nonce value to accomplish
+    /// this." A DPoP-bound access token presented at the application's resource over a raw TLS connection with a proof
+    /// signed by the bound key and carrying no nonce claim is not served: 401, <c>use_dpop_nonce</c> in the body, the one
+    /// challenge <c>DPoP realm="protected", error="use_dpop_nonce", algs="...", resource_metadata="..."</c>, one
+    /// <c>DPoP-Nonce</c> field line carrying a nonce, and the one field line
+    /// <c>Access-Control-Expose-Headers: WWW-Authenticate, DPoP-Nonce</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ResourceServerChallengesAProofWithoutItsNonceAsync()
+    {
+        var asKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey dpopKey = new(TestKeyMaterialProvider.CreateFreshP256KeyMaterial(), WellKnownJwaValues.Es256);
+        await using TestResourceServerShell rs = await StartResourceServerAsync(asKeys.PublicKey).ConfigureAwait(false);
+        string token = await IssueTokenAsync(asKeys.PrivateKey, ThumbprintOf(dpopKey)).ConfigureAwait(false);
+        string proof = await BuildResourceProofAsync(rs, dpopKey, token, nonce: null).ConfigureAwait(false);
+
+        HttpResponseData response = await SendProtectedOverARawConnectionAsync(rs, $"DPoP {token}", [proof]).ConfigureAwait(false);
+
+        AssertResourceRefusal(rs, response, "use_dpop_nonce");
+        Assert.IsFalse(
+            string.IsNullOrEmpty(Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.DPoPNonce))),
+            "The one DPoP-Nonce field line carries a nonce.");
+        Assert.AreEqual(
+            ResourceDpopProofs.ExposedDpopResponseFields, Assert.ContainsSingle(response.Headers.Headers.GetValues("Access-Control-Expose-Headers")));
+        Assert.AreEqual(0, rs.ReplayCache.Count, "A refused proof's jti is not recorded.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">RFC 9449 Section 9</see>: "Note that the nonces
+    /// provided by an authorization server and a resource server are different and should not be confused with one
+    /// another since nonces will be only accepted by the server that issued them." The application's resource issues its
+    /// nonces for the target URI it serves. A nonce it provided at one origin, presented over a raw TLS connection in a
+    /// proof signed by the bound key after the resource names its target URIs under another origin, the proof's
+    /// <c>htu</c> that origin's <c>/protected</c>, is not accepted: 401, <c>use_dpop_nonce</c> and the description
+    /// "DPoP nonce invalid: AudienceMismatch." in the body, the one challenge
+    /// <c>DPoP realm="protected", error="use_dpop_nonce", algs="...", resource_metadata="..."</c> and one
+    /// <c>DPoP-Nonce</c> field line carrying a fresh nonce.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ResourceServerRefusesANonceIssuedForAnotherTargetUriAsync()
+    {
+        var asKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey dpopKey = new(TestKeyMaterialProvider.CreateFreshP256KeyMaterial(), WellKnownJwaValues.Es256);
+        await using TestResourceServerShell rs = await StartResourceServerAsync(asKeys.PublicKey).ConfigureAwait(false);
+        string token = await IssueTokenAsync(asKeys.PrivateKey, ThumbprintOf(dpopKey)).ConfigureAwait(false);
+        string nonce = await ObtainResourceNonceWithANonceLessProofAsync(rs, dpopKey, token).ConfigureAwait(false);
+
+        rs.TargetAuthority = new Uri("https://rs.example");
+        string proof = await BuildResourceProofAsync(
+            rs, dpopKey, token, nonce, htu: new Uri("https://rs.example/protected")).ConfigureAwait(false);
+        HttpResponseData response = await SendProtectedOverARawConnectionAsync(rs, $"DPoP {token}", [proof]).ConfigureAwait(false);
+
+        AssertResourceRefusal(rs, response, "use_dpop_nonce");
+        AssertRefusalDescription(response, "DPoP nonce invalid: AudienceMismatch.");
+        Assert.AreNotEqual(
+            nonce, Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.DPoPNonce)),
+            "The refusal provides a fresh nonce.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-8.1">RFC 9449 Section 8.1</see>: "nonce = 1*NQCHAR", so
+    /// an empty <c>nonce</c> claim carries no nonce, and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.3">Section 11.3</see>: "A server MUST NOT accept any
+    /// DPoP proofs without the nonce claim when a DPoP nonce has been provided to the client." At an application's
+    /// resource whose proof validation answers a valid proof's claims with an empty <c>nonce</c>, a DPoP-bound access
+    /// token presented over a raw TLS connection with that proof is answered with the resource's nonce challenge: 401,
+    /// <c>use_dpop_nonce</c> and the description "DPoP nonce required." in the body, the one challenge
+    /// <c>DPoP realm="protected", error="use_dpop_nonce", algs="...", resource_metadata="..."</c> and one
+    /// <c>DPoP-Nonce</c> field line carrying a nonce.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ResourceServerChallengesAProofWhoseNonceIsEmptyAsync()
+    {
+        var asKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey dpopKey = new(TestKeyMaterialProvider.CreateFreshP256KeyMaterial(), WellKnownJwaValues.Es256);
+        await using TestResourceServerShell rs = await StartResourceServerAsync(
+            asKeys.PublicKey, wrapDpopProofValidation: AnswerAnEmptyNonce).ConfigureAwait(false);
+        string token = await IssueTokenAsync(asKeys.PrivateKey, ThumbprintOf(dpopKey)).ConfigureAwait(false);
+        string proof = await BuildResourceProofAsync(rs, dpopKey, token, nonce: null).ConfigureAwait(false);
+
+        HttpResponseData response = await SendProtectedOverARawConnectionAsync(rs, $"DPoP {token}", [proof]).ConfigureAwait(false);
+
+        AssertResourceRefusal(rs, response, "use_dpop_nonce");
+        AssertRefusalDescription(response, "DPoP nonce required.");
+        Assert.IsFalse(
+            string.IsNullOrEmpty(Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.DPoPNonce))),
+            "The one DPoP-Nonce field line carries a nonce.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "A DPoP-bound access
+    /// token is sent using the Authorization request header field per Section 11.6.2 of [RFC9110] with an authentication
+    /// scheme of DPoP." An access token bound to no key, presented at the application's resource over a raw TLS
+    /// connection under the <c>DPoP</c> scheme, is no DPoP-bound access token and is refused: 401, <c>invalid_token</c>
+    /// in the body and the one challenge <c>DPoP realm="protected", error="invalid_token", algs="...", resource_metadata="..."</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ResourceServerRefusesAnUnboundTokenPresentedUnderDpopAsync()
+    {
+        var asKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        await using TestResourceServerShell rs = await StartResourceServerAsync(asKeys.PublicKey).ConfigureAwait(false);
+        string token = await IssueTokenAsync(asKeys.PrivateKey, boundThumbprint: null).ConfigureAwait(false);
+
+        HttpResponseData response = await SendProtectedOverARawConnectionAsync(rs, $"DPoP {token}", []).ConfigureAwait(false);
+
+        AssertResourceRefusal(rs, response, "invalid_token");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">RFC 9449 Section 4.3</see>, check 12: "confirm
+    /// that the public key to which the access token is bound matches the public key from the DPoP proof", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">Section 7.1</see>: "check that the public key of
+    /// the DPoP proof matches the public key to which the access token is bound per Section 6." A DPoP-bound access
+    /// token presented at the application's resource over a raw TLS connection with a proof signed by another DPoP key and
+    /// carrying the nonce the resource provided is refused: 401, <c>invalid_token</c> in the body and the one challenge
+    /// <c>DPoP realm="protected", error="invalid_token", algs="...", resource_metadata="..."</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ResourceServerRefusesAProofByAKeyOtherThanTheBoundOneAsync()
+    {
+        var asKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey boundKey = new(TestKeyMaterialProvider.CreateFreshP256KeyMaterial(), WellKnownJwaValues.Es256);
+        DpopKey otherKey = new(TestKeyMaterialProvider.CreateFreshP256KeyMaterial(), WellKnownJwaValues.Es256);
+        await using TestResourceServerShell rs = await StartResourceServerAsync(asKeys.PublicKey).ConfigureAwait(false);
+        string token = await IssueTokenAsync(asKeys.PrivateKey, ThumbprintOf(boundKey)).ConfigureAwait(false);
+        string nonce = await ObtainResourceNonceAsync(rs, token).ConfigureAwait(false);
+        string proof = await BuildResourceProofAsync(rs, otherKey, token, nonce).ConfigureAwait(false);
+
+        HttpResponseData response = await SendProtectedOverARawConnectionAsync(rs, $"DPoP {token}", [proof]).ConfigureAwait(false);
+
+        AssertResourceRefusal(rs, response, "invalid_token");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">RFC 9449 Section 4.3</see>: "To validate a DPoP
+    /// proof, the receiving server MUST ensure the following: 1. There is not more than one DPoP HTTP request header
+    /// field." A DPoP-bound access token presented at the application's resource over a raw TLS connection with two
+    /// <c>DPoP</c> field lines, each a proof signed by the bound key, is refused: 401, <c>invalid_dpop_proof</c> and the
+    /// description "More than one DPoP header field was presented." in the body, and the one challenge
+    /// <c>DPoP realm="protected", error="invalid_dpop_proof", algs="...", resource_metadata="..."</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ResourceServerRefusesTwoDpopFieldsAsync()
+    {
+        var asKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey dpopKey = new(TestKeyMaterialProvider.CreateFreshP256KeyMaterial(), WellKnownJwaValues.Es256);
+        await using TestResourceServerShell rs = await StartResourceServerAsync(asKeys.PublicKey).ConfigureAwait(false);
+        string token = await IssueTokenAsync(asKeys.PrivateKey, ThumbprintOf(dpopKey)).ConfigureAwait(false);
+        string firstProof = await BuildResourceProofAsync(rs, dpopKey, token, nonce: null).ConfigureAwait(false);
+        string secondProof = await BuildResourceProofAsync(rs, dpopKey, token, nonce: null).ConfigureAwait(false);
+
+        HttpResponseData response = await SendProtectedOverARawConnectionAsync(rs, $"DPoP {token}", [firstProof, secondProof]).ConfigureAwait(false);
+
+        AssertResourceRefusal(rs, response, "invalid_dpop_proof");
+        using JsonDocument document = JsonDocument.Parse(response.Body);
+        Assert.AreEqual("More than one DPoP header field was presented.", document.RootElement.GetProperty("error_description").GetString());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "The resource server
+    /// MUST NOT grant access to the resource unless all checks are successful.", with
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.6.1">RFC 9110 Section 15.6.1</see>: "The 500
+    /// (Internal Server Error) status code indicates that the server encountered an unexpected condition that prevented
+    /// it from fulfilling the request." At an application's resource with a check of the token's binding unwired, a
+    /// DPoP-bound access token presented over a raw TLS connection with a proof signed by the bound key cannot be checked
+    /// and is not served: 500, <c>server_error</c> in the body and no <c>WWW-Authenticate</c> field. The rows: the
+    /// resource wires no DPoP proof validation and no nonce issuance or validation, its <c>jti</c> record wired; the
+    /// resource wires the proof validation and the nonce slots and no <c>jti</c> seen query or record.
+    /// </summary>
+    /// <param name="row">The unwired checks: <see cref="ProofAndNonceUnwiredRow"/> or <see cref="JtiRecordUnwiredRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(ProofAndNonceUnwiredRow)]
+    [DataRow(JtiRecordUnwiredRow)]
+    public async Task ResourceServerWithoutProofValidationAnswersABoundTokenWithAServerErrorAsync(string row)
+    {
+        (bool isDpopProofValidationWired, bool isDpopProofJtiRecordWired) = row switch
+        {
+            ProofAndNonceUnwiredRow => (false, true),
+            JtiRecordUnwiredRow => (true, false),
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown wiring row.")
+        };
+        var asKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey dpopKey = new(TestKeyMaterialProvider.CreateFreshP256KeyMaterial(), WellKnownJwaValues.Es256);
+        await using TestResourceServerShell rs = await StartResourceServerAsync(
+            asKeys.PublicKey,
+            isDpopProofValidationWired: isDpopProofValidationWired,
+            isDpopProofJtiRecordWired: isDpopProofJtiRecordWired).ConfigureAwait(false);
+        string token = await IssueTokenAsync(asKeys.PrivateKey, ThumbprintOf(dpopKey)).ConfigureAwait(false);
+        string proof = await BuildResourceProofAsync(rs, dpopKey, token, nonce: null).ConfigureAwait(false);
+
+        HttpResponseData response = await SendProtectedOverARawConnectionAsync(rs, $"DPoP {token}", [proof]).ConfigureAwait(false);
+
+        Assert.AreEqual(500, response.StatusCode, response.Body);
+        Assert.IsEmpty(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate), "A server error carries no challenge.");
+        using JsonDocument document = JsonDocument.Parse(response.Body);
+        Assert.AreEqual("server_error", document.RootElement.GetProperty("error").GetString(), response.Body);
+    }
+
+
+    /// <summary>
+    /// The row whose resource wires no DPoP proof validation and no nonce issuance or validation. A constant, not a
+    /// property, because a DataRow attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string ProofAndNonceUnwiredRow = "proof-and-nonce-unwired";
+
+    /// <summary>
+    /// The row whose resource wires no <c>jti</c> seen query or record. A constant, not a property, because a DataRow
+    /// attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string JtiRecordUnwiredRow = "jti-record-unwired";
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449 Section 11.1</see>: "HTTP
+    /// requests to the same URI for which the jti value has been seen before would be declined." A proof carrying the
+    /// nonce the application's resource provided, which the resource served once, presented again over the wire with the
+    /// same token, is refused with 401 and the one challenge
+    /// <c>DPoP realm="protected", error="invalid_dpop_proof", algs="...", resource_metadata="..."</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
     public async Task DpopBoundProofReplayedReturns401()
     {
@@ -338,9 +980,8 @@ internal sealed class ResourceServerEndToEndTests
         };
         string token = await BuildAccessTokenAsync(asKeys.PrivateKey, payload).ConfigureAwait(false);
 
-        string resourceUrl = new Uri(rs.HttpBaseAddress!, "/protected").ToString();
-        string proof = await ResourceDpopProofs.BuildAsync(
-            dpopKey, "GET", resourceUrl, token, nonce: null, NowInstant, TestContext.CancellationToken).ConfigureAwait(false);
+        string nonce = await ObtainResourceNonceWithANonceLessProofAsync(rs, dpopKey, token).ConfigureAwait(false);
+        string proof = await BuildResourceProofAsync(rs, dpopKey, token, nonce).ConfigureAwait(false);
 
         using HttpClient client = LoopbackTls.CreatePinnedHttpClient(rs.HttpCertificate!, rs.HttpBaseAddress);
 
@@ -363,9 +1004,207 @@ internal sealed class ResourceServerEndToEndTests
             .ConfigureAwait(false);
         Assert.AreEqual(HttpStatusCode.Unauthorized, replayResponse.StatusCode,
             $"Replayed proof must return 401; body was: {replayBody}");
-        Assert.IsTrue(replayResponse.Headers.TryGetValues("WWW-Authenticate", out var values));
-        Assert.IsTrue(values!.First().Contains("invalid_dpop_proof", StringComparison.Ordinal));
+        Assert.IsTrue(replayResponse.Headers.NonValidated.TryGetValues("WWW-Authenticate", out HeaderStringValues values),
+            "The refusal carries a WWW-Authenticate challenge.");
+        Assert.AreEqual(ResourceDpopChallenge(rs, "invalid_dpop_proof"), Assert.ContainsSingle(values));
     }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449 Section 11.1</see>: "In the context of
+    /// the target URI, servers can store the jti value of each DPoP proof for the time window in which the respective
+    /// DPoP proof JWT would be accepted to prevent multiple uses of the same DPoP proof. HTTP requests to the same URI for
+    /// which the jti value has been seen before would be declined." The application's resource accepts a proof whose
+    /// <c>iat</c> lies within 60 seconds of its clock either way. A proof whose <c>iat</c> lies 59 seconds ahead of the
+    /// clock, carrying the nonce the resource provided, is served over a raw TLS connection; with the clock advanced 61
+    /// seconds the proof is still within its acceptance window, and the same request replayed is refused: 401,
+    /// <c>invalid_dpop_proof</c> and the description "The DPoP proof jti has been presented previously." in the body,
+    /// and the one challenge <c>DPoP realm="protected", error="invalid_dpop_proof", algs="...", resource_metadata="..."</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task DpopProofWithAFutureIatReplayedWithinItsAcceptanceWindowIsRefusedAsync()
+    {
+        var asKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey dpopKey = new(TestKeyMaterialProvider.CreateFreshP256KeyMaterial(), WellKnownJwaValues.Es256);
+        FakeTimeProvider time = new(NowInstant);
+        await using TestResourceServerShell rs = await StartResourceServerAsync(asKeys.PublicKey, time: time).ConfigureAwait(false);
+        Assert.AreEqual(TimeSpan.FromSeconds(60), rs.Integration.DpopFreshnessWindow, "The resource accepts an iat within 60 seconds of its clock.");
+        string token = await IssueTokenAsync(asKeys.PrivateKey, ThumbprintOf(dpopKey)).ConfigureAwait(false);
+        string nonce = await ObtainResourceNonceWithANonceLessProofAsync(rs, dpopKey, token).ConfigureAwait(false);
+        string proof = await BuildResourceProofAsync(
+            rs, dpopKey, token, nonce, issuedAt: NowInstant + TimeSpan.FromSeconds(59)).ConfigureAwait(false);
+
+        HttpResponseData first = await SendProtectedOverARawConnectionAsync(rs, $"DPoP {token}", [proof]).ConfigureAwait(false);
+        Assert.AreEqual(200, first.StatusCode, first.Body);
+
+        time.Advance(TimeSpan.FromSeconds(61));
+        HttpResponseData replay = await SendProtectedOverARawConnectionAsync(rs, $"DPoP {token}", [proof]).ConfigureAwait(false);
+
+        AssertResourceRefusal(rs, replay, "invalid_dpop_proof");
+        AssertRefusalDescription(replay, "The DPoP proof jti has been presented previously.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449 Section 11.1</see>: "In the context of
+    /// the target URI, servers can store the jti value of each DPoP proof for the time window in which the respective
+    /// DPoP proof JWT would be accepted to prevent multiple uses of the same DPoP proof. HTTP requests to the same URI for
+    /// which the jti value has been seen before would be declined." The application's resource accepts a proof whose
+    /// <c>iat</c> lies within 60 seconds of its clock either way, the 60th second included. A proof whose <c>iat</c> is
+    /// the clock's instant, carrying the nonce the resource provided, is served over a raw TLS connection; with the clock
+    /// advanced exactly 60 seconds, the last instant the proof is accepted at, the same request replayed is refused: 401,
+    /// <c>invalid_dpop_proof</c> and the description "The DPoP proof jti has been presented previously." in the body,
+    /// and the one challenge <c>DPoP realm="protected", error="invalid_dpop_proof", algs="...", resource_metadata="..."</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task DpopProofReplayedAtTheLastInstantOfItsAcceptanceWindowIsRefusedAsync()
+    {
+        var asKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey dpopKey = new(TestKeyMaterialProvider.CreateFreshP256KeyMaterial(), WellKnownJwaValues.Es256);
+        FakeTimeProvider time = new(NowInstant);
+        await using TestResourceServerShell rs = await StartResourceServerAsync(asKeys.PublicKey, time: time).ConfigureAwait(false);
+        Assert.AreEqual(TimeSpan.FromSeconds(60), rs.Integration.DpopFreshnessWindow, "The resource accepts an iat within 60 seconds of its clock.");
+        string token = await IssueTokenAsync(asKeys.PrivateKey, ThumbprintOf(dpopKey)).ConfigureAwait(false);
+        string nonce = await ObtainResourceNonceWithANonceLessProofAsync(rs, dpopKey, token).ConfigureAwait(false);
+        string proof = await BuildResourceProofAsync(rs, dpopKey, token, nonce, issuedAt: NowInstant).ConfigureAwait(false);
+
+        HttpResponseData first = await SendProtectedOverARawConnectionAsync(rs, $"DPoP {token}", [proof]).ConfigureAwait(false);
+        Assert.AreEqual(200, first.StatusCode, first.Body);
+
+        time.Advance(TimeSpan.FromSeconds(60));
+        HttpResponseData replay = await SendProtectedOverARawConnectionAsync(rs, $"DPoP {token}", [proof]).ConfigureAwait(false);
+
+        AssertResourceRefusal(rs, replay, "invalid_dpop_proof");
+        AssertRefusalDescription(replay, "The DPoP proof jti has been presented previously.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449 Section 11.1</see>: "To limit this,
+    /// servers MUST only accept DPoP proofs for a limited time after their creation (preferably only for a relatively
+    /// brief period on the order of seconds or minutes).", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">Section 7.1</see>: "The resource server MUST NOT
+    /// grant access to the resource unless all checks are successful." The application's resource holds a proof's
+    /// <c>iat</c> to within 60 seconds of its clock either way, both bounds included, whatever tolerance its proof
+    /// validation applies: a proof created more than the window ago is a proof accepted for longer than the limited time
+    /// after its creation that section requires, and a proof dated ahead of the clock by more than the window is no
+    /// proof of a recent creation. At a resource whose proof validation accepts an <c>iat</c> within 120 seconds of the
+    /// clock, a DPoP-bound access token presented over a raw TLS connection with a proof signed by the bound key,
+    /// carrying the nonce the resource provided and an <c>iat</c> 90 seconds away from the clock, is refused before
+    /// anything is recorded: 401, <c>invalid_dpop_proof</c> and the description "DPoP proof iat lies outside the
+    /// resource's freshness window." in the body, the one challenge
+    /// <c>DPoP realm="protected", error="invalid_dpop_proof", algs="...", resource_metadata="..."</c>, and the record
+    /// holds no entry; presented with a proof whose <c>iat</c> lies 60 seconds away from the clock, it is served: 200.
+    /// The rows: the <c>iat</c> ahead of the clock; the <c>iat</c> behind it.
+    /// </summary>
+    /// <param name="row">The side of the clock the <c>iat</c> lies on: <see cref="FutureIatRow"/> or <see cref="PastIatRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(FutureIatRow)]
+    [DataRow(PastIatRow)]
+    public async Task DpopProofWhoseIatLiesOutsideTheResourcesFreshnessWindowIsRefusedAsync(string row)
+    {
+        int direction = row switch
+        {
+            FutureIatRow => 1,
+            PastIatRow => -1,
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown iat row.")
+        };
+        var asKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey dpopKey = new(TestKeyMaterialProvider.CreateFreshP256KeyMaterial(), WellKnownJwaValues.Es256);
+        FakeTimeProvider time = new(NowInstant);
+        await using TestResourceServerShell rs = await StartResourceServerAsync(
+            asKeys.PublicKey, time: time, wrapDpopProofValidation: ValidateWithAnIatTolerance(time, TimeSpan.FromSeconds(120))).ConfigureAwait(false);
+        Assert.AreEqual(TimeSpan.FromSeconds(60), rs.Integration.DpopFreshnessWindow, "The resource holds an iat to within 60 seconds of its clock.");
+        string token = await IssueTokenAsync(asKeys.PrivateKey, ThumbprintOf(dpopKey)).ConfigureAwait(false);
+        string nonce = await ObtainResourceNonceWithANonceLessProofAsync(rs, dpopKey, token).ConfigureAwait(false);
+        string outsideProof = await BuildResourceProofAsync(
+            rs, dpopKey, token, nonce, issuedAt: NowInstant + (direction * TimeSpan.FromSeconds(90))).ConfigureAwait(false);
+
+        HttpResponseData refused = await SendProtectedOverARawConnectionAsync(rs, $"DPoP {token}", [outsideProof]).ConfigureAwait(false);
+
+        AssertResourceRefusal(rs, refused, "invalid_dpop_proof");
+        AssertRefusalDescription(refused, "DPoP proof iat lies outside the resource's freshness window.");
+        Assert.AreEqual(0, rs.ReplayCache.Count, "A refused proof's jti is not recorded.");
+
+        string boundaryProof = await BuildResourceProofAsync(
+            rs, dpopKey, token, nonce, issuedAt: NowInstant + (direction * TimeSpan.FromSeconds(60))).ConfigureAwait(false);
+        HttpResponseData served = await SendProtectedOverARawConnectionAsync(rs, $"DPoP {token}", [boundaryProof]).ConfigureAwait(false);
+
+        Assert.AreEqual(200, served.StatusCode, served.Body);
+    }
+
+
+    /// <summary>
+    /// The row whose proofs carry an <c>iat</c> ahead of the clock. A constant, not a property, because a DataRow
+    /// attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string FutureIatRow = "future-iat";
+
+    /// <summary>
+    /// The row whose proofs carry an <c>iat</c> behind the clock. A constant, not a property, because a DataRow
+    /// attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string PastIatRow = "past-iat";
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449 Section 11.1</see>: "In order to guard
+    /// against memory exhaustion attacks, a server that is tracking jti values should reject DPoP proof JWTs with
+    /// unnecessarily large jti values or store only a hash thereof." The application's resource tracks a <c>jti</c> that
+    /// is not empty, is at most 1024 UTF-16 code units long and holds no control character (Unicode category Cc) and no
+    /// unpaired surrogate, the rule the library's resources apply. A DPoP-bound access
+    /// token presented over a raw TLS connection with a proof signed by the bound key, carrying the nonce the resource
+    /// provided and a <c>jti</c> the record cannot hold, is refused before anything is recorded: 401,
+    /// <c>invalid_dpop_proof</c> and the description "DPoP proof jti is empty, too long or carries a character the replay
+    /// guard cannot store." in the body, the one challenge
+    /// <c>DPoP realm="protected", error="invalid_dpop_proof", algs="...", resource_metadata="..."</c>, and the record
+    /// holds no entry. The rows: a <c>jti</c> of 1025 characters; a <c>jti</c> carrying U+0001.
+    /// </summary>
+    /// <param name="row">The <c>jti</c>: <see cref="OversizedJtiRow"/> or <see cref="ControlCharacterJtiRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(OversizedJtiRow)]
+    [DataRow(ControlCharacterJtiRow)]
+    public async Task ResourceServerRefusesAProofWhoseJtiTheRecordCannotHoldAsync(string row)
+    {
+        string jti = row switch
+        {
+            OversizedJtiRow => new string('j', 1025),
+            ControlCharacterJtiRow => ControlCharacterJti,
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown jti row.")
+        };
+        var asKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        DpopKey dpopKey = new(TestKeyMaterialProvider.CreateFreshP256KeyMaterial(), WellKnownJwaValues.Es256);
+        await using TestResourceServerShell rs = await StartResourceServerAsync(asKeys.PublicKey).ConfigureAwait(false);
+        string token = await IssueTokenAsync(asKeys.PrivateKey, ThumbprintOf(dpopKey)).ConfigureAwait(false);
+        string nonce = await ObtainResourceNonceWithANonceLessProofAsync(rs, dpopKey, token).ConfigureAwait(false);
+        string proof = await BuildResourceProofAsync(rs, dpopKey, token, nonce, jti: jti).ConfigureAwait(false);
+
+        HttpResponseData response = await SendProtectedOverARawConnectionAsync(rs, $"DPoP {token}", [proof]).ConfigureAwait(false);
+
+        AssertResourceRefusal(rs, response, "invalid_dpop_proof");
+        AssertRefusalDescription(response, "DPoP proof jti is empty, too long or carries a character the replay guard cannot store.");
+        Assert.AreEqual(0, rs.ReplayCache.Count, "A jti the record cannot hold is not recorded.");
+    }
+
+
+    /// <summary>
+    /// The row whose proof carries a <c>jti</c> of 1025 characters. A constant, not a property, because a DataRow
+    /// attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string OversizedJtiRow = "oversized-jti";
+
+    /// <summary>
+    /// The row whose proof carries a <c>jti</c> holding U+0001. A constant, not a property, because a DataRow attribute
+    /// argument must be a compile-time constant.
+    /// </summary>
+    private const string ControlCharacterJtiRow = "control-character-jti";
+
+    /// <summary>A <c>jti</c> holding the control character U+0001 between two visible runs.</summary>
+    private static string ControlCharacterJti { get; } = "jti-\u0001-held";
 
 
     /// <summary>
@@ -718,6 +1557,247 @@ internal sealed class ResourceServerEndToEndTests
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         return await client.SendAsync(request, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// The <c>DPoP</c> challenge the application's resource answers with, written out:
+    /// <c>DPoP realm="protected", error="&lt;error&gt;", algs="...", resource_metadata="&lt;metadata URL&gt;"</c>, the
+    /// realm the resource names its protection space with, the <c>algs</c> the accepted algorithms it wires and the
+    /// metadata URL it serves its document at.
+    /// </summary>
+    /// <param name="rs">The running resource server.</param>
+    /// <param name="error">The challenge's <c>error</c>, or <see langword="null"/> for a challenge carrying none.</param>
+    /// <returns>The <c>WWW-Authenticate</c> value.</returns>
+    private static string ResourceDpopChallenge(TestResourceServerShell rs, string? error) =>
+        ResourceDpopProofs.DpopChallenge("protected", error, resourceMetadata: rs.MetadataUrl);
+
+
+    /// <summary>
+    /// Asserts a refusal of a DPoP presentation at the application's resource received over a raw TLS connection: 401,
+    /// exactly one <c>WWW-Authenticate</c> field line equal to <see cref="ResourceDpopChallenge"/> with
+    /// <paramref name="error"/>, <paramref name="error"/> in the body, and no claim served.
+    /// </summary>
+    /// <param name="rs">The running resource server.</param>
+    /// <param name="response">The answer as received.</param>
+    /// <param name="error">The expected error.</param>
+    private static void AssertResourceRefusal(TestResourceServerShell rs, HttpResponseData response, string error)
+    {
+        Assert.AreEqual(401, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            ResourceDpopChallenge(rs, error),
+            Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
+        using JsonDocument document = JsonDocument.Parse(response.Body);
+        Assert.AreEqual(error, document.RootElement.GetProperty("error").GetString(), response.Body);
+        Assert.IsFalse(document.RootElement.TryGetProperty("sub", out _), "A refused request is served no claim.");
+    }
+
+
+    /// <summary>Asserts the <c>error_description</c> of a refusal's body as received.</summary>
+    /// <param name="response">The answer as received.</param>
+    /// <param name="description">The expected description.</param>
+    private static void AssertRefusalDescription(HttpResponseData response, string description)
+    {
+        using JsonDocument document = JsonDocument.Parse(response.Body);
+        Assert.AreEqual(description, document.RootElement.GetProperty("error_description").GetString(), response.Body);
+    }
+
+
+    /// <summary>
+    /// Wraps a resource server's DPoP proof validation so it answers a valid proof's claims with an empty <c>nonce</c>:
+    /// an application validator that admits <c>"nonce":""</c>.
+    /// </summary>
+    /// <param name="validate">The wired proof validation.</param>
+    /// <returns>The validation answering every success with an empty <c>nonce</c>.</returns>
+    private static ValidateDpopProofDelegate AnswerAnEmptyNonce(ValidateDpopProofDelegate validate) =>
+        async (request, cancellationToken) =>
+        {
+            DpopProofValidationResult result = await validate(request, cancellationToken).ConfigureAwait(false);
+
+            return result is { IsSuccess: true, Claims: DpopProofClaims claims, JwkThumbprint: string thumbprint }
+                ? DpopProofValidationResult.Success(claims with { Nonce = string.Empty }, thumbprint)
+                : result;
+        };
+
+
+    /// <summary>
+    /// Wires a resource server's DPoP proof validation in place of the one it wires: <see cref="DpopProofValidator"/>'s
+    /// <c>ValidateAsync</c> over the resource's signature verification and <paramref name="timeProvider"/>, holding a
+    /// proof's <c>iat</c> to <paramref name="iatTolerance"/> either way of the clock, an application validator with a
+    /// tolerance of its own.
+    /// </summary>
+    /// <param name="timeProvider">The resource server's clock.</param>
+    /// <param name="iatTolerance">The validator's tolerance on a proof's <c>iat</c>.</param>
+    /// <returns>The wrapper answering that validation whatever validation it is handed.</returns>
+    private static Func<ValidateDpopProofDelegate, ValidateDpopProofDelegate> ValidateWithAnIatTolerance(
+        TimeProvider timeProvider, TimeSpan iatTolerance) =>
+        _ => (request, cancellationToken) => DpopProofValidator.ValidateAsync(
+            request, MicrosoftCryptographicFunctionsAdapter.VerifyP256Async, DpopTestSupport.Parser, TestSetup.Base64UrlEncoder,
+            TestSetup.Base64UrlDecoder, timeProvider, BaseMemoryPool.Shared, iatTolerance, cancellationToken);
+
+
+    /// <summary>
+    /// Starts a resource server trusting <see cref="Issuer"/>'s key <paramref name="asPublicKey"/> on
+    /// <paramref name="time"/>, or on a clock of its own at <see cref="NowInstant"/>.
+    /// </summary>
+    /// <param name="asPublicKey">The authorization server's access token key the resource server verifies with.</param>
+    /// <param name="requiresDpop">Whether the resource requires DPoP-bound access tokens.</param>
+    /// <param name="isDpopProofValidationWired">Whether the resource server wires its proof validation, nonce slots and accepted algorithms.</param>
+    /// <param name="isDpopProofJtiRecordWired">Whether the resource server wires its <c>jti</c> seen query and record.</param>
+    /// <param name="time">The resource server's clock, or <see langword="null"/> for one at <see cref="NowInstant"/>.</param>
+    /// <param name="wrapDpopProofValidation">Wraps the wired proof validation, or <see langword="null"/> to wire it as it is.</param>
+    /// <returns>The running resource server; the caller disposes it.</returns>
+    private async Task<TestResourceServerShell> StartResourceServerAsync(
+        PublicKeyMemory asPublicKey,
+        bool requiresDpop = false,
+        bool isDpopProofValidationWired = true,
+        bool isDpopProofJtiRecordWired = true,
+        FakeTimeProvider? time = null,
+        Func<ValidateDpopProofDelegate, ValidateDpopProofDelegate>? wrapDpopProofValidation = null)
+    {
+        TestResourceServerShell rs = new(
+            trustedIssuer: new Uri(Issuer),
+            expectedAudience: Audience,
+            resolveVerificationKey: BuildResolver(asPublicKey),
+            verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
+            timeProvider: time ?? new FakeTimeProvider(NowInstant),
+            requiresDpop: requiresDpop,
+            isDpopProofValidationWired: isDpopProofValidationWired,
+            isDpopProofJtiRecordWired: isDpopProofJtiRecordWired,
+            wrapDpopProofValidation: wrapDpopProofValidation);
+        try
+        {
+            await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+            return rs;
+        }
+        catch
+        {
+            await rs.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
+
+
+    /// <summary>
+    /// Signs an access token from <see cref="Issuer"/> for <see cref="Audience"/>, issued a minute before
+    /// <see cref="NowInstant"/> and expiring an hour after it, bound by <c>cnf.jkt</c> to
+    /// <paramref name="boundThumbprint"/> when one is given.
+    /// </summary>
+    /// <param name="asPrivateKey">The authorization server's access token signing key.</param>
+    /// <param name="boundThumbprint">The <c>cnf.jkt</c>, or <see langword="null"/> for an unbound token.</param>
+    /// <returns>The compact JWS.</returns>
+    private Task<string> IssueTokenAsync(PrivateKeyMemory asPrivateKey, string? boundThumbprint)
+    {
+        JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
+            subject: Subject,
+            scope: Scope,
+            clientId: ClientId,
+            issuedAt: NowInstant - TimeSpan.FromMinutes(1),
+            expiresAt: NowInstant + TimeSpan.FromHours(1),
+            issuer: Issuer,
+            audience: [Audience]);
+        if(boundThumbprint is not null)
+        {
+            payload[WellKnownJwtClaimNames.Cnf] = new Dictionary<string, object>
+            {
+                [WellKnownJwtClaimNames.JwkThumbprint] = boundThumbprint
+            };
+        }
+
+        return BuildAccessTokenAsync(asPrivateKey, payload);
+    }
+
+
+    /// <summary>The JWK SHA-256 Thumbprint of <paramref name="dpopKey"/>'s public key, the value a bound token's <c>cnf.jkt</c> carries.</summary>
+    /// <param name="dpopKey">The DPoP key.</param>
+    /// <returns>The base64url thumbprint.</returns>
+    private static string ThumbprintOf(DpopKey dpopKey) =>
+        dpopKey.GetThumbprint(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+
+
+    /// <summary>
+    /// Builds a DPoP proof by <paramref name="dpopKey"/> for a GET of <c>/protected</c> on the resource server, issued at
+    /// <paramref name="issuedAt"/> or at <see cref="NowInstant"/>, its <c>ath</c> hashing <paramref name="token"/>,
+    /// carrying <paramref name="nonce"/> when given and <paramref name="jti"/> or a fresh unique <c>jti</c>.
+    /// </summary>
+    /// <param name="rs">The running resource server.</param>
+    /// <param name="dpopKey">The key that signs the proof.</param>
+    /// <param name="token">The access token presented with the proof.</param>
+    /// <param name="nonce">The resource's nonce, or <see langword="null"/> to carry none.</param>
+    /// <param name="issuedAt">The proof's <c>iat</c>, or <see langword="null"/> for <see cref="NowInstant"/>.</param>
+    /// <param name="jti">The proof's <c>jti</c>, or <see langword="null"/> for a fresh unique one.</param>
+    /// <param name="htu">The proof's <c>htu</c>, or <see langword="null"/> for the listener's <c>/protected</c>.</param>
+    /// <returns>The compact proof.</returns>
+    private Task<string> BuildResourceProofAsync(
+        TestResourceServerShell rs, DpopKey dpopKey, string token, string? nonce, DateTimeOffset? issuedAt = null, string? jti = null, Uri? htu = null) =>
+        ResourceDpopProofs.BuildAsync(
+            dpopKey, "GET", (htu ?? new Uri(rs.HttpBaseAddress!, "/protected")).ToString(), token, nonce, issuedAt ?? NowInstant,
+            TestContext.CancellationToken, jti: jti);
+
+
+    /// <summary>
+    /// Presents <paramref name="token"/> at the resource server over a raw TLS connection under the <c>DPoP</c> scheme
+    /// with no <c>DPoP</c> field, asserts the 401 it is answered with, and returns the one nonce its <c>DPoP-Nonce</c>
+    /// field line provides.
+    /// </summary>
+    /// <param name="rs">The running resource server.</param>
+    /// <param name="token">The DPoP-bound access token.</param>
+    /// <returns>The nonce the resource provided.</returns>
+    private async Task<string> ObtainResourceNonceAsync(TestResourceServerShell rs, string token)
+    {
+        HttpResponseData challenge = await SendProtectedOverARawConnectionAsync(rs, $"DPoP {token}", []).ConfigureAwait(false);
+        Assert.AreEqual(401, challenge.StatusCode, challenge.Body);
+
+        return Assert.ContainsSingle(challenge.Headers.Headers.GetValues(WellKnownHttpHeaderNames.DPoPNonce),
+            "The resource's nonce challenge carries one DPoP-Nonce field line.");
+    }
+
+
+    /// <summary>
+    /// Presents <paramref name="token"/> at the resource server over a raw TLS connection under the <c>DPoP</c> scheme
+    /// with a proof by <paramref name="dpopKey"/> carrying no nonce, asserts the nonce challenge it is answered with (401,
+    /// <c>use_dpop_nonce</c> in the body and the one challenge
+    /// <c>DPoP realm="protected", error="use_dpop_nonce", algs="...", resource_metadata="..."</c>), and returns the one
+    /// nonce its <c>DPoP-Nonce</c> field line provides.
+    /// </summary>
+    /// <param name="rs">The running resource server.</param>
+    /// <param name="dpopKey">The key the token is bound to, which signs the proof.</param>
+    /// <param name="token">The DPoP-bound access token.</param>
+    /// <returns>The nonce the resource provided.</returns>
+    private async Task<string> ObtainResourceNonceWithANonceLessProofAsync(TestResourceServerShell rs, DpopKey dpopKey, string token)
+    {
+        string nonceLessProof = await BuildResourceProofAsync(rs, dpopKey, token, nonce: null).ConfigureAwait(false);
+        HttpResponseData challenge = await SendProtectedOverARawConnectionAsync(rs, $"DPoP {token}", [nonceLessProof]).ConfigureAwait(false);
+        AssertResourceRefusal(rs, challenge, "use_dpop_nonce");
+
+        return Assert.ContainsSingle(challenge.Headers.Headers.GetValues(WellKnownHttpHeaderNames.DPoPNonce),
+            "The resource's nonce challenge carries one DPoP-Nonce field line.");
+    }
+
+
+    /// <summary>
+    /// Sends a GET of <c>/protected</c> to the resource server over a raw TLS connection with
+    /// <paramref name="authorization"/> as its one <c>Authorization</c> field line and each of
+    /// <paramref name="dpopFieldLines"/> on its own <c>DPoP</c> field line, so every field line of the request and of the
+    /// answer is as written and as received.
+    /// </summary>
+    /// <param name="rs">The running resource server.</param>
+    /// <param name="authorization">The <c>Authorization</c> field value.</param>
+    /// <param name="dpopFieldLines">The <c>DPoP</c> field values, one line each.</param>
+    /// <returns>The answer as received.</returns>
+    private Task<HttpResponseData> SendProtectedOverARawConnectionAsync(
+        TestResourceServerShell rs, string authorization, IReadOnlyList<string> dpopFieldLines)
+    {
+        List<KeyValuePair<string, string>> fieldLines = [new(WellKnownHttpHeaderNames.Authorization, authorization)];
+        foreach(string proof in dpopFieldLines)
+        {
+            fieldLines.Add(new(WellKnownHttpHeaderNames.DPoP, proof));
+        }
+
+        return RawHttpsRequest.SendPinnedAsync(
+            rs.HttpCertificate!, WellKnownHttpMethods.Get, new Uri(rs.HttpBaseAddress!, "/protected"), fieldLines,
+            ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken);
     }
 
 

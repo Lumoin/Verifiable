@@ -18,6 +18,8 @@ public enum JwsAccessTokenValidationFailureReason
     /// payload is not a JSON object, or a structured claim whose meaning would otherwise be silently lost is
     /// not in its registered shape (the <c>act</c> delegation chain and <c>may_act</c> of RFC 8693,
     /// Sections 4.1 and 4.4 — a delegated token must never validate as a plain direct-subject token).
+    /// An access token whose <c>cnf</c> claim carries no <c>jkt</c> confirmation the validator reads is refused with
+    /// this reason too, so a sender-constrained token never validates as a bearer token.
     /// </summary>
     Malformed,
 

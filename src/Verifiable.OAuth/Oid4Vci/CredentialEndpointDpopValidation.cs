@@ -56,7 +56,9 @@ namespace Verifiable.OAuth.Oid4Vci;
 /// fails a Section 4.3 check, <c>use_dpop_nonce</c> for a missing or stale nonce). The resource-server shape mirrors
 /// <c>DpopTokenEndpointValidation</c> but adds the <c>ath</c> binding and computes <c>htm</c> and
 /// <c>htu</c> from the request being served, so one enforcement serves an endpoint that answers more
-/// than one HTTP method.
+/// than one HTTP method. The checks run in the one order of <see cref="DpopResourceAccess.DecideCoreAsync"/>, which an
+/// application's own resource runs through <see cref="DpopResourceAccess.DecideAsync"/>; <see cref="EnforceAsync"/> is
+/// the adapter over the authorization server's slots.
 /// </para>
 /// <para>
 /// Every <c>DPoP</c> challenge of one request carries the parameters of its <see cref="ResourceChallengeContext"/>,
@@ -248,8 +250,8 @@ internal static class CredentialEndpointDpopValidation
     /// <summary>
     /// Attaches the <c>DPoP</c> challenge <paramref name="challenge"/> to <paramref name="response"/> as its
     /// <c>WWW-Authenticate</c> field, with the field <c>Access-Control-Expose-Headers: WWW-Authenticate, DPoP-Nonce</c>
-    /// (<see cref="WellKnownDpopValues.ExposedDpopResponseFields"/>): the one place a library resource attaches a
-    /// <c>DPoP</c> challenge, so every such answer exposes its fields to a browser application.
+    /// (<see cref="WellKnownDpopValues.ExposedDpopResponseFields"/>), through <see cref="DpopResourceAccess.WithDpopChallenge"/>,
+    /// the one place a <c>DPoP</c> challenge is attached, so every such answer exposes its fields to a browser application.
     /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "In order for the
     /// application to obtain and use the WWW-Authenticate HTTP response header value, the server needs to make it
     /// available to the application by including WWW-Authenticate in the Access-Control-Expose-Headers response header
@@ -261,9 +263,7 @@ internal static class CredentialEndpointDpopValidation
     /// <param name="challenge">The <c>WWW-Authenticate</c> value, holding a <c>DPoP</c> challenge.</param>
     /// <returns>The answer with its challenge and the exposure field.</returns>
     internal static ServerHttpResponse WithDpopChallenge(ServerHttpResponse response, string challenge) =>
-        response
-            .WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, challenge)
-            .WithHeader(WellKnownHttpHeaderNames.AccessControlExposeHeaders, WellKnownDpopValues.ExposedDpopResponseFields);
+        DpopResourceAccess.WithDpopChallenge(response, challenge);
 
 
     /// <summary>
@@ -273,6 +273,27 @@ internal static class CredentialEndpointDpopValidation
     /// two or more lines through <see cref="RefuseRepeatedField"/>, a field carrying no access token through
     /// <see cref="RefuseMissingCredentials"/>, and otherwise answers the token and the scheme it was presented under.
     /// </summary>
+    /// <remarks>
+    /// When the server's resources require DPoP-bound access tokens
+    /// (<see cref="AuthorizationServerIntegration.IsDpopBoundAccessTokenRequiredAtResources"/>), the resource is a
+    /// protection space requiring DPoP authentication
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>;
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-2">RFC 9728 Section 2</see>,
+    /// <c>dpop_bound_access_tokens_required</c>) and the <c>DPoP</c> scheme is the one mechanism it accepts, so every
+    /// answer here carries the <c>DPoP</c> challenge alone, before any token is validated
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "Upon receipt of a
+    /// request to a protected resource within the protection space requiring DPoP authentication, the server can respond
+    /// with a challenge to the client to provide DPoP authentication information if the request does not include valid
+    /// credentials or does not contain an access token sufficient for access."): a request carrying no access token and
+    /// one presenting a token under the <c>Bearer</c> scheme 401 with an empty body and no <c>error</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>: "If the request
+    /// lacks any authentication information (e.g., the client was unaware that authentication is necessary or attempted
+    /// using an unsupported authentication method), the resource server SHOULD NOT include an error code or other error
+    /// information."), and a field sent on two or more lines 400 <c>invalid_request</c> (RFC 6750 Section 3.1:
+    /// "invalid_request The request is missing a required parameter, includes an unsupported parameter or parameter value,
+    /// repeats the same parameter, uses more than one method for including an access token, or is otherwise malformed.
+    /// The resource server SHOULD respond with the HTTP 400 (Bad Request) status code.").
+    /// </remarks>
     /// <param name="server">The authorization server holding the issuer resolver and the algorithm slot.</param>
     /// <param name="registration">The client (tenant) the request belongs to.</param>
     /// <param name="context">The per-request context carrying the inbound request.</param>
@@ -288,13 +309,29 @@ internal static class CredentialEndpointDpopValidation
     {
         ResourceChallengeContext challenge = await ResolveChallengeContextAsync(
             server, registration, context, requiredScope, cancellationToken).ConfigureAwait(false);
+        bool isDpopBoundAccessTokenRequired = server.OAuth().IsDpopBoundAccessTokenRequiredAtResources;
         AuthorizationFieldReading authorization = BearerTokenValidation.ReadAuthorizationField(context);
         if(authorization.IsRepeated)
         {
-            return new LibraryResourcePresentation(null, false, challenge, RefuseRepeatedField(authorization, challenge.Realm, challenge));
+            ServerHttpResponse repeatedFieldRefusal = isDpopBoundAccessTokenRequired switch
+            {
+                true => WithDpopChallenge(
+                    ServerHttpResponse.BadRequest(OAuthErrors.InvalidRequest, WellKnownOAuthErrorDescriptions.MalformedAuthorizationField),
+                    BuildDpopChallenge(OAuthErrors.InvalidRequest, challenge)),
+                false => RefuseRepeatedField(authorization, challenge.Realm, challenge)
+            };
+
+            return new LibraryResourcePresentation(null, false, challenge, repeatedFieldRefusal);
         }
 
-        if(!BearerTokenValidation.TryExtractAccessToken(authorization, out string? accessToken, out bool isDpopPresentation))
+        bool hasAccessToken = BearerTokenValidation.TryExtractAccessToken(authorization, out string? accessToken, out bool isDpopPresentation);
+        if(isDpopBoundAccessTokenRequired && (!hasAccessToken || !isDpopPresentation))
+        {
+            return new LibraryResourcePresentation(
+                null, false, challenge, WithDpopChallenge(ServerHttpResponse.Unauthorized(), BuildDpopChallenge(null, challenge)));
+        }
+
+        if(!hasAccessToken)
         {
             return new LibraryResourcePresentation(null, false, challenge, RefuseMissingCredentials(challenge));
         }
@@ -306,7 +343,19 @@ internal static class CredentialEndpointDpopValidation
     /// <summary>
     /// Returns the failure response to return, or <see langword="null"/> when the sender
     /// constraint is satisfied or the token is an ordinary bearer token presented under the
-    /// <c>Bearer</c> scheme.
+    /// <c>Bearer</c> scheme: the library resources' adapter over <see cref="DpopResourceAccess.DecideCoreAsync"/>, the
+    /// one order of the RFC 9449 Section 7.1 checks an application's resource runs through
+    /// <see cref="DpopResourceAccess.DecideAsync"/>. The presentation is the token's <c>cnf</c>
+    /// (<see cref="ReadConfirmationThumbprint"/>), the request's method and every <c>DPoP</c> field line; the checks are
+    /// the authorization server's slots (the proof validation <see cref="DpopRequestReading.ValidateProofAsync"/> runs,
+    /// <see cref="AuthorizationServerIntegration.IssueDpopNonceAsync"/> and
+    /// <see cref="AuthorizationServerIntegration.ValidateDpopNonceAsync"/> under the registration's tenant), the
+    /// replay guard's atomic claim (<see cref="JtiReplayGuard.ConsultDpopProofAsync"/>, the issuer's text and the target
+    /// URI) and the <c>Bearer</c> refusal's <see cref="BearerTokenValidation.InvalidTokenChallenge"/>. The target URI is
+    /// composed by <see cref="DpopRequestReading.ComposeTargetUri"/> from the issuer resolved only once the checks reach
+    /// the proof, and is the audience of the resource's nonces
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">RFC 9449 Section 9</see>: "nonces will be only
+    /// accepted by the server that issued them").
     /// </summary>
     /// <param name="server">The authorization server holding the DPoP delegates and the issuer resolver.</param>
     /// <param name="context">The per-request context carrying the inbound request.</param>
@@ -334,191 +383,63 @@ internal static class CredentialEndpointDpopValidation
         CancellationToken cancellationToken)
     {
         var oauth = server.OAuth();
+        IncomingRequest? request = context.IncomingRequest;
+        bool isSenderConstrained = accessToken.TryGetValue(WellKnownJwtClaimNames.Cnf, out object? confirmation);
+        IReadOnlyList<string>? dpopFieldLines = null;
+        _ = request?.Headers.TryGetAll(WellKnownHttpHeaderNames.DPoP, out dpopFieldLines);
 
-        if(!accessToken.TryGetValue(WellKnownJwtClaimNames.Cnf, out object? confirmation))
+        DpopResourceAccess.DpopResourcePresentation presentation = new(
+            rawAccessToken,
+            isDpopPresentation,
+            isSenderConstrained,
+            isSenderConstrained ? ReadConfirmationThumbprint(confirmation) : null,
+            request?.Method ?? string.Empty,
+            dpopFieldLines ?? [],
+            oauth.IsDpopBoundAccessTokenRequiredAtResources);
+
+        //RFC 9449 Section 4.3: the htm claim matches the HTTP method of the current request, and the htu claim its
+        //target URI, its authority the listener authority the host stamped when it names one and the issuer's otherwise
+        //(RFC 9110 Section 7.1). The issuer is resolved once, when the checks reach the proof, and its text keys the
+        //proof's jti record beside the target.
+        Uri? resolvedIssuer = null;
+        IssueDpopNonceDelegate? issueNonce = oauth.IssueDpopNonceAsync;
+        ValidateDpopNonceDelegate? validateNonce = oauth.ValidateDpopNonceAsync;
+        DpopResourceAccess.DpopResourceChecks checks = new()
         {
-            //RFC 9449 §7.1: the DPoP scheme carries a DPoP-bound access token. An unbound token
-            //presented under it names no key a proof could be checked against, so it is refused;
-            //under the Bearer scheme it is an ordinary bearer token.
-            return isDpopPresentation
-                ? RefuseUnderScheme(isDpopPresentation, OAuthErrors.InvalidToken,
-                    "The Access Token is not bound to a DPoP key and cannot be presented under the DPoP scheme.", challenge)
-                : null;
-        }
-
-        string? boundThumbprint = ReadConfirmationThumbprint(confirmation);
-        if(boundThumbprint is null)
-        {
-            //The token is sender-constrained by a confirmation method this resource does not check
-            //(cnf without a usable jkt). Serving it as a bearer token would drop that constraint.
-            return RefuseUnderScheme(isDpopPresentation, OAuthErrors.InvalidToken,
-                "The Access Token carries a confirmation method this resource cannot enforce.", challenge);
-        }
-
-        //RFC 9449 §7.2: a DPoP-bound token received as a bearer token is rejected. Accepting it
-        //under Bearer would strip the binding the token endpoint established.
-        if(!isDpopPresentation)
-        {
-            return RefuseUnderScheme(isDpopPresentation, OAuthErrors.InvalidToken,
-                "The Access Token is sender-constrained and must be presented under the DPoP scheme.", challenge);
-        }
-
-        //A bound token with no DPoP enforcement wired (no validator assigned and no parser for the library
-        //default, or no nonce delegates) is a misconfiguration: fail loud rather than fall back to bearer,
-        //which would silently drop the proof-of-possession check.
-        if(!DpopRequestReading.IsProofValidationWired(oauth)
-            || oauth.IssueDpopNonceAsync is null
-            || oauth.ValidateDpopNonceAsync is null)
-        {
-            return ServerHttpResponse.ServerError(
-                OAuthErrors.ServerError,
-                "The Access Token is DPoP-bound but DPoP validation is not configured.");
-        }
-
-        Uri issuerUri = await ResolveIssuerAsync(server, registration, context, cancellationToken)
-            .ConfigureAwait(false);
-
-        //RFC 9449 Section 4.3: the htm claim matches the HTTP method of the current request, and the htu
-        //claim its target URI; both are read from the request this endpoint is serving, its
-        //authority the listener authority the host stamped when it names one and the issuer's
-        //otherwise (RFC 9110 Section 7.1). RFC 9449 Section 9: a resource's nonce is accepted only at
-        //the endpoint that issued it, so its nonces are issued for and validated against that same
-        //target URI, never the issuer the token endpoint's nonces are issued for.
-        IncomingRequest request = context.IncomingRequest!;
-        string htu = DpopRequestReading.ComposeTargetUri(request, issuerUri);
-        Uri nonceAudience = new(htu);
-
-        //RFC 9449 Section 4.3, check 1: "There is not more than one DPoP HTTP request header field."
-        //Two field lines are an invalid proof (Section 7.1: "invalid_dpop_proof is used to indicate
-        //that the DPoP proof itself was deemed invalid based on the criteria of Section 4.3"), refused
-        //before the nonce challenge a request with no proof is answered with.
-        (string? dpopProof, bool isDpopFieldRepeated) = DpopRequestReading.ReadDpopField(context.IncomingRequest);
-        if(isDpopFieldRepeated)
-        {
-            return RefuseUnderScheme(isDpopPresentation, OAuthErrors.InvalidDpopProof,
-                DpopRequestReading.MoreThanOneDpopFieldDescription, challenge);
-        }
-
-        if(dpopProof is null)
-        {
-            return await ChallengeForNonceAsync(
-                server, registration, context, nonceAudience,
-                "A DPoP proof carrying this resource's nonce is required for the sender-constrained Access Token.",
-                challenge, cancellationToken).ConfigureAwait(false);
-        }
-
-        //RFC 9449 Section 4.3, check 5: the alg is held to the algorithms the authorization server accepts, the one
-        //slot the token endpoint reads. A host resolver that answered no list, or a list holding a name no challenge
-        //can carry, leaves no usable policy to hold it to, so the request fails closed as a server error, as the token
-        //endpoint answers a resolver that answered no list.
-        if(challenge.Algorithms is not IReadOnlyList<string> acceptedAlgorithms)
-        {
-            return ServerHttpResponse.ServerError(
-                OAuthErrors.ServerError,
-                challenge.IsAlgorithmListUnusable switch
-                {
-                    true => DpopTokenEndpointValidation.AlgorithmResolverAnsweredUnusableListDescription,
-                    false => DpopTokenEndpointValidation.AlgorithmResolverAnsweredNoListDescription
-                });
-        }
-
-        DpopProofValidationResult proofResult = await DpopRequestReading.ValidateProofAsync(
-            oauth,
-            server.TimeProvider,
-            new DpopProofValidationRequest
+            ResolveTargetUriAsync = async ct =>
             {
-                Proof = dpopProof,
-                HttpMethod = request.Method,
-                HttpUrl = htu,
-                //ath binds the proof to THIS access token (RFC 9449 §4.2 / §7).
-                AccessToken = rawAccessToken,
-                NonceRequired = false,
-                AcceptedAlgorithms = acceptedAlgorithms
+                resolvedIssuer = await ResolveIssuerAsync(server, registration, context, ct).ConfigureAwait(false);
+
+                return new Uri(DpopRequestReading.ComposeTargetUri(context.IncomingRequest!, resolvedIssuer));
             },
-            cancellationToken).ConfigureAwait(false);
-
-        if(!proofResult.IsSuccess)
-        {
-            return proofResult.FailureReason is DpopProofValidationFailureReason.NonceMissing
-                or DpopProofValidationFailureReason.NonceMismatch
-                ? await ChallengeForNonceAsync(
-                    server, registration, context, nonceAudience, "DPoP nonce required.", challenge, cancellationToken)
-                    .ConfigureAwait(false)
-                : RefuseUnderScheme(isDpopPresentation, OAuthErrors.InvalidDpopProof,
-                    $"DPoP proof validation failed: {proofResult.FailureReason}.", challenge);
-        }
-
-        //A validation that answers success names the base64url JWK SHA-256 Thumbprint of the proof's
-        //public key (DpopProofValidationResult.JwkThumbprint; RFC 9449 Section 6.1, the jkt member;
-        //RFC 7638 Section 3), the value Section 7.1 has the resource match against the token's
-        //binding. An application's validator answering success with no value or text of another
-        //spelling leaves nothing to match, a fault of the server's own validator rather than of the
-        //client's proof, so the request fails closed as a server error before the binding compare,
-        //never as the invalid_token that compare answers.
-        if(proofResult.JwkThumbprint is not string proofThumbprint
-            || !DpopJwkUtilities.IsJwkSha256ThumbprintSpelling(proofThumbprint))
-        {
-            return ServerHttpResponse.ServerError(OAuthErrors.ServerError, DpopRequestReading.ValidatedProofWithoutThumbprintDescription);
-        }
-
-        //A validation that answers success carries the proof's claims, the nonce and the jti the
-        //checks below read (RFC 9449 Section 4.3, checks 10 and 11; Section 11.1). An application's
-        //validator answering success without them leaves neither to check, so the request fails
-        //closed as a server error, as for a missing thumbprint.
-        if(proofResult.Claims is not DpopProofClaims proofClaims)
-        {
-            return ServerHttpResponse.ServerError(OAuthErrors.ServerError, DpopRequestReading.ValidatedProofWithoutClaimsDescription);
-        }
-
-        //RFC 9449 §4.3 item 12 and §7.1: the proving key MUST be the one the token was bound to.
-        //Constant-time — the thumbprint is matched, not merely compared. The refusal is the
-        //invalid_token of §7.1's Figure 16, the binding of the token being what fails.
-        if(!FixedTimeComparison.AreEqual(proofThumbprint, boundThumbprint))
-        {
-            return RefuseUnderScheme(isDpopPresentation, OAuthErrors.InvalidToken,
-                "The DPoP proof key does not match the Access Token's cnf.jkt binding.", challenge);
-        }
-
-        //RFC 9449 §11.3: no proof without the nonce claim is accepted once a nonce has been
-        //provided, and this resource provides one to every client it challenges.
-        if(proofClaims.Nonce is null)
-        {
-            return await ChallengeForNonceAsync(
-                server, registration, context, nonceAudience, "DPoP nonce required.", challenge, cancellationToken)
-                .ConfigureAwait(false);
-        }
-
-        DpopNonceValidationResult nonceResult = await oauth.ValidateDpopNonceAsync(
-            proofClaims.Nonce, nonceAudience, registration.TenantId, context, cancellationToken)
-            .ConfigureAwait(false);
-        if(!nonceResult.IsSuccess)
-        {
-            return await ChallengeForNonceAsync(
-                server, registration, context, nonceAudience,
-                $"DPoP nonce invalid: {nonceResult.FailureReason}.", challenge, cancellationToken).ConfigureAwait(false);
-        }
-
-        //jti replay — the same shared correlation store, the proof's jti recorded in the context of
-        //the target URI this request is served at (RFC 9449 §11.1).
-        JtiReplayOutcome jtiOutcome = await JtiReplayGuard.ConsultDpopProofAsync(
-            server, context, registration.TenantId,
-            issuerUri.OriginalString, htu, proofClaims.Jti,
-            now + WellKnownDpopValues.DefaultReplayWindow,
-            cancellationToken).ConfigureAwait(false);
-
-        return jtiOutcome switch
-        {
-            JtiReplayOutcome.FirstUse => null,
-            JtiReplayOutcome.Replayed => RefuseUnderScheme(isDpopPresentation,
-                OAuthErrors.InvalidDpopProof, "The DPoP proof jti has been presented previously.", challenge),
-            JtiReplayOutcome.Unacceptable => RefuseUnderScheme(isDpopPresentation,
-                OAuthErrors.InvalidDpopProof, "DPoP proof jti is too long or carries a character the replay guard cannot store.", challenge),
-            JtiReplayOutcome.StoreUnavailable => ServerHttpResponse.ServerError(
-                OAuthErrors.ServerError,
-                "DPoP proof jti replay defense is required by policy but no jti store is configured."),
-
-            _ => null
+            ValidateProofAsync = DpopRequestReading.IsProofValidationWired(oauth)
+                ? (proofRequest, ct) => DpopRequestReading.ValidateProofAsync(oauth, server.TimeProvider, proofRequest, ct)
+                : null,
+            IssueNonceAsync = issueNonce is null
+                ? null
+                : (audience, ct) => issueNonce(audience, registration.TenantId, context, ct),
+            ValidateNonceAsync = validateNonce is null
+                ? null
+                : (nonce, audience, ct) => validateNonce(nonce, audience, registration.TenantId, context, ct),
+            //The guard keeps the record for the replay window from the request's instant, as the token endpoint does, so
+            //the proof's iat is not read here.
+            ConsultJtiAsync = (target, jti, _, ct) => JtiReplayGuard.ConsultDpopProofAsync(
+                server, context, registration.TenantId, resolvedIssuer!.OriginalString, target.OriginalString, jti,
+                now + WellKnownDpopValues.DefaultReplayWindow, ct),
+            AcceptedAlgorithms = challenge.Algorithms,
+            AlgorithmListFailureDescription = challenge.IsAlgorithmListUnusable switch
+            {
+                true => DpopTokenEndpointValidation.AlgorithmResolverAnsweredUnusableListDescription,
+                false => DpopTokenEndpointValidation.AlgorithmResolverAnsweredNoListDescription
+            },
+            BearerChallenge = BearerTokenValidation.InvalidTokenChallenge,
+            Realm = challenge.Realm,
+            Scope = challenge.Scope
         };
+
+        DpopResourceDecision decision = await DpopResourceAccess.DecideCoreAsync(presentation, checks, cancellationToken).ConfigureAwait(false);
+
+        return decision.Response;
     }
 
 
@@ -661,63 +582,6 @@ internal static class CredentialEndpointDpopValidation
         isDpopPresentation && refusal.StatusCode == 401
             ? WithDpopChallenge(refusal, BuildDpopChallenge(OAuthErrors.InvalidToken, challenge))
             : refusal;
-
-
-    /// <summary>
-    /// Builds a 401 refusal carrying <paramref name="error"/> in the body and a challenge in the
-    /// presentation's scheme: the <c>DPoP</c> challenge with the same error, attached through
-    /// <see cref="WithDpopChallenge"/>, or <c>Bearer error="invalid_token"</c> for a <c>Bearer</c> presentation (whose
-    /// refusals here are all <c>invalid_token</c>).
-    /// </summary>
-    /// <param name="isDpopPresentation">Whether the token was presented under the <c>DPoP</c> scheme.</param>
-    /// <param name="error">The error code.</param>
-    /// <param name="description">The <c>error_description</c> the body carries.</param>
-    /// <param name="challenge">The parameters every <c>DPoP</c> challenge of the request carries.</param>
-    /// <returns>The 401 response.</returns>
-    private static ServerHttpResponse RefuseUnderScheme(
-        bool isDpopPresentation, string error, string description, ResourceChallengeContext challenge) =>
-        isDpopPresentation
-            ? WithDpopChallenge(ServerHttpResponse.Unauthorized(error, description), BuildDpopChallenge(error, challenge))
-            : ServerHttpResponse.Unauthorized(error, description)
-                .WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, BearerTokenValidation.InvalidTokenChallenge);
-
-
-    /// <summary>
-    /// Issues a fresh resource nonce and answers with the
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">RFC 9449 §9</see> challenge: 401,
-    /// <c>use_dpop_nonce</c> in the body and in the <c>DPoP</c> challenge, and the nonce in the
-    /// <c>DPoP-Nonce</c> header: "Resource servers use an HTTP 401 (Unauthorized) error code with an
-    /// accompanying WWW-Authenticate: DPoP value and DPoP-Nonce value to accomplish this."
-    /// </summary>
-    /// <param name="server">The authorization server holding the nonce issuance delegate.</param>
-    /// <param name="registration">The client (tenant) the request belongs to.</param>
-    /// <param name="context">The per-request context.</param>
-    /// <param name="nonceAudience">
-    /// The target URI of the endpoint serving the request, the one endpoint the nonce is accepted at
-    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">RFC 9449 Section 9</see>: "nonces will be only
-    /// accepted by the server that issued them").
-    /// </param>
-    /// <param name="description">The <c>error_description</c> the body carries.</param>
-    /// <param name="challenge">The parameters every <c>DPoP</c> challenge of the request carries.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The 401 nonce challenge.</returns>
-    private static async ValueTask<ServerHttpResponse> ChallengeForNonceAsync(
-        EndpointServer server,
-        ClientRecord registration,
-        ExchangeContext context,
-        Uri nonceAudience,
-        string description,
-        ResourceChallengeContext challenge,
-        CancellationToken cancellationToken)
-    {
-        string freshNonce = await server.OAuth().IssueDpopNonceAsync!(
-            nonceAudience, registration.TenantId, context, cancellationToken).ConfigureAwait(false);
-
-        return WithDpopChallenge(
-                ServerHttpResponse.Unauthorized(OAuthErrors.UseDpopNonce, description),
-                BuildDpopChallenge(OAuthErrors.UseDpopNonce, challenge))
-            .WithHeader(WellKnownHttpHeaderNames.DPoPNonce, freshNonce);
-    }
 
 
     /// <summary>

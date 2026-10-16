@@ -82,10 +82,29 @@ public static class JtiReplayGuard
     /// The classes of character the guard refuses in a <c>jti</c> or an issuer before any store call: the Unicode
     /// general category Cc (the C0 and C1 controls and U+007F) and an unpaired surrogate, with no exempt code point.
     /// A format character (Cf) such as U+200B is not selected. Built once over the shared classifier
-    /// <see cref="TextHygiene"/>; the rule is this library's policy, which <see cref="ConsultCoreAsync"/> applies.
+    /// <see cref="TextHygiene"/>; the rule is this library's policy, which <see cref="IsStorableJti"/> applies to a
+    /// <c>jti</c> and <see cref="ConsultCoreAsync"/> to the issuer beside it.
     /// </summary>
     private static TextHygieneRule UnstorableCharacterRule { get; } = new(
         [TextHygieneClass.Control, TextHygieneClass.UnpairedSurrogate], []);
+
+
+    /// <summary>
+    /// Whether a <c>jti</c> is one a <c>jti</c> record can hold: at least one character and at most
+    /// <see cref="MaxJtiLength"/> (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.1">RFC 9449
+    /// Section 11.1</see>: "In order to guard against memory exhaustion attacks, a server that is tracking jti values
+    /// should reject DPoP proof JWTs with unnecessarily large jti values or store only a hash thereof."), and no
+    /// character of <see cref="UnstorableCharacterRule"/>, which a store may not hold. The one rule
+    /// <see cref="ConsultCoreAsync"/> applies before any store call and an application's resource applies before its own
+    /// <c>jti</c> slots are called (<see cref="ProtectedResource.DpopResourceAccess.DecideAsync"/>), so a <c>jti</c> no
+    /// record can hold is refused the same way at every resource.
+    /// </summary>
+    /// <param name="jti">The presented <c>jti</c>.</param>
+    /// <returns><see langword="true"/> when a record can hold <paramref name="jti"/>.</returns>
+    internal static bool IsStorableJti(string jti) =>
+        jti.Length > 0
+        && jti.Length <= MaxJtiLength
+        && TextHygiene.Inspect(jti, UnstorableCharacterRule) is null;
 
     /// <summary>
     /// Composes the <c>(purpose, issuer, jti)</c> correlation key of a purpose whose identifiers are not
@@ -321,19 +340,14 @@ public static class JtiReplayGuard
             return JtiReplayOutcome.FirstUse;
         }
 
-        //RFC 9449 §11.1's memory-exhaustion rule: an oversized jti is refused before it ever
-        //reaches a store, under every policy that consults the store at all.
-        if(jti.Length > MaxJtiLength)
-        {
-            return JtiReplayOutcome.Unacceptable;
-        }
-
-        //The composed correlation string and the saved record carry the jti and the issuer to the application's
-        //store, and a store may not hold a control character or an unpaired surrogate (a durable store faults on
-        //U+0000), so the guard answers a refusal where a fault would otherwise reach the caller as a server error.
-        //The rule is this library's policy, beyond the length the text asks to bound, and runs before any store
-        //call.
-        bool isUnstorable = TextHygiene.Inspect(jti, UnstorableCharacterRule) is not null
+        //RFC 9449 Section 11.1's memory-exhaustion rule, an oversized jti refused before it ever reaches a store, under every
+        //policy that consults the store at all; and the character rule: the composed correlation string and the saved
+        //record carry the jti and the issuer to the application's store, and a store may not hold a control character
+        //or an unpaired surrogate (a durable store faults on U+0000), so the guard answers a refusal where a fault would
+        //otherwise reach the caller as a server error. The jti's rule is IsStorableJti, the one an application's
+        //resource applies too; the character rule is this library's policy, beyond the length the text asks to bound,
+        //and runs before any store call.
+        bool isUnstorable = !IsStorableJti(jti)
             || TextHygiene.Inspect(issuer, UnstorableCharacterRule) is not null;
         if(isUnstorable)
         {

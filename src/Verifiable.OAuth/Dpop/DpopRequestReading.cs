@@ -4,11 +4,13 @@ namespace Verifiable.OAuth.Dpop;
 
 /// <summary>
 /// The reading of a request's <c>DPoP</c> field and target that every DPoP-checked endpoint shares, the token endpoint,
-/// the pushed authorization request and the protected resources alike: the field read by its field lines
-/// (<see cref="ReadDpopField"/>), the target URI a proof's <c>htu</c> is held to (<see cref="ComposeTargetUri"/>), the
-/// proof validation the server runs, the application's or the library default (<see cref="IsProofValidationWired"/>,
-/// <see cref="ValidateProofAsync"/>), and the descriptions those endpoints answer a repeated field and a validator's
-/// incomplete success with.
+/// the pushed authorization request and the protected resources alike: the target URI a proof's <c>htu</c> is held to
+/// (<see cref="ComposeTargetUri"/>), the proof validation the server runs, the application's or the library default
+/// (<see cref="IsProofValidationWired"/>, <see cref="ValidateProofAsync"/>), and the descriptions those endpoints answer
+/// a repeated field and a validator's incomplete success with. The token endpoint and the pushed authorization request
+/// read the field by its field lines through <see cref="ReadDpopField"/>; the library's protected resources pass every
+/// field line to <see cref="ProtectedResource.DpopResourceAccess"/>'s checks, which refuse two or more with
+/// <see cref="MoreThanOneDpopFieldDescription"/>.
 /// </summary>
 /// <remarks>
 /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">RFC 9449 Section 4.3</see> holds every receiving
