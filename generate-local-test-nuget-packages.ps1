@@ -14,7 +14,10 @@
 #                consumer's pins carry in the package version file -ConsumerPins names. A number that
 #                record names, or one not above every number it names, refuses the packing before
 #                anything is packed, and the number is reserved by creating its tag, which git
-#                refuses if the tag exists, only once the whole family is packed and checked.
+#                refuses if the tag exists, only once the whole family is packed and checked. The
+#                record is read, the number reserved and the family published under the publication
+#                lock, so no other run of this clone reads or changes the record in between; what lies
+#                outside this clone is stated under The record below.
 #  g<sha>        The commit the packages were built from, written as git describe writes it: the
 #                letter g before the short commit id. The letter makes the label an alphanumeric
 #                identifier for every commit, so a short id of digits alone with a leading zero,
@@ -74,16 +77,32 @@
 #                address it advertises and every redirect, must be https, and a location that is not
 #                refuses the packing; what an archive holds is established by its content hash, not by
 #                its transport.
-#  The record.   The tags are this clone's: a tag another clone created and did not push is not seen.
+#  The record.   The tags are this clone's and the pins those of the file -ConsumerPins names. A run takes
+#                the publication lock, a file in the repository's common git directory, before it first
+#                reads the record, and holds it until the run ends, so the runs of this clone and of its
+#                worktrees read the record, reserve a number and replace a family one at a time; a lock
+#                another run holds refuses the run, naming that run. Nothing outside this clone is read
+#                or held off: a reservation another clone made is not seen, whether that clone has not
+#                pushed its tag or pushed it and this clone has not fetched it, and a run in another
+#                clone is not held off by this clone's lock. The lane that publishes reconciles the
+#                record with the shared repository's tags before the run and pushes the tag after it.
 #
 #The working tree is still held to the commit, so this script is the commit's own: any git command
 #that fails, git naming no commit, a tracked file that differs from the commit, a file git does not
 #track, and a file git has been told to stop comparing (assume-unchanged or skip-worktree, which
 #status reads as unchanged whatever the file holds) each refuse the packing.
 #
-#Every directory the run writes lies under one directory created for the run, which is removed when the
-#run ends, whether it publishes or is refused, and whatever refused it: a check, a failed command, a
-#process that could not start, an archive that could not be read or a network failure.
+#Every directory the run writes lies under one directory created for the run. When the run ends, whether
+#it publishes or is refused, and whatever refused it - a check, a failed command, a process that could not
+#start, an archive that could not be read or a network failure - it ends every process it started and
+#removes that directory. Every process the run starts, and every process those start in turn, is held in
+#one job of the operating system that the run's own process joins when the run begins, so a process left
+#running after the command that started it has ended is found by its membership and not by its parent;
+#each is ended after its command, held by its own handle until its exit is observed. Each cleanup action
+#is attempted apart from the others, and a cleanup the operating system refuses is not called done: a
+#process of the run not shown to have exited, an archive of the new family that could not be removed, the
+#run directory if it still stands and a publication lock that could not be released are each named when
+#the run ends, and the run fails.
 param(
     [Parameter(Mandatory = $true)]
     [int]$Publication,
@@ -129,6 +148,317 @@ $runCancellation = [System.Threading.CancellationTokenSource]::new()
 $httpHandler = [System.Net.Http.SocketsHttpHandler]::new()
 $httpHandler.AllowAutoRedirect = $false
 $httpClient = [System.Net.Http.HttpClient]::new($httpHandler, $true)
+
+#What the run's cleanup could not undo, each entry naming what it leaves; any entry fails the run.
+$cleanupSurvivors = [System.Collections.Generic.List[string]]::new()
+
+#The processes of the run that could not be shown to have exited when they were ended, each kept with
+#the handle that holds its identity, and their process identifiers.
+$survivingProcesses = [System.Collections.Generic.List[hashtable]]::new()
+$survivingIds = [System.Collections.Generic.HashSet[long]]::new()
+
+#The job of the operating system that holds the run's own process and every process it starts, once it is
+#created, and the run's own process, which joins it.
+$runJob = $null
+$runProcess = [System.Diagnostics.Process]::GetCurrentProcess()
+
+#The publication lock this run holds once it has taken it, and the file it holds.
+$publicationLock = $null
+$publicationLockPath = $null
+
+#How long a process the run has ended may take to exit before it is named as surviving, and how many
+#times the job is listed and its processes ended before any process still listed is named as surviving.
+$processExitAllowance = [TimeSpan]::FromSeconds(30)
+$maximumClosingRounds = 5
+
+#The job of the operating system the run's processes are held in. A process joins a job when it starts if
+#the process starting it is in that job, so once the run's own process has joined it, every process the
+#run starts and every process those start is a member, wherever its parent is by then; the job is listed by
+#the identifiers of its member processes, and a process is established as a member by its own handle.
+$runJobSource = @'
+#nullable enable
+namespace VerifiableLocalPublication
+{
+    using System;
+    using System.Buffers.Binary;
+    using System.ComponentModel;
+    using System.Runtime.InteropServices;
+    using Microsoft.Win32.SafeHandles;
+
+    /// <summary>
+    /// A job of the operating system that holds the processes of one packing run.
+    /// </summary>
+    public static class RunJob
+    {
+        /// <summary>
+        /// The information class that lists the identifiers of a job's member processes.
+        /// </summary>
+        private const int JobObjectBasicProcessIdList = 3;
+
+        /// <summary>
+        /// The error a listing answers when the buffer holds fewer identifiers than the job has members.
+        /// </summary>
+        private const int ErrorMoreData = 234;
+
+        /// <summary>
+        /// The bytes before the identifier list: the number of member processes and the number listed.
+        /// </summary>
+        private const int ListHeaderLength = 8;
+
+        /// <summary>
+        /// The access a member is opened with: to wait for it, to read its name and membership, and to end it.
+        /// </summary>
+        private const int MemberAccess = 0x00100000 | 0x1000 | 0x0001;
+
+        /// <summary>
+        /// The error opening a process answers when no process of that identifier exists any longer.
+        /// </summary>
+        private const int ErrorInvalidParameter = 87;
+
+        /// <summary>
+        /// The answer of a wait whose object is signalled, which a process is once it has ended.
+        /// </summary>
+        private const int WaitObject0 = 0;
+
+        /// <summary>
+        /// The answer of a wait whose time ran out before its object was signalled.
+        /// </summary>
+        private const int WaitTimeout = 0x102;
+
+        /// <summary>
+        /// The exit code a process ended by the run is given.
+        /// </summary>
+        private const int EndedByRunExitCode = 1;
+
+        /// <summary>
+        /// The longest image path read.
+        /// </summary>
+        private const int ImagePathCapacity = 32768;
+
+        /// <summary>
+        /// Opens a process by its identifier.
+        /// </summary>
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern SafeProcessHandle OpenProcess(int desiredAccess, [MarshalAs(UnmanagedType.Bool)] bool inheritHandle, int processId);
+
+        /// <summary>
+        /// Ends a process.
+        /// </summary>
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool TerminateProcess(SafeProcessHandle process, int exitCode);
+
+        /// <summary>
+        /// Waits for an object to be signalled.
+        /// </summary>
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern int WaitForSingleObject(SafeProcessHandle handle, int milliseconds);
+
+        /// <summary>
+        /// Reads the full path of a process's image.
+        /// </summary>
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool QueryFullProcessImageNameW(SafeProcessHandle process, int flags, char[] name, ref int size);
+
+        /// <summary>
+        /// Creates a job without a name.
+        /// </summary>
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        private static extern SafeFileHandle CreateJobObjectW(IntPtr attributes, string? name);
+
+        /// <summary>
+        /// Makes a process a member of a job.
+        /// </summary>
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool AssignProcessToJobObject(SafeFileHandle job, SafeProcessHandle process);
+
+        /// <summary>
+        /// Reads one class of a job's information.
+        /// </summary>
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool QueryInformationJobObject(SafeFileHandle job, int informationClass, byte[] information, int length, out int returnedLength);
+
+        /// <summary>
+        /// Answers whether a process is a member of a job.
+        /// </summary>
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool IsProcessInJob(SafeProcessHandle process, SafeFileHandle job, [MarshalAs(UnmanagedType.Bool)] out bool result);
+
+        /// <summary>
+        /// Creates a job and makes the process given its first member.
+        /// </summary>
+        /// <param name="process">The process that joins the job.</param>
+        /// <returns>The handle that holds the job.</returns>
+        public static SafeFileHandle CreateFor(SafeProcessHandle process)
+        {
+            var job = CreateJobObjectW(IntPtr.Zero, null);
+            if(job.IsInvalid)
+            {
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+            }
+
+            if(!AssignProcessToJobObject(job, process))
+            {
+                var error = Marshal.GetLastWin32Error();
+                job.Dispose();
+                throw new Win32Exception(error);
+            }
+
+            return job;
+        }
+
+        /// <summary>
+        /// Answers whether the process the handle holds is a member of the job.
+        /// </summary>
+        /// <param name="job">The job.</param>
+        /// <param name="process">The handle holding the process.</param>
+        /// <returns>Whether the process is a member.</returns>
+        public static bool Holds(SafeFileHandle job, SafeProcessHandle process)
+        {
+            if(!IsProcessInJob(process, job, out var member))
+            {
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+            }
+
+            return member;
+        }
+
+        /// <summary>
+        /// Lists the identifiers of the job's member processes that have not ended.
+        /// </summary>
+        /// <param name="job">The job.</param>
+        /// <returns>The identifiers.</returns>
+        public static long[] ListProcessIds(SafeFileHandle job)
+        {
+            var capacity = 64;
+            while(true)
+            {
+                var information = new byte[ListHeaderLength + (capacity * IntPtr.Size)];
+                if(QueryInformationJobObject(job, JobObjectBasicProcessIdList, information, information.Length, out _))
+                {
+                    var listed = BinaryPrimitives.ReadInt32LittleEndian(information.AsSpan(4, 4));
+                    var identifiers = new long[listed];
+                    for(var index = 0; index < listed; index++)
+                    {
+                        var offset = ListHeaderLength + (index * IntPtr.Size);
+                        identifiers[index] = IntPtr.Size == 8
+                            ? BinaryPrimitives.ReadInt64LittleEndian(information.AsSpan(offset, 8))
+                            : BinaryPrimitives.ReadInt32LittleEndian(information.AsSpan(offset, 4));
+                    }
+
+                    return identifiers;
+                }
+
+                var error = Marshal.GetLastWin32Error();
+                if(error != ErrorMoreData)
+                {
+                    throw new Win32Exception(error);
+                }
+
+                capacity *= 4;
+            }
+        }
+
+        /// <summary>
+        /// Opens the process of the identifier given by a handle of its own, if that process is a member of the
+        /// job. A process that has ended but whose object other handles still keep is opened alike and answers
+        /// as ended; while the handle is held, the identifier names no other process.
+        /// </summary>
+        /// <param name="job">The job.</param>
+        /// <param name="processId">The identifier the job listed.</param>
+        /// <returns>The handle, or <see langword="null"/> when no process of the identifier exists any longer or
+        /// the identifier now names a process outside the job.</returns>
+        public static SafeProcessHandle? OpenMember(SafeFileHandle job, long processId)
+        {
+            var process = OpenProcess(MemberAccess, false, checked((int)processId));
+            if(process.IsInvalid)
+            {
+                var error = Marshal.GetLastWin32Error();
+                process.Dispose();
+                if(error == ErrorInvalidParameter)
+                {
+                    return null;
+                }
+
+                throw new Win32Exception(error);
+            }
+
+            if(!Holds(job, process))
+            {
+                process.Dispose();
+                return null;
+            }
+
+            return process;
+        }
+
+        /// <summary>
+        /// Answers whether the process the handle holds has ended.
+        /// </summary>
+        /// <param name="process">The handle holding the process.</param>
+        /// <returns>Whether it has ended.</returns>
+        public static bool HasEnded(SafeProcessHandle process)
+        {
+            return WaitForEnd(process, 0);
+        }
+
+        /// <summary>
+        /// Waits up to the time given for the process the handle holds to end.
+        /// </summary>
+        /// <param name="process">The handle holding the process.</param>
+        /// <param name="milliseconds">How long to wait.</param>
+        /// <returns>Whether it ended.</returns>
+        public static bool WaitForEnd(SafeProcessHandle process, int milliseconds)
+        {
+            var answer = WaitForSingleObject(process, milliseconds);
+            if(answer == WaitObject0)
+            {
+                return true;
+            }
+
+            if(answer == WaitTimeout)
+            {
+                return false;
+            }
+
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+        }
+
+        /// <summary>
+        /// Ends the process the handle holds.
+        /// </summary>
+        /// <param name="process">The handle holding the process.</param>
+        public static void End(SafeProcessHandle process)
+        {
+            if(!TerminateProcess(process, EndedByRunExitCode))
+            {
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+            }
+        }
+
+        /// <summary>
+        /// Reads the full path of the image of the process the handle holds.
+        /// </summary>
+        /// <param name="process">The handle holding the process.</param>
+        /// <returns>The path.</returns>
+        public static string ImagePath(SafeProcessHandle process)
+        {
+            var name = new char[ImagePathCapacity];
+            var size = name.Length;
+            if(!QueryFullProcessImageNameW(process, 0, name, ref size))
+            {
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+            }
+
+            return new string(name, 0, size);
+        }
+    }
+}
+'@
 
 $exitCode = 1
 try
@@ -307,32 +637,225 @@ try
         return $startInfo
     }
 
-    #Ends a process this run started that is still running when its caller stops waiting for it, so no
-    #process of the run outlives it or holds a file of its directory, and releases the process.
-    function Close-ControlledProcess
+    #Keeps a process of the run that could not be shown to have exited among the run's surviving processes,
+    #with the handle that holds its identity, so the end of the run names it.
+    function Add-SurvivingProcess
+    {
+        param(
+            [Parameter(Mandatory = $true)]
+            [hashtable]$Member
+        )
+
+        if($survivingIds.Add([long]$Member['Id']))
+        {
+            $survivingProcesses.Add($Member)
+        }
+    }
+
+    #Releases the handle that holds a process of the run: the process object of a command the run started, or
+    #the handle the run opened on a member of its job.
+    function Close-MemberHandle
+    {
+        param(
+            [Parameter(Mandatory = $true)]
+            [hashtable]$Member
+        )
+
+        if($null -ne $Member['Owner'])
+        {
+            $Member['Owner'].Dispose()
+        }
+        elseif($null -ne $Member['Handle'])
+        {
+            $Member['Handle'].Dispose()
+        }
+    }
+
+    #Ends every process of the run's job but the run's own, together with the process a command started
+    #whether or not the job holds it, and answers how many of them could not be shown to have exited. A
+    #process waited for may have started others that outlive it, so its own exit establishes nothing about
+    #theirs: the job is listed instead. Each process is held by its own handle, opened by the identifier the
+    #job listed and established as a member of the job through that handle, from before it is ended until
+    #its exit is observed on that handle; each is ended and observed apart from the others, so one that could
+    #not be ended neither stops the ending of the rest nor is released unnamed, and it is kept, with its
+    #handle, among the run's surviving processes. The job is listed again after every round, since a process
+    #ended late may have started another, until a listing holds nothing but the run's own process, processes
+    #already observed to have ended and processes already kept as surviving; when the rounds are spent first,
+    #every process the job still lists that has not ended is named as surviving.
+    function Close-RunProcesses
+    {
+        param(
+            [Parameter(Mandatory = $true)]
+            [AllowNull()]
+            [System.Diagnostics.Process]$Started
+        )
+
+        $survivorsBefore = $survivingProcesses.Count
+        $held = [System.Collections.Generic.List[hashtable]]::new()
+        $observed = [System.Collections.Generic.HashSet[long]]::new()
+        $pendingStarted = $Started
+        try
+        {
+            $settled = $false
+            for($round = 0; $round -lt $maximumClosingRounds -and -not $settled; $round++)
+            {
+                $members = [System.Collections.Generic.List[hashtable]]::new()
+                if($null -ne $pendingStarted)
+                {
+                    $members.Add(@{ 'Owner' = $pendingStarted; 'Handle' = $pendingStarted.SafeHandle; 'Id' = [long]$pendingStarted.Id; 'Name' = $pendingStarted.StartInfo.FileName; 'Refusal' = $null })
+                    $pendingStarted = $null
+                }
+
+                foreach($id in [VerifiableLocalPublication.RunJob]::ListProcessIds($runJob))
+                {
+                    if($id -eq $runProcess.Id -or $observed.Contains($id) -or $survivingIds.Contains($id) -or @($members | Where-Object { $_['Id'] -eq $id }).Count -gt 0)
+                    {
+                        continue
+                    }
+
+                    $handle = [VerifiableLocalPublication.RunJob]::OpenMember($runJob, $id)
+                    if($null -eq $handle)
+                    {
+                        #No process of the identifier exists any longer, or the identifier now names a process
+                        #outside the job, so the member it named has ended.
+                        continue
+                    }
+
+                    $member = @{ 'Owner' = $null; 'Handle' = $handle; 'Id' = $id; 'Name' = "the process $id"; 'Refusal' = $null }
+                    $members.Add($member)
+                    try
+                    {
+                        $member['Name'] = [VerifiableLocalPublication.RunJob]::ImagePath($handle)
+                    }
+                    catch [System.ComponentModel.Win32Exception]
+                    {
+                        #A process that has ended may no longer name its image; it is named by its identifier.
+                    }
+                }
+
+                $settled = $members.Count -eq 0
+                $held.AddRange($members)
+                foreach($member in $members)
+                {
+                    $target = $member['Handle']
+                    try
+                    {
+                        if(-not [VerifiableLocalPublication.RunJob]::HasEnded($target))
+                        {
+                            [VerifiableLocalPublication.RunJob]::End($target)
+                        }
+                    }
+                    catch
+                    {
+                        $member['Refusal'] = "ending it failed: $($_.Exception.Message)"
+                    }
+                }
+
+                foreach($member in $members)
+                {
+                    $ended = $false
+                    try
+                    {
+                        $ended = if($null -eq $member['Refusal']) { [VerifiableLocalPublication.RunJob]::WaitForEnd($member['Handle'], [int]$processExitAllowance.TotalMilliseconds) } else { [VerifiableLocalPublication.RunJob]::HasEnded($member['Handle']) }
+                    }
+                    catch
+                    {
+                        $member['Refusal'] = "its end could not be observed: $($_.Exception.Message)"
+                    }
+
+                    if($ended)
+                    {
+                        $observed.Add($member['Id']) | Out-Null
+                        Close-MemberHandle -Member $member
+                        continue
+                    }
+
+                    if($null -eq $member['Refusal'])
+                    {
+                        $member['Refusal'] = "it had not ended $($processExitAllowance.TotalSeconds) seconds after it was ended"
+                    }
+
+                    Add-SurvivingProcess -Member $member
+                }
+            }
+
+            if(-not $settled)
+            {
+                foreach($id in [VerifiableLocalPublication.RunJob]::ListProcessIds($runJob))
+                {
+                    if($id -eq $runProcess.Id -or $observed.Contains($id) -or $survivingIds.Contains($id))
+                    {
+                        continue
+                    }
+
+                    $handle = [VerifiableLocalPublication.RunJob]::OpenMember($runJob, $id)
+                    if($null -eq $handle)
+                    {
+                        continue
+                    }
+
+                    $member = @{ 'Owner' = $null; 'Handle' = $handle; 'Id' = $id; 'Name' = "the process $id"; 'Refusal' = "the run's job still held it after $maximumClosingRounds rounds of ending its processes" }
+                    $held.Add($member)
+                    if([VerifiableLocalPublication.RunJob]::HasEnded($handle))
+                    {
+                        $observed.Add($id) | Out-Null
+                        Close-MemberHandle -Member $member
+                        continue
+                    }
+
+                    Add-SurvivingProcess -Member $member
+                }
+            }
+        }
+        catch
+        {
+            $refusal = "the run's processes could not be listed and ended: $($_.Exception.Message)"
+            foreach($member in $held)
+            {
+                if(-not $observed.Contains($member['Id']) -and -not $survivingIds.Contains($member['Id']))
+                {
+                    $member['Refusal'] = $refusal
+                    Add-SurvivingProcess -Member $member
+                }
+            }
+
+            if($null -ne $pendingStarted)
+            {
+                Add-SurvivingProcess -Member @{ 'Owner' = $pendingStarted; 'Handle' = $pendingStarted.SafeHandle; 'Id' = [long]$pendingStarted.Id; 'Name' = $pendingStarted.StartInfo.FileName; 'Refusal' = $refusal }
+            }
+
+            $cleanupSurvivors.Add($refusal)
+            return [Math]::Max(1, $survivingProcesses.Count - $survivorsBefore)
+        }
+
+        return $survivingProcesses.Count - $survivorsBefore
+    }
+
+    #Every process the run starts from here on is held in the run's job, which the run's own process joins.
+    Add-Type -TypeDefinition $runJobSource
+    $runJob = [VerifiableLocalPublication.RunJob]::CreateFor($runProcess.SafeHandle)
+
+    #Holds a process the run started to being a member of the run's job before anything is asked of it. A
+    #process the job does not hold, which a job above the run's that lets processes leave it silently would
+    #answer, refuses the packing, since the processes it starts could not be found; its caller ends it like
+    #any other.
+    function Assert-HeldByRunJob
     {
         param(
             [Parameter(Mandatory = $true)]
             [System.Diagnostics.Process]$Process
         )
 
-        try
+        if(-not [VerifiableLocalPublication.RunJob]::Holds($runJob, $Process.SafeHandle))
         {
-            if(-not $Process.HasExited)
-            {
-                $Process.Kill($true)
-                $Process.WaitForExit()
-            }
-        }
-        finally
-        {
-            $Process.Dispose()
+            Stop-Packing "the process $($Process.Id) ($($Process.StartInfo.FileName)) started outside the run's job, so the processes it starts could not be found and ended."
         }
     }
 
     #Runs an executable in a controlled environment and answers what it wrote to its output. A command that
     #fails answers nothing a verdict may rest on, so its exit code is read before its output is used and a
-    #failure refuses the packing.
+    #failure refuses the packing. Whatever ends the command, every process of the run then still running is
+    #ended, and one that could not be shown to have exited refuses the packing.
     function Invoke-ControlledCapture
     {
         param(
@@ -356,15 +879,22 @@ try
         $startInfo.RedirectStandardOutput = $true
         $startInfo.StandardOutputEncoding = [System.Text.UTF8Encoding]::new($false)
         $process = [System.Diagnostics.Process]::Start($startInfo)
+        $survivingCount = 0
         try
         {
+            Assert-HeldByRunJob -Process $process
             $written = $process.StandardOutput.ReadToEnd()
             $process.WaitForExit()
             $processExitCode = $process.ExitCode
         }
         finally
         {
-            Close-ControlledProcess -Process $process
+            $survivingCount = Close-RunProcesses -Started $process
+        }
+
+        if($survivingCount -gt 0)
+        {
+            Stop-Packing "a process of the run was still running when the command to $Purpose ended and could not be shown to have exited after it was ended; the end of the run names it."
         }
 
         if($processExitCode -ne 0)
@@ -376,7 +906,8 @@ try
     }
 
     #Runs an executable in a controlled environment with its output written straight to this script's
-    #output; a failure refuses the packing.
+    #output; a failure refuses the packing. Whatever ends the command, every process of the run then still
+    #running is ended, and one that could not be shown to have exited refuses the packing.
     function Invoke-ControlledStream
     {
         param(
@@ -398,14 +929,21 @@ try
 
         $startInfo = New-ControlledStartInfo -FilePath $FilePath -Arguments $Arguments -WorkingDirectory $WorkingDirectory -Environment $Environment
         $process = [System.Diagnostics.Process]::Start($startInfo)
+        $survivingCount = 0
         try
         {
+            Assert-HeldByRunJob -Process $process
             $process.WaitForExit()
             $processExitCode = $process.ExitCode
         }
         finally
         {
-            Close-ControlledProcess -Process $process
+            $survivingCount = Close-RunProcesses -Started $process
+        }
+
+        if($survivingCount -gt 0)
+        {
+            Stop-Packing "a process of the run was still running when the command to $Purpose ended and could not be shown to have exited after it was ended; the end of the run names it."
         }
 
         if($processExitCode -ne 0)
@@ -526,6 +1064,87 @@ try
             Write-Host "Publication $Publication is forward of every number used; the highest, $highest, is named by $($used[$highest])."
         }
     }
+
+    #Answers who holds the publication lock in the file given, from the record the holding run wrote in it:
+    #the run holding the file open, or, when no process holds it open, the run that left it behind.
+    function Get-PublicationLockHolder
+    {
+        param(
+            [Parameter(Mandatory = $true)]
+            [string]$Path
+        )
+
+        try
+        {
+            $probe = [System.IO.FileStream]::new($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::None)
+            try
+            {
+                $recorded = [System.IO.StreamReader]::new($probe, [System.Text.UTF8Encoding]::new($false)).ReadToEnd()
+            }
+            finally
+            {
+                $probe.Dispose()
+            }
+
+            return "no process holds it open, so the run it records ended without releasing it, which only a run whose machine stopped under it leaves: $recorded. Remove $Path once that run is known to have ended."
+        }
+        catch [System.IO.FileNotFoundException]
+        {
+            return 'the run that held it released it while this run read who held it; the run may be started again.'
+        }
+        catch [System.IO.IOException]
+        {
+            try
+            {
+                $reader = [System.IO.FileStream]::new($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete)
+                try
+                {
+                    $recorded = [System.IO.StreamReader]::new($reader, [System.Text.UTF8Encoding]::new($false)).ReadToEnd()
+                }
+                finally
+                {
+                    $reader.Dispose()
+                }
+
+                return "it is held by $recorded"
+            }
+            catch
+            {
+                return "it is held by a run whose record could not be read: $($_.Exception.Message)"
+            }
+        }
+    }
+
+    #The publication lock serializes the runs of this repository and of its worktrees, which share one record
+    #of tags: the run takes it before it first reads the record and holds it until the run ends, so no other
+    #run reads the record, reserves a number or replaces a family between this run's reading and its
+    #publication. The lock is a file in the repository's common git directory, created only where none
+    #stands, held open by this run with nothing allowed of others but reading it, and deleted by the
+    #operating system when this run's handle closes, however its process ends. A lock another run holds
+    #refuses the run, naming that run, and so does a lock file no process holds open, naming the run it
+    #records, until it is removed by hand once that run is known to have ended.
+    $commonGitDirectory = (Invoke-IsolatedGit -Repository $repositoryRoot -Arguments @('rev-parse', '--path-format=absolute', '--git-common-dir') -Purpose 'name the common git directory of the repository' -Separator "`n") -join ''
+    $publicationLockPath = [System.IO.Path]::GetFullPath((Join-Path $commonGitDirectory 'local-publication.lock'))
+    try
+    {
+        $lockStream = [System.IO.FileStream]::new($publicationLockPath, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::Read, 4096, [System.IO.FileOptions]::DeleteOnClose)
+    }
+    catch [System.IO.IOException]
+    {
+        if(-not (Test-Path -LiteralPath $publicationLockPath))
+        {
+            throw
+        }
+
+        Stop-Packing "the publication lock $publicationLockPath is taken: $(Get-PublicationLockHolder -Path $publicationLockPath)"
+    }
+
+    $publicationLock = $lockStream
+    $holderRecord = "the run of process $($runProcess.Id) on $([Environment]::MachineName) as $([Environment]::UserName), started $($runProcess.StartTime.ToString('o', [System.Globalization.CultureInfo]::InvariantCulture)), packing publication $Publication of $repositoryRoot in the run directory $runRoot"
+    $holderBytes = [System.Text.UTF8Encoding]::new($false).GetBytes($holderRecord)
+    $publicationLock.Write($holderBytes, 0, $holderBytes.Length)
+    $publicationLock.Flush($true)
+    Write-Host "Took the publication lock ${publicationLockPath}: $holderRecord."
 
     Assert-PublicationForward
 
@@ -1394,15 +2013,21 @@ try
     Write-Host "Checked the family in ${stagingRoot}: $($stagedFamily.Count) archives of version $packageVersion, each naming its project, the packages naming commit $commitId."
 
     #The number is reserved by creating its tag, which git refuses if the tag exists, after the record is
-    #read once more, so a publication another run reserved since the first reading is never cut again.
+    #read once more. The publication lock this run has held since its first reading keeps every other run of
+    #this clone from reserving a number or replacing a family meanwhile; the second reading still holds the
+    #number to the consumer's pins as they stand now and to any tag created outside a run of this script.
     Assert-PublicationForward
     $absentObject = '0' * 40
     Invoke-IsolatedGit -Repository $repositoryRoot -Arguments @('update-ref', "$($publicationTagPrefix)$Publication", $commitId, $absentObject) -Purpose "reserve publication $Publication by creating its tag, which no publication may yet hold" -Separator "`n" | Out-Null
     Write-Host "Reserved publication ${Publication}: the tag local-publication/$Publication names commit $commitId."
 
-    #The family is published into the output directory beside the previous one, each archive held to the
-    #bytes checked, and only then is the previous family removed. A copy that fails removes every archive
-    #this step wrote, so the output directory holds the previous family alone, as before the run.
+    #The family is published into the output directory beside the previous one, each archive created there
+    #by this run, where no file of its name stood, and held to the bytes checked; only then is the previous
+    #family removed. A publication that fails is answered by removing every archive this step created, each
+    #removal attempted whatever became of the others, and the failure that stopped the publication is the one
+    #the run reports. An archive whose removal the operating system refuses is named among what the run
+    #leaves, so the output directory then holds the previous family and the archives of the new one named
+    #there, and the run fails; when every removal is done it holds the previous family alone, as before.
     $outputDir = Join-Path $repositoryRoot 'generated-nugets'
     if(-not (Test-Path -LiteralPath $outputDir -PathType Container))
     {
@@ -1421,8 +2046,25 @@ try
                 Stop-Packing "the output directory already holds $target, which this run did not write."
             }
 
+            $targetStream = [System.IO.FileStream]::new($target, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
             $published.Add($target)
-            [System.IO.File]::Copy($staged['Path'], $target, $false)
+            try
+            {
+                $sourceStream = [System.IO.File]::OpenRead($staged['Path'])
+                try
+                {
+                    $sourceStream.CopyTo($targetStream)
+                }
+                finally
+                {
+                    $sourceStream.Dispose()
+                }
+            }
+            finally
+            {
+                $targetStream.Dispose()
+            }
+
             if((Get-FileHash -LiteralPath $target -Algorithm SHA512).Hash -cne $staged['Hash'])
             {
                 Stop-Packing "the archive published as $target is not the archive checked in $stagingRoot."
@@ -1431,15 +2073,23 @@ try
     }
     catch
     {
+        $publicationFailure = $_
         foreach($written in $published)
         {
-            if(Test-Path -LiteralPath $written)
+            try
             {
-                Remove-Item -LiteralPath $written -Force
+                if(Test-Path -LiteralPath $written)
+                {
+                    Remove-Item -LiteralPath $written -Force
+                }
+            }
+            catch
+            {
+                $cleanupSurvivors.Add("the archive $written of the new family, which this run created in the output directory and could not remove: $($_.Exception.Message)")
             }
         }
 
-        throw
+        throw $publicationFailure
     }
 
     $remaining = [System.Collections.Generic.List[string]]::new()
@@ -1476,19 +2126,105 @@ catch
 }
 finally
 {
-    $httpClient.Dispose()
-    $runCancellation.Dispose()
-    if($null -ne $createdRunRoot -and (Test-Path -LiteralPath $createdRunRoot))
+    #Every cleanup action is attempted apart from the others, and what one could not undo is named.
+    try
+    {
+        $httpClient.Dispose()
+    }
+    catch
+    {
+        $cleanupSurvivors.Add("the run's web client could not be released: $($_.Exception.Message)")
+    }
+
+    try
+    {
+        $runCancellation.Dispose()
+    }
+    catch
+    {
+        $cleanupSurvivors.Add("the run's cancellation could not be released: $($_.Exception.Message)")
+    }
+
+    if($null -ne $runJob)
+    {
+        Close-RunProcesses -Started $null | Out-Null
+    }
+
+    foreach($survivor in $survivingProcesses)
     {
         try
         {
-            Remove-Item -LiteralPath $createdRunRoot -Recurse -Force
+            if(-not [VerifiableLocalPublication.RunJob]::HasEnded($survivor['Handle']))
+            {
+                $cleanupSurvivors.Add("the process $($survivor['Id']) ($($survivor['Name'])), still running: $($survivor['Refusal'])")
+            }
         }
         catch
         {
-            $Host.UI.WriteErrorLine("The run directory $createdRunRoot could not be removed: $($_.Exception.Message)")
-            $exitCode = 1
+            $cleanupSurvivors.Add("the process $($survivor['Id']) ($($survivor['Name'])), which may still be running: $($survivor['Refusal']); whether it has ended could not be read: $($_.Exception.Message)")
         }
+
+        Close-MemberHandle -Member $survivor
+    }
+
+    if($null -ne $createdRunRoot)
+    {
+        $removalRefusal = 'it was not removed'
+        try
+        {
+            if(Test-Path -LiteralPath $createdRunRoot)
+            {
+                Remove-Item -LiteralPath $createdRunRoot -Recurse -Force
+            }
+        }
+        catch
+        {
+            $removalRefusal = $_.Exception.Message
+        }
+
+        try
+        {
+            if(Test-Path -LiteralPath $createdRunRoot)
+            {
+                $cleanupSurvivors.Add("the run directory $createdRunRoot, which could not be removed: $removalRefusal")
+            }
+        }
+        catch
+        {
+            $cleanupSurvivors.Add("the run directory $createdRunRoot, which may still stand: whether it does could not be read: $($_.Exception.Message)")
+        }
+    }
+
+    if($null -ne $runJob)
+    {
+        try
+        {
+            $runJob.Dispose()
+        }
+        catch
+        {
+            $cleanupSurvivors.Add("the handle of the run's job could not be released: $($_.Exception.Message)")
+        }
+    }
+
+    if($null -ne $publicationLock)
+    {
+        try
+        {
+            $publicationLock.Dispose()
+        }
+        catch
+        {
+            $cleanupSurvivors.Add("the publication lock $publicationLockPath, which could not be released: $($_.Exception.Message)")
+        }
+    }
+
+    $runProcess.Dispose()
+
+    if($cleanupSurvivors.Count -gt 0)
+    {
+        $exitCode = 1
+        $Host.UI.WriteErrorLine("The run's cleanup was refused, so the run fails and leaves:`n$(($cleanupSurvivors | ForEach-Object { "  $_" }) -join "`n")")
     }
 }
 

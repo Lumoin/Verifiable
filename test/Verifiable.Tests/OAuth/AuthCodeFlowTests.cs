@@ -191,11 +191,11 @@ internal sealed class AuthCodeFlowTests
     [TestMethod]
     public async Task HandleParAsyncRefusesAnInvalidFieldValueWithTheClientsOwnCode()
     {
-        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
+        var (infrastructure, registration) = CreateInfrastructureAndRegistration(
             store: [],
             parResponse: OAuthJsonResponseFixtures.BuildParJson("urn:ietf:params:oauth:request_uri:negative", -1));
 
-        AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleParAsync(
+        var result = await AuthCodeFlowHandlers.HandleParAsync(
             new Dictionary<string, string>(),
             DefaultRedirectUri,
             infrastructure,
