@@ -119,10 +119,6 @@ internal static class ClientCredentialsFlowHandlers
             [OAuthRequestParameterNames.Scope] = tokenResponse.Scope ?? string.Empty
         };
 
-        return new AuthCodeFlowEndpointResult
-        {
-            Outcome = AuthCodeFlowEndpointOutcome.Ok,
-            Body = body
-        };
+        return AuthCodeFlowEndpointResult.Succeeded(body);
     }
 }

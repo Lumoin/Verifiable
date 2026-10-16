@@ -277,13 +277,11 @@ public static class AuthCodeFlowHandlers
             //recorded on the current Activity for diagnostics rather than echoed to the caller.
             _ = (Activity.Current?.AddException(ex));
 
-            return new AuthCodeFlowEndpointResult
-            {
-                Outcome = AuthCodeFlowEndpointOutcome.InternalError,
-                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
-                ErrorCode = "server_error",
-                ErrorDescription = "The pushed authorization request could not be sent."
-            };
+            return AuthCodeFlowEndpointResult.Refused(
+                AuthCodeFlowEndpointOutcome.InternalError,
+                AuthCodeFlowRefusalOrigin.ClientJudgement,
+                "server_error",
+                "The pushed authorization request could not be sent.");
         }
 
         Result<ParResponse, OAuthParseError> parResult =
@@ -316,11 +314,7 @@ public static class AuthCodeFlowHandlers
             registration.ClientId.Value,
             parResponse.RequestUri);
 
-        return new AuthCodeFlowEndpointResult
-        {
-            Outcome = AuthCodeFlowEndpointOutcome.Redirect,
-            RedirectUri = authorizationUri
-        };
+        return AuthCodeFlowEndpointResult.Redirected(authorizationUri);
     }
 
 
@@ -411,16 +405,13 @@ public static class AuthCodeFlowHandlers
         //default value is 'false'." Refused before state, PKCE, or the redirect URI are built.
         if(metadata.RequirePushedAuthorizationRequests)
         {
-            return new AuthCodeFlowEndpointResult
-            {
-                Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
-                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
-                ErrorCode = OAuthErrors.InvalidRequest,
-                ErrorDescription =
-                    "The authorization server requires Pushed Authorization Requests " +
-                    "(RFC 9126 §5 require_pushed_authorization_requests); a direct authorization " +
-                    "request is not accepted."
-            };
+            return AuthCodeFlowEndpointResult.Refused(
+                AuthCodeFlowEndpointOutcome.BadRequest,
+                AuthCodeFlowRefusalOrigin.ClientJudgement,
+                OAuthErrors.InvalidRequest,
+                "The authorization server requires Pushed Authorization Requests " +
+                "(RFC 9126 §5 require_pushed_authorization_requests); a direct authorization " +
+                "request is not accepted.");
         }
 
         DateTimeOffset now = infrastructure.TimeProvider.GetUtcNow();
@@ -449,11 +440,7 @@ public static class AuthCodeFlowHandlers
 
         await infrastructure.SaveStateAsync(parCompleted, context, cancellationToken).ConfigureAwait(false);
 
-        return new AuthCodeFlowEndpointResult
-        {
-            Outcome = AuthCodeFlowEndpointOutcome.Redirect,
-            RedirectUri = authorizationUri
-        };
+        return AuthCodeFlowEndpointResult.Redirected(authorizationUri);
     }
 
 
@@ -562,13 +549,11 @@ public static class AuthCodeFlowHandlers
         if(!fields.TryGetValue(OAuthRequestParameterNames.Code, out string? code) ||
            !fields.TryGetValue(OAuthRequestParameterNames.State, out string? state))
         {
-            return new AuthCodeFlowEndpointResult
-            {
-                Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
-                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
-                ErrorCode = "invalid_request",
-                ErrorDescription = "Missing required callback parameters."
-            };
+            return AuthCodeFlowEndpointResult.Refused(
+                AuthCodeFlowEndpointOutcome.BadRequest,
+                AuthCodeFlowRefusalOrigin.ClientJudgement,
+                "invalid_request",
+                "Missing required callback parameters.");
         }
 
         FlowState? loaded = await infrastructure.LoadStateAsync(
@@ -576,13 +561,11 @@ public static class AuthCodeFlowHandlers
 
         if(loaded is not ParCompletedState parCompleted)
         {
-            return new AuthCodeFlowEndpointResult
-            {
-                Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
-                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
-                ErrorCode = "invalid_request",
-                ErrorDescription = "No active flow found for the supplied state value."
-            };
+            return AuthCodeFlowEndpointResult.Refused(
+                AuthCodeFlowEndpointOutcome.BadRequest,
+                AuthCodeFlowRefusalOrigin.ClientJudgement,
+                "invalid_request",
+                "No active flow found for the supplied state value.");
         }
 
         //Client-side flow does not sit inside server dispatch, so there is no
@@ -609,14 +592,12 @@ public static class AuthCodeFlowHandlers
         if(!validationResult.IsComplete
             || validationResult.Claims.Any(static c => c.Outcome != ClaimOutcome.Success))
         {
-            return new AuthCodeFlowEndpointResult
-            {
-                Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
-                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
-                ErrorCode = "invalid_request",
-                ErrorDescription = "Callback validation failed.",
-                ValidationClaims = (IReadOnlyList<Claim>)validationResult.Claims
-            };
+            return AuthCodeFlowEndpointResult.Refused(
+                AuthCodeFlowEndpointOutcome.BadRequest,
+                AuthCodeFlowRefusalOrigin.ClientJudgement,
+                "invalid_request",
+                "Callback validation failed.",
+                (IReadOnlyList<Claim>)validationResult.Claims);
         }
 
         string? iss = fields.TryGetValue(OAuthRequestParameterNames.Iss, out string? issValue)
@@ -636,15 +617,12 @@ public static class AuthCodeFlowHandlers
             && !AuthorizationServerIssuerValidation.IsAuthorizationResponseIssuerValid(
                 iss, registration.AuthorizationServerIssuer, infrastructure.IsKnownAuthorizationServerIssuer))
         {
-            return new AuthCodeFlowEndpointResult
-            {
-                Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
-                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
-                ErrorCode = "invalid_request",
-                ErrorDescription =
-                    "The iss parameter does not resolve to a known, uniquely-configured authorization " +
-                    "server matching this registration (RFC 9207 §2.4, §4)."
-            };
+            return AuthCodeFlowEndpointResult.Refused(
+                AuthCodeFlowEndpointOutcome.BadRequest,
+                AuthCodeFlowRefusalOrigin.ClientJudgement,
+                "invalid_request",
+                "The iss parameter does not resolve to a known, uniquely-configured authorization " +
+                "server matching this registration (RFC 9207 §2.4, §4).");
         }
 
         DateTimeOffset now = infrastructure.TimeProvider.GetUtcNow();
@@ -666,11 +644,7 @@ public static class AuthCodeFlowHandlers
 
         await infrastructure.SaveStateAsync(codeReceived, context, cancellationToken).ConfigureAwait(false);
 
-        return new AuthCodeFlowEndpointResult
-        {
-            Outcome = AuthCodeFlowEndpointOutcome.Ok,
-            Body = new Dictionary<string, object> { [AuthCodeFlowRoutes.FlowIdField] = codeReceived.FlowId }
-        };
+        return AuthCodeFlowEndpointResult.Succeeded(new Dictionary<string, object> { [AuthCodeFlowRoutes.FlowIdField] = codeReceived.FlowId });
     }
 
 
@@ -777,13 +751,11 @@ public static class AuthCodeFlowHandlers
 
         if(!fields.TryGetValue(AuthCodeFlowRoutes.FlowIdField, out string? flowId))
         {
-            return new AuthCodeFlowEndpointResult
-            {
-                Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
-                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
-                ErrorCode = "invalid_request",
-                ErrorDescription = "Missing required parameter: flow_id."
-            };
+            return AuthCodeFlowEndpointResult.Refused(
+                AuthCodeFlowEndpointOutcome.BadRequest,
+                AuthCodeFlowRefusalOrigin.ClientJudgement,
+                "invalid_request",
+                "Missing required parameter: flow_id.");
         }
 
         FlowState? loaded = await infrastructure.LoadStateAsync(
@@ -791,25 +763,21 @@ public static class AuthCodeFlowHandlers
 
         if(loaded is not AuthorizationCodeReceivedState codeState)
         {
-            return new AuthCodeFlowEndpointResult
-            {
-                Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
-                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
-                ErrorCode = "invalid_request",
-                ErrorDescription = "No code pending token exchange for the supplied flow_id."
-            };
+            return AuthCodeFlowEndpointResult.Refused(
+                AuthCodeFlowEndpointOutcome.BadRequest,
+                AuthCodeFlowRefusalOrigin.ClientJudgement,
+                "invalid_request",
+                "No code pending token exchange for the supplied flow_id.");
         }
 
         DateTimeOffset now = infrastructure.TimeProvider.GetUtcNow();
         if(now > codeState.ExpiresAt)
         {
-            return new AuthCodeFlowEndpointResult
-            {
-                Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
-                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
-                ErrorCode = "invalid_request",
-                ErrorDescription = "Flow has expired."
-            };
+            return AuthCodeFlowEndpointResult.Refused(
+                AuthCodeFlowEndpointOutcome.BadRequest,
+                AuthCodeFlowRefusalOrigin.ClientJudgement,
+                "invalid_request",
+                "Flow has expired.");
         }
 
         //RFC 8707 §2.2 Figure 3: a resource named at code redemption narrows the minted access
@@ -888,11 +856,7 @@ public static class AuthCodeFlowHandlers
             body[OAuthRequestParameterNames.IdToken] = tokenResponse.IdToken;
         }
 
-        return new AuthCodeFlowEndpointResult
-        {
-            Outcome = AuthCodeFlowEndpointOutcome.Ok,
-            Body = body
-        };
+        return AuthCodeFlowEndpointResult.Succeeded(body);
     }
 
 
@@ -931,24 +895,20 @@ public static class AuthCodeFlowHandlers
 
         if(metadata.RevocationEndpoint is null)
         {
-            return new AuthCodeFlowEndpointResult
-            {
-                Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
-                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
-                ErrorCode = "unsupported_token_type",
-                ErrorDescription = "This authorization server does not support token revocation."
-            };
+            return AuthCodeFlowEndpointResult.Refused(
+                AuthCodeFlowEndpointOutcome.BadRequest,
+                AuthCodeFlowRefusalOrigin.ClientJudgement,
+                "unsupported_token_type",
+                "This authorization server does not support token revocation.");
         }
 
         if(!fields.TryGetValue(OAuthRequestParameterNames.Token, out string? token))
         {
-            return new AuthCodeFlowEndpointResult
-            {
-                Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
-                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
-                ErrorCode = "invalid_request",
-                ErrorDescription = "Missing required parameter: token."
-            };
+            return AuthCodeFlowEndpointResult.Refused(
+                AuthCodeFlowEndpointOutcome.BadRequest,
+                AuthCodeFlowRefusalOrigin.ClientJudgement,
+                "invalid_request",
+                "Missing required parameter: token.");
         }
 
         var revocationFields = new Dictionary<string, string>
@@ -977,10 +937,7 @@ public static class AuthCodeFlowHandlers
             context,
             cancellationToken).ConfigureAwait(false);
 
-        return new AuthCodeFlowEndpointResult
-        {
-            Outcome = AuthCodeFlowEndpointOutcome.Ok
-        };
+        return AuthCodeFlowEndpointResult.Succeeded(null);
     }
 
 
@@ -1085,11 +1042,7 @@ public static class AuthCodeFlowHandlers
             body[OAuthRequestParameterNames.IdToken] = tokenResponse.IdToken;
         }
 
-        return new AuthCodeFlowEndpointResult
-        {
-            Outcome = AuthCodeFlowEndpointOutcome.Ok,
-            Body = body
-        };
+        return AuthCodeFlowEndpointResult.Succeeded(body);
     }
 
 
@@ -1220,13 +1173,11 @@ public static class AuthCodeFlowHandlers
             //current Activity for diagnostics rather than echoed to the caller.
             _ = (Activity.Current?.AddException(ex));
 
-            return new AuthCodeFlowEndpointResult
-            {
-                Outcome = AuthCodeFlowEndpointOutcome.InternalError,
-                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
-                ErrorCode = "server_error",
-                ErrorDescription = "The pushed authorization request could not be sent."
-            };
+            return AuthCodeFlowEndpointResult.Refused(
+                AuthCodeFlowEndpointOutcome.InternalError,
+                AuthCodeFlowRefusalOrigin.ClientJudgement,
+                "server_error",
+                "The pushed authorization request could not be sent.");
         }
 
         Result<ParResponse, OAuthParseError> parResult =
@@ -1260,11 +1211,7 @@ public static class AuthCodeFlowHandlers
             registration.ClientId.Value,
             parResponse.RequestUri);
 
-        return new AuthCodeFlowEndpointResult
-        {
-            Outcome = AuthCodeFlowEndpointOutcome.Redirect,
-            RedirectUri = authorizationUri
-        };
+        return AuthCodeFlowEndpointResult.Redirected(authorizationUri);
     }
 
 
@@ -1385,11 +1332,7 @@ public static class AuthCodeFlowHandlers
 
         await infrastructure.SaveStateAsync(parCompleted, context, cancellationToken).ConfigureAwait(false);
 
-        return new AuthCodeFlowEndpointResult
-        {
-            Outcome = AuthCodeFlowEndpointOutcome.Redirect,
-            RedirectUri = authorizationUri
-        };
+        return AuthCodeFlowEndpointResult.Redirected(authorizationUri);
     }
 
 
@@ -1513,15 +1456,12 @@ public static class AuthCodeFlowHandlers
     /// stored.
     /// </summary>
     /// <returns>The refusal of the start.</returns>
-    private static AuthCodeFlowEndpointResult BuildResourceEntryHoldingWhiteSpaceRefusal() => new()
-    {
-        Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
-        RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
-        ErrorCode = OAuthErrors.InvalidRequest,
-        ErrorDescription =
-            "A resource entry holds white space; each entry must be one absolute URI " +
-            "(RFC 8707 §2), so the request object is not signed and nothing is sent."
-    };
+    private static AuthCodeFlowEndpointResult BuildResourceEntryHoldingWhiteSpaceRefusal() => AuthCodeFlowEndpointResult.Refused(
+        AuthCodeFlowEndpointOutcome.BadRequest,
+        AuthCodeFlowRefusalOrigin.ClientJudgement,
+        OAuthErrors.InvalidRequest,
+        "A resource entry holds white space; each entry must be one absolute URI " +
+        "(RFC 8707 §2), so the request object is not signed and nothing is sent.");
 
 
     private static Uri BuildJarAuthorizeRedirectUri(
@@ -1764,16 +1704,13 @@ public static class AuthCodeFlowHandlers
         //response return it, so an error without one cannot be tied to any request of this client.
         if(!fields.TryGetValue(OAuthRequestParameterNames.State, out string? errorState))
         {
-            return new AuthCodeFlowEndpointResult
-            {
-                Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
-                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
-                ErrorCode = "invalid_request",
-                ErrorDescription =
-                    "The error callback carries no state, so it cannot be tied to an authorization request " +
-                    "of this client and no authorization server is established as its author " +
-                    "(RFC 6749 §4.1.2.1, RFC 9207 §2.4)."
-            };
+            return AuthCodeFlowEndpointResult.Refused(
+                AuthCodeFlowEndpointOutcome.BadRequest,
+                AuthCodeFlowRefusalOrigin.ClientJudgement,
+                "invalid_request",
+                "The error callback carries no state, so it cannot be tied to an authorization request " +
+                "of this client and no authorization server is established as its author " +
+                "(RFC 6749 §4.1.2.1, RFC 9207 §2.4).");
         }
 
         FlowState? errorFlowState = await infrastructure.LoadStateAsync(
@@ -1781,15 +1718,12 @@ public static class AuthCodeFlowHandlers
 
         if(errorFlowState is not ParCompletedState errorParCompleted)
         {
-            return new AuthCodeFlowEndpointResult
-            {
-                Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
-                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
-                ErrorCode = "invalid_request",
-                ErrorDescription =
-                    "The error callback's state names no pending authorization request of this client, so " +
-                    "no authorization server is established as its author (RFC 9207 §2.4)."
-            };
+            return AuthCodeFlowEndpointResult.Refused(
+                AuthCodeFlowEndpointOutcome.BadRequest,
+                AuthCodeFlowRefusalOrigin.ClientJudgement,
+                "invalid_request",
+                "The error callback's state names no pending authorization request of this client, so " +
+                "no authorization server is established as its author (RFC 9207 §2.4).");
         }
 
         ValidationContext correlationContext = new()
@@ -1811,17 +1745,14 @@ public static class AuthCodeFlowHandlers
 
         if(correlationClaims.Exists(static c => c.Outcome != ClaimOutcome.Success))
         {
-            return new AuthCodeFlowEndpointResult
-            {
-                Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
-                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
-                ErrorCode = "invalid_request",
-                ErrorDescription =
-                    "The error callback failed a check that ties it to this client's authorization request; " +
-                    "the response is not trusted as originating from the intended authorization " +
-                    "server (RFC 9207 §2.4, RFC 9700 §4.4).",
-                ValidationClaims = correlationClaims
-            };
+            return AuthCodeFlowEndpointResult.Refused(
+                AuthCodeFlowEndpointOutcome.BadRequest,
+                AuthCodeFlowRefusalOrigin.ClientJudgement,
+                "invalid_request",
+                "The error callback failed a check that ties it to this client's authorization request; " +
+                "the response is not trusted as originating from the intended authorization " +
+                "server (RFC 9207 §2.4, RFC 9700 §4.4).",
+                correlationClaims);
         }
 
         string? iss = fields.TryGetValue(OAuthRequestParameterNames.Iss, out string? issValue)
@@ -1833,28 +1764,23 @@ public static class AuthCodeFlowHandlers
             && !AuthorizationServerIssuerValidation.IsAuthorizationResponseIssuerValid(
                 iss, registration.AuthorizationServerIssuer, infrastructure.IsKnownAuthorizationServerIssuer))
         {
-            return new AuthCodeFlowEndpointResult
-            {
-                Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
-                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
-                ErrorCode = "invalid_request",
-                ErrorDescription =
-                    "The iss parameter on the error callback does not resolve to a known, uniquely-configured " +
-                    "authorization server matching this registration (RFC 9207 §2.4, §4).",
-                ValidationClaims = correlationClaims
-            };
+            return AuthCodeFlowEndpointResult.Refused(
+                AuthCodeFlowEndpointOutcome.BadRequest,
+                AuthCodeFlowRefusalOrigin.ClientJudgement,
+                "invalid_request",
+                "The iss parameter on the error callback does not resolve to a known, uniquely-configured " +
+                "authorization server matching this registration (RFC 9207 §2.4, §4).",
+                correlationClaims);
         }
 
         //The error names this client's pending request and every callback check that request holds it to accepted it,
         //so it is the authorization server's answer.
-        return new AuthCodeFlowEndpointResult
-        {
-            Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
-            RefusalOrigin = AuthCodeFlowRefusalOrigin.AuthorizationServerAnswer,
-            ErrorCode = errorCode,
-            ErrorDescription = errorDescription,
-            ValidationClaims = correlationClaims
-        };
+        return AuthCodeFlowEndpointResult.Refused(
+            AuthCodeFlowEndpointOutcome.BadRequest,
+            AuthCodeFlowRefusalOrigin.AuthorizationServerAnswer,
+            errorCode,
+            errorDescription,
+            correlationClaims);
     }
 
 

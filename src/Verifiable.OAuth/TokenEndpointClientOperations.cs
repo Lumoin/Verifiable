@@ -54,15 +54,12 @@ internal static class TokenEndpointClientOperations
         if(!AuthorizationServerMetadataValidation.IsIssuerMatch(metadata, registration.AuthorizationServerIssuer))
         {
             return Result<AuthorizationServerMetadata, AuthCodeFlowEndpointResult>.Failure(
-                new AuthCodeFlowEndpointResult
-                {
-                    Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
-                    RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
-                    ErrorCode = "invalid_request",
-                    ErrorDescription =
-                        "The authorization server metadata issuer does not match this registration's " +
-                        "pinned AuthorizationServerIssuer (RFC 8414 §3.3 / RFC 9207 §2.4)."
-                });
+                AuthCodeFlowEndpointResult.Refused(
+                    AuthCodeFlowEndpointOutcome.BadRequest,
+                    AuthCodeFlowRefusalOrigin.ClientJudgement,
+                    "invalid_request",
+                    "The authorization server metadata issuer does not match this registration's " +
+                    "pinned AuthorizationServerIssuer (RFC 8414 §3.3 / RFC 9207 §2.4)."));
         }
 
         return Result<AuthorizationServerMetadata, AuthCodeFlowEndpointResult>.Success(metadata);
@@ -84,13 +81,11 @@ internal static class TokenEndpointClientOperations
         _ = (Activity.Current?.AddEvent(new ActivityEvent(
             OAuthEventNames.AuthorizationServerMetadataResolutionFailed, tags: tags)));
 
-        return new AuthCodeFlowEndpointResult
-        {
-            Outcome = AuthCodeFlowEndpointOutcome.InternalError,
-            RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
-            ErrorCode = "server_error",
-            ErrorDescription = "The authorization server metadata could not be resolved."
-        };
+        return AuthCodeFlowEndpointResult.Refused(
+            AuthCodeFlowEndpointOutcome.InternalError,
+            AuthCodeFlowRefusalOrigin.ClientJudgement,
+            "server_error",
+            "The authorization server metadata could not be resolved.");
     }
 
 
@@ -135,13 +130,11 @@ internal static class TokenEndpointClientOperations
 
         _ = (Activity.Current?.AddEvent(new ActivityEvent(OAuthEventNames.OutboundFetchPolicyDenied, tags: tags)));
 
-        return new AuthCodeFlowEndpointResult
-        {
-            Outcome = AuthCodeFlowEndpointOutcome.InternalError,
-            RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
-            ErrorCode = "server_error",
-            ErrorDescription = "The endpoint was refused by the outbound fetch policy."
-        };
+        return AuthCodeFlowEndpointResult.Refused(
+            AuthCodeFlowEndpointOutcome.InternalError,
+            AuthCodeFlowRefusalOrigin.ClientJudgement,
+            "server_error",
+            "The endpoint was refused by the outbound fetch policy.");
     }
 
 
@@ -176,14 +169,12 @@ internal static class TokenEndpointClientOperations
 
         if(!key.IsSuccess)
         {
-            return Result<ClientAssertionCredential?, AuthCodeFlowEndpointResult>.Failure(new AuthCodeFlowEndpointResult
-            {
-                Outcome = AuthCodeFlowEndpointOutcome.InternalError,
-                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
-                ErrorCode = "server_error",
-                ErrorDescription = key.Error.Describe(),
-                ClientAssertionCredentialRefusal = key.Error
-            });
+            return Result<ClientAssertionCredential?, AuthCodeFlowEndpointResult>.Failure(AuthCodeFlowEndpointResult.Refused(
+                AuthCodeFlowEndpointOutcome.InternalError,
+                AuthCodeFlowRefusalOrigin.ClientJudgement,
+                "server_error",
+                key.Error.Describe(),
+                key.Error));
         }
 
         return Result<ClientAssertionCredential?, AuthCodeFlowEndpointResult>.Success(key.Value);
@@ -495,34 +486,26 @@ internal static class TokenEndpointClientOperations
     {
         return error switch
         {
-            OAuthProtocolError pe => new AuthCodeFlowEndpointResult
-            {
-                Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
-                RefusalOrigin = AuthCodeFlowRefusalOrigin.AuthorizationServerAnswer,
-                ErrorCode = pe.ErrorCode,
-                ErrorDescription = pe.ErrorDescription ?? pe.Support.Summary
-            },
-            OAuthInvalidFieldValue ifv => new AuthCodeFlowEndpointResult
-            {
-                Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
-                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
-                ErrorCode = "invalid_response",
-                ErrorDescription = $"{ifv.FieldName}: {ifv.Reason}"
-            },
-            OAuthMalformedResponse mr => new AuthCodeFlowEndpointResult
-            {
-                Outcome = AuthCodeFlowEndpointOutcome.InternalError,
-                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
-                ErrorCode = "server_error",
-                ErrorDescription = mr.Support.Summary
-            },
-            _ => new AuthCodeFlowEndpointResult
-            {
-                Outcome = AuthCodeFlowEndpointOutcome.InternalError,
-                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
-                ErrorCode = "server_error",
-                ErrorDescription = error.Support.Summary
-            }
+            OAuthProtocolError pe => AuthCodeFlowEndpointResult.Refused(
+                AuthCodeFlowEndpointOutcome.BadRequest,
+                AuthCodeFlowRefusalOrigin.AuthorizationServerAnswer,
+                pe.ErrorCode,
+                pe.ErrorDescription ?? pe.Support.Summary),
+            OAuthInvalidFieldValue ifv => AuthCodeFlowEndpointResult.Refused(
+                AuthCodeFlowEndpointOutcome.BadRequest,
+                AuthCodeFlowRefusalOrigin.ClientJudgement,
+                "invalid_response",
+                $"{ifv.FieldName}: {ifv.Reason}"),
+            OAuthMalformedResponse mr => AuthCodeFlowEndpointResult.Refused(
+                AuthCodeFlowEndpointOutcome.InternalError,
+                AuthCodeFlowRefusalOrigin.ClientJudgement,
+                "server_error",
+                mr.Support.Summary),
+            _ => AuthCodeFlowEndpointResult.Refused(
+                AuthCodeFlowEndpointOutcome.InternalError,
+                AuthCodeFlowRefusalOrigin.ClientJudgement,
+                "server_error",
+                error.Support.Summary)
         };
     }
 

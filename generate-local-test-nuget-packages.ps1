@@ -19,12 +19,20 @@
 #                stands after the publication number and never alone.
 #
 #The informational version carries the same version and the full commit id as build metadata.
-#The sha must name exactly what was packed, so the packing is refused when any git command it asks
-#fails, when git names no commit, when any file git tracks differs from that commit - this script,
-#the sources, the build files and every file they bring into a package, such as the banned-symbol
-#lists, the package logo and the README, among them - when any file git does not track stands in
-#the tree, and when a file the ignore rules hide lies where the packing reads: the repository's root
-#and the src and resources directories, outside the bin and obj directories the build writes.
+#
+#The sha must name exactly what was packed, so the packing never reads the working tree. The
+#commit HEAD names is fetched into a fresh repository in a new directory of its own, checked out
+#there and restored and packed there: every source, build file and file a project brings into a
+#package is the commit's, and every intermediate the build reads - the obj directories' restore
+#outputs, which MSBuild imports while it evaluates a project, among them - is written by this run
+#alone. Outside that directory the build reads only what the commit itself pins: the SDK its
+#global.json names, the packages its lock files name by content hash, restored in locked mode
+#through its own NuGet.config alone; a directory above the new one holding a file MSBuild or NuGet
+#would read from an ancestor refuses the packing. The working tree is still held to the commit, so
+#this script is the commit's own: any git command that fails, git naming no commit, a tracked file
+#that differs from the commit, a file git does not track, and a file git has been told to stop
+#comparing (assume-unchanged or skip-worktree, which status reads as unchanged whatever the file
+#holds) each refuse the packing. Every package must name the commit as its repository commit.
 param(
     [Parameter(Mandatory = $true)]
     [int]$Publication
@@ -40,7 +48,7 @@ if($Publication -lt $minimumPublication -or $Publication -gt $maximumPublication
 
 $repositoryRoot = $PSScriptRoot
 
-#Runs one git command against the repository and answers the lines it wrote to its output. A command
+#Runs one git command against a repository and answers the lines it wrote to its output. A command
 #that fails answers nothing a verdict may rest on, so its exit code is read before its output and a
 #failure refuses the packing: an empty answer from a git that could not read the tree is never taken
 #for a clean one.
@@ -48,60 +56,112 @@ function Invoke-RepositoryGit
 {
     param(
         [Parameter(Mandatory = $true)]
+        [string]$Repository,
+
+        [Parameter(Mandatory = $true)]
         [string[]]$Arguments,
 
         [Parameter(Mandatory = $true)]
         [string]$Purpose
     )
 
-    $written = & git -C $repositoryRoot @Arguments 2>&1
+    $written = & git -C $Repository @Arguments 2>&1
     $exitCode = $LASTEXITCODE
     $errors = @($written | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] } | ForEach-Object { "$_" })
 
     if($exitCode -ne 0)
     {
-        Write-Error "Packing is refused: git could not $Purpose in $repositoryRoot (git $($Arguments -join ' ') exited with $exitCode). $($errors -join ' ')"
+        Write-Error "Packing is refused: git could not $Purpose in $Repository (git $($Arguments -join ' ') exited with $exitCode). $($errors -join ' ')"
         exit 1
     }
 
     return @($written | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] } | ForEach-Object { "$_" })
 }
 
-$sha = (Invoke-RepositoryGit -Arguments @('rev-parse', '--short', 'HEAD') -Purpose 'name the commit HEAD points at') -join ''
-$commitId = (Invoke-RepositoryGit -Arguments @('rev-parse', 'HEAD') -Purpose 'name the commit HEAD points at') -join ''
+$sha = (Invoke-RepositoryGit -Repository $repositoryRoot -Arguments @('rev-parse', '--short', 'HEAD') -Purpose 'name the commit HEAD points at') -join ''
+$commitId = (Invoke-RepositoryGit -Repository $repositoryRoot -Arguments @('rev-parse', 'HEAD') -Purpose 'name the commit HEAD points at') -join ''
 if([string]::IsNullOrWhiteSpace($sha) -or [string]::IsNullOrWhiteSpace($commitId))
 {
     Write-Error "Packing is refused: git names no commit for $repositoryRoot, and the package version must carry the commit the packages are built from."
     exit 1
 }
 
+#A file marked assume-unchanged or skip-worktree is one git status no longer compares with the
+#commit, so status reads it as unchanged whatever it holds. git ls-files -v tags such a file with a
+#lower-case letter (assume-unchanged) or with S (skip-worktree, lower-case s for both); any such
+#file refuses the packing before status is asked.
+$indexEntries = (Invoke-RepositoryGit -Repository $repositoryRoot -Arguments @('ls-files', '-v', '-z') -Purpose 'list the index entries and their tags') -join ''
+$uncomparedFiles = @($indexEntries.Split([char]0, [System.StringSplitOptions]::RemoveEmptyEntries) | Where-Object {
+    $tag = $_[0]
+    [char]::IsLower($tag) -or $tag -ceq 'S'
+})
+if($uncomparedFiles.Count -gt 0)
+{
+    Write-Error "Packing is refused: git is told to stop comparing these files with commit $sha (assume-unchanged or skip-worktree), so the working tree cannot be shown to be that commit. Marked:`n$($uncomparedFiles -join "`n")"
+    exit 1
+}
+
 #Every file git tracks, wherever it lies, is compared with the commit, and every file it does not
-#track is listed one by one: the build reads files no list kept here could name ahead of time, from
-#this script and the build files to whatever a project file brings into a package.
-$changedFiles = Invoke-RepositoryGit -Arguments @('status', '--porcelain=v1', '--untracked-files=all', '--ignore-submodules=none') -Purpose 'read the state of the working tree'
+#track is listed one by one.
+$changedFiles = Invoke-RepositoryGit -Repository $repositoryRoot -Arguments @('status', '--porcelain=v1', '--untracked-files=all', '--ignore-submodules=none') -Purpose 'read the state of the working tree'
 if($changedFiles.Count -gt 0)
 {
     Write-Error "Packing is refused: the working tree differs from commit $sha, so the version would name a commit that did not build these packages. Changed:`n$($changedFiles -join "`n")"
     exit 1
 }
 
-#The ignore rules hide what the build writes, and also files the build reads: MSBuild reads a
-#Directory.Build.rsp and a project's .user file, which the rules hide as *.rsp and *.user. A hidden
-#file is admitted only outside the places the packing reads - the repository's root, src and
-#resources - or inside a bin or obj directory, which the build writes.
-$packingReads = @('src', 'resources')
-$buildWrites = @('bin', 'obj')
-$hiddenEntries = (Invoke-RepositoryGit -Arguments @('ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--directory') -Purpose 'list the files the ignore rules hide') -join ''
-$hiddenInputs = @($hiddenEntries.Split([char]0, [System.StringSplitOptions]::RemoveEmptyEntries) | Where-Object {
-    $segments = $_.TrimEnd('/').Split('/')
-    $atRoot = $segments.Count -eq 1 -and -not $_.EndsWith('/')
-    $whereRead = $packingReads -contains $segments[0]
-    $whereWritten = @($segments | Where-Object { $buildWrites -contains $_ }).Count -gt 0
-    $atRoot -or ($whereRead -and -not $whereWritten)
-})
-if($hiddenInputs.Count -gt 0)
+#The commit is packed in a directory created for this run alone. MSBuild reads a Directory.Build.rsp
+#from every directory above a project until one holds it, and NuGet reads a NuGet.Config from every
+#directory above it, so a directory above the new one holding a file either reads from an ancestor
+#is an input the commit does not hold, and refuses the packing.
+$exportRoot = Join-Path ([System.IO.Path]::GetTempPath()) "verifiable-pack-g$sha-$([Guid]::NewGuid().ToString('N'))"
+$ancestorInputs = @('Directory.Build.props', 'Directory.Build.targets', 'Directory.Build.rsp', 'Directory.Packages.props', 'global.json', 'NuGet.Config')
+$ancestorFound = @()
+$ancestor = [System.IO.Directory]::GetParent($exportRoot)
+while($null -ne $ancestor)
 {
-    Write-Error "Packing is refused: files the ignore rules hide lie where the packing reads, so the packages could hold what commit $sha does not. Hidden:`n$($hiddenInputs -join "`n")"
+    foreach($name in $ancestorInputs)
+    {
+        $candidate = Join-Path $ancestor.FullName $name
+        if(Test-Path -LiteralPath $candidate -PathType Leaf)
+        {
+            $ancestorFound += $candidate
+        }
+    }
+
+    $ancestor = $ancestor.Parent
+}
+
+if($ancestorFound.Count -gt 0)
+{
+    Write-Error "Packing is refused: a directory above $exportRoot holds a file MSBuild or NuGet would read into the build, which commit $sha does not hold. Found:`n$($ancestorFound -join "`n")"
+    exit 1
+}
+
+if(Test-Path -LiteralPath $exportRoot)
+{
+    Write-Error "Packing is refused: the directory $exportRoot already exists, and the packing reads only a directory this run creates."
+    exit 1
+}
+
+New-Item -ItemType Directory -Path $exportRoot | Out-Null
+
+#The commit alone is fetched into a fresh repository and checked out: no index, no configuration
+#and no file of the working tree comes with it. The fresh repository names the working repository's
+#origin as its own, so the source link the build writes into each package names the published
+#repository, as a build of the working tree did.
+$sourceUrl = ([Uri]$repositoryRoot).AbsoluteUri
+$originUrl = (Invoke-RepositoryGit -Repository $repositoryRoot -Arguments @('remote', 'get-url', 'origin') -Purpose 'name the origin repository') -join ''
+Invoke-RepositoryGit -Repository $exportRoot -Arguments @('init', '--quiet') -Purpose 'create the fresh repository' | Out-Null
+Invoke-RepositoryGit -Repository $exportRoot -Arguments @('fetch', '--quiet', '--depth', '1', '--no-tags', $sourceUrl, $commitId) -Purpose "fetch commit $commitId" | Out-Null
+Invoke-RepositoryGit -Repository $exportRoot -Arguments @('checkout', '--quiet', '--detach', $commitId) -Purpose "check out commit $commitId" | Out-Null
+Invoke-RepositoryGit -Repository $exportRoot -Arguments @('remote', 'add', 'origin', $originUrl) -Purpose 'name the origin repository' | Out-Null
+
+$exportedCommit = (Invoke-RepositoryGit -Repository $exportRoot -Arguments @('rev-parse', 'HEAD') -Purpose 'name the commit checked out') -join ''
+$exportedState = Invoke-RepositoryGit -Repository $exportRoot -Arguments @('status', '--porcelain=v1', '--untracked-files=all', '--ignored') -Purpose 'read the state of the fresh tree'
+if($exportedCommit -ne $commitId -or $exportedState.Count -gt 0)
+{
+    Write-Error "Packing is refused: the fresh tree in $exportRoot is not exactly commit $commitId (checked out $exportedCommit). State:`n$($exportedState -join "`n")"
     exit 1
 }
 
@@ -134,6 +194,7 @@ $outputDir = Join-Path $repositoryRoot 'generated-nugets'
 $baseVersion = '0.0.2'
 $packageVersion = "$baseVersion-local.$Publication.g$sha"
 $informationalVersion = "$packageVersion+$commitId"
+$nugetConfig = Join-Path $exportRoot 'NuGet.config'
 
 #Remove all existing packages before generating new ones so stale or malformed
 #packages from previous runs do not accumulate in the output directory.
@@ -149,20 +210,85 @@ else
 
 foreach($project in $projects)
 {
-    dotnet pack --verbosity normal `
+    $projectFile = Join-Path $exportRoot "src/$project/$project.csproj"
+
+    #Restored in locked mode through the commit's NuGet.config alone: every package is the one the
+    #commit's lock file names by its content hash, and no user or machine NuGet configuration is read.
+    dotnet restore $projectFile `
+        --configfile $nugetConfig `
+        --locked-mode `
+        --disable-build-servers `
+        -nodeReuse:false
+
+    if($LASTEXITCODE -ne 0)
+    {
+        Write-Error "Restore failed for $project in $exportRoot."
+        exit $LASTEXITCODE
+    }
+
+    dotnet pack $projectFile --verbosity normal `
+        --no-restore `
+        --disable-build-servers `
+        -nodeReuse:false `
         --configuration Release `
         --output $outputDir `
         --include-symbols `
         --include-source `
         --property:PackageVersion=$packageVersion `
-        --property:InformationalVersion=$informationalVersion `
-        (Join-Path $repositoryRoot "src/$project/$project.csproj")
+        --property:InformationalVersion=$informationalVersion
 
     if($LASTEXITCODE -ne 0)
     {
-        Write-Error "Pack failed for $project."
+        Write-Error "Pack failed for $project in $exportRoot."
         exit $LASTEXITCODE
     }
 }
 
-Write-Host "Generated $($projects.Count) packages in $outputDir with version $packageVersion."
+#Every package names the commit it was built from as its repository commit, which the build reads
+#from the fresh repository's HEAD: a package naming any other was not built from this commit.
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$misnamed = @()
+foreach($project in $projects)
+{
+    $package = Join-Path $outputDir "$project.$packageVersion.nupkg"
+    if(-not (Test-Path -LiteralPath $package))
+    {
+        $misnamed += "$project (no package $package)"
+        continue
+    }
+
+    $archive = [System.IO.Compression.ZipFile]::OpenRead($package)
+    try
+    {
+        $entry = $archive.Entries | Where-Object { $_.FullName -eq "$project.nuspec" } | Select-Object -First 1
+        $reader = [System.IO.StreamReader]::new($entry.Open())
+        try
+        {
+            [xml]$nuspec = $reader.ReadToEnd()
+        }
+        finally
+        {
+            $reader.Dispose()
+        }
+    }
+    finally
+    {
+        $archive.Dispose()
+    }
+
+    $repositoryCommit = $nuspec.package.metadata.repository.commit
+    if($repositoryCommit -ne $commitId)
+    {
+        $misnamed += "$project (repository commit '$repositoryCommit')"
+    }
+}
+
+if($misnamed.Count -gt 0)
+{
+    Write-Error "Packing is refused: these packages do not name commit $commitId as their repository commit:`n$($misnamed -join "`n")"
+    exit 1
+}
+
+Remove-Item -LiteralPath $exportRoot -Recurse -Force
+
+Write-Host "Generated $($projects.Count) packages in $outputDir with version $packageVersion from commit $commitId, packed in a fresh checkout of that commit."
