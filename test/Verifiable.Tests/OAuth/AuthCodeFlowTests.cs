@@ -73,6 +73,7 @@ internal sealed class AuthCodeFlowTests
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.InternalError, result.Outcome);
         Assert.AreEqual("server_error", result.ErrorCode);
+        Assert.AreEqual(AuthCodeFlowRefusalOrigin.ClientJudgement, result.RefusalOrigin, "The refusal is the library's own judgement, made without an answer of the authorization server.");
     }
 
 
@@ -100,6 +101,7 @@ internal sealed class AuthCodeFlowTests
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.InternalError, result.Outcome);
         Assert.AreEqual("server_error", result.ErrorCode);
         Assert.IsEmpty(store, "A failed metadata resolution must not reach the PAR send or state save.");
+        Assert.AreEqual(AuthCodeFlowRefusalOrigin.ClientJudgement, result.RefusalOrigin, "The refusal is the library's own judgement, made without an answer of the authorization server.");
     }
 
 
@@ -131,6 +133,7 @@ internal sealed class AuthCodeFlowTests
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.InternalError, result.Outcome);
         Assert.AreEqual("server_error", result.ErrorCode);
         Assert.IsEmpty(store, "A failed metadata resolution must not reach the PAR send or state save.");
+        Assert.AreEqual(AuthCodeFlowRefusalOrigin.ClientJudgement, result.RefusalOrigin, "The refusal is the library's own judgement, made without an answer of the authorization server.");
     }
 
 
@@ -176,6 +179,7 @@ internal sealed class AuthCodeFlowTests
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, result.Outcome);
         Assert.AreEqual("invalid_client", result.ErrorCode,
             "A well-formed OAuth error response must surface the server error code directly.");
+        Assert.AreEqual(AuthCodeFlowRefusalOrigin.AuthorizationServerAnswer, result.RefusalOrigin, "The error the authorization server answered is its own answer.");
     }
 
 
@@ -196,6 +200,7 @@ internal sealed class AuthCodeFlowTests
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.InternalError, result.Outcome);
         Assert.AreEqual("server_error", result.ErrorCode,
             "An HTML error page or unparseable body must map to server_error.");
+        Assert.AreEqual(AuthCodeFlowRefusalOrigin.ClientJudgement, result.RefusalOrigin, "The refusal is the library's own judgement, made without an answer of the authorization server.");
     }
 
 
@@ -264,6 +269,7 @@ internal sealed class AuthCodeFlowTests
             "A metadata issuer diverging from the pinned AuthorizationServerIssuer must be rejected " +
             "before any request is sent to the (potentially wrong) authorization server.");
         Assert.AreEqual("invalid_request", result.ErrorCode);
+        Assert.AreEqual(AuthCodeFlowRefusalOrigin.ClientJudgement, result.RefusalOrigin, "The refusal is the library's own judgement, made without an answer of the authorization server.");
     }
 
 
@@ -280,6 +286,7 @@ internal sealed class AuthCodeFlowTests
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, result.Outcome);
         Assert.AreEqual("invalid_request", result.ErrorCode);
+        Assert.AreEqual(AuthCodeFlowRefusalOrigin.ClientJudgement, result.RefusalOrigin, "The refusal is the library's own judgement, made without an answer of the authorization server.");
     }
 
 
@@ -301,6 +308,7 @@ internal sealed class AuthCodeFlowTests
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, result.Outcome);
         Assert.AreEqual("invalid_request", result.ErrorCode);
+        Assert.AreEqual(AuthCodeFlowRefusalOrigin.ClientJudgement, result.RefusalOrigin, "The refusal is the library's own judgement, made without an answer of the authorization server.");
     }
 
 
@@ -326,6 +334,7 @@ internal sealed class AuthCodeFlowTests
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, result.Outcome);
         Assert.AreEqual("invalid_request", result.ErrorCode);
+        Assert.AreEqual(AuthCodeFlowRefusalOrigin.ClientJudgement, result.RefusalOrigin, "The refusal is the library's own judgement, made without an answer of the authorization server.");
     }
 
 
@@ -350,6 +359,7 @@ internal sealed class AuthCodeFlowTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, result.Outcome);
+        Assert.IsNull(result.RefusalOrigin, "A result that refuses nothing states no refusal origin.");
         _ = Assert.IsInstanceOfType<AuthorizationCodeReceivedState>(store[flowId],
             "Callback success must replace ParCompleted with AuthorizationCodeReceived in the store.");
     }
@@ -368,6 +378,7 @@ internal sealed class AuthCodeFlowTests
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, result.Outcome);
         Assert.AreEqual("invalid_request", result.ErrorCode);
+        Assert.AreEqual(AuthCodeFlowRefusalOrigin.ClientJudgement, result.RefusalOrigin, "The refusal is the library's own judgement, made without an answer of the authorization server.");
     }
 
 
@@ -474,6 +485,7 @@ internal sealed class AuthCodeFlowTests
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.InternalError, result.Outcome,
             "A token_endpoint naming a loopback IP literal must be refused, never dialed.");
+        Assert.AreEqual(AuthCodeFlowRefusalOrigin.ClientJudgement, result.RefusalOrigin, "An endpoint the outbound fetch policy refused is the library's own judgement.");
         Assert.IsEmpty(invocations, "The transport spy must record ZERO invocations when the policy denies the endpoint.");
     }
 
@@ -544,6 +556,7 @@ internal sealed class AuthCodeFlowTests
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.InternalError, result.Outcome,
             "A pushed_authorization_request_endpoint naming a loopback IP literal must be refused, never dialed.");
+        Assert.AreEqual(AuthCodeFlowRefusalOrigin.ClientJudgement, result.RefusalOrigin, "An endpoint the outbound fetch policy refused is the library's own judgement.");
         Assert.IsEmpty(invocations, "The transport spy must record ZERO invocations when the policy denies the endpoint.");
     }
 

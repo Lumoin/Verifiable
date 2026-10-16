@@ -280,6 +280,7 @@ public static class AuthCodeFlowHandlers
             return new AuthCodeFlowEndpointResult
             {
                 Outcome = AuthCodeFlowEndpointOutcome.InternalError,
+                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
                 ErrorCode = "server_error",
                 ErrorDescription = "The pushed authorization request could not be sent."
             };
@@ -413,6 +414,7 @@ public static class AuthCodeFlowHandlers
             return new AuthCodeFlowEndpointResult
             {
                 Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
+                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
                 ErrorCode = OAuthErrors.InvalidRequest,
                 ErrorDescription =
                     "The authorization server requires Pushed Authorization Requests " +
@@ -563,6 +565,7 @@ public static class AuthCodeFlowHandlers
             return new AuthCodeFlowEndpointResult
             {
                 Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
+                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
                 ErrorCode = "invalid_request",
                 ErrorDescription = "Missing required callback parameters."
             };
@@ -576,6 +579,7 @@ public static class AuthCodeFlowHandlers
             return new AuthCodeFlowEndpointResult
             {
                 Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
+                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
                 ErrorCode = "invalid_request",
                 ErrorDescription = "No active flow found for the supplied state value."
             };
@@ -608,6 +612,7 @@ public static class AuthCodeFlowHandlers
             return new AuthCodeFlowEndpointResult
             {
                 Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
+                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
                 ErrorCode = "invalid_request",
                 ErrorDescription = "Callback validation failed.",
                 ValidationClaims = (IReadOnlyList<Claim>)validationResult.Claims
@@ -634,6 +639,7 @@ public static class AuthCodeFlowHandlers
             return new AuthCodeFlowEndpointResult
             {
                 Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
+                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
                 ErrorCode = "invalid_request",
                 ErrorDescription =
                     "The iss parameter does not resolve to a known, uniquely-configured authorization " +
@@ -774,6 +780,7 @@ public static class AuthCodeFlowHandlers
             return new AuthCodeFlowEndpointResult
             {
                 Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
+                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
                 ErrorCode = "invalid_request",
                 ErrorDescription = "Missing required parameter: flow_id."
             };
@@ -787,6 +794,7 @@ public static class AuthCodeFlowHandlers
             return new AuthCodeFlowEndpointResult
             {
                 Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
+                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
                 ErrorCode = "invalid_request",
                 ErrorDescription = "No code pending token exchange for the supplied flow_id."
             };
@@ -798,6 +806,7 @@ public static class AuthCodeFlowHandlers
             return new AuthCodeFlowEndpointResult
             {
                 Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
+                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
                 ErrorCode = "invalid_request",
                 ErrorDescription = "Flow has expired."
             };
@@ -925,6 +934,7 @@ public static class AuthCodeFlowHandlers
             return new AuthCodeFlowEndpointResult
             {
                 Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
+                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
                 ErrorCode = "unsupported_token_type",
                 ErrorDescription = "This authorization server does not support token revocation."
             };
@@ -935,6 +945,7 @@ public static class AuthCodeFlowHandlers
             return new AuthCodeFlowEndpointResult
             {
                 Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
+                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
                 ErrorCode = "invalid_request",
                 ErrorDescription = "Missing required parameter: token."
             };
@@ -1212,6 +1223,7 @@ public static class AuthCodeFlowHandlers
             return new AuthCodeFlowEndpointResult
             {
                 Outcome = AuthCodeFlowEndpointOutcome.InternalError,
+                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
                 ErrorCode = "server_error",
                 ErrorDescription = "The pushed authorization request could not be sent."
             };
@@ -1504,6 +1516,7 @@ public static class AuthCodeFlowHandlers
     private static AuthCodeFlowEndpointResult BuildResourceEntryHoldingWhiteSpaceRefusal() => new()
     {
         Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
+        RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
         ErrorCode = OAuthErrors.InvalidRequest,
         ErrorDescription =
             "A resource entry holds white space; each entry must be one absolute URI " +
@@ -1759,6 +1772,7 @@ public static class AuthCodeFlowHandlers
                     return new AuthCodeFlowEndpointResult
                     {
                         Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
+                        RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
                         ErrorCode = "invalid_request",
                         ErrorDescription =
                             "The iss parameter on the error callback does not match the recorded issuer; " +
@@ -1770,9 +1784,11 @@ public static class AuthCodeFlowHandlers
             }
         }
 
+        //Every check this error response could be held to accepted it, so its error is the authorization server's answer.
         return new AuthCodeFlowEndpointResult
         {
             Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
+            RefusalOrigin = AuthCodeFlowRefusalOrigin.AuthorizationServerAnswer,
             ErrorCode = errorCode,
             ErrorDescription = errorDescription
         };

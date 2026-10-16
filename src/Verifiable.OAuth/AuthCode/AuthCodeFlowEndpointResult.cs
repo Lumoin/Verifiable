@@ -36,6 +36,27 @@ public enum AuthCodeFlowEndpointOutcome
 
 
 /// <summary>
+/// Where a refusal the flow answers came from, stated by the flow where it constructs the refusal: the authorization server's
+/// own answer, or the client library's judgement made without one.
+/// </summary>
+public enum AuthCodeFlowRefusalOrigin
+{
+    /// <summary>
+    /// The authorization server answered with the error the refusal carries: an error response of its token or pushed
+    /// authorization request endpoint (RFC 6749 section 5.2, RFC 9126 section 2.3), or the error of its authorization
+    /// response that every check of that response the library made accepted (RFC 6749 section 4.1.2.1).
+    /// </summary>
+    AuthorizationServerAnswer,
+
+    /// <summary>
+    /// The library refused on its own judgement: a request it would not compose or send, an answer it could not read as the
+    /// specification shapes one, or an authorization response one of its checks refused.
+    /// </summary>
+    ClientJudgement
+}
+
+
+/// <summary>
 /// The framework-agnostic result returned by an <c>AuthCodeFlowEndpoint</c> handler.
 /// </summary>
 /// <remarks>
@@ -74,6 +95,15 @@ public sealed class AuthCodeFlowEndpointResult
     /// <see langword="null"/> for other outcomes.
     /// </summary>
     public string? ErrorDescription { get; init; }
+
+    /// <summary>
+    /// Where the refusal came from, stated where the flow constructs it, for
+    /// <see cref="AuthCodeFlowEndpointOutcome.BadRequest"/> and <see cref="AuthCodeFlowEndpointOutcome.InternalError"/>
+    /// outcomes: the authorization server's own answer, whose code <see cref="ErrorCode"/> is, or the library's judgement,
+    /// whose reason it is. <see langword="null"/> for <see cref="AuthCodeFlowEndpointOutcome.Ok"/> and
+    /// <see cref="AuthCodeFlowEndpointOutcome.Redirect"/> outcomes.
+    /// </summary>
+    public AuthCodeFlowRefusalOrigin? RefusalOrigin { get; init; }
 
     /// <summary>
     /// The refusal of the client authentication assertion the request was to present, judged before anything was composed

@@ -275,6 +275,7 @@ internal sealed class OAuthAttackMitigationTests
         Assert.AreEqual("invalid_request", result.ErrorCode,
             "A mismatched iss on an error callback must be surfaced as tampering (invalid_request), " +
             "not passed through as the authorization server's access_denied error.");
+        Assert.AreEqual(AuthCodeFlowRefusalOrigin.ClientJudgement, result.RefusalOrigin, "An error response the issuer check refused is the library's judgement, not the authorization server's answer.");
         AssertClaimFailed(result.ValidationClaims, ValidationClaimIds.IssuerMatchesExpectedWhenPresent,
             "Issuer mismatch on the error callback must produce a failed IssuerMatchesExpectedWhenPresent claim.");
     }
@@ -305,6 +306,7 @@ internal sealed class OAuthAttackMitigationTests
         Assert.AreEqual("access_denied", result.ErrorCode,
             "A correctly-issued error callback must surface the authorization server's own error code.");
         Assert.AreEqual("User declined consent.", result.ErrorDescription);
+        Assert.AreEqual(AuthCodeFlowRefusalOrigin.AuthorizationServerAnswer, result.RefusalOrigin, "An error response every check accepted is the authorization server's own answer.");
     }
 
 
@@ -386,6 +388,7 @@ internal sealed class OAuthAttackMitigationTests
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, callbackResult.Outcome,
             "An iss absent from the application's known-issuer store must be rejected even when it matches the flow's expected issuer.");
         Assert.AreEqual("invalid_request", callbackResult.ErrorCode);
+        Assert.AreEqual(AuthCodeFlowRefusalOrigin.ClientJudgement, callbackResult.RefusalOrigin, "The known-issuer gate's refusal is the library's own judgement.");
         Assert.IsTrue(
             callbackResult.ErrorDescription is not null
                 && callbackResult.ErrorDescription.Contains("RFC 9207", StringComparison.Ordinal),
@@ -632,6 +635,7 @@ internal sealed class OAuthAttackMitigationTests
             "Callback on an expired flow state must be rejected.");
         AssertClaimFailed(result.ValidationClaims, ValidationClaimIds.FlowStateNotExpired,
             "Expired flow must produce a failed FlowStateNotExpired claim.");
+        Assert.AreEqual(AuthCodeFlowRefusalOrigin.ClientJudgement, result.RefusalOrigin, "A callback the library's checks refused is the library's own judgement.");
     }
 
 

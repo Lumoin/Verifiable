@@ -209,6 +209,7 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, tokenResult.Outcome,
             $"A wrong code_verifier must fail token exchange. Body={tokenResult.Body}");
         Assert.AreEqual(OAuthErrors.InvalidGrant, tokenResult.ErrorCode);
+        Assert.AreEqual(AuthCodeFlowRefusalOrigin.AuthorizationServerAnswer, tokenResult.RefusalOrigin, "The token endpoint's invalid_grant is the authorization server's own answer.");
     }
 
 

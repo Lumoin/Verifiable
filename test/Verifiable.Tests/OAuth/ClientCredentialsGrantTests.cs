@@ -616,6 +616,7 @@ internal sealed class ClientCredentialsGrantTests
 
             Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, result.Outcome);
             Assert.AreEqual(OAuthErrors.InvalidClient, result.ErrorCode);
+            Assert.AreEqual(AuthCodeFlowRefusalOrigin.AuthorizationServerAnswer, result.RefusalOrigin, "The token endpoint's invalid_client is the authorization server's own answer.");
         }
         finally
         {

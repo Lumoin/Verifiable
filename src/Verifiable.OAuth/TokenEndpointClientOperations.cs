@@ -57,6 +57,7 @@ internal static class TokenEndpointClientOperations
                 new AuthCodeFlowEndpointResult
                 {
                     Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
+                    RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
                     ErrorCode = "invalid_request",
                     ErrorDescription =
                         "The authorization server metadata issuer does not match this registration's " +
@@ -86,6 +87,7 @@ internal static class TokenEndpointClientOperations
         return new AuthCodeFlowEndpointResult
         {
             Outcome = AuthCodeFlowEndpointOutcome.InternalError,
+            RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
             ErrorCode = "server_error",
             ErrorDescription = "The authorization server metadata could not be resolved."
         };
@@ -136,6 +138,7 @@ internal static class TokenEndpointClientOperations
         return new AuthCodeFlowEndpointResult
         {
             Outcome = AuthCodeFlowEndpointOutcome.InternalError,
+            RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
             ErrorCode = "server_error",
             ErrorDescription = "The endpoint was refused by the outbound fetch policy."
         };
@@ -176,6 +179,7 @@ internal static class TokenEndpointClientOperations
             return Result<ClientAssertionCredential?, AuthCodeFlowEndpointResult>.Failure(new AuthCodeFlowEndpointResult
             {
                 Outcome = AuthCodeFlowEndpointOutcome.InternalError,
+                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
                 ErrorCode = "server_error",
                 ErrorDescription = key.Error.Describe(),
                 ClientAssertionCredentialRefusal = key.Error
@@ -494,24 +498,28 @@ internal static class TokenEndpointClientOperations
             OAuthProtocolError pe => new AuthCodeFlowEndpointResult
             {
                 Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
+                RefusalOrigin = AuthCodeFlowRefusalOrigin.AuthorizationServerAnswer,
                 ErrorCode = pe.ErrorCode,
                 ErrorDescription = pe.ErrorDescription ?? pe.Support.Summary
             },
             OAuthInvalidFieldValue ifv => new AuthCodeFlowEndpointResult
             {
                 Outcome = AuthCodeFlowEndpointOutcome.BadRequest,
+                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
                 ErrorCode = "invalid_response",
                 ErrorDescription = $"{ifv.FieldName}: {ifv.Reason}"
             },
             OAuthMalformedResponse mr => new AuthCodeFlowEndpointResult
             {
                 Outcome = AuthCodeFlowEndpointOutcome.InternalError,
+                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
                 ErrorCode = "server_error",
                 ErrorDescription = mr.Support.Summary
             },
             _ => new AuthCodeFlowEndpointResult
             {
                 Outcome = AuthCodeFlowEndpointOutcome.InternalError,
+                RefusalOrigin = AuthCodeFlowRefusalOrigin.ClientJudgement,
                 ErrorCode = "server_error",
                 ErrorDescription = error.Support.Summary
             }

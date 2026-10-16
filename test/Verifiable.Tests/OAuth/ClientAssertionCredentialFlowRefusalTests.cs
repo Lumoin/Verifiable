@@ -413,6 +413,7 @@ internal sealed class ClientAssertionCredentialFlowRefusalTests
         Assert.IsNotNull(result.ClientAssertionCredentialRefusal, "The result carries the typed refusal.");
         Assert.AreEqual(reason, result.ClientAssertionCredentialRefusal.Reason);
         Assert.AreEqual(result.ClientAssertionCredentialRefusal.Describe(), result.ErrorDescription);
+        Assert.AreEqual(AuthCodeFlowRefusalOrigin.ClientJudgement, result.RefusalOrigin, "A credential refused before anything was sent is the library's own judgement.");
         AssertNothingHappened(observations);
     }
 
