@@ -183,6 +183,33 @@ internal sealed class AuthCodeFlowTests
     }
 
 
+    /// <summary>
+    /// A pushed authorization response whose <c>expires_in</c> is not the positive integer RFC 9126 section 2.2 requires is
+    /// refused by the client on its own judgement with the client's <c>invalid_response</c> code, which no specification
+    /// defines and no authorization server sent, so the refusal names the client's judgement as its origin.
+    /// </summary>
+    [TestMethod]
+    public async Task HandleParAsyncRefusesAnInvalidFieldValueWithTheClientsOwnCode()
+    {
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
+            store: [],
+            parResponse: OAuthJsonResponseFixtures.BuildParJson("urn:ietf:params:oauth:request_uri:negative", -1));
+
+        AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleParAsync(
+            new Dictionary<string, string>(),
+            DefaultRedirectUri,
+            infrastructure,
+            registration,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, result.Outcome);
+        Assert.AreEqual("invalid_response", OAuthClientErrors.InvalidResponse, "The client's code keeps its wire spelling.");
+        Assert.AreEqual(OAuthClientErrors.InvalidResponse, result.ErrorCode, "The refusal carries the client's own code.");
+        Assert.AreEqual(AuthCodeFlowRefusalOrigin.ClientJudgement, result.RefusalOrigin, "The client refused the answer on its own judgement.");
+        Assert.StartsWith("expires_in: ", result.ErrorDescription, StringComparison.Ordinal);
+    }
+
+
     [TestMethod]
     public async Task HandleParAsyncReturnsInternalErrorWhenResponseIsMalformed()
     {

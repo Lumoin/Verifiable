@@ -494,7 +494,7 @@ internal static class TokenEndpointClientOperations
             OAuthInvalidFieldValue ifv => AuthCodeFlowEndpointResult.Refused(
                 AuthCodeFlowEndpointOutcome.BadRequest,
                 AuthCodeFlowRefusalOrigin.ClientJudgement,
-                "invalid_response",
+                OAuthClientErrors.InvalidResponse,
                 $"{ifv.FieldName}: {ifv.Reason}"),
             OAuthMalformedResponse mr => AuthCodeFlowEndpointResult.Refused(
                 AuthCodeFlowEndpointOutcome.InternalError,

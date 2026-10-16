@@ -51,7 +51,7 @@ public static class AuthCodeServerFlowAutomaton
                 EnteredAt = now,
                 ExpiresAt = DateTimeOffset.MaxValue,
                 Kind = FlowKind.AuthCodeServer,
-                ErrorCode = "server_error",
+                ErrorCode = OAuthErrors.ServerError,
                 Reason = "Flow not yet initiated.",
                 FailedAt = now
             },
