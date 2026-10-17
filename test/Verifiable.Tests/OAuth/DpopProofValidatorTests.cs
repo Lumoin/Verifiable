@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Time.Testing;
-using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth.Dpop;
@@ -425,7 +424,7 @@ internal sealed class DpopProofValidatorTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         DpopProofValidationResult result = await ValidateAsync(
-            proof, verifier: MicrosoftCryptographicFunctionsAdapter.VerifyRsaSha256Pkcs1Async).ConfigureAwait(false);
+            proof, verifier: new JwsAlgorithmVerification(WellKnownJwaValues.Rs256, MicrosoftCryptographicFunctionsAdapter.VerifyRsaSha256Pkcs1Async)).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccess, $"RS256 proof validation must succeed; got {result.FailureReason}.");
         Assert.AreEqual(
@@ -451,13 +450,59 @@ internal sealed class DpopProofValidatorTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         DpopProofValidationResult result = await ValidateAsync(
-            proof, verifier: MicrosoftCryptographicFunctionsAdapter.VerifyRsaSha256PssAsync).ConfigureAwait(false);
+            proof, verifier: new JwsAlgorithmVerification(WellKnownJwaValues.Ps256, MicrosoftCryptographicFunctionsAdapter.VerifyRsaSha256PssAsync)).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccess, $"PS256 proof validation must succeed; got {result.FailureReason}.");
         Assert.AreEqual(
             DpopJwkUtilities.ComputeThumbprint(keys.PublicKey, WellKnownJwaValues.Ps256,
                 TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared),
             result.JwkThumbprint);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.1">RFC 8725 Section 3.1</see>: "The library MUST ensure
+    /// that the "alg" or "enc" header specifies the same algorithm that is used for the cryptographic operation." A proof
+    /// signed with RSASSA-PKCS1-v1_5 and SHA-256 beneath a header naming PS256 over the same RSA key is refused as
+    /// <see cref="DpopProofValidationFailureReason.InvalidAlg"/> under a supplied RS256 verification, which would verify the
+    /// signature: the header names an algorithm the verification never performs. The same key's proof declaring RS256
+    /// validates under the same verification, so the refusal is the binding's and not the key's.
+    /// </summary>
+    [TestMethod]
+    public async Task ValidateAsyncRefusesAPs256HeaderOverAnRs256SignatureUnderASuppliedRs256Verification()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshRsa2048KeyMaterial();
+        var declaredKey = new DpopKey(keys, WellKnownJwaValues.Rs256);
+        var mislabelledKey = new DpopKey(keys, WellKnownJwaValues.Ps256);
+
+        var declared = await DpopProofConstruction.BuildAsync(
+            BuildClaims(),
+            declaredKey,
+            TestSetup.Base64UrlEncoder,
+            DpopTestSupport.Serializer,
+            MicrosoftCryptographicFunctionsAdapter.SignRsaSha256Pkcs1Async,
+            BaseMemoryPool.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        var declaredResult = await ValidateAsync(
+            declared, verifier: new JwsAlgorithmVerification(WellKnownJwaValues.Rs256, MicrosoftCryptographicFunctionsAdapter.VerifyRsaSha256Pkcs1Async)).ConfigureAwait(false);
+
+        Assert.IsTrue(declaredResult.IsSuccess, $"The RS256 proof validates under the RS256 verification; got {declaredResult.FailureReason}.");
+
+        var mislabelled = await DpopProofConstruction.BuildAsync(
+            BuildClaims(),
+            mislabelledKey,
+            TestSetup.Base64UrlEncoder,
+            DpopTestSupport.Serializer,
+            MicrosoftCryptographicFunctionsAdapter.SignRsaSha256Pkcs1Async,
+            BaseMemoryPool.Shared,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        var mislabelledResult = await ValidateAsync(
+            mislabelled, verifier: new JwsAlgorithmVerification(WellKnownJwaValues.Rs256, MicrosoftCryptographicFunctionsAdapter.VerifyRsaSha256Pkcs1Async)).ConfigureAwait(false);
+
+        Assert.AreEqual(DpopProofValidationFailureReason.InvalidAlg, mislabelledResult.FailureReason,
+            "A PS256 header names an algorithm the supplied RS256 verification never performs.");
     }
 
 
@@ -477,7 +522,7 @@ internal sealed class DpopProofValidatorTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         DpopProofValidationResult result = await ValidateAsync(
-            proof, verifier: BouncyCastleCryptographicFunctionsAdapter.VerifyEd25519Async).ConfigureAwait(false);
+            proof, verifier: new JwsAlgorithmVerification(WellKnownJwaValues.EdDsa, BouncyCastleCryptographicFunctionsAdapter.VerifyEd25519Async)).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccess, $"EdDSA proof validation must succeed; got {result.FailureReason}.");
         Assert.AreEqual(
@@ -537,7 +582,7 @@ internal sealed class DpopProofValidatorTests
     /// <param name="expectedNonce">The nonce the server provided, or <see langword="null"/>.</param>
     /// <param name="nonceRequired">Whether the request requires a nonce.</param>
     /// <param name="accessToken">The access token <c>ath</c> is checked against, or <see langword="null"/>.</param>
-    /// <param name="verifier">The verification function, or <see langword="null"/> for P-256.</param>
+    /// <param name="verifier">The verification bound to the algorithm it performs, or <see langword="null"/> for ES256.</param>
     /// <param name="httpUrl">The target URI of the request, or <see langword="null"/> for the default.</param>
     /// <returns>The validation result.</returns>
     private async Task<DpopProofValidationResult> ValidateAsync(
@@ -545,7 +590,7 @@ internal sealed class DpopProofValidatorTests
         string? expectedNonce = null,
         bool nonceRequired = false,
         string? accessToken = null,
-        VerificationDelegate? verifier = null,
+        JwsAlgorithmVerification? verifier = null,
         string? httpUrl = null)
     {
         DpopProofValidationRequest request = new()
@@ -560,7 +605,7 @@ internal sealed class DpopProofValidatorTests
 
         return await DpopProofValidator.ValidateAsync(
             request,
-            verifier ?? MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
+            verifier ?? DpopTestSupport.Es256Verification,
             DpopTestSupport.Parser,
             TestSetup.Base64UrlEncoder,
             TestSetup.Base64UrlDecoder,

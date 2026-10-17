@@ -202,25 +202,43 @@ namespace Verifiable.JCose
         {
             ArgumentNullException.ThrowIfNull(tag);
 
-            CryptoAlgorithm algorithm = tag.Get<CryptoAlgorithm>();
+            return ResolveJwaAlgorithm(tag) is { IsNamed: true, Algorithm: string named }
+                ? named
+                : throw new NotSupportedException($"CryptoAlgorithm '{tag.Get<CryptoAlgorithm>()}' does not have a JWA mapping.");
+        };
+
+
+        /// <summary>
+        /// Resolves the JWA algorithm the library names a key of <paramref name="tag"/> by, the one table
+        /// <see cref="DefaultTagToJwaConverter"/> reads: a key type the table names no algorithm for resolves as
+        /// <see cref="JwaAlgorithmResolution.NoneNamed"/> rather than raising.
+        /// </summary>
+        /// <param name="tag">The tag containing algorithm information.</param>
+        /// <returns>The algorithm the library names the key type by, or the resolution naming none.</returns>
+        public static JwaAlgorithmResolution ResolveJwaAlgorithm(Tag tag)
+        {
+            ArgumentNullException.ThrowIfNull(tag);
+
+            var algorithm = tag.Get<CryptoAlgorithm>();
+
             return algorithm switch
             {
-                var a when a.Equals(CryptoAlgorithm.P256) => WellKnownJwaValues.Es256,
-                var a when a.Equals(CryptoAlgorithm.P384) => WellKnownJwaValues.Es384,
-                var a when a.Equals(CryptoAlgorithm.P521) => WellKnownJwaValues.Es512,
-                var a when a.Equals(CryptoAlgorithm.Secp256k1) => WellKnownJwaValues.Es256K,
-                var a when a.Equals(CryptoAlgorithm.Ed25519) => WellKnownJwaValues.EdDsa,
-                var a when a.Equals(CryptoAlgorithm.Rsa2048) || a.Equals(CryptoAlgorithm.Rsa4096) => WellKnownJwaValues.Rs256,
-                var a when a.Equals(CryptoAlgorithm.MlDsa44) => WellKnownJwaValues.MlDsa44,
-                var a when a.Equals(CryptoAlgorithm.MlDsa65) => WellKnownJwaValues.MlDsa65,
-                var a when a.Equals(CryptoAlgorithm.MlDsa87) => WellKnownJwaValues.MlDsa87,
-                var a when a.Equals(CryptoAlgorithm.BrainpoolP256r1) => WellKnownJwaValues.Esb256,
-                var a when a.Equals(CryptoAlgorithm.BrainpoolP320r1) => WellKnownJwaValues.Esb320,
-                var a when a.Equals(CryptoAlgorithm.BrainpoolP384r1) => WellKnownJwaValues.Esb384,
-                var a when a.Equals(CryptoAlgorithm.BrainpoolP512r1) => WellKnownJwaValues.Esb512,
-                _ => throw new NotSupportedException($"CryptoAlgorithm '{algorithm}' does not have a JWA mapping.")
+                var a when a.Equals(CryptoAlgorithm.P256) => JwaAlgorithmResolution.Named(WellKnownJwaValues.Es256),
+                var a when a.Equals(CryptoAlgorithm.P384) => JwaAlgorithmResolution.Named(WellKnownJwaValues.Es384),
+                var a when a.Equals(CryptoAlgorithm.P521) => JwaAlgorithmResolution.Named(WellKnownJwaValues.Es512),
+                var a when a.Equals(CryptoAlgorithm.Secp256k1) => JwaAlgorithmResolution.Named(WellKnownJwaValues.Es256K),
+                var a when a.Equals(CryptoAlgorithm.Ed25519) => JwaAlgorithmResolution.Named(WellKnownJwaValues.EdDsa),
+                var a when a.Equals(CryptoAlgorithm.Rsa2048) || a.Equals(CryptoAlgorithm.Rsa4096) => JwaAlgorithmResolution.Named(WellKnownJwaValues.Rs256),
+                var a when a.Equals(CryptoAlgorithm.MlDsa44) => JwaAlgorithmResolution.Named(WellKnownJwaValues.MlDsa44),
+                var a when a.Equals(CryptoAlgorithm.MlDsa65) => JwaAlgorithmResolution.Named(WellKnownJwaValues.MlDsa65),
+                var a when a.Equals(CryptoAlgorithm.MlDsa87) => JwaAlgorithmResolution.Named(WellKnownJwaValues.MlDsa87),
+                var a when a.Equals(CryptoAlgorithm.BrainpoolP256r1) => JwaAlgorithmResolution.Named(WellKnownJwaValues.Esb256),
+                var a when a.Equals(CryptoAlgorithm.BrainpoolP320r1) => JwaAlgorithmResolution.Named(WellKnownJwaValues.Esb320),
+                var a when a.Equals(CryptoAlgorithm.BrainpoolP384r1) => JwaAlgorithmResolution.Named(WellKnownJwaValues.Esb384),
+                var a when a.Equals(CryptoAlgorithm.BrainpoolP512r1) => JwaAlgorithmResolution.Named(WellKnownJwaValues.Esb512),
+                _ => JwaAlgorithmResolution.NoneNamed
             };
-        };
+        }
 
 
         /// <summary>

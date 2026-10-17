@@ -188,7 +188,7 @@ internal sealed class DpopEndToEndTests
                 AccessToken = accessToken,
                 NonceRequired = false
             },
-            MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
+            DpopTestSupport.Es256Verification,
             DpopTestSupport.Parser,
             TestHostShell.Base64UrlEncoder,
             TestHostShell.Base64UrlDecoder,

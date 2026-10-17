@@ -2,6 +2,7 @@ using System.Text.Json;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth.Dpop;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
 
@@ -14,6 +15,14 @@ namespace Verifiable.Tests.OAuth;
 internal static class DpopTestSupport
 {
     public static DpopJwsPartSerializer Serializer { get; } = DpopJwsPartSerializerJson.Default;
+
+
+    /// <summary>
+    /// The ES256 verification over P-256 keys the DPoP and resource-server tests verify proofs and access tokens under, the
+    /// function bound to the one algorithm it performs.
+    /// </summary>
+    public static JwsAlgorithmVerification Es256Verification { get; } =
+        new(WellKnownJwaValues.Es256, MicrosoftCryptographicFunctionsAdapter.VerifyP256Async);
 
 
     public static DpopJwsPartParser Parser { get; } = new()

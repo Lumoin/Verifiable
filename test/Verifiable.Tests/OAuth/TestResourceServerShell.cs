@@ -7,6 +7,7 @@ using System.Security.Cryptography.X509Certificates;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Dpop;
@@ -52,7 +53,7 @@ internal sealed class TestResourceServerShell : IAsyncDisposable
     private bool Disposed { get; set; }
 
     public ResourceServerIntegration Integration { get; }
-    public VerificationDelegate VerifySignature { get; }
+    public JwsAlgorithmVerification VerifySignature { get; }
 
 
     /// <summary>
@@ -110,7 +111,7 @@ internal sealed class TestResourceServerShell : IAsyncDisposable
         Uri trustedIssuer,
         string expectedAudience,
         ServerVerificationKeyResolverDelegate resolveVerificationKey,
-        VerificationDelegate verifySignature,
+        JwsAlgorithmVerification verifySignature,
         TimeProvider timeProvider,
         string? requiredScope = null,
         IReadOnlyList<string>? advertisedAuthorizationServers = null)
@@ -308,6 +309,8 @@ internal sealed class TestResourceServerShell : IAsyncDisposable
                 JwtHeaderDeserializer = static bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
                     bytes, TestSetup.DefaultSerializationOptions) ?? throw new FormatException("Header JSON parsed to null."),
                 JwtPayloadDeserializer = static bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+                    bytes, TestSetup.DefaultSerializationOptions) ?? throw new FormatException("Payload JSON parsed to null."),
+                ClientAssertionPayloadDeserializer = static bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
                     bytes, TestSetup.DefaultSerializationOptions) ?? throw new FormatException("Payload JSON parsed to null.")
             },
             MemoryPool = BaseMemoryPool.Shared

@@ -46,7 +46,7 @@ internal sealed class ResourceServerEndToEndTests
             trustedIssuer: new Uri(Issuer),
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(keys.PublicKey),
-            verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
+            verifySignature: DpopTestSupport.Es256Verification,
             timeProvider: time);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -103,7 +103,7 @@ internal sealed class ResourceServerEndToEndTests
             trustedIssuer: new Uri(Issuer),
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(keys.PublicKey, recordedUsages),
-            verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
+            verifySignature: DpopTestSupport.Es256Verification,
             timeProvider: time);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -137,7 +137,7 @@ internal sealed class ResourceServerEndToEndTests
             trustedIssuer: new Uri(Issuer),
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(keys.PublicKey),
-            verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
+            verifySignature: DpopTestSupport.Es256Verification,
             timeProvider: time);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -163,7 +163,7 @@ internal sealed class ResourceServerEndToEndTests
             trustedIssuer: new Uri(Issuer),
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(keys.PublicKey),
-            verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
+            verifySignature: DpopTestSupport.Es256Verification,
             timeProvider: time);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -199,7 +199,7 @@ internal sealed class ResourceServerEndToEndTests
             trustedIssuer: new Uri(Issuer),
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(keys.PublicKey),
-            verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
+            verifySignature: DpopTestSupport.Es256Verification,
             timeProvider: time);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -254,7 +254,7 @@ internal sealed class ResourceServerEndToEndTests
             trustedIssuer: new Uri(Issuer),
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(asKeys.PublicKey),
-            verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
+            verifySignature: DpopTestSupport.Es256Verification,
             timeProvider: time);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -317,7 +317,7 @@ internal sealed class ResourceServerEndToEndTests
             trustedIssuer: new Uri(Issuer),
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(asKeys.PublicKey),
-            verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
+            verifySignature: DpopTestSupport.Es256Verification,
             timeProvider: time);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -387,7 +387,7 @@ internal sealed class ResourceServerEndToEndTests
             trustedIssuer: new Uri(Issuer),
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(keys.PublicKey),
-            verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
+            verifySignature: DpopTestSupport.Es256Verification,
             timeProvider: time);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -426,7 +426,7 @@ internal sealed class ResourceServerEndToEndTests
             trustedIssuer: new Uri(Issuer),
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(keys.PublicKey),
-            verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
+            verifySignature: DpopTestSupport.Es256Verification,
             timeProvider: time);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -471,7 +471,7 @@ internal sealed class ResourceServerEndToEndTests
             trustedIssuer: new Uri(Issuer),
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(keys.PublicKey),
-            verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
+            verifySignature: DpopTestSupport.Es256Verification,
             timeProvider: time);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -643,7 +643,7 @@ internal sealed class ResourceServerEndToEndTests
             trustedIssuer: new Uri(Issuer),
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(keys.PublicKey),
-            verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
+            verifySignature: DpopTestSupport.Es256Verification,
             timeProvider: time);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 

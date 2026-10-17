@@ -231,27 +231,29 @@ internal sealed class ClientAssertionCredentialFlowRefusalTests
 
 
     /// <summary>
+    /// The methods no assertion family classifies, each a row of its own: <c>attest_jwt_client_auth</c>, <c>spiffe_jwt</c> and
+    /// <see cref="ApplicationDefinedMethod"/>.
+    /// </summary>
+    /// <returns>The methods.</returns>
+    private static IEnumerable<object[]> MethodsNoFamilyClassifies()
+    {
+        yield return [ClientAuthenticationMethod.AttestJwtClientAuth];
+        yield return [ClientAuthenticationMethod.SpiffeJwt];
+        yield return [ApplicationDefinedMethod];
+    }
+
+
+    /// <summary>
     /// An ID-JAG mint and redeem under a registration naming a method no assertion family classifies - attestation-based,
     /// SPIFFE, or one an application defined - are refused, typed
     /// (<see cref="ClientAssertionCredentialRefusalReason.MethodNotSupported"/>), before they resolve metadata or send anything:
     /// the refusal never records such a method as one known to present no assertion.
     /// </summary>
-    /// <param name="code">
-    /// The method's code: 7 <c>attest_jwt_client_auth</c>, 8 <c>spiffe_jwt</c>, or that of <see cref="ApplicationDefinedMethod"/>.
-    /// </param>
+    /// <param name="method">The registration's method, one of <see cref="MethodsNoFamilyClassifies"/>.</param>
     [TestMethod]
-    [DataRow(7)]
-    [DataRow(8)]
-    [DataRow(ApplicationDefinedMethodCode)]
-    public async Task MintAndRedeemRefuseARegistrationWhoseMethodNoFamilyClassifies(int code)
+    [DynamicData(nameof(MethodsNoFamilyClassifies))]
+    public async Task MintAndRedeemRefuseARegistrationWhoseMethodNoFamilyClassifies(ClientAuthenticationMethod method)
     {
-        var method = code switch
-        {
-            7 => ClientAuthenticationMethod.AttestJwtClientAuth,
-            8 => ClientAuthenticationMethod.SpiffeJwt,
-            _ => ApplicationDefinedMethod
-        };
-
         var keyMaterial = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         using var publicKey = keyMaterial.PublicKey;
         using var privateKey = keyMaterial.PrivateKey;

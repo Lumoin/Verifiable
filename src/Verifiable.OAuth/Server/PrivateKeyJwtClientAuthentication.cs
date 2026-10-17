@@ -118,7 +118,7 @@ public sealed record PrivateKeyJwtClientAuthenticationResult
 /// <see cref="Validate"/> is crypto-agnostic: it operates on the already signature-verified,
 /// decoded <see cref="JwtPayload"/>, mirroring <see cref="FederationClientAuthentication.Validate"/>'s
 /// shape. <see cref="BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Pipeline.ResolveJwksUriDelegate?,ClientAssertionAudiencePolicy?)"/>
-/// and its explicit-<see cref="VerificationDelegate"/> overload compose the signature step around
+/// and its explicit-<see cref="JwsAlgorithmVerification"/> overload compose the signature step around
 /// it: they parse the compact <c>client_assertion</c>, resolve the verification key from the
 /// registration's <see cref="ClientRecord.ClientJwks"/> — or, when that is absent, from
 /// <see cref="ClientRecord.ClientJwksUri"/> through the OPTIONAL wired
@@ -230,7 +230,7 @@ public static class PrivateKeyJwtClientAuthentication
     /// <see cref="ClientRecord.ClientJwks"/>, verifies the signature via
     /// <see cref="Jws.VerifyAsync(string,DecodeDelegate,BaseMemoryPool,PublicKeyMemory,CancellationToken)"/>'s
     /// registry-resolving overload, and applies <see cref="Validate"/>. Delegates the signature step
-    /// to <see cref="BuildValidator(VerificationDelegate,System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Pipeline.ResolveJwksUriDelegate?,ClientAssertionAudiencePolicy?)"/>'s
+    /// to <see cref="BuildValidator(JwsAlgorithmVerification,System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Pipeline.ResolveJwksUriDelegate?,ClientAssertionAudiencePolicy?)"/>'s
     /// shared core once the key is resolved per request, so the verification logic is written once.
     /// </summary>
     /// <param name="additionalAcceptedAudiences">
@@ -275,20 +275,21 @@ public static class PrivateKeyJwtClientAuthentication
     {
         ThrowIfAudiencePolicyCompositionIsContradictory(additionalAcceptedAudiences, audiencePolicy);
 
-        return BuildValidatorCore(additionalAcceptedAudiences, checkJtiReplayAsync, resolveJwksUriAsync, verificationDelegate: null, audiencePolicy);
+        return BuildValidatorCore(additionalAcceptedAudiences, checkJtiReplayAsync, resolveJwksUriAsync, verification: null, audiencePolicy);
     }
 
 
     /// <summary>
-    /// Builds a <see cref="ValidateClientCredentialsDelegate"/> using an explicit
-    /// <see cref="VerificationDelegate"/> rather than resolving one from
-    /// <see cref="CryptoFunctionRegistry{TDiscriminator1,TDiscriminator2}"/>. The registry-resolving
-    /// overload above shares this method's validation core, supplying a
-    /// <see langword="null"/> function so the per-request signature step falls back to
+    /// Builds a <see cref="ValidateClientCredentialsDelegate"/> using an explicit verification bound to the one algorithm it
+    /// performs (<see cref="JwsAlgorithmVerification"/>) rather than resolving one from
+    /// <see cref="CryptoFunctionRegistry{TDiscriminator1,TDiscriminator2}"/>: an assertion whose header names another
+    /// algorithm, or an algorithm of another key type than the selected key's, is refused before the function runs
+    /// (<see cref="JwsKeyAlgorithmBinding.JudgeSuppliedVerification"/>). The registry-resolving overload above shares this
+    /// method's validation core, supplying no verification so the per-request signature step falls back to
     /// <see cref="Jws.VerifyAsync(string,DecodeDelegate,BaseMemoryPool,PublicKeyMemory,CancellationToken)"/>'s
     /// own registry resolution.
     /// </summary>
-    /// <param name="verificationDelegate">The verification function to use.</param>
+    /// <param name="verification">The verification to use, bound to the algorithm it performs.</param>
     /// <param name="additionalAcceptedAudiences">
     /// Extra values <c>aud</c> may name beyond the resolved issuer identifier and the request's token
     /// and pushed-authorization endpoint URLs, or <see langword="null"/> to add none. Refused (an
@@ -313,16 +314,16 @@ public static class PrivateKeyJwtClientAuthentication
     /// parameter of the same name.
     /// </param>
     public static ValidateClientCredentialsDelegate BuildValidator(
-        VerificationDelegate verificationDelegate,
+        JwsAlgorithmVerification verification,
         IReadOnlyCollection<string>? additionalAcceptedAudiences = null,
         CheckClientAssertionJtiReplayDelegate? checkJtiReplayAsync = null,
         ResolveJwksUriDelegate? resolveJwksUriAsync = null,
         ClientAssertionAudiencePolicy? audiencePolicy = null)
     {
-        ArgumentNullException.ThrowIfNull(verificationDelegate);
+        ArgumentNullException.ThrowIfNull(verification);
         ThrowIfAudiencePolicyCompositionIsContradictory(additionalAcceptedAudiences, audiencePolicy);
 
-        return BuildValidatorCore(additionalAcceptedAudiences, checkJtiReplayAsync, resolveJwksUriAsync, verificationDelegate, audiencePolicy);
+        return BuildValidatorCore(additionalAcceptedAudiences, checkJtiReplayAsync, resolveJwksUriAsync, verification, audiencePolicy);
     }
 
 
@@ -334,7 +335,7 @@ public static class PrivateKeyJwtClientAuthentication
     /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-rfc7523bis-11#section-4">Section
     /// 4</see>'s narrower rule admits no additional accepted audience, so both
     /// <see cref="BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Pipeline.ResolveJwksUriDelegate?,ClientAssertionAudiencePolicy?)"/>
-    /// and its explicit-<see cref="VerificationDelegate"/> overload refuse this composition when the
+    /// and its explicit-<see cref="JwsAlgorithmVerification"/> overload refuse this composition when the
     /// validator is BUILT, before any wire input is read.
     /// </summary>
     /// <param name="additionalAcceptedAudiences">The additional-audience argument as the caller passed it.</param>
@@ -368,7 +369,7 @@ public static class PrivateKeyJwtClientAuthentication
         IReadOnlyCollection<string>? additionalAcceptedAudiences,
         CheckClientAssertionJtiReplayDelegate? checkJtiReplayAsync,
         ResolveJwksUriDelegate? resolveJwksUriAsync,
-        VerificationDelegate? verificationDelegate,
+        JwsAlgorithmVerification? verification,
         ClientAssertionAudiencePolicy? audiencePolicy)
     {
         return async (request, fields, registration, context, cancellationToken) =>
@@ -382,7 +383,7 @@ public static class PrivateKeyJwtClientAuthentication
             var oauth = server.OAuth();
             if(oauth.Codecs.Decoder is null
                 || oauth.Codecs.JwtHeaderDeserializer is null
-                || oauth.Codecs.JwtPayloadDeserializer is null)
+                || oauth.Codecs.ClientAssertionPayloadDeserializer is null)
             {
                 return false;
             }
@@ -493,10 +494,11 @@ public static class PrivateKeyJwtClientAuthentication
                 {
                     //RFC 7515 Section 5.2 step 8 and RFC 8725 Section 3.1: the key was reconstructed from its material alone, so the
                     //algorithm the header names is bound to it here, before either verification runs - for a verification
-                    //resolved from the key's tag, the one algorithm that function computes; for a function the caller supplies,
-                    //an algorithm of the key's type - and an ES256 signature beneath an RS256 header is refused unverified.
-                    var binding = verificationDelegate is not null
-                        ? JwsKeyAlgorithmBinding.JudgeKeyType(alg, publicKey)
+                    //resolved from the key's tag, the one algorithm that function computes; for a verification the caller
+                    //supplies, the one algorithm it is bound to, defined over the key's type - and an ES256 signature beneath an
+                    //RS256 header, or an RS256 signature beneath a PS256 header, is refused unverified.
+                    var binding = verification is not null
+                        ? JwsKeyAlgorithmBinding.JudgeSuppliedVerification(alg, publicKey, verification)
                         : JwsKeyAlgorithmBinding.JudgeRegistryVerification(alg, publicKey);
 
                     if(binding is not null)
@@ -507,10 +509,10 @@ public static class PrivateKeyJwtClientAuthentication
                     bool signatureValid;
                     try
                     {
-                        signatureValid = verificationDelegate is not null
+                        signatureValid = verification is not null
                             ? await Jws.VerifyAsync(
                                 clientAssertion, oauth.Codecs.Decoder, oauth.MemoryPool!,
-                                publicKey, verificationDelegate, cancellationToken).ConfigureAwait(false)
+                                publicKey, verification.Verification, cancellationToken).ConfigureAwait(false)
                             : await Jws.VerifyAsync(
                                 clientAssertion, oauth.Codecs.Decoder, oauth.MemoryPool!,
                                 publicKey, cancellationToken).ConfigureAwait(false);
@@ -534,10 +536,12 @@ public static class PrivateKeyJwtClientAuthentication
                         return false;
                     }
 
+                    //RFC 7519 Section 2: a NumericDate may carry a fraction, and the claim rules judge it to the tick under their
+                    //own tolerance, so the claims set is read by the codec that states every member as written.
                     JwtPayload payload;
                     try
                     {
-                        payload = new(oauth.Codecs.JwtPayloadDeserializer(unverified.Payload.Span));
+                        payload = new(oauth.Codecs.ClientAssertionPayloadDeserializer(unverified.Payload.Span));
                     }
                     catch(Exception ex) when(ex is FormatException or InvalidOperationException or System.Text.Json.JsonException)
                     {

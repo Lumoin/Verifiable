@@ -591,9 +591,9 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
 
 
     /// <summary>
-    /// The same ES256 signature beneath an RS256 header is refused when the caller supplies the verification function itself:
-    /// the function handed in verifies P-256 signatures, so it would verify this one, and only the binding of the header's
-    /// algorithm to the key's type, judged before the function runs, refuses it.
+    /// The same ES256 signature beneath an RS256 header is refused when the caller supplies the verification itself: the function
+    /// handed in verifies P-256 signatures, so it would verify this one, and only the binding of the header's algorithm to the
+    /// ES256 the supplied verification performs, judged before the function runs, refuses it.
     /// </summary>
     [TestMethod]
     public async Task AssertionWithRs256HeaderAndEs256SignatureIsRefusedUnderASuppliedVerification()
@@ -606,8 +606,9 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
         try
         {
             var registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
-            var p256Verification = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(
-                CryptoAlgorithm.P256, Purpose.Verification);
+            var p256Verification = new JwsAlgorithmVerification(
+                WellKnownJwaValues.Es256,
+                CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(CryptoAlgorithm.P256, Purpose.Verification));
             var validator = PrivateKeyJwtClientAuthentication.BuildValidator(p256Verification);
 
             var declared = await SignAssertionUnderHeaderAsync(
@@ -634,7 +635,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
                 null, BuildFields(mismatched), registration, BuildContext(app.Server), TestContext.CancellationToken)
                 .ConfigureAwait(false);
 
-            Assert.IsFalse(authenticated, "An RS256 header over a P-256 key names no algorithm of the key's type.");
+            Assert.IsFalse(authenticated, "An RS256 header names an algorithm the supplied ES256 verification never performs.");
         }
         finally
         {
@@ -687,6 +688,63 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
                 .ConfigureAwait(false);
 
             Assert.IsFalse(authenticated, "A PS256 header names an algorithm the verification resolved from the key's tag never performs.");
+        }
+        finally
+        {
+            clientKeys.PublicKey.Dispose();
+            clientKeys.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// The same RS256 signature beneath a PS256 header over the same registered RSA key is refused when the caller supplies an
+    /// RS256 verification itself: the supplied function verifies RSASSA-PKCS1-v1_5 with SHA-256 and would verify the
+    /// signature, so only the binding of the header's algorithm to the one the supplied verification performs, judged before
+    /// it runs, refuses it (RFC 8725 Section 3.1). The same key's assertion declaring RS256 authenticates under the same
+    /// verification, so the refusal is the binding's and not the key's.
+    /// </summary>
+    [TestMethod]
+    public async Task AssertionWithPs256HeaderAndRs256SignatureIsRefusedUnderASuppliedRs256Verification()
+    {
+        await using var app = new TestHostShell(new FakeTimeProvider(TestClock.CanonicalEpoch));
+        using var material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        var clientKeys = TestKeyMaterialProvider.CreateFreshRsa2048KeyMaterial();
+        try
+        {
+            var registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
+            var rs256Verification = new JwsAlgorithmVerification(
+                WellKnownJwaValues.Rs256,
+                CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(CryptoAlgorithm.Rsa2048, Purpose.Verification));
+            var validator = PrivateKeyJwtClientAuthentication.BuildValidator(rs256Verification);
+
+            var declared = await SignAssertionUnderHeaderAsync(
+                app.Server,
+                registration.ClientId,
+                registration.IssuerUri!.OriginalString,
+                clientKeys.PrivateKey,
+                HeaderNaming(WellKnownJwaValues.Rs256, SigningKeyId)).ConfigureAwait(false);
+
+            var declaredAuthenticated = await validator(
+                null, BuildFields(declared), registration, BuildContext(app.Server), TestContext.CancellationToken)
+                .ConfigureAwait(false);
+
+            Assert.IsTrue(declaredAuthenticated, "The supplied RS256 verification verifies the correctly declared RS256 assertion.");
+
+            var mismatched = await SignAssertionUnderHeaderAsync(
+                app.Server,
+                registration.ClientId,
+                registration.IssuerUri!.OriginalString,
+                clientKeys.PrivateKey,
+                HeaderNaming(WellKnownJwaValues.Ps256, SigningKeyId)).ConfigureAwait(false);
+
+            var authenticated = await validator(
+                null, BuildFields(mismatched), registration, BuildContext(app.Server), TestContext.CancellationToken)
+                .ConfigureAwait(false);
+
+            Assert.IsFalse(authenticated, "A PS256 header names an algorithm the supplied RS256 verification never performs.");
         }
         finally
         {
@@ -1110,23 +1168,24 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
     /// refuses the contradictory composition of a non-empty additional-audience set together with
     /// <see cref="ClientAssertionAudiencePolicy.IssuerIdentifierOnly"/> when the validator is BUILT,
     /// before any wire input is read, through the registry-resolving overload and through the
-    /// overload taking an explicit <see cref="VerificationDelegate"/> alike, and the exception's message
+    /// overload taking an explicit <see cref="JwsAlgorithmVerification"/> alike, and the exception's message
     /// names both <c>additionalAcceptedAudiences</c> and <c>audiencePolicy</c>.
     /// </summary>
-    /// <param name="isExplicitVerificationDelegateOverload">
+    /// <param name="isExplicitVerificationOverload">
     /// <see langword="true"/> to build through the overload taking an explicit
-    /// <see cref="VerificationDelegate"/>, <see langword="false"/> for the registry-resolving overload.
+    /// <see cref="JwsAlgorithmVerification"/>, <see langword="false"/> for the registry-resolving overload.
     /// </param>
     [TestMethod]
     [DataRow(false, DisplayName = "the registry-resolving overload")]
-    [DataRow(true, DisplayName = "the explicit VerificationDelegate overload")]
-    public void IssuerOnlyPolicyWithAdditionalAudiencesIsRefusedAtBuild(bool isExplicitVerificationDelegateOverload)
+    [DataRow(true, DisplayName = "the explicit JwsAlgorithmVerification overload")]
+    public void IssuerOnlyPolicyWithAdditionalAudiencesIsRefusedAtBuild(bool isExplicitVerificationOverload)
     {
-        VerificationDelegate verification = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(
-            CryptoAlgorithm.P256, Purpose.Verification);
+        var verification = new JwsAlgorithmVerification(
+            WellKnownJwaValues.Es256,
+            CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(CryptoAlgorithm.P256, Purpose.Verification));
 
         ArgumentException refusal = Assert.ThrowsExactly<ArgumentException>(
-            () => isExplicitVerificationDelegateOverload
+            () => isExplicitVerificationOverload
                 ? PrivateKeyJwtClientAuthentication.BuildValidator(
                     verification,
                     additionalAcceptedAudiences: ["https://other.example"],
@@ -1232,7 +1291,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
 
             await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
             {
-                candidateIntegration.Codecs.JwtPayloadDeserializer = bytes =>
+                candidateIntegration.Codecs.ClientAssertionPayloadDeserializer = bytes =>
                 {
                     Dictionary<string, object> claims = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
                         bytes, TestSetup.DefaultSerializationOptions)
@@ -1316,7 +1375,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
 
             await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
             {
-                candidateIntegration.Codecs.JwtPayloadDeserializer = bytes =>
+                candidateIntegration.Codecs.ClientAssertionPayloadDeserializer = bytes =>
                     ReadClaimsKeepingOneRepeatedMember(bytes, isLastMemberKept);
             }).ConfigureAwait(false);
 
@@ -1342,7 +1401,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             string signatureB64 = TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan());
             string repeatedAssertion = $"{segments[0]}.{repeatedPayloadB64}.{signatureB64}";
 
-            IReadOnlyDictionary<string, object> permissiveClaims = app.Server.OAuth().Codecs.JwtPayloadDeserializer!(
+            IReadOnlyDictionary<string, object> permissiveClaims = app.Server.OAuth().Codecs.ClientAssertionPayloadDeserializer!(
                 Encoding.UTF8.GetBytes(repeatedPayloadJson));
             Assert.AreEqual(registration.ClientId, (string)permissiveClaims[WellKnownJwtClaimNames.Sub],
                 "The permissive deserializer must yield the client's own sub, so only the repeated name can refuse the assertion.");

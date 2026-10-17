@@ -552,6 +552,10 @@ internal sealed class AuthorizationServerFeatureTests
             JwtPayloadDeserializer = static bytes =>
                 JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
                     bytes, TestSetup.DefaultSerializationOptions)
+                ?? throw new FormatException("Payload JSON parsed to null."),
+            ClientAssertionPayloadDeserializer = static bytes =>
+                JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+                    bytes, TestSetup.DefaultSerializationOptions)
                 ?? throw new FormatException("Payload JSON parsed to null.")
         };
 
@@ -565,6 +569,57 @@ internal sealed class AuthorizationServerFeatureTests
             "Error must name JwtHeaderDeserializer.");
         Assert.IsFalse(codecs.IsValidated,
             "IsValidated must remain false after a Validate() that threw.");
+    }
+
+
+    /// <summary>
+    /// The codec a client assertion's claims set is read with, every NumericDate as written, is required apart from the
+    /// payload codec the whole-second readers use: codecs wiring every other slot fail validation naming it alone, and the
+    /// same codecs with it wired validate.
+    /// </summary>
+    [TestMethod]
+    public void CodecsValidateThrowsWhenClientAssertionPayloadDeserializerIsMissing()
+    {
+        AuthorizationServerCodecs codecs = new()
+        {
+            Encoder = TestSetup.Base64UrlEncoder,
+            Decoder = TestSetup.Base64UrlDecoder,
+            ComputeDigest = MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
+            JwtHeaderSerializer = static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
+                (Dictionary<string, object>)header,
+                TestSetup.DefaultSerializationOptions),
+            JwtPayloadSerializer = static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
+                (Dictionary<string, object>)payload,
+                TestSetup.DefaultSerializationOptions),
+            JwtHeaderDeserializer = static bytes =>
+                JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+                    bytes, TestSetup.DefaultSerializationOptions)
+                ?? throw new FormatException("Header JSON parsed to null."),
+            JwtPayloadDeserializer = static bytes =>
+                JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
+                    bytes, TestSetup.DefaultSerializationOptions)
+                ?? throw new FormatException("Payload JSON parsed to null.")
+        };
+
+        var ex = Assert.ThrowsExactly<InvalidOperationException>(codecs.Validate);
+
+        Assert.Contains(
+            nameof(AuthorizationServerCodecs.ClientAssertionPayloadDeserializer),
+            ex.Message,
+            StringComparison.Ordinal,
+            "Error must name ClientAssertionPayloadDeserializer.");
+        Assert.DoesNotContain(
+            $" {nameof(AuthorizationServerCodecs.JwtPayloadDeserializer)}",
+            ex.Message,
+            StringComparison.Ordinal,
+            "The wired payload codec is not named missing.");
+        Assert.IsFalse(codecs.IsValidated,
+            "IsValidated must remain false after a Validate() that threw.");
+
+        codecs.ClientAssertionPayloadDeserializer = codecs.JwtPayloadDeserializer;
+        codecs.Validate();
+
+        Assert.IsTrue(codecs.IsValidated, "The same codecs with the client assertion's codec wired validate.");
     }
 
 

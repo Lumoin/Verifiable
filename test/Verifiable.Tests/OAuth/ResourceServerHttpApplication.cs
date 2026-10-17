@@ -5,7 +5,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using Verifiable.Core;
-using Verifiable.Cryptography;
+using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.ProtectedResource;
@@ -57,7 +57,7 @@ internal sealed class ResourceServerHttpApplication : IHttpApplication<HttpConte
     private const string ProtectedRealm = "protected";
 
     private ResourceServerIntegration Integration { get; }
-    private VerificationDelegate VerifySignature { get; }
+    private JwsAlgorithmVerification VerifySignature { get; }
     private string? RequiredScope { get; }
 
     /// <summary>
@@ -75,7 +75,7 @@ internal sealed class ResourceServerHttpApplication : IHttpApplication<HttpConte
 
     public ResourceServerHttpApplication(
         ResourceServerIntegration integration,
-        VerificationDelegate verifySignature,
+        JwsAlgorithmVerification verifySignature,
         string? requiredScope = null)
     {
         ArgumentNullException.ThrowIfNull(integration);
@@ -153,7 +153,7 @@ internal sealed class ResourceServerHttpApplication : IHttpApplication<HttpConte
             Integration.TrustedIssuer.OriginalString,
             Integration.ExpectedAudience,
             Integration.ResolveVerificationKeyAsync,
-            VerifySignature,
+            VerifySignature.Verification,
             JwsAccessTokenTestSupport.Parser,
             TestSetup.Base64UrlDecoder,
             Integration.TimeProvider,

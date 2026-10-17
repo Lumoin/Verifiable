@@ -1319,7 +1319,7 @@ internal sealed class AgenticFlowCapstoneTests
                 trustedIssuer: As1Issuer,
                 expectedAudience: Rs1Audience,
                 resolveVerificationKey: BuildMapResolver(As1JwksKeys),
-                verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
+                verifySignature: DpopTestSupport.Es256Verification,
                 timeProvider: Time,
                 requiredScope: Rs1RequiredScope);
             await Rs1.StartHttpHostAsync(cancellationToken).ConfigureAwait(false);
@@ -1328,7 +1328,7 @@ internal sealed class AgenticFlowCapstoneTests
                 trustedIssuer: As2Issuer,
                 expectedAudience: Rs2Audience,
                 resolveVerificationKey: BuildMapResolver(As2JwksKeys),
-                verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
+                verifySignature: DpopTestSupport.Es256Verification,
                 timeProvider: Time,
                 requiredScope: Rs2RequiredScope);
             await Rs2.StartHttpHostAsync(cancellationToken).ConfigureAwait(false);

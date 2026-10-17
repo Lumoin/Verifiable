@@ -22,12 +22,14 @@ namespace Verifiable.OAuth.Dpop;
 public static class DpopProofValidator
 {
     /// <summary>
-    /// Validates a DPoP proof against the receiver's expectations.
+    /// Validates a DPoP proof against the receiver's expectations, verifying its signature under the verification the receiver
+    /// selected, bound to the one algorithm it performs: a proof whose header names another algorithm is refused as
+    /// <see cref="DpopProofValidationFailureReason.InvalidAlg"/> before the function runs.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "PublicKeyMemory created via PublicKeyFromJwk is disposed in the finally block of the verification try; the analyzer does not trace the catch-then-finally path correctly here.")]
     public static async ValueTask<DpopProofValidationResult> ValidateAsync(
         DpopProofValidationRequest request,
-        VerificationDelegate verificationDelegate,
+        JwsAlgorithmVerification verification,
         DpopJwsPartParser parser,
         EncodeDelegate base64UrlEncoder,
         DecodeDelegate base64UrlDecoder,
@@ -37,7 +39,7 @@ public static class DpopProofValidator
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-        ArgumentNullException.ThrowIfNull(verificationDelegate);
+        ArgumentNullException.ThrowIfNull(verification);
         ArgumentNullException.ThrowIfNull(parser);
         ArgumentNullException.ThrowIfNull(base64UrlEncoder);
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);
@@ -144,11 +146,12 @@ public static class DpopProofValidator
 
         //RFC 7515 §5.2 step 8: "Validate the JWS Signature against the JWS Signing Input ... in the
         //manner defined for the algorithm being used, which MUST be accurately represented by the value
-        //of the "alg" (algorithm) Header Parameter". The key reconstructed from the jwk fixes the
-        //algorithm the verification runs under, so a declared alg that is not an algorithm of that key
-        //(an RSA alg over an EC key, a curve other than the key's) does not accurately represent it and
-        //is refused before any verification.
-        if(JwsKeyAlgorithmBinding.JudgeKeyType(header.Alg, publicKey) is not null)
+        //of the "alg" (algorithm) Header Parameter". The receiver's verification performs one algorithm
+        //and the key reconstructed from the jwk is of one type, so a declared alg that is not the
+        //algorithm the verification performs (PS256 beneath an RS256 verification over the same RSA
+        //key) or not an algorithm of that key (an RSA alg over an EC key, a curve other than the key's)
+        //does not accurately represent the operation and is refused before any verification.
+        if(JwsKeyAlgorithmBinding.JudgeSuppliedVerification(header.Alg, publicKey, verification) is not null)
         {
             publicKey.Dispose();
 
@@ -167,7 +170,7 @@ public static class DpopProofValidator
                 base64UrlDecoder,
                 memoryPool,
                 publicKey,
-                verificationDelegate,
+                verification.Verification,
                 cancellationToken).ConfigureAwait(false);
         }
 

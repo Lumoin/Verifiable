@@ -3870,7 +3870,7 @@ internal sealed class TestHostShell : IAsyncDisposable
             integration.ValidateDpopProofAsync = (request, ct) =>
                 DpopProofValidator.ValidateAsync(
                     request,
-                    MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
+                    DpopTestSupport.Es256Verification,
                     DpopTestSupport.Parser,
                     Base64UrlEncoder,
                     Base64UrlDecoder,
