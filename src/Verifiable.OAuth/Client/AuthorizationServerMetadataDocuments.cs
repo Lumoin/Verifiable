@@ -169,6 +169,43 @@ public static class AuthorizationServerMetadataDocuments
 
 
     /// <summary>
+    /// Resolves an OpenID Provider's metadata: at its OpenID Connect discovery location first
+    /// (<see href="https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderConfig">OpenID Connect Discovery 1.0
+    /// §4</see>, <see cref="WellKnownPaths.OpenIdConfiguration"/>), then, where that answers no document whose issuer is the
+    /// one asked for, at its RFC 8414 location (<see cref="WellKnownPaths.OAuthAuthorizationServer"/>; RFC 8414 §5: "an OAuth
+    /// 2.0 authorization server ... may also publish its metadata" at the OpenID location, and a client "using this specification
+    /// ... MUST specify what well-known URI suffix it will use"), each attempt <see cref="ResolveAsync"/> with every rule it holds.
+    /// The first resolved document is answered; where neither location resolves one, the RFC 8414 attempt's outcome.
+    /// </summary>
+    /// <param name="issuer">The provider's issuer identifier.</param>
+    /// <param name="context">The per-request context carrying the outbound-fetch policy.</param>
+    /// <param name="transport">The application-supplied single-hop transport.</param>
+    /// <param name="parseDocument">The complete-document parser supplied by the serialization adapter.</param>
+    /// <param name="options">The resolver's byte cap.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The resolution.</returns>
+    public static async ValueTask<AuthorizationServerMetadataResolution> ResolveOpenIdProviderAsync(
+        Uri issuer,
+        ExchangeContext context,
+        OutboundTransportDelegate transport,
+        ParseAuthorizationServerMetadataDelegate parseDocument,
+        AuthorizationServerMetadataResolverOptions options,
+        CancellationToken cancellationToken)
+    {
+        var discovered = await ResolveAsync(
+            issuer, WellKnownPaths.OpenIdConfiguration, context, transport, parseDocument, options, cancellationToken).ConfigureAwait(false);
+
+        if(discovered is AuthorizationServerMetadataResolved)
+        {
+            return discovered;
+        }
+
+        return await ResolveAsync(
+            issuer, WellKnownPaths.OAuthAuthorizationServer, context, transport, parseDocument, options, cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
     /// Whether <paramref name="contentType"/> is exactly <c>application/json</c> per RFC 8414 §3.2 —
     /// no <c>+json</c> structured-suffix allowance, unlike <c>ClientIdMetadataDocuments</c>'s and
     /// <c>JwksUriResolver</c>'s content-type gate. Parameters (e.g. <c>;charset=utf-8</c>) are

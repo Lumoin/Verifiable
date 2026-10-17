@@ -767,6 +767,54 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
     }
 
 
+    /// <summary>
+    /// An OpenID Provider answering at its OpenID Connect discovery location is resolved there, and its RFC 8414 location is
+    /// never read.
+    /// </summary>
+    [TestMethod]
+    public async Task AnOpenIdProviderIsResolvedAtItsDiscoveryLocationFirst()
+    {
+        const string DiscoveryUrl = "https://as.example.com/.well-known/openid-configuration";
+
+        var transport = new ScriptedTransport();
+        transport.Enqueue(DiscoveryUrl, 200, ValidDocumentJson(Issuer), contentType: WellKnownMediaTypes.Application.Json);
+        transport.Enqueue(MetadataUrl, 200, ValidDocumentJson(Issuer), contentType: WellKnownMediaTypes.Application.Json);
+
+        var resolution = await AuthorizationServerMetadataDocuments.ResolveOpenIdProviderAsync(
+            new Uri(Issuer, UriKind.Absolute), NewContext(), transport.Delegate, AuthorizationServerMetadataJson.Parse,
+            new AuthorizationServerMetadataResolverOptions(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        var resolved = Assert.IsInstanceOfType<AuthorizationServerMetadataResolved>(resolution);
+        Assert.AreEqual(DiscoveryUrl, resolved.MetadataLocation.OriginalString);
+        Assert.HasCount(1, transport.Calls, "The RFC 8414 location is never read once the discovery location answers.");
+    }
+
+
+    /// <summary>
+    /// An OpenID Provider whose discovery location answers nothing is resolved at its RFC 8414 location, and one answering at
+    /// neither is the RFC 8414 attempt's outcome.
+    /// </summary>
+    [TestMethod]
+    public async Task AnOpenIdProviderAnsweringNoDiscoveryIsResolvedAtItsRfc8414Location()
+    {
+        var transport = new ScriptedTransport();
+        transport.Enqueue(MetadataUrl, 200, ValidDocumentJson(Issuer), contentType: WellKnownMediaTypes.Application.Json);
+
+        var resolution = await AuthorizationServerMetadataDocuments.ResolveOpenIdProviderAsync(
+            new Uri(Issuer, UriKind.Absolute), NewContext(), transport.Delegate, AuthorizationServerMetadataJson.Parse,
+            new AuthorizationServerMetadataResolverOptions(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        var resolved = Assert.IsInstanceOfType<AuthorizationServerMetadataResolved>(resolution);
+        Assert.AreEqual(MetadataUrl, resolved.MetadataLocation.OriginalString);
+
+        var neither = await AuthorizationServerMetadataDocuments.ResolveOpenIdProviderAsync(
+            new Uri("https://other.example.com", UriKind.Absolute), NewContext(), transport.Delegate, AuthorizationServerMetadataJson.Parse,
+            new AuthorizationServerMetadataResolverOptions(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(404, Assert.IsInstanceOfType<AuthorizationServerMetadataNotAnswered>(neither).StatusCode);
+    }
+
+
     /// <summary>Builds the reference application-layer cache under test, over the scripted transport and pinned clock.</summary>
     private static AuthorizationServerMetadataResolutionCache NewCache(ScriptedTransport transport, TimeProvider timeProvider) =>
         new(transport.Delegate, WellKnownPaths.OAuthAuthorizationServer, new AuthorizationServerMetadataResolverOptions(), timeProvider);
