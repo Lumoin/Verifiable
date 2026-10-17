@@ -96,10 +96,13 @@ public sealed record AuthorizationServerMetadata
     public IReadOnlyList<string> GrantTypesSupported { get; init; } = [];
 
     /// <summary>
-    /// The client authentication methods supported at the token endpoint,
-    /// advertised as <c>token_endpoint_auth_methods_supported</c>.
+    /// The client authentication methods supported at the token endpoint, advertised as
+    /// <c>token_endpoint_auth_methods_supported</c>; <see langword="null"/> where the metadata omits the member, which
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8414#section-2">RFC 8414 §2</see> reads as <c>client_secret_basic</c>
+    /// alone ("If omitted, the default is "client_secret_basic""), and an empty list where the metadata states one listing no
+    /// method, which admits none.
     /// </summary>
-    public IReadOnlyList<string> TokenEndpointAuthMethodsSupported { get; init; } = [];
+    public IReadOnlyList<string>? TokenEndpointAuthMethodsSupported { get; init; }
 
     /// <summary>
     /// The JWS algorithms supported for <c>client_secret_jwt</c> and

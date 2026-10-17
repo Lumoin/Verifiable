@@ -96,6 +96,14 @@ public static class IdJagFlowHandlers
             form[OAuthRequestParameterNames.AuthorizationDetails] = options.AuthorizationDetails;
         }
 
+        //RFC 8693 §2.1: an actor_token is sent with its actor_token_type, which is "REQUIRED when the actor_token parameter is
+        //present".
+        if(options.Actor is { } actor)
+        {
+            form[OAuthRequestParameterNames.ActorToken] = actor.Token;
+            form[OAuthRequestParameterNames.ActorTokenType] = TokenTypeNames.GetName(actor.Type);
+        }
+
         if(EvaluateOutboundPolicy(tokenEndpoint, context, infrastructure) is OAuthOutboundFetchPolicyDenied mintPolicyDenial)
         {
             return Result<TokenResponse, OAuthParseError>.Failure(mintPolicyDenial);

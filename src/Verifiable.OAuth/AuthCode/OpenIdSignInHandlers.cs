@@ -29,6 +29,13 @@ public enum OpenIdSignInRefusal
     /// </summary>
     KeyUnresolved,
 
+    /// <summary>
+    /// The ID Token's header names another algorithm than the one the client registered for its ID Tokens
+    /// (<see cref="OpenIdTokenVerification.RegisteredAlgorithm"/>; OpenID Connect Core 1.0 §3.1.3.7 item 7), whatever key of the
+    /// provider's published set would verify it.
+    /// </summary>
+    AlgorithmNotRegistered,
+
     /// <summary>A check of OpenID Connect Core 1.0 §3.1.3.7 refused the ID Token; the check is <see cref="OpenIdSignInResult.IdTokenFailure"/>.</summary>
     IdTokenRefused
 }
@@ -51,6 +58,15 @@ public sealed record OpenIdTokenVerification
 
     /// <summary>The tolerance an <c>iat</c> slightly in the future is judged with.</summary>
     public required TimeSpan ClockSkew { get; init; }
+
+    /// <summary>
+    /// The JWS algorithm the client registered for the ID Tokens issued to it: its <c>id_token_signed_response_alg</c>
+    /// (OpenID Connect Dynamic Client Registration 1.0 §2: "The default, if omitted, is RS256"). OpenID Connect Core 1.0
+    /// §3.1.3.7 item 7: "The alg value SHOULD be the default of RS256 or the algorithm sent by the Client in the
+    /// id_token_signed_response_alg parameter during Registration"; an ID Token under any other algorithm is refused, so a
+    /// provider publishing keys of several algorithms has its tokens judged under the one the client chose.
+    /// </summary>
+    public required string RegisteredAlgorithm { get; init; }
 }
 
 
@@ -101,11 +117,12 @@ public static class OpenIdSignInHandlers
     /// Exchanges the code a callback held (<see cref="AuthCodeFlowHandlers.HandleCallbackAsync(IReadOnlyDictionary{string, string}, OAuthClientInfrastructure, ClientRegistration, ExchangeContext, CancellationToken)"/>)
     /// at the provider's token endpoint under the registration's client authentication, the PKCE verifier and the redirect URI
     /// named again (<see cref="AuthCodeFlowHandlers.HandleTokenAsync(IReadOnlyDictionary{string, string}, OAuthClientInfrastructure, ClientRegistration, ExchangeContext, ClientAssertionOptions?, IReadOnlyList{string}?, CancellationToken)"/>),
-    /// and verifies the ID Token it answered: the key its header's <c>kid</c> names resolved under its <c>alg</c> alone
-    /// (RFC 8725 §3.1), then through <see cref="Oidc10IdTokenValidator.ValidateAsync"/> its signature, its <c>iss</c> the
-    /// registration's issuer, its <c>aud</c> naming the registration's client with no other audience trusted, an <c>azp</c>
-    /// naming that client where present, <c>exp</c>, <c>iat</c> and the <c>nonce</c> the flow sent (§3.1.3.7 items 2, 3, 4, 5,
-    /// 6, 9, 10 and 11). A flow whose request sent no nonce is refused before anything is sent.
+    /// and verifies the ID Token it answered: its header's <c>alg</c> the one the client registered
+    /// (<see cref="OpenIdTokenVerification.RegisteredAlgorithm"/>; §3.1.3.7 item 7), the key its header's <c>kid</c> names
+    /// resolved under that <c>alg</c> alone (RFC 8725 §3.1), then through <see cref="Oidc10IdTokenValidator.ValidateAsync"/> its
+    /// signature, its <c>iss</c> the registration's issuer, its <c>aud</c> naming the registration's client with no other
+    /// audience trusted, an <c>azp</c> naming that client where present, <c>exp</c>, <c>iat</c> and the <c>nonce</c> the flow
+    /// sent (§3.1.3.7 items 2, 3, 4, 5, 6, 9, 10 and 11). A flow whose request sent no nonce is refused before anything is sent.
     /// </summary>
     /// <param name="infrastructure">The long-lived infrastructure carrying transport, parsing, persistence, and time delegates.</param>
     /// <param name="registration">The registration identifying the OpenID Provider and the client's authentication there.</param>
@@ -173,6 +190,13 @@ public static class OpenIdSignInHandlers
             return new OpenIdSignInResult { Exchange = exchange, Refusal = OpenIdSignInRefusal.KeyUnresolved, RefreshToken = refreshToken };
         }
 
+        //§3.1.3.7 item 7: the token is judged under the algorithm the client registered, so no key of another algorithm the
+        //provider publishes is ever asked for (RFC 8725 §3.1: the algorithm the client accepts is the client's to fix).
+        if(!string.Equals(algorithm, verification.RegisteredAlgorithm, StringComparison.Ordinal))
+        {
+            return new OpenIdSignInResult { Exchange = exchange, Refusal = OpenIdSignInRefusal.AlgorithmNotRegistered, RefreshToken = refreshToken };
+        }
+
         using var key = await verification.ResolveKey(keyId, algorithm, cancellationToken).ConfigureAwait(false);
 
         if(key is null)
@@ -190,11 +214,9 @@ public static class OpenIdSignInHandlers
         var resolveNamedKey = new ServerVerificationKeyResolverDelegate((named, usage, tenant, exchangeContext, cancel) =>
             ValueTask.FromResult(string.Equals(named.Value, keyId, StringComparison.Ordinal) ? key : null));
 
-        Oidc10IdTokenValidationResult validated;
-
         try
         {
-            validated = await Oidc10IdTokenValidator.ValidateAsync(
+            var validated = await Oidc10IdTokenValidator.ValidateAsync(
                 idToken,
                 issuer,
                 clientId,
@@ -211,6 +233,19 @@ public static class OpenIdSignInHandlers
                 nonce,
                 [],
                 cancellationToken).ConfigureAwait(false);
+
+            if(validated is not { FailureReason: null, Claims: { } claims })
+            {
+                return new OpenIdSignInResult
+                {
+                    Exchange = exchange,
+                    Refusal = OpenIdSignInRefusal.IdTokenRefused,
+                    IdTokenFailure = validated.FailureReason ?? JwsAccessTokenValidationFailureReason.Malformed,
+                    RefreshToken = refreshToken
+                };
+            }
+
+            return new OpenIdSignInResult { Exchange = exchange, IdToken = idToken, Claims = claims, RefreshToken = refreshToken };
         }
         catch(Exception unreadable) when(unreadable is FormatException or InvalidOperationException or ArgumentException or CryptographicException)
         {
@@ -222,18 +257,5 @@ public static class OpenIdSignInHandlers
                 RefreshToken = refreshToken
             };
         }
-
-        if(validated is not { FailureReason: null, Claims: { } claims })
-        {
-            return new OpenIdSignInResult
-            {
-                Exchange = exchange,
-                Refusal = OpenIdSignInRefusal.IdTokenRefused,
-                IdTokenFailure = validated.FailureReason ?? JwsAccessTokenValidationFailureReason.Malformed,
-                RefreshToken = refreshToken
-            };
-        }
-
-        return new OpenIdSignInResult { Exchange = exchange, IdToken = idToken, Claims = claims, RefreshToken = refreshToken };
     }
 }

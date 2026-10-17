@@ -107,6 +107,43 @@ internal sealed class IdJagMintClientAuthenticationTests
     }
 
 
+    /// <summary>
+    /// RFC 8693 §2.1: a mint naming an actor sends its <c>actor_token</c> with the <c>actor_token_type</c> "REQUIRED when the
+    /// actor_token parameter is present", each once; a mint naming none sends neither.
+    /// </summary>
+    [TestMethod]
+    public async Task AMintNamingAnActorSendsItsTokenWithItsTypeAndOneNamingNoneSendsNeither()
+    {
+        using var secret = new HeldSecret(ProviderSecret);
+        var wire = new SentRequests();
+        var infrastructure = CreateInfrastructure(wire, IdJagAnswer(WellKnownTokenTypeIdentifiers.IdJag));
+
+        var minted = await IdJagFlowHandlers.MintAsync(
+            MintOptions("https://resource-as.example.com") with { Actor = new IdJagMintActor { Token = "actor-jwt-of-the-client", Type = TokenType.Jwt } },
+            infrastructure,
+            Registration(ClientAuthenticationMethod.ClientSecretPost, secret.Material),
+            [],
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(minted.IsSuccess, $"The mint holds; refused by {minted.Error}.");
+        var sent = Assert.ContainsSingle(wire.Requests);
+        Assert.AreEqual("actor-jwt-of-the-client", sent.Field(OAuthRequestParameterNames.ActorToken), "The actor's token is sent.");
+        Assert.AreEqual(WellKnownTokenTypeIdentifiers.Jwt, sent.Field(OAuthRequestParameterNames.ActorTokenType), "The actor's token is typed.");
+
+        var unnamed = new SentRequests();
+        _ = await IdJagFlowHandlers.MintAsync(
+            MintOptions("https://resource-as.example.com"),
+            CreateInfrastructure(unnamed, IdJagAnswer(WellKnownTokenTypeIdentifiers.IdJag)),
+            Registration(ClientAuthenticationMethod.ClientSecretPost, secret.Material),
+            [],
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        var plain = Assert.ContainsSingle(unnamed.Requests);
+        Assert.IsFalse(plain.Names(OAuthRequestParameterNames.ActorToken), "No actor token is sent where the options name no actor.");
+        Assert.IsFalse(plain.Names(OAuthRequestParameterNames.ActorTokenType), "No actor token type is sent where the options name no actor.");
+    }
+
+
     /// <summary>A secret method whose registration carries no secret is refused, typed, before anything is sent.</summary>
     [TestMethod]
     public async Task ASecretMethodCarryingNoSecretIsRefusedBeforeAnythingIsSent()

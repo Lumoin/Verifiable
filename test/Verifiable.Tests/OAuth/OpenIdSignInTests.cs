@@ -6,6 +6,7 @@ using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
+using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Server.Pipeline;
 using Verifiable.Tests.TestDataProviders;
@@ -63,10 +64,10 @@ internal sealed class OpenIdSignInTests
         var nonce = query[OAuthRequestParameterNames.Nonce];
         var state = query[OAuthRequestParameterNames.State]!;
         Assert.IsFalse(string.IsNullOrEmpty(nonce), "The OpenID Connect start sends a nonce.");
-        Assert.AreEqual(nonce, Assert.IsInstanceOfType<Verifiable.OAuth.AuthCode.States.ParCompletedState>(provider.States[state]).Nonce);
+        Assert.AreEqual(nonce, Assert.IsInstanceOfType<ParCompletedState>(provider.States[state]).Nonce);
 
         provider.IdTokenNonce = nonce;
-        var signedIn = await CallbackAndExchangeAsync(client, provider, state, publicKey).ConfigureAwait(false);
+        var signedIn = await CallbackAndExchangeAsync(client, provider, state, publicKey, WellKnownJwaValues.Es256).ConfigureAwait(false);
 
         Assert.IsTrue(signedIn.IsSignedIn, $"The sign-in holds; refused by {signedIn.Refusal} {signedIn.IdTokenFailure}.");
         Assert.AreEqual(nonce, signedIn.Claims!.Nonce);
@@ -90,7 +91,7 @@ internal sealed class OpenIdSignInTests
         var state = HttpUtility.ParseQueryString(started.RedirectUri!.Query)[OAuthRequestParameterNames.State]!;
 
         provider.IdTokenNonce = "another-sign-ins-nonce";
-        var signedIn = await CallbackAndExchangeAsync(client, provider, state, publicKey).ConfigureAwait(false);
+        var signedIn = await CallbackAndExchangeAsync(client, provider, state, publicKey, WellKnownJwaValues.Es256).ConfigureAwait(false);
 
         Assert.AreEqual(OpenIdSignInRefusal.IdTokenRefused, signedIn.Refusal);
         Assert.AreEqual(JwsAccessTokenValidationFailureReason.NonceMismatch, signedIn.IdTokenFailure);
@@ -114,7 +115,7 @@ internal sealed class OpenIdSignInTests
 
         provider.IdTokenNonce = query[OAuthRequestParameterNames.Nonce];
         provider.IdTokenAudience = "another-client";
-        var signedIn = await CallbackAndExchangeAsync(client, provider, query[OAuthRequestParameterNames.State]!, publicKey).ConfigureAwait(false);
+        var signedIn = await CallbackAndExchangeAsync(client, provider, query[OAuthRequestParameterNames.State]!, publicKey, WellKnownJwaValues.Es256).ConfigureAwait(false);
 
         Assert.AreEqual(OpenIdSignInRefusal.IdTokenRefused, signedIn.Refusal);
         Assert.IsNotNull(signedIn.IdTokenFailure);
@@ -136,9 +137,45 @@ internal sealed class OpenIdSignInTests
         var query = HttpUtility.ParseQueryString(started.RedirectUri!.Query);
 
         provider.IdTokenNonce = query[OAuthRequestParameterNames.Nonce];
-        var signedIn = await CallbackAndExchangeAsync(client, provider, query[OAuthRequestParameterNames.State]!, publicKey).ConfigureAwait(false);
+        var signedIn = await CallbackAndExchangeAsync(client, provider, query[OAuthRequestParameterNames.State]!, publicKey, WellKnownJwaValues.Es256).ConfigureAwait(false);
 
         Assert.AreEqual(OpenIdSignInRefusal.KeyUnresolved, signedIn.Refusal);
+    }
+
+
+    /// <summary>
+    /// OpenID Connect Core 1.0 §3.1.3.7 item 7: an ID Token correctly signed under a key the provider publishes, but under another
+    /// algorithm than the one the relying party registered - ES256 where it registered the default RS256 - is refused by the
+    /// algorithm check, and the provider's key is never asked for; the same token is verified where ES256 is the one registered.
+    /// </summary>
+    [TestMethod]
+    public async Task AnIdTokenUnderAnotherPublishedAlgorithmThanTheRegisteredOneIsRefused()
+    {
+        var keys = TestKeyMaterialProvider.CreateP256KeyMaterial();
+        using var publicKey = keys.PublicKey;
+        using var privateKey = keys.PrivateKey;
+        var provider = new StandInProvider(this, privateKey);
+        var client = new OAuthClient(provider.Infrastructure).AuthCode;
+
+        var started = await client.StartOpenIdAsync(
+            Registration(), Callback, Scope(), [], resource: null, TimeSpan.FromMinutes(10), TestContext.CancellationToken).ConfigureAwait(false);
+        var query = HttpUtility.ParseQueryString(started.RedirectUri!.Query);
+
+        provider.IdTokenNonce = query[OAuthRequestParameterNames.Nonce];
+        var signedIn = await CallbackAndExchangeAsync(client, provider, query[OAuthRequestParameterNames.State]!, publicKey, WellKnownJwaValues.Rs256).ConfigureAwait(false);
+
+        Assert.AreEqual(OpenIdSignInRefusal.AlgorithmNotRegistered, signedIn.Refusal, "The token signed under an algorithm other than the registered one is refused.");
+        Assert.IsNull(signedIn.IdToken, "No token is answered as verified.");
+        Assert.AreEqual(0, provider.KeyRequests, "No key of another algorithm than the registered one is asked for.");
+
+        var again = await client.StartOpenIdAsync(
+            Registration(), Callback, Scope(), [], resource: null, TimeSpan.FromMinutes(10), TestContext.CancellationToken).ConfigureAwait(false);
+        var againQuery = HttpUtility.ParseQueryString(again.RedirectUri!.Query);
+
+        provider.IdTokenNonce = againQuery[OAuthRequestParameterNames.Nonce];
+        var registered = await CallbackAndExchangeAsync(client, provider, againQuery[OAuthRequestParameterNames.State]!, publicKey, WellKnownJwaValues.Es256).ConfigureAwait(false);
+
+        Assert.IsTrue(registered.IsSignedIn, $"The same provider's token verifies under the algorithm registered; refused by {registered.Refusal} {registered.IdTokenFailure}.");
     }
 
 
@@ -157,7 +194,7 @@ internal sealed class OpenIdSignInTests
         var query = HttpUtility.ParseQueryString(started.RedirectUri!.Query);
         Assert.IsNull(query[OAuthRequestParameterNames.Nonce], "A plain start sends no nonce.");
 
-        var signedIn = await CallbackAndExchangeAsync(client, provider, query[OAuthRequestParameterNames.State]!, publicKey).ConfigureAwait(false);
+        var signedIn = await CallbackAndExchangeAsync(client, provider, query[OAuthRequestParameterNames.State]!, publicKey, WellKnownJwaValues.Es256).ConfigureAwait(false);
 
         Assert.AreEqual(OpenIdSignInRefusal.NonceNotHeld, signedIn.Refusal);
         Assert.AreEqual(0, provider.TokenRequests, "No code is exchanged for a flow holding no nonce.");
@@ -169,8 +206,9 @@ internal sealed class OpenIdSignInTests
     /// <param name="provider">The stand-in provider.</param>
     /// <param name="state">The state the start sent.</param>
     /// <param name="publicKey">The provider's published key.</param>
+    /// <param name="registeredAlgorithm">The algorithm the relying party registered for its ID Tokens.</param>
     /// <returns>What the sign-in came to.</returns>
-    private async Task<OpenIdSignInResult> CallbackAndExchangeAsync(AuthCodeClient client, StandInProvider provider, string state, PublicKeyMemory publicKey)
+    private async Task<OpenIdSignInResult> CallbackAndExchangeAsync(AuthCodeClient client, StandInProvider provider, string state, PublicKeyMemory publicKey, string registeredAlgorithm)
     {
         var callback = await client.HandleCallbackAsync(
             Registration(),
@@ -192,13 +230,19 @@ internal sealed class OpenIdSignInTests
             clientAssertionOptions: null,
             new OpenIdTokenVerification
             {
-                ResolveKey = (keyId, algorithm, cancellationToken) => ValueTask.FromResult(
-                    string.Equals(keyId, ProviderKeyId, StringComparison.Ordinal) && WellKnownJwaValues.IsEs256(algorithm)
-                        ? IdJagGrantHoldingTests.CopyOf(publicKey)
-                        : null),
+                ResolveKey = (keyId, algorithm, cancellationToken) =>
+                {
+                    provider.KeyRequests++;
+
+                    return ValueTask.FromResult(
+                        string.Equals(keyId, ProviderKeyId, StringComparison.Ordinal) && WellKnownJwaValues.IsEs256(algorithm)
+                            ? IdJagGrantHoldingTests.CopyOf(publicKey)
+                            : null);
+                },
                 Parser = JwsAccessTokenTestSupport.Parser,
                 Base64UrlDecoder = TestSetup.Base64UrlDecoder,
-                ClockSkew = TimeSpan.FromSeconds(60)
+                ClockSkew = TimeSpan.FromSeconds(60),
+                RegisteredAlgorithm = registeredAlgorithm
             },
             TestContext.CancellationToken).ConfigureAwait(false);
     }
@@ -284,6 +328,9 @@ internal sealed class OpenIdSignInTests
 
         /// <summary>How many token requests reached the token endpoint.</summary>
         public int TokenRequests { get; private set; }
+
+        /// <summary>How many times the client asked for the provider's published key.</summary>
+        public int KeyRequests { get; set; }
 
         /// <summary>The nonce the ID Token carries, or <see langword="null"/> for none.</summary>
         public string? IdTokenNonce { get; set; }

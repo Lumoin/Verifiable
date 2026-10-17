@@ -66,6 +66,32 @@ public sealed record IdJagMintOptions
 
     /// <summary>The requested RFC 9396 <c>authorization_details</c> as a JSON array string (§4.3.3), or <see langword="null"/>.</summary>
     public string? AuthorizationDetails { get; init; }
+
+    /// <summary>
+    /// The party acting for the subject (RFC 8693 §2.1 <c>actor_token</c> and <c>actor_token_type</c>, a delegation of §1.1), or
+    /// <see langword="null"/> for an exchange naming none.
+    /// </summary>
+    public IdJagMintActor? Actor { get; init; }
+}
+
+
+/// <summary>
+/// The actor a token exchange names (<see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.1">RFC 8693 §2.1</see>):
+/// <c>actor_token</c> "A security token that represents the identity of the acting party", and <c>actor_token_type</c>,
+/// "REQUIRED when the actor_token parameter is present", so the two are carried as one.
+/// </summary>
+public sealed record IdJagMintActor
+{
+    /// <summary>The token representing the acting party, sent as <c>actor_token</c>.</summary>
+    public required string Token { get; init; }
+
+    /// <summary>The type of <see cref="Token"/>, sent as <c>actor_token_type</c> (RFC 8693 §3).</summary>
+    public required TokenType Type { get; init; }
+
+
+    /// <summary>Names the actor by its type alone, never its token.</summary>
+    /// <returns>The text.</returns>
+    public override string ToString() => $"{nameof(IdJagMintActor)} {{ {nameof(Type)} = {TokenTypeNames.GetName(Type)} }}";
 }
 
 

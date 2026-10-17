@@ -619,8 +619,8 @@ public static class AuthCodeFlowHandlers
 
         //RFC 6749 §4.1.2.1 Authorization Error Response — error is present instead of code.
         //RFC 9207 §2.4/§4: "clients MUST NOT assume that the error originates from the
-        //intended authorization server," so a PRESENT iss on this branch is validated with
-        //the same mix-up-attack rule the success path applies before the error is trusted.
+        //intended authorization server," so the error response is judged by the callback rules the
+        //registration's profile holds a success response to before the error is trusted.
         if(fields.TryGetValue(OAuthRequestParameterNames.Error, out string? errorCode))
         {
             return await BuildCallbackErrorResultAsync(
@@ -1755,11 +1755,12 @@ public static class AuthCodeFlowHandlers
     /// (<paramref name="errorCode"/> present per RFC 6749 §4.1.2.1). RFC 9207 §2.4 says a client
     /// must not assume the error originates from the intended authorization server, so the error
     /// is attributed to that server only once the callback is tied to it: its <c>state</c> names a
-    /// pending <see cref="ParCompletedState"/> of this client, and the callback checks that flow
-    /// holds every response to accepted it — the state matches the flow, a PRESENT <c>iss</c>
-    /// matches the flow's recorded issuer
-    /// (<see cref="ValidationChecks.CheckCallbackIssuerMatchesWhenPresent"/>), the flow has not
-    /// expired, and a present <c>iss</c> resolves to a known authorization server when the
+    /// pending <see cref="ParCompletedState"/> of this client, and the callback validator the
+    /// registration's profile selects (<see cref="OAuthClientInfrastructure.ResolveCallbackValidator"/>)
+    /// accepted it by every rule it holds a success response to but the presence of a <c>code</c> —
+    /// the state matches the flow, the <c>iss</c> matches the flow's recorded issuer and is present
+    /// where the profile requires it (<see cref="ValidationChecks.CheckCallbackIssPresent"/>), the flow
+    /// has not expired — and a present <c>iss</c> resolves to a known authorization server when the
     /// application supplies that resolver. A callback with no <c>state</c>, with a <c>state</c>
     /// naming no flow, or with one naming a flow of another kind or step, establishes no
     /// authorization server as its author; it is refused as the library's own judgement, as is a
@@ -1819,15 +1820,17 @@ public static class AuthCodeFlowHandlers
             Now = infrastructure.TimeProvider.GetUtcNow()
         };
 
-        List<Claim> correlationClaims = [];
-        correlationClaims.AddRange(await ValidationChecks.CheckCallbackStateMatchesFlow(
-            correlationContext, cancellationToken).ConfigureAwait(false));
-        correlationClaims.AddRange(await ValidationChecks.CheckCallbackIssuerMatchesWhenPresent(
-            correlationContext, cancellationToken).ConfigureAwait(false));
-        correlationClaims.AddRange(await ValidationChecks.CheckCallbackFlowNotExpired(
-            correlationContext, cancellationToken).ConfigureAwait(false));
+        //The registration's profile judges an error response by the rules it judges a success response by (RFC 9207 §2.4: a
+        //client "MUST NOT assume that the error originates from the intended authorization server"), so a profile requiring iss
+        //refuses an error answering none; the code a success response carries is the one rule an error response has no part in.
+        var callbackValidator = infrastructure.ResolveCallbackValidator(registration, infrastructure.TimeProvider);
+        var validation = await callbackValidator.GenerateClaimsAsync(
+            correlationContext, errorParCompleted.FlowId, cancellationToken).ConfigureAwait(false);
+        var correlationClaims = validation.Claims
+            .Where(static claim => claim.Id.Code != ValidationClaimIds.CallbackCodePresent.Code)
+            .ToList();
 
-        if(correlationClaims.Exists(static c => c.Outcome != ClaimOutcome.Success))
+        if(!validation.IsComplete || correlationClaims.Exists(static c => c.Outcome != ClaimOutcome.Success))
         {
             return AuthCodeFlowEndpointResult.Refused(
                 AuthCodeFlowEndpointOutcome.BadRequest,
