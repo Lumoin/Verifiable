@@ -3,7 +3,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.OAuth.Validation;
 
@@ -149,7 +148,7 @@ public static class DpopProofValidator
         //algorithm the verification runs under, so a declared alg that is not an algorithm of that key
         //(an RSA alg over an EC key, a curve other than the key's) does not accurately represent it and
         //is refused before any verification.
-        if(!IsAlgorithmOfKey(header.Alg, publicKey.Tag.Get<CryptoAlgorithm>()))
+        if(JwsKeyAlgorithmBinding.JudgeKeyType(header.Alg, publicKey) is not null)
         {
             publicKey.Dispose();
 
@@ -286,27 +285,6 @@ public static class DpopProofValidator
         || WellKnownJwaValues.IsPs384(alg)
         || WellKnownJwaValues.IsPs512(alg)
         || WellKnownJwaValues.IsEdDsa(alg);
-
-
-    /// <summary>
-    /// Whether the declared <paramref name="alg"/> is an algorithm of the key reconstructed from the
-    /// proof's <c>jwk</c>: <c>ES256</c> over P-256, <c>ES384</c> over P-384, <c>ES512</c> over P-521,
-    /// <c>ES256K</c> over secp256k1, <c>EdDSA</c> over Ed25519, and the RSA PKCS#1 and PSS algorithms
-    /// over an RSA key. The verification the validator runs is selected by the key, so an alg outside
-    /// the key's family would otherwise be declared without being the algorithm that verified.
-    /// </summary>
-    /// <param name="alg">The proof header's <c>alg</c>.</param>
-    /// <param name="keyAlgorithm">The algorithm the reconstructed public key is tagged with.</param>
-    /// <returns><see langword="true"/> when the declared algorithm belongs to the key.</returns>
-    private static bool IsAlgorithmOfKey(string alg, CryptoAlgorithm keyAlgorithm) =>
-        (keyAlgorithm.Equals(CryptoAlgorithm.P256) && WellKnownJwaValues.IsEs256(alg))
-        || (keyAlgorithm.Equals(CryptoAlgorithm.P384) && WellKnownJwaValues.IsEs384(alg))
-        || (keyAlgorithm.Equals(CryptoAlgorithm.P521) && WellKnownJwaValues.IsEs512(alg))
-        || (keyAlgorithm.Equals(CryptoAlgorithm.Secp256k1) && WellKnownJwaValues.IsEs256K(alg))
-        || (keyAlgorithm.Equals(CryptoAlgorithm.Ed25519) && WellKnownJwaValues.IsEdDsa(alg))
-        || ((keyAlgorithm.Equals(CryptoAlgorithm.Rsa2048) || keyAlgorithm.Equals(CryptoAlgorithm.Rsa4096))
-            && (WellKnownJwaValues.IsRs256(alg) || WellKnownJwaValues.IsRs384(alg) || WellKnownJwaValues.IsRs512(alg)
-                || WellKnownJwaValues.IsPs256(alg) || WellKnownJwaValues.IsPs384(alg) || WellKnownJwaValues.IsPs512(alg)));
 
 
     /// <summary>

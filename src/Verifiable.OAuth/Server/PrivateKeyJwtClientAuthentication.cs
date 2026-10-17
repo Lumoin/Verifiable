@@ -124,8 +124,10 @@ public sealed record PrivateKeyJwtClientAuthenticationResult
 /// <see cref="ClientRecord.ClientJwksUri"/> through the OPTIONAL wired
 /// <see cref="Pipeline.ResolveJwksUriDelegate"/> — via <see cref="JwkJsonReader"/> and
 /// <see cref="CryptoFormatConversions.DefaultJwkToAlgorithmConverter"/> (through
-/// <see cref="DpopJwkUtilities.PublicKeyFromJwk"/>), verify with <see cref="Jws.VerifyAsync(string,DecodeDelegate,BaseMemoryPool,PublicKeyMemory,CancellationToken)"/>,
-/// and only then apply <see cref="Validate"/>.
+/// <see cref="DpopJwkUtilities.PublicKeyFromJwk"/>), bind the header's algorithm to that key
+/// (<see cref="JwsKeyAlgorithmBinding"/>), verify with <see cref="Jws.VerifyAsync(string,DecodeDelegate,BaseMemoryPool,PublicKeyMemory,CancellationToken)"/>,
+/// and only then apply <see cref="Validate"/>. The compact form and the protected header are read
+/// (<see cref="ClientAssertionHeaderRules.Read"/>) before any key set is read or resolved.
 /// </para>
 /// <para>
 /// The <see cref="ClientAssertionAudiencePolicy"/> is applied by the validators
@@ -403,6 +405,22 @@ public static class PrivateKeyJwtClientAuthentication
                 return false;
             }
 
+            //The compact form and the protected header are judged by the one reading every key source shares before any key set
+            //is read or resolved and any key selected: three base64url segments no longer than the verifier reads, a header of
+            //one JSON object naming each member once and an algorithm that is not none (RFC 8725 Section 3.1), and no critical
+            //extension, this profile implementing none (RFC 7515 Section 4.1.11), so a refused assertion never reaches the key
+            //set's resolution.
+            var headerReading = ClientAssertionHeaderRules.Read(
+                clientAssertion,
+                oauth.Codecs.Decoder,
+                oauth.Codecs.JwtHeaderDeserializer,
+                oauth.MemoryPool!);
+
+            if(headerReading is not { Algorithm: { } alg, Header: { } presentedHeader })
+            {
+                return false;
+            }
+
             //draft-ietf-oauth-client-id-metadata-document-02 §8.2: no published key material means
             //the assertion cannot be verified. RFC 7591 §2 permits the client to register a jwks_uri
             //instead of an inline jwks; when the registration carries one and a resolver is wired,
@@ -427,21 +445,6 @@ public static class PrivateKeyJwtClientAuthentication
                 clientJwksJson = jwksResolution.Jwks;
             }
 
-            //The compact form and the protected header are judged by the one reading every key source shares before any key is
-            //selected: three base64url segments no longer than the verifier reads, a header of one JSON object naming each member
-            //once and an algorithm that is not none (RFC 8725 Section 3.1), and no critical extension, none being understood here
-            //(RFC 7515 Section 4.1.11).
-            var headerReading = ClientAssertionHeaderRules.Read(
-                clientAssertion,
-                oauth.Codecs.Decoder,
-                oauth.Codecs.JwtHeaderDeserializer,
-                oauth.MemoryPool!);
-
-            if(headerReading is not { Algorithm: { } alg, Header: { } presentedHeader })
-            {
-                return false;
-            }
-
             UnverifiedJwsMessage unverified;
             try
             {
@@ -458,7 +461,7 @@ public static class PrivateKeyJwtClientAuthentication
 
             using(unverified)
             {
-                string? kid = presentedHeader.TryGetValue(WellKnownJwkMemberNames.Kid, out object? kidObj)
+                var kid = presentedHeader.TryGetValue(WellKnownJwkMemberNames.Kid, out var kidObj)
                     && kidObj is string kidValue
                     ? kidValue
                     : null;
@@ -488,6 +491,19 @@ public static class PrivateKeyJwtClientAuthentication
 
                 using(publicKey)
                 {
+                    //RFC 7515 Section 5.2 step 8 and RFC 8725 Section 3.1: the key was reconstructed from its material alone, so the
+                    //algorithm the header names is bound to it here, before either verification runs - for a verification
+                    //resolved from the key's tag, the one algorithm that function computes; for a function the caller supplies,
+                    //an algorithm of the key's type - and an ES256 signature beneath an RS256 header is refused unverified.
+                    var binding = verificationDelegate is not null
+                        ? JwsKeyAlgorithmBinding.JudgeKeyType(alg, publicKey)
+                        : JwsKeyAlgorithmBinding.JudgeRegistryVerification(alg, publicKey);
+
+                    if(binding is not null)
+                    {
+                        return false;
+                    }
+
                     bool signatureValid;
                     try
                     {

@@ -44,8 +44,14 @@ internal sealed class ClientAssertionCredentialFlowRefusalTests
     /// <summary>The message the recording transport throws once a request reaches it.</summary>
     private const string TransportReachedMessage = "The request reached the token endpoint.";
 
+    /// <summary>The code of <see cref="ApplicationDefinedMethod"/>, registered once for the process.</summary>
+    private const int ApplicationDefinedMethodCode = 41_798;
+
     /// <summary>The authorization server every registration names.</summary>
     private static Uri Issuer { get; } = new("https://as.example.com");
+
+    /// <summary>An application-defined client authentication method, which no assertion family classifies.</summary>
+    private static ClientAuthenticationMethod ApplicationDefinedMethod { get; } = ClientAuthenticationMethod.Create(ApplicationDefinedMethodCode);
 
     /// <summary>The token endpoint the authorization server's metadata names.</summary>
     private static Uri TokenEndpoint { get; } = new("https://as.example.com/token");
@@ -221,6 +227,50 @@ internal sealed class ClientAssertionCredentialFlowRefusalTests
 
         var refusal = AssertIdJagRefusedBeforeAnything(result, ClientAssertionCredentialRefusalReason.MethodPresentsNoAssertion, observations);
         Assert.AreEqual<ClientAuthenticationMethod?>(ClientAuthenticationMethod.ClientSecretPost, refusal.Method, "The refusal names the registration's method.");
+    }
+
+
+    /// <summary>
+    /// An ID-JAG mint and redeem under a registration naming a method no assertion family classifies - attestation-based,
+    /// SPIFFE, or one an application defined - are refused, typed
+    /// (<see cref="ClientAssertionCredentialRefusalReason.MethodNotSupported"/>), before they resolve metadata or send anything:
+    /// the refusal never records such a method as one known to present no assertion.
+    /// </summary>
+    /// <param name="code">
+    /// The method's code: 7 <c>attest_jwt_client_auth</c>, 8 <c>spiffe_jwt</c>, or that of <see cref="ApplicationDefinedMethod"/>.
+    /// </param>
+    [TestMethod]
+    [DataRow(7)]
+    [DataRow(8)]
+    [DataRow(ApplicationDefinedMethodCode)]
+    public async Task MintAndRedeemRefuseARegistrationWhoseMethodNoFamilyClassifies(int code)
+    {
+        var method = code switch
+        {
+            7 => ClientAuthenticationMethod.AttestJwtClientAuth,
+            8 => ClientAuthenticationMethod.SpiffeJwt,
+            _ => ApplicationDefinedMethod
+        };
+
+        var keyMaterial = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using var publicKey = keyMaterial.PublicKey;
+        using var privateKey = keyMaterial.PrivateKey;
+        var mintObservations = new FlowObservations();
+
+        var minted = await MintAsync(RegistrationOf(method, keyMaterial), OptionsNaming(SigningKeyId), mintObservations)
+            .ConfigureAwait(false);
+
+        var mintRefusal = AssertIdJagRefusedBeforeAnything(minted, ClientAssertionCredentialRefusalReason.MethodNotSupported, mintObservations);
+        Assert.AreEqual<ClientAuthenticationMethod?>(method, mintRefusal.Method, "The refusal names the registration's method.");
+
+        var redeemObservations = new FlowObservations();
+
+        var redeemed = await RedeemAsync(RegistrationOf(method, keyMaterial), OptionsNaming(SigningKeyId), redeemObservations)
+            .ConfigureAwait(false);
+
+        var redeemRefusal = AssertIdJagRefusedBeforeAnything(redeemed, ClientAssertionCredentialRefusalReason.MethodNotSupported, redeemObservations);
+        Assert.AreEqual<ClientAuthenticationMethod?>(method, redeemRefusal.Method, "The refusal names the registration's method.");
+        Assert.DoesNotContain("presents no client assertion", redeemRefusal.Describe(), "The description concludes nothing about an assertion.");
     }
 
 

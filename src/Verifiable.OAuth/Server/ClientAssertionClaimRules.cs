@@ -435,8 +435,7 @@ public static class ClientAssertionClaimRules
     {
         ArgumentNullException.ThrowIfNull(claimName);
 
-        var roundsUp = string.Equals(claimName, WellKnownJwtClaimNames.Nbf, StringComparison.Ordinal)
-            || string.Equals(claimName, WellKnownJwtClaimNames.Iat, StringComparison.Ordinal);
+        var roundsUp = WellKnownJwtClaimNames.IsNbf(claimName) || WellKnownJwtClaimNames.IsIat(claimName);
         var ticks = value switch
         {
             long seconds => TicksOfWholeSeconds(seconds),

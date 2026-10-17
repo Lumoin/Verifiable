@@ -3,6 +3,7 @@ using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
+using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.Client;
 
@@ -127,8 +128,9 @@ public sealed class ClientAssertionCredential
     /// <param name="registration">The registration naming the method and carrying its key.</param>
     /// <param name="options">The assertion options composed for the request.</param>
     /// <returns>
-    /// The key; or the refusal of a registration naming a method that presents no assertion
-    /// (<see cref="ClientAssertionCredentialRefusalReason.MethodPresentsNoAssertion"/>) or carrying no key
+    /// The key; or the refusal of a registration naming a method known to present no assertion
+    /// (<see cref="ClientAssertionCredentialRefusalReason.MethodPresentsNoAssertion"/>), naming one classified under no
+    /// assertion family (<see cref="ClientAssertionCredentialRefusalReason.MethodNotSupported"/>), or carrying no key
     /// (<see cref="ClientAssertionCredentialRefusalReason.RegistrationCarriesNoKey"/>), of options naming no key identifier
     /// for a private key (<see cref="ClientAssertionCredentialRefusalReason.PrivateKeyNamesNoKeyIdentifier"/>) or naming one
     /// for a client secret (<see cref="ClientAssertionCredentialRefusalReason.ClientSecretNamesAKeyIdentifier"/>), or of the
@@ -140,17 +142,24 @@ public sealed class ClientAssertionCredential
         ArgumentNullException.ThrowIfNull(options);
 
         var method = registration.AuthenticationMethod;
-        var isPrivateKey = method == ClientAuthenticationMethod.PrivateKeyJwt;
-        var isClientSecret = method == ClientAuthenticationMethod.ClientSecretJwt;
 
-        if(!isPrivateKey && !isClientSecret)
+        //The one classification of a registered method: a method known to present no assertion and one classified under no
+        //assertion family are refused apart, so a method this composition does not support is never recorded as one known to
+        //present no assertion.
+        var family = ClientAssertionFamilies.Of(method);
+
+        if(family is ClientAssertionFamily.NoAssertion or ClientAssertionFamily.Unsupported)
         {
             return Result<ClientAssertionCredential, ClientAssertionCredentialRefusal>.Failure(new ClientAssertionCredentialRefusal
             {
-                Reason = ClientAssertionCredentialRefusalReason.MethodPresentsNoAssertion,
+                Reason = family == ClientAssertionFamily.NoAssertion
+                    ? ClientAssertionCredentialRefusalReason.MethodPresentsNoAssertion
+                    : ClientAssertionCredentialRefusalReason.MethodNotSupported,
                 Method = method
             });
         }
+
+        var isPrivateKey = family == ClientAssertionFamily.DigitalSignature;
 
         if(registration.AuthenticationKeyMaterial?.PrivateKey is not PrivateKeyMemory key)
         {

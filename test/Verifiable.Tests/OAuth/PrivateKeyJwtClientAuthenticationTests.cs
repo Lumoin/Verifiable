@@ -568,20 +568,12 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
                 .ConfigureAwait(false);
             Assert.IsTrue(originalAuthenticated, "The correctly declared ES256 assertion must authenticate.");
 
-            string[] segments = assertion.Split('.');
-            Assert.HasCount(3, segments);
-            Dictionary<string, string> header = new(StringComparer.Ordinal)
-            {
-                [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Rs256,
-                [WellKnownJwkMemberNames.Kid] = SigningKeyId,
-                [WellKnownJoseHeaderNames.Typ] = WellKnownJwkValues.TypeJwt
-            };
-            string headerSegment = TestSetup.Base64UrlEncoder(JsonSerializer.SerializeToUtf8Bytes(header));
-            byte[] signingInput = Encoding.ASCII.GetBytes($"{headerSegment}.{segments[1]}");
-            using var signature = await clientKeys.PrivateKey.SignAsync(signingInput, BaseMemoryPool.Shared, TestContext.CancellationToken)
-                .ConfigureAwait(false);
-            string signatureSegment = TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan());
-            string mismatchedAssertion = $"{headerSegment}.{segments[1]}.{signatureSegment}";
+            var mismatchedAssertion = await SignAssertionUnderHeaderAsync(
+                app.Server,
+                registration.ClientId,
+                registration.IssuerUri!.OriginalString,
+                clientKeys.PrivateKey,
+                HeaderNaming(WellKnownJwaValues.Rs256, SigningKeyId)).ConfigureAwait(false);
 
             bool authenticated = await validator(
                 null, BuildFields(mismatchedAssertion), registration, BuildContext(app.Server), TestContext.CancellationToken)
@@ -589,6 +581,199 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
 
             Assert.IsFalse(authenticated,
                 "The algorithm named by the assertion must be the algorithm that verifies its signature.");
+        }
+        finally
+        {
+            clientKeys.PublicKey.Dispose();
+            clientKeys.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// The same ES256 signature beneath an RS256 header is refused when the caller supplies the verification function itself:
+    /// the function handed in verifies P-256 signatures, so it would verify this one, and only the binding of the header's
+    /// algorithm to the key's type, judged before the function runs, refuses it.
+    /// </summary>
+    [TestMethod]
+    public async Task AssertionWithRs256HeaderAndEs256SignatureIsRefusedUnderASuppliedVerification()
+    {
+        await using var app = new TestHostShell(new FakeTimeProvider(TestClock.CanonicalEpoch));
+        using var material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        var clientKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            var registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
+            var p256Verification = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(
+                CryptoAlgorithm.P256, Purpose.Verification);
+            var validator = PrivateKeyJwtClientAuthentication.BuildValidator(p256Verification);
+
+            var declared = await SignAssertionUnderHeaderAsync(
+                app.Server,
+                registration.ClientId,
+                registration.IssuerUri!.OriginalString,
+                clientKeys.PrivateKey,
+                HeaderNaming(WellKnownJwaValues.Es256, SigningKeyId)).ConfigureAwait(false);
+
+            var declaredAuthenticated = await validator(
+                null, BuildFields(declared), registration, BuildContext(app.Server), TestContext.CancellationToken)
+                .ConfigureAwait(false);
+
+            Assert.IsTrue(declaredAuthenticated, "The supplied function verifies the correctly declared ES256 assertion.");
+
+            var mismatched = await SignAssertionUnderHeaderAsync(
+                app.Server,
+                registration.ClientId,
+                registration.IssuerUri!.OriginalString,
+                clientKeys.PrivateKey,
+                HeaderNaming(WellKnownJwaValues.Rs256, SigningKeyId)).ConfigureAwait(false);
+
+            var authenticated = await validator(
+                null, BuildFields(mismatched), registration, BuildContext(app.Server), TestContext.CancellationToken)
+                .ConfigureAwait(false);
+
+            Assert.IsFalse(authenticated, "An RS256 header over a P-256 key names no algorithm of the key's type.");
+        }
+        finally
+        {
+            clientKeys.PublicKey.Dispose();
+            clientKeys.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// An RS256 signature beneath a PS256 header over a registered RSA key is refused under the verification resolved from the
+    /// key's tag: that function verifies RSASSA-PKCS1-v1_5 with SHA-256 and would verify the signature, so the header would
+    /// name RSASSA-PSS for an operation that never performed it.
+    /// </summary>
+    [TestMethod]
+    public async Task AssertionWithPs256HeaderAndRs256SignatureIsRefused()
+    {
+        await using var app = new TestHostShell(new FakeTimeProvider(TestClock.CanonicalEpoch));
+        using var material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        var clientKeys = TestKeyMaterialProvider.CreateFreshRsa2048KeyMaterial();
+        try
+        {
+            var registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
+            var validator = PrivateKeyJwtClientAuthentication.BuildValidator();
+
+            var declared = await SignAssertionUnderHeaderAsync(
+                app.Server,
+                registration.ClientId,
+                registration.IssuerUri!.OriginalString,
+                clientKeys.PrivateKey,
+                HeaderNaming(WellKnownJwaValues.Rs256, SigningKeyId)).ConfigureAwait(false);
+
+            var declaredAuthenticated = await validator(
+                null, BuildFields(declared), registration, BuildContext(app.Server), TestContext.CancellationToken)
+                .ConfigureAwait(false);
+
+            Assert.IsTrue(declaredAuthenticated, "The correctly declared RS256 assertion authenticates.");
+
+            var mismatched = await SignAssertionUnderHeaderAsync(
+                app.Server,
+                registration.ClientId,
+                registration.IssuerUri!.OriginalString,
+                clientKeys.PrivateKey,
+                HeaderNaming(WellKnownJwaValues.Ps256, SigningKeyId)).ConfigureAwait(false);
+
+            var authenticated = await validator(
+                null, BuildFields(mismatched), registration, BuildContext(app.Server), TestContext.CancellationToken)
+                .ConfigureAwait(false);
+
+            Assert.IsFalse(authenticated, "A PS256 header names an algorithm the verification resolved from the key's tag never performs.");
+        }
+        finally
+        {
+            clientKeys.PublicKey.Dispose();
+            clientKeys.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// An assertion the shared reading of the compact form and the protected header refuses - no compact JWS, a header naming
+    /// <c>none</c>, a header listing a critical extension - is refused before the registration's <c>jwks_uri</c> is resolved:
+    /// the wired resolution counts no call. A well-formed assertion under the same seam is counted once, so the count can fire.
+    /// </summary>
+    /// <param name="refusedForm">Which refused form the assertion takes.</param>
+    [TestMethod]
+    [DataRow("NotACompactJws")]
+    [DataRow("AlgorithmNone")]
+    [DataRow("CriticalHeader")]
+    public async Task AssertionRefusedByItsHeaderNeverResolvesTheKeySet(string refusedForm)
+    {
+        await using var app = new TestHostShell(new FakeTimeProvider(TestClock.CanonicalEpoch));
+        using var material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        var clientKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            var jwksJson = BuildJwksJson((JwkOf(clientKeys.PublicKey), SigningKeyId));
+            var registration = material.Registration with
+            {
+                TokenEndpointAuthMethod = ClientAuthenticationMethod.PrivateKeyJwt,
+                ClientJwksUri = new Uri("https://client.example/jwks.json")
+            };
+
+            var resolutions = 0;
+
+            ValueTask<JwksUriResolution> ResolveJwksUriAsync(Uri uri, ExchangeContext context, CancellationToken ct)
+            {
+                resolutions++;
+
+                return ValueTask.FromResult(new JwksUriResolution
+                {
+                    Outcome = JwksUriResolutionOutcome.Resolved,
+                    Jwks = jwksJson
+                });
+            }
+
+            var validator = PrivateKeyJwtClientAuthentication.BuildValidator(resolveJwksUriAsync: ResolveJwksUriAsync);
+
+            var wellFormed = await SignAssertionAsync(
+                app.Server, registration.ClientId, registration.IssuerUri!.OriginalString, clientKeys.PrivateKey)
+                .ConfigureAwait(false);
+
+            var wellFormedAuthenticated = await validator(
+                null, BuildFields(wellFormed), registration, BuildContext(app.Server), TestContext.CancellationToken)
+                .ConfigureAwait(false);
+
+            Assert.IsTrue(wellFormedAuthenticated, "A well-formed assertion authenticates under the resolved key set.");
+            Assert.AreEqual(1, resolutions, "The well-formed assertion resolves the key set once.");
+
+            resolutions = 0;
+
+            var refused = refusedForm switch
+            {
+                "NotACompactJws" => "not-a-compact-jws",
+                "AlgorithmNone" => await SignAssertionUnderHeaderAsync(
+                    app.Server,
+                    registration.ClientId,
+                    registration.IssuerUri!.OriginalString,
+                    clientKeys.PrivateKey,
+                    HeaderNaming(WellKnownJwaValues.None, SigningKeyId)).ConfigureAwait(false),
+                "CriticalHeader" => await SignAssertionUnderHeaderAsync(
+                    app.Server,
+                    registration.ClientId,
+                    registration.IssuerUri!.OriginalString,
+                    clientKeys.PrivateKey,
+                    HeaderListingACriticalExtension(WellKnownJwaValues.Es256, SigningKeyId)).ConfigureAwait(false),
+                _ => throw new ArgumentOutOfRangeException(nameof(refusedForm), refusedForm, "No such refused form.")
+            };
+
+            var authenticated = await validator(
+                null, BuildFields(refused), registration, BuildContext(app.Server), TestContext.CancellationToken)
+                .ConfigureAwait(false);
+
+            Assert.IsFalse(authenticated, "The assertion is refused by its compact form or its protected header.");
+            Assert.AreEqual(0, resolutions, "A refused assertion never reaches the key set's resolution.");
         }
         finally
         {
@@ -1323,8 +1508,6 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
     private async Task<string> SignAssertionWithoutKidAsync(
         EndpointServer server, string clientId, string audience, PrivateKeyMemory clientPrivateKey)
     {
-        var oauth = server.OAuth();
-        DateTimeOffset now = server.TimeProvider.GetUtcNow();
         string algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(clientPrivateKey.Tag);
 
         JwtHeader header = new(capacity: 2)
@@ -1332,6 +1515,60 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             [WellKnownJwkMemberNames.Alg] = algorithm,
             [WellKnownJoseHeaderNames.Typ] = WellKnownJwkValues.TypeJwt
         };
+
+        return await SignAssertionUnderHeaderAsync(server, clientId, audience, clientPrivateKey, header).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// The protected header an assertion is composed under, naming the algorithm and the key identifier given and typed
+    /// <c>JWT</c>, whatever key then signs it.
+    /// </summary>
+    /// <param name="algorithm">The <c>alg</c> the header names.</param>
+    /// <param name="keyId">The <c>kid</c> the header names.</param>
+    /// <returns>The header.</returns>
+    private static JwtHeader HeaderNaming(string algorithm, string keyId) => new(capacity: 3)
+    {
+        [WellKnownJwkMemberNames.Alg] = algorithm,
+        [WellKnownJwkMemberNames.Kid] = keyId,
+        [WellKnownJoseHeaderNames.Typ] = WellKnownJwkValues.TypeJwt
+    };
+
+
+    /// <summary>
+    /// The protected header of <see cref="HeaderNaming"/> listing one extension as critical (RFC 7515 Section 4.1.11) and
+    /// carrying it, an extension this verifier does not implement.
+    /// </summary>
+    /// <param name="algorithm">The <c>alg</c> the header names.</param>
+    /// <param name="keyId">The <c>kid</c> the header names.</param>
+    /// <returns>The header.</returns>
+    private static JwtHeader HeaderListingACriticalExtension(string algorithm, string keyId)
+    {
+        var header = HeaderNaming(algorithm, keyId);
+        header[WellKnownJoseHeaderNames.Crit] = new List<object> { "https://client.example/extension" };
+        header["https://client.example/extension"] = true;
+
+        return header;
+    }
+
+
+    /// <summary>
+    /// Signs a client assertion under the key's own signing function with the protected header given, its claims written before
+    /// serialization: <c>iss</c> and <c>sub</c> the client, <c>aud</c> the audience, a fresh <c>jti</c>, an <c>iat</c> one minute
+    /// before and an <c>exp</c> five minutes after the server's fixture clock. The header is serialized as given, whatever
+    /// algorithm it names.
+    /// </summary>
+    /// <param name="server">The server whose codecs and clock the assertion is built with.</param>
+    /// <param name="clientId">The client identifier written as the <c>iss</c> and <c>sub</c> claims.</param>
+    /// <param name="audience">The value written as the <c>aud</c> claim.</param>
+    /// <param name="clientPrivateKey">The key the assertion is signed with.</param>
+    /// <param name="header">The protected header the assertion is composed under.</param>
+    /// <returns>The assertion in JWS Compact Serialization.</returns>
+    private async Task<string> SignAssertionUnderHeaderAsync(
+        EndpointServer server, string clientId, string audience, PrivateKeyMemory clientPrivateKey, JwtHeader header)
+    {
+        var oauth = server.OAuth();
+        var now = server.TimeProvider.GetUtcNow();
 
         JwtPayload payload = new(capacity: 6)
         {

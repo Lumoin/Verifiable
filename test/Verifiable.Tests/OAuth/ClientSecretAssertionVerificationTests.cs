@@ -293,8 +293,7 @@ internal sealed class ClientSecretAssertionVerificationTests
     {
         using var secret = SecretOf(LongClientSecret);
         var accepted = new ClientSecretAssertionAlgorithms([WellKnownJwaValues.Hs256]);
-        var composed = await ComposeAsync(secret, WellKnownJwaValues.Hs256).ConfigureAwait(false);
-        var assertion = MacedUnder(LongClientSecret, header, composed.Split('.')[1]);
+        var assertion = MacedUnder(LongClientSecret, header, ClaimsOfTheClient("critical-header-jti"));
 
         Assert.IsTrue((await VerifyAsync(assertion, secret, WellKnownJwaValues.Hs256).ConfigureAwait(false)).IsSuccess,
             "The assertion carries the secret's MAC of its own signing input.");
@@ -432,19 +431,43 @@ internal sealed class ClientSecretAssertionVerificationTests
 
 
     /// <summary>
-    /// A compact value of the protected header given and a payload segment, carrying the HMAC-SHA-256 of its signing input under
-    /// the secret's UTF-8 octets, computed by the platform's own HMAC apart from the library's.
+    /// A compact value composed of the protected header and the claims given, both serialized here and only then MACed: the
+    /// HMAC-SHA-256 of the signing input under the secret's UTF-8 octets, computed by the platform's own HMAC apart from the
+    /// library's.
     /// </summary>
     /// <param name="secret">The secret.</param>
-    /// <param name="header">The header's JSON text.</param>
-    /// <param name="payloadSegment">The payload segment.</param>
+    /// <param name="header">The header's JSON text, as the producer intends it.</param>
+    /// <param name="claims">The claims the assertion carries.</param>
     /// <returns>The compact value.</returns>
-    private static string MacedUnder(string secret, string header, string payloadSegment)
+    private static string MacedUnder(string secret, string header, JwtPayload claims)
     {
+        var payloadSegment = TestSetup.Base64UrlEncoder(PayloadSerializer(claims));
         var signingInput = $"{TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(header))}.{payloadSegment}";
         var mac = HMACSHA256.HashData(Encoding.UTF8.GetBytes(secret), Encoding.ASCII.GetBytes(signingInput));
 
         return $"{signingInput}.{TestSetup.Base64UrlEncoder(mac)}";
+    }
+
+
+    /// <summary>
+    /// The claims a client assertion of the client carries at the fixture clock (RFC 7523 Section 3): <c>iss</c> and <c>sub</c>
+    /// the client, <c>aud</c> the token endpoint, the identifier given, <c>iat</c> now and <c>exp</c> a minute after.
+    /// </summary>
+    /// <param name="jti">The assertion's identifier.</param>
+    /// <returns>The claims.</returns>
+    private JwtPayload ClaimsOfTheClient(string jti)
+    {
+        var now = TimeProvider.GetUtcNow();
+
+        return new JwtPayload(capacity: 6)
+        {
+            [WellKnownJwtClaimNames.Iss] = ClientId,
+            [WellKnownJwtClaimNames.Sub] = ClientId,
+            [WellKnownJwtClaimNames.Aud] = TokenEndpoint,
+            [WellKnownJwtClaimNames.Jti] = jti,
+            [WellKnownJwtClaimNames.Iat] = now.ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Exp] = now.AddMinutes(1).ToUnixTimeSeconds()
+        };
     }
 
 

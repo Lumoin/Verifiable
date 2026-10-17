@@ -37,11 +37,21 @@ public enum ClientAssertionCredentialRefusalReason
     PrivateKeyNamesNoKeyIdentifier,
 
     /// <summary>
-    /// The registration names a client authentication method that presents no client assertion: only
-    /// <c>private_key_jwt</c> (RFC 7523 Section 2.2) and <c>client_secret_jwt</c> (OpenID Connect Core 1.0 Section 9)
-    /// authenticate the client with one.
+    /// The registration names a client authentication method known to present no client assertion
+    /// (<see cref="Verifiable.OAuth.Server.ClientAssertionFamily.NoAssertion"/>): <c>none</c>, <c>client_secret_basic</c>,
+    /// <c>client_secret_post</c> and the two mutual TLS methods; only <c>private_key_jwt</c> (RFC 7523 Section 2.2) and
+    /// <c>client_secret_jwt</c> (OpenID Connect Core 1.0 Section 9) authenticate the client with one here.
     /// </summary>
     MethodPresentsNoAssertion,
+
+    /// <summary>
+    /// The registration names a client authentication method classified under no assertion family
+    /// (<see cref="Verifiable.OAuth.Server.ClientAssertionFamily.Unsupported"/>): an application-defined method, or one whose
+    /// credential neither family composes - <c>attest_jwt_client_auth</c>'s attestation and proof of possession and
+    /// <c>spiffe_jwt</c>'s JWT-SVID. Nothing is concluded about whether it presents an assertion; this composition forms no
+    /// credential for it.
+    /// </summary>
+    MethodNotSupported,
 
     /// <summary>
     /// The registration names an assertion method but carries no authentication key material: neither the private key a
@@ -73,14 +83,16 @@ public sealed record ClientAssertionCredentialRefusal
 
     /// <summary>
     /// The JWS <c>alg</c> the assertion was to be signed or MACed under, as the options or the key named it; or
-    /// <see langword="null"/> for <see cref="ClientAssertionCredentialRefusalReason.MethodPresentsNoAssertion"/> and
+    /// <see langword="null"/> for <see cref="ClientAssertionCredentialRefusalReason.MethodPresentsNoAssertion"/>,
+    /// <see cref="ClientAssertionCredentialRefusalReason.MethodNotSupported"/> and
     /// <see cref="ClientAssertionCredentialRefusalReason.RegistrationCarriesNoKey"/>, refused before any algorithm is named.
     /// </summary>
     public string? Algorithm { get; init; }
 
     /// <summary>
     /// The client authentication method the registration names, for
-    /// <see cref="ClientAssertionCredentialRefusalReason.MethodPresentsNoAssertion"/> and
+    /// <see cref="ClientAssertionCredentialRefusalReason.MethodPresentsNoAssertion"/>,
+    /// <see cref="ClientAssertionCredentialRefusalReason.MethodNotSupported"/> and
     /// <see cref="ClientAssertionCredentialRefusalReason.RegistrationCarriesNoKey"/>; <see langword="null"/> for every other
     /// reason.
     /// </summary>
@@ -116,6 +128,9 @@ public sealed record ClientAssertionCredentialRefusal
         ClientAssertionCredentialRefusalReason.MethodPresentsNoAssertion => string.Create(
             CultureInfo.InvariantCulture,
             $"The registration names {MethodName()}, which presents no client assertion: only private_key_jwt (RFC 7523 Section 2.2) and client_secret_jwt (OpenID Connect Core 1.0 Section 9) do."),
+        ClientAssertionCredentialRefusalReason.MethodNotSupported => string.Create(
+            CultureInfo.InvariantCulture,
+            $"The registration names {MethodName()}, which no client assertion family classifies, so no credential is formed for it: only private_key_jwt (RFC 7523 Section 2.2) and client_secret_jwt (OpenID Connect Core 1.0 Section 9) are composed."),
         ClientAssertionCredentialRefusalReason.RegistrationCarriesNoKey => string.Create(
             CultureInfo.InvariantCulture,
             $"The registration names {MethodName()} but carries no authentication key material to sign or MAC its assertion with."),
