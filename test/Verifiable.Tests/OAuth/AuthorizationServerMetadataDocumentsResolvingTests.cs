@@ -815,6 +815,39 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
     }
 
 
+    /// <summary>
+    /// An OpenID Provider whose discovery location answers a document naming another issuer, and whose RFC 8414 location answers
+    /// none, is answered as the issuer mismatch the discovery location showed, not as the location that served nothing; one whose
+    /// RFC 8414 location answers a document of its own is answered by that location.
+    /// </summary>
+    [TestMethod]
+    public async Task AnOpenIdProviderWhoseDiscoveryNamesAnotherIssuerIsAnsweredAsThatMismatch()
+    {
+        const string DiscoveryUrl = "https://as.example.com/.well-known/openid-configuration";
+        const string AnotherIssuer = "https://another.example.com";
+
+        var transport = new ScriptedTransport();
+        transport.Enqueue(DiscoveryUrl, 200, ValidDocumentJson(AnotherIssuer), contentType: WellKnownMediaTypes.Application.Json);
+
+        var resolution = await AuthorizationServerMetadataDocuments.ResolveOpenIdProviderAsync(
+            new Uri(Issuer, UriKind.Absolute), NewContext(), transport.Delegate, AuthorizationServerMetadataJson.Parse,
+            new AuthorizationServerMetadataResolverOptions(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        var mismatch = Assert.IsInstanceOfType<AuthorizationServerMetadataIssuerMismatch>(resolution);
+        Assert.AreEqual(AnotherIssuer, mismatch.PublishedIssuer);
+        Assert.HasCount(2, transport.Calls, "The RFC 8414 location was read after the discovery location named another issuer.");
+
+        var bothRead = new ScriptedTransport();
+        bothRead.Enqueue(DiscoveryUrl, 200, ValidDocumentJson(AnotherIssuer), contentType: WellKnownMediaTypes.Application.Json);
+        bothRead.Enqueue(MetadataUrl, 200, ValidDocumentJson(Issuer), contentType: WellKnownMediaTypes.Application.Json);
+
+        var located = await AuthorizationServerMetadataDocuments.ResolveOpenIdProviderAsync(
+            new Uri(Issuer, UriKind.Absolute), NewContext(), bothRead.Delegate, AuthorizationServerMetadataJson.Parse,
+            new AuthorizationServerMetadataResolverOptions(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(MetadataUrl, Assert.IsInstanceOfType<AuthorizationServerMetadataResolved>(located).MetadataLocation.OriginalString);
+    }
+
     /// <summary>Builds the reference application-layer cache under test, over the scripted transport and pinned clock.</summary>
     private static AuthorizationServerMetadataResolutionCache NewCache(ScriptedTransport transport, TimeProvider timeProvider) =>
         new(transport.Delegate, WellKnownPaths.OAuthAuthorizationServer, new AuthorizationServerMetadataResolverOptions(), timeProvider);
