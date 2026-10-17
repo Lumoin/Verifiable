@@ -232,19 +232,17 @@ public static class OAuthRequestParameterNames
     /// </summary>
     public static string ErrorDescription { get; } = Utf8Constants.ToInternedString(ErrorDescriptionUtf8);
 
-    /// <summary>The UTF-8 source literal of <see cref="ErrorUri"/>, held within the library as its string is.</summary>
-    internal static ReadOnlySpan<byte> ErrorUriUtf8 => "error_uri"u8;
+    /// <summary>The UTF-8 source literal of <see cref="ErrorInformationLocation"/>.</summary>
+    public static ReadOnlySpan<byte> ErrorInformationLocationUtf8 => "error_uri"u8;
 
     /// <summary>
-    /// The <c>error_uri</c> parameter.
-    /// A URI identifying a human-readable web page with information about the error, used to provide the client
-    /// developer with additional information about the error per
+    /// The name of the <c>error_uri</c> parameter, which locates a human-readable web page with information about the
+    /// error, used to provide the client developer with additional information about the error per
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 §5.2</see>.
-    /// OPTIONAL. Held within the library, whose reading of an error response names the parameter by it and hands the
-    /// URI it carries as a <see cref="System.Uri"/>; a public member of text type named for a URI would be read as a URI
-    /// held in a string.
+    /// OPTIONAL. This member is the parameter's name, text compared and written as such; the location the parameter
+    /// carries is read as a <see cref="System.Uri"/> (<see cref="OAuthProtocolError.ErrorUri"/>).
     /// </summary>
-    internal static string ErrorUri { get; } = Utf8Constants.ToInternedString(ErrorUriUtf8);
+    public static string ErrorInformationLocation { get; } = Utf8Constants.ToInternedString(ErrorInformationLocationUtf8);
 
     //Token request parameters — RFC 6749 §4.1.3.
 

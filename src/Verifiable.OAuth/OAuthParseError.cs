@@ -10,7 +10,7 @@ namespace Verifiable.OAuth;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Four distinct failure modes exist for a client flow driving a PAR or token
+/// Several distinct failure modes exist for a client flow driving a PAR or token
 /// endpoint call. Callers must distinguish between them to respond appropriately:
 /// </para>
 /// <list type="bullet">
@@ -27,6 +27,19 @@ namespace Verifiable.OAuth;
 ///       parsed as a valid OAuth response. The server may have returned an HTML
 ///       error page, a proxy may have intercepted the request, or the wrong
 ///       endpoint was called.
+///     </description>
+///   </item>
+///   <item>
+///     <description>
+///       <see cref="OAuthRepeatedMemberName"/> — the response body is one well-formed JSON
+///       object, but one of its objects names a member more than once (RFC 8259 §4), so it
+///       names no parameter one way.
+///     </description>
+///   </item>
+///   <item>
+///     <description>
+///       <see cref="OAuthUndecodableMemberValue"/> — a parameter the response carries is a
+///       string naming no Unicode text (RFC 8259 §8.2), so it has no value a client can read.
 ///     </description>
 ///   </item>
 ///   <item>
@@ -143,6 +156,46 @@ public sealed record OAuthProtocolError(
 /// </remarks>
 public sealed record OAuthMalformedResponse(
     string Body,
+    DecisionSupport Support) : OAuthParseError(Support);
+
+
+/// <summary>
+/// The response body is one well-formed JSON object, but one of its objects names a member more than once, where
+/// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-4">RFC 8259 §4</see> says the names within an object SHOULD be
+/// unique: readers of a repeated name differ in which value they take, so the value one reader checks and the value another
+/// uses could differ, and the response names no parameter one way.
+/// </summary>
+/// <remarks>
+/// Carries the repeated name and where it is repeated, the facts the JSON reader answered
+/// (<see cref="Verifiable.JCose.JsonRepeatedMemberName"/>), so the application reads the reason without parsing a sentence;
+/// <see cref="DecisionSupport.Summary"/> is composed from them. No value the response carries, under the repeated name or any
+/// other, is carried.
+/// </remarks>
+/// <param name="MemberName">The repeated name, decoded once (RFC 8259 §7).</param>
+/// <param name="ObjectDepth">
+/// The nesting depth of the object that repeats it: one for the response's own object, whose members are its parameters.
+/// </param>
+/// <param name="Support">Guidance for the calling application.</param>
+public sealed record OAuthRepeatedMemberName(
+    string MemberName,
+    int ObjectDepth,
+    DecisionSupport Support) : OAuthParseError(Support);
+
+
+/// <summary>
+/// A parameter the response carries, at the top level of the one JSON object its body is, is a string whose escapes name an
+/// unpaired surrogate, which the grammar admits and which encodes no Unicode character
+/// (<see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.2">RFC 8259 §8.2</see>), so the parameter has no value a
+/// client can read.
+/// </summary>
+/// <remarks>
+/// Carries the parameter's name, so the application reads the reason without parsing a sentence;
+/// <see cref="DecisionSupport.Summary"/> is composed from it. None of the parameter's value is carried.
+/// </remarks>
+/// <param name="MemberName">The parameter's name.</param>
+/// <param name="Support">Guidance for the calling application.</param>
+public sealed record OAuthUndecodableMemberValue(
+    string MemberName,
     DecisionSupport Support) : OAuthParseError(Support);
 
 

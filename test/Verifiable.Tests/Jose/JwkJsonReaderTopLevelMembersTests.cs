@@ -38,9 +38,8 @@ internal sealed class JwkJsonReaderTopLevelMembersTests
     [DataRow(/*lang=json,strict*/ """{}""", DisplayName = "The empty object")]
     public void TheTopLevelMembersAgreeWithTheOracle(string document)
     {
-        var members = JwkJsonReader.ReadTopLevelMembers(Encoding.UTF8.GetBytes(document));
-
-        Assert.IsNotNull(members, "A well-formed object is read.");
+        var reading = JwkJsonReader.ReadTopLevelMembers(Encoding.UTF8.GetBytes(document));
+        var members = Assert.IsInstanceOfType<JsonTopLevelMembers>(reading, "A well-formed object is read.").Members;
 
         using var oracle = JsonDocument.Parse(document);
         var expected = oracle.RootElement.EnumerateObject().ToList();
@@ -63,22 +62,71 @@ internal sealed class JwkJsonReaderTopLevelMembersTests
 
 
     /// <summary>
-    /// A document that is not exactly one well-formed JSON object is no object: an array, a string, a document repeating a name
-    /// at the top level or in a nested object (RFC 8259 section 4), one never closed and one followed by more text.
+    /// A document that is not exactly one well-formed JSON object is no object: an array, a string, one never closed and one
+    /// followed by more text, each also when it repeats a name, as a document that is no well-formed object names no member at
+    /// all, once or more than once.
     /// </summary>
     /// <param name="document">The document.</param>
     [TestMethod]
     [DataRow(/*lang=json,strict*/ """["access_token","top"]""", DisplayName = "An array")]
     [DataRow(/*lang=json,strict*/ "\"access_token\"", DisplayName = "A string")]
-    [DataRow(
-        /*lang=json*/ """{"access_token":"first","access_token":"second"}""",
-        DisplayName = "A name repeated at the top level")]
-    [DataRow(/*lang=json*/ """{"ext":{"note":"one","note":"two"}}""", DisplayName = "A name repeated in a nested object")]
     [DataRow("{\"access_token\":\"top\"", DisplayName = "An object never closed")]
     [DataRow("""{"access_token":"top"}{"access_token":"second"}""", DisplayName = "An object followed by another")]
+    [DataRow(
+        /*lang=json*/ """[{"access_token":"first","access_token":"second"}]""",
+        DisplayName = "An array holding an object that repeats a name")]
+    [DataRow(
+        "{\"access_token\":\"first\",\"access_token\":\"second\"",
+        DisplayName = "An object never closed that repeats a name")]
+    [DataRow(
+        """{"access_token":"first","access_token":"second"}{"access_token":"third"}""",
+        DisplayName = "An object repeating a name followed by another")]
     public void ADocumentThatIsNotOneWellFormedObjectIsNone(string document)
     {
-        Assert.IsNull(JwkJsonReader.ReadTopLevelMembers(Encoding.UTF8.GetBytes(document)), "No members are read from it.");
+        var reading = JwkJsonReader.ReadTopLevelMembers(Encoding.UTF8.GetBytes(document));
+
+        _ = Assert.IsInstanceOfType<JsonNotOneObject>(reading, "No members are read from it, and no name is said to repeat.");
+    }
+
+
+    /// <summary>
+    /// RFC 8259 section 4: the names within an object SHOULD be unique, and "the behavior of software that receives such an
+    /// object is unpredictable". A well-formed object one of whose objects repeats a name breaks no rule of the grammar, so it
+    /// is refused for the repetition itself, never as a document that is not well formed: the reading names the repeated name,
+    /// decoded once (RFC 8259 section 7), and the depth of the object repeating it.
+    /// </summary>
+    /// <param name="document">The document.</param>
+    /// <param name="expectedName">The repeated name.</param>
+    /// <param name="expectedDepth">The depth of the object repeating it.</param>
+    [TestMethod]
+    [DataRow(
+        /*lang=json*/ """{"access_token":"first","access_token":"second","token_type":"Bearer"}""",
+        "access_token",
+        1,
+        DisplayName = "A name repeated at the top level")]
+    [DataRow(
+        /*lang=json*/ """{"access_token":"first","access_token":"second"}""",
+        "access_token",
+        1,
+        DisplayName = "A name repeated through an escape")]
+    [DataRow(
+        /*lang=json*/ """{"access_token":"at","ext":{"note":"one","note":"two"}}""",
+        "note",
+        2,
+        DisplayName = "A name repeated in a nested object")]
+    [DataRow(
+        /*lang=json*/ """{"list":[{"b":1,"b":2}],"access_token":"at","access_token":"again"}""",
+        "b",
+        3,
+        DisplayName = "The first repetition, in an object within an array, before a later one")]
+    public void ARepeatedNameIsRefusedByTheNameAndTheDepthOfItsObject(string document, string expectedName, int expectedDepth)
+    {
+        var reading = JwkJsonReader.ReadTopLevelMembers(Encoding.UTF8.GetBytes(document));
+
+        var repeated = Assert.IsInstanceOfType<JsonRepeatedMemberName>(reading, "The repetition is refused as itself.");
+        Assert.AreEqual(expectedName, repeated.Name, "The repeated name, decoded.");
+        Assert.AreEqual(expectedDepth, repeated.ObjectDepth, "The depth of the object repeating it.");
+        Assert.IsFalse(JwkJsonReader.IsWellFormedJsonDocument(Encoding.UTF8.GetBytes(document)), "The whole-document judgement still refuses it.");
     }
 
 
@@ -90,10 +138,10 @@ internal sealed class JwkJsonReaderTopLevelMembersTests
     [TestMethod]
     public void TextNamingAnUnpairedSurrogateIsReadAsUndecodable()
     {
-        var members = JwkJsonReader.ReadTopLevelMembers(
+        var reading = JwkJsonReader.ReadTopLevelMembers(
             Encoding.UTF8.GetBytes(/*lang=json*/ """{"access_token":"\uD800","\uDC00":"left-out","token_type":"Bearer"}"""));
 
-        Assert.IsNotNull(members, "The document is well formed.");
+        var members = Assert.IsInstanceOfType<JsonTopLevelMembers>(reading, "The document is well formed.").Members;
         Assert.HasCount(2, members, "The member whose name names no Unicode text is left out.");
         Assert.AreEqual(new JsonTopLevelMember("access_token", JsonTopLevelValueKind.UndecodableString, string.Empty), members[0]);
         Assert.AreEqual(new JsonTopLevelMember("token_type", JsonTopLevelValueKind.String, "Bearer"), members[1]);
@@ -132,9 +180,9 @@ internal sealed class JwkJsonReaderTopLevelMembersTests
         DisplayName = "A code point past U+10FFFF")]
     public void ADocumentHoldingBytesThatAreNoUtf8IsNone(byte[] document)
     {
-        var members = JwkJsonReader.ReadTopLevelMembers(document);
+        var reading = JwkJsonReader.ReadTopLevelMembers(document);
 
-        Assert.IsNull(members, $"No members are read from it; read {(members is null ? "none" : string.Join(", ", members))}.");
+        _ = Assert.IsInstanceOfType<JsonNotOneObject>(reading, $"No members are read from it; read {reading}.");
         Assert.IsFalse(JwkJsonReader.IsWellFormedJsonDocument(document), "The document is no well-formed JSON text.");
     }
 
@@ -154,9 +202,9 @@ internal sealed class JwkJsonReaderTopLevelMembersTests
             0x22, 0x7D
         };
 
-        var members = JwkJsonReader.ReadTopLevelMembers(document);
+        var reading = JwkJsonReader.ReadTopLevelMembers(document);
 
-        Assert.IsNotNull(members, "The document is well formed.");
+        var members = Assert.IsInstanceOfType<JsonTopLevelMembers>(reading, "The document is well formed.").Members;
         Assert.HasCount(1, members);
         Assert.AreEqual(new JsonTopLevelMember("v", JsonTopLevelValueKind.String, "\u007F\u07FF\uD7FF\uE000\uFFFF\U0010FFFF"), members[0]);
     }

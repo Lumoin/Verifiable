@@ -459,29 +459,181 @@ internal sealed class OAuthResponseParsersTests
 
 
     /// <summary>
-    /// A body that names a parameter in more than one way is refused as malformed (RFC 8259 §4: "the behavior of software that
-    /// receives such an object is unpredictable"), as is a body that is no JSON object or no well-formed JSON at all, and an
-    /// <c>access_token</c> spelled as a string naming no Unicode text (RFC 8259 §8.2) is no access token.
+    /// A body that is no JSON object or no well-formed JSON at all is refused as malformed, each also when it repeats a name:
+    /// the repetition of a body that is no well-formed object is never its reason.
     /// </summary>
     /// <param name="body">The response body.</param>
     [TestMethod]
-    [DataRow(
-        /*lang=json*/ """{"access_token":"first","access_token":"second","token_type":"Bearer"}""",
-        DisplayName = "An access_token named twice")]
-    [DataRow(
-        /*lang=json*/ """{"access_token":"at","token_type":"Bearer","ext":{"note":"one","note":"two"}}""",
-        DisplayName = "A name repeated in an extension object")]
     [DataRow(/*lang=json,strict*/ """["access_token","at","token_type","Bearer"]""", DisplayName = "An array")]
     [DataRow("{\"access_token\":\"at\",\"token_type\":\"Bearer\"", DisplayName = "An object never closed")]
     [DataRow(
-        /*lang=json*/ """{"access_token":"\uD800","token_type":"Bearer"}""",
-        DisplayName = "An access_token naming an unpaired surrogate")]
-    public void ParseTokenResponseRefusesABodyNamingNoOneAccessToken(string body)
+        """{"access_token":"at","token_type":"Bearer"}{"access_token":"again"}""",
+        DisplayName = "Two top-level values")]
+    [DataRow(
+        /*lang=json*/ """[{"access_token":"first","access_token":"second","token_type":"Bearer"}]""",
+        DisplayName = "An array holding an object that repeats access_token")]
+    [DataRow(
+        "{\"access_token\":\"first\",\"access_token\":\"second\",\"token_type\":\"Bearer\"",
+        DisplayName = "An object never closed that repeats access_token")]
+    public void ParseTokenResponseRefusesABodyThatIsNoOneObjectAsMalformed(string body)
     {
         var result = OAuthResponseParsers.ParseTokenResponse(Respond(body), DateTimeOffset.UnixEpoch);
 
         Assert.IsFalse(result.IsSuccess, "No access token is read from the body.");
-        _ = Assert.IsInstanceOfType<OAuthMalformedResponse>(result.Error);
+        _ = Assert.IsInstanceOfType<OAuthMalformedResponse>(result.Error, "The body is no well-formed object.");
+    }
+
+
+    /// <summary>
+    /// RFC 8259 §4: the names within an object SHOULD be unique, and "the behavior of software that receives such an object is
+    /// unpredictable". A token response that is one well-formed object but repeats a name, at the top level or in an extension
+    /// object, is refused for the repetition itself, naming the name and the depth of the object repeating it, never as a body
+    /// that is not well-formed JSON; its summary is composed from those facts and carries none of the values the body holds.
+    /// </summary>
+    /// <param name="body">The response body.</param>
+    /// <param name="expectedName">The repeated name.</param>
+    /// <param name="expectedDepth">The depth of the object repeating it.</param>
+    [TestMethod]
+    [DataRow(
+        /*lang=json*/ """{"access_token":"first-credential-text","access_token":"second-credential-text","token_type":"Bearer"}""",
+        "access_token",
+        1,
+        DisplayName = "An access_token named twice")]
+    [DataRow(
+        /*lang=json*/ """{"access_token":"first-credential-text","token_type":"Bearer","ext":{"note":"one","note":"two"}}""",
+        "note",
+        2,
+        DisplayName = "A name repeated in an extension object")]
+    public void ParseTokenResponseRefusesARepeatedNameByTheName(string body, string expectedName, int expectedDepth)
+    {
+        var result = OAuthResponseParsers.ParseTokenResponse(Respond(body), DateTimeOffset.UnixEpoch);
+
+        Assert.IsFalse(result.IsSuccess, "No access token is read from the body.");
+
+        var refused = Assert.IsInstanceOfType<OAuthRepeatedMemberName>(result.Error, "The repetition is the reason.");
+        Assert.AreEqual(expectedName, refused.MemberName, "The repeated name.");
+        Assert.AreEqual(expectedDepth, refused.ObjectDepth, "The depth of the object repeating it.");
+        Assert.AreEqual("RFC 8259 §4", refused.Support.SpecificationReference, "The rule broken.");
+        Assert.Contains(expectedName, refused.Support.Summary, "The summary names the repeated name.");
+        Assert.DoesNotContain("credential-text", refused.Support.Summary, "No value the body carries is in the summary.");
+        Assert.DoesNotContain("credential-text", refused.Support.LikelyCause ?? string.Empty, "No value the body carries is in the cause.");
+    }
+
+
+    /// <summary>
+    /// RFC 8259 §8.2: an escape naming an unpaired surrogate is grammatical but names no Unicode text. A token response carrying
+    /// a parameter its success is read from - the access token, the token type, a refresh token - or its <c>error</c> as such a
+    /// string is refused by that parameter's name, never answered as a response carrying no such parameter, and a parameter so
+    /// spelled is never dropped from a success; the summary carries none of the values the body holds.
+    /// </summary>
+    /// <param name="body">The response body.</param>
+    /// <param name="expectedName">The parameter carried as such a string.</param>
+    [TestMethod]
+    [DataRow(
+        /*lang=json*/ """{"access_token":"\uD800","token_type":"Bearer","refresh_token":"refresh-credential-text"}""",
+        "access_token",
+        DisplayName = "An access_token naming an unpaired surrogate")]
+    [DataRow(
+        /*lang=json*/ """{"access_token":"access-credential-text","token_type":"\uDC00"}""",
+        "token_type",
+        DisplayName = "A token_type naming an unpaired surrogate")]
+    [DataRow(
+        /*lang=json*/ """{"access_token":"access-credential-text","token_type":"Bearer","refresh_token":"x\uD800"}""",
+        "refresh_token",
+        DisplayName = "A refresh_token naming an unpaired surrogate")]
+    [DataRow(
+        /*lang=json*/ """{"refresh_token":"\uD800","access_token":"\uDBFF","token_type":"Bearer"}""",
+        "access_token",
+        DisplayName = "The access_token judged before a refresh_token written ahead of it")]
+    [DataRow(
+        /*lang=json*/ """{"error":"\uD800","access_token":"access-credential-text","token_type":"Bearer"}""",
+        "error",
+        DisplayName = "An error naming an unpaired surrogate beside a success")]
+    public void ParseTokenResponseRefusesAnUndecodableParameterByItsName(string body, string expectedName)
+    {
+        var result = OAuthResponseParsers.ParseTokenResponse(Respond(body), DateTimeOffset.UnixEpoch);
+
+        Assert.IsFalse(result.IsSuccess, "No token is read from the body.");
+
+        var refused = Assert.IsInstanceOfType<OAuthUndecodableMemberValue>(result.Error, "The undecodable parameter is the reason.");
+        Assert.AreEqual(expectedName, refused.MemberName, "The parameter carried as no Unicode text.");
+        Assert.AreEqual("RFC 8259 §8.2", refused.Support.SpecificationReference, "The rule broken.");
+        Assert.Contains(expectedName, refused.Support.Summary, "The summary names the parameter.");
+        Assert.DoesNotContain("credential-text", refused.Support.Summary, "No value the body carries is in the summary.");
+        Assert.DoesNotContain("credential-text", refused.Support.LikelyCause ?? string.Empty, "No value the body carries is in the cause.");
+    }
+
+
+    /// <summary>
+    /// The error a response names keeps its precedence over the parameters a success is read from: an error response carrying
+    /// an <c>access_token</c> that names no Unicode text is answered as the error it names, under the token endpoint's own media
+    /// type and the problem details media type alike, as neither reads an access token.
+    /// </summary>
+    [TestMethod]
+    public void AnErrorResponseIsAnsweredAsItsErrorWhateverAccessTokenItCarries()
+    {
+        var error = OAuthResponseParsers.ParseTokenResponse(
+            Respond(/*lang=json*/ """{"error":"invalid_grant","access_token":"\uD800"}""", statusCode: 400),
+            DateTimeOffset.UnixEpoch);
+
+        var problem = OAuthResponseParsers.ParseTokenResponse(
+            Respond(
+                /*lang=json*/ """{"type":"invalid_grant","access_token":"\uD800"}""",
+                statusCode: 400,
+                contentType: WellKnownMediaTypes.Application.ProblemJson),
+            DateTimeOffset.UnixEpoch);
+
+        Assert.AreEqual("invalid_grant", Assert.IsInstanceOfType<OAuthProtocolError>(error.Error).ErrorCode, "The error the body names.");
+        Assert.AreEqual("invalid_grant", Assert.IsInstanceOfType<OAuthProtocolError>(problem.Error).ErrorCode, "The problem the body names.");
+    }
+
+
+    /// <summary>
+    /// An error response's own members are read as its error is: an <c>error_description</c> or an <c>error_uri</c> carried as
+    /// a string naming no Unicode text (RFC 8259 §8.2) is refused by its name, at the token and the pushed authorization
+    /// endpoints alike, never answered as an error carrying no description or no location.
+    /// </summary>
+    /// <param name="body">The response body.</param>
+    /// <param name="expectedName">The member carried as such a string.</param>
+    [TestMethod]
+    [DataRow(
+        /*lang=json*/ """{"error":"invalid_grant","error_description":"\uD800"}""",
+        "error_description",
+        DisplayName = "An error_description naming an unpaired surrogate")]
+    [DataRow(
+        /*lang=json*/ """{"error":"invalid_grant","error_uri":"https://as.example.com/\uDC00"}""",
+        "error_uri",
+        DisplayName = "An error_uri naming an unpaired surrogate")]
+    public void AnUndecodableMemberOfAnErrorResponseIsRefusedByItsName(string body, string expectedName)
+    {
+        var token = OAuthResponseParsers.ParseTokenResponse(Respond(body, statusCode: 400), DateTimeOffset.UnixEpoch);
+        var pushed = OAuthResponseParsers.ParseParResponse(Respond(body, statusCode: 400));
+
+        Assert.AreEqual(expectedName, Assert.IsInstanceOfType<OAuthUndecodableMemberValue>(token.Error).MemberName, "The token endpoint's.");
+        Assert.AreEqual(expectedName, Assert.IsInstanceOfType<OAuthUndecodableMemberValue>(pushed.Error).MemberName, "The pushed authorization endpoint's.");
+    }
+
+
+    /// <summary>
+    /// The pushed authorization response's parameters are read as the token response's are: a response repeating its
+    /// <c>request_uri</c> is refused by that name (RFC 8259 §4), and a <c>request_uri</c> naming no Unicode text by its name
+    /// (RFC 8259 §8.2), never answered as a response carrying no <c>request_uri</c> or as no well-formed object.
+    /// </summary>
+    [TestMethod]
+    public void ParseParResponseRefusesARepeatedOrUndecodableRequestUriByItsName()
+    {
+        var repeated = OAuthResponseParsers.ParseParResponse(Respond(
+            /*lang=json*/ """{"request_uri":"urn:ietf:params:oauth:request_uri:one","request_uri":"urn:ietf:params:oauth:request_uri:two","expires_in":60}"""));
+
+        var undecodable = OAuthResponseParsers.ParseParResponse(Respond(
+            /*lang=json*/ """{"request_uri":"urn:ietf:params:oauth:request_uri:\uD800","expires_in":60}"""));
+
+        var repeatedRefusal = Assert.IsInstanceOfType<OAuthRepeatedMemberName>(repeated.Error, "The repetition is the reason.");
+        Assert.AreEqual(OAuthRequestParameterNames.RequestUri, repeatedRefusal.MemberName);
+        Assert.AreEqual(1, repeatedRefusal.ObjectDepth);
+
+        var undecodableRefusal = Assert.IsInstanceOfType<OAuthUndecodableMemberValue>(undecodable.Error, "The undecodable request_uri is the reason.");
+        Assert.AreEqual(OAuthRequestParameterNames.RequestUri, undecodableRefusal.MemberName);
     }
 
 
@@ -509,9 +661,8 @@ internal sealed class OAuthResponseParsersTests
 
     /// <summary>
     /// A problem details response states its problem through the members of the one JSON object its body is (RFC 9457
-    /// section 3): a token endpoint's body under the problem details media type that is an array of problems, an object never
-    /// closed or an object naming its <c>type</c> twice (RFC 8259 section 4) states no problem one way, so it is refused as
-    /// malformed, never read as the problem the media type names.
+    /// section 3): a token endpoint's body under the problem details media type that is an array of problems or an object
+    /// never closed states no problem, so it is refused as malformed, never read as the problem the media type names.
     /// </summary>
     /// <param name="body">The response body.</param>
     [TestMethod]
@@ -519,9 +670,6 @@ internal sealed class OAuthResponseParsersTests
         /*lang=json,strict*/ """[{"type":"invalid_grant","detail":"an array of problems"}]""",
         DisplayName = "A token answer that is an array of problems")]
     [DataRow("{\"type\":\"invalid_grant\",\"detail\":\"never closed\"", DisplayName = "A token answer never closed")]
-    [DataRow(
-        /*lang=json*/ """{"type":"invalid_grant","type":"invalid_client","detail":"two types"}""",
-        DisplayName = "A token answer naming its type twice")]
     public void ATokenProblemDetailsBodyThatIsNoOneObjectIsRefusedAsMalformed(string body)
     {
         var result = OAuthResponseParsers.ParseTokenResponse(
@@ -535,8 +683,8 @@ internal sealed class OAuthResponseParsersTests
 
     /// <summary>
     /// The pushed authorization endpoint's problem details response is read as the token endpoint's is (RFC 9457 section 3,
-    /// RFC 9126 section 2.3): a body under the problem details media type that is an array of problems, an object never closed
-    /// or an object naming its <c>type</c> twice is refused as malformed, never read as the problem the media type names.
+    /// RFC 9126 section 2.3): a body under the problem details media type that is an array of problems or an object never
+    /// closed is refused as malformed, never read as the problem the media type names.
     /// </summary>
     /// <param name="body">The response body.</param>
     [TestMethod]
@@ -546,9 +694,6 @@ internal sealed class OAuthResponseParsersTests
     [DataRow(
         "{\"type\":\"invalid_request\",\"detail\":\"never closed\"",
         DisplayName = "A pushed authorization answer never closed")]
-    [DataRow(
-        /*lang=json*/ """{"type":"invalid_request","type":"invalid_client","detail":"two types"}""",
-        DisplayName = "A pushed authorization answer naming its type twice")]
     public void APushedAuthorizationProblemDetailsBodyThatIsNoOneObjectIsRefusedAsMalformed(string body)
     {
         var result = OAuthResponseParsers.ParseParResponse(
@@ -556,6 +701,45 @@ internal sealed class OAuthResponseParsersTests
 
         Assert.IsFalse(result.IsSuccess, "The pushed authorization endpoint's answer is refused.");
         _ = Assert.IsInstanceOfType<OAuthMalformedResponse>(result.Error, "The pushed authorization endpoint's answer names no problem.");
+    }
+
+
+    /// <summary>
+    /// A problem details response naming a member twice (RFC 8259 section 4) states no problem one way, and one carrying its
+    /// <c>type</c>, <c>detail</c> or <c>instance</c> as a string naming no Unicode text (RFC 8259 section 8.2) states it in
+    /// no text a client can read: each is refused by the member's name, at the token and the pushed authorization endpoints
+    /// alike, never as a body that is not well-formed JSON and never read as the problem the media type names.
+    /// </summary>
+    [TestMethod]
+    public void AProblemDetailsBodyRepeatingOrUndecodableInAMemberIsRefusedByTheName()
+    {
+        var repeatedBody = /*lang=json*/ """{"type":"invalid_grant","type":"invalid_client","detail":"two types"}""";
+        var undecodableBody = /*lang=json*/ """{"type":"invalid_grant","detail":"\uD800"}""";
+
+        var tokenRepeated = OAuthResponseParsers.ParseTokenResponse(Problem(repeatedBody), DateTimeOffset.UnixEpoch);
+        var pushedRepeated = OAuthResponseParsers.ParseParResponse(Problem(repeatedBody));
+        var tokenUndecodable = OAuthResponseParsers.ParseTokenResponse(Problem(undecodableBody), DateTimeOffset.UnixEpoch);
+        var pushedUndecodable = OAuthResponseParsers.ParseParResponse(Problem(undecodableBody));
+
+        Assert.AreEqual(
+            WellKnownProblemDetailsMemberNames.Type,
+            Assert.IsInstanceOfType<OAuthRepeatedMemberName>(tokenRepeated.Error).MemberName,
+            "The token endpoint's answer names its type twice.");
+
+        Assert.AreEqual(
+            WellKnownProblemDetailsMemberNames.Type,
+            Assert.IsInstanceOfType<OAuthRepeatedMemberName>(pushedRepeated.Error).MemberName,
+            "The pushed authorization endpoint's answer names its type twice.");
+
+        Assert.AreEqual(
+            WellKnownProblemDetailsMemberNames.Detail,
+            Assert.IsInstanceOfType<OAuthUndecodableMemberValue>(tokenUndecodable.Error).MemberName,
+            "The token endpoint's answer carries a detail naming no Unicode text.");
+
+        Assert.AreEqual(
+            WellKnownProblemDetailsMemberNames.Detail,
+            Assert.IsInstanceOfType<OAuthUndecodableMemberValue>(pushedUndecodable.Error).MemberName,
+            "The pushed authorization endpoint's answer carries a detail naming no Unicode text.");
     }
 
 
@@ -586,6 +770,13 @@ internal sealed class OAuthResponseParsersTests
         }
     }
 
+
+
+    /// <summary>An answer of status 400 under the problem details media type.</summary>
+    /// <param name="body">The response body.</param>
+    /// <returns>The response.</returns>
+    private static HttpResponseData Problem(string body) =>
+        Respond(body, statusCode: 400, contentType: WellKnownMediaTypes.Application.ProblemJson);
 
 
     private static HttpResponseData Respond(

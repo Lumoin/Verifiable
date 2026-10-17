@@ -67,8 +67,8 @@ internal sealed class JwkJsonReaderKeySelectionTests
 
         var byKeyId = JwkJsonReader.SelectKeyByKeyId(json, "a", use);
         var sole = JwkJsonReader.SelectSoleKey(json, use);
-        var controlByKeyId = JwkJsonReader.SelectKeyByKeyId(json, "a", "sig"u8);
-        var controlSole = JwkJsonReader.SelectSoleKey(json, "sig"u8);
+        var controlByKeyId = JwkJsonReader.SelectKeyByKeyId(json, "a", WellKnownJwkValues.UseSigUtf8);
+        var controlSole = JwkJsonReader.SelectSoleKey(json, WellKnownJwkValues.UseSigUtf8);
 
         Assert.AreEqual(JwkSelectionOutcome.NoMatch, byKeyId.Outcome, "No use the bytes spell makes the key eligible.");
         Assert.IsNull(byKeyId.Members, "No key is handed out by its identifier.");
@@ -93,9 +93,11 @@ internal sealed class JwkJsonReaderKeySelectionTests
 
         Assert.AreEqual(JwkSelectionOutcome.MalformedDocument, JwkJsonReader.SelectKeyByKeyId(malformed, "a", use).Outcome);
         Assert.AreEqual(JwkSelectionOutcome.MalformedDocument, JwkJsonReader.SelectSoleKey(malformed, use).Outcome);
+
         Assert.AreEqual(
             JwkSelectionOutcome.PrivateOrSymmetricMemberPresent,
             JwkJsonReader.SelectKeyByKeyId(carryingPrivateMaterial, "a", use).Outcome);
+
         Assert.AreEqual(
             JwkSelectionOutcome.PrivateOrSymmetricMemberPresent,
             JwkJsonReader.SelectSoleKey(carryingPrivateMaterial, use).Outcome);

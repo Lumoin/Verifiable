@@ -1126,21 +1126,22 @@ public static class JwkJsonReader
     /// The members at the top level of the one JSON object a document is (RFC 8259 section 4), read as the JSON it is rather
     /// than searched as text: each member of the object's own level in document order, its name and a string value each
     /// decoded once (RFC 8259 section 7), and no member of an object or array nested beneath it, so a member a nested object
-    /// carries is never read as the object's own. <see cref="IsWellFormedJsonDocument"/> judges the whole document first, so a
-    /// document that is not exactly one well-formed JSON value, that holds a name or a string, at any depth, that is no
-    /// well-formed UTF-8 (RFC 8259 section 8.1), or that repeats a member name in any object, is answered as no object, and so
-    /// is a well-formed value that is no object. A member whose name decodes to no Unicode text - an escape
-    /// naming an unpaired surrogate, which the grammar admits (RFC 8259 section 8.2) - is left out, as no name a reader asks for
-    /// spells one; a string value doing so is answered as <see cref="JsonTopLevelValueKind.UndecodableString"/>, carrying no
-    /// text. This method never throws.
+    /// carries is never read as the object's own. The whole document is judged first, and each refusal is a reason of its own:
+    /// a document that is not exactly one well-formed JSON value, that holds a name or a string, at any depth, that is no
+    /// well-formed UTF-8 (RFC 8259 section 8.1), or that is a well-formed value that is no object, is answered as
+    /// <see cref="JsonNotOneObject"/>; a well-formed object one of whose objects repeats a member name (RFC 8259 section 4) is
+    /// answered as <see cref="JsonRepeatedMemberName"/>, naming the first repetition. A member whose name decodes to no Unicode
+    /// text - an escape naming an unpaired surrogate, which the grammar admits (RFC 8259 section 8.2) - is left out, as no name a
+    /// reader asks for spells one; a string value doing so is answered as <see cref="JsonTopLevelValueKind.UndecodableString"/>,
+    /// carrying no text, so its reader refuses it by the member's name. This method never throws.
     /// </summary>
     /// <param name="json">The UTF-8 bytes of the document.</param>
-    /// <returns>The object's top-level members, or <see langword="null"/> when the document is not one well-formed JSON object.</returns>
-    public static IReadOnlyList<JsonTopLevelMember>? ReadTopLevelMembers(ReadOnlySpan<byte> json)
+    /// <returns>The object's top-level members, or the refusal of the document with its reason.</returns>
+    public static JsonTopLevelReading ReadTopLevelMembers(ReadOnlySpan<byte> json)
     {
-        if(!IsWellFormedJsonDocument(json))
+        if(!IsOneJsonValue(json, out var repeatedName))
         {
-            return null;
+            return new JsonNotOneObject();
         }
 
         var pos = 0;
@@ -1148,7 +1149,16 @@ public static class JwkJsonReader
 
         if(json[pos] != (byte)'{')
         {
-            return null;
+            return new JsonNotOneObject();
+        }
+
+        //The document is one well-formed object, so the first name it repeats decodes and is answered by its decoded spelling;
+        //a spelling that decoded to none would be no well-formed document.
+        if(repeatedName is { } repeated)
+        {
+            return DecodeContentToString(json, repeated.Start, repeated.Length) is { } repeatedSpelling
+                ? new JsonRepeatedMemberName(repeatedSpelling, repeated.Depth)
+                : new JsonNotOneObject();
         }
 
         pos++;
@@ -1167,7 +1177,7 @@ public static class JwkJsonReader
 
             if(json[pos] == (byte)'}')
             {
-                return members;
+                return new JsonTopLevelMembers(members);
             }
 
             var nameStart = pos + 1;
@@ -1181,7 +1191,7 @@ public static class JwkJsonReader
             //document and the document is answered as no object.
             if(member is null)
             {
-                return null;
+                return new JsonNotOneObject();
             }
 
             if(!HoldsUnpairedSurrogate(member.Name))
@@ -1311,8 +1321,24 @@ public static class JwkJsonReader
     /// or a lone surrogate escape (accepted by the grammar, so not a reason to refuse). Exceeding any of the
     /// three bounds is reported as a refusal, never an exception. This method never throws.
     /// </returns>
-    public static bool IsWellFormedJsonDocument(ReadOnlySpan<byte> json)
+    public static bool IsWellFormedJsonDocument(ReadOnlySpan<byte> json) =>
+        IsOneJsonValue(json, out var repeatedName) && repeatedName is null;
+
+
+    /// <summary>
+    /// Whether <paramref name="json"/> is exactly one JSON value of the grammar (RFC 8259 section 2) within the reader's
+    /// bounds, every name and string at any depth well-formed UTF-8 (RFC 8259 section 8.1), with the first member name an
+    /// object repeats (RFC 8259 section 4) answered beside it, as a repetition breaks no rule of the grammar.
+    /// <see cref="IsWellFormedJsonDocument"/> refuses a repetition as it refuses a grammar fault; <see cref="ReadTopLevelMembers"/>
+    /// answers each as a reason of its own. This method never throws.
+    /// </summary>
+    /// <param name="json">UTF-8 JSON bytes to validate.</param>
+    /// <param name="repeatedName">The first repeated member name in document order, or <see langword="null"/> when none is.</param>
+    /// <returns><see langword="true"/> when the whole span is exactly one JSON value within the bounds.</returns>
+    private static bool IsOneJsonValue(ReadOnlySpan<byte> json, out SeenName? repeatedName)
     {
+        repeatedName = null;
+
         if(json.Length > MaximumDocumentLength)
         {
             return false;
@@ -1331,7 +1357,7 @@ public static class JwkJsonReader
         Span<SeenName> seenNames = stackalloc SeenName[MaximumLiveMemberNames];
         int seenNameCount = 0;
 
-        if(!ValidateFrames(json, ref pos, frames, ref top, ref depth, seenNames, ref seenNameCount, bareRootObject: false))
+        if(!ValidateFrames(json, ref pos, frames, ref top, ref depth, seenNames, ref seenNameCount, bareRootObject: false, ref repeatedName))
         {
             return false;
         }
@@ -1382,15 +1408,16 @@ public static class JwkJsonReader
         Span<SeenName> seenNames = stackalloc SeenName[MaximumLiveMemberNames];
         int seenNameCount = 0;
         int pos = 0;
+        SeenName? repeatedName = null;
 
-        if(!ValidateFrames(objectContent, ref pos, frames, ref top, ref depth, seenNames, ref seenNameCount, bareRootObject: true))
+        if(!ValidateFrames(objectContent, ref pos, frames, ref top, ref depth, seenNames, ref seenNameCount, bareRootObject: true, ref repeatedName))
         {
             return false;
         }
 
         SkipWhitespace(objectContent, ref pos);
 
-        return pos == objectContent.Length;
+        return pos == objectContent.Length && repeatedName is null;
     }
 
 
@@ -1417,7 +1444,11 @@ public static class JwkJsonReader
     /// Whether the frame at index 0 is a virtual object with no bytes of its own for <c>{</c> or
     /// <c>}</c>, so that frame closes on end of input rather than on a literal <c>}</c>.
     /// </param>
-    /// <returns><see langword="true"/> when every frame closed without a grammar or uniqueness violation.</returns>
+    /// <param name="repeatedName">
+    /// The first member name, in document order, that an object repeats (RFC 8259 §4), or <see langword="null"/> while
+    /// none has; a repetition breaks no rule of the grammar, so the walk goes on past it and its caller weighs it.
+    /// </param>
+    /// <returns><see langword="true"/> when every frame closed without a grammar violation or a bound exceeded.</returns>
     private static bool ValidateFrames(
         ReadOnlySpan<byte> json,
         ref int pos,
@@ -1426,7 +1457,8 @@ public static class JwkJsonReader
         ref int depth,
         Span<SeenName> seenNames,
         ref int seenNameCount,
-        bool bareRootObject)
+        bool bareRootObject,
+        ref SeenName? repeatedName)
     {
         bool rootParsed = false;
 
@@ -1505,18 +1537,23 @@ public static class JwkJsonReader
                             return false;
                         }
 
+                        //A repeated name breaks no rule of the grammar, so the walk goes on past it: a document that is also no
+                        //well-formed JSON is answered as that, and the first repetition is reported beside a well-formed one.
                         if(HasNameAtDepth(json, seenNames, seenNameCount, depth, nameStart, nameLength))
                         {
-                            return false;
+                            repeatedName ??= new SeenName(nameStart, nameLength, depth);
                         }
-
-                        if(seenNameCount >= MaximumLiveMemberNames)
+                        else
                         {
-                            return false;
+                            if(seenNameCount >= MaximumLiveMemberNames)
+                            {
+                                return false;
+                            }
+
+                            seenNames[seenNameCount] = new SeenName(nameStart, nameLength, depth);
+                            seenNameCount++;
                         }
 
-                        seenNames[seenNameCount] = new SeenName(nameStart, nameLength, depth);
-                        seenNameCount++;
                         frames[top].Phase = (byte)ObjectPhase.ExpectColon;
 
                         continue;
@@ -2903,7 +2940,7 @@ public static class JwkJsonReader
                 carriesPrivateOrSymmetricMember = true;
             }
 
-            bool isUseEligible = filterSpellsAUse && IsUseEligible(candidate, publicKeyUse);
+            var isUseEligible = filterSpellsAUse && IsUseEligible(candidate, publicKeyUse);
 
             if(keyId is not null)
             {
