@@ -625,4 +625,17 @@ public static class OAuthRequestParameterNames
     /// JWT profile (<c>private_key_jwt</c> / <c>client_secret_jwt</c>).
     /// </summary>
     public static string ClientAssertionType { get; } = Utf8Constants.ToInternedString(ClientAssertionTypeUtf8);
+
+    //OpenID Connect authentication request parameter — OpenID Connect Core 1.0 §3.1.2.1.
+
+    /// <summary>The UTF-8 source literal of <see cref="Nonce"/>.</summary>
+    public static ReadOnlySpan<byte> NonceUtf8 => "nonce"u8;
+
+    /// <summary>
+    /// The <c>nonce</c> authentication request parameter — "String value used to associate a Client session with an ID
+    /// Token, and to mitigate replay attacks. The value is passed through unmodified from the Authentication Request to
+    /// the ID Token." (<see href="https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest">OpenID Connect Core
+    /// 1.0 §3.1.2.1</see>).
+    /// </summary>
+    public static string Nonce { get; } = Utf8Constants.ToInternedString(NonceUtf8);
 }

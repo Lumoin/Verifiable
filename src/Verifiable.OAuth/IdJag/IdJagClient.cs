@@ -10,14 +10,23 @@ namespace Verifiable.OAuth.IdJag;
 /// Per-call inputs for <see cref="IdJagClient.MintAsync(ClientRegistration, IdJagMintOptions, CancellationToken)"/>
 /// — the client side of the ID-JAG mint (a Token Exchange requesting <c>requested_token_type</c> id-jag,
 /// draft-ietf-oauth-identity-assertion-authz-grant-04 (21 May 2026) §4.3). The client authenticates as a confidential
-/// client (§9.1) with the client assertion its registration's method names (RFC 7523 §2.2), composed under the key or the
-/// secret the registration carries and the inputs <see cref="ClientAssertion"/> names.
+/// client (§9.1) by the method its registration names: the client assertion of <c>private_key_jwt</c> or
+/// <c>client_secret_jwt</c> (RFC 7523 §2.2), composed under the key or the secret the registration carries and the inputs
+/// <see cref="ClientAssertion"/> names, or the client secret of <c>client_secret_basic</c> or <c>client_secret_post</c>
+/// (RFC 6749 §2.3.1), which the registration the caller composes for the one call carries and the library reads for that
+/// call alone.
 /// </summary>
 [DebuggerDisplay("IdJagMintOptions Audience={Audience}, SubjectTokenType={SubjectTokenType}")]
 public sealed record IdJagMintOptions
 {
-    /// <summary>The Resource Authorization Server identifier the ID-JAG is minted for (§4.3 <c>audience</c>, REQUIRED).</summary>
-    public required string Audience { get; init; }
+    /// <summary>
+    /// The Resource Authorization Server identifier the ID-JAG is minted for (§4.3 <c>audience</c>), or <see langword="null"/>
+    /// to send no <c>audience</c>: RFC 8693 §2.1 makes the parameter OPTIONAL in a token exchange, and an identity provider
+    /// that takes the audience from its own mapping of the requested <c>resource</c> is sent none. Draft-04 §4.3 marks it
+    /// REQUIRED, so a caller omits it only toward such a provider and holds the grant it answers to the Resource
+    /// Authorization Server's issuer all the same (<see cref="IdJagGrantHolding"/>).
+    /// </summary>
+    public required string? Audience { get; init; }
 
     /// <summary>The Identity Assertion or Refresh Token presented as the <c>subject_token</c> (§4.3, REQUIRED).</summary>
     public required string SubjectToken { get; init; }
@@ -26,12 +35,15 @@ public sealed record IdJagMintOptions
     public required TokenType SubjectTokenType { get; init; }
 
     /// <summary>
-    /// The client assertion's inputs (RFC 7523 §2.2): the <c>kid</c> of a <c>private_key_jwt</c> key or the HMAC algorithm
-    /// of a <c>client_secret_jwt</c> secret, the serialisers and the assertion's validity window. The key or the secret
-    /// itself is the registration's <see cref="ClientRegistration.AuthenticationKeyMaterial"/>, under the method the
-    /// registration names (<see cref="ClientAssertionCredential.Of"/>).
+    /// The client assertion's inputs (RFC 7523 §2.2) for a registration naming <c>private_key_jwt</c> or
+    /// <c>client_secret_jwt</c>: the <c>kid</c> of a <c>private_key_jwt</c> key or the HMAC algorithm of a
+    /// <c>client_secret_jwt</c> secret, the serialisers and the assertion's validity window. The key or the secret itself is
+    /// the registration's <see cref="ClientRegistration.AuthenticationKeyMaterial"/>, under the method the registration names
+    /// (<see cref="ClientAssertionCredential.Of"/>). <see langword="null"/> for a registration naming
+    /// <c>client_secret_basic</c> or <c>client_secret_post</c>, which presents no assertion; an assertion method handed none
+    /// is refused before anything is sent (<see cref="OAuthClientAuthenticationRefused"/>).
     /// </summary>
-    public required ClientAssertionOptions ClientAssertion { get; init; }
+    public required ClientAssertionOptions? ClientAssertion { get; init; }
 
     /// <summary>The requested Resource Identifier(s) (RFC 8707 / §4.3 <c>resource</c>). MAY be empty. The entries are sent as given and unchecked; the application decides whether an entry is acceptable.</summary>
     public IReadOnlyList<string> Resource { get; init; } = [];

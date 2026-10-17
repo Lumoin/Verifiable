@@ -199,6 +199,66 @@ public readonly struct AuthCodeClient
 
 
     /// <summary>
+    /// Starts an OpenID Connect authentication request of the authorization code flow
+    /// (<see href="https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest">OpenID Connect Core 1.0 §3.1.2.1</see>):
+    /// the request <see cref="StartAsync"/> composes, and beside its <c>state</c> and PKCE pair a fresh <c>nonce</c>, sent on
+    /// the redirect and held with the flow so the ID Token the code is exchanged for is held to it
+    /// (<see cref="ExchangeOpenIdTokenAsync"/>).
+    /// </summary>
+    /// <param name="registration">The registration identifying the OpenID Provider.</param>
+    /// <param name="redirectUri">The redirect URI the authentication response returns to.</param>
+    /// <param name="additionalFields">
+    /// Additional fields of the redirect's query; its <c>scope</c> names <c>openid</c> among the scope values (§3.1.2.1: "OpenID
+    /// Connect requests MUST contain the openid scope value."). A field named after one the flow mints, <c>nonce</c> among
+    /// them, is dropped.
+    /// </param>
+    /// <param name="context">The per-operation exchange context threaded into the flow-state delegates.</param>
+    /// <param name="resource">The RFC 8707 §2 <c>resource</c> indicator(s) to request; <see langword="null"/> or empty omits the parameter.</param>
+    /// <param name="requestLifetime">How long the pending authentication request stays redeemable at the callback.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The redirect to the authorization endpoint, or the refusal.</returns>
+    public ValueTask<AuthCodeFlowEndpointResult> StartOpenIdAsync(
+        ClientRegistration registration,
+        Uri redirectUri,
+        OAuthFormEncodedFields additionalFields,
+        ExchangeContext context,
+        IReadOnlyList<string>? resource,
+        TimeSpan requestLifetime,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(registration);
+        ArgumentNullException.ThrowIfNull(redirectUri);
+        ArgumentNullException.ThrowIfNull(context);
+
+        return AuthCodeFlowHandlers.HandleOpenIdAuthorizeStartAsync(
+            additionalFields.Fields, redirectUri, Infrastructure, registration, context, resource, requestLifetime, cancellationToken);
+    }
+
+
+    /// <summary>
+    /// Completes an OpenID Connect sign-in: the code the callback held exchanged at the provider's token endpoint and the ID
+    /// Token it answered verified as OpenID Connect Core 1.0 §3.1.3.7 orders, held to the nonce
+    /// <see cref="StartOpenIdAsync"/> sent (<see cref="OpenIdSignInHandlers.ExchangeOpenIdTokenAsync"/>).
+    /// </summary>
+    /// <param name="registration">The registration identifying the OpenID Provider and the client's authentication there.</param>
+    /// <param name="flowId">The flow identifier (the <c>state</c> value).</param>
+    /// <param name="context">The per-operation exchange context threaded into the transport and flow-state delegates.</param>
+    /// <param name="clientAssertionOptions">The client-assertion inputs for an assertion method; <see langword="null"/> for every other method.</param>
+    /// <param name="verification">How the ID Token is verified.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>What the sign-in came to.</returns>
+    public ValueTask<OpenIdSignInResult> ExchangeOpenIdTokenAsync(
+        ClientRegistration registration,
+        string flowId,
+        ExchangeContext context,
+        ClientAssertionOptions? clientAssertionOptions,
+        OpenIdTokenVerification verification,
+        CancellationToken cancellationToken) =>
+        OpenIdSignInHandlers.ExchangeOpenIdTokenAsync(
+            Infrastructure, registration, flowId, context, clientAssertionOptions, verification, cancellationToken);
+
+
+    /// <summary>
     /// Handles the authorization callback: validates the <c>iss</c> parameter
     /// (when HAIP / RFC 9207 is active), extracts the authorization <c>code</c>,
     /// and persists the code-received state.

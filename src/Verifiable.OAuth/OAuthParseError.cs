@@ -210,3 +210,34 @@ public sealed record OAuthOutboundFetchPolicyDenied(
 public sealed record OAuthClientAssertionRefused(
     ClientAssertionCredentialRefusal Refusal,
     DecisionSupport Support) : OAuthParseError(Support);
+
+
+/// <summary>The rule a client authentication its exchange was to present refuses, before anything is sent.</summary>
+public enum ClientAuthenticationRefusalReason
+{
+    /// <summary>
+    /// The registration names <c>client_secret_basic</c> or <c>client_secret_post</c> and carries no client secret in its
+    /// <see cref="ClientRegistration.AuthenticationKeyMaterial"/> (RFC 6749 §2.3.1).
+    /// </summary>
+    ClientSecretNotCarried,
+
+    /// <summary>
+    /// The registration names <c>private_key_jwt</c> or <c>client_secret_jwt</c> and the exchange was handed no client
+    /// assertion inputs to compose its assertion with (RFC 7523 §2.2).
+    /// </summary>
+    AssertionInputsNotGiven
+}
+
+
+/// <summary>
+/// The client authentication the exchange was to present was refused as the exchange was composed, before any metadata was
+/// resolved or any request sent: a secret method whose registration carries no secret, or an assertion method handed no
+/// assertion inputs.
+/// </summary>
+/// <param name="Method">The method the registration names.</param>
+/// <param name="Reason">The rule broken.</param>
+/// <param name="Support">Guidance for the calling application.</param>
+public sealed record OAuthClientAuthenticationRefused(
+    ClientAuthenticationMethod Method,
+    ClientAuthenticationRefusalReason Reason,
+    DecisionSupport Support) : OAuthParseError(Support);

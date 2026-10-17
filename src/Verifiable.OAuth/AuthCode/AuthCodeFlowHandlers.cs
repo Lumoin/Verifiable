@@ -374,7 +374,7 @@ public static class AuthCodeFlowHandlers
     /// <see cref="AuthorizationServerMetadata.RequirePushedAuthorizationRequests"/> is set
     /// (<see href="https://www.rfc-editor.org/rfc/rfc9126#section-5">RFC 9126 §5</see>).
     /// </returns>
-    internal static async ValueTask<AuthCodeFlowEndpointResult> HandleDirectAuthorizeStartAsync(
+    internal static ValueTask<AuthCodeFlowEndpointResult> HandleDirectAuthorizeStartAsync(
         IReadOnlyDictionary<string, string> fields,
         Uri redirectUri,
         OAuthClientInfrastructure infrastructure,
@@ -382,6 +382,69 @@ public static class AuthCodeFlowHandlers
         ExchangeContext context,
         IReadOnlyList<string>? resource,
         TimeSpan requestLifetime,
+        CancellationToken cancellationToken) =>
+        StartDirectAuthorizationAsync(
+            fields, redirectUri, infrastructure, registration, context, resource, requestLifetime, mintsNonce: false, cancellationToken);
+
+
+    /// <summary>
+    /// Starts an OpenID Connect authentication request of the authorization code flow
+    /// (<see href="https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest">OpenID Connect Core 1.0 §3.1.2.1</see>)
+    /// as <see cref="HandleDirectAuthorizeStartAsync"/> starts a plain one, and mints beside its <c>state</c> and PKCE pair a
+    /// fresh <c>nonce</c> from <see cref="OAuthClientInfrastructure.FillEntropy"/>, sent on the redirect's query and held in
+    /// the persisted <see cref="ParCompletedState.Nonce"/>, so the ID Token the code is exchanged for is held to it
+    /// (<see cref="OpenIdSignInHandlers.ExchangeOpenIdTokenAsync"/>; §3.1.3.7 item 11). A caller's additional field named <c>nonce</c> is dropped:
+    /// the flow mints its own.
+    /// </summary>
+    /// <param name="fields">
+    /// Inbound form fields. Its <c>scope</c> field names the requested scope values, <c>openid</c> among them (§3.1.2.1:
+    /// "OpenID Connect requests MUST contain the openid scope value."), sent as given.
+    /// </param>
+    /// <param name="redirectUri">The client's redirect URI to which the authorization response is returned.</param>
+    /// <param name="infrastructure">The long-lived infrastructure carrying transport, parsing, persistence, and time delegates.</param>
+    /// <param name="registration">The registration identifying the OpenID Provider this call targets.</param>
+    /// <param name="context">The per-operation exchange context threaded into the flow-state delegates.</param>
+    /// <param name="resource">The RFC 8707 §2 <c>resource</c> indicator(s) to request; <see langword="null"/> or empty omits the parameter.</param>
+    /// <param name="requestLifetime">How long this pending authentication request stays redeemable at the callback.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>As <see cref="HandleDirectAuthorizeStartAsync"/> returns.</returns>
+    internal static ValueTask<AuthCodeFlowEndpointResult> HandleOpenIdAuthorizeStartAsync(
+        IReadOnlyDictionary<string, string> fields,
+        Uri redirectUri,
+        OAuthClientInfrastructure infrastructure,
+        ClientRegistration registration,
+        ExchangeContext context,
+        IReadOnlyList<string>? resource,
+        TimeSpan requestLifetime,
+        CancellationToken cancellationToken) =>
+        StartDirectAuthorizationAsync(
+            fields, redirectUri, infrastructure, registration, context, resource, requestLifetime, mintsNonce: true, cancellationToken);
+
+
+    /// <summary>
+    /// The one start of a direct authorization request, plain or OpenID Connect: the metadata resolved and validated, a
+    /// pushed-only server refused, <c>state</c> and the PKCE pair minted, and the <c>nonce</c> where the request is an
+    /// OpenID Connect one, each held in the persisted <see cref="ParCompletedState"/>.
+    /// </summary>
+    /// <param name="fields">Inbound form fields.</param>
+    /// <param name="redirectUri">The client's redirect URI.</param>
+    /// <param name="infrastructure">The long-lived infrastructure.</param>
+    /// <param name="registration">The registration identifying the authorization server.</param>
+    /// <param name="context">The per-operation exchange context.</param>
+    /// <param name="resource">The RFC 8707 §2 <c>resource</c> indicator(s) to request.</param>
+    /// <param name="requestLifetime">How long the pending request stays redeemable.</param>
+    /// <param name="mintsNonce">Whether the request is an OpenID Connect one, minting and holding a <c>nonce</c>.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The redirect, or the refusal.</returns>
+    private static async ValueTask<AuthCodeFlowEndpointResult> StartDirectAuthorizationAsync(
+        IReadOnlyDictionary<string, string> fields,
+        Uri redirectUri,
+        OAuthClientInfrastructure infrastructure,
+        ClientRegistration registration,
+        ExchangeContext context,
+        IReadOnlyList<string>? resource,
+        TimeSpan requestLifetime,
+        bool mintsNonce,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(fields);
@@ -417,12 +480,13 @@ public static class AuthCodeFlowHandlers
         DateTimeOffset now = infrastructure.TimeProvider.GetUtcNow();
         string state = GenerateEntropyHexString(infrastructure);
         PkceParameters pkce = GeneratePkceParameters(infrastructure.Base64UrlEncoder, infrastructure.MemoryPool);
+        var nonce = mintsNonce ? GenerateEntropyHexString(infrastructure) : null;
 
         ImmutableArray<string> scopes = ReadRequestedScopes(fields);
         ImmutableArray<string> requestedResource = ReadNamedResource(resource);
 
         Uri authorizationUri = BuildDirectAuthorizeRedirectUri(
-            metadata.AuthorizationEndpoint!, registration.ClientId.Value, redirectUri, scopes, state, pkce, resource, fields);
+            metadata.AuthorizationEndpoint!, registration.ClientId.Value, redirectUri, scopes, state, nonce, pkce, resource, fields);
 
         ParCompletedState parCompleted = new()
         {
@@ -435,6 +499,7 @@ public static class AuthCodeFlowHandlers
             RedirectUri = redirectUri,
             Scopes = scopes,
             Resource = requestedResource,
+            Nonce = nonce,
             Par = new ParResponse(authorizationUri, (int)requestLifetime.TotalSeconds)
         };
 
@@ -457,6 +522,7 @@ public static class AuthCodeFlowHandlers
     /// <param name="redirectUri">The redirect URI sent as <c>redirect_uri</c>.</param>
     /// <param name="scopes">The scope values the caller named; empty sends no <c>scope</c> parameter.</param>
     /// <param name="state">The <c>state</c> value this start minted.</param>
+    /// <param name="nonce">The <c>nonce</c> an OpenID Connect start minted, or <see langword="null"/> for a plain request.</param>
     /// <param name="pkce">The PKCE pair whose challenge and method are sent.</param>
     /// <param name="resource">The RFC 8707 resource indicators, each sent as its own occurrence.</param>
     /// <param name="additionalFields">The caller's further fields, flow-owned names skipped.</param>
@@ -467,6 +533,7 @@ public static class AuthCodeFlowHandlers
         Uri redirectUri,
         ImmutableArray<string> scopes,
         string state,
+        string? nonce,
         PkceParameters pkce,
         IReadOnlyList<string>? resource,
         IReadOnlyDictionary<string, string> additionalFields)
@@ -480,11 +547,25 @@ public static class AuthCodeFlowHandlers
 
         AddScopeWhenNamed(query, scopes);
         query[OAuthRequestParameterNames.State] = state;
+
+        if(nonce is not null)
+        {
+            query[OAuthRequestParameterNames.Nonce] = nonce;
+        }
+
         query[OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge;
         query[OAuthRequestParameterNames.CodeChallengeMethod] = pkce.Method.ToString().ToUpperInvariant();
 
         TokenEndpointClientOperations.AddResourceOccurrences(query, resource);
-        AddAdditionalAuthorizationFields(query, additionalFields);
+
+        //The nonce an OpenID Connect start minted is the flow's own, so a caller's field of that name is dropped as every other
+        //flow-owned name is.
+        AddAdditionalAuthorizationFields(
+            query,
+            nonce is null
+                ? additionalFields
+                : additionalFields.Where(static field => !string.Equals(field.Key, OAuthRequestParameterNames.Nonce, StringComparison.Ordinal))
+                    .ToDictionary(static field => field.Key, static field => field.Value, StringComparer.Ordinal));
 
         StringBuilder builder = new();
         _ = builder.Append(authorizationEndpoint);
@@ -639,7 +720,8 @@ public static class AuthCodeFlowHandlers
             IssuerId = iss,
             Pkce = parCompleted.Pkce,
             RedirectUri = parCompleted.RedirectUri,
-            Resource = parCompleted.Resource
+            Resource = parCompleted.Resource,
+            Nonce = parCompleted.Nonce
         };
 
         await infrastructure.SaveStateAsync(codeReceived, context, cancellationToken).ConfigureAwait(false);
@@ -1201,6 +1283,7 @@ public static class AuthCodeFlowHandlers
             RedirectUri = jarOptions.RedirectUri,
             Scopes = scopes,
             Resource = requestedResource,
+            Nonce = nonce,
             Par = parResponse
         };
 
@@ -1327,6 +1410,7 @@ public static class AuthCodeFlowHandlers
             RedirectUri = jarOptions.RedirectUri,
             Scopes = scopes,
             Resource = requestedResource,
+            Nonce = nonce,
             Par = new ParResponse(authorizationUri, (int)jarOptions.JarLifetime.TotalSeconds)
         };
 

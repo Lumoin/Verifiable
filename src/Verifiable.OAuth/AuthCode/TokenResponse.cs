@@ -45,4 +45,12 @@ public sealed record TokenResponse
     /// <see langword="null"/> for plain OAuth 2.0 responses that carry no ID Token.
     /// </summary>
     public string? IdToken { get; init; }
+
+    /// <summary>
+    /// The <c>issued_token_type</c> of a token exchange's answer, the type of the token issued
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8693#section-2.2.1">RFC 8693 §2.2.1</see>: "REQUIRED. An identifier, as
+    /// described in Section 3, for the representation of the issued security token."); <see langword="null"/> for an answer
+    /// of any other grant, which names none.
+    /// </summary>
+    public string? IssuedTokenType { get; init; }
 }
