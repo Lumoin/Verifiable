@@ -34,6 +34,25 @@ internal sealed class JwkJsonReaderKeySelectionTests
     }
 
 
+    /// <summary>
+    /// A <c>use</c> to filter by whose bytes are no well-formed UTF-8 (RFC 8259 section 8.1) spells no text, so no key's
+    /// <c>use</c> equals it: the byte FF is never read as the character U+00FF a key's <c>use</c> spells, by its identifier
+    /// or as the sole key.
+    /// </summary>
+    [TestMethod]
+    public void AUseToFilterByThatIsNoUtf8MatchesNoKey()
+    {
+        var json = Utf8(/*lang=json,strict*/ """{"keys":[{"kty":"EC","kid":"a","use":"ÿ"}]}""");
+        byte[] use = [0xFF];
+
+        var byKeyId = JwkJsonReader.SelectKeyByKeyId(json, "a", use);
+        var sole = JwkJsonReader.SelectSoleKey(json, use);
+
+        Assert.AreEqual(JwkSelectionOutcome.NoMatch, byKeyId.Outcome, "The key's use is no use the bytes spell.");
+        Assert.AreEqual(JwkSelectionOutcome.NoMatch, sole.Outcome, "The sole key's use is no use the bytes spell.");
+    }
+
+
     /// <summary>No key in the set carries the requested <c>kid</c>.</summary>
     [TestMethod]
     public void SelectKeyByKeyIdReportsNoMatchWhenNoKeyCarriesTheKeyId()

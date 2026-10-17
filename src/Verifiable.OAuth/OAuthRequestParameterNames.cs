@@ -232,6 +232,20 @@ public static class OAuthRequestParameterNames
     /// </summary>
     public static string ErrorDescription { get; } = Utf8Constants.ToInternedString(ErrorDescriptionUtf8);
 
+    /// <summary>The UTF-8 source literal of <see cref="ErrorUri"/>.</summary>
+    public static ReadOnlySpan<byte> ErrorUriUtf8 => "error_uri"u8;
+
+    /// <summary>
+    /// The <c>error_uri</c> parameter.
+    /// A URI identifying a human-readable web page with information about the error, used to provide the client
+    /// developer with additional information about the error per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 §5.2</see>.
+    /// OPTIONAL.
+    /// </summary>
+    [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
+        Justification = "This member is the wire parameter NAME 'error_uri' (compared and serialised as a string), not a dereferenceable System.Uri.")]
+    public static string ErrorUri { get; } = Utf8Constants.ToInternedString(ErrorUriUtf8);
+
     //Token request parameters — RFC 6749 §4.1.3.
 
     /// <summary>The UTF-8 source literal of <see cref="GrantType"/>.</summary>

@@ -41,7 +41,9 @@ namespace Verifiable.OAuth;
 ///   <item>
 ///     <description>
 ///       RFC 9457 problem+json response — detected when
-///       <see cref="HttpResponseData.IsProblemJson"/> is <see langword="true"/>.
+///       <see cref="HttpResponseData.IsProblemJson"/> is <see langword="true"/> on a body that is one
+///       well-formed JSON object; a body that is no such object is refused as malformed whatever its
+///       media type names.
 ///       The <c>detail</c> field maps to <c>error_description</c> and the
 ///       <c>instance</c> field becomes the <see cref="DecisionSupport.CorrelationId"/>.
 ///     </description>
@@ -84,17 +86,15 @@ public static class OAuthResponseParsers
                     }).WithTransportMetadata(response));
         }
 
-        var members = MembersOf(response.Body);
-
-        if(response.IsProblemJson)
-        {
-            return ParseProblemJson<ParResponse>(members ?? [], response);
-        }
-
-        if(members is null)
+        if(MembersOf(response.Body) is not { } members)
         {
             return Result.Failure<ParResponse, OAuthParseError>(
                 NotOneObject(response, "PAR", "RFC 9126 §2.2").WithTransportMetadata(response));
+        }
+
+        if(response.IsProblemJson)
+        {
+            return ParseProblemJson<ParResponse>(members, response);
         }
 
         if(StringOf(members, OAuthRequestParameterNames.Error) is { } errorCode)
@@ -144,7 +144,7 @@ public static class OAuthResponseParsers
                     }).WithTransportMetadata(response));
         }
 
-        if(!TryIntegerOf(members, OAuthRequestParameterNames.ExpiresIn, out int expiresIn))
+        if(!TryIntegerOf(members, OAuthRequestParameterNames.ExpiresIn, out var expiresIn))
         {
             return Result.Failure<ParResponse, OAuthParseError>(
                 new OAuthMalformedResponse(
@@ -202,17 +202,15 @@ public static class OAuthResponseParsers
                     }).WithTransportMetadata(response));
         }
 
-        var members = MembersOf(response.Body);
-
-        if(response.IsProblemJson)
-        {
-            return ParseProblemJson<TokenResponse>(members ?? [], response);
-        }
-
-        if(members is null)
+        if(MembersOf(response.Body) is not { } members)
         {
             return Result.Failure<TokenResponse, OAuthParseError>(
                 NotOneObject(response, "token", "RFC 6749 §5.1").WithTransportMetadata(response));
+        }
+
+        if(response.IsProblemJson)
+        {
+            return ParseProblemJson<TokenResponse>(members, response);
         }
 
         if(StringOf(members, OAuthRequestParameterNames.Error) is { } errorCode)
@@ -251,7 +249,8 @@ public static class OAuthResponseParsers
         }
 
         int? expiresIn = null;
-        if(TryIntegerOf(members, OAuthRequestParameterNames.ExpiresIn, out int expiresInValue))
+
+        if(TryIntegerOf(members, OAuthRequestParameterNames.ExpiresIn, out var expiresInValue))
         {
             if(expiresInValue <= 0)
             {
@@ -374,10 +373,11 @@ public static class OAuthResponseParsers
         string endpoint,
         string specReference)
     {
-        string? description = StringOf(members, OAuthRequestParameterNames.ErrorDescription) is { Length: > 0 } carried ? carried : null;
+        var description = StringOf(members, OAuthRequestParameterNames.ErrorDescription) is { Length: > 0 } carried ? carried : null;
 
         Uri? errorUri = null;
-        if(StringOf(members, "error_uri") is { Length: > 0 } errorUriText)
+
+        if(StringOf(members, OAuthRequestParameterNames.ErrorUri) is { Length: > 0 } errorUriText)
         {
             _ = Uri.TryCreate(errorUriText, UriKind.Absolute, out errorUri);
         }
@@ -392,20 +392,25 @@ public static class OAuthResponseParsers
 
 
     /// <summary>
-    /// The RFC 9457 problem a <c>problem+json</c> response states, read from its top-level <c>type</c>, <c>detail</c> and
-    /// <c>instance</c> members, none of them where the body is no JSON object.
+    /// The RFC 9457 problem a <c>problem+json</c> response states, read from the top-level <c>type</c>, <c>detail</c> and
+    /// <c>instance</c> members of the one JSON object its body is; a body that is no such object never reaches this reading,
+    /// as it is refused as malformed whatever its media type.
     /// </summary>
     /// <typeparam name="T">The success type the endpoint's parser answers.</typeparam>
-    /// <param name="members">The response's top-level members, empty where the body is no JSON object.</param>
+    /// <param name="members">The response's top-level members.</param>
     /// <param name="response">The response.</param>
     /// <returns>The protocol error.</returns>
     private static Result<T, OAuthParseError> ParseProblemJson<T>(
         IReadOnlyList<JsonTopLevelMember> members,
         HttpResponseData response)
     {
-        string errorCode = StringOf(members, "type") is { Length: > 0 } type ? type : "problem";
-        string? detail = StringOf(members, "detail") is { Length: > 0 } carriedDetail ? carriedDetail : null;
-        string? instance = StringOf(members, "instance") is { Length: > 0 } carriedInstance ? carriedInstance : null;
+        var errorCode = StringOf(members, WellKnownProblemDetailsMemberNames.Type) is { Length: > 0 } type ? type : "problem";
+        var detail = StringOf(members, WellKnownProblemDetailsMemberNames.Detail) is { Length: > 0 } carriedDetail
+            ? carriedDetail
+            : null;
+        var instance = StringOf(members, WellKnownProblemDetailsMemberNames.Instance) is { Length: > 0 } carriedInstance
+            ? carriedInstance
+            : null;
 
         DecisionSupport support = new(
             $"The server returned an RFC 9457 problem+json response: {errorCode}.")

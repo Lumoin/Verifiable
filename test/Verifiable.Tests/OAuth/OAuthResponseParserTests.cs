@@ -392,9 +392,15 @@ internal sealed class OAuthResponseParsersTests
     /// </summary>
     /// <param name="body">The response body.</param>
     [TestMethod]
-    [DataRow(/*lang=json,strict*/ """{"ext":{"access_token":"nested-access-token","token_type":"Bearer","expires_in":3600}}""", DisplayName = "A token response inside an extension object")]
-    [DataRow(/*lang=json,strict*/ """{"ext":{"error":"invalid_grant","error_description":"nested"}}""", DisplayName = "An error inside an extension object")]
-    [DataRow(/*lang=json,strict*/ """{"ext":[{"access_token":"nested-access-token","token_type":"Bearer"}]}""", DisplayName = "A token response inside an extension array")]
+    [DataRow(
+        /*lang=json,strict*/ """{"ext":{"access_token":"nested-access-token","token_type":"Bearer","expires_in":3600}}""",
+        DisplayName = "A token response inside an extension object")]
+    [DataRow(
+        /*lang=json,strict*/ """{"ext":{"error":"invalid_grant","error_description":"nested"}}""",
+        DisplayName = "An error inside an extension object")]
+    [DataRow(
+        /*lang=json,strict*/ """{"ext":[{"access_token":"nested-access-token","token_type":"Bearer"}]}""",
+        DisplayName = "A token response inside an extension array")]
     public void ParseTokenResponseReadsNoParameterANestedValueCarries(string body)
     {
         var result = OAuthResponseParsers.ParseTokenResponse(Respond(body), DateTimeOffset.UnixEpoch);
@@ -423,7 +429,7 @@ internal sealed class OAuthResponseParsersTests
 
         Assert.IsTrue(result.IsSuccess, $"The top-level response is read; refused by {(result.IsSuccess ? null : result.Error.Support.Summary)}.");
         Assert.AreEqual("top-access-token", result.Value.AccessToken);
-        Assert.AreEqual("Bearer", result.Value.TokenType);
+        Assert.AreEqual(WellKnownAuthenticationSchemes.Bearer, result.Value.TokenType);
         Assert.AreEqual("top-refresh-token", result.Value.RefreshToken);
         Assert.AreEqual("top-id-token", result.Value.IdToken);
         Assert.AreEqual(WellKnownTokenTypeIdentifiers.IdJag, result.Value.IssuedTokenType);
@@ -446,7 +452,7 @@ internal sealed class OAuthResponseParsersTests
 
         Assert.IsTrue(result.IsSuccess, $"The escaped names are the parameters' names; refused by {(result.IsSuccess ? null : result.Error.Support.Summary)}.");
         Assert.AreEqual("access/token.one", result.Value.AccessToken, "The access token is its decoded text.");
-        Assert.AreEqual("Bearer", result.Value.TokenType);
+        Assert.AreEqual(WellKnownAuthenticationSchemes.Bearer, result.Value.TokenType);
         Assert.AreEqual("head.body.sig", result.Value.IdToken, "The ID Token is its decoded text.");
         Assert.AreEqual(@"refresh\u002e", result.Value.RefreshToken, "An escaped backslash is decoded once, so the escape it begins is never decoded again.");
     }
@@ -459,11 +465,17 @@ internal sealed class OAuthResponseParsersTests
     /// </summary>
     /// <param name="body">The response body.</param>
     [TestMethod]
-    [DataRow(/*lang=json*/ """{"access_token":"first","access_token":"second","token_type":"Bearer"}""", DisplayName = "An access_token named twice")]
-    [DataRow(/*lang=json*/ """{"access_token":"at","token_type":"Bearer","ext":{"note":"one","note":"two"}}""", DisplayName = "A name repeated in an extension object")]
+    [DataRow(
+        /*lang=json*/ """{"access_token":"first","access_token":"second","token_type":"Bearer"}""",
+        DisplayName = "An access_token named twice")]
+    [DataRow(
+        /*lang=json*/ """{"access_token":"at","token_type":"Bearer","ext":{"note":"one","note":"two"}}""",
+        DisplayName = "A name repeated in an extension object")]
     [DataRow(/*lang=json,strict*/ """["access_token","at","token_type","Bearer"]""", DisplayName = "An array")]
     [DataRow("{\"access_token\":\"at\",\"token_type\":\"Bearer\"", DisplayName = "An object never closed")]
-    [DataRow(/*lang=json*/ """{"access_token":"\uD800","token_type":"Bearer"}""", DisplayName = "An access_token naming an unpaired surrogate")]
+    [DataRow(
+        /*lang=json*/ """{"access_token":"\uD800","token_type":"Bearer"}""",
+        DisplayName = "An access_token naming an unpaired surrogate")]
     public void ParseTokenResponseRefusesABodyNamingNoOneAccessToken(string body)
     {
         var result = OAuthResponseParsers.ParseTokenResponse(Respond(body), DateTimeOffset.UnixEpoch);
@@ -492,6 +504,58 @@ internal sealed class OAuthResponseParsersTests
 
         Assert.IsTrue(escaped.IsSuccess, "The escaped top-level request_uri is read.");
         Assert.AreEqual("urn:ietf:params:oauth:request_uri:top", escaped.Value.RequestUri.OriginalString, "The top-level value is read, decoded.");
+    }
+
+
+    /// <summary>
+    /// A problem details response states its problem through the members of the one JSON object its body is (RFC 9457
+    /// section 3): a token endpoint's body under the problem details media type that is an array of problems, an object never
+    /// closed or an object naming its <c>type</c> twice (RFC 8259 section 4) states no problem one way, so it is refused as
+    /// malformed, never read as the problem the media type names.
+    /// </summary>
+    /// <param name="body">The response body.</param>
+    [TestMethod]
+    [DataRow(
+        /*lang=json,strict*/ """[{"type":"invalid_grant","detail":"an array of problems"}]""",
+        DisplayName = "A token answer that is an array of problems")]
+    [DataRow("{\"type\":\"invalid_grant\",\"detail\":\"never closed\"", DisplayName = "A token answer never closed")]
+    [DataRow(
+        /*lang=json*/ """{"type":"invalid_grant","type":"invalid_client","detail":"two types"}""",
+        DisplayName = "A token answer naming its type twice")]
+    public void ATokenProblemDetailsBodyThatIsNoOneObjectIsRefusedAsMalformed(string body)
+    {
+        var result = OAuthResponseParsers.ParseTokenResponse(
+            Respond(body, statusCode: 400, contentType: WellKnownMediaTypes.Application.ProblemJson),
+            DateTimeOffset.UnixEpoch);
+
+        Assert.IsFalse(result.IsSuccess, "The token endpoint's answer is refused.");
+        _ = Assert.IsInstanceOfType<OAuthMalformedResponse>(result.Error, "The token endpoint's answer names no problem.");
+    }
+
+
+    /// <summary>
+    /// The pushed authorization endpoint's problem details response is read as the token endpoint's is (RFC 9457 section 3,
+    /// RFC 9126 section 2.3): a body under the problem details media type that is an array of problems, an object never closed
+    /// or an object naming its <c>type</c> twice is refused as malformed, never read as the problem the media type names.
+    /// </summary>
+    /// <param name="body">The response body.</param>
+    [TestMethod]
+    [DataRow(
+        /*lang=json,strict*/ """[{"type":"invalid_request","detail":"an array of problems"}]""",
+        DisplayName = "A pushed authorization answer that is an array of problems")]
+    [DataRow(
+        "{\"type\":\"invalid_request\",\"detail\":\"never closed\"",
+        DisplayName = "A pushed authorization answer never closed")]
+    [DataRow(
+        /*lang=json*/ """{"type":"invalid_request","type":"invalid_client","detail":"two types"}""",
+        DisplayName = "A pushed authorization answer naming its type twice")]
+    public void APushedAuthorizationProblemDetailsBodyThatIsNoOneObjectIsRefusedAsMalformed(string body)
+    {
+        var result = OAuthResponseParsers.ParseParResponse(
+            Respond(body, statusCode: 400, contentType: WellKnownMediaTypes.Application.ProblemJson));
+
+        Assert.IsFalse(result.IsSuccess, "The pushed authorization endpoint's answer is refused.");
+        _ = Assert.IsInstanceOfType<OAuthMalformedResponse>(result.Error, "The pushed authorization endpoint's answer names no problem.");
     }
 
 
