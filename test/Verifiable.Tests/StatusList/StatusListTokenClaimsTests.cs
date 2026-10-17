@@ -258,30 +258,48 @@ internal sealed class StatusListTokenClaimsTests
 
 
     /// <summary>
-    /// A JWT NumericDate is "a JSON numeric value representing the number of seconds", <c>ttl</c>
-    /// "MUST be a positive number", and <c>bits</c> is a "JSON Integer" — none of them admits a
-    /// fractional value, and truncating one would silently move an instant or a cache boundary. Each
-    /// must therefore be refused, with the reported reason naming the claim.
+    /// <c>ttl</c> "MUST be a positive number" of seconds a cache holds the token, read as the whole
+    /// number this library caches by, so a fractional one is refused rather than truncated, with the
+    /// reported reason naming the claim.
     /// See <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-21#section-5.1">Token Status List, Section 5.1</see>.
     /// </summary>
-    /// <param name="claimName">The claim carrying the fractional value.</param>
     [TestMethod]
-    [DataRow("iat")]
-    [DataRow("exp")]
-    [DataRow("ttl")]
-    public void TryFromPayloadRefusesAFractionalValueForANumericClaim(string claimName)
+    public void TryFromPayloadRefusesAFractionalTimeToLive()
     {
-        JwtPayload payload = HandBuiltClaimsSet();
+        var payload = HandBuiltClaimsSet();
         payload["exp"] = SmallExpirationSeconds;
-        payload["ttl"] = SmallTimeToLiveSeconds;
-        payload[claimName] = 10.5m;
+        payload["ttl"] = 10.5m;
 
-        bool isRead = StatusListTokenClaims.TryFromPayload(payload, TestSetup.Base64UrlDecoder, Pool, out StatusListToken? decoded, out string? reason, out _);
+        var isRead = StatusListTokenClaims.TryFromPayload(payload, TestSetup.Base64UrlDecoder, Pool, out var decoded, out var reason, out _);
 
-        Assert.IsFalse(isRead, $"A fractional '{claimName}' is not the whole number the claim is defined as.");
+        Assert.IsFalse(isRead, "A fractional 'ttl' is not the whole number of seconds this library caches by.");
         Assert.IsNull(decoded, "A refused claims set yields no token.");
         Assert.IsNotNull(reason);
-        Assert.Contains(claimName, reason, StringComparison.Ordinal, "The reported reason must name the claim that was malformed.");
+        Assert.Contains("ttl", reason, StringComparison.Ordinal, "The reported reason must name the claim that was malformed.");
+    }
+
+
+    /// <summary>
+    /// The <c>iat</c> and <c>exp</c> are JWT NumericDates, which RFC 7519 Section 2 defines with "non-integer values can be
+    /// represented": each written with a fraction is read as the instant it names, to the tick, never refused and never
+    /// truncated to its whole second.
+    /// See <see href="https://www.rfc-editor.org/rfc/rfc7519#section-2">RFC 7519 Section 2</see>.
+    /// </summary>
+    [TestMethod]
+    public void TryFromPayloadReadsAFractionalNumericDateToTheTick()
+    {
+        var payload = HandBuiltClaimsSet();
+        payload["iat"] = SmallIssuedAtSeconds + 0.25m;
+        payload["exp"] = SmallExpirationSeconds + 0.75m;
+
+        var isRead = StatusListTokenClaims.TryFromPayload(payload, TestSetup.Base64UrlDecoder, Pool, out var decoded, out var reason, out _);
+
+        Assert.IsTrue(isRead, $"A fractional NumericDate is read: {reason}");
+        Assert.IsNotNull(decoded);
+        using var decodedList = decoded.StatusList;
+
+        Assert.AreEqual(DateTimeOffset.FromUnixTimeSeconds(SmallIssuedAtSeconds).AddMilliseconds(250), decoded.IssuedAt, "'iat' is the instant written.");
+        Assert.AreEqual(DateTimeOffset.FromUnixTimeSeconds(SmallExpirationSeconds).AddMilliseconds(750), decoded.ExpirationTime, "'exp' is the instant written.");
     }
 
 

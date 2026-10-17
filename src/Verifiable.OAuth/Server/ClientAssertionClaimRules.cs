@@ -170,27 +170,11 @@ public sealed record ClientAssertionClaimsJudgement
 /// The rules are judged in that order and the first broken is named.
 /// </summary>
 /// <remarks>
-/// A NumericDate is a JSON number of seconds since the epoch, which may carry a fraction (RFC 7519 Section 2); a string of digits is
-/// none. A fraction names its own instant, kept to the tick a <see cref="DateTimeOffset"/> holds, so a date a fraction past a bound
-/// is past it; only a remainder finer than a tick is taken, on the side that never widens the window the claim bounds - an
-/// <c>iat</c> and an <c>nbf</c> up, an <c>exp</c> down - and a count naming an instant no <see cref="DateTimeOffset"/> represents is
-/// none.
+/// A NumericDate is read by the library's one reading of the type (<see cref="JwtNumericDates.InstantOf"/>): a fraction names its
+/// own instant to the tick, so a date a fraction past a bound is past it, and a string of digits is none.
 /// </remarks>
 public static class ClientAssertionClaimRules
 {
-    /// <summary>The earliest whole second a <see cref="DateTimeOffset"/> represents, as seconds since the epoch.</summary>
-    private const long EarliestRepresentableSeconds = -62_135_596_800;
-
-    /// <summary>The latest whole second a <see cref="DateTimeOffset"/> represents, as seconds since the epoch.</summary>
-    private const long LatestRepresentableSeconds = 253_402_300_799;
-
-    /// <summary>The earliest instant a <see cref="DateTimeOffset"/> represents, as ticks since the epoch.</summary>
-    private const long EarliestRepresentableTicks = EarliestRepresentableSeconds * TimeSpan.TicksPerSecond;
-
-    /// <summary>The latest instant a <see cref="DateTimeOffset"/> represents, as ticks since the epoch: the last tick of its latest whole second.</summary>
-    private const long LatestRepresentableTicks = ((LatestRepresentableSeconds + 1) * TimeSpan.TicksPerSecond) - 1;
-
-
     /// <summary>
     /// The JWT Claims Set of a client assertion whose signature or MAC verified, read as RFC 7519 Section 7.2 reads one once the
     /// JWS validated: the payload segment base64url-decoded, exactly one JSON object naming each member once (step 10: "a
@@ -273,7 +257,7 @@ public static class ClientAssertionClaimRules
             return ClientAssertionClaimsJudgement.Refused(ClientAssertionClaimRefusal.ExpiryNotPresented);
         }
 
-        if(NumericDateOf(WellKnownJwtClaimNames.Exp, expiryValue) is not DateTimeOffset expiry)
+        if(JwtNumericDates.InstantOf(WellKnownJwtClaimNames.Exp, expiryValue) is not DateTimeOffset expiry)
         {
             return ClientAssertionClaimsJudgement.Refused(ClientAssertionClaimRefusal.ExpiryNotANumericDate);
         }
@@ -282,7 +266,7 @@ public static class ClientAssertionClaimRules
         //clock, no further ahead than the tolerance.
         if(claims.TryGetValue(WellKnownJwtClaimNames.Iat, out var issuedAtValue))
         {
-            if(NumericDateOf(WellKnownJwtClaimNames.Iat, issuedAtValue) is not DateTimeOffset issuedAt)
+            if(JwtNumericDates.InstantOf(WellKnownJwtClaimNames.Iat, issuedAtValue) is not DateTimeOffset issuedAt)
             {
                 return ClientAssertionClaimsJudgement.Refused(ClientAssertionClaimRefusal.IssuedAtNotANumericDate);
             }
@@ -302,7 +286,7 @@ public static class ClientAssertionClaimRules
         //lies before exp and, by this server's clock, is reached within the tolerance.
         if(claims.TryGetValue(WellKnownJwtClaimNames.Nbf, out var notBeforeValue))
         {
-            if(NumericDateOf(WellKnownJwtClaimNames.Nbf, notBeforeValue) is not DateTimeOffset notBefore)
+            if(JwtNumericDates.InstantOf(WellKnownJwtClaimNames.Nbf, notBeforeValue) is not DateTimeOffset notBefore)
             {
                 return ClientAssertionClaimsJudgement.Refused(ClientAssertionClaimRefusal.NotBeforeNotANumericDate);
             }
@@ -423,40 +407,6 @@ public static class ClientAssertionClaimRules
 
 
     /// <summary>
-    /// The instant a NumericDate claim names, its fraction of a second kept to the tick a <see cref="DateTimeOffset"/> holds, and a
-    /// remainder finer than a tick taken on the side that never widens the window the claim bounds - up for <c>iat</c> and
-    /// <c>nbf</c>, which bound how early an assertion is accepted, down for <c>exp</c> and every other claim - or
-    /// <see langword="null"/> when the value is no JSON number or names an instant no <see cref="DateTimeOffset"/> represents.
-    /// </summary>
-    /// <param name="claimName">The claim the value was read from, which decides the side.</param>
-    /// <param name="value">The claim's value as the claims set holds it.</param>
-    /// <returns>The instant, or <see langword="null"/>.</returns>
-    public static DateTimeOffset? NumericDateOf(string claimName, object? value)
-    {
-        ArgumentNullException.ThrowIfNull(claimName);
-
-        var roundsUp = WellKnownJwtClaimNames.IsNbf(claimName) || WellKnownJwtClaimNames.IsIat(claimName);
-        var ticks = value switch
-        {
-            long seconds => TicksOfWholeSeconds(seconds),
-            int seconds => TicksOfWholeSeconds(seconds),
-            short seconds => TicksOfWholeSeconds(seconds),
-            byte seconds => TicksOfWholeSeconds(seconds),
-            uint seconds => TicksOfWholeSeconds(seconds),
-            ulong seconds when seconds <= long.MaxValue => TicksOfWholeSeconds((long)seconds),
-            decimal seconds => TicksOf(seconds, roundsUp),
-            double seconds => TicksOf(seconds, roundsUp),
-            float seconds => TicksOf(seconds, roundsUp),
-            _ => null
-        };
-
-        return ticks is long sinceEpoch && sinceEpoch is >= EarliestRepresentableTicks and <= LatestRepresentableTicks
-            ? new DateTimeOffset(DateTimeOffset.UnixEpoch.Ticks + sinceEpoch, TimeSpan.Zero)
-            : null;
-    }
-
-
-    /// <summary>
     /// The one contract of a client assertion's identifier every reader of an assertion holds it to: its <c>jti</c> is a string
     /// holding a character other than white space. RFC 7519 Section 4.1.7 has the value "a case-sensitive string" a replay guard
     /// keys by; a string of white space alone names nothing an issuer told apart from another, so the judgement refuses it
@@ -513,55 +463,5 @@ public static class ClientAssertionClaimRules
         }
 
         return sawAny;
-    }
-
-
-    /// <summary>The ticks since the epoch a whole count of seconds names, or <see langword="null"/> outside the representable range.</summary>
-    /// <param name="seconds">The count.</param>
-    /// <returns>The ticks, or <see langword="null"/>.</returns>
-    private static long? TicksOfWholeSeconds(long seconds) =>
-        seconds is >= EarliestRepresentableSeconds and <= LatestRepresentableSeconds ? seconds * TimeSpan.TicksPerSecond : null;
-
-
-    /// <summary>
-    /// The ticks since the epoch a decimal count of seconds names, exactly where it falls on a tick and on the side given where it
-    /// falls between two, or <see langword="null"/> outside the representable range.
-    /// </summary>
-    /// <param name="seconds">The count.</param>
-    /// <param name="roundsUp">Whether a remainder finer than a tick is taken up rather than down.</param>
-    /// <returns>The ticks, or <see langword="null"/>.</returns>
-    private static long? TicksOf(decimal seconds, bool roundsUp)
-    {
-        if(seconds is < EarliestRepresentableSeconds or > LatestRepresentableSeconds + 1)
-        {
-            return null;
-        }
-
-        var ticks = seconds * TimeSpan.TicksPerSecond;
-
-        return (long)(roundsUp ? decimal.Ceiling(ticks) : decimal.Floor(ticks));
-    }
-
-
-    /// <summary>
-    /// The ticks since the epoch a floating count of seconds names, its whole seconds kept exactly and its fraction to the tick on
-    /// the side given, or <see langword="null"/> for no finite count within the representable range.
-    /// </summary>
-    /// <param name="seconds">The count.</param>
-    /// <param name="roundsUp">Whether a remainder finer than a tick is taken up rather than down.</param>
-    /// <returns>The ticks, or <see langword="null"/>.</returns>
-    private static long? TicksOf(double seconds, bool roundsUp)
-    {
-        if(!double.IsFinite(seconds) || seconds is < EarliestRepresentableSeconds or > LatestRepresentableSeconds + 1)
-        {
-            return null;
-        }
-
-        //A double holds every whole second of the range exactly, and the count less its whole seconds is exact too, so only the
-        //fraction's ticks are rounded.
-        var whole = Math.Floor(seconds);
-        var fractionTicks = (seconds - whole) * TimeSpan.TicksPerSecond;
-
-        return ((long)whole * TimeSpan.TicksPerSecond) + (long)(roundsUp ? Math.Ceiling(fractionTicks) : Math.Floor(fractionTicks));
     }
 }

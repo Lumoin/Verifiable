@@ -226,4 +226,34 @@ internal sealed class Rfc7523AssertionValidationTests
         Assert.IsTrue(result.IsValid, result.FailureDescription);
         Assert.IsNull(result.IssuedAt);
     }
+
+    /// <summary>
+    /// RFC 7519 Section 2: an assertion's NumericDates may carry a fraction, each judged to the tick under the clock-skew
+    /// tolerance (§3 items 4 and 5). An <c>nbf</c> a quarter of a second past the present plus the tolerance is not yet valid,
+    /// where a reading truncated to its whole second took it to the bound and served it; an <c>exp</c> a quarter of a second
+    /// after the present less the tolerance is still live, where the truncated reading had it expired; and the dates surfaced
+    /// are the instants written.
+    /// </summary>
+    [TestMethod]
+    public void FractionalDatesAreJudgedToTheTickAtTheTolerance()
+    {
+        var second = Now.ToUnixTimeSeconds();
+        var toleranceSeconds = (long)Skew.TotalSeconds;
+
+        var notYetValid = ValidPayload();
+        notYetValid[WellKnownJwtClaimNames.Nbf] = second + toleranceSeconds + 0.25m;
+
+        Assert.AreEqual(Rfc7523AssertionValidationFailureReason.NotYetValid, Validate(notYetValid).FailureReason,
+            "An nbf a quarter of a second past the tolerance is not yet valid.");
+
+        var live = ValidPayload();
+        live[WellKnownJwtClaimNames.Iat] = second - toleranceSeconds - 1.5m;
+        live[WellKnownJwtClaimNames.Exp] = second - toleranceSeconds + 0.25m;
+
+        var result = Validate(live);
+
+        Assert.IsTrue(result.IsValid, result.FailureDescription);
+        Assert.AreEqual(Now.AddSeconds(-toleranceSeconds).AddMilliseconds(250), result.Expiration, "The exp is the instant written.");
+        Assert.AreEqual(Now.AddSeconds(-toleranceSeconds).AddMilliseconds(-1500), result.IssuedAt, "The iat is the instant written.");
+    }
 }

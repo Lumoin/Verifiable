@@ -47,7 +47,9 @@ internal sealed class ResourceServerEndToEndTests
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(keys.PublicKey),
             verifySignature: DpopTestSupport.Es256Verification,
-            timeProvider: time);
+            timeProvider: time,
+            requiredScope: null,
+            advertisedAuthorizationServers: null);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
@@ -104,7 +106,9 @@ internal sealed class ResourceServerEndToEndTests
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(keys.PublicKey, recordedUsages),
             verifySignature: DpopTestSupport.Es256Verification,
-            timeProvider: time);
+            timeProvider: time,
+            requiredScope: null,
+            advertisedAuthorizationServers: null);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
@@ -138,7 +142,9 @@ internal sealed class ResourceServerEndToEndTests
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(keys.PublicKey),
             verifySignature: DpopTestSupport.Es256Verification,
-            timeProvider: time);
+            timeProvider: time,
+            requiredScope: null,
+            advertisedAuthorizationServers: null);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         using HttpClient client = LoopbackTls.CreatePinnedHttpClient(rs.HttpCertificate!, rs.HttpBaseAddress);
@@ -164,7 +170,9 @@ internal sealed class ResourceServerEndToEndTests
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(keys.PublicKey),
             verifySignature: DpopTestSupport.Es256Verification,
-            timeProvider: time);
+            timeProvider: time,
+            requiredScope: null,
+            advertisedAuthorizationServers: null);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         //Token issued for the wrong audience; RS expects "test-resource-server".
@@ -200,7 +208,9 @@ internal sealed class ResourceServerEndToEndTests
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(keys.PublicKey),
             verifySignature: DpopTestSupport.Es256Verification,
-            timeProvider: time);
+            timeProvider: time,
+            requiredScope: null,
+            advertisedAuthorizationServers: null);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         //Token carries a cnf.jkt binding — must be presented with DPoP scheme.
@@ -255,7 +265,9 @@ internal sealed class ResourceServerEndToEndTests
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(asKeys.PublicKey),
             verifySignature: DpopTestSupport.Es256Verification,
-            timeProvider: time);
+            timeProvider: time,
+            requiredScope: null,
+            advertisedAuthorizationServers: null);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         string thumbprint = dpopKey.GetThumbprint(
@@ -318,7 +330,9 @@ internal sealed class ResourceServerEndToEndTests
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(asKeys.PublicKey),
             verifySignature: DpopTestSupport.Es256Verification,
-            timeProvider: time);
+            timeProvider: time,
+            requiredScope: null,
+            advertisedAuthorizationServers: null);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         string thumbprint = dpopKey.GetThumbprint(
@@ -388,7 +402,9 @@ internal sealed class ResourceServerEndToEndTests
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(keys.PublicKey),
             verifySignature: DpopTestSupport.Es256Verification,
-            timeProvider: time);
+            timeProvider: time,
+            requiredScope: null,
+            advertisedAuthorizationServers: null);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
@@ -427,7 +443,9 @@ internal sealed class ResourceServerEndToEndTests
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(keys.PublicKey),
             verifySignature: DpopTestSupport.Es256Verification,
-            timeProvider: time);
+            timeProvider: time,
+            requiredScope: null,
+            advertisedAuthorizationServers: null);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
@@ -472,7 +490,9 @@ internal sealed class ResourceServerEndToEndTests
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(keys.PublicKey),
             verifySignature: DpopTestSupport.Es256Verification,
-            timeProvider: time);
+            timeProvider: time,
+            requiredScope: null,
+            advertisedAuthorizationServers: null);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
@@ -644,7 +664,9 @@ internal sealed class ResourceServerEndToEndTests
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(keys.PublicKey),
             verifySignature: DpopTestSupport.Es256Verification,
-            timeProvider: time);
+            timeProvider: time,
+            requiredScope: null,
+            advertisedAuthorizationServers: null);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(

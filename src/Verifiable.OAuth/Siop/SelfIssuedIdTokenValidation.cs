@@ -90,10 +90,8 @@ public static class SelfIssuedIdTokenValidation
         string? audString = null;
         List<string>? audArray = null;
         string? nonce = null;
-        long expSeconds = 0;
-        bool hasExp = false;
-        long iatSeconds = 0;
-        bool hasIat = false;
+        DateTimeOffset? expiresAt = null;
+        DateTimeOffset? issuedAt = null;
         Dictionary<string, object>? subJwk = null;
         bool isStructurallyValid = false;
 
@@ -127,8 +125,15 @@ public static class SelfIssuedIdTokenValidation
                 audString = JwkJsonReader.ExtractStringValue(payload, WellKnownJwtClaimNames.AudUtf8);
                 audArray = JwkJsonReader.ExtractStringArrayProperty(payload, WellKnownJwtClaimNames.AudUtf8);
                 nonce = JwkJsonReader.ExtractStringValue(payload, WellKnownJwtClaimNames.NonceUtf8);
-                hasExp = JwkJsonReader.TryExtractLongValue(payload, WellKnownJwtClaimNames.ExpUtf8, out expSeconds);
-                hasIat = JwkJsonReader.TryExtractLongValue(payload, WellKnownJwtClaimNames.IatUtf8, out iatSeconds);
+
+                //RFC 7519 Section 2: exp and iat are NumericDates, a fraction read to the tick.
+                expiresAt = JwkJsonReader.TryExtractNumericDate(payload, WellKnownJwtClaimNames.ExpUtf8, WellKnownJwtClaimNames.Exp, out var expiry)
+                    ? expiry
+                    : null;
+                issuedAt = JwkJsonReader.TryExtractNumericDate(payload, WellKnownJwtClaimNames.IatUtf8, WellKnownJwtClaimNames.Iat, out var issued)
+                    ? issued
+                    : null;
+
                 subJwk = JwkJsonReader.ExtractObjectProperties(payload, WellKnownJwtClaimNames.SubJwkUtf8);
 
                 isStructurallyValid = true;
@@ -138,9 +143,6 @@ public static class SelfIssuedIdTokenValidation
                 isStructurallyValid = false;
             }
         }
-
-        DateTimeOffset? expiresAt = hasExp ? DateTimeOffset.FromUnixTimeSeconds(expSeconds) : null;
-        DateTimeOffset? issuedAt = hasIat ? DateTimeOffset.FromUnixTimeSeconds(iatSeconds) : null;
 
         //§11.1 step 1: the token is self-issued if and only if iss equals sub. An
         //attester-signed token is the caller's OpenID Connect Core path; stop here.

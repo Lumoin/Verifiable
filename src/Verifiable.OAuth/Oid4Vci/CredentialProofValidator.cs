@@ -500,7 +500,7 @@ public static class CredentialProofValidator
         Dictionary<string, object>? jwkMembers;
         string? audience;
         bool hasIat;
-        long iatSeconds;
+        DateTimeOffset issuedAt;
         string? nonce;
         try
         {
@@ -531,7 +531,7 @@ public static class CredentialProofValidator
                 : null;
 
             audience = JwkJsonReader.ExtractStringValue(payload, WellKnownJwtClaimNames.AudUtf8);
-            hasIat = JwkJsonReader.TryExtractLongValue(payload, WellKnownJwtClaimNames.IatUtf8, out iatSeconds);
+            hasIat = JwkJsonReader.TryExtractNumericDate(payload, WellKnownJwtClaimNames.IatUtf8, WellKnownJwtClaimNames.Iat, out issuedAt);
             nonce = JwkJsonReader.ExtractStringValue(payload, WellKnownJwtClaimNames.NonceUtf8);
         }
         catch
@@ -626,13 +626,13 @@ public static class CredentialProofValidator
         }
 
         //§F.1: "iat: REQUIRED (number)"; §F.4: "the creation time of the JWT ... is within an
-        //acceptable window". Reuses the shared temporal atoms — no re-rolled arithmetic.
+        //acceptable window". Reuses the shared temporal atoms — no re-rolled arithmetic. RFC 7519 Section 2: the iat is a NumericDate,
+        //a fraction read to the tick.
         if(!hasIat)
         {
             return CredentialProofValidationResult.Failure(CredentialProofValidationFailureReason.IatOutOfWindow);
         }
 
-        DateTimeOffset issuedAt = DateTimeOffset.FromUnixTimeSeconds(iatSeconds);
         DateTimeOffset now = timeProvider.GetUtcNow();
         if(!JwtTemporalChecks.IsNotStale(issuedAt, now, iatSkew)
             || !JwtTemporalChecks.IsNotInFuture(issuedAt, now, iatSkew))

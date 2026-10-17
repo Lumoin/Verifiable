@@ -40,6 +40,13 @@ namespace Verifiable.JCose;
 /// not-before is reduced by skew. Pass <see cref="TimeSpan.Zero"/> for strict
 /// comparison.
 /// </para>
+/// <para>
+/// A NumericDate claim is read by the library's one reading of the type
+/// (<see cref="JwtNumericDates.InstantOf"/>), a fraction of a second kept to the
+/// tick. An absent claim sets no bound; a claim present as no NumericDate - a
+/// string of digits among them - is a bound that cannot be kept, so the time-bound
+/// check it would answer reports the failure.
+/// </para>
 /// </remarks>
 [SuppressMessage("Design", "CA1034:Nested types should not be visible",
     Justification = "The analyzer is not yet up to date with C# 14 extension syntax.")]
@@ -359,12 +366,12 @@ public static class JwtChecks
         DateTimeOffset now,
         TimeSpan clockSkew)
     {
-        if(!TryGetUnixTime(claims, WellKnownJwtClaimNames.Exp, out long expSeconds))
+        return ReadInstant(claims, WellKnownJwtClaimNames.Exp, out DateTimeOffset expiry) switch
         {
-            return false;
-        }
-
-        return now > DateTimeOffset.FromUnixTimeSeconds(expSeconds) + clockSkew;
+            ClaimInstantReading.Absent => false,
+            ClaimInstantReading.Read => now > expiry + clockSkew,
+            _ => true
+        };
     }
 
     private static bool IsNotYetValidCore(
@@ -372,12 +379,12 @@ public static class JwtChecks
         DateTimeOffset now,
         TimeSpan clockSkew)
     {
-        if(!TryGetUnixTime(claims, WellKnownJwtClaimNames.Nbf, out long nbfSeconds))
+        return ReadInstant(claims, WellKnownJwtClaimNames.Nbf, out DateTimeOffset notBefore) switch
         {
-            return false;
-        }
-
-        return now < DateTimeOffset.FromUnixTimeSeconds(nbfSeconds) - clockSkew;
+            ClaimInstantReading.Absent => false,
+            ClaimInstantReading.Read => now < notBefore - clockSkew,
+            _ => true
+        };
     }
 
     private static bool IsIssuedInFutureCore(
@@ -385,62 +392,97 @@ public static class JwtChecks
         DateTimeOffset now,
         TimeSpan clockSkew)
     {
-        if(!TryGetUnixTime(claims, WellKnownJwtClaimNames.Iat, out long iatSeconds))
+        return ReadInstant(claims, WellKnownJwtClaimNames.Iat, out DateTimeOffset issuedAt) switch
         {
-            return false;
-        }
-
-        return DateTimeOffset.FromUnixTimeSeconds(iatSeconds) > now + clockSkew;
+            ClaimInstantReading.Absent => false,
+            ClaimInstantReading.Read => issuedAt > now + clockSkew,
+            _ => true
+        };
     }
 
     private static bool LifetimeExceedsCore(
         IReadOnlyDictionary<string, object> claims,
         TimeSpan maximum)
     {
-        if(!TryGetUnixTime(claims, WellKnownJwtClaimNames.Exp, out long expSeconds))
+        var expiryReading = ReadInstant(claims, WellKnownJwtClaimNames.Exp, out DateTimeOffset expiry);
+
+        if(expiryReading == ClaimInstantReading.Absent)
         {
             return false;
         }
 
         //Prefer nbf over iat as the validity window start.
-        if(!TryGetUnixTime(claims, WellKnownJwtClaimNames.Nbf, out long startSeconds)
-            && !TryGetUnixTime(claims, WellKnownJwtClaimNames.Iat, out startSeconds))
+        var startReading = ReadInstant(claims, WellKnownJwtClaimNames.Nbf, out DateTimeOffset start);
+
+        if(startReading == ClaimInstantReading.Absent)
+        {
+            startReading = ReadInstant(claims, WellKnownJwtClaimNames.Iat, out start);
+        }
+
+        if(startReading == ClaimInstantReading.Absent)
         {
             return false;
         }
 
-        return TimeSpan.FromSeconds(expSeconds - startSeconds) > maximum;
+        return expiryReading != ClaimInstantReading.Read
+            || startReading != ClaimInstantReading.Read
+            || expiry - start > maximum;
     }
 
     private static bool IsExpBeforeNbfCore(IReadOnlyDictionary<string, object> claims)
     {
-        if(!TryGetUnixTime(claims, WellKnownJwtClaimNames.Exp, out long expSeconds)
-            || !TryGetUnixTime(claims, WellKnownJwtClaimNames.Nbf, out long nbfSeconds))
+        var expiryReading = ReadInstant(claims, WellKnownJwtClaimNames.Exp, out DateTimeOffset expiry);
+        var notBeforeReading = ReadInstant(claims, WellKnownJwtClaimNames.Nbf, out DateTimeOffset notBefore);
+
+        if(expiryReading == ClaimInstantReading.Absent || notBeforeReading == ClaimInstantReading.Absent)
         {
             return false;
         }
 
-        return expSeconds <= nbfSeconds;
+        return expiryReading != ClaimInstantReading.Read
+            || notBeforeReading != ClaimInstantReading.Read
+            || expiry <= notBefore;
     }
 
-    private static bool TryGetUnixTime(
+    /// <summary>
+    /// Reads a NumericDate claim as the instant it names, a fraction of a second kept to the tick (RFC 7519 Section 2;
+    /// <see cref="JwtNumericDates.InstantOf"/>), so no bound is judged against a value moved to a whole second.
+    /// </summary>
+    /// <param name="claims">The claims set.</param>
+    /// <param name="key">The NumericDate claim to read.</param>
+    /// <param name="instant">The instant the claim names when it is <see cref="ClaimInstantReading.Read"/>.</param>
+    /// <returns>Whether the claim is absent, names an instant, or is present as no NumericDate.</returns>
+    private static ClaimInstantReading ReadInstant(
         IReadOnlyDictionary<string, object> claims,
         string key,
-        out long seconds)
+        out DateTimeOffset instant)
     {
-        seconds = 0;
+        instant = default;
         if(!claims.TryGetValue(key, out object? value))
         {
-            return false;
+            return ClaimInstantReading.Absent;
         }
 
-        return value switch
+        if(JwtNumericDates.InstantOf(key, value) is not DateTimeOffset read)
         {
-            long l => (seconds = l) >= 0,
-            int i => (seconds = i) >= 0,
-            double d => (seconds = (long)d) >= 0,
-            string s => long.TryParse(s, out seconds),
-            _ => false
-        };
+            return ClaimInstantReading.Unreadable;
+        }
+
+        instant = read;
+
+        return ClaimInstantReading.Read;
+    }
+
+    /// <summary>What reading a NumericDate claim found.</summary>
+    private enum ClaimInstantReading
+    {
+        /// <summary>The claim is not present: it sets no bound, and the check it would bound does not fail.</summary>
+        Absent,
+
+        /// <summary>The claim names an instant, which the check judges.</summary>
+        Read,
+
+        /// <summary>The claim is present as no NumericDate - a string of digits among them - so it is a bound that cannot be kept, and the check it bounds fails.</summary>
+        Unreadable
     }
 }

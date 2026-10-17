@@ -216,44 +216,12 @@ public sealed class AuthorizationServerCodecs : WiringComponent
 
 
     /// <summary>
-    /// Deserializes the payload bytes of a compact JWS into a claim
-    /// dictionary. Required when the AS consumes JWTs from the wire.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Wire to the application's chosen JSON library. See
-    /// <see cref="JwtHeaderSerializer"/> for the rationale.
-    /// </para>
-    /// <para>
-    /// Set during construction or on an alteration candidate. A serving setter throws
-    /// <see cref="InvalidOperationException"/> naming this member; use
-    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
-    /// Dispatch retains this operation and its dependencies from admission through completion.
-    /// Delegate targets own synchronization of mutable application state.
-    /// </para>
-    /// </remarks>
-    public JwtPayloadDeserializer? JwtPayloadDeserializer
-    {
-        get;
-        set
-        {
-            lock(MutationLock)
-            {
-                EnsureMutable();
-                field = value;
-            }
-        }
-    }
-
-
-    /// <summary>
-    /// Deserializes the payload bytes of a client assertion (RFC 7523 Section 3) into a claim dictionary, every member as
-    /// written: a NumericDate keeps its fraction (RFC 7519 Section 2: "non-integer values can be represented"). Required. The
-    /// library's one judgement of a client assertion's claims (<see cref="ClientAssertionClaimRules"/>) reads a NumericDate to
-    /// the tick and judges its own tolerance, so a codec that moved a fraction to a whole second before the judgement - as one
-    /// wired for <see cref="JwtPayloadDeserializer"/>'s whole-second readers may - would accept an <c>iat</c> a fraction of a
-    /// second past the tolerance; the validator of a published key set
-    /// (<see cref="PrivateKeyJwtClientAuthentication"/>) reads a client assertion's claims set through this codec alone.
+    /// Deserializes the payload bytes of a compact JWS into a claim dictionary, every member as written. Required when the AS
+    /// consumes JWTs from the wire. A NumericDate keeps its fraction (RFC 7519 Section 2: "non-integer values can be
+    /// represented"): every reader of the claims sets parsed here - a client assertion's, a request object's, a bearer access
+    /// token's and an end-session <c>id_token_hint</c>'s - reads it to the tick (<see cref="JwtNumericDates.InstantOf"/>) and
+    /// judges it under its own tolerance, so a codec that moved a fraction to a whole second first would distort the window the
+    /// claim bounds, an <c>iat</c> taken down to the tolerance from a fraction past it among them.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -268,7 +236,7 @@ public sealed class AuthorizationServerCodecs : WiringComponent
     /// Delegate targets own synchronization of mutable application state.
     /// </para>
     /// </remarks>
-    public JwtPayloadDeserializer? ClientAssertionPayloadDeserializer
+    public JwtPayloadDeserializer? JwtPayloadDeserializer
     {
         get;
         set
@@ -357,7 +325,6 @@ public sealed class AuthorizationServerCodecs : WiringComponent
         if(JwtPayloadSerializer is null) { missing.Add(nameof(JwtPayloadSerializer)); }
         if(JwtHeaderDeserializer is null) { missing.Add(nameof(JwtHeaderDeserializer)); }
         if(JwtPayloadDeserializer is null) { missing.Add(nameof(JwtPayloadDeserializer)); }
-        if(ClientAssertionPayloadDeserializer is null) { missing.Add(nameof(ClientAssertionPayloadDeserializer)); }
 
         if(missing.Count > 0)
         {

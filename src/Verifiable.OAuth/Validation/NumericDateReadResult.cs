@@ -17,7 +17,7 @@ internal enum NumericDateReadResult
 
     /// <summary>
     /// The claim is present but is not a number, or names no instant a <see cref="DateTimeOffset"/>
-    /// holds (<see cref="JwtTemporalChecks.TryFromUnixSeconds(double, out DateTimeOffset)"/>).
+    /// holds (<see cref="Verifiable.JCose.JwtNumericDates.InstantOf"/>).
     /// </summary>
     Malformed
 }

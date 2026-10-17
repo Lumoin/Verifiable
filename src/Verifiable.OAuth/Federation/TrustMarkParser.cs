@@ -66,7 +66,7 @@ public static class TrustMarkParser
             return TrustMarkParseResult.Invalid("Trust mark payload is missing the required 'trust_mark_type' claim.");
         }
 
-        if(!TryReadUnixTime(payload, WellKnownJwtClaimNames.Iat, out DateTimeOffset iat))
+        if(!EntityStatementParser.TryReadUnixTime(payload, WellKnownJwtClaimNames.Iat, out DateTimeOffset iat))
         {
             return TrustMarkParseResult.Invalid("Trust mark payload is missing or malformed for the required 'iat' claim.");
         }
@@ -74,7 +74,7 @@ public static class TrustMarkParser
         DateTimeOffset? exp = null;
         if(payload.ContainsKey(WellKnownJwtClaimNames.Exp))
         {
-            if(!TryReadUnixTime(payload, WellKnownJwtClaimNames.Exp, out DateTimeOffset expValue))
+            if(!EntityStatementParser.TryReadUnixTime(payload, WellKnownJwtClaimNames.Exp, out DateTimeOffset expValue))
             {
                 return TrustMarkParseResult.Invalid("Trust mark payload's 'exp' claim is malformed.");
             }
@@ -103,26 +103,5 @@ public static class TrustMarkParser
             MarkId = typeValue,
             Payload = payload,
         });
-    }
-
-
-    //Same NumericDate parser shape as EntityStatementParser; intentionally
-    //duplicated to keep the two parsers independent.
-    private static bool TryReadUnixTime(
-        UnverifiedJwtPayload payload, string claimName, out DateTimeOffset value)
-    {
-        value = default;
-        if(!payload.TryGetValue(claimName, out object? raw))
-        {
-            return false;
-        }
-
-        if(!EntityStatementParser.TryReadIntegralSeconds(raw, out long seconds))
-        {
-            return false;
-        }
-
-        value = DateTimeOffset.FromUnixTimeSeconds(seconds);
-        return true;
     }
 }

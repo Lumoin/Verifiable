@@ -622,6 +622,75 @@ internal sealed class DiscoveryClientAuthenticationAdvertisementTests
 
 
     /// <summary>
+    /// OpenID Connect Discovery 1.0 Section 3 names <c>claims_supported</c> the claims the provider "MAY be able to supply values
+    /// for": where the deployment resolves them per registration (<see cref="AuthorizationServerIntegration.ResolveClaimsSupportedAsync"/>),
+    /// the document is composed with the registration's own list before it is serialized - the resolver is handed the registration
+    /// the document is served for - so the member is never edited after the document is written.
+    /// </summary>
+    [TestMethod]
+    public async Task TheRegistrationsOwnClaimsAreComposedBeforeTheDocumentIsServed()
+    {
+        await using var host = new TestHostShell(TimeProvider);
+        using var material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        var resolvedFor = new List<string>();
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveClaimsSupportedAsync = (registration, context, ct) =>
+            {
+                resolvedFor.Add(registration.ClientId);
+
+                return ValueTask.FromResult<IReadOnlyList<string>>(
+                    [WellKnownJwtClaimNames.Sub, WellKnownJwtClaimNames.AuthTime, WellKnownJwtClaimNames.Email]);
+            };
+        }).ConfigureAwait(false);
+
+        var response = await DispatchDiscoveryAsync(host, material).ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+        Assert.AreSequenceEqual(new List<string> { material.Registration.ClientId }, resolvedFor, "The resolver is handed the registration the document is served for.");
+
+        using var body = JsonDocument.Parse(response.Body);
+
+        Assert.AreSequenceEqual(
+            new List<string> { "sub", "auth_time", "email" },
+            EnumerateStrings(body.RootElement.GetProperty(OpenIdProviderMetadataParameterNames.ClaimsSupported)),
+            "The registration's own claims, not the library's standard list, are advertised.");
+    }
+
+
+    /// <summary>
+    /// A resolver naming no claim, a claim of white space alone, or one claim twice is a composition defect: the document is
+    /// answered as a server error rather than advertise a list that names no distinct claims.
+    /// </summary>
+    /// <param name="claimNames">The claim names the resolver answers, separated by a comma.</param>
+    [TestMethod]
+    [DataRow("")]
+    [DataRow("sub, ")]
+    [DataRow("sub,sub")]
+    public async Task AResolvedClaimListNamingNoDistinctClaimsIsNeverAdvertised(string claimNames)
+    {
+        await using var host = new TestHostShell(TimeProvider);
+        using var material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        IReadOnlyList<string> resolved = claimNames.Length == 0 ? [] : claimNames.Split(',');
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ResolveClaimsSupportedAsync = (registration, context, ct) => ValueTask.FromResult(resolved);
+        }).ConfigureAwait(false);
+
+        var response = await DispatchDiscoveryAsync(host, material).ConfigureAwait(false);
+
+        Assert.AreEqual(500, response.StatusCode, response.Body);
+        Assert.DoesNotContain(OpenIdProviderMetadataParameterNames.ClaimsSupported, response.Body, StringComparison.Ordinal, "No claim list is advertised.");
+    }
+
+
+    /// <summary>
     /// Dispatches a GET to the tenant's discovery endpoint on the hosted test
     /// server, the same recipe <see cref="DiscoveryEndpointTests"/> uses.
     /// </summary>

@@ -131,7 +131,9 @@ public static class StatusListTokenClaims
     /// non-positive or non-integer <c>ttl</c> is likewise a read failure. "The JWT MAY contain other
     /// claims." — every claim not read here is tolerated. Integer-valued claims arrive boxed by the
     /// leaf deserializer as one of the .NET integer families or <see cref="decimal"/> (a too-large or
-    /// fractional JSON number); a fractional value is refused as non-conforming.
+    /// fractional JSON number); a fractional <c>bits</c> or <c>ttl</c> is refused as non-conforming. The
+    /// <c>iat</c> and <c>exp</c> are NumericDates (RFC 7519 Section 2), which may carry a fraction: each is
+    /// read to the tick by the library's one reading of the type (<see cref="JwtNumericDates.InstantOf"/>).
     /// See <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-21#section-5.1">Token Status List, Section 5.1</see>.
     /// </remarks>
     /// <exception cref="ArgumentNullException">
@@ -165,7 +167,8 @@ public static class StatusListTokenClaims
             return false;
         }
 
-        if(!payload.TryGetValue(WellKnownJwtClaimNames.Iat, out object? iatValue) || !TryToInt64(iatValue, out long issuedAtSeconds))
+        if(!payload.TryGetValue(WellKnownJwtClaimNames.Iat, out object? iatValue)
+            || JwtNumericDates.InstantOf(WellKnownJwtClaimNames.Iat, iatValue) is not DateTimeOffset issuedAt)
         {
             defect = $"Missing required claim '{WellKnownJwtClaimNames.Iat}'.";
             defectKind = StatusListTokenClaimsDefect.RequiredClaimMissing;
@@ -216,7 +219,7 @@ public static class StatusListTokenClaims
         DateTimeOffset? expirationTime = null;
         if(payload.TryGetValue(WellKnownJwtClaimNames.Exp, out object? expValue))
         {
-            if(!TryToInt64(expValue, out long expSeconds))
+            if(JwtNumericDates.InstantOf(WellKnownJwtClaimNames.Exp, expValue) is not DateTimeOffset expiry)
             {
                 defect = $"Claim '{WellKnownJwtClaimNames.Exp}' is not a JWT NumericDate value.";
                 defectKind = StatusListTokenClaimsDefect.ClaimValueInvalid;
@@ -224,7 +227,7 @@ public static class StatusListTokenClaims
                 return false;
             }
 
-            expirationTime = DateTimeOffset.FromUnixTimeSeconds(expSeconds);
+            expirationTime = expiry;
         }
 
         long? timeToLive = null;
@@ -273,7 +276,7 @@ public static class StatusListTokenClaims
             statusList.AggregationUri = aggregationUri;
         }
 
-        token = new StatusListToken(subject, DateTimeOffset.FromUnixTimeSeconds(issuedAtSeconds), statusList)
+        token = new StatusListToken(subject, issuedAt, statusList)
         {
             ExpirationTime = expirationTime,
             TimeToLive = timeToLive

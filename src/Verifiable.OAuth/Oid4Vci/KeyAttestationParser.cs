@@ -91,16 +91,25 @@ public static class KeyAttestationParser
             Nonce = JwkJsonReader.ExtractStringValue(body, WellKnownJwtClaimNames.NonceUtf8),
             Certification = JwkJsonReader.ExtractStringValue(
                 body, AttestationProofParameterNames.CertificationUtf8),
-            IssuedAt = ReadInstant(body, WellKnownJwtClaimNames.IatUtf8),
-            ExpiresAt = ReadInstant(body, WellKnownJwtClaimNames.ExpUtf8)
+            IssuedAt = ReadInstant(body, WellKnownJwtClaimNames.IatUtf8, WellKnownJwtClaimNames.Iat),
+            ExpiresAt = ReadInstant(body, WellKnownJwtClaimNames.ExpUtf8, WellKnownJwtClaimNames.Exp)
         };
 
         return true;
     }
 
 
-    private static DateTimeOffset? ReadInstant(ReadOnlySpan<byte> body, ReadOnlySpan<byte> key) =>
-        JwkJsonReader.TryExtractLongValue(body, key, out long seconds)
-            ? DateTimeOffset.FromUnixTimeSeconds(seconds)
+    /// <summary>
+    /// Reads a NumericDate claim of the attestation (RFC 7519 Section 2) as the instant it names, a fraction of a second kept
+    /// to the tick (<see cref="JwkJsonReader.TryExtractNumericDate"/>), or <see langword="null"/> when it is absent or no
+    /// NumericDate.
+    /// </summary>
+    /// <param name="body">The attestation's claims set.</param>
+    /// <param name="key">The claim's name as UTF-8.</param>
+    /// <param name="claimName">The claim's name.</param>
+    /// <returns>The instant, or <see langword="null"/>.</returns>
+    private static DateTimeOffset? ReadInstant(ReadOnlySpan<byte> body, ReadOnlySpan<byte> key, string claimName) =>
+        JwkJsonReader.TryExtractNumericDate(body, key, claimName, out var instant)
+            ? instant
             : null;
 }

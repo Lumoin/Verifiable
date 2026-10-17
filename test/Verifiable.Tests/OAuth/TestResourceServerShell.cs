@@ -52,7 +52,14 @@ internal sealed class TestResourceServerShell : IAsyncDisposable
     private EndpointServer? metadataServer;
     private bool Disposed { get; set; }
 
+    /// <summary>The resource server integration the shell's application validates presented tokens through.</summary>
     public ResourceServerIntegration Integration { get; }
+
+    /// <summary>
+    /// The verification a presented token's signature is checked with, bound to the one algorithm it performs
+    /// (<see cref="JwsAlgorithmVerification"/>), so a token whose header names another algorithm is refused before the
+    /// function runs.
+    /// </summary>
     public JwsAlgorithmVerification VerifySignature { get; }
 
 
@@ -107,14 +114,26 @@ internal sealed class TestResourceServerShell : IAsyncDisposable
     public InMemoryDpopReplayCache ReplayCache { get; }
 
 
+    /// <summary>Creates a resource server shell trusting one issuer and validating tokens for one audience.</summary>
+    /// <param name="trustedIssuer">The issuer whose tokens the resource server accepts.</param>
+    /// <param name="expectedAudience">The audience a presented token must name.</param>
+    /// <param name="resolveVerificationKey">Resolves the key a presented token's signature is verified under.</param>
+    /// <param name="verifySignature">The verification bound to the one algorithm it performs.</param>
+    /// <param name="timeProvider">The clock the validation and the replay cache read.</param>
+    /// <param name="requiredScope">The scope a token must carry to reach <c>/protected</c>, or <see langword="null"/> for none.</param>
+    /// <param name="advertisedAuthorizationServers">
+    /// The <c>authorization_servers</c> the metadata document advertises, or <see langword="null"/> for the trusted issuer
+    /// alone; a list must include the trusted issuer.
+    /// </param>
+    /// <exception cref="ArgumentException">The advertised list omits the trusted issuer.</exception>
     public TestResourceServerShell(
         Uri trustedIssuer,
         string expectedAudience,
         ServerVerificationKeyResolverDelegate resolveVerificationKey,
         JwsAlgorithmVerification verifySignature,
         TimeProvider timeProvider,
-        string? requiredScope = null,
-        IReadOnlyList<string>? advertisedAuthorizationServers = null)
+        string? requiredScope,
+        IReadOnlyList<string>? advertisedAuthorizationServers)
     {
         ArgumentNullException.ThrowIfNull(trustedIssuer);
         ArgumentException.ThrowIfNullOrWhiteSpace(expectedAudience);
@@ -309,8 +328,6 @@ internal sealed class TestResourceServerShell : IAsyncDisposable
                 JwtHeaderDeserializer = static bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
                     bytes, TestSetup.DefaultSerializationOptions) ?? throw new FormatException("Header JSON parsed to null."),
                 JwtPayloadDeserializer = static bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
-                    bytes, TestSetup.DefaultSerializationOptions) ?? throw new FormatException("Payload JSON parsed to null."),
-                ClientAssertionPayloadDeserializer = static bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
                     bytes, TestSetup.DefaultSerializationOptions) ?? throw new FormatException("Payload JSON parsed to null.")
             },
             MemoryPool = BaseMemoryPool.Shared

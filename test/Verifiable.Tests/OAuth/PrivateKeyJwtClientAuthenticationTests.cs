@@ -609,7 +609,12 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             var p256Verification = new JwsAlgorithmVerification(
                 WellKnownJwaValues.Es256,
                 CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(CryptoAlgorithm.P256, Purpose.Verification));
-            var validator = PrivateKeyJwtClientAuthentication.BuildValidator(p256Verification);
+            var validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+                p256Verification,
+                additionalAcceptedAudiences: null,
+                checkJtiReplayAsync: null,
+                resolveJwksUriAsync: null,
+                audiencePolicy: null);
 
             var declared = await SignAssertionUnderHeaderAsync(
                 app.Server,
@@ -718,7 +723,12 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             var rs256Verification = new JwsAlgorithmVerification(
                 WellKnownJwaValues.Rs256,
                 CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(CryptoAlgorithm.Rsa2048, Purpose.Verification));
-            var validator = PrivateKeyJwtClientAuthentication.BuildValidator(rs256Verification);
+            var validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+                rs256Verification,
+                additionalAcceptedAudiences: null,
+                checkJtiReplayAsync: null,
+                resolveJwksUriAsync: null,
+                audiencePolicy: null);
 
             var declared = await SignAssertionUnderHeaderAsync(
                 app.Server,
@@ -1189,6 +1199,8 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
                 ? PrivateKeyJwtClientAuthentication.BuildValidator(
                     verification,
                     additionalAcceptedAudiences: ["https://other.example"],
+                    checkJtiReplayAsync: null,
+                    resolveJwksUriAsync: null,
                     audiencePolicy: ClientAssertionAudiencePolicy.IssuerIdentifierOnly)
                 : PrivateKeyJwtClientAuthentication.BuildValidator(
                     additionalAcceptedAudiences: ["https://other.example"],
@@ -1291,7 +1303,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
 
             await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
             {
-                candidateIntegration.Codecs.ClientAssertionPayloadDeserializer = bytes =>
+                candidateIntegration.Codecs.JwtPayloadDeserializer = bytes =>
                 {
                     Dictionary<string, object> claims = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
                         bytes, TestSetup.DefaultSerializationOptions)
@@ -1375,7 +1387,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
 
             await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
             {
-                candidateIntegration.Codecs.ClientAssertionPayloadDeserializer = bytes =>
+                candidateIntegration.Codecs.JwtPayloadDeserializer = bytes =>
                     ReadClaimsKeepingOneRepeatedMember(bytes, isLastMemberKept);
             }).ConfigureAwait(false);
 
@@ -1401,7 +1413,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             string signatureB64 = TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan());
             string repeatedAssertion = $"{segments[0]}.{repeatedPayloadB64}.{signatureB64}";
 
-            IReadOnlyDictionary<string, object> permissiveClaims = app.Server.OAuth().Codecs.ClientAssertionPayloadDeserializer!(
+            var permissiveClaims = app.Server.OAuth().Codecs.JwtPayloadDeserializer!(
                 Encoding.UTF8.GetBytes(repeatedPayloadJson));
             Assert.AreEqual(registration.ClientId, (string)permissiveClaims[WellKnownJwtClaimNames.Sub],
                 "The permissive deserializer must yield the client's own sub, so only the repeated name can refuse the assertion.");

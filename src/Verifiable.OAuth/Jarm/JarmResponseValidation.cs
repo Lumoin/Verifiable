@@ -2,7 +2,6 @@ using System.Buffers;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth.Client;
-using Verifiable.OAuth.Jar;
 
 namespace Verifiable.OAuth.Jarm;
 
@@ -148,11 +147,10 @@ public static class JarmResponseValidation
         bool isAudienceValid = claims.TryGetValue(WellKnownJwtClaimNames.Aud, out object? audValue)
             && AudienceContains(audValue, expectedClientId);
 
-        //§2.4 step 4: exp must be in the future, within leeway.
+        //§2.4 step 4: exp must be in the future, within leeway. RFC 7519 Section 2: the NumericDate is read to the tick.
         bool isUnexpired = claims.TryGetValue(WellKnownJwtClaimNames.Exp, out object? expValue)
-            && JwtClaimReaders.TryToInt64(expValue, out long expSeconds)
-            && validationTime < DateTimeOffset.FromUnixTimeSeconds(expSeconds)
-                + (expirationLeeway ?? TimeSpan.Zero);
+            && JwtNumericDates.InstantOf(WellKnownJwtClaimNames.Exp, expValue) is DateTimeOffset expiry
+            && validationTime < expiry + (expirationLeeway ?? TimeSpan.Zero);
 
         //§2.4 step 5: alg=none is never accepted; the signature is only evaluated
         //under an allowed algorithm.

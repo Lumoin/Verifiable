@@ -1321,7 +1321,8 @@ internal sealed class AgenticFlowCapstoneTests
                 resolveVerificationKey: BuildMapResolver(As1JwksKeys),
                 verifySignature: DpopTestSupport.Es256Verification,
                 timeProvider: Time,
-                requiredScope: Rs1RequiredScope);
+                requiredScope: Rs1RequiredScope,
+                advertisedAuthorizationServers: null);
             await Rs1.StartHttpHostAsync(cancellationToken).ConfigureAwait(false);
 
             Rs2 = new TestResourceServerShell(
@@ -1330,7 +1331,8 @@ internal sealed class AgenticFlowCapstoneTests
                 resolveVerificationKey: BuildMapResolver(As2JwksKeys),
                 verifySignature: DpopTestSupport.Es256Verification,
                 timeProvider: Time,
-                requiredScope: Rs2RequiredScope);
+                requiredScope: Rs2RequiredScope,
+                advertisedAuthorizationServers: null);
             await Rs2.StartHttpHostAsync(cancellationToken).ConfigureAwait(false);
 
             BrowserClient = LoopbackTls.CreateSingleHopPinnedHttpClient(

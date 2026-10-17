@@ -2,10 +2,8 @@ using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
-using Verifiable.OAuth.Jar;
 using Verifiable.OAuth.ProtectedResource;
 using Verifiable.OAuth.Server.Pipeline;
-using Verifiable.OAuth.Validation;
 
 namespace Verifiable.OAuth.Server;
 
@@ -467,26 +465,25 @@ public static class BearerTokenValidation
                 }
             }
 
-            //7. exp claim must be in the future. JwtClaimReaders.TryToInt64
-            //   handles the broad set of integer types JSON deserializers may
-            //   produce for Unix-seconds values (long, int, decimal, ulong, …).
-            if(!payload.TryGetValue(WellKnownJwtClaimNames.Exp, out object? expObj)
-                || !JwtClaimReaders.TryToInt64(expObj, out long expSeconds))
+            //7. exp claim must be in the future. RFC 7519 Section 2: a NumericDate may carry a
+            //   fraction, read to the tick (JwtNumericDates), so the expiry its issuer wrote is the
+            //   one judged.
+            if(!payload.TryGetValue(WellKnownJwtClaimNames.Exp, out object? expObj))
             {
                 return (null, RefuseToken(
                     "Access token is missing the exp claim."));
             }
 
-            //A NumericDate beyond the instants a DateTimeOffset holds is malformed input: it is
-            //refused before the instant is constructed, never raised as a server fault.
-            if(!JwtTemporalChecks.IsRepresentableUnixSeconds(expSeconds))
+            //A value that is no NumericDate, or one beyond the instants a DateTimeOffset holds, is
+            //malformed input: it is refused, never raised as a server fault.
+            if(JwtNumericDates.InstantOf(WellKnownJwtClaimNames.Exp, expObj) is not DateTimeOffset expiry)
             {
                 return (null, RefuseToken(
                     "Access token exp claim is not a representable NumericDate."));
             }
 
             DateTimeOffset now = server.TimeProvider.GetUtcNow();
-            if(DateTimeOffset.FromUnixTimeSeconds(expSeconds) < now)
+            if(expiry < now)
             {
                 return (null, RefuseToken(
                     "Access token has expired."));

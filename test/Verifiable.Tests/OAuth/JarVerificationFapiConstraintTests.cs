@@ -178,6 +178,73 @@ internal sealed class JarVerificationFapiConstraintTests
     }
 
 
+    /// <summary>
+    /// RFC 7519 Section 2: a request object's <c>iat</c>, <c>nbf</c> and <c>exp</c> are NumericDates, which may carry a fraction,
+    /// each judged to the tick under the clock-skew tolerance. An <c>iat</c> three quarters of a second past the present plus the
+    /// tolerance is issued in the future and refused, where a reading at the whole second would take it down to the bound and
+    /// admit it; an <c>iat</c> and an <c>nbf</c> a quarter of a second inside the bound, and an <c>exp</c> half a second into its
+    /// second, are admitted as the instants written.
+    /// </summary>
+    [TestMethod]
+    public async Task ARequestObjectsFractionalDatesAreJudgedToTheTickAtTheTolerance()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using var verificationKey = keys.PublicKey;
+        using var signingKey = keys.PrivateKey;
+
+        var bound = TimeProvider.GetUtcNow().ToUnixTimeSeconds() + (long)ClockSkew.TotalSeconds;
+
+        var pastTheTolerance = await SignWithDatesAsync(
+            signingKey, iat: bound + 0.75m, nbf: bound - 1, exp: bound + 30).ConfigureAwait(false);
+        var refused = Assert.IsInstanceOfType<JarRejected>(
+            await VerifyAsync(pastTheTolerance, verificationKey).ConfigureAwait(false));
+
+        Assert.AreEqual(OAuthErrors.InvalidRequestObject, refused.ErrorCode);
+        Assert.Contains("is in the future beyond clock skew", refused.Reason, StringComparison.Ordinal,
+            "An iat three quarters of a second past the tolerance is issued in the future.");
+
+        var insideTheTolerance = await SignWithDatesAsync(
+            signingKey, iat: bound - 0.25m, nbf: bound - 0.25m, exp: bound + 30.5m).ConfigureAwait(false);
+        var admitted = Assert.IsInstanceOfType<JarVerified>(
+            await VerifyAsync(insideTheTolerance, verificationKey).ConfigureAwait(false));
+
+        var boundInstant = DateTimeOffset.FromUnixTimeSeconds(bound);
+        Assert.AreEqual(boundInstant.AddMilliseconds(-250), admitted.Iat, "The iat is the instant written, to the tick.");
+        Assert.AreEqual(boundInstant.AddMilliseconds(-250), admitted.Nbf, "The nbf is the instant written, to the tick.");
+        Assert.AreEqual(boundInstant.AddSeconds(30).AddMilliseconds(500), admitted.Exp, "The exp is the instant written, to the tick.");
+    }
+
+
+    /// <summary>Signs a request object whose dates are the counts of seconds given, a fraction written as it is.</summary>
+    /// <param name="signingKey">The key the request object is signed with.</param>
+    /// <param name="iat">The <c>iat</c>, in seconds since the epoch.</param>
+    /// <param name="nbf">The <c>nbf</c>, in seconds since the epoch.</param>
+    /// <param name="exp">The <c>exp</c>, in seconds since the epoch.</param>
+    /// <returns>The compact request object.</returns>
+    private async ValueTask<string> SignWithDatesAsync(PrivateKeyMemory signingKey, decimal iat, decimal nbf, decimal exp)
+    {
+        var algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(signingKey.Tag);
+        var payload = new JwtPayload(capacity: 4)
+        {
+            [WellKnownJwtClaimNames.ClientId] = "https://client.example.org",
+            [WellKnownJwtClaimNames.Iat] = iat,
+            [WellKnownJwtClaimNames.Nbf] = nbf,
+            [WellKnownJwtClaimNames.Exp] = exp
+        };
+
+        var unsigned = new UnsignedJwt(JwtHeaderExtensions.ForJar(algorithm, "jar-key-1"), payload);
+        using var jws = await unsigned.SignAsync(
+            signingKey,
+            HeaderSerializer,
+            PayloadSerializer,
+            TestSetup.Base64UrlEncoder,
+            Pool,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        return JwsSerialization.SerializeCompact(jws, TestSetup.Base64UrlEncoder);
+    }
+
+
     private async ValueTask<string> MintJarAsync(
         PrivateKeyMemory signingKey, DateTimeOffset iat, DateTimeOffset nbf, DateTimeOffset exp)
     {

@@ -60,7 +60,7 @@ public static class TrustMarkDelegationParser
             return TrustMarkDelegationParseResult.Invalid("Delegation payload is missing the required 'id' claim.");
         }
 
-        if(!TryReadUnixTime(payload, WellKnownJwtClaimNames.Iat, out DateTimeOffset iat))
+        if(!EntityStatementParser.TryReadUnixTime(payload, WellKnownJwtClaimNames.Iat, out DateTimeOffset iat))
         {
             return TrustMarkDelegationParseResult.Invalid("Delegation 'iat' claim missing or malformed.");
         }
@@ -68,7 +68,7 @@ public static class TrustMarkDelegationParser
         DateTimeOffset? exp = null;
         if(payload.ContainsKey(WellKnownJwtClaimNames.Exp))
         {
-            if(!TryReadUnixTime(payload, WellKnownJwtClaimNames.Exp, out DateTimeOffset expValue))
+            if(!EntityStatementParser.TryReadUnixTime(payload, WellKnownJwtClaimNames.Exp, out DateTimeOffset expValue))
             {
                 return TrustMarkDelegationParseResult.Invalid("Delegation 'exp' claim malformed.");
             }
@@ -97,24 +97,5 @@ public static class TrustMarkDelegationParser
             MarkId = idValue,
             Payload = payload,
         });
-    }
-
-
-    private static bool TryReadUnixTime(
-        UnverifiedJwtPayload payload, string claimName, out DateTimeOffset value)
-    {
-        value = default;
-        if(!payload.TryGetValue(claimName, out object? raw))
-        {
-            return false;
-        }
-
-        if(!EntityStatementParser.TryReadIntegralSeconds(raw, out long seconds))
-        {
-            return false;
-        }
-
-        value = DateTimeOffset.FromUnixTimeSeconds(seconds);
-        return true;
     }
 }

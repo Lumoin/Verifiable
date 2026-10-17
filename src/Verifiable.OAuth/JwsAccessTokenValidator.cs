@@ -631,8 +631,8 @@ public static class JwsAccessTokenValidator
     /// <summary>
     /// Reads the NumericDate claim <paramref name="claimName"/> (RFC 7519 §2, seconds since the Unix
     /// epoch, "other than that non-integer values can be represented") of a verified payload as an
-    /// instant, a fraction of a second included (<see cref="JwtTemporalChecks.TryFromUnixSeconds(double, out DateTimeOffset)"/>),
-    /// so a comparison with the clock is never made against a value truncated to its whole second. An
+    /// instant, a fraction of a second included (<see cref="JwtNumericDates.InstantOf"/>), so a
+    /// comparison with the clock is never made against a value truncated to its whole second. An
     /// absent claim is <see cref="NumericDateReadResult.Absent"/>; a present value that is not a number, or
     /// that names no instant a <see cref="DateTimeOffset"/> can hold, is
     /// <see cref="NumericDateReadResult.Malformed"/>, so every caller, the optional <c>nbf</c> and
@@ -651,17 +651,7 @@ public static class JwsAccessTokenValidator
             return NumericDateReadResult.Absent;
         }
 
-        DateTimeOffset instant = default;
-        bool isRepresentable = raw switch
-        {
-            long l => JwtTemporalChecks.TryFromUnixSeconds((decimal)l, out instant),
-            int i => JwtTemporalChecks.TryFromUnixSeconds((decimal)i, out instant),
-            double d => JwtTemporalChecks.TryFromUnixSeconds(d, out instant),
-            decimal dec => JwtTemporalChecks.TryFromUnixSeconds(dec, out instant),
-            _ => false
-        };
-
-        if(!isRepresentable)
+        if(JwtNumericDates.InstantOf(claimName, raw) is not DateTimeOffset instant)
         {
             return NumericDateReadResult.Malformed;
         }

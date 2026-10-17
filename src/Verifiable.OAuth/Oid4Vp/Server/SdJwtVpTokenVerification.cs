@@ -298,9 +298,10 @@ public static class SdJwtVpTokenVerification
                 kbAud = JwkJsonReader.ExtractStringValue(kbPayload, "aud"u8);
                 claimedSdHash = JwkJsonReader.ExtractStringValue(kbPayload, "sd_hash"u8);
 
-                if(JwkJsonReader.TryExtractLongValue(kbPayload, "iat"u8, out long iatEpoch))
+                //RFC 7519 Section 2: the KB-JWT's iat is a NumericDate, a fraction read to the tick.
+                if(JwkJsonReader.TryExtractNumericDate(kbPayload, WellKnownJwtClaimNames.IatUtf8, WellKnownJwtClaimNames.Iat, out var issuedAt))
                 {
-                    kbIat = DateTimeOffset.FromUnixTimeSeconds(iatEpoch);
+                    kbIat = issuedAt;
                 }
 
                 //OID4VP 1.0 §8.4: optional transaction_data_hashes array bound

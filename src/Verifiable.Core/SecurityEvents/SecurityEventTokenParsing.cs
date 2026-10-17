@@ -44,21 +44,16 @@ public static class SecurityEventTokenParsing
         obj.TryGetValue(name, out object? value) && value is string s ? s : null;
 
 
-    private static DateTimeOffset? ReadUnixSeconds(IReadOnlyDictionary<string, object> obj, string name)
-    {
-        if(!obj.TryGetValue(name, out object? value))
-        {
-            return null;
-        }
-
-        return value switch
-        {
-            int i => DateTimeOffset.FromUnixTimeSeconds(i),
-            long l => DateTimeOffset.FromUnixTimeSeconds(l),
-            decimal d when d is >= long.MinValue and <= long.MaxValue => DateTimeOffset.FromUnixTimeSeconds((long)d),
-            _ => null
-        };
-    }
+    /// <summary>
+    /// Reads a NumericDate claim (RFC 7519 Section 2) as the instant it names, a fraction of a second kept to the tick by the
+    /// library's one reading of the type (<see cref="JwtNumericDates.InstantOf"/>), or <see langword="null"/> when it is absent,
+    /// no NumericDate, or names an instant no clock represents.
+    /// </summary>
+    /// <param name="obj">The claims.</param>
+    /// <param name="name">The NumericDate claim to read.</param>
+    /// <returns>The instant, or <see langword="null"/>.</returns>
+    private static DateTimeOffset? ReadUnixSeconds(IReadOnlyDictionary<string, object> obj, string name) =>
+        obj.TryGetValue(name, out object? value) ? JwtNumericDates.InstantOf(name, value) : null;
 
 
     private static List<string> ReadAudiences(IReadOnlyDictionary<string, object> obj)

@@ -119,62 +119,27 @@ public static class EntityStatementParser
     }
 
 
-    //Unix-seconds claim parsing. JWT RFC 7519 §4.1.4 says iat/exp are
-    //NumericDate (seconds since epoch); JSON parsers typically surface
-    //these as long or int. JCose's serializer follows the same
-    //convention. Accept both for robustness.
-    private static bool TryReadUnixTime(
+    /// <summary>
+    /// Reads a NumericDate claim of a federation statement (RFC 7519 Section 2: a JSON number of seconds since the epoch, which
+    /// may carry a fraction) as the instant it names, the fraction kept to the tick by the library's one reading of the type
+    /// (<see cref="JwtNumericDates.InstantOf"/>), so the statement's window is judged as its issuer wrote it. A value that is
+    /// no NumericDate, or one naming an instant no clock represents, is unreadable. The trust mark and trust mark delegation
+    /// parsers read their dates by it too.
+    /// </summary>
+    /// <param name="payload">The statement's claims.</param>
+    /// <param name="claimName">The NumericDate claim to read.</param>
+    /// <param name="value">The instant the claim names, when present and readable.</param>
+    /// <returns><see langword="true"/> when the claim is present and names an instant.</returns>
+    internal static bool TryReadUnixTime(
         UnverifiedJwtPayload payload, string claimName, out DateTimeOffset value)
     {
         value = default;
-        if(!payload.TryGetValue(claimName, out object? raw))
+        if(!payload.TryGetValue(claimName, out object? raw) || JwtNumericDates.InstantOf(claimName, raw) is not DateTimeOffset instant)
         {
             return false;
         }
 
-        if(!TryReadIntegralSeconds(raw, out long seconds))
-        {
-            return false;
-        }
-
-        value = DateTimeOffset.FromUnixTimeSeconds(seconds);
+        value = instant;
         return true;
-    }
-
-
-    /// <summary>
-    /// Reads a boxed RFC 7519 §2 NumericDate — "a JSON numeric value representing the
-    /// number of seconds from 1970-01-01T00:00:00Z UTC" — as an integral second count.
-    /// The JSON wire shape is any numeric; the boxed type after deserialization depends
-    /// on the resolver (<see cref="long"/> via <c>DictionaryStringObjectJsonConverter</c>;
-    /// <see cref="decimal"/> via the source-gen default for object-typed properties;
-    /// <see cref="double"/> via permissive handlers), so any integer-valued numeric is
-    /// accepted. The <c>== Truncate(…)</c> checks test whether a directly-deserialized
-    /// <see cref="decimal"/>/<see cref="double"/> already holds an exact integer value —
-    /// no arithmetic is performed on the claim, so the exact comparison carries no
-    /// floating-point rounding risk.
-    /// </summary>
-    internal static bool TryReadIntegralSeconds(object raw, out long seconds)
-    {
-        switch(raw)
-        {
-            case long l:
-                seconds = l;
-                return true;
-            case int i:
-                seconds = i;
-                return true;
-            case decimal d when d == decimal.Truncate(d) && d >= long.MinValue && d <= long.MaxValue:
-                seconds = (long)d;
-                return true;
-            case double dbl when !double.IsNaN(dbl) && !double.IsInfinity(dbl)
-                && dbl == Math.Truncate(dbl)
-                && dbl >= long.MinValue && dbl <= long.MaxValue:
-                seconds = (long)dbl;
-                return true;
-            default:
-                seconds = 0;
-                return false;
-        }
     }
 }

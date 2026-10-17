@@ -214,7 +214,7 @@ public static class PrivateKeyJwtClientAuthentication
         var judged = ClientAssertionClaimRules.Judge(payload, clientId, acceptedAudiences, now, clockSkew);
 
         if(judged.Refusal is not null
-            || ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Exp, payload[WellKnownJwtClaimNames.Exp]) is not DateTimeOffset expiry)
+            || JwtNumericDates.InstantOf(WellKnownJwtClaimNames.Exp, payload[WellKnownJwtClaimNames.Exp]) is not DateTimeOffset expiry)
         {
             return PrivateKeyJwtClientAuthenticationResult.Rejected(
                 $"The client assertion breaks the RFC 7523 Section 3 rule {judged.Refusal}.");
@@ -306,19 +306,20 @@ public static class PrivateKeyJwtClientAuthentication
     /// mechanism.
     /// </param>
     /// <param name="resolveJwksUriAsync">
-    /// The OPTIONAL key-set resolution seam; see the registry-resolving overload's parameter of the
-    /// same name.
+    /// The key-set resolution seam, or <see langword="null"/> for none; see the registry-resolving
+    /// overload's parameter of the same name.
     /// </param>
     /// <param name="audiencePolicy">
-    /// The <c>aud</c> claim rule this validator applies; see the registry-resolving overload's
-    /// parameter of the same name.
+    /// The <c>aud</c> claim rule this validator applies, or <see langword="null"/> for
+    /// <see cref="ClientAssertionAudiencePolicy.AuthorizationServerIdentities"/>; see the
+    /// registry-resolving overload's parameter of the same name.
     /// </param>
     public static ValidateClientCredentialsDelegate BuildValidator(
         JwsAlgorithmVerification verification,
-        IReadOnlyCollection<string>? additionalAcceptedAudiences = null,
-        CheckClientAssertionJtiReplayDelegate? checkJtiReplayAsync = null,
-        ResolveJwksUriDelegate? resolveJwksUriAsync = null,
-        ClientAssertionAudiencePolicy? audiencePolicy = null)
+        IReadOnlyCollection<string>? additionalAcceptedAudiences,
+        CheckClientAssertionJtiReplayDelegate? checkJtiReplayAsync,
+        ResolveJwksUriDelegate? resolveJwksUriAsync,
+        ClientAssertionAudiencePolicy? audiencePolicy)
     {
         ArgumentNullException.ThrowIfNull(verification);
         ThrowIfAudiencePolicyCompositionIsContradictory(additionalAcceptedAudiences, audiencePolicy);
@@ -383,7 +384,7 @@ public static class PrivateKeyJwtClientAuthentication
             var oauth = server.OAuth();
             if(oauth.Codecs.Decoder is null
                 || oauth.Codecs.JwtHeaderDeserializer is null
-                || oauth.Codecs.ClientAssertionPayloadDeserializer is null)
+                || oauth.Codecs.JwtPayloadDeserializer is null)
             {
                 return false;
             }
@@ -537,11 +538,11 @@ public static class PrivateKeyJwtClientAuthentication
                     }
 
                     //RFC 7519 Section 2: a NumericDate may carry a fraction, and the claim rules judge it to the tick under their
-                    //own tolerance, so the claims set is read by the codec that states every member as written.
+                    //own tolerance, as the payload codec states every member as written.
                     JwtPayload payload;
                     try
                     {
-                        payload = new(oauth.Codecs.ClientAssertionPayloadDeserializer(unverified.Payload.Span));
+                        payload = new(oauth.Codecs.JwtPayloadDeserializer(unverified.Payload.Span));
                     }
                     catch(Exception ex) when(ex is FormatException or InvalidOperationException or System.Text.Json.JsonException)
                     {

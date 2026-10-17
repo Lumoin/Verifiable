@@ -395,14 +395,29 @@ public static class Rfc7523AssertionValidation
         items.Count == 1 && items[0] is string s && !string.IsNullOrEmpty(s) ? s : null;
 
 
+    /// <summary>What reading a NumericDate claim of the assertion found.</summary>
     private enum EpochReadResult
     {
+        /// <summary>The claim is not present.</summary>
         Absent,
+
+        /// <summary>The claim names an instant.</summary>
         Value,
+
+        /// <summary>The claim is present but is no NumericDate naming an instant a clock represents.</summary>
         Malformed
     }
 
 
+    /// <summary>
+    /// Reads a NumericDate claim of the assertion as the instant it names, a fraction of a second kept to the tick
+    /// (RFC 7519 Section 2; <see cref="JwtNumericDates.InstantOf"/>), so no bound is judged against a value moved to a whole
+    /// second: an <c>nbf</c> written a fraction of a second ahead is never read as reached earlier than its issuer wrote.
+    /// </summary>
+    /// <param name="payload">The assertion's claims.</param>
+    /// <param name="claimName">The NumericDate claim to read.</param>
+    /// <param name="value">The instant when the result is <see cref="EpochReadResult.Value"/>.</param>
+    /// <returns>Whether the claim is absent, names an instant, or is malformed.</returns>
     private static EpochReadResult TryReadEpochSeconds(JwtPayload payload, string claimName, out DateTimeOffset value)
     {
         value = default;
@@ -411,20 +426,12 @@ public static class Rfc7523AssertionValidation
             return EpochReadResult.Absent;
         }
 
-        long? seconds = raw switch
-        {
-            long l => l,
-            int i => i,
-            double d => (long)d,
-            decimal dec => (long)dec,
-            _ => null
-        };
-        if(seconds is null)
+        if(JwtNumericDates.InstantOf(claimName, raw) is not DateTimeOffset instant)
         {
             return EpochReadResult.Malformed;
         }
 
-        value = DateTimeOffset.FromUnixTimeSeconds(seconds.Value);
+        value = instant;
 
         return EpochReadResult.Value;
     }

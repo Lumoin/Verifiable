@@ -56,8 +56,17 @@ internal sealed class ResourceServerHttpApplication : IHttpApplication<HttpConte
     /// <summary>The RFC 6750 §3 <c>realm</c> value every Bearer challenge from this host carries.</summary>
     private const string ProtectedRealm = "protected";
 
+    /// <summary>The resource server integration presented tokens are validated through.</summary>
     private ResourceServerIntegration Integration { get; }
+
+    /// <summary>
+    /// The verification an access token's and a DPoP proof's signature is checked with, bound to the one algorithm it
+    /// performs (<see cref="JwsAlgorithmVerification"/>), so a header naming another algorithm is refused before the
+    /// function runs.
+    /// </summary>
     private JwsAlgorithmVerification VerifySignature { get; }
+
+    /// <summary>The scope a token must carry to reach <c>/protected</c>, or <see langword="null"/> for no scope enforcement.</summary>
     private string? RequiredScope { get; }
 
     /// <summary>
@@ -73,10 +82,14 @@ internal sealed class ResourceServerHttpApplication : IHttpApplication<HttpConte
     public ResourceServerMetadataEndpoint? MetadataEndpoint { get; set; }
 
 
+    /// <summary>Creates the resource server's request mapping over its integration and its bound verification.</summary>
+    /// <param name="integration">The resource server integration presented tokens are validated through.</param>
+    /// <param name="verifySignature">The verification bound to the one algorithm it performs.</param>
+    /// <param name="requiredScope">The scope a token must carry to reach <c>/protected</c>, or <see langword="null"/> for none.</param>
     public ResourceServerHttpApplication(
         ResourceServerIntegration integration,
         JwsAlgorithmVerification verifySignature,
-        string? requiredScope = null)
+        string? requiredScope)
     {
         ArgumentNullException.ThrowIfNull(integration);
         ArgumentNullException.ThrowIfNull(verifySignature);
@@ -109,6 +122,13 @@ internal sealed class ResourceServerHttpApplication : IHttpApplication<HttpConte
     }
 
 
+    /// <summary>
+    /// Serves one request: the RFC 9728 metadata document at its path, and <c>/protected</c> behind an access token validated
+    /// under <see cref="VerifySignature"/> - a DPoP-bound token with its proof judged under the same bound verification - and
+    /// the required scope, every refusal answered with its challenge.
+    /// </summary>
+    /// <param name="context">The request's HTTP context.</param>
+    /// <returns>A task completing when the response is written.</returns>
     private async Task ProcessRequestCoreAsync(HttpContext context)
     {
         if(MetadataEndpoint is { } metadataEndpoint

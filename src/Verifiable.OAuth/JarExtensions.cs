@@ -881,11 +881,16 @@ public static class JarExtensions
     }
 
 
-    //Reads a required JWT timing claim as a NumericDate value per RFC 7519 §2.
-    //Accepts the integer family produced by Verifiable.Json's narrowing
-    //converters when materializing JSON numbers into an object-typed claim
-    //dictionary. The library does not take a compile-time dependency on any
-    //specific JSON library; the deserializer is supplied as a delegate.
+    /// <summary>
+    /// Reads a required JWT timing claim as the NumericDate it is (RFC 7519 Section 2), a fraction kept to the tick by the
+    /// library's one reading of the type (<see cref="JwtNumericDates.InstantOf"/>), or one a deserializer already resolved to a
+    /// <see cref="DateTimeOffset"/>. The library takes no compile-time dependency on a JSON library; the deserializer is
+    /// supplied as a delegate.
+    /// </summary>
+    /// <param name="claims">The claims set.</param>
+    /// <param name="name">The NumericDate claim to read.</param>
+    /// <returns>The instant the claim names.</returns>
+    /// <exception cref="FormatException">The claim is absent, or is no NumericDate naming an instant a clock represents.</exception>
     private static DateTimeOffset RequireInstant(
         IReadOnlyDictionary<string, object> claims,
         string name)
@@ -901,79 +906,13 @@ public static class JarExtensions
             return dt;
         }
 
-        if(TryToInt64(value, out long unixSeconds))
+        if(JwtNumericDates.InstantOf(name, value) is DateTimeOffset instant)
         {
-            return DateTimeOffset.FromUnixTimeSeconds(unixSeconds);
+            return instant;
         }
 
         throw new FormatException(
             $"JAR payload claim '{name}' is not a JWT NumericDate value " +
             $"(observed runtime type: {value.GetType().FullName}).");
-    }
-
-
-    //Resolves a runtime claim value to a 64-bit integer for JWT NumericDate
-    //interpretation. Accepts the integer types Verifiable.Json's narrowing
-    //converters produce for JSON numbers materialized into an object-typed
-    //claim dictionary.
-    private static bool TryToInt64(object value, out long result)
-    {
-        switch(value)
-        {
-            case long l:
-            {
-                result = l;
-                return true;
-            }
-            case int i:
-            {
-                result = i;
-                return true;
-            }
-            case short s:
-            {
-                result = s;
-                return true;
-            }
-            case byte b:
-            {
-                result = b;
-                return true;
-            }
-            case uint ui:
-            {
-                result = ui;
-                return true;
-            }
-            case ulong ul when ul <= long.MaxValue:
-            {
-                result = (long)ul;
-                return true;
-            }
-            case sbyte sb:
-            {
-                result = sb;
-                return true;
-            }
-            case ushort us:
-            {
-                result = us;
-                return true;
-            }
-            case decimal d when d >= long.MinValue && d <= long.MaxValue && d == Math.Truncate(d):
-            {
-                result = (long)d;
-                return true;
-            }
-            default:
-            {
-                //No other runtime type is a whole-number JSON numeric value this reader accepts.
-                break;
-            }
-        }
-
-        result = 0;
-
-        return false;
     }
 }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using Verifiable.JCose;
 using Verifiable.OAuth.Federation;
 
@@ -122,5 +123,36 @@ internal sealed class FederationClientAuthenticationTests
         payload[WellKnownJwtClaimNames.Exp] = Now.AddMinutes(-5).ToUnixTimeSeconds();
 
         Assert.IsFalse(Validate(payload).IsValid, "An expired assertion must be rejected.");
+    }
+
+    /// <summary>
+    /// RFC 7519 Section 2: the JWT's NumericDates may carry a fraction, each judged to the tick under the clock-skew tolerance:
+    /// an <c>exp</c> a quarter of a second after the present less the tolerance is still live and surfaced as written, where a
+    /// fraction was once refused as malformed; an <c>nbf</c> a quarter of a second past the present plus the tolerance is not yet
+    /// valid; and a string of digits is no NumericDate, where it was once read as the count it spells.
+    /// </summary>
+    [TestMethod]
+    public void FractionalDatesAreJudgedToTheTickAndAStringIsNoNumericDate()
+    {
+        var second = Now.ToUnixTimeSeconds();
+        var toleranceSeconds = (long)Skew.TotalSeconds;
+
+        var live = ValidPayload();
+        live[WellKnownJwtClaimNames.Exp] = second - toleranceSeconds + 0.25m;
+
+        var result = Validate(live);
+
+        Assert.IsTrue(result.IsValid, result.FailureReason);
+        Assert.AreEqual(Now.AddSeconds(-toleranceSeconds).AddMilliseconds(250), result.Expiration, "The exp is the instant written.");
+
+        var notYetValid = ValidPayload();
+        notYetValid[WellKnownJwtClaimNames.Nbf] = second + toleranceSeconds + 0.25m;
+
+        Assert.IsFalse(Validate(notYetValid).IsValid, "An nbf a quarter of a second past the tolerance is not yet valid.");
+
+        var spelled = ValidPayload();
+        spelled[WellKnownJwtClaimNames.Exp] = Now.AddMinutes(5).ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
+
+        Assert.IsFalse(Validate(spelled).IsValid, "A string of digits is no NumericDate.");
     }
 }

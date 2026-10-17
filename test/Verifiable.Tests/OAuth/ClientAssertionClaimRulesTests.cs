@@ -165,36 +165,6 @@ internal sealed class ClientAssertionClaimRulesTests
 
 
     /// <summary>
-    /// RFC 7519 Section 2: a NumericDate is a JSON number, which may carry a fraction. Whole numbers of every width read as their
-    /// instant; a fraction names its own instant to the tick, and only a remainder finer than a tick is taken - down for exp, up for
-    /// iat and nbf - so the window never widens; a string of digits, a count no instant represents, and a value of any other kind
-    /// read as none.
-    /// </summary>
-    [TestMethod]
-    public void ANumericDateIsAJsonNumberTakenOnTheSideThatNeverWidensTheWindow()
-    {
-        var second = Now.ToUnixTimeSeconds();
-
-        Assert.AreEqual(Now, ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Exp, second));
-        Assert.AreEqual(Now, ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Exp, (int)second));
-        Assert.AreEqual(Now, ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Exp, (ulong)second));
-        Assert.AreEqual(Now.AddMilliseconds(750), ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Exp, second + 0.75m), "A fraction names its own instant.");
-        Assert.AreEqual(Now.AddMilliseconds(750), ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Iat, second + 0.75d), "A floating fraction names its own instant.");
-        Assert.AreEqual(Now.AddMilliseconds(250), ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Nbf, second + 0.25m));
-        Assert.AreEqual(Now, ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Nbf, second + 0m));
-        Assert.AreEqual(Now, ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Exp, second + 0.00000001m), "A remainder finer than a tick is taken down for exp.");
-        Assert.AreEqual(Now.AddTicks(1), ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Iat, second + 0.00000001m), "A remainder finer than a tick is taken up for iat.");
-        Assert.AreEqual(Now.AddTicks(1), ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Nbf, second + 0.00000001m), "A remainder finer than a tick is taken up for nbf.");
-        Assert.IsNull(ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Exp, second.ToString(CultureInfo.InvariantCulture)));
-        Assert.IsNull(ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Exp, long.MaxValue));
-        Assert.IsNull(ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Exp, double.NaN));
-        Assert.IsNull(ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Exp, decimal.MaxValue));
-        Assert.IsNull(ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Exp, true));
-        Assert.IsNull(ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Exp, null));
-    }
-
-
-    /// <summary>
     /// The assertion is accepted until exp plus the tolerance and refused from that instant on; an exp the tolerance would carry
     /// past the last instant a clock represents is accepted until that instant, never thrown on.
     /// </summary>

@@ -1,4 +1,3 @@
-using System.Globalization;
 using Verifiable.JCose;
 
 namespace Verifiable.OAuth.Federation;
@@ -223,14 +222,16 @@ public static class FederationClientAuthentication
 
 
     /// <summary>
-    /// Reads an epoch-seconds temporal claim. Returns <see langword="false"/> when
-    /// the claim is present but not a numeric timestamp; sets
-    /// <paramref name="present"/> to whether the claim was there at all. The
-    /// <c>== Math.Floor(…)</c> checks test whether a directly-deserialized
-    /// <see cref="double"/>/<see cref="float"/> already holds an exact integer value —
-    /// no arithmetic is performed on the claim, so the exact comparison carries no
-    /// floating-point rounding risk.
+    /// Reads a NumericDate temporal claim as the instant it names, a fraction of a second kept to the tick (RFC 7519 Section 2;
+    /// <see cref="JwtNumericDates.InstantOf"/>). Returns <see langword="false"/> when the claim is present but is no NumericDate
+    /// naming an instant a clock represents - a string of digits among them; sets <paramref name="present"/> to whether the
+    /// claim was there at all.
     /// </summary>
+    /// <param name="payload">The client authentication JWT's claims.</param>
+    /// <param name="claimName">The NumericDate claim to read.</param>
+    /// <param name="present">Whether the claim is present.</param>
+    /// <param name="value">The instant the claim names, when present and readable.</param>
+    /// <returns><see langword="false"/> when the claim is present and unreadable.</returns>
     private static bool TryReadEpochSeconds(
         JwtPayload payload, string claimName, out bool present, out DateTimeOffset value)
     {
@@ -242,26 +243,13 @@ public static class FederationClientAuthentication
         }
 
         present = true;
-        long? seconds = raw switch
-        {
-            long l => l,
-            int i => i,
-            short s => s,
-            byte b => b,
-            ulong u when u <= long.MaxValue => (long)u,
-            uint ui => ui,
-            double d when d >= long.MinValue && d <= long.MaxValue && d == Math.Floor(d) => (long)d,
-            float f when f >= long.MinValue && f <= long.MaxValue && f == Math.Floor(f) => (long)f,
-            string text when long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out long parsed) => parsed,
-            _ => null,
-        };
 
-        if(seconds is null)
+        if(JwtNumericDates.InstantOf(claimName, raw) is not DateTimeOffset instant)
         {
             return false;
         }
 
-        value = DateTimeOffset.FromUnixTimeSeconds(seconds.Value);
+        value = instant;
         return true;
     }
 }

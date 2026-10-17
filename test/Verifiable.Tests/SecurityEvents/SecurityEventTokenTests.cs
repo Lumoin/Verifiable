@@ -273,6 +273,31 @@ internal sealed class SecurityEventTokenTests
     };
 
 
+    /// <summary>
+    /// RFC 8417 Section 2.2 has a SET's <c>iat</c> and <c>toe</c> NumericDates (RFC 7519 Section 2), which may carry a fraction:
+    /// each is surfaced as the instant written, to the tick, never truncated to its whole second; a string of digits is no
+    /// NumericDate and surfaces none.
+    /// </summary>
+    [TestMethod]
+    public void AFractionalNumericDateIsSurfacedAsTheInstantWritten()
+    {
+        var payload = new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            [WellKnownJwtClaimNames.Iss] = Issuer,
+            [WellKnownJwtClaimNames.Iat] = 1615305159.75m,
+            [SecurityEventTokenClaimNames.Toe] = 1615304991.5m
+        };
+
+        var token = SecurityEventTokenParsing.Parse(payload);
+
+        Assert.AreEqual(DateTimeOffset.FromUnixTimeSeconds(1615305159).AddMilliseconds(750), token.IssuedAt, "The iat is the instant written.");
+        Assert.AreEqual(DateTimeOffset.FromUnixTimeSeconds(1615304991).AddMilliseconds(500), token.TimeOfEvent, "The toe is the instant written.");
+
+        payload[WellKnownJwtClaimNames.Iat] = "1615305159";
+
+        Assert.IsNull(SecurityEventTokenParsing.Parse(payload).IssuedAt, "A string of digits is no NumericDate.");
+    }
+
     private async Task<string> IssueAsync(
         PrivateKeyMemory signingKey, IReadOnlyList<SecurityEvent> events, SubjectIdentifier subjectId) =>
         await SecurityEventTokenIssuance.IssueAsync(

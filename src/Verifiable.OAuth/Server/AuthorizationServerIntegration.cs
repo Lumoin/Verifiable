@@ -1607,6 +1607,33 @@ public sealed class AuthorizationServerIntegration : ServerIntegration
     }
 
     /// <summary>
+    /// Supplies the claim names a registration's OpenID Provider may supply values for, which discovery names in
+    /// <c>claims_supported</c> (OpenID Connect Discovery 1.0, Section 3) for that registration. Optional. When
+    /// <see langword="null"/>, discovery names the claims the library's standard claim contributors can emit; when set, the
+    /// resolved list names at least one claim, each by a name holding a character other than white space and none twice, and
+    /// discovery answers a server error rather than advertise a list that does not.
+    /// </summary>
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public ResolveClaimsSupportedDelegate? ResolveClaimsSupportedAsync
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
+    /// <summary>
     /// The JWA <c>alg</c> names (<see cref="WellKnownJwaValues"/>) this token endpoint
     /// accepts on the client-assertion JWT for <see cref="ClientAuthenticationMethod.PrivateKeyJwt"/>
     /// and <see cref="ClientAuthenticationMethod.ClientSecretJwt"/> — the declaration

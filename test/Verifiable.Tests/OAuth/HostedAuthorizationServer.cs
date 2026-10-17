@@ -1574,10 +1574,6 @@ internal sealed class HostedAuthorizationServer : IClientRegistrationStore
                 JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
                     bytes, TestSetup.DefaultSerializationOptions)
                 ?? throw new FormatException("Payload JSON parsed to null."),
-            ClientAssertionPayloadDeserializer = static bytes =>
-                JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
-                    bytes, TestSetup.DefaultSerializationOptions)
-                ?? throw new FormatException("Payload JSON parsed to null."),
 
             //OID4VP §5.9.3 redirect_uri prefix path serialises the JAR
             //inline; the dcql_query and client_metadata claims need their

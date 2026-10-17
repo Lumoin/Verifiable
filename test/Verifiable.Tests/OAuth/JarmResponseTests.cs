@@ -488,6 +488,57 @@ resolver, PayloadDeserializer, TestSetup.Base64UrlDecoder, Pool,
     }
 
 
+    /// <summary>
+    /// JARM Section 2.4 step 4 with RFC 7519 Section 2: the response's <c>exp</c> is a NumericDate, which may carry a fraction,
+    /// judged to the tick: an <c>exp</c> a quarter of a second after the validation instant is still live, where a fraction was
+    /// once read as no expiry at all and refused, and one a quarter of a second before it has expired.
+    /// </summary>
+    [TestMethod]
+    public async Task AFractionalExpiryIsJudgedToTheTick()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using var serverPublic = keys.PublicKey;
+        using var serverPrivate = keys.PrivateKey;
+
+        var second = TimeProvider.GetUtcNow().ToUnixTimeSeconds();
+
+        var live = await ValidateAsync(
+            await SignResponseExpiringAtAsync(serverPrivate, $"{second}.25").ConfigureAwait(false),
+            serverPublic,
+            Issuer,
+            ClientId).ConfigureAwait(false);
+
+        Assert.IsTrue(live.IsValid, "An exp a quarter of a second ahead is still live.");
+
+        var expired = await ValidateAsync(
+            await SignResponseExpiringAtAsync(serverPrivate, $"{second - 1}.75").ConfigureAwait(false),
+            serverPublic,
+            Issuer,
+            ClientId).ConfigureAwait(false);
+
+        Assert.IsFalse(expired.IsValid, "An exp a quarter of a second past has expired.");
+    }
+
+
+    /// <summary>Signs a code response whose <c>exp</c> is the JSON number text given, a fraction written as it is.</summary>
+    /// <param name="signingKey">The authorization server's response signing key.</param>
+    /// <param name="expiryNumber">The <c>exp</c> as JSON number text.</param>
+    /// <returns>The compact response JWT.</returns>
+    private async ValueTask<string> SignResponseExpiringAtAsync(PrivateKeyMemory signingKey, string expiryNumber)
+    {
+        var algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(signingKey.Tag);
+        var headerJson = "{\"alg\":\"" + algorithm + "\",\"kid\":\"" + KeyId + "\"}";
+        var payloadJson = "{\"iss\":\"" + Issuer + "\",\"aud\":\"" + ClientId + "\",\"exp\":" + expiryNumber + ",\"code\":\"fractional-expiry-code\"}";
+
+        var headerB64 = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(headerJson));
+        var payloadB64 = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(payloadJson));
+        var signingInput = Encoding.ASCII.GetBytes($"{headerB64}.{payloadB64}");
+
+        using var signature = await signingKey.SignAsync(signingInput, Pool, TestContext.CancellationToken).ConfigureAwait(false);
+
+        return $"{headerB64}.{payloadB64}.{TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan())}";
+    }
+
     private async ValueTask<string> IssueAsync(
         PrivateKeyMemory signingKey,
         IReadOnlyDictionary<string, object> responseParameters,

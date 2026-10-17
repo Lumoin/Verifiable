@@ -735,23 +735,31 @@ public static class MetadataEndpoints
                             emittedFieldNames);
                     }
 
-                    //claims_supported (OIDC Discovery §3 RECOMMENDED). Lists the
-                    //JWT claim names the standard
-                    //ContributionProfiles.StandardClaimIssuer rules can emit, plus
-                    //the spec-required sub. The list is aspirational per OIDC
-                    //Discovery §3 — the OP is not guaranteed to populate every
-                    //advertised claim for every request; scope / authentication-
-                    //context drives actual emission. Deployments that install
-                    //custom contributors extend the list via
-                    //ContributeDiscoveryFieldsAsync; the library default reflects
-                    //what the standard rules emit. Gated on authorization_code
+                    //claims_supported (OIDC Discovery §3 RECOMMENDED). The registration's own claims where the
+                    //deployment resolves them per registration, composed before the document is serialized;
+                    //otherwise the JWT claim names the standard ContributionProfiles.StandardClaimIssuer rules can
+                    //emit, plus the spec-required sub. The list is aspirational per OIDC Discovery §3 — the OP is not
+                    //guaranteed to populate every advertised claim for every request; scope / authentication-context
+                    //drives actual emission. A resolved list naming no claim, a claim of white space alone or one
+                    //claim twice is a composition defect, and the document is not served. Gated on authorization_code
                     //chain presence because the field is OIDC-specific.
                     if(authorizationCodeOnChain)
                     {
+                        var claimsSupported = oauth.ResolveClaimsSupportedAsync is { } resolveClaims
+                            ? await resolveClaims(registration, context, ct).ConfigureAwait(false)
+                            : StandardClaimsSupported;
+
+                        if(!IsClaimNameList(claimsSupported))
+                        {
+                            return (null, ServerHttpResponse.ServerError(
+                                OAuthErrors.ServerError,
+                                "The registration's supported claims are not a list of distinct claim names."));
+                        }
+
                         AppendStringArrayField(
                             sb,
                             OpenIdProviderMetadataParameterNames.ClaimsSupported,
-                            StandardClaimsSupported,
+                            claimsSupported,
                             emittedFieldNames);
 
                         //claim_types_supported (OIDC Core §5.6 / OIDC Discovery §3
@@ -895,6 +903,26 @@ public static class MetadataEndpoints
 
     /// <summary>The normal claim type advertised by discovery.</summary>
     private static IReadOnlyList<string> ClaimTypeNormal { get; } = ["normal"];
+
+
+    /// <summary>
+    /// Whether a list is one discovery may name as <c>claims_supported</c> (OpenID Connect Discovery 1.0 Section 3, "a list of
+    /// the Claim Names"): at least one claim, each named by a string holding a character other than white space, none named
+    /// twice under ordinal comparison, since RFC 7519 Section 4 compares claim names as case-sensitive strings.
+    /// </summary>
+    /// <param name="claimNames">The resolved claim names.</param>
+    /// <returns><see langword="true"/> when the list names distinct claims and at least one.</returns>
+    private static bool IsClaimNameList(IReadOnlyList<string> claimNames)
+    {
+        if(claimNames is null || claimNames.Count == 0)
+        {
+            return false;
+        }
+
+        var named = new HashSet<string>(claimNames.Count, StringComparer.Ordinal);
+
+        return claimNames.All(claimName => !string.IsNullOrWhiteSpace(claimName) && named.Add(claimName));
+    }
 
     /// <summary>
     /// JWT claim names the standard

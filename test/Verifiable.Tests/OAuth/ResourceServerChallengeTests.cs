@@ -55,7 +55,8 @@ internal sealed class ResourceServerChallengeTests
             resolveVerificationKey: BuildResolver(keys.PublicKey),
             verifySignature: DpopTestSupport.Es256Verification,
             timeProvider: time,
-            requiredScope: RequiredScope);
+            requiredScope: RequiredScope,
+            advertisedAuthorizationServers: null);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         using HttpClient client = LoopbackTls.CreatePinnedHttpClient(rs.HttpCertificate!, rs.HttpBaseAddress);
@@ -102,7 +103,9 @@ internal sealed class ResourceServerChallengeTests
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(keys.PublicKey),
             verifySignature: DpopTestSupport.Es256Verification,
-            timeProvider: time);
+            timeProvider: time,
+            requiredScope: null,
+            advertisedAuthorizationServers: null);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         using HttpClient client = LoopbackTls.CreatePinnedHttpClient(rs.HttpCertificate!, rs.HttpBaseAddress);
@@ -155,7 +158,9 @@ internal sealed class ResourceServerChallengeTests
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(keys.PublicKey),
             verifySignature: DpopTestSupport.Es256Verification,
-            timeProvider: time);
+            timeProvider: time,
+            requiredScope: null,
+            advertisedAuthorizationServers: null);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         //Signed by the trusted key but addressed to another resource — the
@@ -202,7 +207,8 @@ internal sealed class ResourceServerChallengeTests
             resolveVerificationKey: BuildResolver(keys.PublicKey),
             verifySignature: DpopTestSupport.Es256Verification,
             timeProvider: time,
-            requiredScope: RequiredScope);
+            requiredScope: RequiredScope,
+            advertisedAuthorizationServers: null);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         //A fully valid token — signature, issuer, audience, lifetime — whose
@@ -248,7 +254,8 @@ internal sealed class ResourceServerChallengeTests
             resolveVerificationKey: BuildResolver(keys.PublicKey),
             verifySignature: DpopTestSupport.Es256Verification,
             timeProvider: time,
-            requiredScope: RequiredScope);
+            requiredScope: RequiredScope,
+            advertisedAuthorizationServers: null);
         await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
