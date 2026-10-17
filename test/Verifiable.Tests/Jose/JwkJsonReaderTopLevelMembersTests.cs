@@ -158,7 +158,7 @@ internal sealed class JwkJsonReaderTopLevelMembersTests
 
         Assert.IsNotNull(members, "The document is well formed.");
         Assert.HasCount(1, members);
-        Assert.AreEqual(new JsonTopLevelMember("v", JsonTopLevelValueKind.String, "\u007F߿퟿￿\U0010FFFF"), members[0]);
+        Assert.AreEqual(new JsonTopLevelMember("v", JsonTopLevelValueKind.String, "\u007F\u07FF\uD7FF\uE000\uFFFF\U0010FFFF"), members[0]);
     }
 
 
