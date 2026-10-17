@@ -58,6 +58,23 @@ public sealed record Oid4VciRequestFailure
     /// <see langword="null"/>.
     /// </summary>
     public OAuthRedirectRefused? RedirectRefusal { get; init; }
+
+    /// <summary>
+    /// The <c>resource_metadata</c> URL the refusal's <c>WWW-Authenticate</c> challenge named, for the application's
+    /// resolver, when the Credential, Deferred Credential or Notification Request was refused with 401 or 403; otherwise
+    /// <see langword="null"/>.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-5.1">RFC 9728 Section 5.1</see>: "resource_metadata:
+    /// The URL of the protected resource metadata." and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-5.2">Section 5.2</see>: "If the client receives such a
+    /// WWW-Authenticate response, it SHOULD retrieve the updated protected resource metadata and use the new metadata
+    /// values obtained, after validating them as described in Section 3.3." The Wallet resolves nothing itself: the
+    /// application passes this URL and <see cref="Endpoint"/> to
+    /// <see cref="ProtectedResource.ProtectedResourceMetadataDocuments.ResolveFromChallengeAsync"/>. The URL is read as
+    /// the challenge readers read it, <see cref="ProtectedResource.DpopChallenge.TryRead"/> and then the <c>Bearer</c>
+    /// challenge, an absolute http or https URL; a challenge naming a pointer that is not one is read as no challenge, and
+    /// the pointer of the other scheme's challenge, if any, is carried.
+    /// </summary>
+    public Uri? ResourceMetadata { get; init; }
 }
 
 

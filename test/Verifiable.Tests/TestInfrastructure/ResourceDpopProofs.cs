@@ -43,6 +43,25 @@ internal static class ResourceDpopProofs
 
 
     /// <summary>
+    /// The URL the protected resource metadata document of the resource <paramref name="identifier"/> identifies is
+    /// served at, written out: <c>/.well-known/oauth-protected-resource</c> inserted between the host and the path
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.1">RFC 9728 Section 3.1</see>: "GET
+    /// /.well-known/oauth-protected-resource/resource1 HTTP/1.1").
+    /// </summary>
+    /// <param name="identifier">
+    /// The resource identifier, in the domain this derivation is written for: an https URL whose host is ASCII, with a path
+    /// that does not end in a slash, and no query, userinfo or fragment.
+    /// </param>
+    /// <returns>The document's URL.</returns>
+    public static Uri ProtectedResourceDocumentUrlOf(Uri identifier)
+    {
+        ArgumentNullException.ThrowIfNull(identifier);
+
+        return new Uri($"{identifier.GetLeftPart(UriPartial.Authority)}/.well-known/oauth-protected-resource{identifier.AbsolutePath}");
+    }
+
+
+    /// <summary>
     /// The literal <c>DPoP</c> challenge a library resource answers with, written out in the order
     /// <c>realm</c>, <c>error</c>, <c>scope</c>, <c>algs</c>, <c>resource_metadata</c>, each a quoted-string
     /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>; RFC 9110 Section

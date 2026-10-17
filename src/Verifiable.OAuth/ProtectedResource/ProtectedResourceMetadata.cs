@@ -82,6 +82,10 @@ public static class ProtectedResourceMetadataValidation
     /// resource identifier the metadata URL was derived from (§3.3). The
     /// comparison is code point by code point with no Unicode normalization
     /// (§6). When the values differ, the document MUST NOT be used.
+    /// <see cref="ProtectedResourceMetadataDocuments.ResolveFromChallengeAsync"/> is the flow that applies both
+    /// paragraphs of <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">RFC 9728 Section 3.3</see> to a
+    /// pointer a challenge named: the pointer is the location formed from the request URL, and this comparison holds the
+    /// document's <c>resource</c> to that URL.
     /// </summary>
     /// <param name="metadata">The fetched and parsed document.</param>
     /// <param name="expectedResourceIdentifier">

@@ -18,6 +18,7 @@ using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Oid4Vci.Wallet;
 using Verifiable.OAuth.Oid4Vp;
+using Verifiable.OAuth.ProtectedResource;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
 using Verifiable.Tests.TestDataProviders;
@@ -1640,6 +1641,335 @@ internal sealed class Oid4VciWalletClientTests
         Assert.IsTrue(outcome.IsSuccess,
             $"The wallet answers the nonce challenge whatever unknown parameter it carries; got {(outcome.IsSuccess ? string.Empty : outcome.Error.Kind + " " + outcome.Error.StatusCode + " " + outcome.Error.ErrorCode)}.");
         Assert.HasCount(2, credentialProofs, "The challenged Credential Request and its one retry.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>, of the <c>DPoP</c>
+    /// challenge: "Additional authentication parameters MAY be used, and unknown parameters MUST be ignored by
+    /// recipients." Under a registration allowing
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>, the Credential Endpoint answers the
+    /// wallet's first Credential Request over the wire with its 401 nonce challenge, which also names the endpoint's
+    /// protected resource metadata document in <c>resource_metadata</c>. The wallet reads the challenge's
+    /// <c>use_dpop_nonce</c>, retries exactly once with the nonce the <c>DPoP-Nonce</c> field supplied, and the Credential
+    /// is issued.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task WalletAnswersANonceChallengeNamingTheResourceMetadataAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Haip10, DocumentServingIssuerCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        List<string> credentialProofs = await ArrangeCredentialEndpointNonceChallengeAsync(host, material).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        var walletDpopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory walletDpopPublic = walletDpopKeys.PublicKey;
+        using PrivateKeyMemory walletDpopPrivate = walletDpopKeys.PrivateKey;
+
+        List<DpopChallengeParameters> nonceChallenges = [];
+        Oid4VciWalletClient walletClient = BuildWalletClient(
+            host,
+            constructDpopProofAsync: BuildWalletDpopProofAsync,
+            dpopKey: new DpopKey(walletDpopKeys, WellKnownJwaValues.Es256),
+            rewriteResourceAnswer: answer =>
+            {
+                if(answer.StatusCode == 401
+                    && DpopChallenge.TryRead(answer.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate), out DpopChallengeParameters parameters))
+                {
+                    nonceChallenges.Add(parameters);
+                }
+
+                return answer;
+            });
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await IssueOverTheWireAsync(walletClient, host, material, holderPrivate, holderPublic).ConfigureAwait(false);
+
+        DpopChallengeParameters nonceChallenge = Assert.ContainsSingle(nonceChallenges, "The Credential Endpoint answered one DPoP challenge.");
+        Assert.AreEqual(OAuthErrors.UseDpopNonce, nonceChallenge.Error);
+        Assert.AreEqual(
+            ResourceDpopProofs.ProtectedResourceDocumentUrlOf(ResolveEndpoints(host, material).CredentialEndpoint).OriginalString,
+            nonceChallenge.ResourceMetadata?.OriginalString,
+            "The nonce challenge names the Credential Endpoint's document.");
+        Assert.IsTrue(outcome.IsSuccess, $"The wallet answers the nonce challenge naming the document; got {DescribeOutcome(outcome)}.");
+        Assert.HasCount(2, credentialProofs, "The challenged Credential Request and its one retry.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-5.1">RFC 9728 Section 5.1</see>: "This parameter MAY also
+    /// be used in WWW-Authenticate responses using authorization schemes other than "Bearer" [RFC6750], such as the DPoP
+    /// scheme defined by [RFC9449]."; <see href="https://www.rfc-editor.org/rfc/rfc9728#section-5.2">Section 5.2</see>: "If
+    /// the client receives such a WWW-Authenticate response, it SHOULD retrieve the updated protected resource metadata".
+    /// Under a registration allowing <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>, the
+    /// wallet presents an access token the Issuer did not issue at the Credential Endpoint over the wire; the endpoint
+    /// refuses it with 401 and a challenge naming its document, and the wallet's failure carries that URL for the
+    /// application's resolver. The rows: the token presented under <c>DPoP</c>, refused by a <c>DPoP</c> challenge; under
+    /// <c>Bearer</c>, refused by a <c>Bearer</c> challenge.
+    /// </summary>
+    /// <param name="row">The presentation: <see cref="DpopRefusalRow"/> or <see cref="BearerRefusalRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(DpopRefusalRow)]
+    [DataRow(BearerRefusalRow)]
+    public async Task WalletFailureCarriesTheResourceMetadataItsChallengeNamedAsync(string row)
+    {
+        bool isDpop = string.Equals(row, DpopRefusalRow, StringComparison.Ordinal);
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Haip10, DocumentServingIssuerCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        _ = await WireIssuerSeamsAsync(host).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        var walletDpopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory walletDpopPublic = walletDpopKeys.PublicKey;
+        using PrivateKeyMemory walletDpopPrivate = walletDpopKeys.PrivateKey;
+        Oid4VciIssuanceEndpoints endpoints = ResolveEndpoints(host, material);
+        (Oid4VciWalletClient walletClient, List<string> refusalChallenges) = BuildRefusalObservingWalletClient(
+            host, isDpop ? new DpopKey(walletDpopKeys, WellKnownJwaValues.Es256) : null);
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await walletClient.IssueWithAccessTokenDetailedAsync(
+            UnissuedAccessToken,
+            isDpop ? WellKnownAuthenticationSchemes.DPoP : WellKnownAuthenticationSchemes.Bearer,
+            accessTokenExpiresAt: null,
+            material.Registration.IssuerUri!,
+            CredentialRequestTarget.ForConfiguration(ConfigurationId),
+            holderPrivate,
+            holderPublic,
+            endpoints,
+            responseEncryption: null,
+            TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(outcome.IsSuccess, $"The token is refused; got {DescribeOutcome(outcome)}.");
+        Assert.StartsWith(isDpop ? "DPoP " : "Bearer ", Assert.ContainsSingle(refusalChallenges), "The refusal's challenge is of the presentation's scheme.");
+        Assert.AreEqual(endpoints.CredentialEndpoint, outcome.Error.Endpoint);
+        Assert.AreEqual(401, outcome.Error.StatusCode, DescribeOutcome(outcome));
+        Assert.AreEqual(
+            ResourceDpopProofs.ProtectedResourceDocumentUrlOf(endpoints.CredentialEndpoint).OriginalString,
+            outcome.Error.ResourceMetadata?.OriginalString);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-5.2">RFC 9728 Section 5.2</see>: "If the client receives
+    /// such a WWW-Authenticate response, it SHOULD retrieve the updated protected resource metadata and use the new
+    /// metadata values obtained, after validating them as described in Section 3.3." Under a registration allowing
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>, the wallet presents an access token the
+    /// Issuer did not issue at the Credential Endpoint over the wire under <c>DPoP</c> and is refused with 401; the
+    /// application passes the failure's endpoint and pointer to the resolution, which fetches the endpoint's document over
+    /// the wire through a transport that follows no redirect, under the loopback outbound policy, and answers it resolved
+    /// with its <c>resource</c> the endpoint the wallet sent the request to.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task WalletFailureResolvesTheDocumentOfTheEndpointThatRefusedItAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Haip10, DocumentServingIssuerCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        _ = await WireIssuerSeamsAsync(host).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+
+        var holderKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivate = holderKeys.PrivateKey;
+        var walletDpopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory walletDpopPublic = walletDpopKeys.PublicKey;
+        using PrivateKeyMemory walletDpopPrivate = walletDpopKeys.PrivateKey;
+        Oid4VciWalletClient walletClient = BuildWalletClient(
+            host, constructDpopProofAsync: BuildWalletDpopProofAsync, dpopKey: new DpopKey(walletDpopKeys, WellKnownJwaValues.Es256));
+        ExchangeContext context = TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy);
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await walletClient.IssueWithAccessTokenDetailedAsync(
+            UnissuedAccessToken,
+            WellKnownAuthenticationSchemes.DPoP,
+            accessTokenExpiresAt: null,
+            material.Registration.IssuerUri!,
+            CredentialRequestTarget.ForConfiguration(ConfigurationId),
+            holderPrivate,
+            holderPublic,
+            ResolveEndpoints(host, material),
+            responseEncryption: null,
+            context,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsFalse(outcome.IsSuccess, $"The token is refused; got {DescribeOutcome(outcome)}.");
+        Assert.IsNotNull(outcome.Error.ResourceMetadata, "The refusal names the endpoint's document.");
+
+        using HttpClient singleHopClient = LoopbackTls.CreateSingleHopPinnedHttpClient(host.HostCertificate("default"));
+        ProtectedResourceMetadataResolution resolution = await ProtectedResourceMetadataDocuments.ResolveFromChallengeAsync(
+            outcome.Error.Endpoint,
+            outcome.Error.ResourceMetadata,
+            WellKnownPaths.OAuthProtectedResource,
+            context,
+            GuardedHttpClientTransport.BuildSingleHopTransport(singleHopClient),
+            ProtectedResourceMetadataJsonParsing.ParseProtectedResourceMetadata,
+            maximumDocumentBytes: 64 * 1024,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        ProtectedResourceMetadataResolved resolved = Assert.IsInstanceOfType<ProtectedResourceMetadataResolved>(
+            resolution.Value, $"Expected ProtectedResourceMetadataResolved; got {resolution.Value?.GetType().Name}.");
+        Assert.AreEqual(outcome.Error.Endpoint.OriginalString, resolved.Metadata.Resource);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-5.1">RFC 9728 Section 5.1</see>: "This parameter MAY also
+    /// be used in WWW-Authenticate responses using authorization schemes other than "Bearer" [RFC6750], such as the DPoP
+    /// scheme defined by [RFC9449]." Under a registration allowing
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>, the wallet polls the Deferred
+    /// Credential Endpoint over the wire with an access token the Issuer did not issue, under <c>DPoP</c>; the endpoint
+    /// refuses it with 401 and a <c>DPoP</c> challenge naming its document, and the wallet's failure carries that URL.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task WalletDeferredCredentialFailureCarriesTheResourceMetadataItsChallengeNamedAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Haip10, DocumentServingIssuerCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        _ = await WireIssuerSeamsAsync(host).ConfigureAwait(false);
+        await WireDeferredCredentialResolutionAsync(host, "notification-of-a-deferred-issuance").ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+
+        var walletDpopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory walletDpopPublic = walletDpopKeys.PublicKey;
+        using PrivateKeyMemory walletDpopPrivate = walletDpopKeys.PrivateKey;
+        Uri deferredCredentialEndpoint = ResolveDeferredEndpoint(host, material);
+        (Oid4VciWalletClient walletClient, List<string> refusalChallenges) = BuildRefusalObservingWalletClient(
+            host, new DpopKey(walletDpopKeys, WellKnownJwaValues.Es256));
+
+        Result<CredentialIssuanceResult, Oid4VciRequestFailure> outcome = await walletClient.PollDeferredCredentialAsync(
+            "transaction-of-a-deferred-issuance",
+            UnissuedAccessToken,
+            WellKnownAuthenticationSchemes.DPoP,
+            accessTokenExpiresAt: null,
+            deferredCredentialEndpoint,
+            responseEncryption: null,
+            TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(outcome.IsSuccess, $"The token is refused; got {DescribeOutcome(outcome)}.");
+        Assert.StartsWith("DPoP ", Assert.ContainsSingle(refusalChallenges), "The refusal's challenge is of the presentation's scheme.");
+        Assert.AreEqual(deferredCredentialEndpoint, outcome.Error.Endpoint);
+        Assert.AreEqual(401, outcome.Error.StatusCode, DescribeOutcome(outcome));
+        Assert.AreEqual(
+            ResourceDpopProofs.ProtectedResourceDocumentUrlOf(deferredCredentialEndpoint).OriginalString,
+            outcome.Error.ResourceMetadata?.OriginalString);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-5.1">RFC 9728 Section 5.1</see>: "resource_metadata: The
+    /// URL of the protected resource metadata.", carried by the <c>Bearer</c> challenge as Section 5.1's example
+    /// "WWW-Authenticate: Bearer resource_metadata=" does. Under a registration allowing
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>, the wallet sends a Notification Request
+    /// over the wire with an access token the Issuer did not issue, under <c>Bearer</c>; the Notification Endpoint refuses
+    /// it with 401 and a <c>Bearer</c> challenge naming its document, and the wallet's failure carries that URL.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task WalletNotificationFailureCarriesTheResourceMetadataItsChallengeNamedAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Haip10, DocumentServingIssuerCapabilities).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        _ = await WireIssuerSeamsAsync(host).ConfigureAwait(false);
+        await WireNotificationProcessingAsync(host, observe: null).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+
+        Uri notificationEndpoint = ResolveNotificationEndpoint(host, material);
+        (Oid4VciWalletClient walletClient, List<string> refusalChallenges) = BuildRefusalObservingWalletClient(host, dpopKey: null);
+
+        Oid4VciRequestFailure? failure = await walletClient.SendCredentialNotificationAsync(
+            "notification-of-an-issuance",
+            Oid4VciNotificationEvents.CredentialAccepted,
+            UnissuedAccessToken,
+            WellKnownAuthenticationSchemes.Bearer,
+            notificationEndpoint,
+            eventDescription: null,
+            TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsNotNull(failure, "The token is refused.");
+        Assert.StartsWith("Bearer ", Assert.ContainsSingle(refusalChallenges), "The refusal's challenge is of the presentation's scheme.");
+        Assert.AreEqual(notificationEndpoint, failure.Endpoint);
+        Assert.AreEqual(401, failure.StatusCode, $"{failure.Kind} {failure.StatusCode} {failure.ErrorCode}");
+        Assert.AreEqual(
+            ResourceDpopProofs.ProtectedResourceDocumentUrlOf(notificationEndpoint).OriginalString,
+            failure.ResourceMetadata?.OriginalString);
+    }
+
+
+    /// <summary>
+    /// The capabilities of <see cref="IssuerCapabilities"/> and
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>, under which the Credential, Deferred
+    /// Credential and Notification Endpoints serve their protected resource metadata documents and name them in their
+    /// challenges.
+    /// </summary>
+    private static ImmutableHashSet<CapabilityIdentifier> DocumentServingIssuerCapabilities { get; } =
+        IssuerCapabilities.Add(WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata);
+
+    /// <summary>An access token the Issuer did not issue, of the token68 syntax a wallet presents.</summary>
+    private static string UnissuedAccessToken { get; } = "an-access-token-the-issuer-did-not-issue";
+
+    /// <summary>The refusal row whose token is presented under <c>DPoP</c>.</summary>
+    private const string DpopRefusalRow = "dpop-refusal";
+
+    /// <summary>The refusal row whose token is presented under <c>Bearer</c>.</summary>
+    private const string BearerRefusalRow = "bearer-refusal";
+
+
+    /// <summary>
+    /// Builds a wallet, wired with <paramref name="dpopKey"/> when one is given, that records the
+    /// <c>WWW-Authenticate</c> field value of every 401 resource answer other than a nonce challenge as it crossed the
+    /// wire, handing every answer over unchanged.
+    /// </summary>
+    /// <param name="host">The started host.</param>
+    /// <param name="dpopKey">The wallet's DPoP key, or <see langword="null"/> for a wallet presenting under <c>Bearer</c>.</param>
+    /// <returns>The wallet and the refusal challenges it received, in arrival order.</returns>
+    private (Oid4VciWalletClient Wallet, List<string> RefusalChallenges) BuildRefusalObservingWalletClient(TestHostShell host, DpopKey? dpopKey)
+    {
+        List<string> refusalChallenges = [];
+        Oid4VciWalletClient walletClient = BuildWalletClient(
+            host,
+            constructDpopProofAsync: dpopKey switch
+            {
+                null => null,
+                _ => BuildWalletDpopProofAsync
+            },
+            dpopKey: dpopKey,
+            rewriteResourceAnswer: answer =>
+            {
+                IReadOnlyList<string> challengeLines = answer.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate);
+                bool isNonceChallenge = DpopChallenge.TryRead(challengeLines, out DpopChallengeParameters parameters)
+                    && string.Equals(parameters.Error, OAuthErrors.UseDpopNonce, StringComparison.Ordinal);
+                if(answer.StatusCode == 401 && !isNonceChallenge)
+                {
+                    refusalChallenges.Add(string.Join(", ", challengeLines));
+                }
+
+                return answer;
+            });
+
+        return (walletClient, refusalChallenges);
     }
 
 

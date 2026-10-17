@@ -1,10 +1,15 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using Verifiable.Core;
+using Verifiable.Core.Outbound;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
+using Verifiable.OAuth.Client;
 using Verifiable.OAuth.ProtectedResource;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Ssf;
@@ -465,6 +470,19 @@ internal sealed class ProtectedResourceMetadataTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.1">RFC 8259 Section 8.1</see>: "JSON text exchanged
+    /// between systems that are not part of a closed ecosystem MUST be encoded using UTF-8 [RFC3629]." The bytes of a JSON
+    /// object naming its <c>resource</c> whose member <c>other</c>, one the reading does not know, holds the octet
+    /// <c>0xFF</c>, which no UTF-8 sequence holds, are read by the bytes overload as no document.
+    /// </summary>
+    [TestMethod]
+    public void StrictBytesParserReadsABodyThatIsNotUtf8AsNoDocument()
+    {
+        Assert.IsNull(ProtectedResourceMetadataJsonParsing.ParseProtectedResourceMetadata(NotUtf8DocumentOf("https://x/r")));
+    }
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-2">RFC 9728 Section 2</see>,
     /// <c>bearer_methods_supported</c>: "If this entry is omitted, no default bearer methods supported are implied,
     /// nor does its absence indicate that they are not supported." A resource whose contribution names no bearer
@@ -907,6 +925,447 @@ internal sealed class ProtectedResourceMetadataTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">RFC 9728 Section 3.3</see>: "If the protected
+    /// resource metadata was retrieved from a URL returned by the protected resource via the WWW-Authenticate
+    /// resource_metadata parameter, then the resource value returned MUST be identical to the URL that the client used to
+    /// make the request to the resource server.", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-5.2">Section 5.2</see>: "If the client receives such a
+    /// WWW-Authenticate response, it SHOULD retrieve the updated protected resource metadata and use the new metadata
+    /// values obtained, after validating them as described in Section 3.3." A UserInfo request without credentials sent
+    /// over the wire is answered with a challenge naming UserInfo's document; the resolution of that pointer for the URL
+    /// the request was sent to fetches the document over the wire and answers it resolved: <c>resource</c> the request
+    /// URL, <c>authorization_servers</c> the issuer alone, the twelve DPoP algorithms the server accepts. The rows: the
+    /// server's resources not requiring DPoP-bound access tokens (no <c>dpop_bound_access_tokens_required</c>,
+    /// <c>bearer_methods_supported</c> <c>["header"]</c>); requiring them (<c>true</c> and <c>[]</c>).
+    /// </summary>
+    /// <param name="row">The server's wiring: <see cref="ResolutionRequirementUnsetRow"/> or <see cref="ResolutionRequirementSetRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(ResolutionRequirementUnsetRow)]
+    [DataRow(ResolutionRequirementSetRow)]
+    public async Task ResolutionFromAChallengeReadsTheDocumentThatNamesTheRequestUrlAsync(string row)
+    {
+        bool isRequired = string.Equals(row, ResolutionRequirementSetRow, StringComparison.Ordinal);
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterUserInfoResourceAsync(app, isRequired).ConfigureAwait(false);
+        (Uri requestUri, Uri pointer) = await ReadUserInfoChallengePointerAsync(app, material).ConfigureAwait(false);
+
+        ProtectedResourceMetadataResolution resolution = await ResolveFromChallengeAsync(app, requestUri, pointer).ConfigureAwait(false);
+
+        ProtectedResourceMetadataResolved resolved = AssertResolutionCase<ProtectedResourceMetadataResolved>(resolution);
+        Assert.AreEqual(requestUri.OriginalString, resolved.Metadata.Resource);
+        Assert.AreEqual(pointer.OriginalString, resolved.MetadataLocation.OriginalString);
+        Assert.AreSequenceEqual(new[] { IssuerOf(app, material) }, resolved.Metadata.AuthorizationServers!.ToArray());
+        Assert.AreSequenceEqual(ResourceDpopProofs.AcceptedProofAlgorithms.Split(' '), resolved.Metadata.DpopSigningAlgValuesSupported!.ToArray());
+        Assert.AreEqual<bool?>(isRequired ? true : null, resolved.Metadata.DpopBoundAccessTokensRequired);
+        Assert.AreSequenceEqual(isRequired ? Array.Empty<string>() : [BearerMethodValues.Header], resolved.Metadata.BearerMethodsSupported!.ToArray());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">RFC 9728 Section 3.3</see>: "The resource value
+    /// returned MUST be identical to the protected resource's resource identifier value into which the well-known URI path
+    /// suffix was inserted to create the URL used to retrieve the metadata." and "the resource value returned MUST be
+    /// identical to the URL that the client used to make the request to the resource server";
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-7.3">Section 7.3</see>: "the client MUST ensure that the
+    /// resource identifier URL it is using as the prefix for the metadata request exactly matches the value of the
+    /// resource metadata parameter"; <see href="https://www.rfc-editor.org/rfc/rfc9728#section-7.7">Section 7.7</see>:
+    /// "Clients SHOULD take appropriate precautions against SSRF attacks". UserInfo's challenge is read over the wire and
+    /// its pointer replaced by one that is not the location formed from the request URL; the resolution answers that the
+    /// pointer is not derived from the request, naming the request URL, the pointer and the location expected, and sends
+    /// no request. The resolution runs under an outbound policy allowing the listener's host alone, so a request to any
+    /// other host would be denied without leaving the machine. The rows: the pointer on another host; at another path;
+    /// under another well-known suffix.
+    /// </summary>
+    /// <param name="row">The replaced pointer: <see cref="AnotherHostPointerRow"/>, <see cref="AnotherPathPointerRow"/> or <see cref="AnotherSuffixPointerRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(AnotherHostPointerRow)]
+    [DataRow(AnotherPathPointerRow)]
+    [DataRow(AnotherSuffixPointerRow)]
+    public async Task ResolutionFromAChallengeRefusesAPointerNotDerivedFromTheRequestUrlAsync(string row)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterUserInfoResourceAsync(app, isRequired: false).ConfigureAwait(false);
+        (Uri requestUri, Uri pointer) = await ReadUserInfoChallengePointerAsync(app, material).ConfigureAwait(false);
+        Uri replaced = new(row switch
+        {
+            AnotherHostPointerRow => $"https://resource.example.com/.well-known/oauth-protected-resource{requestUri.AbsolutePath}",
+            AnotherPathPointerRow => pointer.OriginalString.Replace("/userinfo", "/credential", StringComparison.Ordinal),
+            AnotherSuffixPointerRow => pointer.OriginalString.Replace(
+                "/.well-known/oauth-protected-resource/", "/.well-known/oauth-authorization-server/", StringComparison.Ordinal),
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown pointer row.")
+        });
+        using HttpClient client = SingleHopClientOf(app);
+        (OutboundTransportDelegate transport, Func<IReadOnlyList<OutboundRequest>> requests) =
+            RecordingOutboundTransport.WrapRequests(SingleHopTransportOf(client));
+
+        ProtectedResourceMetadataResolution resolution = await ResolveFromChallengeAsync(
+            app,
+            requestUri,
+            replaced,
+            transport,
+            TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy with { HostAllowList = [requestUri.Host] })).ConfigureAwait(false);
+
+        ProtectedResourceMetadataPointerNotDerivedFromRequest notDerived =
+            AssertResolutionCase<ProtectedResourceMetadataPointerNotDerivedFromRequest>(resolution);
+        Assert.AreEqual(requestUri, notDerived.RequestUri);
+        Assert.AreEqual(replaced, notDerived.Pointer);
+        Assert.AreEqual(pointer.OriginalString, notDerived.ExpectedPointer.OriginalString);
+        Assert.IsEmpty(requests(), "No request is sent to a pointer that is not derived from the request URL.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">RFC 9728 Section 3.3</see>: "the resource value
+    /// returned MUST be identical to the URL that the client used to make the request to the resource server. If these
+    /// values are not identical, the data contained in the response MUST NOT be used.", compared as
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-6">Section 6</see> states: "Comparisons between the two
+    /// strings MUST be performed as a Unicode code-point-to-code-point equality comparison." UserInfo's document is served
+    /// over the wire with its <c>resource</c> rewritten; the resolution answers the mismatch, naming the request URL, the
+    /// published <c>resource</c> as served and the document's location, and no document. The rows: the issuer, another
+    /// URL; the request URL with the first letter of UserInfo's path segment written <c>%75</c>, a spelling
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.2">RFC 3986 Section 6.2.2.2</see> holds equivalent
+    /// ("These URIs should be normalized by decoding any percent-encoded octet that corresponds to an unreserved
+    /// character") and a code-point comparison holds different.
+    /// </summary>
+    /// <param name="row">The served <c>resource</c>: <see cref="IssuerResourceRow"/> or <see cref="PercentEncodedResourceRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(IssuerResourceRow)]
+    [DataRow(PercentEncodedResourceRow)]
+    public async Task ResolutionFromAChallengeRefusesADocumentWhoseResourceIsNotTheRequestUrlAsync(string row)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterUserInfoResourceAsync(app, isRequired: false).ConfigureAwait(false);
+        (Uri requestUri, Uri pointer) = await ReadUserInfoChallengePointerAsync(app, material).ConfigureAwait(false);
+        string published = row switch
+        {
+            IssuerResourceRow => IssuerOf(app, material),
+            PercentEncodedResourceRow => requestUri.OriginalString.Replace("/userinfo", "/%75serinfo", StringComparison.Ordinal),
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown resource row.")
+        };
+        List<(string Path, int StatusCode, string BodyBefore, string BodyAfter)> rewritten = app.RewriteAnswerBody(
+            pointer.AbsolutePath, 1,
+            body => body.Replace($"\"resource\":\"{requestUri.OriginalString}\"", $"\"resource\":\"{published}\"", StringComparison.Ordinal));
+
+        ProtectedResourceMetadataResolution resolution = await ResolveFromChallengeAsync(app, requestUri, pointer).ConfigureAwait(false);
+
+        ProtectedResourceMetadataResourceMismatch mismatch = AssertResolutionCase<ProtectedResourceMetadataResourceMismatch>(resolution);
+        Assert.AreEqual(requestUri, mismatch.RequestUri);
+        Assert.AreEqual(published, mismatch.PublishedResource);
+        Assert.AreEqual(pointer, mismatch.MetadataLocation);
+        (_, _, string bodyBefore, string bodyAfter) = Assert.ContainsSingle(rewritten);
+        Assert.AreNotEqual(bodyBefore, bodyAfter, "The served document names the rewritten resource.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.2">RFC 9728 Section 3.2</see>: "Additional metadata
+    /// parameters MAY be defined and used; any metadata parameters that are not understood MUST be ignored." UserInfo's
+    /// document is served over the wire with a member the reading does not know, <c>"x_extension":{"a":1}</c>, added; the
+    /// resolution answers the document resolved, its known members as served.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ResolutionFromAChallengeIgnoresAMemberItDoesNotUnderstandAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterUserInfoResourceAsync(app, isRequired: false).ConfigureAwait(false);
+        (Uri requestUri, Uri pointer) = await ReadUserInfoChallengePointerAsync(app, material).ConfigureAwait(false);
+        List<(string Path, int StatusCode, string BodyBefore, string BodyAfter)> rewritten = app.RewriteAnswerBody(
+            pointer.AbsolutePath, 1, static body => "{\"x_extension\":{\"a\":1}," + body[1..]);
+
+        ProtectedResourceMetadataResolution resolution = await ResolveFromChallengeAsync(app, requestUri, pointer).ConfigureAwait(false);
+
+        ProtectedResourceMetadataResolved resolved = AssertResolutionCase<ProtectedResourceMetadataResolved>(resolution);
+        Assert.AreEqual(requestUri.OriginalString, resolved.Metadata.Resource);
+        Assert.AreSequenceEqual(new[] { IssuerOf(app, material) }, resolved.Metadata.AuthorizationServers!.ToArray());
+        Assert.AreSequenceEqual(new[] { WellKnownScopes.OpenId }, resolved.Metadata.ScopesSupported!.ToArray());
+        Assert.StartsWith("{\"x_extension\":{\"a\":1},", Assert.ContainsSingle(rewritten).BodyAfter);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.1">RFC 9728 Section 3.1</see>: "A protected resource
+    /// metadata document MUST be queried using an HTTP GET request at the previously specified URL." The resolution of
+    /// UserInfo's pointer, read from its challenge over the wire, sends exactly one request through the transport, with
+    /// the method <c>GET</c>, to the pointer.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ResolutionFromAChallengeQueriesTheDocumentWithGetAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterUserInfoResourceAsync(app, isRequired: false).ConfigureAwait(false);
+        (Uri requestUri, Uri pointer) = await ReadUserInfoChallengePointerAsync(app, material).ConfigureAwait(false);
+        using HttpClient client = SingleHopClientOf(app);
+        (OutboundTransportDelegate transport, Func<IReadOnlyList<OutboundRequest>> requests) =
+            RecordingOutboundTransport.WrapRequests(SingleHopTransportOf(client));
+
+        ProtectedResourceMetadataResolution resolution = await ResolveFromChallengeAsync(app, requestUri, pointer, transport).ConfigureAwait(false);
+
+        OutboundRequest sent = Assert.ContainsSingle(requests(), "The document is queried with one request.");
+        Assert.AreEqual(WellKnownHttpMethods.Get, sent.Method);
+        Assert.AreEqual(pointer, sent.Target);
+        _ = AssertResolutionCase<ProtectedResourceMetadataResolved>(resolution);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-7.7">RFC 9728 Section 7.7</see>: "Clients SHOULD take
+    /// appropriate precautions against SSRF attacks, such as blocking requests to internal IP address ranges." The
+    /// resolution of UserInfo's pointer, read from its challenge over the wire at the loopback listener, runs under the
+    /// secure default outbound policy, which blocks loopback addresses: it answers the policy's denial of the pointer and
+    /// the transport is never called.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ResolutionFromAChallengeAnswersAPolicyDenialBeforeAnyRequestAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterUserInfoResourceAsync(app, isRequired: false).ConfigureAwait(false);
+        (Uri requestUri, Uri pointer) = await ReadUserInfoChallengePointerAsync(app, material).ConfigureAwait(false);
+        using HttpClient client = SingleHopClientOf(app);
+        (OutboundTransportDelegate transport, Func<IReadOnlyList<OutboundRequest>> requests) =
+            RecordingOutboundTransport.WrapRequests(SingleHopTransportOf(client));
+
+        ProtectedResourceMetadataResolution resolution = await ResolveFromChallengeAsync(
+            app, requestUri, pointer, transport, TestHostShell.ExchangeContextWith(OutboundFetchPolicy.SecureDefault)).ConfigureAwait(false);
+
+        MetadataDocumentPolicyDenied denied = AssertResolutionCase<MetadataDocumentPolicyDenied>(resolution);
+        Assert.AreEqual(pointer, denied.Target);
+        Assert.IsEmpty(requests(), "The policy denies the pointer before the transport is called.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.2">RFC 9728 Section 3.2</see>: "A successful response
+    /// MUST use the 200 OK HTTP status code and return a JSON object using the application/json content type". UserInfo's
+    /// document is served over the wire with its answer rewritten at the listener; the resolution answers the failure the
+    /// answer is. The rows: the document answered with the status 404, a document not answered, with 404; the document
+    /// answered with the content type <c>text/html</c>, an unsupported media type, with <c>text/html</c>.
+    /// </summary>
+    /// <param name="row">The rewritten answer: <see cref="AnsweredNotFoundRow"/> or <see cref="AnsweredAsHtmlRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(AnsweredNotFoundRow)]
+    [DataRow(AnsweredAsHtmlRow)]
+    public async Task ResolutionFromAChallengeAnswersADocumentThatIsNoJson200AsTheFailureItIsAsync(string row)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterUserInfoResourceAsync(app, isRequired: false).ConfigureAwait(false);
+        (Uri requestUri, Uri pointer) = await ReadUserInfoChallengePointerAsync(app, material).ConfigureAwait(false);
+        string documentPath = pointer.AbsolutePath;
+        app.Host("default").RewriteAnswer = (path, response) => string.Equals(path, documentPath, StringComparison.Ordinal)
+            ? row switch
+            {
+                AnsweredNotFoundRow => response with { StatusCode = 404 },
+                AnsweredAsHtmlRow => response with { ContentType = "text/html" },
+                _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown answer row.")
+            }
+            : response;
+
+        ProtectedResourceMetadataResolution resolution = await ResolveFromChallengeAsync(app, requestUri, pointer).ConfigureAwait(false);
+
+        Assert.AreEqual(
+            row switch
+            {
+                AnsweredNotFoundRow => "NotAnswered 404",
+                AnsweredAsHtmlRow => "UnsupportedMediaType text/html",
+                _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown answer row.")
+            },
+            DescribeResolution(resolution));
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-2.2">RFC 9728 Section 2.2</see>: "Consumers of the
+    /// metadata MAY ignore the signed metadata if they do not support this feature." UserInfo's document is served over
+    /// the wire carrying <c>signed_metadata</c>, the server's signer answering <c>header.payload.signature</c>; the
+    /// resolution answers the document resolved from its plain members, with the signed metadata carried as the string the
+    /// document holds.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ResolutionFromAChallengeCarriesTheSignedMetadataUnverifiedAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterUserInfoResourceAsync(app, isRequired: false).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(app.Server, static candidateIntegration =>
+            candidateIntegration.SignProtectedResourceMetadataAsync = static (_, _, _, _) =>
+                ValueTask.FromResult<string?>("header.payload.signature")).ConfigureAwait(false);
+        (Uri requestUri, Uri pointer) = await ReadUserInfoChallengePointerAsync(app, material).ConfigureAwait(false);
+
+        ProtectedResourceMetadataResolution resolution = await ResolveFromChallengeAsync(app, requestUri, pointer).ConfigureAwait(false);
+
+        ProtectedResourceMetadataResolved resolved = AssertResolutionCase<ProtectedResourceMetadataResolved>(resolution);
+        Assert.AreEqual(requestUri.OriginalString, resolved.Metadata.Resource);
+        Assert.AreEqual("header.payload.signature", resolved.Metadata.SignedMetadata);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.1">RFC 8259 Section 8.1</see>: "JSON text exchanged
+    /// between systems that are not part of a closed ecosystem MUST be encoded using UTF-8 [RFC3629]."
+    /// UserInfo's challenge is read over the wire, and its pointer is answered 200 <c>application/json</c> with a body
+    /// naming the request URL as its <c>resource</c> whose member <c>other</c>, one the reading does not know, holds the
+    /// octet <c>0xFF</c>, which no UTF-8 sequence holds; the resolution answers the body unreadable at the pointer. The
+    /// document is answered by an injected transport because the listener's answer hooks carry a body as a string, which
+    /// cannot hold an octet that is not UTF-8.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ResolutionFromAChallengeAnswersABodyThatIsNotUtf8AsUnreadableAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterUserInfoResourceAsync(app, isRequired: false).ConfigureAwait(false);
+        (Uri requestUri, Uri pointer) = await ReadUserInfoChallengePointerAsync(app, material).ConfigureAwait(false);
+        ScriptedOutboundTransport transport = new(new Dictionary<string, ScriptedOutboundResponse>(StringComparer.Ordinal)
+        {
+            [pointer.AbsoluteUri] = ScriptedOutboundResponse.WithBody(
+                200,
+                HttpHeaderSet.FromPairs((WellKnownHttpHeaderNames.ContentType, WellKnownMediaTypes.Application.Json)),
+                new TaggedMemory<byte>(NotUtf8DocumentOf(requestUri.OriginalString), BufferTags.Json))
+        });
+
+        ProtectedResourceMetadataResolution resolution = await ResolveFromChallengeAsync(app, requestUri, pointer, transport.Delegate).ConfigureAwait(false);
+
+        ProtectedResourceMetadataUnreadable unreadable = AssertResolutionCase<ProtectedResourceMetadataUnreadable>(resolution);
+        Assert.AreEqual(pointer.OriginalString, unreadable.MetadataLocation.OriginalString);
+        Assert.AreEqual(pointer, Assert.ContainsSingle(transport.Calls, "The document is queried with one request.").Target);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.2">RFC 9728 Section 3.2</see>: "A successful response
+    /// MUST use the 200 OK HTTP status code and return a JSON object using the application/json content type".
+    /// UserInfo's document is served over the wire with its body rewritten to <c>[]</c>, a JSON text that is not an
+    /// object, its status and content type kept; the resolution answers the body unreadable at the pointer.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ResolutionFromAChallengeAnswersAJsonTextThatIsNotAnObjectAsUnreadableAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterUserInfoResourceAsync(app, isRequired: false).ConfigureAwait(false);
+        (Uri requestUri, Uri pointer) = await ReadUserInfoChallengePointerAsync(app, material).ConfigureAwait(false);
+        List<(string Path, int StatusCode, string BodyBefore, string BodyAfter)> rewritten = app.RewriteAnswerBody(
+            pointer.AbsolutePath, 1, static _ => "[]");
+
+        ProtectedResourceMetadataResolution resolution = await ResolveFromChallengeAsync(app, requestUri, pointer).ConfigureAwait(false);
+
+        ProtectedResourceMetadataUnreadable unreadable = AssertResolutionCase<ProtectedResourceMetadataUnreadable>(resolution);
+        Assert.AreEqual(pointer.OriginalString, unreadable.MetadataLocation.OriginalString);
+        Assert.AreEqual("[]", Assert.ContainsSingle(rewritten).BodyAfter);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.1">RFC 9728 Section 3.1</see>: "A protected resource
+    /// metadata document MUST be queried using an HTTP GET request at the previously specified URL.", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.4">RFC 9110 Section 15.4</see>: "If a Location header
+    /// field (Section 10.2.2) is provided, the user agent MAY automatically redirect its request to the URI referenced by
+    /// the Location field value". UserInfo's document location is answered over the wire with 302 and a
+    /// <c>Location</c> naming UserInfo; under the loopback outbound policy, which follows no redirect, the resolution
+    /// answers the redirect refused, with the status 302 and the <c>Location</c> as received.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ResolutionFromAChallengeAnswersARedirectOfTheDocumentAsRefusedAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterUserInfoResourceAsync(app, isRequired: false).ConfigureAwait(false);
+        (Uri requestUri, Uri pointer) = await ReadUserInfoChallengePointerAsync(app, material).ConfigureAwait(false);
+        string documentPath = pointer.AbsolutePath;
+        string location = requestUri.OriginalString;
+        app.Host("default").RewriteAnswer = (path, response) => string.Equals(path, documentPath, StringComparison.Ordinal)
+            ? ServerHttpResponse.Redirect(location)
+            : response;
+
+        ProtectedResourceMetadataResolution resolution = await ResolveFromChallengeAsync(app, requestUri, pointer).ConfigureAwait(false);
+
+        MetadataDocumentRedirectRefused refused = AssertResolutionCase<MetadataDocumentRedirectRefused>(resolution);
+        Assert.AreEqual(302, refused.StatusCode);
+        Assert.AreEqual(location, refused.Location);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.1">RFC 9728 Section 3.1</see>: "A protected resource
+    /// metadata document MUST be queried using an HTTP GET request at the previously specified URL."; RFC 9728 states no
+    /// bound on the document's size, and the bound is the caller's byte cap. UserInfo's document, served over the wire
+    /// without a <c>Content-Length</c> field, so its length is known only as it is read, is resolved under a cap of 64
+    /// bytes, below its length; the guarded fetch stops at the first octet past the cap, and the resolution answers the
+    /// document too large, with the cap, the 65 octets observed and that the length was observed.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ResolutionFromAChallengeAnswersADocumentOverTheByteCapAsTooLargeAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterUserInfoResourceAsync(app, isRequired: false).ConfigureAwait(false);
+        (Uri requestUri, Uri pointer) = await ReadUserInfoChallengePointerAsync(app, material).ConfigureAwait(false);
+
+        ProtectedResourceMetadataResolution resolution = await ResolveFromChallengeAsync(
+            app, requestUri, pointer, maximumDocumentBytes: 64).ConfigureAwait(false);
+
+        MetadataDocumentTooLarge tooLarge = AssertResolutionCase<MetadataDocumentTooLarge>(resolution);
+        Assert.AreEqual(64L, tooLarge.Limit);
+        Assert.AreEqual(65L, tooLarge.LengthSeen);
+        Assert.AreEqual(OutboundResponseLengthKind.Observed, tooLarge.LengthKind);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.1">RFC 9728 Section 3.1</see>: "A protected resource
+    /// metadata document MUST be queried using an HTTP GET request at the previously specified URL." The request URL names
+    /// a loopback port that a socket holds bound and never listening on, so no listener can take it, and the pointer is
+    /// the location formed from it; the GET finds no listener, the connection is refused, and the resolution answers the
+    /// document unreachable with the transport's failure kind, <see cref="HttpRequestException"/>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ResolutionFromAChallengeAnswersADocumentNoListenerServesAsUnreachableAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using Socket portHolder = new(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        portHolder.Bind(new IPEndPoint(IPAddress.Loopback, 0));
+        Uri requestUri = new($"https://127.0.0.1:{((IPEndPoint)portHolder.LocalEndPoint!).Port}/connect/no-listener/userinfo");
+        Uri pointer = ResourceDpopProofs.ProtectedResourceDocumentUrlOf(requestUri);
+
+        ProtectedResourceMetadataResolution resolution = await ResolveFromChallengeAsync(app, requestUri, pointer).ConfigureAwait(false);
+
+        MetadataDocumentUnreachable unreachable = AssertResolutionCase<MetadataDocumentUnreachable>(resolution);
+        Assert.AreEqual(typeof(HttpRequestException), unreachable.FailureKind);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.1">RFC 9728 Section 3.1</see>: "A protected resource
+    /// metadata document MUST be queried using an HTTP GET request at the previously specified URL." UserInfo's
+    /// challenge is read over the wire and its pointer, where a GET over a raw TLS connection is answered 200, is sent a
+    /// POST over a raw TLS connection; the server serves no document to it and answers 404.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task DocumentLocationAnswersAPostWithNotFoundAsync()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterUserInfoResourceAsync(app, isRequired: false).ConfigureAwait(false);
+        (_, Uri pointer) = await ReadUserInfoChallengePointerAsync(app, material).ConfigureAwait(false);
+        HttpResponseData queried = await RawHttpsRequest.SendAsync(
+            app, WellKnownHttpMethods.Get, pointer, [], ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, queried.StatusCode, "A GET at the pointer is answered with the document.");
+
+        HttpResponseData posted = await RawHttpsRequest.SendAsync(
+            app, WellKnownHttpMethods.Post, pointer, [], ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(404, posted.StatusCode, posted.Body);
+    }
+
+
+    /// <summary>
     /// Registers a protected resource, wires <paramref name="contribution"/> as its metadata contribution, runs
     /// <paramref name="arrange"/> on the server when given, starts the listener, and fetches the document over the wire
     /// at the location <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3">RFC 9728 Section 3</see> derives
@@ -1000,4 +1459,206 @@ internal sealed class ProtectedResourceMetadataTests
 
         return doc.RootElement.GetProperty("issuer").GetString()!;
     }
+
+
+    /// <summary>The resolution row whose server's resources do not require DPoP-bound access tokens.</summary>
+    private const string ResolutionRequirementUnsetRow = "requirement-unset";
+
+    /// <summary>The resolution row whose server's resources require DPoP-bound access tokens.</summary>
+    private const string ResolutionRequirementSetRow = "requirement-set";
+
+    /// <summary>The pointer row naming the document's path on another host.</summary>
+    private const string AnotherHostPointerRow = "another-host";
+
+    /// <summary>The pointer row naming the document of another path on the same host.</summary>
+    private const string AnotherPathPointerRow = "another-path";
+
+    /// <summary>The pointer row naming the request URL's path under another well-known suffix.</summary>
+    private const string AnotherSuffixPointerRow = "another-suffix";
+
+    /// <summary>The resource row whose document names the issuer as its <c>resource</c>.</summary>
+    private const string IssuerResourceRow = "issuer";
+
+    /// <summary>The resource row whose document names the request URL with one unreserved letter percent-encoded.</summary>
+    private const string PercentEncodedResourceRow = "percent-encoded-letter";
+
+    /// <summary>The answer row whose document is answered with the status 404.</summary>
+    private const string AnsweredNotFoundRow = "answered-404";
+
+    /// <summary>The answer row whose document is answered with the content type <c>text/html</c>.</summary>
+    private const string AnsweredAsHtmlRow = "answered-text-html";
+
+    /// <summary>The byte cap the resolution rows read a document under.</summary>
+    private static long MaximumDocumentBytes { get; } = 64 * 1024;
+
+
+    /// <summary>
+    /// The bytes of <c>{"resource":"</c>, <paramref name="resource"/>, <c>","other":"</c>, the octet <c>0xFF</c> and
+    /// <c>"}</c>: a JSON object in every byte but one, that octet, which no UTF-8 sequence holds, standing in the value of
+    /// a member the reading does not know.
+    /// </summary>
+    /// <param name="resource">The <c>resource</c> value, ASCII with no character JSON escapes.</param>
+    /// <returns>The bytes.</returns>
+    private static byte[] NotUtf8DocumentOf(string resource) =>
+        [.. Encoding.ASCII.GetBytes($"{{\"resource\":\"{resource}\",\"other\":\""), 0xFF, .. Encoding.ASCII.GetBytes("\"}")];
+
+
+    /// <summary>
+    /// The capabilities under which UserInfo answers a request without credentials with a challenge naming its protected
+    /// resource metadata document, and serves that document: OpenID Connect UserInfo with discovery and the JWK Set, and
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>.
+    /// </summary>
+    private static ImmutableHashSet<CapabilityIdentifier> UserInfoDocumentCapabilities { get; } = ImmutableHashSet.Create(
+        WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
+        WellKnownCapabilityIdentifiers.OAuthPushedAuthorization,
+        WellKnownCapabilityIdentifiers.OidcOpenIdConnect,
+        WellKnownCapabilityIdentifiers.OidcUserInfo,
+        WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
+        WellKnownCapabilityIdentifiers.OAuthJwksEndpoint,
+        WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata);
+
+
+    /// <summary>
+    /// Registers a DPoP client under <see cref="UserInfoDocumentCapabilities"/> and enables DPoP proof validation on the
+    /// server, with the resources requiring DPoP-bound access tokens when <paramref name="isRequired"/> is set.
+    /// </summary>
+    /// <param name="app">The host.</param>
+    /// <param name="isRequired">Whether the server's resources require DPoP-bound access tokens.</param>
+    /// <returns>The registration; the caller disposes it.</returns>
+    private static async Task<VerifierKeyMaterial> RegisterUserInfoResourceAsync(TestHostShell app, bool isRequired)
+    {
+        VerifierKeyMaterial material = await app.RegisterDpopClientAsync(
+            ClientId, new Uri(ClientId), capabilities: UserInfoDocumentCapabilities).ConfigureAwait(false);
+        if(isRequired)
+        {
+            await RequireDpopBoundAccessTokensAsync(app).ConfigureAwait(false);
+        }
+        else
+        {
+            _ = await app.EnableDpopAsync().ConfigureAwait(false);
+        }
+
+        return material;
+    }
+
+
+    /// <summary>
+    /// Starts the listener, aligns <paramref name="material"/>'s registration to the listener's base address so the
+    /// issuer and UserInfo's identifier name the URL a client sends its request to, sends a UserInfo request without
+    /// credentials over a raw TLS connection, asserts the 401 answer, reads the <c>resource_metadata</c> pointer of its
+    /// <c>DPoP</c> challenge as a client reads it (<see cref="DpopChallenge.TryRead"/> over every <c>WWW-Authenticate</c>
+    /// field line), and asserts the pointer's text is, code point for code point, the test's own derivation of the
+    /// document's URL from the request URL (<see cref="ResourceDpopProofs.ProtectedResourceDocumentUrlOf"/>).
+    /// </summary>
+    /// <param name="app">The host.</param>
+    /// <param name="material">The registration whose UserInfo endpoint is addressed; its registration is replaced by the aligned one.</param>
+    /// <returns>The URL the request was sent to and the pointer its challenge named.</returns>
+    private async Task<(Uri RequestUri, Uri Pointer)> ReadUserInfoChallengePointerAsync(TestHostShell app, VerifierKeyMaterial material)
+    {
+        Uri requestUri = await RawAuthCodeWirePushers.ResolveUserInfoUriAsync(app, material, TestContext.CancellationToken).ConfigureAwait(false);
+        material.Registration = app.AlignRegistrationToHostHttpBase("default", material.Registration);
+        HttpResponseData challenged = await RawHttpsRequest.SendAsync(
+            app, WellKnownHttpMethods.Post, requestUri, [], ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(401, challenged.StatusCode, challenged.Body);
+        IReadOnlyList<string> challengeLines = challenged.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate);
+        Assert.IsTrue(DpopChallenge.TryRead(challengeLines, out DpopChallengeParameters parameters), string.Join(" | ", challengeLines));
+        Assert.IsNotNull(parameters.ResourceMetadata, $"The challenge names UserInfo's document: {string.Join(" | ", challengeLines)}");
+        Assert.AreEqual(
+            ResourceDpopProofs.ProtectedResourceDocumentUrlOf(requestUri).OriginalString,
+            parameters.ResourceMetadata.OriginalString,
+            "The challenge's pointer is the document's URL formed from the request URL.");
+
+        return (requestUri, parameters.ResourceMetadata);
+    }
+
+
+    /// <summary>
+    /// Resolves <paramref name="pointer"/> for <paramref name="requestUri"/> under
+    /// <see cref="WellKnownPaths.OAuthProtectedResource"/>, through <paramref name="transport"/> (by default the host's
+    /// single-hop transport) under <paramref name="context"/> (by default the loopback outbound policy), with the JSON
+    /// leaf's strict reading of the bytes and <see cref="MaximumDocumentBytes"/>.
+    /// </summary>
+    /// <param name="app">The host whose listener serves the document.</param>
+    /// <param name="requestUri">The URL the challenged request was sent to.</param>
+    /// <param name="pointer">The pointer resolved.</param>
+    /// <param name="transport">The transport, or <see langword="null"/> for <see cref="SingleHopTransportOf"/>.</param>
+    /// <param name="context">The context, or <see langword="null"/> for the loopback outbound policy.</param>
+    /// <param name="maximumDocumentBytes">The byte cap, or <see langword="null"/> for <see cref="MaximumDocumentBytes"/>.</param>
+    /// <returns>The resolution.</returns>
+    private async Task<ProtectedResourceMetadataResolution> ResolveFromChallengeAsync(
+        TestHostShell app,
+        Uri requestUri,
+        Uri pointer,
+        OutboundTransportDelegate? transport = null,
+        ExchangeContext? context = null,
+        long? maximumDocumentBytes = null)
+    {
+        using HttpClient singleHopClient = SingleHopClientOf(app);
+
+        return await ProtectedResourceMetadataDocuments.ResolveFromChallengeAsync(
+            requestUri,
+            pointer,
+            WellKnownPaths.OAuthProtectedResource,
+            context ?? TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy),
+            transport ?? SingleHopTransportOf(singleHopClient),
+            ProtectedResourceMetadataJsonParsing.ParseProtectedResourceMetadata,
+            maximumDocumentBytes ?? MaximumDocumentBytes,
+            TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// A client of the default host's listener that pins the certificate the listener presents and follows no redirect
+    /// (<see cref="LoopbackTls.CreateSingleHopPinnedHttpClient(System.Security.Cryptography.X509Certificates.X509Certificate2)"/>),
+    /// so a 3xx reaches the guarded fetch, whose outbound policy is the one redirect authority.
+    /// </summary>
+    /// <param name="app">The host.</param>
+    /// <returns>The client; the caller disposes it.</returns>
+    private static HttpClient SingleHopClientOf(TestHostShell app) =>
+        LoopbackTls.CreateSingleHopPinnedHttpClient(app.HostCertificate("default"));
+
+
+    /// <summary>The single-hop transport over <paramref name="client"/>, a client of <see cref="SingleHopClientOf"/>.</summary>
+    /// <param name="client">The single-hop client.</param>
+    /// <returns>The transport.</returns>
+    private static OutboundTransportDelegate SingleHopTransportOf(HttpClient client) =>
+        GuardedHttpClientTransport.BuildSingleHopTransport(client);
+
+
+    /// <summary>The issuer the host holds for <paramref name="material"/>'s registration, as written.</summary>
+    /// <param name="app">The host holding the registration.</param>
+    /// <param name="material">The registration.</param>
+    /// <returns>The issuer.</returns>
+    private static string IssuerOf(TestHostShell app, VerifierKeyMaterial material) =>
+        app.Host("default").Registrations[material.Registration.TenantId.Value].IssuerUri!.OriginalString;
+
+
+    /// <summary>Asserts that <paramref name="resolution"/> holds the case <typeparamref name="T"/> and answers it.</summary>
+    /// <typeparam name="T">The case type expected.</typeparam>
+    /// <param name="resolution">The resolution.</param>
+    /// <returns>The case.</returns>
+    private static T AssertResolutionCase<T>(ProtectedResourceMetadataResolution resolution) where T : class =>
+        Assert.IsInstanceOfType<T>(resolution.Value, $"Expected {typeof(T).Name}; got {DescribeResolution(resolution)}.");
+
+
+    /// <summary>
+    /// States a resolution for an assertion message: the case and its evidence, through a switch over every case of the
+    /// union, so the description covers each case the resolution can answer.
+    /// </summary>
+    /// <param name="resolution">The resolution.</param>
+    /// <returns>The statement.</returns>
+    private static string DescribeResolution(ProtectedResourceMetadataResolution resolution) => resolution switch
+    {
+        ProtectedResourceMetadataResolved resolved => $"Resolved {resolved.Metadata.Resource}",
+        ProtectedResourceMetadataPointerNotDerivedFromRequest notDerived => $"PointerNotDerivedFromRequest {notDerived.Pointer}",
+        MetadataDocumentPolicyDenied denied => $"PolicyDenied {denied.Target}",
+        MetadataDocumentUnreachable unreachable => $"Unreachable {unreachable.FailureKind.Name}",
+        MetadataDocumentRedirectRefused refused => $"RedirectRefused {refused.StatusCode} {refused.Location}",
+        MetadataDocumentTooLarge tooLarge => $"TooLarge {tooLarge.LengthSeen}",
+        MetadataDocumentNotAnswered notAnswered => $"NotAnswered {notAnswered.StatusCode}",
+        MetadataDocumentUnsupportedMediaType unsupported => $"UnsupportedMediaType {unsupported.ContentType}",
+        ProtectedResourceMetadataUnreadable unreadable => $"Unreadable {unreadable.MetadataLocation}",
+        ProtectedResourceMetadataResourceMismatch mismatch => $"ResourceMismatch {mismatch.PublishedResource}"
+    };
 }

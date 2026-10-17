@@ -1201,7 +1201,7 @@ public sealed class Oid4VciWalletClient
         if(response.StatusCode is < 200 or >= 300)
         {
             return Result<CredentialIssuanceResult, Oid4VciRequestFailure>.Failure(
-                ParseErrorResponse(response.StatusCode, response.Body, credentialEndpoint));
+                ResourceRequestRefusal(response, credentialEndpoint));
         }
 
         string? contentType = response.Headers.TryGetSingle(WellKnownHttpHeaderNames.ContentType);
@@ -1303,7 +1303,7 @@ public sealed class Oid4VciWalletClient
         if(response.StatusCode is < 200 or >= 300)
         {
             return Result<CredentialIssuanceResult, Oid4VciRequestFailure>.Failure(
-                ParseErrorResponse(response.StatusCode, response.Body, deferredCredentialEndpoint));
+                ResourceRequestRefusal(response, deferredCredentialEndpoint));
         }
 
         string? contentType = response.Headers.TryGetSingle(WellKnownHttpHeaderNames.ContentType);
@@ -1391,7 +1391,7 @@ public sealed class Oid4VciWalletClient
         //§11.2: success is HTTP 204 No Content; §11.3 maps failures to error bodies.
         if(response.StatusCode is < 200 or >= 300)
         {
-            return ParseErrorResponse(response.StatusCode, response.Body, notificationEndpoint);
+            return ResourceRequestRefusal(response, notificationEndpoint);
         }
 
         return null;
@@ -1663,6 +1663,61 @@ public sealed class Oid4VciWalletClient
                 ? errorDescription
                 : null
         };
+    }
+
+
+    /// <summary>
+    /// The failure of a Credential, Deferred Credential or Notification Request the endpoint refused with a non-2xx
+    /// status: the error response <see cref="ParseErrorResponse"/> reads, carrying the <c>resource_metadata</c> pointer
+    /// the refusal's challenge named (<see cref="ReadResourceMetadata"/>) as
+    /// <see cref="Oid4VciRequestFailure.ResourceMetadata"/>, for the application's resolver.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-5.2">RFC 9728 Section 5.2</see>: "If the client
+    /// receives such a WWW-Authenticate response, it SHOULD retrieve the updated protected resource metadata and use the
+    /// new metadata values obtained, after validating them as described in Section 3.3." The Wallet surfaces the pointer
+    /// and resolves nothing itself.
+    /// </summary>
+    /// <param name="response">The endpoint's non-2xx answer.</param>
+    /// <param name="endpoint">The endpoint that refused the request.</param>
+    /// <returns>The refusal, with the pointer when its challenge named one.</returns>
+    private static Oid4VciRequestFailure ResourceRequestRefusal(HttpResponseData response, Uri endpoint) =>
+        ParseErrorResponse(response.StatusCode, response.Body, endpoint) with
+        {
+            ResourceMetadata = ReadResourceMetadata(response)
+        };
+
+
+    /// <summary>
+    /// The <c>resource_metadata</c> URL a 401 or 403 resource answer's <c>WWW-Authenticate</c> challenge names, or
+    /// <see langword="null"/> when the answer is of another status or no challenge names one.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-5.1">RFC 9728 Section 5.1</see>: "resource_metadata:
+    /// The URL of the protected resource metadata." and "This parameter MAY also be used in WWW-Authenticate responses
+    /// using authorization schemes other than "Bearer" [RFC6750], such as the DPoP scheme defined by [RFC9449]." Every
+    /// field line is read as the challenge readers read it: the one <c>DPoP</c> challenge through
+    /// <see cref="ProtectedResource.DpopChallenge.TryRead"/>, and, when that names no pointer, the one <c>Bearer</c>
+    /// challenge through <see cref="ProtectedResource.BearerTokenChallenge.TryReadChallenge"/>; a pointer is an absolute
+    /// http or https URL as those readers accept it. Reading the <c>DPoP</c> challenge's pointer first is the library's
+    /// own rule: the library's resources write one pointer in both challenges.
+    /// </summary>
+    /// <param name="response">The resource answer.</param>
+    /// <returns>The pointer, or <see langword="null"/>.</returns>
+    private static Uri? ReadResourceMetadata(HttpResponseData response)
+    {
+        if(response.StatusCode is not (401 or 403))
+        {
+            return null;
+        }
+
+        IReadOnlyList<string> challengeLines = response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate);
+        if(ProtectedResource.DpopChallenge.TryRead(challengeLines, out ProtectedResource.DpopChallengeParameters dpopParameters)
+            && dpopParameters.ResourceMetadata is Uri dpopPointer)
+        {
+            return dpopPointer;
+        }
+
+        return ProtectedResource.BearerTokenChallenge.TryReadChallenge(
+            challengeLines, WellKnownAuthenticationSchemes.Bearer, out ProtectedResource.BearerTokenChallengeParameters bearerParameters)
+            ? bearerParameters.ResourceMetadata
+            : null;
     }
 
 
