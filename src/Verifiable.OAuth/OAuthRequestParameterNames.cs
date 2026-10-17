@@ -232,19 +232,19 @@ public static class OAuthRequestParameterNames
     /// </summary>
     public static string ErrorDescription { get; } = Utf8Constants.ToInternedString(ErrorDescriptionUtf8);
 
-    /// <summary>The UTF-8 source literal of <see cref="ErrorUri"/>.</summary>
-    public static ReadOnlySpan<byte> ErrorUriUtf8 => "error_uri"u8;
+    /// <summary>The UTF-8 source literal of <see cref="ErrorUri"/>, held within the library as its string is.</summary>
+    internal static ReadOnlySpan<byte> ErrorUriUtf8 => "error_uri"u8;
 
     /// <summary>
     /// The <c>error_uri</c> parameter.
     /// A URI identifying a human-readable web page with information about the error, used to provide the client
     /// developer with additional information about the error per
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 §5.2</see>.
-    /// OPTIONAL.
+    /// OPTIONAL. Held within the library, whose reading of an error response names the parameter by it and hands the
+    /// URI it carries as a <see cref="System.Uri"/>; a public member of text type named for a URI would be read as a URI
+    /// held in a string.
     /// </summary>
-    [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",
-        Justification = "This member is the wire parameter NAME 'error_uri' (compared and serialised as a string), not a dereferenceable System.Uri.")]
-    public static string ErrorUri { get; } = Utf8Constants.ToInternedString(ErrorUriUtf8);
+    internal static string ErrorUri { get; } = Utf8Constants.ToInternedString(ErrorUriUtf8);
 
     //Token request parameters — RFC 6749 §4.1.3.
 
@@ -269,6 +269,12 @@ public static class OAuthRequestParameterNames
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 §5.1</see>.
     /// </summary>
     public static string AccessToken { get; } = Utf8Constants.ToInternedString(AccessTokenUtf8);
+
+    /// <summary>Returns <see langword="true"/> when <paramref name="value"/> is exactly <c>access_token</c>.</summary>
+    /// <param name="value">The parameter name to recognize.</param>
+    /// <returns><see langword="true"/> when <paramref name="value"/> names the <see cref="AccessToken"/> parameter.</returns>
+    public static bool IsAccessToken(string value) =>
+        string.Equals(value, AccessToken, StringComparison.Ordinal);
 
     /// <summary>The UTF-8 source literal of <see cref="TokenType"/>.</summary>
     public static ReadOnlySpan<byte> TokenTypeUtf8 => "token_type"u8;

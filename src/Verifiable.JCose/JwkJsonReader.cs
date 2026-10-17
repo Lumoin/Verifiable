@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Text;
+using System.Text.Unicode;
 
 namespace Verifiable.JCose;
 
@@ -2011,6 +2012,7 @@ public static class JwkJsonReader
             }
 
             var current = json[_position];
+
             if(current != (byte)'\\' || !DecodeEscapes)
             {
                 if(Rune.DecodeFromUtf8(json[_position..End], out var rune, out var consumed) != OperationStatus.Done)
@@ -2019,6 +2021,7 @@ public static class JwkJsonReader
                 }
 
                 _position += consumed;
+
                 if(rune.IsBmp)
                 {
                     result = (char)rune.Value;
@@ -2035,6 +2038,7 @@ public static class JwkJsonReader
             }
 
             _position++;
+
             if(_position >= End)
             {
                 return NameCursorStep.Undecodable;
@@ -2062,13 +2066,13 @@ public static class JwkJsonReader
                 return NameCursorStep.CodeUnit;
             }
 
-            var code = escape == (byte)'u' && _position + 5 <= End ? DecodeHex4(json, _position + 1) : -1;
-            if(code < 0)
+            //Only the four hex digits of a \uXXXX escape inside the cursor's span name a code unit.
+            if(escape != (byte)'u' || !TryDecodeHex4(json[..End], _position + 1, out var escaped))
             {
                 return NameCursorStep.Undecodable;
             }
 
-            result = (char)code;
+            result = escaped;
             _position += 5;
 
             return NameCursorStep.CodeUnit;
@@ -2076,26 +2080,38 @@ public static class JwkJsonReader
     }
 
 
-    /// <summary>The code unit the four hex digits at <paramref name="start"/> of a <c>\uXXXX</c> escape name.</summary>
-    /// <param name="json">The bytes carrying the escape.</param>
+    /// <summary>Decodes the four hex digits at <paramref name="start"/> of a <c>\uXXXX</c> escape to the code unit they name.</summary>
+    /// <param name="json">The bytes carrying the escape, ending where the escape's string ends.</param>
     /// <param name="start">The position of the first hex digit, immediately after <c>\u</c>.</param>
-    /// <returns>The code unit, or -1 when any of the four is no hex digit or lies past the end of <paramref name="json"/>.</returns>
-    private static int DecodeHex4(ReadOnlySpan<byte> json, int start)
+    /// <param name="codeUnit">The code unit the four digits name, or <c>'\0'</c> when they name none.</param>
+    /// <returns>
+    /// <see langword="true"/> when four hex digits stand at <paramref name="start"/>; <see langword="false"/> when any of the
+    /// four is no hex digit or lies past the end of <paramref name="json"/>.
+    /// </returns>
+    private static bool TryDecodeHex4(ReadOnlySpan<byte> json, int start, out char codeUnit)
     {
+        codeUnit = '\0';
+
+        if(start + 4 > json.Length)
+        {
+            return false;
+        }
+
         var code = 0;
+
         for(var offset = 0; offset < 4; offset++)
         {
-            var index = start + offset;
-            var nibble = index < json.Length ? HexNibble((char)json[index]) : -1;
-            if(nibble < 0)
+            if(!TryReadHexNibble((char)json[start + offset], out var nibble))
             {
-                return -1;
+                return false;
             }
 
             code = (code << 4) | nibble;
         }
 
-        return code;
+        codeUnit = (char)code;
+
+        return true;
     }
 
 
@@ -2167,7 +2183,7 @@ public static class JwkJsonReader
 
                         for(int offset = 0; offset < 4; offset++)
                         {
-                            if(HexNibble((char)json[index + offset]) < 0)
+                            if(!TryReadHexNibble((char)json[index + offset], out _))
                             {
                                 return false;
                             }
@@ -2520,8 +2536,7 @@ public static class JwkJsonReader
         int code = 0;
         for(int offset = 0; offset < 4; offset++)
         {
-            int nibble = HexNibble(value[start + offset]);
-            if(nibble < 0)
+            if(!TryReadHexNibble(value[start + offset], out var nibble))
             {
                 return false;
             }
@@ -2535,17 +2550,40 @@ public static class JwkJsonReader
     }
 
 
-    /// <summary>Maps one hex digit character to its numeric value, or -1 when it is not a hex digit.</summary>
-    /// <param name="character">The character to map.</param>
-    /// <returns>The nibble value 0-15, or -1 when <paramref name="character"/> is not a hex digit.</returns>
-    private static int HexNibble(char character) =>
-        character switch
+    /// <summary>Reads one hex digit character as the value 0 to 15 it names.</summary>
+    /// <param name="character">The character to read.</param>
+    /// <param name="nibble">The value the digit names, or 0 when <paramref name="character"/> is no hex digit.</param>
+    /// <returns><see langword="true"/> when <paramref name="character"/> is a hex digit.</returns>
+    private static bool TryReadHexNibble(char character, out int nibble)
+    {
+        switch(character)
         {
-            >= '0' and <= '9' => character - '0',
-            >= 'a' and <= 'f' => character - 'a' + 10,
-            >= 'A' and <= 'F' => character - 'A' + 10,
-            _ => -1
-        };
+            case >= '0' and <= '9':
+            {
+                nibble = character - '0';
+
+                return true;
+            }
+            case >= 'a' and <= 'f':
+            {
+                nibble = character - 'a' + 10;
+
+                return true;
+            }
+            case >= 'A' and <= 'F':
+            {
+                nibble = character - 'A' + 10;
+
+                return true;
+            }
+            default:
+            {
+                nibble = 0;
+
+                return false;
+            }
+        }
+    }
 
 
     /// <summary>
@@ -2591,7 +2629,10 @@ public static class JwkJsonReader
     /// material. <c>use</c> eligibility (<see href="https://www.rfc-editor.org/rfc/rfc7517#section-4.2">RFC
     /// 7517 §4.2</see>) is: absent, since the member is OPTIONAL; present as a JSON string whose decoded
     /// value ordinally equals <paramref name="publicKeyUse"/>; never present in any other form (another
-    /// value, a number, an array, an object, or JSON <see langword="null"/>). The duplicate-<c>kid</c>
+    /// value, a number, an array, an object, or JSON <see langword="null"/>). A <paramref name="publicKeyUse"/>
+    /// whose bytes are no well-formed UTF-8 (<see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.1">RFC
+    /// 8259 §8.1</see>) spells no use, so no element is eligible for it, one carrying no <c>use</c> included;
+    /// a malformed document and the set-wide refusals below are answered before that. The duplicate-<c>kid</c>
     /// refusal is computed over every element whose <c>kid</c> matches WHATEVER its <c>use</c> — a member
     /// of the same attacker-influenced document never narrows it, and
     /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-3.1.1">OpenID Federation
@@ -2678,7 +2719,11 @@ public static class JwkJsonReader
     /// outright for carrying two keys — counting ELIGIBLE keys, not every key the set holds.
     /// <c>use</c> eligibility (<see href="https://www.rfc-editor.org/rfc/rfc7517#section-4.2">RFC 7517
     /// §4.2</see>) is: absent, since the member is OPTIONAL; present as a JSON string whose decoded
-    /// value ordinally equals <paramref name="publicKeyUse"/>; never present in any other form. The
+    /// value ordinally equals <paramref name="publicKeyUse"/>; never present in any other form. A
+    /// <paramref name="publicKeyUse"/> whose bytes are no well-formed UTF-8 spells no use, so no element is
+    /// eligible for it, one carrying no <c>use</c> included, and the set answers
+    /// <see cref="JwkSelectionOutcome.NoMatch"/> unless a malformed document or the private-or-symmetric-material
+    /// refusal answers it first. The
     /// private-or-symmetric-material refusal is this library's own policy for a JWK Set of
     /// verification keys, not a requirement of any RFC; <c>key_ops</c> and <c>alg</c> are not
     /// consulted. The decoded-name matching and the non-object-element refusal are exactly as
@@ -2823,6 +2868,10 @@ public static class JwkJsonReader
         int eligibleMatchCount = 0;
         int keyIdMatchCount = 0;
 
+        //A use whose bytes are no well-formed UTF-8 (RFC 8259 section 8.1) spells no use, so no key is eligible for it, a key
+        //carrying no use of its own included; the walk still judges every element, so its refusals keep their precedence.
+        var filterSpellsAUse = Utf8.IsValid(publicKeyUse);
+
         while(cursor < json.Length)
         {
             while(cursor < json.Length && IsJwkArraySeparator(json[cursor]))
@@ -2854,7 +2903,7 @@ public static class JwkJsonReader
                 carriesPrivateOrSymmetricMember = true;
             }
 
-            bool isUseEligible = IsUseEligible(candidate, publicKeyUse);
+            bool isUseEligible = filterSpellsAUse && IsUseEligible(candidate, publicKeyUse);
 
             if(keyId is not null)
             {
@@ -3255,6 +3304,7 @@ public static class JwkJsonReader
                 if(depth == 0 && afterName >= 1 && IsKeyPosition(jwkObject, afterName))
                 {
                     int nameLength = afterName - 1 - nameStart;
+
                     if(DecodeContentToString(jwkObject, nameStart, nameLength) is not { } decodedName)
                     {
                         return null;
@@ -3311,15 +3361,20 @@ public static class JwkJsonReader
             switch(cursor.ReadNext(json, out var next))
             {
                 case NameCursorStep.CodeUnit:
+                {
                     _ = builder.Append(next);
 
                     break;
-
+                }
                 case NameCursorStep.End:
+                {
                     return builder.ToString();
-
+                }
                 default:
+                {
+                    //An undecodable sequence spells no text, so the span decodes to none.
                     return null;
+                }
             }
         }
     }

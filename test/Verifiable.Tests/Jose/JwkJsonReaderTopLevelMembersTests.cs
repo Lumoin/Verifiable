@@ -147,12 +147,12 @@ internal sealed class JwkJsonReaderTopLevelMembersTests
     [TestMethod]
     public void TheBoundsOfWellFormedUtf8AreReadAsText()
     {
-        byte[] document =
-        [
+        var document = new byte[]
+        {
             0x7B, 0x22, 0x76, 0x22, 0x3A, 0x22,
             0x7F, 0xDF, 0xBF, 0xED, 0x9F, 0xBF, 0xEE, 0x80, 0x80, 0xEF, 0xBF, 0xBF, 0xF4, 0x8F, 0xBF, 0xBF,
             0x22, 0x7D
-        ];
+        };
 
         var members = JwkJsonReader.ReadTopLevelMembers(document);
 

@@ -43,13 +43,62 @@ internal sealed class JwkJsonReaderKeySelectionTests
     public void AUseToFilterByThatIsNoUtf8MatchesNoKey()
     {
         var json = Utf8(/*lang=json,strict*/ """{"keys":[{"kty":"EC","kid":"a","use":"ÿ"}]}""");
-        byte[] use = [0xFF];
+        var use = new byte[] { 0xFF };
 
         var byKeyId = JwkJsonReader.SelectKeyByKeyId(json, "a", use);
         var sole = JwkJsonReader.SelectSoleKey(json, use);
 
         Assert.AreEqual(JwkSelectionOutcome.NoMatch, byKeyId.Outcome, "The key's use is no use the bytes spell.");
         Assert.AreEqual(JwkSelectionOutcome.NoMatch, sole.Outcome, "The sole key's use is no use the bytes spell.");
+    }
+
+
+    /// <summary>
+    /// A key carrying no <c>use</c> is eligible for any use the filter spells (RFC 7517 section 4.2: the member is OPTIONAL), but
+    /// a <c>use</c> to filter by whose bytes are no well-formed UTF-8 (RFC 8259 section 8.1) spells no use at all, so not even
+    /// such a key is eligible for it: the byte FF selects no key, by its identifier or as the sole key. The control, the
+    /// filter <c>sig</c>, selects that very key both ways.
+    /// </summary>
+    [TestMethod]
+    public void AUseToFilterByThatIsNoUtf8SelectsNoKeyCarryingNoUse()
+    {
+        var json = Utf8(/*lang=json,strict*/ """{"keys":[{"kty":"EC","kid":"a"}]}""");
+        var use = new byte[] { 0xFF };
+
+        var byKeyId = JwkJsonReader.SelectKeyByKeyId(json, "a", use);
+        var sole = JwkJsonReader.SelectSoleKey(json, use);
+        var controlByKeyId = JwkJsonReader.SelectKeyByKeyId(json, "a", "sig"u8);
+        var controlSole = JwkJsonReader.SelectSoleKey(json, "sig"u8);
+
+        Assert.AreEqual(JwkSelectionOutcome.NoMatch, byKeyId.Outcome, "No use the bytes spell makes the key eligible.");
+        Assert.IsNull(byKeyId.Members, "No key is handed out by its identifier.");
+        Assert.AreEqual(JwkSelectionOutcome.NoMatch, sole.Outcome, "No use the bytes spell makes the sole key eligible.");
+        Assert.IsNull(sole.Members, "No key is handed out as the sole key.");
+        Assert.AreEqual(JwkSelectionOutcome.Selected, controlByKeyId.Outcome, "The control: a key carrying no use is eligible for sig.");
+        Assert.AreEqual(JwkSelectionOutcome.Selected, controlSole.Outcome, "The control: the sole key carrying no use is eligible for sig.");
+    }
+
+
+    /// <summary>
+    /// A <c>use</c> to filter by that is no UTF-8 leaves the refusals of the document as they stand: a document that is no
+    /// well-formed JSON is malformed, and a set one of whose keys carries private key material is refused for it, whatever
+    /// the filter, by its identifier and as the sole key.
+    /// </summary>
+    [TestMethod]
+    public void AUseToFilterByThatIsNoUtf8LeavesTheDocumentsRefusalsFirst()
+    {
+        var malformed = Utf8("""{"keys":[{"kty":"EC","kid":"a"}]""");
+        var carryingPrivateMaterial = Utf8(/*lang=json,strict*/ """{"keys":[{"kty":"EC","kid":"a","d":"secret"}]}""");
+        var use = new byte[] { 0xFF };
+
+        Assert.AreEqual(JwkSelectionOutcome.MalformedDocument, JwkJsonReader.SelectKeyByKeyId(malformed, "a", use).Outcome);
+        Assert.AreEqual(JwkSelectionOutcome.MalformedDocument, JwkJsonReader.SelectSoleKey(malformed, use).Outcome);
+        Assert.AreEqual(
+            JwkSelectionOutcome.PrivateOrSymmetricMemberPresent,
+            JwkJsonReader.SelectKeyByKeyId(carryingPrivateMaterial, "a", use).Outcome);
+        Assert.AreEqual(
+            JwkSelectionOutcome.PrivateOrSymmetricMemberPresent,
+            JwkJsonReader.SelectSoleKey(carryingPrivateMaterial, use).Outcome);
     }
 
 

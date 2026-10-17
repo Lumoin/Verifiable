@@ -405,9 +405,11 @@ public static class OAuthResponseParsers
         HttpResponseData response)
     {
         var errorCode = StringOf(members, WellKnownProblemDetailsMemberNames.Type) is { Length: > 0 } type ? type : "problem";
+
         var detail = StringOf(members, WellKnownProblemDetailsMemberNames.Detail) is { Length: > 0 } carriedDetail
             ? carriedDetail
             : null;
+
         var instance = StringOf(members, WellKnownProblemDetailsMemberNames.Instance) is { Length: > 0 } carriedInstance
             ? carriedInstance
             : null;
