@@ -524,7 +524,8 @@ internal sealed class OAuthDiagnosticsTests
     {
         string[] names =
         [
-            ServerActivityNames.Handle
+            ServerActivityNames.Handle,
+            OAuthActivityNames.DecideResourceAccess
         ];
 
         foreach(string name in names)
@@ -550,7 +551,10 @@ internal sealed class OAuthDiagnosticsTests
             ServerTagNames.FlowState,
             ServerTagNames.FlowStepCount,
             ServerTagNames.StartsNewFlow,
-            ServerTagNames.CorrelationResolved
+            ServerTagNames.CorrelationResolved,
+            ServerTagNames.ErrorType,
+            OAuthTagNames.DpopResourceDecision,
+            OAuthTagNames.DpopResourceCheck
         ];
 
         foreach(string tag in tags)
@@ -606,7 +610,8 @@ internal sealed class OAuthDiagnosticsTests
             ServerEventNames.NoMatch,
             OAuthEventNames.ExtraneousAuthorizeParameters,
             OAuthEventNames.DuplicateGrantedCredentialConfigurationCollapsed,
-            OAuthEventNames.LongLivedBearerCredentialTokenRefused
+            OAuthEventNames.LongLivedBearerCredentialTokenRefused,
+            OAuthEventNames.DpopResourceDecided
         ];
 
         foreach(string eventName in events)

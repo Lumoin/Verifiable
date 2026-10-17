@@ -89,20 +89,37 @@ internal static class TraceTreeAssertions
         ArgumentNullException.ThrowIfNull(capturedActivities);
         ArgumentNullException.ThrowIfNull(root);
 
-        IReadOnlyList<Activity> inTrace = FilterByTrace(capturedActivities, root.TraceId);
+        AssertSingleConnectedTree(capturedActivities, root.TraceId, root.SpanId);
+    }
+
+
+    /// <summary>
+    /// Asserts that every captured span carrying <paramref name="traceId"/> is reachable from the span
+    /// <paramref name="rootSpanId"/> via <see cref="Activity.ParentSpanId"/> links: the form for a trace whose root is a
+    /// remote parent the test names by its identifiers, such as the parent of a <c>traceparent</c> field line the test
+    /// sent, which no captured activity is.
+    /// </summary>
+    /// <param name="capturedActivities">The captured spans, typically <see cref="TraceTreeCapture.StoppedActivities"/>.</param>
+    /// <param name="traceId">The trace the spans belong to.</param>
+    /// <param name="rootSpanId">The span every captured span of the trace descends from; it need not itself be captured.</param>
+    public static void AssertSingleConnectedTree(IEnumerable<Activity> capturedActivities, ActivityTraceId traceId, ActivitySpanId rootSpanId)
+    {
+        ArgumentNullException.ThrowIfNull(capturedActivities);
+
+        IReadOnlyList<Activity> inTrace = FilterByTrace(capturedActivities, traceId);
         Assert.IsGreaterThan(0, inTrace.Count,
-            $"No captured span carries the root TraceId '{root.TraceId}'; the trace tree is empty.");
+            $"No captured span carries the root TraceId '{traceId}'; the trace tree is empty.");
 
         Dictionary<ActivitySpanId, Activity> bySpanId = BuildSpanIndex(inTrace);
 
         string[] disconnectedSpans = [.. inTrace
-            .Where(activity => !IsSelfOrDescendantOf(activity, root.SpanId, bySpanId))
+            .Where(activity => !IsSelfOrDescendantOf(activity, rootSpanId, bySpanId))
             .Select(activity =>
                 $"'{activity.OperationName}' (SpanId {activity.SpanId}, ParentSpanId {activity.ParentSpanId})")];
 
         Assert.IsEmpty(disconnectedSpans,
-            $"Every span with TraceId '{root.TraceId}' must be reachable from the root span " +
-            $"'{root.SpanId}' via ParentSpanId links; {disconnectedSpans.Length} of {inTrace.Count} " +
+            $"Every span with TraceId '{traceId}' must be reachable from the root span " +
+            $"'{rootSpanId}' via ParentSpanId links; {disconnectedSpans.Length} of {inTrace.Count} " +
             $"are not: {string.Join("; ", disconnectedSpans)}.");
     }
 

@@ -418,6 +418,8 @@ internal static class CredentialEndpointDpopValidation
     /// (<see cref="JwsAccessTokenValidator.IsBlankJwkThumbprint"/>, the rule the token validator refuses it by as
     /// malformed) is refused 401 <c>invalid_token</c> with <see cref="JwsAccessTokenValidator.BlankJwkThumbprintDescription"/>
     /// in the challenge of the scheme it was presented under (<see cref="InPresentationScheme"/>), before the checks run.
+    /// The decision of the checks is recorded as the <see cref="Diagnostics.OAuthEventNames.DpopResourceDecided"/> event on
+    /// the dispatch span (<see cref="DpopResourceAccess.RecordDecisionEvent"/>), nothing of the presentation in it.
     /// </summary>
     /// <param name="server">The authorization server holding the DPoP delegates and the issuer resolver.</param>
     /// <param name="context">The per-request context carrying the inbound request.</param>
@@ -515,6 +517,7 @@ internal static class CredentialEndpointDpopValidation
         };
 
         DpopResourceDecision decision = await DpopResourceAccess.DecideCoreAsync(presentation, checks, cancellationToken).ConfigureAwait(false);
+        DpopResourceAccess.RecordDecisionEvent(decision);
 
         return decision.Response;
     }

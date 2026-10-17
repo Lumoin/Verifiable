@@ -3,6 +3,7 @@ using System.Buffers;
 using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
@@ -16,11 +17,13 @@ using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.Client;
+using Verifiable.OAuth.Diagnostics;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Oidc;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Metadata;
 using Verifiable.OAuth.Server.States;
+using Verifiable.Server.Diagnostics;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -1104,6 +1107,72 @@ internal sealed class UserInfoEndpointTests
         using JsonDocument document = JsonDocument.Parse(body);
         Assert.AreEqual(SubjectId, document.RootElement.GetProperty("sub").GetString());
     }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "For such an access
+    /// token, a resource server MUST check that a DPoP proof was also received in the DPoP header field of the HTTP
+    /// request, check the DPoP proof according to the rules in Section 4.3, and check that the public key of the DPoP proof
+    /// matches the public key to which the access token is bound per Section 6." A DPoP-bound access token presented at
+    /// UserInfo over the wire with the nonce UserInfo provided, the server's dispatch span unwired and so started on its
+    /// own source: a proof signed by another key is answered 401 and the request's <c>server.handle</c> span carries one
+    /// <c>oauth.dpop.resource.decided</c> event with <c>oauth.dpop.resource.decision</c> <c>Deny</c>,
+    /// <c>oauth.dpop.resource.check</c> <c>key_binding</c> and <c>server.response.error_code</c> <c>invalid_token</c>; a
+    /// proof signed by the bound key is answered 200 and the span carries one such event with <c>Permit</c>, no check and
+    /// no error code.
+    /// </summary>
+    /// <param name="row">Whether the proof is signed by another key or by the bound key.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(ProofByAnotherKeyRow)]
+    [DataRow(ProofByTheBoundKeyRow)]
+    public async Task UserInfoDispatchSpanRecordsTheDpopDecisionAsync(string row)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri).ConfigureAwait(false);
+        using DpopClientFixture fixture = await CreateDpopFixtureAsync(host, material).ConfigureAwait(false);
+        DpopPresentationContext presentation = await PrepareDpopPresentationAsync(host, material, fixture).ConfigureAwait(false);
+        using FreshDpopKey otherKey = new();
+        string proof = await ResourceDpopProofs.BuildAsync(
+            row == ProofByAnotherKeyRow ? otherKey.Key : fixture.DpopKey, "POST", presentation.UserInfoUrl, presentation.AccessToken,
+            presentation.Nonce, TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        //The listener is process-wide and this class runs in parallel with others, so the dispatch span is found by the
+        //registration's own tenant handle; it starts after the token and the nonce are obtained, so it sees the one request.
+        ConcurrentQueue<Activity> captured = new();
+        using ActivityListener listener = new()
+        {
+            ShouldListenTo = static source => string.Equals(source.Name, ServerActivitySource.SourceName, StringComparison.Ordinal),
+            Sample = static (ref _) => ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = captured.Enqueue
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        using HttpResponseMessage response = await SendUserInfoOverWireAsync(
+            host, material, presentation.AccessToken, scheme: "DPoP", dpopProof: proof).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The presentation is answered without a server fault.");
+        Assert.AreEqual(row == ProofByAnotherKeyRow ? HttpStatusCode.Unauthorized : HttpStatusCode.OK, response.StatusCode, body);
+        string handle = material.Registration.TenantHandle!.Value.Value;
+        Activity dispatch = Assert.ContainsSingle(captured.Where(activity =>
+            string.Equals(activity.OperationName, ServerActivityNames.Handle, StringComparison.Ordinal)
+            && string.Equals(activity.GetTagItem(ServerTagNames.TenantHandle) as string, handle, StringComparison.Ordinal)),
+            "The request is dispatched once under the registration's tenant handle.");
+        ActivityEvent decided = Assert.ContainsSingle(
+            dispatch.Events.Where(static activityEvent => string.Equals(activityEvent.Name, OAuthEventNames.DpopResourceDecided, StringComparison.Ordinal)),
+            "The dispatch span carries one decision event.");
+        Dictionary<string, object?> tags = decided.Tags.ToDictionary(static tag => tag.Key, static tag => tag.Value, StringComparer.Ordinal);
+        Assert.AreEqual(
+            row == ProofByAnotherKeyRow ? nameof(Verifiable.OAuth.ProtectedResource.DpopResourceDecisionKind.Deny) : nameof(Verifiable.OAuth.ProtectedResource.DpopResourceDecisionKind.Permit),
+            tags.GetValueOrDefault(OAuthTagNames.DpopResourceDecision) as string);
+        Assert.AreEqual(row == ProofByAnotherKeyRow ? "key_binding" : null, tags.GetValueOrDefault(OAuthTagNames.DpopResourceCheck) as string);
+        Assert.AreEqual(row == ProofByAnotherKeyRow ? "invalid_token" : null, tags.GetValueOrDefault(ServerTagNames.ErrorCode) as string);
+    }
+
+
+    /// <summary>The row of a proof signed by the key the token is bound to. A constant, not a property, because a DataRow attribute argument must be a compile-time constant.</summary>
+    private const string ProofByTheBoundKeyRow = "proof-by-the-bound-key";
 
 
     /// <summary>

@@ -1,10 +1,13 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using Verifiable.Cryptography;
 using Verifiable.OAuth;
+using Verifiable.OAuth.Diagnostics;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.ProtectedResource;
 using Verifiable.OAuth.Server;
+using Verifiable.Server.Diagnostics;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -319,6 +322,236 @@ internal sealed class DpopResourceAccessTests
 
 
     /// <summary>
+    /// The decision is recorded on the span <see cref="ResourceServerIntegration.StartTraceActivity"/> answers as that
+    /// decision alone: <see cref="OAuthTagNames.DpopResourceCheck"/> is "absent on a <c>Permit</c>", and
+    /// <see cref="ServerTagNames.ErrorCode"/> names the answer's error code only where the answer carries one. With the
+    /// slot answering the activity current at the call, a test-started activity the application reuses for every decision,
+    /// a presentation of a DPoP-bound access token with no proof is decided first and refused (<c>proof_absent</c>,
+    /// <c>use_dpop_nonce</c>) and a presentation with a valid proof carrying the resource's nonce is decided next and
+    /// permitted; the activity then carries <see cref="OAuthTagNames.DpopResourceDecision"/> <c>Permit</c> and neither
+    /// <see cref="OAuthTagNames.DpopResourceCheck"/> nor <see cref="ServerTagNames.ErrorCode"/>, no entry of either
+    /// left among its tags, and it is not stopped.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task AReusedSpanCarriesTheLastDecisionAloneAsync()
+    {
+        FakeTimeProvider time = new(TestClock.CanonicalEpoch);
+        InMemoryDpopReplayCache cache = new(time);
+        ResourceServerIntegration integration = ReusedSpanIntegration(time, cache.ConsultAsync);
+        Uri targetUri = new("https://rs.example/protected");
+        using Activity reused = new(nameof(AReusedSpanCarriesTheLastDecisionAloneAsync));
+
+        _ = reused.Start();
+        DpopResourceDecision refused = await DpopResourceAccess.DecideAsync(
+            integration, PresentationWithoutProofAt(targetUri), [], TestContext.CancellationToken).ConfigureAwait(false);
+        DpopResourceDecision permitted = await DpopResourceAccess.DecideAsync(
+            integration, BoundPresentationAt(targetUri), [], TestContext.CancellationToken).ConfigureAwait(false);
+        bool isStoppedByTheDecisions = reused.IsStopped;
+        reused.Stop();
+
+        Assert.AreEqual(DpopResourceDecisionKind.Deny, refused.Kind, "The presentation without a proof is refused.");
+        Assert.AreEqual(DpopResourceDecisionKind.Permit, permitted.Kind, "The presentation with a valid proof is permitted.");
+        Assert.IsFalse(isStoppedByTheDecisions, "The application's own activity is not stopped by the library.");
+        Assert.AreEqual(nameof(DpopResourceDecisionKind.Permit), reused.GetTagItem(OAuthTagNames.DpopResourceDecision) as string);
+        Assert.IsNull(reused.GetTagItem(OAuthTagNames.DpopResourceCheck), "A permit carries no refusing check.");
+        Assert.IsNull(reused.GetTagItem(ServerTagNames.ErrorCode), "A permit carries no error code.");
+        Assert.DoesNotContain(
+            tag => tag.Key == OAuthTagNames.DpopResourceCheck, reused.TagObjects,
+            "The span holds no entry for the earlier decision's refusing check, not one with no value.");
+        Assert.DoesNotContain(
+            tag => tag.Key == ServerTagNames.ErrorCode, reused.TagObjects,
+            "The span holds no entry for the earlier decision's error code, not one with no value.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://opentelemetry.io/docs/specs/semconv/http/http-spans/">OpenTelemetry semantic conventions for
+    /// HTTP spans</see>: "For HTTP status codes in the 5xx range, as well as any other code the client failed to
+    /// interpret, span status SHOULD be set to Error." An <see cref="DpopResourceDecisionKind.IndeterminateDeny"/> is
+    /// answered 500 and sets the status <see cref="ActivityStatusCode.Error"/> and <see cref="ServerTagNames.ErrorType"/>
+    /// <c>500</c>; an error that happened in the span stands, so a later decision on a span the application reuses
+    /// sets its own decision tags and leaves both in place. With the slot answering the activity current at the call, a
+    /// test-started activity the application reuses for every decision, and the <c>jti</c> claim answering
+    /// <see cref="JtiReplayOutcome.StoreUnavailable"/> once and <see cref="JtiReplayOutcome.FirstUse"/> next, a
+    /// presentation with a valid proof carrying the resource's nonce is decided twice: the first decision is an
+    /// <see cref="DpopResourceDecisionKind.IndeterminateDeny"/>, the second a <see cref="DpopResourceDecisionKind.Permit"/>;
+    /// the activity then carries the status <see cref="ActivityStatusCode.Error"/>, <see cref="ServerTagNames.ErrorType"/>
+    /// <c>500</c>, <see cref="OAuthTagNames.DpopResourceDecision"/> <c>Permit</c> and no
+    /// <see cref="OAuthTagNames.DpopResourceCheck"/> or <see cref="ServerTagNames.ErrorCode"/> entry, and it is not
+    /// stopped.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task AServerErrorOfAnEarlierDecisionStandsOnAReusedSpanAsync()
+    {
+        FakeTimeProvider time = new(TestClock.CanonicalEpoch);
+        int claimCount = 0;
+        ResourceServerIntegration integration = ReusedSpanIntegration(
+            time,
+            (_, _, _, _, _) => ValueTask.FromResult(Interlocked.Increment(ref claimCount) == 1
+                ? JtiReplayOutcome.StoreUnavailable
+                : JtiReplayOutcome.FirstUse));
+        Uri targetUri = new("https://rs.example/protected");
+        using Activity reused = new(nameof(AServerErrorOfAnEarlierDecisionStandsOnAReusedSpanAsync));
+
+        _ = reused.Start();
+        DpopResourceDecision failedClosed = await DpopResourceAccess.DecideAsync(
+            integration, BoundPresentationAt(targetUri), [], TestContext.CancellationToken).ConfigureAwait(false);
+        DpopResourceDecision permitted = await DpopResourceAccess.DecideAsync(
+            integration, BoundPresentationAt(targetUri), [], TestContext.CancellationToken).ConfigureAwait(false);
+        bool isStoppedByTheDecisions = reused.IsStopped;
+        reused.Stop();
+
+        Assert.AreEqual(
+            DpopResourceDecisionKind.IndeterminateDeny, failedClosed.Kind, "A jti store that cannot record the proof fails closed.");
+        Assert.AreEqual(DpopResourceDecisionKind.Permit, permitted.Kind, "The proof's first recorded use is served.");
+        Assert.IsFalse(isStoppedByTheDecisions, "The application's own activity is not stopped by the library.");
+        Assert.AreEqual(ActivityStatusCode.Error, reused.Status, "The server error of the earlier decision stands.");
+        Assert.AreEqual("500", reused.GetTagItem(ServerTagNames.ErrorType) as string, "The earlier decision's error.type stands.");
+        Assert.AreEqual(nameof(DpopResourceDecisionKind.Permit), reused.GetTagItem(OAuthTagNames.DpopResourceDecision) as string);
+        Assert.DoesNotContain(
+            tag => tag.Key == OAuthTagNames.DpopResourceCheck, reused.TagObjects, "A permit carries no refusing check.");
+        Assert.DoesNotContain(
+            tag => tag.Key == ServerTagNames.ErrorCode, reused.TagObjects, "A permit carries no error code.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://opentelemetry.io/docs/specs/semconv/http/http-spans/">OpenTelemetry semantic conventions for
+    /// HTTP spans</see>: "For HTTP status codes in the 4xx range span status MUST be left unset in case of
+    /// SpanKind.SERVER" and "Span Status MUST be left unset if HTTP status code was in the 1xx, 2xx or 3xx ranges". A
+    /// <see cref="DpopResourceDecisionKind.Deny"/> is a 4xx answer and a <see cref="DpopResourceDecisionKind.Permit"/>
+    /// sets no status, so both leave the status and <see cref="ServerTagNames.ErrorType"/> the application set on its
+    /// own span as it set them. With the slot answering the activity current at the call, a test-started activity on
+    /// which the test sets the status <see cref="ActivityStatusCode.Error"/> and <see cref="ServerTagNames.ErrorType"/>
+    /// <c>application-error</c> before any decision, a presentation of a DPoP-bound access token with no proof is
+    /// decided first and refused, and a presentation with a valid proof carrying the resource's nonce next and
+    /// permitted; the activity then carries the status <see cref="ActivityStatusCode.Error"/>,
+    /// <see cref="ServerTagNames.ErrorType"/> <c>application-error</c> and
+    /// <see cref="OAuthTagNames.DpopResourceDecision"/> <c>Permit</c>, and it is not stopped.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task AnErrorTheApplicationSetOnItsSpanStandsAcrossDecisionsAsync()
+    {
+        FakeTimeProvider time = new(TestClock.CanonicalEpoch);
+        InMemoryDpopReplayCache cache = new(time);
+        ResourceServerIntegration integration = ReusedSpanIntegration(time, cache.ConsultAsync);
+        Uri targetUri = new("https://rs.example/protected");
+        using Activity reused = new(nameof(AnErrorTheApplicationSetOnItsSpanStandsAcrossDecisionsAsync));
+
+        _ = reused.Start();
+        _ = reused.SetStatus(ActivityStatusCode.Error);
+        _ = reused.SetTag(ServerTagNames.ErrorType, "application-error");
+        DpopResourceDecision refused = await DpopResourceAccess.DecideAsync(
+            integration, PresentationWithoutProofAt(targetUri), [], TestContext.CancellationToken).ConfigureAwait(false);
+        DpopResourceDecision permitted = await DpopResourceAccess.DecideAsync(
+            integration, BoundPresentationAt(targetUri), [], TestContext.CancellationToken).ConfigureAwait(false);
+        bool isStoppedByTheDecisions = reused.IsStopped;
+        reused.Stop();
+
+        Assert.AreEqual(DpopResourceDecisionKind.Deny, refused.Kind, "The presentation without a proof is refused.");
+        Assert.AreEqual(DpopResourceDecisionKind.Permit, permitted.Kind, "The presentation with a valid proof is permitted.");
+        Assert.IsFalse(isStoppedByTheDecisions, "The application's own activity is not stopped by the library.");
+        Assert.AreEqual(ActivityStatusCode.Error, reused.Status, "The status the application set stands.");
+        Assert.AreEqual(
+            "application-error", reused.GetTagItem(ServerTagNames.ErrorType) as string, "The error.type the application set stands.");
+        Assert.AreEqual(nameof(DpopResourceDecisionKind.Permit), reused.GetTagItem(OAuthTagNames.DpopResourceDecision) as string);
+    }
+
+
+    /// <summary>
+    /// <see href="https://opentelemetry.io/docs/specs/semconv/http/http-spans/">OpenTelemetry semantic conventions for
+    /// HTTP spans</see>: "If the request fails with an error before response status code was sent or received,
+    /// error.type SHOULD be set to exception type (its fully-qualified class name, if applicable) or a
+    /// component-specific low cardinality error identifier." An exception a slot raises is no decision, so the span
+    /// <see cref="ResourceServerIntegration.StartTraceActivity"/> answers carries the error alone. With the slot
+    /// answering the activity current at the call, a test-started activity the application reuses for every decision, a
+    /// presentation with a valid proof carrying the resource's nonce is decided first and permitted, and the same
+    /// presentation is decided next with the <c>jti</c> claim raising <see cref="InvalidOperationException"/>, which
+    /// passes to the caller; the activity then carries the status <see cref="ActivityStatusCode.Error"/> and
+    /// <see cref="ServerTagNames.ErrorType"/> <c>System.InvalidOperationException</c>, no
+    /// <see cref="OAuthTagNames.DpopResourceDecision"/>, <see cref="OAuthTagNames.DpopResourceCheck"/> or
+    /// <see cref="ServerTagNames.ErrorCode"/> entry, and it is not stopped.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task AnExceptionAfterADecisionLeavesTheReusedSpanCarryingTheErrorAloneAsync()
+    {
+        FakeTimeProvider time = new(TestClock.CanonicalEpoch);
+        InMemoryDpopReplayCache cache = new(time);
+        int claimCount = 0;
+        ResourceServerIntegration integration = ReusedSpanIntegration(
+            time,
+            (jti, targetUri, recordUntil, context, cancellationToken) => Interlocked.Increment(ref claimCount) == 1
+                ? cache.ConsultAsync(jti, targetUri, recordUntil, context, cancellationToken)
+                : throw new InvalidOperationException("The jti store raised."));
+        Uri targetUri = new("https://rs.example/protected");
+        using Activity reused = new(nameof(AnExceptionAfterADecisionLeavesTheReusedSpanCarryingTheErrorAloneAsync));
+
+        _ = reused.Start();
+        DpopResourceDecision permitted = await DpopResourceAccess.DecideAsync(
+            integration, BoundPresentationAt(targetUri), [], TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
+            async () => await DpopResourceAccess.DecideAsync(
+                integration, BoundPresentationAt(targetUri), [], TestContext.CancellationToken).ConfigureAwait(false))
+            .ConfigureAwait(false);
+        bool isStoppedByTheDecisions = reused.IsStopped;
+        reused.Stop();
+
+        Assert.AreEqual(DpopResourceDecisionKind.Permit, permitted.Kind, "The first presentation of the proof is served.");
+        Assert.IsFalse(isStoppedByTheDecisions, "The application's own activity is not stopped by the library.");
+        Assert.AreEqual(ActivityStatusCode.Error, reused.Status, "An exception a slot raises sets the status Error.");
+        Assert.AreEqual(
+            typeof(InvalidOperationException).FullName, reused.GetTagItem(ServerTagNames.ErrorType) as string,
+            "error.type is the exception type's fully-qualified name.");
+        Assert.DoesNotContain(
+            tag => tag.Key == OAuthTagNames.DpopResourceDecision, reused.TagObjects,
+            "An exception is no decision: the earlier decision's kind is not left on the span.");
+        Assert.DoesNotContain(
+            tag => tag.Key == OAuthTagNames.DpopResourceCheck, reused.TagObjects, "An exception names no refusing check.");
+        Assert.DoesNotContain(
+            tag => tag.Key == ServerTagNames.ErrorCode, reused.TagObjects, "An exception carries no answer's error code.");
+    }
+
+
+    /// <summary>
+    /// A resource server integration whose every slot is wired for <see cref="BoundPresentationAt"/>: the proof
+    /// validation answers a proof carrying the <c>jti</c> <c>reused-span-jti</c> and the resource's nonce, issued at
+    /// <paramref name="time"/>'s instant and bound to <see cref="BoundThumbprint"/>; the nonce issuance answers
+    /// <see cref="ResourceNonce"/> and its validation succeeds; the <c>jti</c> claim is <paramref name="consultJti"/>;
+    /// and <see cref="ResourceServerIntegration.StartTraceActivity"/> answers <see cref="Activity.Current"/>, the
+    /// activity a test starts and reuses for every decision.
+    /// </summary>
+    /// <param name="time">The integration's clock.</param>
+    /// <param name="consultJti">The <c>jti</c> claim.</param>
+    /// <returns>The integration.</returns>
+    private static ResourceServerIntegration ReusedSpanIntegration(FakeTimeProvider time, ConsultDpopProofJtiDelegate consultJti) => new()
+    {
+        TrustedIssuer = new Uri("https://issuer.test/tenant-a"),
+        ExpectedAudience = "test-resource-server",
+        ResolveVerificationKeyAsync = static (_, _, _, _, _) => ValueTask.FromResult<PublicKeyMemory?>(null),
+        TimeProvider = time,
+        ValidateDpopProofAsync = (request, _) => ValueTask.FromResult(DpopProofValidationResult.Success(
+            new DpopProofClaims
+            {
+                Htm = request.HttpMethod,
+                Htu = request.HttpUrl,
+                Iat = time.GetUtcNow(),
+                Jti = "reused-span-jti",
+                Nonce = ResourceNonce
+            },
+            BoundThumbprint)),
+        IssueDpopNonceAsync = static (_, _, _, _) => ValueTask.FromResult(ResourceNonce),
+        ValidateDpopNonceAsync = (_, _, _, _, _) => ValueTask.FromResult(DpopNonceValidationResult.Success(
+            new DpopNoncePayload { Kid = "resource-nonce-key", IssuedAt = time.GetUtcNow() })),
+        ConsultDpopProofJtiAsync = consultJti,
+        StartTraceActivity = static (_, _, _, _) => Activity.Current
+    };
+
+
+    /// <summary>
     /// A presentation of a DPoP-bound access token bound to <see cref="BoundThumbprint"/> under the <c>DPoP</c> scheme,
     /// a GET of <paramref name="targetUri"/> carrying one proof.
     /// </summary>
@@ -333,6 +566,25 @@ internal sealed class DpopResourceAccessTests
         HttpMethod = "GET",
         TargetUri = targetUri,
         DpopFieldLines = ["proof"],
+        Realm = "protected"
+    };
+
+
+    /// <summary>
+    /// A presentation of a DPoP-bound access token bound to <see cref="BoundThumbprint"/> under the <c>DPoP</c> scheme,
+    /// a GET of <paramref name="targetUri"/> carrying no proof, which the resource answers with its nonce challenge.
+    /// </summary>
+    /// <param name="targetUri">The target URI the resource names the request by.</param>
+    /// <returns>The presentation.</returns>
+    private static DpopResourceRequest PresentationWithoutProofAt(Uri targetUri) => new()
+    {
+        AccessToken = "access-token",
+        IsDpopPresentation = true,
+        IsSenderConstrained = true,
+        BoundThumbprint = BoundThumbprint,
+        HttpMethod = "GET",
+        TargetUri = targetUri,
+        DpopFieldLines = [],
         Realm = "protected"
     };
 

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.Primitives;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
@@ -94,6 +95,13 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
     private Func<Uri?> ResolveTargetAuthority { get; }
 
     /// <summary>
+    /// Receives, for every request whose decision <see cref="DpopResourceAccess.DecideAsync"/> answered, the activity
+    /// current in this application when the call returned and whether it had stopped by then, or <see langword="null"/>
+    /// when the host observes nothing.
+    /// </summary>
+    private ConcurrentQueue<(Activity? Activity, bool IsStopped)>? AmbientActivitiesAfterDecision { get; }
+
+    /// <summary>
     /// The RFC 9728 serving surface, assigned by
     /// <see cref="TestResourceServerShell.StartHttpHostAsync"/> once the
     /// listener is bound and the resource identity (scheme://host:port) is
@@ -115,12 +123,17 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
     /// <param name="resolveTargetAuthority">Answers the configured origin the resource's target URIs are named under.</param>
     /// <param name="requiredScope">The scope a token must carry, or <see langword="null"/> for none.</param>
     /// <param name="requiresDpop">Whether <c>/protected</c> always requires DPoP-bound access tokens.</param>
+    /// <param name="ambientActivitiesAfterDecision">
+    /// Receives the activity current when each decision returned and whether it had stopped then, or
+    /// <see langword="null"/> to observe nothing.
+    /// </param>
     public ResourceServerHttpApplication(
         ResourceServerIntegration integration,
         VerificationDelegate verifySignature,
         Func<Uri?> resolveTargetAuthority,
         string? requiredScope = null,
-        bool requiresDpop = false)
+        bool requiresDpop = false,
+        ConcurrentQueue<(Activity? Activity, bool IsStopped)>? ambientActivitiesAfterDecision = null)
     {
         ArgumentNullException.ThrowIfNull(integration);
         ArgumentNullException.ThrowIfNull(verifySignature);
@@ -130,6 +143,7 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
         this.ResolveTargetAuthority = resolveTargetAuthority;
         this.RequiredScope = requiredScope;
         this.RequiresDpop = requiresDpop;
+        this.AmbientActivitiesAfterDecision = ambientActivitiesAfterDecision;
     }
 
 
@@ -337,6 +351,8 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
             },
             exchangeContext,
             context.RequestAborted).ConfigureAwait(false);
+        Activity? afterDecision = Activity.Current;
+        AmbientActivitiesAfterDecision?.Enqueue((afterDecision, afterDecision?.IsStopped ?? false));
         if(!decision.IsPermitted)
         {
             ServerHttpResponse refusal = decision.Response!;

@@ -329,4 +329,47 @@ internal static class LoopbackTls
 
         return new HttpClient(handler);
     }
+
+
+    /// <summary>
+    /// Builds the application's traced <see cref="HttpClient"/>: <see cref="HttpClientSpanHandler"/> (one CLIENT span per
+    /// attempt) over <see cref="TraceContextPropagationHandler"/> (the application's propagator writing the attempt's
+    /// trace context) over the pinned <see cref="SocketsHttpHandler"/> of
+    /// <see cref="CreatePinnedHandler(IReadOnlyCollection{X509Certificate2})"/>, whose own propagation is off
+    /// (<see cref="SocketsHttpHandler.ActivityHeadersPropagator"/> <see langword="null"/>), so the application's handler is
+    /// the one writer of <c>traceparent</c> and <c>tracestate</c> and the TLS pin stays at the bottom of the chain.
+    /// </summary>
+    /// <param name="pinnedCertificates">The exact certificates the loopback listeners present.</param>
+    /// <param name="isSingleHop">Whether a 3xx answer surfaces to the caller instead of being followed.</param>
+    /// <returns>The client; the caller disposes it, and it disposes the chain.</returns>
+    internal static HttpClient CreateTracedPinnedHttpClient(IReadOnlyCollection<X509Certificate2> pinnedCertificates, bool isSingleHop)
+    {
+        SocketsHttpHandler? pinned = null;
+        TraceContextPropagationHandler? propagation = null;
+        HttpClientSpanHandler? spans = null;
+        try
+        {
+            pinned = CreatePinnedHandler(pinnedCertificates);
+            pinned.ActivityHeadersPropagator = null;
+            pinned.AllowAutoRedirect = !isSingleHop;
+            propagation = new TraceContextPropagationHandler();
+            propagation.InnerHandler = pinned;
+            pinned = null;
+            spans = new HttpClientSpanHandler();
+            spans.InnerHandler = propagation;
+            propagation = null;
+            HttpClient client = new(spans);
+            spans = null;
+
+            return client;
+        }
+        finally
+        {
+            //Whatever was created and not handed on to its owner is released here: the client owns the span handler,
+            //the span handler the propagation handler, the propagation handler the pinned handler.
+            spans?.Dispose();
+            propagation?.Dispose();
+            pinned?.Dispose();
+        }
+    }
 }

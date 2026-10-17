@@ -298,4 +298,20 @@ public static class OAuthEventNames
     /// </summary>
     public static string ClientAssertionAlgorithmFaultTagName { get; } =
         Utf8Constants.ToInternedString(ClientAssertionAlgorithmFaultTagNameUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="DpopResourceDecided"/>.</summary>
+    public static ReadOnlySpan<byte> DpopResourceDecidedUtf8 =>
+        "oauth.dpop.resource.decided"u8;
+
+    /// <summary>
+    /// A protected resource decided on one presentation of an access token by the checks of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: the library's own
+    /// resources (UserInfo and the OID4VCI endpoints) record every decision so on the dispatch span, and an application's
+    /// resource records it so on <see cref="System.Diagnostics.Activity.Current"/> when
+    /// <see cref="ResourceServerIntegration.StartTraceActivity"/> is unwired. The event carries
+    /// <see cref="OAuthTagNames.DpopResourceDecision"/>, <see cref="OAuthTagNames.DpopResourceCheck"/> when a check refused,
+    /// and the answer's error code under <c>server.response.error_code</c>; nothing of the presentation.
+    /// </summary>
+    public static string DpopResourceDecided { get; } =
+        Utf8Constants.ToInternedString(DpopResourceDecidedUtf8);
 }

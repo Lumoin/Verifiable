@@ -17,7 +17,8 @@ namespace Verifiable.OAuth;
 /// presentation to <see cref="ProtectedResource.DpopResourceAccess.DecideAsync"/>, the composition
 /// of the RFC 9449 Section 7.1 checks over the slots below: the proof
 /// validation, the resource's own nonces, the accepted algorithms and the
-/// <c>jti</c> record, answering a permit or the exact refusal to send.
+/// <c>jti</c> record, answering a permit or the exact refusal to send. The
+/// decision is traced through <see cref="StartTraceActivity"/>.
 /// </remarks>
 [DebuggerDisplay("ResourceServerIntegration ExpectedAudience={ExpectedAudience,nq}")]
 public sealed class ResourceServerIntegration
@@ -138,4 +139,17 @@ public sealed class ResourceServerIntegration
     /// registered JWS algorithm identifier, an RFC 9110 Section 5.6.2 token.
     /// </summary>
     public IReadOnlyList<string>? AcceptedDpopProofAlgorithms { get; init; }
+
+    /// <summary>
+    /// Starts the span of <see cref="ProtectedResource.DpopResourceAccess.DecideAsync"/>,
+    /// <see cref="Diagnostics.OAuthActivityNames.DecideResourceAccess"/> (<c>oauth.resource.decide</c>), for the
+    /// application: called once per decision, after the caller's own arguments are checked, with that name,
+    /// <see cref="ActivityKind.Internal"/>, no start tags and the caller's context; the decision sets
+    /// <see cref="Diagnostics.OAuthTagNames.DpopResourceDecision"/>, <see cref="Diagnostics.OAuthTagNames.DpopResourceCheck"/>
+    /// and the answer's error code on the returned activity and stops it when the decision is made. With it
+    /// <see langword="null"/> the decision is recorded as the <see cref="Diagnostics.OAuthEventNames.DpopResourceDecided"/>
+    /// event on <see cref="Activity.Current"/>, as the library's own resources record theirs. Nothing of the presentation,
+    /// the token, the proof, its <c>jti</c>, the nonce or the key's thumbprint, is recorded. Optional.
+    /// </summary>
+    public Verifiable.Core.Diagnostics.StartTraceActivityDelegate? StartTraceActivity { get; init; }
 }

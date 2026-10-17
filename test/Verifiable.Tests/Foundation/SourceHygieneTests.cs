@@ -3014,6 +3014,333 @@ internal sealed class SourceHygieneTests
 
         Assert.IsEmpty(failures, string.Join(Environment.NewLine, failures));
     }
+
+
+    /// <summary>
+    /// Matches the start of a call of a refusal factory of the resource decision, <c>DpopResourceDecision.Deny(</c> or
+    /// <c>DpopResourceDecision.IndeterminateDeny(</c>, with any whitespace, line breaks included, around the member
+    /// access dot and before the opening parenthesis.
+    /// </summary>
+    private static Regex DpopRefusalFactoryCallPattern { get; } = new(@"\bDpopResourceDecision\s*\.\s*(Deny|IndeterminateDeny)\s*\(", RegexOptions.Compiled);
+
+
+    /// <summary>
+    /// Matches a reference of a refusal factory by its qualified name that is not followed by an opening parenthesis
+    /// after whitespace alone: a method group, or a call with a comment between the name and its argument list, neither
+    /// of which <see cref="DpopRefusalFactoryCallPattern"/> reads.
+    /// </summary>
+    private static Regex DpopRefusalFactoryReferencePattern { get; } = new(@"\bDpopResourceDecision\s*\.\s*(Deny|IndeterminateDeny)\b(?!\s*\()", RegexOptions.Compiled);
+
+
+    /// <summary>
+    /// Matches a <c>using static</c> directive or a <c>using</c> alias directive naming the type
+    /// <c>DpopResourceDecision</c>, with or without <c>global</c>, either of which lets a refusal factory be called by a
+    /// name <see cref="DpopRefusalFactoryCallPattern"/> does not read.
+    /// </summary>
+    private static Regex DpopResourceDecisionImportPattern { get; } = new(@"(?<![\w.])using\s+(static\s+|@?\w+\s*=\s*)(global::)?([\w.]+\.)?DpopResourceDecision\s*;", RegexOptions.Compiled);
+
+
+    /// <summary>
+    /// Matches an unqualified call of a refusal factory, <c>Deny(</c> or <c>IndeterminateDeny(</c> not preceded by a
+    /// member access dot, which inside the declaring type calls the factory by a name
+    /// <see cref="DpopRefusalFactoryCallPattern"/> does not read.
+    /// </summary>
+    private static Regex DpopRefusalFactoryUnqualifiedCallPattern { get; } = new(@"(?<!\.\s*)(?<!\w)(Deny|IndeterminateDeny)\s*\(", RegexOptions.Compiled);
+
+
+    /// <summary>Matches the declaration of a refusal factory in its declaring type, <c>static DpopResourceDecision Deny(</c> or <c>static DpopResourceDecision IndeterminateDeny(</c>; group 1 is the declared name.</summary>
+    private static Regex DpopRefusalFactoryDeclarationPattern { get; } = new(@"\bstatic\s+DpopResourceDecision\s+(Deny|IndeterminateDeny)\s*\(", RegexOptions.Compiled);
+
+
+    /// <summary>
+    /// The standing record of every reference under <c>src/**</c> to a refusal factory outside the recognized call shape:
+    /// empty, and it never gains an entry.
+    /// </summary>
+    private static IReadOnlyList<(string FilePath, string LineText)> DpopRefusalFactoryReferenceAllowlist { get; } = [];
+
+
+    /// <summary>Matches a check argument naming a member of the closed catalog <c>DpopResourceCheckNames</c>, positional or named <c>check:</c>.</summary>
+    private static Regex DpopResourceCheckNameArgumentPattern { get; } = new(@"^(check:\s*)?DpopResourceCheckNames\.[A-Z][A-Za-z0-9]*$", RegexOptions.Compiled);
+
+
+    /// <summary>
+    /// The standing record of every refusal under <c>src/**</c> whose check argument names no member of
+    /// <c>DpopResourceCheckNames</c>: empty, and it never gains an entry.
+    /// </summary>
+    private static IReadOnlyList<(string FilePath, string LineText)> DpopRefusalCheckArgumentAllowlist { get; } = [];
+
+
+    /// <summary>
+    /// Every call of a refusal factory in <paramref name="lines"/> whose check argument, the second, names no member of
+    /// <c>DpopResourceCheckNames</c>, as (one-based line of the call, trimmed line text), and the number of calls read. A
+    /// call on a comment line is not read. The argument list is read from the opening parenthesis across lines to its
+    /// closing one (<see cref="ReadCallArguments"/>); a call whose list does not close in the file is reported.
+    /// </summary>
+    /// <param name="lines">The lines of one source file.</param>
+    /// <returns>The offending calls and the number of calls read.</returns>
+    private static (List<(int LineNumber, string LineText)> Hits, int CallCount) FindDpopRefusalCheckArgumentHits(string[] lines)
+    {
+        string text = string.Join('\n', lines);
+        List<(int LineNumber, string LineText)> hits = [];
+        int callCount = 0;
+        foreach(Match call in DpopRefusalFactoryCallPattern.Matches(text))
+        {
+            int lineNumber = LineNumberAt(text, call.Index);
+            string lineText = lines[lineNumber - 1].Trim();
+            if(lineText.StartsWith("//", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            callCount++;
+            List<string>? arguments = ReadCallArguments(text, call.Index + call.Length);
+            bool isCatalogCheck = arguments is { Count: 2 } && DpopResourceCheckNameArgumentPattern.IsMatch(arguments[1]);
+            if(!isCatalogCheck)
+            {
+                hits.Add((lineNumber, lineText));
+            }
+        }
+
+        return (hits, callCount);
+    }
+
+
+    /// <summary>
+    /// The arguments of the call whose argument list starts at <paramref name="start"/>, just after its opening
+    /// parenthesis, each trimmed with its whitespace runs written as one space: split at the commas outside nested
+    /// parentheses, brackets and braces and outside string and character literals and line comments, and ended at the
+    /// closing parenthesis; <see langword="null"/> when the text ends first.
+    /// </summary>
+    /// <param name="text">The source text.</param>
+    /// <param name="start">The index just after the call's opening parenthesis.</param>
+    /// <returns>The arguments, or <see langword="null"/>.</returns>
+    private static List<string>? ReadCallArguments(string text, int start)
+    {
+        List<string> arguments = [];
+        StringBuilder current = new();
+        int depth = 0;
+        int index = start;
+        while(index < text.Length)
+        {
+            char character = text[index];
+            if(character == '/' && index + 1 < text.Length && text[index + 1] == '/')
+            {
+                int lineEnd = text.IndexOf('\n', index, StringComparison.Ordinal);
+                index = lineEnd < 0 ? text.Length : lineEnd;
+
+                continue;
+            }
+
+            if(character is '"' or '\'')
+            {
+                int literalEnd = LiteralEnd(text, index);
+                _ = current.Append(text, index, literalEnd - index);
+                index = literalEnd;
+
+                continue;
+            }
+
+            bool isArgumentEnd = depth == 0 && character is ',' or ')';
+            if(isArgumentEnd)
+            {
+                arguments.Add(Regex.Replace(current.ToString(), @"\s+", " ").Trim());
+                _ = current.Clear();
+                if(character == ')')
+                {
+                    return arguments;
+                }
+
+                index++;
+
+                continue;
+            }
+
+            depth += character switch
+            {
+                '(' or '[' or '{' => 1,
+                ')' or ']' or '}' => -1,
+                _ => 0
+            };
+            _ = current.Append(character);
+            index++;
+        }
+
+        return null;
+    }
+
+
+    /// <summary>
+    /// The index just past the string or character literal opening at <paramref name="start"/>: a verbatim string, its
+    /// opening quote preceded by <c>@</c>, ends at a quote not doubled; any other literal at its first quote of the same
+    /// kind not escaped by a backslash.
+    /// </summary>
+    /// <param name="text">The source text.</param>
+    /// <param name="start">The index of the literal's opening quote.</param>
+    /// <returns>The index just past its closing quote, or the text's length when it does not close.</returns>
+    private static int LiteralEnd(string text, int start)
+    {
+        char quote = text[start];
+        bool isVerbatim = quote == '"' && start > 0 && (text[start - 1] == '@' || (start > 1 && text[start - 1] == '$' && text[start - 2] == '@'));
+        int index = start + 1;
+        while(index < text.Length)
+        {
+            char character = text[index];
+            if(isVerbatim && character == '"' && index + 1 < text.Length && text[index + 1] == '"')
+            {
+                index += 2;
+
+                continue;
+            }
+
+            if(!isVerbatim && character == '\\')
+            {
+                index += 2;
+
+                continue;
+            }
+
+            if(character == quote)
+            {
+                return index + 1;
+            }
+
+            index++;
+        }
+
+        return text.Length;
+    }
+
+
+    /// <summary>
+    /// The values of <c>oauth.dpop.resource.check</c> are a closed list of names the library chooses, never a value of
+    /// the presentation (<c>OAuthTagNames.DpopResourceCheck</c>: "Its values are a closed list, each the check of RFC 9449
+    /// Section 7.1"; <see href="https://www.w3.org/TR/2021/REC-trace-context-1-20211123/#privacy-considerations">W3C Trace
+    /// Context Level 1, Section 6</see>: "Tracing vendors MUST NOT use traceparent and tracestate fields for any personally
+    /// identifiable or otherwise sensitive information.", held by the library for every attribute it emits). Every call
+    /// under <c>src</c> of <c>DpopResourceDecision.Deny</c> or <c>DpopResourceDecision.IndeterminateDeny</c> passes a
+    /// member of <c>DpopResourceCheckNames</c> as its check argument; <see cref="DpopRefusalCheckArgumentAllowlist"/> is
+    /// empty, so a call passing any other value fails naming its file and line. The scan reads at least one call, so a
+    /// renamed factory fails instead of passing over nothing.
+    /// </summary>
+    [TestMethod]
+    public void EveryDpopRefusalNamesItsCheckFromTheClosedCatalog()
+    {
+        string repositoryRoot = SourceHygieneScanner.FindRepositoryRoot();
+        List<(string FilePath, int LineNumber, string LineText)> hits = [];
+        int callCount = 0;
+        foreach(string filePath in SourceHygieneScanner.EnumerateSourceFilesUnder(repositoryRoot, "src"))
+        {
+            string relativePath = Path.GetRelativePath(repositoryRoot, filePath).Replace(Path.DirectorySeparatorChar, '/');
+            (List<(int LineNumber, string LineText)> fileHits, int fileCallCount) = FindDpopRefusalCheckArgumentHits(File.ReadAllLines(filePath));
+            callCount += fileCallCount;
+            hits.AddRange(fileHits.Select(hit => (relativePath, hit.LineNumber, hit.LineText)));
+        }
+
+        Assert.AreNotEqual(0, callCount, "The scan reads the refusal factories' calls; a renamed factory must never pass silently.");
+        List<string> failures = [];
+        AssertLineTextHitsMatchAllowlistExactly(
+            hits,
+            DpopRefusalCheckArgumentAllowlist,
+            "pass a DpopResourceCheckNames member as the refusal's check argument",
+            failures);
+
+        Assert.IsEmpty(failures, string.Join(Environment.NewLine, failures));
+    }
+
+
+    /// <summary>
+    /// Every reference in <paramref name="lines"/> to a refusal factory outside the recognized call shape, as (one-based
+    /// line, trimmed line text), and the number of factory declarations read: a <c>using static</c> or alias directive
+    /// naming <c>DpopResourceDecision</c> (<see cref="DpopResourceDecisionImportPattern"/>); a qualified name not
+    /// followed by its argument list (<see cref="DpopRefusalFactoryReferencePattern"/>); and, in the declaring file, an
+    /// unqualified call other than the two declarations (<see cref="DpopRefusalFactoryUnqualifiedCallPattern"/>,
+    /// <see cref="DpopRefusalFactoryDeclarationPattern"/>). A reference on a comment line is not read.
+    /// </summary>
+    /// <param name="lines">The lines of one source file.</param>
+    /// <param name="isDeclaringFile">Whether the file declares <c>DpopResourceDecision</c>.</param>
+    /// <returns>The offending references and the number of factory declarations read.</returns>
+    private static (List<(int LineNumber, string LineText)> Hits, int DeclarationCount) FindDpopRefusalFactoryReferenceHits(string[] lines, bool isDeclaringFile)
+    {
+        string text = string.Join('\n', lines);
+        List<(int LineNumber, string LineText)> hits = [];
+        List<Match> references =
+        [
+            .. DpopResourceDecisionImportPattern.Matches(text).AsEnumerable(),
+            .. DpopRefusalFactoryReferencePattern.Matches(text).AsEnumerable()
+        ];
+        HashSet<int> declarationNameIndexes = [];
+        if(isDeclaringFile)
+        {
+            foreach(Match declaration in DpopRefusalFactoryDeclarationPattern.Matches(text))
+            {
+                int lineNumber = LineNumberAt(text, declaration.Index);
+                if(!lines[lineNumber - 1].Trim().StartsWith("//", StringComparison.Ordinal))
+                {
+                    _ = declarationNameIndexes.Add(declaration.Groups[1].Index);
+                }
+            }
+
+            references.AddRange(DpopRefusalFactoryUnqualifiedCallPattern.Matches(text).Where(call => !declarationNameIndexes.Contains(call.Index)));
+        }
+
+        foreach(Match reference in references)
+        {
+            int lineNumber = LineNumberAt(text, reference.Index);
+            string lineText = lines[lineNumber - 1].Trim();
+            if(!lineText.StartsWith("//", StringComparison.Ordinal))
+            {
+                hits.Add((lineNumber, lineText));
+            }
+        }
+
+        return (hits, declarationNameIndexes.Count);
+    }
+
+
+    /// <summary>
+    /// The check of every refusal is read where it is passed, so every way a refusal factory is reached under
+    /// <c>src</c> is the call shape <see cref="EveryDpopRefusalNamesItsCheckFromTheClosedCatalog"/> reads
+    /// (<c>OAuthTagNames.DpopResourceCheck</c>: "Its values are a closed list, each the check of RFC 9449 Section 7.1";
+    /// <see href="https://www.w3.org/TR/2021/REC-trace-context-1-20211123/#privacy-considerations">W3C Trace Context
+    /// Level 1, Section 6</see>: "Tracing vendors MUST NOT use traceparent and tracestate fields for any personally
+    /// identifiable or otherwise sensitive information.", held by the library for every attribute it emits). No file
+    /// under <c>src</c> carries a <c>using static</c> or <c>using</c> alias directive naming <c>DpopResourceDecision</c>,
+    /// a reference of <c>DpopResourceDecision.Deny</c> or <c>DpopResourceDecision.IndeterminateDeny</c> not followed by
+    /// its argument list (a method group, or a comment before the parenthesis), or, in the declaring file, an unqualified
+    /// call of either factory other than its declaration; <see cref="DpopRefusalFactoryReferenceAllowlist"/> is empty,
+    /// so each fails naming its file and line. The scan reads at least one recognized call and both declarations, so a
+    /// renamed factory or a moved declaring file fails instead of passing over nothing.
+    /// </summary>
+    [TestMethod]
+    public void NoDpopRefusalFactoryIsReferencedOutsideTheRecognizedCallShape()
+    {
+        string repositoryRoot = SourceHygieneScanner.FindRepositoryRoot();
+        List<(string FilePath, int LineNumber, string LineText)> hits = [];
+        int callCount = 0;
+        int declarationCount = 0;
+        foreach(string filePath in SourceHygieneScanner.EnumerateSourceFilesUnder(repositoryRoot, "src"))
+        {
+            string relativePath = Path.GetRelativePath(repositoryRoot, filePath).Replace(Path.DirectorySeparatorChar, '/');
+            string[] lines = File.ReadAllLines(filePath);
+            bool isDeclaringFile = relativePath.EndsWith("/ProtectedResource/DpopResourceDecision.cs", StringComparison.Ordinal);
+            (List<(int LineNumber, string LineText)> fileHits, int fileDeclarationCount) = FindDpopRefusalFactoryReferenceHits(lines, isDeclaringFile);
+            (_, int fileCallCount) = FindDpopRefusalCheckArgumentHits(lines);
+            callCount += fileCallCount;
+            declarationCount += fileDeclarationCount;
+            hits.AddRange(fileHits.Select(hit => (relativePath, hit.LineNumber, hit.LineText)));
+        }
+
+        Assert.AreNotEqual(0, callCount, "The scan reads the refusal factories' calls; a renamed factory must never pass silently.");
+        Assert.AreEqual(2, declarationCount, "The scan reads both refusal factories' declarations in their declaring file.");
+        List<string> failures = [];
+        AssertLineTextHitsMatchAllowlistExactly(
+            hits,
+            DpopRefusalFactoryReferenceAllowlist,
+            "call the refusal factory as DpopResourceDecision.Deny(...) or DpopResourceDecision.IndeterminateDeny(...) so its check argument is read",
+            failures);
+
+        Assert.IsEmpty(failures, string.Join(Environment.NewLine, failures));
+    }
 }
 
 /// <summary>One offending line: which file, which line, and which pattern class it tripped.</summary>

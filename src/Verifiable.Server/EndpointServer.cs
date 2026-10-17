@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using Verifiable.Core;
+using Verifiable.Core.Diagnostics;
 using Verifiable.Server.Diagnostics;
 using Verifiable.Server.Pipeline;
 using Verifiable.Server.Routing;
@@ -1000,18 +1001,39 @@ public sealed class EndpointServer: IDisposable
 
 
     /// <summary>Executes the pipeline entirely against this request's fixed wiring view.</summary>
+    /// <remarks>
+    /// The dispatch span <see cref="ServerActivityNames.Handle"/> is started through the wiring's
+    /// <see cref="ServerIntegration.StartTraceActivity"/>, or <see cref="ServerActivitySource.StartActivity"/> when it is
+    /// unwired, with <see cref="ActivityKind.Internal"/>, no start tags and the context, on which the inbound request is
+    /// already set so the application's propagator reads its field lines. The span is stopped when the response is
+    /// composed, unless the delegate answered the activity that was already current, which stays the application's. The
+    /// delegate is called before inspection stage 1, so a delegate that throws fails the request before any inspection
+    /// stage runs, the exception passing to the caller. A
+    /// response of 500 or above sets the span's status to <see cref="ActivityStatusCode.Error"/> and
+    /// <see cref="ServerTagNames.ErrorType"/> to the status code, and a lower one sets neither
+    /// (<see href="https://opentelemetry.io/docs/specs/semconv/http/http-spans/">OpenTelemetry semantic conventions for HTTP
+    /// spans</see>: "For HTTP status codes in the 4xx range span status MUST be left unset in case of SpanKind.SERVER" and
+    /// "For HTTP status codes in the 5xx range, as well as any other code the client failed to interpret, span status
+    /// SHOULD be set to Error."). The span carries no status description.
+    /// </remarks>
     /// <param name="request">The transport envelope.</param>
     /// <param name="context">The exclusively owned request context.</param>
     /// <param name="cancellationToken">Cancellation of request processing.</param>
     private async ValueTask<ServerHttpResponse> DispatchCapturedAsync(IncomingRequest request, ExchangeContext context, CancellationToken cancellationToken)
     {
-        using Activity? activity = ServerActivitySource.Source.StartActivity(
-            ServerActivityNames.Handle);
-
-        //Place the active host and typed request envelope on the context.
+        //Place the active host and typed request envelope on the context before the span starts, so the application's
+        //delegate reads the inbound field lines.
         context.SetIncomingRequest(request);
 
-        //Inspection stage 1 of 4 — fires once at dispatch entry on every request.
+        Activity? ambientActivity = Activity.Current;
+        StartTraceActivityDelegate startTraceActivity = Integration.StartTraceActivity ?? ServerActivitySource.StartActivity;
+        Activity? activity = startTraceActivity(ServerActivityNames.Handle, ActivityKind.Internal, [], context);
+
+        //An activity that was already current is the application's own and is not stopped here.
+        using Activity? ownedActivity = ReferenceEquals(activity, ambientActivity) ? null : activity;
+
+        //Inspection stage 1 of 4: fires once at dispatch entry on every request, after the tracing delegate, so a delegate
+        //that throws fails the request before this stage.
         await Integration.InspectAsync!(
             new IncomingRequestStage(request), context, cancellationToken)
             .ConfigureAwait(false);
@@ -1145,6 +1167,14 @@ public sealed class EndpointServer: IDisposable
         if(response.ErrorCode is not null)
         {
             _ = (activity?.SetTag(ServerTagNames.ErrorCode, response.ErrorCode));
+        }
+
+        //OpenTelemetry HTTP span status: a 5xx answer sets status Error and error.type to the status code number as text;
+        //a 4xx answer at a server leaves both unset.
+        if(response.StatusCode >= 500)
+        {
+            _ = (activity?.SetStatus(ActivityStatusCode.Error));
+            _ = (activity?.SetTag(ServerTagNames.ErrorType, response.StatusCode.ToString(CultureInfo.InvariantCulture)));
         }
 
         return response;

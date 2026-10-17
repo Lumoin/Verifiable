@@ -1,7 +1,10 @@
+using System.Diagnostics;
 using Verifiable.Core;
+using Verifiable.Core.Diagnostics;
 using Verifiable.OAuth.AuthCode.Server;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Server;
+using Verifiable.Server.Diagnostics;
 
 namespace Verifiable.OAuth.ProtectedResource;
 
@@ -48,6 +51,19 @@ namespace Verifiable.OAuth.ProtectedResource;
 /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">Section 7.1</see>: "the server needs to make it
 /// available to the application by including WWW-Authenticate in the Access-Control-Expose-Headers response header list
 /// value").
+/// </para>
+/// <para>
+/// Every decision is recorded with the names of a closed list and nothing of the presentation, no token, proof,
+/// <c>jti</c>, nonce or key thumbprint: <see cref="OAuthTagNames.DpopResourceDecision"/> the decision kind,
+/// <see cref="OAuthTagNames.DpopResourceCheck"/> the refusing check's name (<see cref="DpopResourceCheckNames"/>) and
+/// <see cref="ServerTagNames.ErrorCode"/> the answer's error code. <see cref="DecideAsync"/> records them on the
+/// <see cref="OAuthActivityNames.DecideResourceAccess"/> span the application starts through
+/// <see cref="ResourceServerIntegration.StartTraceActivity"/>, a server error answer setting the span's status
+/// <c>Error</c> and <c>error.type</c> <c>500</c>, or, with that slot unwired, as the
+/// <see cref="OAuthEventNames.DpopResourceDecided"/> event on <see cref="Activity.Current"/>, as the library's own
+/// resources record theirs on the dispatch span. An exception a slot raises sets the span's status <c>Error</c> and
+/// <c>error.type</c> to the exception type's fully-qualified name and passes on; nothing of its text is recorded, and the
+/// span carries the error alone, no decision.
 /// </para>
 /// </remarks>
 public static class DpopResourceAccess
@@ -195,13 +211,30 @@ public static class DpopResourceAccess
     /// exception raised by a slot of <paramref name="integration"/> passes to the caller, and the request then fails
     /// closed with no permit.
     /// </para>
+    /// <para>
+    /// Once the arguments are checked, the decision's span <see cref="OAuthActivityNames.DecideResourceAccess"/> is
+    /// started through <see cref="ResourceServerIntegration.StartTraceActivity"/> with
+    /// <see cref="ActivityKind.Internal"/>, no start tags and <paramref name="context"/>, the decision recorded on it and
+    /// the span stopped when the decision is made, unless the delegate answered the activity that was already current,
+    /// which stays the application's. An exception a slot raises sets the span's status <c>Error</c> and
+    /// <see cref="ServerTagNames.ErrorType"/> to the exception type's fully-qualified name and passes on; nothing of its
+    /// text is recorded
+    /// (<see href="https://opentelemetry.io/docs/specs/semconv/http/http-spans/">OpenTelemetry semantic conventions for HTTP
+    /// spans</see>: "If the request fails with an error before response status code was sent or received, error.type
+    /// SHOULD be set to exception type (its fully-qualified class name, if applicable) or a component-specific low
+    /// cardinality error identifier."). An exception is no decision: the span carries the error alone, the
+    /// <see cref="OAuthTagNames.DpopResourceDecision"/>, <see cref="OAuthTagNames.DpopResourceCheck"/> and
+    /// <see cref="ServerTagNames.ErrorCode"/> tags an earlier decision left on a span the application reuses cleared.
+    /// With the slot unwired the decision is recorded as the
+    /// <see cref="OAuthEventNames.DpopResourceDecided"/> event on <see cref="Activity.Current"/>.
+    /// </para>
     /// </remarks>
     /// <param name="integration">The resource server's slots.</param>
     /// <param name="request">The presentation, its binding read by the caller's own validation of the token.</param>
     /// <param name="context">The per-request context the slots are called with.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The decision: a permit, or the refusal to send.</returns>
-    public static ValueTask<DpopResourceDecision> DecideAsync(
+    public static async ValueTask<DpopResourceDecision> DecideAsync(
         ResourceServerIntegration integration,
         DpopResourceRequest request,
         ExchangeContext context,
@@ -286,7 +319,148 @@ public static class DpopResourceAccess
             ResourceMetadata = request.ResourceMetadata
         };
 
-        return DecideCoreAsync(presentation, checks, cancellationToken);
+        //The caller's own arguments are checked above, before any span. With no slot wired the decision is recorded as an
+        //event on the ambient activity, as the library's own resources record theirs.
+        StartTraceActivityDelegate? startTraceActivity = integration.StartTraceActivity;
+        if(startTraceActivity is null)
+        {
+            DpopResourceDecision untracedDecision = await DecideCoreAsync(presentation, checks, cancellationToken).ConfigureAwait(false);
+            RecordDecisionEvent(untracedDecision);
+
+            return untracedDecision;
+        }
+
+        Activity? ambientActivity = Activity.Current;
+        Activity? span = startTraceActivity(OAuthActivityNames.DecideResourceAccess, ActivityKind.Internal, [], context);
+
+        //An activity that was already current is the application's own and is not stopped here.
+        using Activity? ownedSpan = ReferenceEquals(span, ambientActivity) ? null : span;
+        try
+        {
+            DpopResourceDecision decision = await DecideCoreAsync(presentation, checks, cancellationToken).ConfigureAwait(false);
+            RecordDecision(span, decision);
+
+            return decision;
+        }
+        catch(Exception exception)
+        {
+            //OpenTelemetry semantic conventions for HTTP spans: "If the request fails with an error before response status
+            //code was sent or received, error.type SHOULD be set to exception type (its fully-qualified class name, if
+            //applicable)". The exception's text is the application's own and is not recorded. An exception is no
+            //decision: the decision tags an earlier decision left on a span the application reuses are cleared, so the
+            //span carries the error alone.
+            _ = span?.SetStatus(ActivityStatusCode.Error);
+            _ = span?.SetTag(ServerTagNames.ErrorType, exception.GetType().FullName);
+            _ = span?.SetTag(OAuthTagNames.DpopResourceDecision, null);
+            _ = span?.SetTag(OAuthTagNames.DpopResourceCheck, null);
+            _ = span?.SetTag(ServerTagNames.ErrorCode, null);
+            throw;
+        }
+    }
+
+
+    /// <summary>
+    /// Records <paramref name="decision"/> on <paramref name="span"/>, the <see cref="OAuthActivityNames.DecideResourceAccess"/>
+    /// span the application started: <see cref="OAuthTagNames.DpopResourceDecision"/> the decision kind's name,
+    /// <see cref="OAuthTagNames.DpopResourceCheck"/> the refusing check's name from <see cref="DpopResourceCheckNames"/>
+    /// when one refused, and <see cref="ServerTagNames.ErrorCode"/> the answer's error code when it carries one. The three
+    /// tags are set on every decision, an absent check or error code set to <see langword="null"/>, which removes the tag
+    /// (<see cref="Activity.SetTag"/>), so a span the application reuses across decisions carries the last decision
+    /// alone. The status <c>Error</c> and <c>error.type</c> an earlier decision or the application set on the span are
+    /// never cleared: an error that happened in the span stands. An exception a slot raises is no decision and is not
+    /// recorded here: <see cref="DecideAsync"/> clears the three tags beside setting the status <c>Error</c> and
+    /// <c>error.type</c>, so the span carries the error alone. An
+    /// <see cref="DpopResourceDecisionKind.IndeterminateDeny"/> is answered 500, so it sets the status
+    /// <see cref="ActivityStatusCode.Error"/> and <see cref="ServerTagNames.ErrorType"/> <c>500</c>; a
+    /// <see cref="DpopResourceDecisionKind.Deny"/> is a 4xx answer and leaves both unset
+    /// (<see href="https://opentelemetry.io/docs/specs/semconv/http/http-spans/">OpenTelemetry semantic conventions for HTTP
+    /// spans</see>: "For HTTP status codes in the 4xx range span status MUST be left unset in case of SpanKind.SERVER" and
+    /// "For HTTP status codes in the 5xx range, as well as any other code the client failed to interpret, span status
+    /// SHOULD be set to Error."). Nothing of the presentation is read: no token, proof, <c>jti</c>, nonce or thumbprint.
+    /// </summary>
+    /// <param name="span">The decision span, or <see langword="null"/> when the operation is not traced.</param>
+    /// <param name="decision">The decision.</param>
+    internal static void RecordDecision(Activity? span, DpopResourceDecision decision)
+    {
+        if(span is null)
+        {
+            return;
+        }
+
+        _ = span.SetTag(OAuthTagNames.DpopResourceDecision, DecisionKindName(decision.Kind));
+        _ = span.SetTag(OAuthTagNames.DpopResourceCheck, decision.Check);
+        _ = span.SetTag(ServerTagNames.ErrorCode, decision.Response?.ErrorCode);
+        if(decision.Kind is DpopResourceDecisionKind.IndeterminateDeny)
+        {
+            _ = span.SetStatus(ActivityStatusCode.Error);
+            _ = span.SetTag(ServerTagNames.ErrorType, IndeterminateDenyErrorType);
+        }
+    }
+
+
+    /// <summary>
+    /// Records <paramref name="decision"/> as the <see cref="OAuthEventNames.DpopResourceDecided"/> event on
+    /// <see cref="Activity.Current"/>, with the decision tags <see cref="DecisionTags"/> yields: the library's own resources record
+    /// every decision so on the dispatch span, and an application's resource so when
+    /// <see cref="ResourceServerIntegration.StartTraceActivity"/> is unwired. Nothing of the presentation is read.
+    /// </summary>
+    /// <param name="decision">The decision.</param>
+    internal static void RecordDecisionEvent(DpopResourceDecision decision)
+    {
+        ActivityTagsCollection tags = [.. DecisionTags(decision)];
+        _ = (Activity.Current?.AddEvent(new ActivityEvent(OAuthEventNames.DpopResourceDecided, tags: tags)));
+    }
+
+
+    /// <summary>
+    /// The <c>error.type</c> of a decision answered with a server error: the status code number as text
+    /// (<see href="https://opentelemetry.io/docs/specs/semconv/http/http-spans/">OpenTelemetry semantic conventions for HTTP
+    /// spans</see>: "error.type SHOULD be set to the status code number (represented as a string)").
+    /// </summary>
+    private static string IndeterminateDenyErrorType { get; } = "500";
+
+
+    /// <summary>
+    /// The name a decision kind is recorded by: <c>Permit</c>, <c>Deny</c> or <c>IndeterminateDeny</c>, the name of
+    /// <paramref name="kind"/>, a fixed text the library chooses. An undefined kind, which no factory of
+    /// <see cref="DpopResourceDecision"/> makes, is recorded by its numeric text.
+    /// </summary>
+    /// <param name="kind">The decision kind.</param>
+    /// <returns>The name.</returns>
+    private static string DecisionKindName(DpopResourceDecisionKind kind) => kind switch
+    {
+        DpopResourceDecisionKind.Permit => nameof(DpopResourceDecisionKind.Permit),
+        DpopResourceDecisionKind.Deny => nameof(DpopResourceDecisionKind.Deny),
+        DpopResourceDecisionKind.IndeterminateDeny => nameof(DpopResourceDecisionKind.IndeterminateDeny),
+        _ => kind.ToString()
+    };
+
+
+    /// <summary>
+    /// The tags of the <see cref="OAuthEventNames.DpopResourceDecided"/> event recording <paramref name="decision"/>: the
+    /// decision kind's name, the refusing check's name when one refused and the answer's error code when it carries one,
+    /// an absent value omitted from the event's own collection; each value is a name the library chooses or the error code
+    /// it writes, never a value of the presentation.
+    /// </summary>
+    /// <param name="decision">The decision.</param>
+    /// <returns>The tags.</returns>
+    private static List<KeyValuePair<string, object?>> DecisionTags(DpopResourceDecision decision)
+    {
+        List<KeyValuePair<string, object?>> tags =
+        [
+            new(OAuthTagNames.DpopResourceDecision, DecisionKindName(decision.Kind))
+        ];
+        if(decision.Check is string check)
+        {
+            tags.Add(new(OAuthTagNames.DpopResourceCheck, check));
+        }
+
+        if(decision.Response?.ErrorCode is string errorCode)
+        {
+            tags.Add(new(ServerTagNames.ErrorCode, errorCode));
+        }
+
+        return tags;
     }
 
 
@@ -441,7 +615,8 @@ public static class DpopResourceAccess
         //"attempted using an unsupported authentication method" as one answered with no error code.
         if(presentation.IsDpopBoundAccessTokenRequired && !presentation.IsDpopPresentation)
         {
-            return DpopResourceDecision.Deny(WithDpopChallenge(ServerHttpResponse.Unauthorized(), BuildChallenge(null, checks)));
+            return DpopResourceDecision.Deny(
+                WithDpopChallenge(ServerHttpResponse.Unauthorized(), BuildChallenge(null, checks)), DpopResourceCheckNames.DpopRequired);
         }
 
         //RFC 9449 Section 7.1: the DPoP scheme carries a DPoP-bound access token. An unbound token presented under it
@@ -450,7 +625,8 @@ public static class DpopResourceAccess
         {
             return presentation.IsDpopPresentation
                 ? DpopResourceDecision.Deny(RefuseUnderScheme(true, OAuthErrors.InvalidToken,
-                    "The Access Token is not bound to a DPoP key and cannot be presented under the DPoP scheme.", checks))
+                    "The Access Token is not bound to a DPoP key and cannot be presented under the DPoP scheme.", checks),
+                    DpopResourceCheckNames.UnboundUnderDpop)
                 : DpopResourceDecision.Permit(null);
         }
 
@@ -459,14 +635,16 @@ public static class DpopResourceAccess
         if(presentation.BoundThumbprint is not string boundThumbprint)
         {
             return DpopResourceDecision.Deny(RefuseUnderScheme(presentation.IsDpopPresentation, OAuthErrors.InvalidToken,
-                "The Access Token carries a confirmation method this resource cannot enforce.", checks));
+                "The Access Token carries a confirmation method this resource cannot enforce.", checks),
+                DpopResourceCheckNames.UnsupportedConfirmation);
         }
 
         //RFC 9449 Section 7.2: a DPoP-bound token received as a bearer token is rejected.
         if(!presentation.IsDpopPresentation)
         {
             return DpopResourceDecision.Deny(RefuseUnderScheme(false, OAuthErrors.InvalidToken,
-                "The Access Token is sender-constrained and must be presented under the DPoP scheme.", checks));
+                "The Access Token is sender-constrained and must be presented under the DPoP scheme.", checks),
+                DpopResourceCheckNames.BoundUnderBearer);
         }
 
         //A bound token with a check unwired is a fault of the server's own wiring: the request fails closed rather
@@ -477,7 +655,7 @@ public static class DpopResourceAccess
             || checks.ConsultJtiAsync is not { } consultJti)
         {
             return DpopResourceDecision.IndeterminateDeny(
-                ServerHttpResponse.ServerError(OAuthErrors.ServerError, DpopChecksNotWiredDescription));
+                ServerHttpResponse.ServerError(OAuthErrors.ServerError, DpopChecksNotWiredDescription), DpopResourceCheckNames.ChecksNotWired);
         }
 
         Uri targetUri = await checks.ResolveTargetUriAsync(cancellationToken).ConfigureAwait(false);
@@ -488,14 +666,14 @@ public static class DpopResourceAccess
         if(presentation.DpopFieldLines.Count > 1)
         {
             return DpopResourceDecision.Deny(RefuseUnderScheme(true, OAuthErrors.InvalidDpopProof,
-                DpopRequestReading.MoreThanOneDpopFieldDescription, checks));
+                DpopRequestReading.MoreThanOneDpopFieldDescription, checks), DpopResourceCheckNames.DpopFieldCount);
         }
 
         if(presentation.DpopFieldLines.Count == 0)
         {
             return DpopResourceDecision.Deny(await ChallengeForNonceAsync(issueNonce, targetUri,
                 "A DPoP proof carrying this resource's nonce is required for the sender-constrained Access Token.", checks,
-                cancellationToken).ConfigureAwait(false));
+                cancellationToken).ConfigureAwait(false), DpopResourceCheckNames.ProofAbsent);
         }
 
         //RFC 9449 Section 4.3, check 5: the alg is held to the algorithms the resource accepts. A resource with no
@@ -503,7 +681,7 @@ public static class DpopResourceAccess
         if(checks.AcceptedAlgorithms is not IReadOnlyList<string> acceptedAlgorithms)
         {
             return DpopResourceDecision.IndeterminateDeny(
-                ServerHttpResponse.ServerError(OAuthErrors.ServerError, checks.AlgorithmListFailureDescription));
+                ServerHttpResponse.ServerError(OAuthErrors.ServerError, checks.AlgorithmListFailureDescription), DpopResourceCheckNames.AlgorithmList);
         }
 
         DpopProofValidationResult proofResult = await validateProof(
@@ -525,7 +703,7 @@ public static class DpopResourceAccess
                 or DpopProofValidationFailureReason.NonceMismatch
                 ? await ChallengeForNonceAsync(issueNonce, targetUri, "DPoP nonce required.", checks, cancellationToken).ConfigureAwait(false)
                 : RefuseUnderScheme(true, OAuthErrors.InvalidDpopProof,
-                    $"DPoP proof validation failed: {proofResult.FailureReason}.", checks));
+                    $"DPoP proof validation failed: {proofResult.FailureReason}.", checks), DpopResourceCheckNames.ProofValidation);
         }
 
         //A validation answering success names the base64url JWK SHA-256 Thumbprint of the proof's public key (RFC 9449
@@ -535,13 +713,13 @@ public static class DpopResourceAccess
             || !DpopJwkUtilities.IsJwkSha256ThumbprintSpelling(proofThumbprint))
         {
             return DpopResourceDecision.IndeterminateDeny(ServerHttpResponse.ServerError(
-                OAuthErrors.ServerError, DpopRequestReading.ValidatedProofWithoutThumbprintDescription));
+                OAuthErrors.ServerError, DpopRequestReading.ValidatedProofWithoutThumbprintDescription), DpopResourceCheckNames.ValidatedProofIncomplete);
         }
 
         if(proofResult.Claims is not DpopProofClaims proofClaims)
         {
             return DpopResourceDecision.IndeterminateDeny(ServerHttpResponse.ServerError(
-                OAuthErrors.ServerError, DpopRequestReading.ValidatedProofWithoutClaimsDescription));
+                OAuthErrors.ServerError, DpopRequestReading.ValidatedProofWithoutClaimsDescription), DpopResourceCheckNames.ValidatedProofIncomplete);
         }
 
         //RFC 9449 Section 4.3, check 12, and Section 7.1: the proof's public key is the one the token is bound to, its
@@ -550,7 +728,7 @@ public static class DpopResourceAccess
         if(!FixedTimeComparison.AreEqual(proofThumbprint, boundThumbprint))
         {
             return DpopResourceDecision.Deny(RefuseUnderScheme(true, OAuthErrors.InvalidToken,
-                "The DPoP proof key does not match the Access Token's cnf.jkt binding.", checks));
+                "The DPoP proof key does not match the Access Token's cnf.jkt binding.", checks), DpopResourceCheckNames.KeyBinding);
         }
 
         //RFC 9449 Section 11.1: "servers MUST only accept DPoP proofs for a limited time after their creation", and
@@ -561,7 +739,7 @@ public static class DpopResourceAccess
             && !isIssuedAtWithinFreshnessWindow(proofClaims.Iat))
         {
             return DpopResourceDecision.Deny(RefuseUnderScheme(true, OAuthErrors.InvalidDpopProof,
-                "DPoP proof iat lies outside the resource's freshness window.", checks));
+                "DPoP proof iat lies outside the resource's freshness window.", checks), DpopResourceCheckNames.FreshnessWindow);
         }
 
         //RFC 9449 Section 11.3: no proof without the nonce claim is accepted once a nonce has been provided, and this
@@ -570,14 +748,15 @@ public static class DpopResourceAccess
         if(proofClaims.Nonce is not { Length: > 0 } nonce)
         {
             return DpopResourceDecision.Deny(await ChallengeForNonceAsync(
-                issueNonce, targetUri, "DPoP nonce required.", checks, cancellationToken).ConfigureAwait(false));
+                issueNonce, targetUri, "DPoP nonce required.", checks, cancellationToken).ConfigureAwait(false), DpopResourceCheckNames.NonceAbsent);
         }
 
         DpopNonceValidationResult nonceResult = await validateNonce(nonce, targetUri, cancellationToken).ConfigureAwait(false);
         if(!nonceResult.IsSuccess)
         {
             return DpopResourceDecision.Deny(await ChallengeForNonceAsync(
-                issueNonce, targetUri, $"DPoP nonce invalid: {nonceResult.FailureReason}.", checks, cancellationToken).ConfigureAwait(false));
+                issueNonce, targetUri, $"DPoP nonce invalid: {nonceResult.FailureReason}.", checks, cancellationToken).ConfigureAwait(false),
+                DpopResourceCheckNames.NonceValidation);
         }
 
         //RFC 9449 Section 11.1: the proof's jti is recorded for the time window in which the proof would be accepted,
@@ -588,14 +767,14 @@ public static class DpopResourceAccess
         {
             JtiReplayOutcome.FirstUse => DpopResourceDecision.Permit(proofThumbprint),
             JtiReplayOutcome.Replayed => DpopResourceDecision.Deny(RefuseUnderScheme(true,
-                OAuthErrors.InvalidDpopProof, "The DPoP proof jti has been presented previously.", checks)),
+                OAuthErrors.InvalidDpopProof, "The DPoP proof jti has been presented previously.", checks), DpopResourceCheckNames.Jti),
             JtiReplayOutcome.Unacceptable => DpopResourceDecision.Deny(RefuseUnderScheme(true,
-                OAuthErrors.InvalidDpopProof, JtiReplayGuard.UnstorableDpopProofJtiDescription, checks)),
+                OAuthErrors.InvalidDpopProof, JtiReplayGuard.UnstorableDpopProofJtiDescription, checks), DpopResourceCheckNames.Jti),
             JtiReplayOutcome.StoreUnavailable => DpopResourceDecision.IndeterminateDeny(ServerHttpResponse.ServerError(
-                OAuthErrors.ServerError, checks.JtiStoreUnavailableDescription)),
+                OAuthErrors.ServerError, checks.JtiStoreUnavailableDescription), DpopResourceCheckNames.JtiStoreUnavailable),
 
             _ => DpopResourceDecision.IndeterminateDeny(ServerHttpResponse.ServerError(
-                OAuthErrors.ServerError, UnrecognizedJtiOutcomeDescription))
+                OAuthErrors.ServerError, UnrecognizedJtiOutcomeDescription), DpopResourceCheckNames.JtiOutcomeUnrecognized)
         };
     }
 

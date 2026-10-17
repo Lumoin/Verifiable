@@ -61,16 +61,27 @@ public sealed record DpopResourceDecision
     /// </summary>
     public ServerHttpResponse? Response { get; }
 
+    /// <summary>
+    /// The name of the check that refused the presentation, one of the closed list of <see cref="DpopResourceCheckNames"/>
+    /// recorded as <see cref="Diagnostics.OAuthTagNames.DpopResourceCheck"/>, on
+    /// <see cref="DpopResourceDecisionKind.Deny"/> and <see cref="DpopResourceDecisionKind.IndeterminateDeny"/>;
+    /// <see langword="null"/> on a permit. A member of the record's value equality: two decisions refused by different
+    /// checks are two decisions.
+    /// </summary>
+    internal string? Check { get; }
+
 
     /// <summary>Creates a decision; only the factories below call it.</summary>
     /// <param name="kind">The kind of the decision.</param>
     /// <param name="proofThumbprint">The thumbprint of a permit of a bound token, or <see langword="null"/>.</param>
     /// <param name="response">The answer of a refusal, or <see langword="null"/> for a permit.</param>
-    private DpopResourceDecision(DpopResourceDecisionKind kind, string? proofThumbprint, ServerHttpResponse? response)
+    /// <param name="check">The name of the refusing check, or <see langword="null"/> for a permit.</param>
+    private DpopResourceDecision(DpopResourceDecisionKind kind, string? proofThumbprint, ServerHttpResponse? response, string? check)
     {
         Kind = kind;
         ProofThumbprint = proofThumbprint;
         Response = response;
+        Check = check;
     }
 
 
@@ -81,19 +92,21 @@ public sealed record DpopResourceDecision
     /// </param>
     /// <returns>The permit.</returns>
     internal static DpopResourceDecision Permit(string? proofThumbprint) =>
-        new(DpopResourceDecisionKind.Permit, proofThumbprint, null);
+        new(DpopResourceDecisionKind.Permit, proofThumbprint, null, null);
 
 
     /// <summary>The refusal of a presentation a check refused.</summary>
     /// <param name="response">The answer to send.</param>
+    /// <param name="check">The name of the refusing check, from <see cref="DpopResourceCheckNames"/>.</param>
     /// <returns>The refusal.</returns>
-    internal static DpopResourceDecision Deny(ServerHttpResponse response) =>
-        new(DpopResourceDecisionKind.Deny, null, response);
+    internal static DpopResourceDecision Deny(ServerHttpResponse response, string check) =>
+        new(DpopResourceDecisionKind.Deny, null, response, check);
 
 
     /// <summary>The refusal of a presentation the resource cannot decide on.</summary>
     /// <param name="response">The <c>server_error</c> answer to send.</param>
+    /// <param name="check">The name of the refusing check, from <see cref="DpopResourceCheckNames"/>.</param>
     /// <returns>The refusal.</returns>
-    internal static DpopResourceDecision IndeterminateDeny(ServerHttpResponse response) =>
-        new(DpopResourceDecisionKind.IndeterminateDeny, null, response);
+    internal static DpopResourceDecision IndeterminateDeny(ServerHttpResponse response, string check) =>
+        new(DpopResourceDecisionKind.IndeterminateDeny, null, response, check);
 }

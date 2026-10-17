@@ -390,6 +390,36 @@ public class ServerIntegration: WiringComponent
 
 
     /// <summary>
+    /// Starts the span of the dispatch of one request, <see cref="Diagnostics.ServerActivityNames.Handle"/>, for the
+    /// application: called once per request with that name, <see cref="ActivityKind.Internal"/>, no start tags and the
+    /// request's context carrying the inbound request, so the application's propagator reads its <c>traceparent</c> and
+    /// <c>tracestate</c> field lines when its host has not continued the trace; the dispatch sets the outcome on the
+    /// returned activity and stops it when the response is composed. <see langword="null"/> reads
+    /// <see cref="Diagnostics.ServerActivitySource.StartActivity"/>, so an unwired server's dispatch span is started on
+    /// <see cref="Diagnostics.ServerActivitySource.Source"/> under the ambient activity. Optional.
+    /// </summary>
+    /// <remarks>
+    /// Set during construction or on an alteration candidate. A serving setter throws
+    /// <see cref="InvalidOperationException"/> naming this member; use
+    /// <see cref="EndpointServer.RequestAlterationAsync"/> to publish related changes together.
+    /// Dispatch retains this operation and its dependencies from admission through completion.
+    /// Delegate targets own synchronization of mutable application state.
+    /// </remarks>
+    public Verifiable.Core.Diagnostics.StartTraceActivityDelegate? StartTraceActivity
+    {
+        get;
+        set
+        {
+            lock(MutationLock)
+            {
+                EnsureMutable();
+                field = value;
+            }
+        }
+    }
+
+
+    /// <summary>
     /// Generates an identifier for a stated <see cref="IdentifierPurpose"/>. Threaded
     /// through every wire-identifier and correlation-identifier generation site; Required.
     /// </summary>

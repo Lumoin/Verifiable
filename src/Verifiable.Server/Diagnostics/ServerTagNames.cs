@@ -64,6 +64,25 @@ public static class ServerTagNames
     /// </summary>
     public static string ErrorCode { get; } = Utf8Constants.ToInternedString(ErrorCodeUtf8);
 
+    /// <summary>The UTF-8 source literal of <see cref="ErrorType"/>.</summary>
+    public static ReadOnlySpan<byte> ErrorTypeUtf8 => "error.type"u8;
+
+    /// <summary>
+    /// The OpenTelemetry general attribute naming the class of error an operation ended with, set with the span status
+    /// <c>Error</c> to one of two values: on a server error answer, the status code number as text
+    /// (<see href="https://opentelemetry.io/docs/specs/semconv/http/http-spans/">OpenTelemetry semantic conventions for
+    /// HTTP spans</see>: "If response status code was sent or received and status indicates an error according to HTTP
+    /// span status definition, error.type SHOULD be set to the status code number (represented as a string), an
+    /// exception type (if thrown) or a component-specific error identifier."); and at the resource decision, when a slot
+    /// raises an exception before any answer is composed, the exception type's fully-qualified name ("If the request
+    /// fails with an error before response status code was sent or received, error.type SHOULD be set to exception type
+    /// (its fully-qualified class name, if applicable) or a component-specific low cardinality error identifier."). These
+    /// two are the list of errors the library reports under it ("The error.type value SHOULD be predictable and SHOULD
+    /// have low cardinality. Instrumentations SHOULD document the list of errors they report."). Absent when the
+    /// operation did not end with an error.
+    /// </summary>
+    public static string ErrorType { get; } = Utf8Constants.ToInternedString(ErrorTypeUtf8);
+
     //Flow state.
 
     /// <summary>The UTF-8 source literal of <see cref="FlowState"/>.</summary>

@@ -2,10 +2,12 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using System.Buffers;
+using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Security.Cryptography.X509Certificates;
 using Verifiable.Core;
+using Verifiable.Core.Diagnostics;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Json;
@@ -143,6 +145,14 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
 
 
     /// <summary>
+    /// For every request whose decision <see cref="DpopResourceAccess.DecideAsync"/> answered, the activity current in the
+    /// resource server's application when the call returned and whether it had stopped by then, in arrival order: a row
+    /// reads from it whether the library left the application's own activity running.
+    /// </summary>
+    public ConcurrentQueue<(Activity? Activity, bool IsStopped)> AmbientActivitiesAfterDecision { get; } = new();
+
+
+    /// <summary>
     /// Creates the resource server: its integration trusting <paramref name="trustedIssuer"/>'s tokens for
     /// <paramref name="expectedAudience"/>, its <c>jti</c> record over <see cref="ReplayCache"/> and its DPoP checks as
     /// the arguments wire them. The listener starts with <see cref="StartHttpHostAsync"/>.
@@ -165,6 +175,10 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
     /// Wraps the wired <c>jti</c> claim of <see cref="ReplayCache"/>, so a row can answer an outcome of an application's
     /// own store in its place, or <see langword="null"/> to wire it as it is.
     /// </param>
+    /// <param name="startTraceActivity">
+    /// The application's start of the resource decision's span, wired as <see cref="ResourceServerIntegration.StartTraceActivity"/>,
+    /// or <see langword="null"/> to record the decision as an event on the ambient activity.
+    /// </param>
     public TestResourceServerShell(
         Uri trustedIssuer,
         string expectedAudience,
@@ -177,7 +191,8 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
         bool isDpopProofValidationWired = true,
         bool isDpopProofJtiRecordWired = true,
         Func<ValidateDpopProofDelegate, ValidateDpopProofDelegate>? wrapDpopProofValidation = null,
-        Func<ConsultDpopProofJtiDelegate, ConsultDpopProofJtiDelegate>? wrapDpopProofJtiClaim = null)
+        Func<ConsultDpopProofJtiDelegate, ConsultDpopProofJtiDelegate>? wrapDpopProofJtiClaim = null,
+        StartTraceActivityDelegate? startTraceActivity = null)
     {
         ArgumentNullException.ThrowIfNull(trustedIssuer);
         ArgumentException.ThrowIfNullOrWhiteSpace(expectedAudience);
@@ -213,7 +228,8 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
             TimeProvider = timeProvider,
             ConsultDpopProofJtiAsync = isDpopProofJtiRecordWired
                 ? (wrapDpopProofJtiClaim ?? (static claim => claim))(ReplayCache.ConsultAsync)
-                : null
+                : null,
+            StartTraceActivity = startTraceActivity
         };
         Integration = isDpopProofValidationWired
             ? WireDpopChecks(integration, verifySignature, wrapDpopProofValidation ?? (static validate => validate))
@@ -259,6 +275,7 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
             ResolveVerificationKeyAsync = integration.ResolveVerificationKeyAsync,
             TimeProvider = timeProvider,
             ConsultDpopProofJtiAsync = integration.ConsultDpopProofJtiAsync,
+            StartTraceActivity = integration.StartTraceActivity,
             ValidateDpopProofAsync = wrapDpopProofValidation((request, ct) => DpopProofValidator.ValidateAsync(
                 request, verifySignature, DpopTestSupport.Parser, TestSetup.Base64UrlEncoder, TestSetup.Base64UrlDecoder,
                 timeProvider, BaseMemoryPool.Shared, iatSkew, ct)),
@@ -363,7 +380,8 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
 
         global::Microsoft.AspNetCore.Builder.WebApplication app = builder.Build();
 
-        ResourceServerHttpApplication application = new(Integration, VerifySignature, () => TargetAuthority, RequiredScope, RequiresDpop);
+        ResourceServerHttpApplication application = new(
+            Integration, VerifySignature, () => TargetAuthority, RequiredScope, RequiresDpop, AmbientActivitiesAfterDecision);
         app.Run(application.ProcessRequestAsync);
 
         await app.StartAsync(cancellationToken).ConfigureAwait(false);
