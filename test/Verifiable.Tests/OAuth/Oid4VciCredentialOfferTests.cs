@@ -188,6 +188,90 @@ internal sealed class Oid4VciCredentialOfferTests
 
 
     /// <summary>
+    /// The length of a <c>tx_code.description</c> is counted in characters, each Unicode scalar value
+    /// one: a description of 300 characters outside the Basic Multilingual Plane (600 UTF-16 code
+    /// units) composes, and one of 301 such characters is refused with an
+    /// <see cref="ArgumentException"/> naming <c>description</c>.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-4.1.1">OID4VCI 1.0 Section 4.1.1</see>:
+    /// "description: OPTIONAL. String containing guidance for the Holder of the Wallet on how to obtain
+    /// the Transaction Code ... The length of the string MUST NOT exceed 300 characters."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-1">RFC 8259 Section 1</see>: "A string
+    /// is a sequence of zero or more Unicode characters [UNICODE]."
+    /// </summary>
+    /// <param name="characterCount">How many U+1F600 characters the description holds.</param>
+    /// <param name="isComposed">Whether the offer composes.</param>
+    [TestMethod]
+    [DataRow(300, true)]
+    [DataRow(301, false)]
+    public void TxCodeDescriptionIsCountedInCharacters(int characterCount, bool isComposed)
+    {
+        string description = string.Concat(Enumerable.Repeat(char.ConvertFromUtf32(0x1F600), characterCount));
+        CredentialOffer offer = new()
+        {
+            CredentialIssuer = Issuer,
+            CredentialConfigurationIds = [ConfigurationId],
+            PreAuthorizedCodeGrant = new PreAuthorizedCodeOfferGrant
+            {
+                PreAuthorizedCode = PreAuthorizedCode,
+                TxCode = new TxCodeRequirement { Description = description }
+            }
+        };
+
+        if(isComposed)
+        {
+            using JsonDocument document = JsonDocument.Parse(CredentialOfferSerializer.ToJson(offer));
+            string composed = document.RootElement.GetProperty("grants")
+                .GetProperty(WellKnownGrantTypes.PreAuthorizedCode)
+                .GetProperty("tx_code").GetProperty("description").GetString()!;
+            Assert.AreEqual(description, composed, "A description of 300 characters composes as given.");
+        }
+        else
+        {
+            ArgumentException error = Assert.ThrowsExactly<ArgumentException>(
+                () => CredentialOfferSerializer.ToJson(offer),
+                "A description of more than 300 characters is refused.");
+            Assert.Contains("description", error.Message, StringComparison.Ordinal);
+        }
+    }
+
+
+    /// <summary>
+    /// The by-reference deep link is composed only for a <c>credential_offer_uri</c> that is an
+    /// absolute URL using the <c>https</c> scheme: an <c>http</c> URL and a relative reference are
+    /// refused with an <see cref="ArgumentException"/> naming <c>credential_offer_uri</c>, and an
+    /// <c>https</c> URL composes the link carrying it URL-encoded.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-4.1">OID4VCI 1.0 Section 4.1</see>:
+    /// "credential_offer_uri: String that is a URL using the https scheme referencing a resource
+    /// containing a JSON object with the Credential Offer parameters." The link is a value the
+    /// End-User scans, so no exchange carries it; the composer is where the rule holds.
+    /// </summary>
+    /// <param name="credentialOfferUri">The <c>credential_offer_uri</c> handed to the composer.</param>
+    /// <param name="isComposed">Whether the link composes.</param>
+    [TestMethod]
+    [DataRow("http://server.example.com/o", false)]
+    [DataRow("o/1", false)]
+    [DataRow("https://server.example.com/o", true)]
+    public void ByReferenceDeepLinkRefusesAUriOtherThanHttps(string credentialOfferUri, bool isComposed)
+    {
+        Uri offerUri = new(credentialOfferUri, UriKind.RelativeOrAbsolute);
+
+        if(isComposed)
+        {
+            Assert.AreEqual(
+                "openid-credential-offer://?credential_offer_uri=https%3A%2F%2Fserver.example.com%2Fo",
+                CredentialOfferSerializer.ToByReferenceDeepLink(offerUri));
+        }
+        else
+        {
+            ArgumentException error = Assert.ThrowsExactly<ArgumentException>(
+                () => CredentialOfferSerializer.ToByReferenceDeepLink(offerUri),
+                "A credential_offer_uri that is not an absolute https URL is refused.");
+            Assert.Contains("credential_offer_uri", error.Message, StringComparison.Ordinal);
+        }
+    }
+
+
+    /// <summary>
     /// §4.1.1 <c>credential_configuration_ids</c> (REQUIRED): "a non-empty JSON array, where every
     /// entry is a string." An empty array is rejected; a distinct non-empty array serializes.
     /// </summary>

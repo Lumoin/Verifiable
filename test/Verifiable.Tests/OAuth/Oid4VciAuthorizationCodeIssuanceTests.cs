@@ -236,6 +236,159 @@ internal sealed class Oid4VciAuthorizationCodeIssuanceTests
     }
 
     /// <summary>
+    /// The <c>authorization_details</c> the Wallet composes for a Credential Configuration whose
+    /// identifier holds a character JSON escapes carries that identifier as one JSON string: the
+    /// pushed authorization request sent over the real wire is accepted, and the credential decision
+    /// seam receives the identifier as composed, whether it holds a quotation mark, a reverse solidus
+    /// or a control character (U+001F).
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-5.1.1">OID4VCI 1.0 Section 5.1.1</see>:
+    /// "The request parameter authorization_details defined in Section 2 of [RFC9396] MUST be used to
+    /// convey the details about the Credentials the Wallet wants to obtain." and
+    /// "credential_configuration_id: REQUIRED. String specifying a unique identifier of the Credential
+    /// being described in the credential_configurations_supported map in the Credential Issuer
+    /// Metadata".
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-7">RFC 8259 Section 7</see>: "All
+    /// Unicode characters may be placed within the quotation marks, except for the characters that
+    /// MUST be escaped: quotation mark, reverse solidus, and the control characters (U+0000 through
+    /// U+001F)."
+    /// </summary>
+    /// <param name="configurationId">The Credential Configuration identifier the Wallet composes.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("pid\"1")]
+    [DataRow("pid\\1")]
+    [DataRow("pid\u001f1")]
+    public async Task ComposedAuthorizationDetailsCarryAQuotedConfigurationIdentifierAsync(string configurationId)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterWalletAsync(host).ConfigureAwait(false);
+        IssuerSeamObservations observations = new();
+        await GrantIdentifiersAsync(host, [CredentialIdentifier], observations).ConfigureAwait(false);
+
+        TokenExchange exchange = await ExchangeAuthorizationCodeAsync(
+            host, material, isComposingAuthorizationDetails: true, rewriteTokenResponse: null,
+            configurationId: configurationId).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, exchange.TokenResult.Outcome,
+            $"The token exchange must succeed. ErrorCode={exchange.TokenResult.ErrorCode} ErrorDescription={exchange.TokenResult.ErrorDescription}");
+        Assert.IsNotNull(observations.AuthorizedDetails, "The credential decision seam must have received the composed details.");
+        Assert.HasCount(1, observations.AuthorizedDetails);
+        Assert.AreEqual(configurationId, observations.AuthorizedDetails[0].CredentialConfigurationId,
+            "The identifier must reach the seam as the Wallet composed it.");
+    }
+
+
+    /// <summary>
+    /// The <c>authorization_details</c> the Wallet composes for a Credential Configuration whose
+    /// identifier holds a percent sign followed by two hexadecimal digits (<c>pid%411</c>) carries
+    /// that identifier as itself: JSON leaves a percent sign as it is, the pushed authorization
+    /// request's form encoding carries the sign as an octet of the value and the server reverses that
+    /// encoding once, so the credential decision seam receives <c>pid%411</c> and never the
+    /// identifier a second decoding of <c>%41</c> would spell.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.1">RFC 9126 Section 2.1</see>: "The
+    /// client constructs the message body of an HTTP "POST" request with parameters formatted with
+    /// "x-www-form-urlencoded" using a character encoding of UTF-8, as described in Appendix B of
+    /// [RFC6749]."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#appendix-B">RFC 6749 Appendix B</see>: "names
+    /// and values MUST be encoded using the UTF-8 character encoding scheme [RFC3629] first; the
+    /// resulting octet sequence then needs to be further encoded using the escaping rules defined in
+    /// [W3C.REC-html401-19991224]." and "When parsing data from a payload using this media type, the
+    /// names and values resulting from reversing the name/value encoding consequently need to be
+    /// treated as octet sequences, to be decoded using the UTF-8 character encoding scheme."
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ComposedAuthorizationDetailsCarryAPercentSignAsItselfAsync()
+    {
+        const string percentConfigurationId = "pid%411";
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterWalletAsync(host).ConfigureAwait(false);
+        IssuerSeamObservations observations = new();
+        await GrantIdentifiersAsync(host, [CredentialIdentifier], observations).ConfigureAwait(false);
+
+        TokenExchange exchange = await ExchangeAuthorizationCodeAsync(
+            host, material, isComposingAuthorizationDetails: true, rewriteTokenResponse: null,
+            configurationId: percentConfigurationId).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, exchange.TokenResult.Outcome,
+            $"The token exchange must succeed. ErrorCode={exchange.TokenResult.ErrorCode} ErrorDescription={exchange.TokenResult.ErrorDescription}");
+        Assert.IsNotNull(observations.AuthorizedDetails, "The credential decision seam must have received the composed details.");
+        Assert.HasCount(1, observations.AuthorizedDetails);
+        Assert.AreEqual(percentConfigurationId, observations.AuthorizedDetails[0].CredentialConfigurationId,
+            "The identifier holding a percent sign must reach the seam as itself, decoded once.");
+    }
+
+
+    /// <summary>
+    /// The <c>authorization_details</c> the Wallet composes with a <c>locations</c> entry whose text
+    /// holds a quotation mark carries that entry as one JSON string: under Credential Issuer metadata
+    /// declaring no <c>authorization_servers</c>, the pushed authorization request sent over the real
+    /// wire is accepted, and the credential decision seam receives the entry as composed.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-5.1.1">OID4VCI 1.0 Section 5.1.1</see>:
+    /// "The request parameter authorization_details defined in Section 2 of [RFC9396] MUST be used to
+    /// convey the details about the Credentials the Wallet wants to obtain."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-7">RFC 8259 Section 7</see>: "All
+    /// Unicode characters may be placed within the quotation marks, except for the characters that
+    /// MUST be escaped: quotation mark, reverse solidus, and the control characters (U+0000 through
+    /// U+001F)."
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ComposedAuthorizationDetailsCarryAQuotedLocationAsync()
+    {
+        Uri quotedLocation = new("https://credential-issuer.example.com/tenant\"1");
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await RegisterWalletAsync(host).ConfigureAwait(false);
+        IssuerSeamObservations observations = new();
+        await GrantIdentifiersAsync(host, [CredentialIdentifier], observations).ConfigureAwait(false);
+
+        TokenExchange exchange = await ExchangeAuthorizationCodeAsync(
+            host, material, isComposingAuthorizationDetails: true, rewriteTokenResponse: null,
+            credentialIssuerLocation: quotedLocation).ConfigureAwait(false);
+
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, exchange.TokenResult.Outcome,
+            $"The token exchange must succeed. ErrorCode={exchange.TokenResult.ErrorCode} ErrorDescription={exchange.TokenResult.ErrorDescription}");
+        Assert.IsNotNull(observations.AuthorizedDetails, "The credential decision seam must have received the composed details.");
+        Assert.HasCount(1, observations.AuthorizedDetails);
+        Assert.IsNotNull(observations.AuthorizedDetails[0].Locations, "The composed details carry locations.");
+        Assert.AreSequenceEqual(
+            [quotedLocation.OriginalString],
+            observations.AuthorizedDetails[0].Locations!.ToArray(),
+            "The locations entry holding a quotation mark must reach the seam as the Wallet composed it.");
+    }
+
+
+    /// <summary>
+    /// The composer refuses a Credential Configuration identifier holding an unpaired surrogate as
+    /// the caller's own argument: such a string encodes no Unicode character there, so the identifier
+    /// the server would read is not the one composed.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.2">RFC 8259 Section 8.2</see>:
+    /// "However, the ABNF in this specification allows member names and string values to contain bit
+    /// sequences that cannot encode Unicode characters; for example, "\uDEAD" (a single unpaired UTF-16
+    /// surrogate). ... The behavior of software that receives JSON texts containing such values is
+    /// unpredictable". The refusal holds for every unpaired shape: a high surrogate before an ASCII
+    /// character, a low surrogate with no high surrogate before it, and a high surrogate at the
+    /// identifier's end.
+    /// </summary>
+    /// <param name="prefix">The identifier's text before the surrogate.</param>
+    /// <param name="surrogate">The unpaired UTF-16 surrogate code unit, carried as a <see cref="char"/> so the attribute holds the code unit itself.</param>
+    /// <param name="suffix">The identifier's text after the surrogate.</param>
+    [TestMethod]
+    [DataRow("pid", '\uD800', "1")]
+    [DataRow("pid", '\uDC00', "1")]
+    [DataRow("pid", '\uD800', "")]
+    public void ComposeRefusesAConfigurationIdentifierHoldingAnUnpairedSurrogate(string prefix, char surrogate, string suffix)
+    {
+        string configurationId = prefix + surrogate + suffix;
+
+        ArgumentException error = Assert.ThrowsExactly<ArgumentException>(
+            () => CredentialAuthorizationDetailComposition.Compose(configurationId, credentialIssuerLocation: null));
+
+        Assert.AreEqual("credentialConfigurationId", error.ParamName);
+    }
+
+
+    /// <summary>
     /// A Token Response whose <c>authorization_details</c> member holds an entry that is not an
     /// object fails the token exchange as <c>invalid_response</c> naming the member: no token is
     /// surfaced, the flow keeps its code pending, and no Nonce or Credential Request is sent.
@@ -914,13 +1067,17 @@ internal sealed class Oid4VciAuthorizationCodeIssuanceTests
     /// <param name="isComposingAuthorizationDetails">Whether the pushed request carries the composed <c>authorization_details</c>.</param>
     /// <param name="rewriteTokenResponse">The rewrite of each form-post response before the client reads it, or <see langword="null"/>.</param>
     /// <param name="scope">The <c>scope</c> the pushed request names, or <see langword="null"/> for none.</param>
+    /// <param name="configurationId">The Credential Configuration the composed <c>authorization_details</c> names.</param>
+    /// <param name="credentialIssuerLocation">The <c>locations</c> entry the composed <c>authorization_details</c> carries, or <see langword="null"/> for the registration's issuer identifier.</param>
     /// <returns>The token result, the flow's identifier, the client's flow store, the client and its registration.</returns>
     private async Task<TokenExchange> ExchangeAuthorizationCodeAsync(
         TestHostShell host,
         VerifierKeyMaterial material,
         bool isComposingAuthorizationDetails,
         Func<Uri, HttpResponseData, HttpResponseData>? rewriteTokenResponse,
-        string? scope = null)
+        string? scope = null,
+        string configurationId = ConfigurationId,
+        Uri? credentialIssuerLocation = null)
     {
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
             await host.CreateRewritingOAuthClientAndRegistrationAsync(
@@ -940,7 +1097,8 @@ internal sealed class Oid4VciAuthorizationCodeIssuanceTests
         if(isComposingAuthorizationDetails)
         {
             pushedFields[OAuthRequestParameterNames.AuthorizationDetails] =
-                CredentialAuthorizationDetailComposition.Compose(ConfigurationId, material.Registration.IssuerUri);
+                CredentialAuthorizationDetailComposition.Compose(
+                    configurationId, credentialIssuerLocation ?? material.Registration.IssuerUri);
         }
 
         if(scope is not null)

@@ -98,13 +98,32 @@ public static class CredentialOfferSerializer
     /// <paramref name="credentialOfferUri"/> is the <c>https</c> URL the Issuer serves the offer
     /// JSON from.
     /// </summary>
+    /// <remarks>
+    /// Section 4.1: "credential_offer_uri: String that is a URL using the https scheme referencing a
+    /// resource containing a JSON object with the Credential Offer parameters." The URI is the
+    /// caller's own argument, so one that is not an absolute <c>https</c> URL is refused here rather
+    /// than composed into a link no Wallet may follow.
+    /// </remarks>
     /// <param name="credentialOfferUri">The URL the Wallet GETs to retrieve the offer object.</param>
     /// <param name="scheme">The invocation scheme; defaults to <see cref="DefaultScheme"/>.</param>
     /// <returns>The deep link a QR code or link can carry.</returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="credentialOfferUri"/> is not an absolute URL using the <c>https</c>
+    /// scheme, or when <paramref name="scheme"/> is empty.
+    /// </exception>
     public static string ToByReferenceDeepLink(Uri credentialOfferUri, string scheme = DefaultScheme)
     {
         ArgumentNullException.ThrowIfNull(credentialOfferUri);
         ArgumentException.ThrowIfNullOrEmpty(scheme);
+
+        if(!credentialOfferUri.IsAbsoluteUri
+            || !string.Equals(credentialOfferUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException(
+                "Section 4.1 credential_offer_uri is a URL using the https scheme; the composer was given "
+                + "a value that is not an absolute https URL.",
+                nameof(credentialOfferUri));
+        }
 
         return $"{scheme}?{CredentialOfferParameterNames.CredentialOfferUri}="
             + Uri.EscapeDataString(credentialOfferUri.OriginalString);
@@ -127,8 +146,12 @@ public static class CredentialOfferSerializer
     /// <param name="offerJson">The §4.1.1 Credential Offer JSON object.</param>
     /// <returns>The parsed Credential Offer.</returns>
     /// <exception cref="ArgumentException">
-    /// Thrown when <paramref name="offerJson"/> carries no <c>credential_issuer</c> URL or no
-    /// non-empty <c>credential_configuration_ids</c> array — both are REQUIRED by §4.1.1.
+    /// Thrown when <paramref name="offerJson"/> violates a rule <see cref="TryParse"/> answers: no
+    /// <c>credential_issuer</c> URL; a <c>credential_configuration_ids</c> that is absent, is no array of
+    /// strings, is empty, or holds an empty or a repeated entry; a <c>grants</c> or a grant value that
+    /// is no object; a pre-authorized grant without its code; a <c>tx_code</c> that is no object; a
+    /// <c>tx_code.length</c> that is no Integer from 0 to 2147483647; or an <c>input_mode</c>,
+    /// <c>description</c>, <c>authorization_server</c> or <c>issuer_state</c> that is no string.
     /// </exception>
     public static CredentialOffer FromJson(string offerJson)
     {
@@ -204,23 +227,49 @@ public static class CredentialOfferSerializer
         }
 
         //§4.1.1 credential_configuration_ids (REQUIRED): "A non-empty array of unique strings."
+        //The reader answers null for an absent member, a member that is no array and an array holding an entry that
+        //is no string, so the member's presence tells which of the two rules the offer breaks.
         List<string>? configurationIds = JwkJsonReader.ExtractStringArrayProperty(
             json, CredentialOfferParameterNames.CredentialConfigurationIdsUtf8);
-        if(configurationIds is null || configurationIds.Count == 0)
+        if(configurationIds is null)
         {
-            violatedRule = "§4.1.1 credential_configuration_ids is a REQUIRED non-empty array; the offer JSON carries none.";
+            violatedRule = JwkJsonReader.ContainsKey(json, CredentialOfferParameterNames.CredentialConfigurationIdsUtf8)
+                ? "Section 4.1.1 credential_configuration_ids is a non-empty array of unique strings; the offer carries a value that is no array of strings."
+                : "Section 4.1.1 credential_configuration_ids is a REQUIRED non-empty array; the offer JSON carries none.";
 
             return false;
         }
 
-        //§4.1.1 grants (OPTIONAL): the grant-type → parameters map. Absent when the offer leaves the
-        //Wallet to determine grant types from the issuer metadata.
-        string? grantsJson = JwkJsonReader.ExtractObjectAsString(json, CredentialOfferParameterNames.GrantsUtf8);
+        //The one rule the composer raises from: non-empty, every entry a non-empty string, none repeated.
+        violatedRule = FindCredentialConfigurationIdsViolation(configurationIds);
+        if(violatedRule is not null)
+        {
+            return false;
+        }
+
+        //Section 4.1.1 grants (OPTIONAL): "Object indicating to the Wallet the Grant Types the Credential
+        //Issuer's Authorization Server is prepared to process for this Credential Offer." Absent when the
+        //offer leaves the Wallet to determine grant types from the issuer metadata; a present member that
+        //is no object breaks the rule and is never read as absent.
+        if(!TryReadOptionalObject(json, CredentialOfferParameterNames.GrantsUtf8, out string? grantsJson))
+        {
+            violatedRule = "Section 4.1.1 grants is an Object indicating to the Wallet the Grant Types the Credential "
+                + "Issuer's Authorization Server is prepared to process; the offer carries a grants member that is no object.";
+
+            return false;
+        }
 
         PreAuthorizedCodeOfferGrant? preAuthorizedCodeGrant = null;
+        AuthorizationCodeOfferGrant? authorizationCodeGrant = null;
         if(grantsJson is not null)
         {
             preAuthorizedCodeGrant = ParsePreAuthorizedCodeGrant(grantsJson, out violatedRule);
+            if(violatedRule is not null)
+            {
+                return false;
+            }
+
+            authorizationCodeGrant = ParseAuthorizationCodeGrant(grantsJson, out violatedRule);
             if(violatedRule is not null)
             {
                 return false;
@@ -232,7 +281,7 @@ public static class CredentialOfferSerializer
             CredentialIssuer = credentialIssuerUri,
             CredentialConfigurationIds = configurationIds,
             PreAuthorizedCodeGrant = preAuthorizedCodeGrant,
-            AuthorizationCodeGrant = grantsJson is null ? null : ParseAuthorizationCodeGrant(grantsJson)
+            AuthorizationCodeGrant = authorizationCodeGrant
         };
 
         return true;
@@ -348,13 +397,19 @@ public static class CredentialOfferSerializer
 
 
     /// <summary>
-    /// Parses the §4.1.1 <c>urn:ietf:params:oauth:grant-type:pre-authorized_code</c> grant block out
-    /// of the grants object, or answers <see langword="null"/> when the offer advertises no
-    /// Pre-Authorized Code grant. A grant block without its REQUIRED <c>pre-authorized_code</c> is
-    /// reported through <paramref name="violatedRule"/>, so <see cref="FromJson"/> (which raises the
-    /// rule) and a parse of remote input (which answers it) share this one body.
+    /// Parses the Section 4.1.1 <c>urn:ietf:params:oauth:grant-type:pre-authorized_code</c> grant
+    /// block out of the grants object, or answers <see langword="null"/> when the offer advertises no
+    /// Pre-Authorized Code grant. A grant value that is no object, a grant block without its REQUIRED
+    /// <c>pre-authorized_code</c>, a <c>tx_code</c> that violates its rule, or an
+    /// <c>authorization_server</c> that is no string is reported through
+    /// <paramref name="violatedRule"/>, so <see cref="FromJson"/> (which raises the rule) and a parse of
+    /// remote input (which answers it) share this one body. Section 4.1.1: "Every grant is represented
+    /// by a name/value pair. The name is the Grant Type identifier; the value is an object that contains
+    /// parameters" and "authorization_server: OPTIONAL string that the Wallet can use to identify the
+    /// Authorization Server to use with this grant type"; a present member of another JSON type is
+    /// refused, never read as absent.
     /// </summary>
-    /// <param name="grantsJson">The §4.1.1 <c>grants</c> object.</param>
+    /// <param name="grantsJson">The Section 4.1.1 <c>grants</c> object.</param>
     /// <param name="violatedRule">The violated rule, or <see langword="null"/> when the block is valid or absent.</param>
     /// <returns>The parsed grant, or <see langword="null"/> when none is advertised or a rule is violated.</returns>
     private static PreAuthorizedCodeOfferGrant? ParsePreAuthorizedCodeGrant(string grantsJson, out string? violatedRule)
@@ -362,8 +417,15 @@ public static class CredentialOfferSerializer
         violatedRule = null;
 
         ReadOnlySpan<byte> grants = Encoding.UTF8.GetBytes(grantsJson);
-        string? grantJson = JwkJsonReader.ExtractObjectAsString(
-            grants, WellKnownGrantTypes.PreAuthorizedCodeUtf8);
+        if(!TryReadOptionalObject(grants, WellKnownGrantTypes.PreAuthorizedCodeUtf8, out string? grantJson))
+        {
+            violatedRule = "Section 4.1.1 the value of each grants member is an object that contains the parameters "
+                + "of its Grant Type; the offer carries the urn:ietf:params:oauth:grant-type:pre-authorized_code grant "
+                + "as a value that is no object.";
+
+            return null;
+        }
+
         if(grantJson is null)
         {
             return null;
@@ -385,70 +447,221 @@ public static class CredentialOfferSerializer
         //§4.1.1: tx_code is an "Object indicating that a Transaction Code is required if present,
         //even if empty." Its mere presence — independent of its hint members — signals the
         //requirement, so the model carries a non-null TxCode whenever the member is present.
-        TxCodeRequirement? txCode = JwkJsonReader.ContainsKey(grant, OAuthRequestParameterNames.TxCodeUtf8)
-            ? ParseTxCode(grant)
-            : null;
+        TxCodeRequirement? txCode = null;
+        if(JwkJsonReader.ContainsKey(grant, OAuthRequestParameterNames.TxCodeUtf8))
+        {
+            txCode = ParseTxCode(grant, out violatedRule);
+            if(violatedRule is not null)
+            {
+                return null;
+            }
+        }
+
+        if(!TryReadOptionalString(grant, CredentialOfferParameterNames.AuthorizationServerUtf8, out string? authorizationServer))
+        {
+            violatedRule = AuthorizationServerViolation;
+
+            return null;
+        }
 
         return new PreAuthorizedCodeOfferGrant
         {
             PreAuthorizedCode = preAuthorizedCode,
             TxCode = txCode,
-            AuthorizationServer = JwkJsonReader.ExtractStringValue(grant, CredentialOfferParameterNames.AuthorizationServerUtf8)
+            AuthorizationServer = authorizationServer
         };
     }
 
 
     /// <summary>
-    /// Parses the §4.1.1 <c>tx_code</c> object's display hints. An object with every hint unset
-    /// yields the empty requirement: its presence alone signals that a Transaction Code is required.
+    /// Parses the Section 4.1.1 <c>tx_code</c> object's display hints. The caller has found the member
+    /// present: "tx_code: OPTIONAL. Object indicating that a Transaction Code is required if present,
+    /// even if empty." An object with every hint unset yields the empty requirement, since its presence
+    /// alone signals that a Transaction Code is required. A <c>tx_code</c> that is no object, an
+    /// <c>input_mode</c> ("OPTIONAL. String specifying the input character set.") or a
+    /// <c>description</c> ("OPTIONAL. String containing guidance for the Holder of the Wallet on how to
+    /// obtain the Transaction Code") that is no string, and a <c>length</c> that is no Integer a
+    /// Transaction Code can have are each a violated rule, reported through
+    /// <paramref name="violatedRule"/> so <see cref="TryParse"/> answers it as a value and
+    /// <see cref="FromJson"/> raises it, never an arithmetic exception out of either and never a
+    /// present member read as absent.
     /// </summary>
-    /// <param name="grant">The Pre-Authorized Code grant block carrying the <c>tx_code</c> object.</param>
-    /// <returns>The Transaction Code requirement with whichever hints the object carried.</returns>
-    private static TxCodeRequirement ParseTxCode(ReadOnlySpan<byte> grant)
+    /// <param name="grant">The Pre-Authorized Code grant block carrying the <c>tx_code</c> member.</param>
+    /// <param name="violatedRule">The violated rule, or <see langword="null"/> when the object is valid.</param>
+    /// <returns>The Transaction Code requirement with whichever hints the object carried, or <see langword="null"/> when a rule is violated.</returns>
+    private static TxCodeRequirement? ParseTxCode(ReadOnlySpan<byte> grant, out string? violatedRule)
     {
+        violatedRule = null;
+
         string? txCodeJson = JwkJsonReader.ExtractObjectAsString(grant, OAuthRequestParameterNames.TxCodeUtf8);
         if(txCodeJson is null)
         {
-            return TxCodeRequirement.Empty;
+            violatedRule = "Section 4.1.1 tx_code is an Object indicating that a Transaction Code is required if "
+                + "present, even if empty; the offer carries a tx_code member that is no object.";
+
+            return null;
         }
 
         ReadOnlySpan<byte> txCode = Encoding.UTF8.GetBytes(txCodeJson);
-        int? length = JwkJsonReader.TryExtractLongValue(txCode, CredentialOfferParameterNames.LengthUtf8, out long parsedLength)
-            ? checked((int)parsedLength)
-            : null;
+        if(!TryReadTransactionCodeLength(txCode, out int? length))
+        {
+            violatedRule = "Section 4.1.1 tx_code.length is an Integer specifying the length of the "
+                + "Transaction Code; the offer carries a length that is no Integer from 0 to 2147483647.";
+
+            return null;
+        }
+
+        if(!TryReadOptionalString(txCode, CredentialOfferParameterNames.InputModeUtf8, out string? inputMode))
+        {
+            violatedRule = "Section 4.1.1 tx_code.input_mode is a String specifying the input character set; "
+                + "the offer carries an input_mode member that is no string.";
+
+            return null;
+        }
+
+        if(!TryReadOptionalString(txCode, CredentialOfferParameterNames.DescriptionUtf8, out string? description))
+        {
+            violatedRule = "Section 4.1.1 tx_code.description is a String containing guidance for the Holder of the "
+                + "Wallet on how to obtain the Transaction Code; the offer carries a description member that is no string.";
+
+            return null;
+        }
 
         return new TxCodeRequirement
         {
-            InputMode = JwkJsonReader.ExtractStringValue(txCode, CredentialOfferParameterNames.InputModeUtf8),
+            InputMode = inputMode,
             Length = length,
-            Description = JwkJsonReader.ExtractStringValue(txCode, CredentialOfferParameterNames.DescriptionUtf8)
+            Description = description
         };
     }
 
 
     /// <summary>
-    /// Parses the §4.1.1 <c>authorization_code</c> grant block out of the grants object, or answers
-    /// <see langword="null"/> when the offer advertises no Authorization Code grant.
+    /// Reads the Section 4.1.1 <c>tx_code.length</c> as a bounded number. The member is "OPTIONAL.
+    /// Integer specifying the length of the Transaction Code", so an absent member is no hint, an
+    /// Integer from zero to <see cref="int.MaxValue"/> is the hint, and any other present value (a
+    /// negative or larger number, a fraction, an exponent, a string, a literal) violates the rule.
+    /// The value narrows to <see cref="int"/> only after the bound holds, so no wire value reaches a
+    /// conversion that can raise.
     /// </summary>
-    /// <param name="grantsJson">The §4.1.1 <c>grants</c> object.</param>
-    /// <returns>The parsed grant, or <see langword="null"/> when none is advertised.</returns>
-    private static AuthorizationCodeOfferGrant? ParseAuthorizationCodeGrant(string grantsJson)
+    /// <param name="txCode">The <c>tx_code</c> object.</param>
+    /// <param name="length">The length hint, or <see langword="null"/> when the member is absent or violates the rule.</param>
+    /// <returns><see langword="true"/> when the member is absent or holds such an Integer; <see langword="false"/> when it violates the rule.</returns>
+    private static bool TryReadTransactionCodeLength(ReadOnlySpan<byte> txCode, out int? length)
     {
+        length = null;
+        if(!JwkJsonReader.ContainsKey(txCode, CredentialOfferParameterNames.LengthUtf8))
+        {
+            return true;
+        }
+
+        bool isInRange = JwkJsonReader.TryExtractLongValue(txCode, CredentialOfferParameterNames.LengthUtf8, out long parsedLength)
+            && parsedLength is >= 0 and <= int.MaxValue;
+        if(isInRange)
+        {
+            length = (int)parsedLength;
+        }
+
+        return isInRange;
+    }
+
+
+    /// <summary>
+    /// Parses the Section 4.1.1 <c>authorization_code</c> grant block out of the grants object, or
+    /// answers <see langword="null"/> when the offer advertises no Authorization Code grant. A grant
+    /// value that is no object, and an <c>issuer_state</c> ("OPTIONAL. String value created by the
+    /// Credential Issuer and opaque to the Wallet") or <c>authorization_server</c> ("OPTIONAL string")
+    /// that is no string, is reported through <paramref name="violatedRule"/>: a present member of
+    /// another JSON type is refused, never read as absent.
+    /// </summary>
+    /// <param name="grantsJson">The Section 4.1.1 <c>grants</c> object.</param>
+    /// <param name="violatedRule">The violated rule, or <see langword="null"/> when the block is valid or absent.</param>
+    /// <returns>The parsed grant, or <see langword="null"/> when none is advertised or a rule is violated.</returns>
+    private static AuthorizationCodeOfferGrant? ParseAuthorizationCodeGrant(string grantsJson, out string? violatedRule)
+    {
+        violatedRule = null;
+
         ReadOnlySpan<byte> grants = Encoding.UTF8.GetBytes(grantsJson);
-        string? grantJson = JwkJsonReader.ExtractObjectAsString(
-            grants, WellKnownGrantTypes.AuthorizationCodeUtf8);
+        if(!TryReadOptionalObject(grants, WellKnownGrantTypes.AuthorizationCodeUtf8, out string? grantJson))
+        {
+            violatedRule = "Section 4.1.1 the value of each grants member is an object that contains the parameters "
+                + "of its Grant Type; the offer carries the authorization_code grant as a value that is no object.";
+
+            return null;
+        }
+
         if(grantJson is null)
         {
             return null;
         }
 
         ReadOnlySpan<byte> grant = Encoding.UTF8.GetBytes(grantJson);
+        if(!TryReadOptionalString(grant, CredentialOfferParameterNames.IssuerStateUtf8, out string? issuerState))
+        {
+            violatedRule = "Section 4.1.1 issuer_state is a String value created by the Credential Issuer and opaque "
+                + "to the Wallet; the offer carries an issuer_state member that is no string.";
+
+            return null;
+        }
+
+        if(!TryReadOptionalString(grant, CredentialOfferParameterNames.AuthorizationServerUtf8, out string? authorizationServer))
+        {
+            violatedRule = AuthorizationServerViolation;
+
+            return null;
+        }
 
         return new AuthorizationCodeOfferGrant
         {
-            IssuerState = JwkJsonReader.ExtractStringValue(grant, CredentialOfferParameterNames.IssuerStateUtf8),
-            AuthorizationServer = JwkJsonReader.ExtractStringValue(grant, CredentialOfferParameterNames.AuthorizationServerUtf8)
+            IssuerState = issuerState,
+            AuthorizationServer = authorizationServer
         };
+    }
+
+
+    /// <summary>
+    /// The violated rule for an <c>authorization_server</c> of either grant that is no string, written
+    /// once for both grant blocks. Section 4.1.1: "authorization_server: OPTIONAL string that the Wallet
+    /// can use to identify the Authorization Server to use with this grant type".
+    /// </summary>
+    private static string AuthorizationServerViolation { get; } =
+        "Section 4.1.1 authorization_server is a string that the Wallet can use to identify the Authorization "
+        + "Server to use with this grant type; the offer carries an authorization_server member that is no string.";
+
+
+    /// <summary>
+    /// Reads an OPTIONAL member whose definition is an object. The document has passed
+    /// <see cref="JwkJsonReader.IsWellFormedJsonDocument"/>, so a present object is always sliced whole;
+    /// an absent member is no value, and a present member of any other JSON type (a string, a number, an
+    /// array, a literal, <c>null</c>) breaks its definition and is never read as absent.
+    /// </summary>
+    /// <param name="json">The object carrying the member.</param>
+    /// <param name="key">The member name.</param>
+    /// <param name="objectJson">The member's object text, or <see langword="null"/> when the member is absent or is no object.</param>
+    /// <returns><see langword="true"/> when the member is absent or is an object; <see langword="false"/> when it is present and is no object.</returns>
+    private static bool TryReadOptionalObject(ReadOnlySpan<byte> json, ReadOnlySpan<byte> key, out string? objectJson)
+    {
+        objectJson = JwkJsonReader.ExtractObjectAsString(json, key);
+
+        return objectJson is not null || !JwkJsonReader.ContainsKey(json, key);
+    }
+
+
+    /// <summary>
+    /// Reads an OPTIONAL member whose definition is a string. The document has passed
+    /// <see cref="JwkJsonReader.IsWellFormedJsonDocument"/>, so a present string is always read whole;
+    /// an absent member is no value, and a present member of any other JSON type (a number, an object,
+    /// an array, a literal, <c>null</c>) breaks its definition and is never read as absent.
+    /// </summary>
+    /// <param name="json">The object carrying the member.</param>
+    /// <param name="key">The member name.</param>
+    /// <param name="value">The member's string value, or <see langword="null"/> when the member is absent or is no string.</param>
+    /// <returns><see langword="true"/> when the member is absent or is a string; <see langword="false"/> when it is present and is no string.</returns>
+    private static bool TryReadOptionalString(ReadOnlySpan<byte> json, ReadOnlySpan<byte> key, out string? value)
+    {
+        value = JwkJsonReader.ExtractStringValue(json, key);
+
+        return value is not null || !JwkJsonReader.ContainsKey(json, key);
     }
 
 
@@ -503,17 +716,38 @@ public static class CredentialOfferSerializer
 
 
     /// <summary>
-    /// §4.1.1 <c>credential_configuration_ids</c> (REQUIRED): "a non-empty JSON array, where every
-    /// entry is a string" identifying a Credential Configuration. Each entry uniquely identifies one
-    /// of the keys in <c>credential_configurations_supported</c>, so the list carries no duplicates.
+    /// Holds the caller's own offer to the Section 4.1.1 rule on <c>credential_configuration_ids</c>
+    /// before it is composed, raising the rule <see cref="FindCredentialConfigurationIdsViolation"/>
+    /// states.
     /// </summary>
+    /// <param name="configurationIds">The offer's configuration identifiers.</param>
+    /// <exception cref="ArgumentException">Thrown when the list violates the rule <see cref="FindCredentialConfigurationIdsViolation"/> states.</exception>
     private static void ValidateCredentialConfigurationIds(IReadOnlyList<string> configurationIds)
+    {
+        string? violatedRule = FindCredentialConfigurationIdsViolation(configurationIds);
+        if(violatedRule is not null)
+        {
+            throw new ArgumentException(violatedRule, nameof(configurationIds));
+        }
+    }
+
+
+    /// <summary>
+    /// The Section 4.1.1 rule on <c>credential_configuration_ids</c>, written once for the composer
+    /// and the reader: "credential_configuration_ids: REQUIRED. A non-empty array of unique strings
+    /// that each identify one of the keys in the name/value pairs stored in the
+    /// credential_configurations_supported Credential Issuer metadata." The list is non-empty, every
+    /// entry is a non-empty string (an empty string identifies no key), and no entry repeats another
+    /// under ordinal comparison. <see cref="ValidateCredentialConfigurationIds"/> raises the violated
+    /// rule for the caller's own offer; <see cref="TryParse"/> answers it for an offer it reads.
+    /// </summary>
+    /// <param name="configurationIds">The configuration identifiers, in order.</param>
+    /// <returns>The violated rule, or <see langword="null"/> when the list holds it.</returns>
+    private static string? FindCredentialConfigurationIdsViolation(IReadOnlyList<string> configurationIds)
     {
         if(configurationIds.Count == 0)
         {
-            throw new ArgumentException(
-                "§4.1.1 credential_configuration_ids is a non-empty array; the offer lists none.",
-                nameof(configurationIds));
+            return "Section 4.1.1 credential_configuration_ids is a non-empty array; the offer lists none.";
         }
 
         HashSet<string> seen = new(StringComparer.Ordinal);
@@ -521,33 +755,66 @@ public static class CredentialOfferSerializer
         {
             if(string.IsNullOrEmpty(configurationId))
             {
-                throw new ArgumentException(
-                    "§4.1.1 every credential_configuration_ids entry is a string; the offer carries an empty one.",
-                    nameof(configurationIds));
+                return "Section 4.1.1 every credential_configuration_ids entry is a non-empty string; the offer carries an empty one.";
             }
 
             if(!seen.Add(configurationId))
             {
-                throw new ArgumentException(
-                    $"§4.1.1 credential_configuration_ids entries are unique; '{configurationId}' is duplicated.",
-                    nameof(configurationIds));
+                return "Section 4.1.1 credential_configuration_ids entries are unique; the offer repeats one.";
             }
+        }
+
+        return null;
+    }
+
+
+    /// <summary>
+    /// Section 4.1.1 <c>tx_code.description</c>: "The length of the string MUST NOT exceed 300
+    /// characters." The length is counted in characters as RFC 8259 Section 1 reads a string, "a
+    /// sequence of zero or more Unicode characters": each Unicode scalar value counts once, so a
+    /// character outside the Basic Multilingual Plane, two UTF-16 code units, counts as one.
+    /// </summary>
+    /// <param name="description">The description, or <see langword="null"/> when the offer carries none.</param>
+    /// <exception cref="ArgumentException">Thrown when the description holds more than <see cref="MaxTxCodeDescriptionLength"/> characters.</exception>
+    private static void ValidateTxCodeDescription(string? description)
+    {
+        if(description is null)
+        {
+            return;
+        }
+
+        int characterCount = CountUnicodeScalarValues(description);
+        if(characterCount > MaxTxCodeDescriptionLength)
+        {
+            throw new ArgumentException(
+                $"Section 4.1.1 tx_code.description MUST NOT exceed {MaxTxCodeDescriptionLength} characters; "
+                + $"the offer carries {characterCount}.",
+                nameof(description));
         }
     }
 
 
     /// <summary>
-    /// §4.1.1 <c>tx_code.description</c>: "The length of the string MUST NOT exceed 300 characters."
+    /// Counts the Unicode scalar values of <paramref name="value"/>: a high surrogate followed by a
+    /// low surrogate is one character, and every other UTF-16 code unit, an unpaired surrogate
+    /// included, is one.
     /// </summary>
-    private static void ValidateTxCodeDescription(string? description)
+    /// <param name="value">The string to count.</param>
+    /// <returns>The number of characters.</returns>
+    private static int CountUnicodeScalarValues(string value)
     {
-        if(description is not null && description.Length > MaxTxCodeDescriptionLength)
+        int count = 0;
+        for(int i = 0; i < value.Length; ++i)
         {
-            throw new ArgumentException(
-                $"§4.1.1 tx_code.description MUST NOT exceed {MaxTxCodeDescriptionLength} characters; "
-                + $"the offer carries {description.Length}.",
-                nameof(description));
+            if(char.IsHighSurrogate(value[i]) && i + 1 < value.Length && char.IsLowSurrogate(value[i + 1]))
+            {
+                ++i;
+            }
+
+            ++count;
         }
+
+        return count;
     }
 
 
