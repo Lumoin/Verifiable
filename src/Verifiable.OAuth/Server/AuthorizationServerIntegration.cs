@@ -1073,9 +1073,12 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
 
 
     /// <summary>
-    /// Contributes application-supplied values (authorization servers, scopes,
-    /// bearer methods, human-readable fields, feature booleans) to the OAuth 2.0
-    /// Protected Resource Metadata document (RFC 9728 §2). Optional.
+    /// Contributes application-supplied values to the OAuth 2.0 Protected Resource Metadata documents (RFC 9728 Section 2),
+    /// asked once per document with the name of the resource it describes: every member of the document whose
+    /// <c>resource</c> is the issuer (authorization servers, scopes, bearer methods, human-readable fields, feature
+    /// booleans), and the human-readable and documentation members alone of the document of each of the library's own
+    /// resources, any other member stated for one of them answered <c>server_error</c> with no document
+    /// (<see cref="ContributeProtectedResourceMetadataDelegate"/>). Optional.
     /// </summary>
     /// <remarks>
     /// Set during construction or on an alteration candidate. A serving setter throws
@@ -2648,9 +2651,11 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// lacks any authentication information (e.g., the client was unaware that authentication is necessary or attempted
     /// using an unsupported authentication method), the resource server SHOULD NOT include an error code or other error
     /// information."), and an <c>Authorization</c> field sent on two or more lines with 400 <c>invalid_request</c> and
-    /// the <c>DPoP</c> challenge alone. The protected resource metadata then states
-    /// <c>dpop_bound_access_tokens_required: true</c> and <c>bearer_methods_supported: []</c>, and a contribution that
-    /// states otherwise is answered <c>server_error</c> with no document. The token endpoint is not governed by it: a
+    /// the <c>DPoP</c> challenge alone. The protected resource metadata document of each of those resources then states
+    /// <c>dpop_bound_access_tokens_required: true</c> and <c>bearer_methods_supported: []</c>
+    /// (<see cref="ProtectedResource.ProtectedResourceMetadataEndpoints"/>); the document whose <c>resource</c> is the
+    /// issuer describes the resource the issuer identifies, which it does not govern, and states its contribution as
+    /// given. The token endpoint is not governed by it: a
     /// client issued an unbound token cannot use the resources. Defaults to <see langword="false"/>.
     /// </para>
     /// <para>

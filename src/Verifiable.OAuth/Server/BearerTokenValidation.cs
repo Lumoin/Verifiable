@@ -34,9 +34,10 @@ namespace Verifiable.OAuth.Server;
 /// corresponding to an identifier the resource server expects for itself.  The JWT access token MUST be
 /// rejected if "aud" does not contain a resource indicator of the current resource server as a valid
 /// audience." The library's own resources are identified by this Authorization Server's issuer, the
-/// value the <c>iss</c> claim is compared with; a resource an application serves names its own
-/// identifier. Scope and subject-claim requirements are endpoint-specific and stay at the caller
-/// (UserInfo enforces <c>openid</c> per OIDC Core 1.0 Section 5.3.1).
+/// value the <c>iss</c> claim is compared with, and each by its own resource identifier, the URL its protected resource
+/// metadata document names as <c>resource</c>; a resource an application serves names its own identifier. Scope and
+/// subject-claim requirements are endpoint-specific and stay at the caller (UserInfo enforces <c>openid</c> per OIDC
+/// Core 1.0 Section 5.3.1).
 /// </para>
 /// <para>
 /// By the library's key-admission policy (<see cref="IssuedKeyAdmission"/>), the token verifies only
@@ -63,9 +64,10 @@ namespace Verifiable.OAuth.Server;
 /// A resource an application serves calls
 /// <see cref="ValidateAsync(string, string, EndpointServer, ClientRecord, ExchangeContext, CancellationToken)"/>
 /// with its own identifier as the expected audience. The library's own resources run the same body with
-/// the issuer as the expected audience, resolved once by the validation itself. A token whose <c>aud</c>
-/// does not contain that identifier, a token without <c>aud</c>, and a token at or past the instant of its
-/// <c>exp</c> are refused with <c>invalid_token</c>.
+/// the issuer as the expected audience, resolved once by the validation itself, and their own resource identifier as
+/// the one other audience they accept. A token whose <c>aud</c> does not contain an identifier the resource expects, a
+/// token without <c>aud</c>, and a token at or past the instant of its <c>exp</c> are refused with
+/// <c>invalid_token</c>.
 /// </para>
 /// <para>
 /// A fault of the server's own wiring met during the validation, the codecs or the verification-key
@@ -199,13 +201,21 @@ public static class BearerTokenValidation
 
     /// <summary>
     /// Validates an access token presented at one of this library's own resources, UserInfo and the OID4VCI
-    /// Credential, Deferred Credential and Notification endpoints, whose identifier is this Authorization
-    /// Server's issuer: the token's <c>aud</c> claim must contain the issuer the validation resolves for the
-    /// request, the value its <c>iss</c> claim is compared with, so the issuer is resolved once. The sequence
-    /// and the refusals are those of
+    /// Credential, Deferred Credential and Notification endpoints, each identified by this Authorization Server's
+    /// issuer and by its own resource identifier: the token's <c>aud</c> claim must contain the issuer the validation
+    /// resolves for the request, the value its <c>iss</c> claim is compared with, so the issuer is resolved once, or the
+    /// resource's identifier, the URL the host's endpoint resolver answered for <paramref name="endpointName"/> written in
+    /// its URI form (<see cref="Oid4Vci.CredentialEndpointDpopValidation.UriTextOf"/>, an internationalized host in its
+    /// IDNA ASCII form), the text the resource's protected resource metadata document names as its <c>resource</c>
+    /// (<see cref="ProtectedResourceMetadataEndpoints.TryResolveLibraryResourceIdentifier"/>), compared ordinally.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-4">RFC 9068 Section 4</see>: "The resource server MUST
+    /// validate that the "aud" claim contains a resource indicator value corresponding to an identifier the resource
+    /// server expects for itself." A token audienced at another resource's identifier, the library's other resources'
+    /// among them, is refused. The sequence and the refusals are those of
     /// <see cref="ValidateAsync(string, string, EndpointServer, ClientRecord, ExchangeContext, CancellationToken)"/>.
     /// </summary>
     /// <param name="bearerToken">The compact-JWS access token, exactly as presented on the wire.</param>
+    /// <param name="endpointName">The resource's endpoint name, among <see cref="ProtectedResourceMetadataEndpoints.LibraryResourceEndpointNames"/>.</param>
     /// <param name="server">The authorization server holding codecs, cryptography, and integration delegates.</param>
     /// <param name="registration">The client (tenant) the request belongs to.</param>
     /// <param name="context">The per-request context bag.</param>
@@ -216,11 +226,21 @@ public static class BearerTokenValidation
     /// </returns>
     internal static ValueTask<(JwtPayload? Payload, ServerHttpResponse? Failure)> ValidateAtLibraryResourceAsync(
         string bearerToken,
+        string endpointName,
         EndpointServer server,
         ClientRecord registration,
         ExchangeContext context,
         CancellationToken cancellationToken) =>
-        ValidateCoreAsync(bearerToken, expectedAudience: null, server, registration, context, cancellationToken);
+        ValidateCoreAsync(
+            bearerToken,
+            expectedAudience: null,
+            ProtectedResourceMetadataEndpoints.TryResolveLibraryResourceIdentifier(context.EndpointChain, endpointName, out string? resourceIdentifier)
+                ? resourceIdentifier
+                : null,
+            server,
+            registration,
+            context,
+            cancellationToken);
 
 
     /// <summary>
@@ -271,7 +291,7 @@ public static class BearerTokenValidation
     {
         ArgumentException.ThrowIfNullOrEmpty(expectedAudience);
 
-        return ValidateCoreAsync(bearerToken, expectedAudience, server, registration, context, cancellationToken);
+        return ValidateCoreAsync(bearerToken, expectedAudience, resourceIdentifier: null, server, registration, context, cancellationToken);
     }
 
 
@@ -289,6 +309,11 @@ public static class BearerTokenValidation
     /// Only <see cref="ValidateAtLibraryResourceAsync"/> passes <see langword="null"/>;
     /// <see cref="ValidateAsync(string, string, EndpointServer, ClientRecord, ExchangeContext, CancellationToken)"/>
     /// refuses a <see langword="null"/> or empty audience before this body runs.
+    /// </param>
+    /// <param name="resourceIdentifier">
+    /// The second identifier one of the library's own resources expects for itself beside the issuer, its own resource
+    /// identifier, or <see langword="null"/> for none; only <see cref="ValidateAtLibraryResourceAsync"/> passes one, and an
+    /// application's resource keeps its one <paramref name="expectedAudience"/>.
     /// </param>
     /// <param name="server">The authorization server holding codecs, cryptography, and integration delegates.</param>
     /// <param name="registration">The client (tenant) the request belongs to.</param>
@@ -316,6 +341,7 @@ public static class BearerTokenValidation
     private static async ValueTask<(JwtPayload? Payload, ServerHttpResponse? Failure)> ValidateCoreAsync(
         string bearerToken,
         string? expectedAudience,
+        string? resourceIdentifier,
         EndpointServer server,
         ClientRecord registration,
         ExchangeContext context,
@@ -510,9 +536,11 @@ public static class BearerTokenValidation
             //    audience." A token without aud contains no audience and is refused. The claim's shape is
             //    read strictly (TryReadWellFormedAudience): an array holding anything other than non-empty
             //    strings is refused outright, never narrowed to its string entries, so a malformed aud is
-            //    never admitted on the entries beside the malformed one.
+            //    never admitted on the entries beside the malformed one. One of the library's own resources expects its
+            //    own resource identifier for itself beside the issuer.
             bool isAudienceMatched = TryReadWellFormedAudience(payload, out IReadOnlyList<string> audience)
-                && ContainsOrdinal(audience, expectedAudience ?? issuer);
+                && (ContainsOrdinal(audience, expectedAudience ?? issuer)
+                    || (resourceIdentifier is not null && ContainsOrdinal(audience, resourceIdentifier)));
 
             if(!isAudienceMatched)
             {
@@ -558,10 +586,11 @@ public static class BearerTokenValidation
     /// this specification MUST use the auth-scheme value "Bearer". This scheme MUST be followed by one or
     /// more auth-param values", and "If the protected resource request included an access token and
     /// failed authentication, the resource server SHOULD include the "error" attribute". Composed once by
-    /// <see cref="BearerTokenChallenge.BuildChallenge"/>. It carries no <c>realm</c>, since the library
+    /// <see cref="BearerTokenChallenge.BuildChallenge"/>. It carries no <c>realm</c>, since the validation
     /// does not know the protection space a host names, and no <c>error_description</c>, since a
     /// refusal's description can carry presented text outside the §3 attribute charset; the description
-    /// travels in the response body.
+    /// travels in the response body. The library's own resources replace it by name with their realm-bearing
+    /// challenge (<see cref="Oid4Vci.CredentialEndpointDpopValidation.InPresentationScheme"/>).
     /// </summary>
     internal static string InvalidTokenChallenge { get; } =
         BearerTokenChallenge.BuildChallenge(error: OAuthErrors.InvalidToken);

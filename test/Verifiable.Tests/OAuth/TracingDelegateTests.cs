@@ -316,7 +316,7 @@ internal sealed class TracingDelegateTests
     /// SHOULD be set to Error." and "If response status code was sent or received and status indicates an error according
     /// to HTTP span status definition, error.type SHOULD be set to the status code number (represented as a string)". With
     /// the delegate unwired, a request the authorization server answers 500 over the wire, the protected resource metadata
-    /// of a resource requiring DPoP-bound access tokens whose contribution states otherwise, has a dispatch span with status
+    /// of a resource whose contribution names <c>none</c> among its signing algorithms, has a dispatch span with status
     /// <c>Error</c>, <c>error.type</c> <c>500</c>, <c>server.response.status_code</c> <c>500</c> and
     /// <c>server.response.error_code</c> <c>server_error</c>; a token request without <c>grant_type</c>, answered 400,
     /// has status <c>Unset</c>, no <c>error.type</c> and <c>server.response.error_code</c> <c>invalid_request</c>.
@@ -1174,21 +1174,19 @@ internal sealed class TracingDelegateTests
 
 
     /// <summary>
-    /// Wires the server's resources to require DPoP-bound access tokens while the resource's metadata contribution states
-    /// <c>dpop_bound_access_tokens_required: false</c>, so the document cannot be served and its request is answered 500;
-    /// starts the listener, reads the issuer from discovery and answers the protected resource metadata URL on the listener.
+    /// Wires the resource's metadata contribution to name <c>none</c> among <c>resource_signing_alg_values_supported</c>
+    /// (RFC 9728 Section 2: "The value none MUST NOT be used."), so the document cannot be served and its request is
+    /// answered 500; starts the listener, reads the issuer from discovery and answers the protected resource metadata URL
+    /// on the listener.
     /// </summary>
     /// <param name="host">The host.</param>
     /// <param name="material">The resource's registration.</param>
     /// <returns>The metadata URL.</returns>
     private async Task<Uri> ContradictingMetadataUrlAsync(TestHostShell host, VerifierKeyMaterial material)
     {
-        ProtectedResourceMetadataContribution contribution = new() { DpopBoundAccessTokensRequired = false };
+        ProtectedResourceMetadataContribution contribution = new() { ResourceSigningAlgValuesSupported = ["none"] };
         await TestHostShell.AlterAsync(host.Server, candidate =>
-            candidate.ContributeProtectedResourceMetadataAsync = (_, _, _) => ValueTask.FromResult(contribution)).ConfigureAwait(false);
-        _ = await host.EnableDpopAsync().ConfigureAwait(false);
-        await TestHostShell.AlterAsync(host.Server, static candidate =>
-            candidate.IsDpopBoundAccessTokenRequiredAtResources = true).ConfigureAwait(false);
+            candidate.ContributeProtectedResourceMetadataAsync = (_, _, _, _) => ValueTask.FromResult(contribution)).ConfigureAwait(false);
         await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         HostedAuthorizationServer hosted = host.Host("default");

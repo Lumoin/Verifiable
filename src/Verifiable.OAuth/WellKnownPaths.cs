@@ -121,14 +121,23 @@ public static class WellKnownPaths
     /// <para>
     /// Computes the metadata URL per RFC 9728 §3: the well-known suffix is
     /// inserted between the host component and the path and/or query
-    /// components of the resource identifier, with any terminating slash
-    /// removed first — <c>{host}/.well-known/oauth-protected-resource{path}</c>.
+    /// components of the resource identifier, with any terminating slash of the path
+    /// removed first: <c>{host}/.well-known/oauth-protected-resource{path}{query}</c>, a query component of the
+    /// identifier kept after the path as written
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-3">RFC 9728 Section 3</see>: "inserting a well-known
+    /// URI string into the protected resource's resource identifier between the host component and the path and/or query
+    /// components, if any"; <see href="https://www.rfc-editor.org/rfc/rfc9728#section-1.2">Section 1.2</see>: "it is
+    /// recognized that there are cases that make a query component a useful and necessary part of a resource
+    /// identifier"), and an internationalized host written in its IDNA ASCII form, the URL's URI form
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc3987#section-3.1">RFC 3987 Section 3.1</see>: "when an IRI is used
+    /// for resource retrieval, the resource that the IRI locates is the same as the one located by the URI obtained after
+    /// converting the IRI").
     /// </para>
     /// </remarks>
     public static WellKnownPath OAuthProtectedResource { get; } = new(
         "oauth-protected-resource",
         "RFC 9728",
-        identifier => ComputeWellKnownWithPathInsertion(identifier, "oauth-protected-resource"));
+        identifier => ComputeWellKnownWithPathAndQueryInsertion(identifier, "oauth-protected-resource"));
 
     /// <summary>
     /// OpenID for Verifiable Credential Issuance 1.0 Credential Issuer Metadata (OID4VCI 1.0 §12.2.2).
@@ -245,4 +254,38 @@ public static class WellKnownPaths
         return new Uri($"{baseUri.Scheme}://{baseUri.Authority}/.well-known/{suffix}{path}");
     }
 
+
+    /// <summary>
+    /// Computes a well-known URI with the suffix inserted between the host and the path and/or query components of
+    /// <paramref name="identifier"/>, the query kept after the path:
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3">RFC 9728 Section 3</see>, "between the host
+    /// component and the path and/or query components, if any", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.1">Section 3.1</see>: "If the resource identifier
+    /// value contains a path or query component, any terminating slash (/) following the host component MUST be removed
+    /// before inserting /.well-known/ and the well-known URI path suffix between the host component and the path and/or
+    /// query components." The identifier is parsed first and read in its URI form
+    /// (<see cref="Oid4Vci.CredentialEndpointDpopValidation.UriTextOf"/>, an internationalized host in its IDNA ASCII
+    /// form, <see href="https://www.rfc-editor.org/rfc/rfc3987#section-3.1">RFC 3987 Section 3.1</see>); the terminating
+    /// slashes of its path are removed, a path of <c>/</c> alone written as none; and its query is appended as written,
+    /// never edited.
+    /// </summary>
+    /// <remarks>
+    /// For <c>https://example.com/protected?tenant=t1</c>, produces
+    /// <c>https://example.com/.well-known/oauth-protected-resource/protected?tenant=t1</c>; for
+    /// <c>https://example.com/protected/?v=1</c>, <c>https://example.com/.well-known/oauth-protected-resource/protected?v=1</c>;
+    /// for <c>https://example.com/protected?x=/</c>, <c>https://example.com/.well-known/oauth-protected-resource/protected?x=/</c>;
+    /// an identifier with no query produces what <see cref="ComputeWellKnownWithPathInsertion"/> produces.
+    /// </remarks>
+    /// <param name="identifier">The resource identifier.</param>
+    /// <param name="suffix">The well-known URI suffix.</param>
+    /// <returns>The well-known URL.</returns>
+    private static Uri ComputeWellKnownWithPathAndQueryInsertion(string identifier, string suffix)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(identifier);
+
+        Uri baseUri = new(Oid4Vci.CredentialEndpointDpopValidation.UriTextOf(new Uri(identifier)));
+        string path = baseUri.AbsolutePath.TrimEnd('/');
+
+        return new Uri($"{baseUri.Scheme}://{baseUri.Authority}/.well-known/{suffix}{path}{baseUri.Query}");
+    }
 }

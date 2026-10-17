@@ -1228,7 +1228,7 @@ internal sealed class ResourceServerEndToEndTests
         AssertResourceRefusal(rs, second, "invalid_dpop_proof");
         AssertRefusalDescription(second, "The DPoP proof jti has been presented previously.");
         Assert.AreEqual(1, rs.ReplayCache.Count, "The jti is recorded once for the one target URI.");
-        string normalizedTarget = rs.ResourceIdentity!.OriginalString + UpperCaseHexItemPath;
+        string normalizedTarget = rs.TargetAuthority!.GetLeftPart(UriPartial.Authority) + UpperCaseHexItemPath;
         string[] targets = [.. claimedTargets];
         Assert.HasCount(2, targets, "Each presentation claims the proof's jti once.");
         Assert.AreEqual(normalizedTarget, targets[0], "The store is handed the normalized target at the first presentation.");

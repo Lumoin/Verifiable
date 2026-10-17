@@ -1621,7 +1621,7 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
     /// <c>Authorization</c> field line, authenticates no client, so the materialization leaves it to UserInfo, which
     /// reads it as a request without the authentication information it reads and answers 401 with an empty body and
     /// the one challenge naming the two schemes it accepts and no error,
-    /// <c>Bearer scope="openid", DPoP realm="&lt;issuer&gt;", scope="openid", algs="..."</c>:
+    /// <c>Bearer realm="&lt;issuer&gt;", scope="openid", DPoP realm="&lt;issuer&gt;", scope="openid", algs="..."</c>:
     /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>, "If the request
     /// lacks any authentication information (e.g., the client was unaware that authentication is necessary or
     /// attempted using an unsupported authentication method), the resource server SHOULD NOT include an error code
@@ -1644,7 +1644,7 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
 
         Assert.AreEqual(401, response.StatusCode, response.Body);
         Assert.AreEqual(
-            $"Bearer scope=\"openid\", {ResourceDpopProofs.DpopChallenge(stub.IssuerUri!.OriginalString, error: null, scope: "openid")}",
+            $"Bearer realm=\"{stub.IssuerUri!.OriginalString}\", scope=\"openid\", {ResourceDpopProofs.DpopChallenge(stub.IssuerUri!.OriginalString, error: null, scope: "openid")}",
             Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
         Assert.AreEqual(string.Empty, response.Body, "No error code or other error information.");
     }
@@ -1660,7 +1660,7 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
     /// identifies and authenticates no OAuth client and the materialization fetches nothing for it. The rule refuses
     /// only a materialized registration, so the resource answers as it answers the same request without the rule: 401
     /// with an empty body and the one challenge naming the two schemes it accepts,
-    /// <c>Bearer scope="openid", DPoP realm="&lt;issuer&gt;", scope="openid", algs="..."</c>, where a rule that refused the stored registration would answer
+    /// <c>Bearer realm="&lt;issuer&gt;", scope="openid", DPoP realm="&lt;issuer&gt;", scope="openid", algs="..."</c>, where a rule that refused the stored registration would answer
     /// 400 without that challenge.
     /// </summary>
     [TestMethod]
@@ -1681,7 +1681,7 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
 
         Assert.AreEqual(401, response.StatusCode, response.Body);
         Assert.AreEqual(
-            $"Bearer scope=\"openid\", {ResourceDpopProofs.DpopChallenge(stub.IssuerUri!.OriginalString, error: null, scope: "openid")}",
+            $"Bearer realm=\"{stub.IssuerUri!.OriginalString}\", scope=\"openid\", {ResourceDpopProofs.DpopChallenge(stub.IssuerUri!.OriginalString, error: null, scope: "openid")}",
             Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
         Assert.AreEqual(string.Empty, response.Body, "The resource's own answer carries no body.");
     }

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using System.Collections.Concurrent;
@@ -110,7 +111,11 @@ internal sealed class WebFingerHttpApplication
             Method: request.Method,
             Fields: fields,
             Headers: headers,
-            RouteValues: RouteValues.Empty);
+            RouteValues: RouteValues.Empty)
+        {
+            RequestTarget = request.HttpContext.Features.Get<IHttpRequestFeature>()?.RawTarget
+                ?? throw new InvalidOperationException("The server answered no raw request-target for the request.")
+        };
     }
 
 

@@ -2201,6 +2201,7 @@ internal sealed class TestHostShell: IAsyncDisposable
             Headers: requestHeaders,
             RouteValues: RouteValues.Empty)
         {
+            RequestTarget = path,
             Body = body
         };
 
@@ -2481,7 +2482,10 @@ internal sealed class TestHostShell: IAsyncDisposable
             Method: "POST",
             Fields: new RequestFields(),
             Headers: RequestHeaders.Empty,
-            RouteValues: RouteValues.Empty);
+            RouteValues: RouteValues.Empty)
+        {
+            RequestTarget = parPath
+        };
 
         await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
 
@@ -2624,7 +2628,10 @@ internal sealed class TestHostShell: IAsyncDisposable
             Method: "POST",
             Fields: new RequestFields(),
             Headers: RequestHeaders.Empty,
-            RouteValues: RouteValues.Empty);
+            RouteValues: RouteValues.Empty)
+        {
+            RequestTarget = preparationPath
+        };
 
         await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
 
@@ -2679,7 +2686,10 @@ internal sealed class TestHostShell: IAsyncDisposable
             Method: "GET",
             Fields: new RequestFields(),
             Headers: RequestHeaders.Empty,
-            RouteValues: RouteValues.Empty);
+            RouteValues: RouteValues.Empty)
+        {
+            RequestTarget = requestObjectPath
+        };
 
         await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
 
@@ -2726,7 +2736,10 @@ internal sealed class TestHostShell: IAsyncDisposable
             Method: "GET",
             Fields: new RequestFields(),
             Headers: RequestHeaders.Empty,
-            RouteValues: RouteValues.Empty);
+            RouteValues: RouteValues.Empty)
+        {
+            RequestTarget = jarPath
+        };
 
         await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
 
@@ -2782,7 +2795,10 @@ internal sealed class TestHostShell: IAsyncDisposable
             Method: "POST",
             Fields: fields,
             Headers: RequestHeaders.Empty,
-            RouteValues: RouteValues.Empty);
+            RouteValues: RouteValues.Empty)
+        {
+            RequestTarget = jarPath
+        };
 
         await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
 
@@ -2834,7 +2850,10 @@ internal sealed class TestHostShell: IAsyncDisposable
             Method: "POST",
             Fields: fields,
             Headers: RequestHeaders.Empty,
-            RouteValues: RouteValues.Empty);
+            RouteValues: RouteValues.Empty)
+        {
+            RequestTarget = directPostPath
+        };
 
         await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
 
@@ -2989,7 +3008,10 @@ internal sealed class TestHostShell: IAsyncDisposable
             Method: httpMethod,
             Fields: fields,
             Headers: headers,
-            RouteValues: RouteValues.Empty);
+            RouteValues: RouteValues.Empty)
+        {
+            RequestTarget = path
+        };
 
         context.SetTenantId(segment);
         await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
@@ -3041,6 +3063,7 @@ internal sealed class TestHostShell: IAsyncDisposable
             Headers: RequestHeaders.Empty,
             RouteValues: RouteValues.Empty)
         {
+            RequestTarget = path,
             Body = body
         };
 
@@ -3092,6 +3115,7 @@ internal sealed class TestHostShell: IAsyncDisposable
             Headers: headers ?? RequestHeaders.Empty,
             RouteValues: RouteValues.Empty)
         {
+            RequestTarget = path,
             Body = body
         };
 
@@ -3132,7 +3156,10 @@ internal sealed class TestHostShell: IAsyncDisposable
             Method: httpMethod,
             Fields: new RequestFields(),
             Headers: RequestHeaders.Empty,
-            RouteValues: RouteValues.Empty);
+            RouteValues: RouteValues.Empty)
+        {
+            RequestTarget = path
+        };
 
         context.SetTenantId(segment);
         await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
@@ -3167,7 +3194,10 @@ internal sealed class TestHostShell: IAsyncDisposable
             Method: "GET",
             Fields: new RequestFields(),
             Headers: RequestHeaders.Empty,
-            RouteValues: RouteValues.Empty);
+            RouteValues: RouteValues.Empty)
+        {
+            RequestTarget = path
+        };
 
         context.SetTenantId(segment);
         await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
@@ -3204,7 +3234,10 @@ internal sealed class TestHostShell: IAsyncDisposable
             Method: httpMethod,
             Fields: new RequestFields(),
             Headers: RequestHeaders.Empty,
-            RouteValues: RouteValues.Empty);
+            RouteValues: RouteValues.Empty)
+        {
+            RequestTarget = path
+        };
 
         context.SetTenantId(segment);
         await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
@@ -3256,6 +3289,7 @@ internal sealed class TestHostShell: IAsyncDisposable
             Headers: headers ?? RequestHeaders.Empty,
             RouteValues: RouteValues.Empty)
         {
+            RequestTarget = path,
             Body = body
         };
 
@@ -3291,7 +3325,10 @@ internal sealed class TestHostShell: IAsyncDisposable
             Method: "GET",
             Fields: new RequestFields(),
             Headers: RequestHeaders.Empty,
-            RouteValues: RouteValues.Empty);
+            RouteValues: RouteValues.Empty)
+        {
+            RequestTarget = path
+        };
 
         context.SetTenantId(segment);
         await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
@@ -3325,7 +3362,10 @@ internal sealed class TestHostShell: IAsyncDisposable
             Method: "GET",
             Fields: new RequestFields(),
             Headers: RequestHeaders.Empty,
-            RouteValues: RouteValues.Empty);
+            RouteValues: RouteValues.Empty)
+        {
+            RequestTarget = path
+        };
 
         context.SetTenantId(segment);
         await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
@@ -3370,6 +3410,7 @@ internal sealed class TestHostShell: IAsyncDisposable
             Headers: RequestHeaders.Empty,
             RouteValues: RouteValues.Empty)
         {
+            RequestTarget = path,
             Body = body
         };
 
@@ -3416,7 +3457,10 @@ internal sealed class TestHostShell: IAsyncDisposable
             Method: "GET",
             Fields: new RequestFields(),
             Headers: headers,
-            RouteValues: RouteValues.Empty);
+            RouteValues: RouteValues.Empty)
+        {
+            RequestTarget = path
+        };
 
         context.SetTenantId(segment);
         await PrepareServingAsync(Server, cancellationToken).ConfigureAwait(false);
@@ -3462,6 +3506,7 @@ internal sealed class TestHostShell: IAsyncDisposable
             Headers: RequestHeaders.Empty,
             RouteValues: RouteValues.Empty)
         {
+            RequestTarget = path,
             Body = body
         };
 
@@ -3513,6 +3558,7 @@ internal sealed class TestHostShell: IAsyncDisposable
             Headers: headers,
             RouteValues: RouteValues.Empty)
         {
+            RequestTarget = path,
             Body = body
         };
 
@@ -5913,7 +5959,10 @@ internal sealed class TestHostShell: IAsyncDisposable
                 Method: "POST",
                 Fields: serverFields,
                 Headers: BuildIncomingHeaders(headers),
-                RouteValues: RouteValues.Empty);
+                RouteValues: RouteValues.Empty)
+            {
+                RequestTarget = endpoint.PathAndQuery
+            };
 
             ExchangeContext context = [];
             context.SetTenantId(segment);
@@ -6028,7 +6077,10 @@ internal sealed class TestHostShell: IAsyncDisposable
                 Method: "POST",
                 Fields: serverFields,
                 Headers: BuildIncomingHeaders(headers),
-                RouteValues: RouteValues.Empty);
+                RouteValues: RouteValues.Empty)
+            {
+                RequestTarget = endpoint.PathAndQuery
+            };
 
             ExchangeContext context = [];
             context.SetTenantId(segment);

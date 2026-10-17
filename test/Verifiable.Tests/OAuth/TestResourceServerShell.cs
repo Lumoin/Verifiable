@@ -83,10 +83,26 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
     /// <summary>
     /// The resource server's own identity — the RFC 9728 §1.2 <c>resource</c>
     /// identifier the metadata document carries and the §3.3 resource-match
-    /// validation compares against. Derived from the bound listener address
+    /// validation compares against: the URL its one resource answers at,
+    /// <c>https://127.0.0.1:{port}/protected</c>, followed by
+    /// <see cref="ResourceIdentifierQuery"/> when one is given. Derived from the bound listener address
     /// once <see cref="StartHttpHostAsync"/> has run.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">RFC 9728 Section 3.3</see>: "If the protected
+    /// resource metadata was retrieved from a URL returned by the protected resource via the WWW-Authenticate
+    /// resource_metadata parameter, then the resource value returned MUST be identical to the URL that the client used to
+    /// make the request to the resource server."
     /// </summary>
     public Uri? ResourceIdentity { get; private set; }
+
+
+    /// <summary>
+    /// The text the resource identifier carries after the path <c>/protected</c>: its query component, starting with
+    /// <c>?</c>, or a terminating <c>/</c> followed by one; <see langword="null"/> for none
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-1.2">RFC 9728 Section
+    /// 1.2</see>: "it is recognized that there are cases that make a query component a useful and necessary part of a
+    /// resource identifier").
+    /// </summary>
+    public string? ResourceIdentifierQuery { get; }
 
 
     /// <summary>
@@ -179,6 +195,10 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
     /// The application's start of the resource decision's span, wired as <see cref="ResourceServerIntegration.StartTraceActivity"/>,
     /// or <see langword="null"/> to record the decision as an event on the ambient activity.
     /// </param>
+    /// <param name="resourceIdentifierQuery">
+    /// The text the resource identifier carries after <c>/protected</c>, its query component starting with <c>?</c> or a
+    /// terminating <c>/</c> followed by one, or <see langword="null"/> for none.
+    /// </param>
     public TestResourceServerShell(
         Uri trustedIssuer,
         string expectedAudience,
@@ -192,7 +212,8 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
         bool isDpopProofJtiRecordWired = true,
         Func<ValidateDpopProofDelegate, ValidateDpopProofDelegate>? wrapDpopProofValidation = null,
         Func<ConsultDpopProofJtiDelegate, ConsultDpopProofJtiDelegate>? wrapDpopProofJtiClaim = null,
-        StartTraceActivityDelegate? startTraceActivity = null)
+        StartTraceActivityDelegate? startTraceActivity = null,
+        string? resourceIdentifierQuery = null)
     {
         ArgumentNullException.ThrowIfNull(trustedIssuer);
         ArgumentException.ThrowIfNullOrWhiteSpace(expectedAudience);
@@ -212,6 +233,7 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
         }
 
         VerifySignature = verifySignature;
+        ResourceIdentifierQuery = resourceIdentifierQuery;
         RequiredScope = requiredScope;
         AdvertisedAuthorizationServers = advertised;
         RequiresDpop = requiresDpop;
@@ -394,12 +416,12 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
         string boundAddress = addresses.Addresses.FirstOrDefault()
             ?? throw new InvalidOperationException("Kestrel bound no address.");
 
-        //The resource identity is the bound listener's origin: the same value
-        //becomes the document's §1.2 resource identifier and the base the §3
-        //well-known URL is inserted into, keeping the consumer's §3.3
-        //resource-match validation true by construction.
+        //The resource identity is the URL the one resource answers at, on the bound listener's origin: the same value
+        //becomes the document's Section 1.2 resource identifier and the base the Section 3 well-known URL is inserted
+        //into, so a client comparing the document's resource with the URL it requested (Section 3.3) keeps it.
         Uri baseAddress = new(boundAddress);
-        Uri resourceIdentity = new(baseAddress.GetLeftPart(UriPartial.Authority));
+        Uri origin = new(baseAddress.GetLeftPart(UriPartial.Authority));
+        Uri resourceIdentity = new(baseAddress.GetLeftPart(UriPartial.Authority) + "/protected" + ResourceIdentifierQuery);
         Uri metadataUrl = WellKnownPaths.OAuthProtectedResource.ComputeUri(resourceIdentity.OriginalString);
 
         metadataServer = await BuildMetadataServerAsync(resourceIdentity).ConfigureAwait(false);
@@ -410,7 +432,7 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
         HttpBaseAddress = baseAddress;
         ResourceIdentity = resourceIdentity;
         MetadataUrl = metadataUrl;
-        TargetAuthority ??= resourceIdentity;
+        TargetAuthority ??= origin;
     }
 
 
@@ -488,6 +510,10 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
             GenerateIdentifierAsync = DefaultIdentifierGenerator.For(Integration.TimeProvider, TestEntropy.NewCounterStream(), BaseMemoryPool.Shared),
             ResolveSubjectIdentifierAsync = DefaultSubjectIdentifierResolver.PublicAsync,
 
+            //RFC 9728 Section 1.2: the resource identifier may carry a query component, which an issuer identifier the
+            //default issuer resolver accepts never does, so the document's resource is answered as the identifier itself.
+            ResolveIssuerAsync = (reg, ctx, ct) => ValueTask.FromResult<Uri?>(resourceIdentity),
+
             //RFC 9728 §3: the metadata URL is formed by inserting the
             //well-known suffix into the resource identifier; WellKnownPaths
             //owns that computation for the one endpoint this host serves.
@@ -497,7 +523,7 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
                         ? WellKnownPaths.OAuthProtectedResource.ComputeUri(resourceIdentity.OriginalString)
                         : null),
 
-            ContributeProtectedResourceMetadataAsync = (reg, ctx, ct) =>
+            ContributeProtectedResourceMetadataAsync = (reg, endpointName, ctx, ct) =>
                 ValueTask.FromResult(new ProtectedResourceMetadataContribution
                 {
                     AuthorizationServers = advertisedAuthorizationServers,

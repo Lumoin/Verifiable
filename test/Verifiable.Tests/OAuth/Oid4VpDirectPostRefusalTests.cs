@@ -1732,12 +1732,16 @@ truncateProtectedHeader,
             fields[field.Key] = field.Value;
         }
 
+        string path = TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.Oid4VpDirectPost, segment);
         IncomingRequest request = new(
-            Path: TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.Oid4VpDirectPost, segment),
+            Path: path,
             Method: WellKnownHttpMethods.Post,
             Fields: fields,
             Headers: RequestHeaders.Empty,
-            RouteValues: RouteValues.Empty);
+            RouteValues: RouteValues.Empty)
+        {
+            RequestTarget = path
+        };
 
         return await app.DispatchBySegmentAsync(
             segment, request, context, TestContext.CancellationToken).ConfigureAwait(false);

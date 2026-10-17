@@ -1766,17 +1766,39 @@ public delegate ValueTask<string?> SignAuthZenMetadataDelegate(
 
 
 /// <summary>
-/// Contributes application-supplied values to the OAuth 2.0 Protected Resource
-/// Metadata document (RFC 9728 §2) that the library cannot derive from the
-/// endpoint chain — the authorization servers, scopes, bearer methods,
-/// human-readable fields, and feature booleans. Optional; when unset the
-/// document advertises only the derived <c>resource</c> and <c>jwks_uri</c>.
+/// Contributes application-supplied values to an OAuth 2.0 Protected Resource Metadata document
+/// (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-2">RFC 9728 Section 2</see>) that the library cannot
+/// derive, for the resource <paramref name="endpointName"/> names. Optional; when unset each document advertises only
+/// what the library composes.
 /// </summary>
+/// <remarks>
+/// <para>
+/// <paramref name="endpointName"/> is <see cref="WellKnownEndpointNames.ProtectedResourceMetadata"/> for the document
+/// whose <c>resource</c> is the issuer, the resource the registration's issuer identifies, and the
+/// <see cref="WellKnownEndpointNames"/> name of the endpoint for the document of each of the library's own resources:
+/// <see cref="WellKnownEndpointNames.UserInfo"/>, <see cref="WellKnownEndpointNames.Oid4VciCredential"/>,
+/// <see cref="WellKnownEndpointNames.Oid4VciDeferredCredential"/> and
+/// <see cref="WellKnownEndpointNames.Oid4VciNotification"/>. For the issuer's document every member of the
+/// contribution is written as given. For one of the library's own resources the library composes the document from
+/// what it knows, and the contribution supplies the human-readable and documentation members only:
+/// <c>resource_name</c> (RFC 9728 Section 2: "It is RECOMMENDED that protected resource metadata include this
+/// field."), <c>resource_documentation</c>, <c>resource_policy_uri</c>, <c>resource_tos_uri</c> and their
+/// language-tagged forms (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-2.1">Section 2.1</see>). A
+/// contribution stating for such a resource any other member, one the library composes or one that would misdescribe
+/// the resource, is the server's own wiring at fault: the document is answered 500 <c>server_error</c> with
+/// <see cref="WellKnownOAuthErrorDescriptions.ServerNotReady"/> and is not served
+/// (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.2">Section 3.2</see>: "An error response uses the
+/// applicable HTTP status code value."). A contribution that ignores <paramref name="endpointName"/> keeps the issuer's
+/// document as it describes it and leaves the documents of the library's resources to that rule.
+/// </para>
+/// </remarks>
 /// <param name="registration">The <see cref="ClientRecord"/> serving the protected resource.</param>
+/// <param name="endpointName">The name of the resource the contribution is asked for.</param>
 /// <param name="context">The per-request context bag.</param>
 /// <param name="cancellationToken">Cancellation token.</param>
 public delegate ValueTask<ProtectedResource.ProtectedResourceMetadataContribution> ContributeProtectedResourceMetadataDelegate(
     ClientRecord registration,
+    string endpointName,
     ExchangeContext context,
     CancellationToken cancellationToken);
 
@@ -1789,6 +1811,8 @@ public delegate ValueTask<ProtectedResource.ProtectedResourceMetadataContributio
 /// document carries — and the application signs it with its own key and
 /// algorithm and returns the compact JWS. The application MUST add the
 /// spec-required <c>iss</c> claim denoting the party attesting to the claims.
+/// It signs every document the server serves, the issuer's and each of the library's own resources', the claims'
+/// <c>resource</c> naming the resource the document describes.
 /// </summary>
 /// <remarks>
 /// Optional: when unset, the document carries only its plain-JSON fields; when

@@ -63,15 +63,20 @@ namespace Verifiable.OAuth.Oid4Vci;
 /// <para>
 /// Every <c>DPoP</c> challenge of one request carries the parameters of its <see cref="ResourceChallengeContext"/>,
 /// written by <see cref="DpopChallenge.BuildChallenge"/> in the order <c>realm</c>, <c>error</c>, <c>scope</c>,
-/// <c>algs</c>: the <c>realm</c> of the protection space the resource serves, the issuer the request is served under
+/// <c>algs</c>, <c>resource_metadata</c>: the <c>realm</c> of the protection space the resource serves, the issuer the request is served under
 /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "The authentication
 /// parameter realm MAY be included to indicate the scope of protection in the manner described in [RFC9110], Section
 /// 11.5."), the <c>scope</c> the resource requires when it names one ("A scope authentication parameter MAY be
 /// included as defined in [RFC6750], Section 3."), and the <c>algs</c> the authorization server accepts for a DPoP
 /// proof, the one slot <see cref="DpopTokenEndpointValidation.ResolveAcceptedProofAlgorithmsAsync"/> answers ("An algs
 /// parameter SHOULD be included to signal to the client the JWS algorithms that are acceptable for the DPoP proof
-/// JWT."), which the resource holds every proof to. No <c>error_description</c> is written into a challenge; the body
-/// carries it. Every answer carrying a <c>DPoP</c> challenge carries the field
+/// JWT."), which the resource holds every proof to, and the <c>resource_metadata</c> naming the resource's protected
+/// resource metadata document where it is served and the request's URL is the resource's identifier
+/// (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-5.1">RFC 9728 Section 5.1</see>: "This parameter MAY also
+/// be used in WWW-Authenticate responses using authorization schemes other than "Bearer" [RFC6750], such as the DPoP
+/// scheme defined by [RFC9449]."). Every <c>Bearer</c> challenge of the request carries the same <c>realm</c> and
+/// <c>resource_metadata</c> (<see cref="BuildBearerChallenge"/>). No <c>error_description</c> is written into a
+/// challenge; the body carries it. Every answer carrying a <c>DPoP</c> challenge carries the field
 /// <c>Access-Control-Expose-Headers: WWW-Authenticate, DPoP-Nonce</c> (<see cref="WithDpopChallenge"/>; Section 7.1:
 /// "the server needs to make it available to the application by including WWW-Authenticate in the
 /// Access-Control-Expose-Headers response header list value").
@@ -103,8 +108,14 @@ internal static class CredentialEndpointDpopValidation
     /// <see cref="DpopTokenEndpointValidation.AlgorithmResolverAnsweredUnusableListDescription"/> rather than
     /// <see cref="DpopTokenEndpointValidation.AlgorithmResolverAnsweredNoListDescription"/>.
     /// </param>
+    /// <param name="ResourceMetadata">
+    /// The URL of the resource's protected resource metadata document every challenge of the request names as
+    /// <c>resource_metadata</c> (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-5.1">RFC 9728 Section
+    /// 5.1</see>), or <see langword="null"/> where the document is not served or the request's URL is not the resource's
+    /// identifier (<see cref="ResourceMetadataOf"/>).
+    /// </param>
     internal sealed record ResourceChallengeContext(
-        string? Realm, string? Scope, IReadOnlyList<string>? Algorithms, bool IsAlgorithmListUnusable);
+        string? Realm, string? Scope, IReadOnlyList<string>? Algorithms, bool IsAlgorithmListUnusable, Uri? ResourceMetadata);
 
 
     /// <summary>
@@ -162,26 +173,140 @@ internal static class CredentialEndpointDpopValidation
     /// <param name="server">The authorization server holding the issuer resolver and the algorithm slot.</param>
     /// <param name="registration">The client (tenant) the request belongs to.</param>
     /// <param name="context">The per-request context.</param>
-    /// <param name="requiredScope">The scope the resource requires, or <see langword="null"/> when it names none.</param>
+    /// <param name="endpointName">
+    /// The resource's endpoint name, among <see cref="ProtectedResourceMetadataEndpoints.LibraryResourceEndpointNames"/>;
+    /// it names the scope the resource requires (<see cref="ProtectedResourceMetadataEndpoints.RequiredScopeOf"/>) and
+    /// locates the resource's document (<see cref="ResourceMetadataOf"/>).
+    /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The challenge parameters of the request.</returns>
     internal static async ValueTask<ResourceChallengeContext> ResolveChallengeContextAsync(
         EndpointServer server,
         ClientRecord registration,
         ExchangeContext context,
-        string? requiredScope,
+        string endpointName,
         CancellationToken cancellationToken)
     {
         Uri? issuer = await TryResolveIssuerAsync(server, registration, context, cancellationToken).ConfigureAwait(false);
+        (IReadOnlyList<string>? algorithms, bool isAlgorithmListUnusable) = await ResolveChallengeAlgorithmsAsync(
+            server, registration, context, cancellationToken).ConfigureAwait(false);
+
+        return new ResourceChallengeContext(
+            issuer is null ? null : HeaderSafeRealm(issuer),
+            ProtectedResourceMetadataEndpoints.RequiredScopeOf(endpointName),
+            algorithms,
+            isAlgorithmListUnusable,
+            ResourceMetadataOf(context, endpointName, issuer));
+    }
+
+
+    /// <summary>
+    /// Resolves the algorithms a library resource holds every proof to and names in its challenges, the one slot
+    /// <see cref="DpopTokenEndpointValidation.ResolveAcceptedProofAlgorithmsAsync"/> answers, read as no list where the
+    /// answer holds a name that is no <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.6.2">RFC 9110 Section
+    /// 5.6.2</see> token (<see cref="DpopChallenge.IsToken"/>). The resource's challenges and its protected resource
+    /// metadata document read this one answer, so the document's <c>dpop_signing_alg_values_supported</c> names exactly
+    /// the challenges' <c>algs</c> (<see cref="AcceptableChallengeAlgorithms"/>).
+    /// </summary>
+    /// <param name="server">The authorization server holding the algorithm slot.</param>
+    /// <param name="registration">The client (tenant) the request belongs to.</param>
+    /// <param name="context">The per-request context.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The usable list or <see langword="null"/>, and whether the slot's answer held a name that is no token.</returns>
+    internal static async ValueTask<(IReadOnlyList<string>? Algorithms, bool IsAlgorithmListUnusable)> ResolveChallengeAlgorithmsAsync(
+        EndpointServer server,
+        ClientRecord registration,
+        ExchangeContext context,
+        CancellationToken cancellationToken)
+    {
         IReadOnlyList<string>? algorithms = await DpopTokenEndpointValidation.ResolveAcceptedProofAlgorithmsAsync(
             server.OAuth(), registration, context, cancellationToken).ConfigureAwait(false);
         bool isAlgorithmListUnusable = algorithms is not null && !algorithms.All(DpopChallenge.IsToken);
 
-        return new ResourceChallengeContext(
-            issuer is null ? null : HeaderSafeRealm(issuer),
-            requiredScope,
-            isAlgorithmListUnusable ? null : algorithms,
-            isAlgorithmListUnusable);
+        return (isAlgorithmListUnusable ? null : algorithms, isAlgorithmListUnusable);
+    }
+
+
+    /// <summary>
+    /// The algorithms of <paramref name="algorithms"/> a proof can be accepted under
+    /// (<see cref="DpopProofValidator.AcceptableProofAlgorithms"/>), the list a resource's challenges write as
+    /// <c>algs</c> and its protected resource metadata document as <c>dpop_signing_alg_values_supported</c>, the parameter
+    /// and the member absent when none remains; <see langword="null"/> for no list.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section 7.1</see>: "An algs parameter
+    /// SHOULD be included to signal to the client the JWS algorithms that are acceptable for the DPoP proof JWT."
+    /// </summary>
+    /// <param name="algorithms">The usable list the slot answered, or <see langword="null"/>.</param>
+    /// <returns>The acceptable algorithms, or <see langword="null"/>.</returns>
+    internal static IReadOnlyList<string>? AcceptableChallengeAlgorithms(IReadOnlyList<string>? algorithms) =>
+        algorithms is IReadOnlyList<string> list ? DpopProofValidator.AcceptableProofAlgorithms(list) : null;
+
+
+    /// <summary>
+    /// The URL of the resource's protected resource metadata document the request's challenges name as
+    /// <c>resource_metadata</c> (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-5.1">RFC 9728 Section
+    /// 5.1</see>: "resource_metadata: The URL of the protected resource metadata."): the document's URL where it is served
+    /// (<see cref="ProtectedResourceMetadataEndpoints.TryLocateLibraryResourceDocument"/>, which names no document whose
+    /// location serves another resource's too), an issuer resolves, and the URL the client used is the resource's
+    /// identifier, code point for code point (<see cref="IsTargetTheResourceIdentifier"/>); <see langword="null"/>
+    /// otherwise. <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">Section 3.3</see>: "If the protected
+    /// resource metadata was retrieved from a URL returned by the protected resource via the WWW-Authenticate
+    /// resource_metadata parameter, then the resource value returned MUST be identical to the URL that the client used
+    /// to make the request to the resource server. If these values are not identical, the data contained in the response
+    /// MUST NOT be used." The URL the client used is the scheme and authority the request is judged against, the
+    /// listener's or the issuer's as <see cref="DpopRequestReading.ComposeTargetUri"/> reads them, followed by the
+    /// request-target exactly as the client sent it (<see cref="IncomingRequest.RequestTarget"/>: the path and the query
+    /// in the client's own spelling). So a request whose URL is not the identifier is named no document its client must
+    /// discard: a listener alias, a query the identifier does not carry, another query or none where it carries one, and
+    /// a spelling of the path other than the identifier's (a percent-encoded character among them, though the server's
+    /// decoded path routes it); a request whose URL is the identifier, its query included, is named the document.
+    /// </summary>
+    /// <param name="context">The per-request context carrying the inbound request and the endpoint chain.</param>
+    /// <param name="endpointName">The resource's endpoint name.</param>
+    /// <param name="issuer">The issuer the request is served under, or <see langword="null"/> where none resolves.</param>
+    /// <returns>The document's URL, or <see langword="null"/>.</returns>
+    private static Uri? ResourceMetadataOf(ExchangeContext context, string endpointName, Uri? issuer)
+    {
+        if(issuer is not { IsAbsoluteUri: true }
+            || context.IncomingRequest is not IncomingRequest request
+            || !ProtectedResourceMetadataEndpoints.TryLocateLibraryResourceDocument(
+                context.EndpointChain, endpointName, out string? resourceIdentifier, out Uri? documentUri))
+        {
+            return null;
+        }
+
+        return IsTargetTheResourceIdentifier(request, issuer, resourceIdentifier) ? documentUri : null;
+    }
+
+
+    /// <summary>
+    /// Whether the URL the client used is the resource's identifier: the scheme and authority of
+    /// <see cref="IncomingRequest.ListenerAuthority"/> when the host stamped one, otherwise those of the issuer, written in
+    /// their URI form (<see cref="UriTextOf"/>, the form the identifier is written in), followed by
+    /// <see cref="IncomingRequest.RequestTarget"/> as the client sent it, and that text compared with the identifier
+    /// ordinally (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-6">RFC 9728 Section 6</see>: "Comparisons
+    /// between the two strings MUST be performed as a Unicode code-point-to-code-point equality comparison."). The
+    /// request-target is origin-form (<see href="https://www.rfc-editor.org/rfc/rfc9112#section-3.2.1">RFC 9112 Section
+    /// 3.2.1</see>: "origin-form = absolute-path [ "?" query ]"), so the authority is never the client's: a host spelled in
+    /// upper case or an explicit default port the client wrote in the <c>Host</c> field takes no part, the authority
+    /// being the host's configuration or the issuer's. The authority is read as
+    /// <see cref="DpopRequestReading.ComposeTargetUri"/> reads it (<see cref="Uri.GetLeftPart(UriPartial)"/> with
+    /// <see cref="UriPartial.Authority"/>, a relative listener authority failing the request as there); an authority with
+    /// no URI form names no identifier.
+    /// </summary>
+    /// <param name="request">The inbound request.</param>
+    /// <param name="issuer">The issuer the request is served under.</param>
+    /// <param name="resourceIdentifier">The resource's identifier, in its URI form.</param>
+    /// <returns><see langword="true"/> when the URL the client used is the identifier.</returns>
+    private static bool IsTargetTheResourceIdentifier(IncomingRequest request, Uri issuer, string resourceIdentifier)
+    {
+        Uri authority = new((request.ListenerAuthority ?? issuer).GetLeftPart(UriPartial.Authority));
+
+        return UriTextOrNullOf(authority) is string authorityText
+            && Uri.TryCreate(authorityText, UriKind.Absolute, out Uri? mappedAuthority)
+            && string.Equals(
+                mappedAuthority.GetLeftPart(UriPartial.Authority) + request.RequestTarget,
+                resourceIdentifier,
+                StringComparison.Ordinal);
     }
 
 
@@ -197,7 +322,7 @@ internal static class CredentialEndpointDpopValidation
     /// <param name="context">The per-request context.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The issuer, or <see langword="null"/>.</returns>
-    private static async ValueTask<Uri?> TryResolveIssuerAsync(
+    internal static async ValueTask<Uri?> TryResolveIssuerAsync(
         EndpointServer server,
         ClientRecord registration,
         ExchangeContext context,
@@ -230,22 +355,7 @@ internal static class CredentialEndpointDpopValidation
     /// </summary>
     /// <param name="issuer">The issuer the request is served under.</param>
     /// <returns>The realm text in visible US-ASCII, or <see langword="null"/> where the issuer has no such form.</returns>
-    private static string? HeaderSafeRealm(Uri issuer)
-    {
-        if(!issuer.IsAbsoluteUri)
-        {
-            return null;
-        }
-
-        try
-        {
-            return HeaderSafeIssuer(issuer);
-        }
-        catch(UriFormatException)
-        {
-            return null;
-        }
-    }
+    private static string? HeaderSafeRealm(Uri issuer) => UriTextOrNullOf(issuer);
 
 
     /// <summary>
@@ -302,18 +412,18 @@ internal static class CredentialEndpointDpopValidation
     /// <param name="server">The authorization server holding the issuer resolver and the algorithm slot.</param>
     /// <param name="registration">The client (tenant) the request belongs to.</param>
     /// <param name="context">The per-request context carrying the inbound request.</param>
-    /// <param name="requiredScope">The scope the resource requires, or <see langword="null"/> when it names none.</param>
+    /// <param name="endpointName">The resource's endpoint name, among <see cref="ProtectedResourceMetadataEndpoints.LibraryResourceEndpointNames"/>.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The presentation, or the refusal it is answered with.</returns>
     internal static async ValueTask<LibraryResourcePresentation> ReadPresentationAsync(
         EndpointServer server,
         ClientRecord registration,
         ExchangeContext context,
-        string? requiredScope,
+        string endpointName,
         CancellationToken cancellationToken)
     {
         ResourceChallengeContext challenge = await ResolveChallengeContextAsync(
-            server, registration, context, requiredScope, cancellationToken).ConfigureAwait(false);
+            server, registration, context, endpointName, cancellationToken).ConfigureAwait(false);
         bool isDpopBoundAccessTokenRequired = server.OAuth().IsDpopBoundAccessTokenRequiredAtResources;
         AuthorizationFieldReading authorization = BearerTokenValidation.ReadAuthorizationField(context);
         if(authorization.IsRepeated)
@@ -380,7 +490,8 @@ internal static class CredentialEndpointDpopValidation
     /// carrying that error (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 Section 7.2</see>:
     /// "If the mechanism used to attempt authentication could be established unambiguously, then the corresponding
     /// challenge SHOULD be used to deliver error information (Figure 18)."): the <c>DPoP</c> challenge through
-    /// <see cref="WithDpopChallenge"/>, or the <c>Bearer</c> challenge with the realm where the resource has one.
+    /// <see cref="WithDpopChallenge"/>, or the <c>Bearer</c> challenge of <see cref="BuildBearerChallenge"/>, with the
+    /// realm and the <c>resource_metadata</c> where the resource has them.
     /// </summary>
     /// <param name="isDpopScheme">Whether the line names the <c>DPoP</c> scheme.</param>
     /// <param name="challenge">The parameters every <c>DPoP</c> challenge of the request carries.</param>
@@ -393,8 +504,7 @@ internal static class CredentialEndpointDpopValidation
         {
             true => WithDpopChallenge(refusal, BuildDpopChallenge(OAuthErrors.InvalidRequest, challenge)),
             false => refusal.WithHeader(
-                WellKnownHttpHeaderNames.WwwAuthenticate,
-                BearerTokenChallenge.BuildChallenge(realm: challenge.Realm, error: OAuthErrors.InvalidRequest))
+                WellKnownHttpHeaderNames.WwwAuthenticate, BuildBearerChallenge(OAuthErrors.InvalidRequest, scope: null, challenge))
         };
     }
 
@@ -410,7 +520,8 @@ internal static class CredentialEndpointDpopValidation
     /// <see cref="AuthorizationServerIntegration.IssueDpopNonceAsync"/> and
     /// <see cref="AuthorizationServerIntegration.ValidateDpopNonceAsync"/> under the registration's tenant), the
     /// replay guard's atomic claim (<see cref="JtiReplayGuard.ConsultDpopProofAsync"/>, the issuer's text and the target
-    /// URI) and the <c>Bearer</c> refusal's <see cref="BearerTokenValidation.InvalidTokenChallenge"/>. The target URI is
+    /// URI) and the <c>Bearer</c> refusal's <see cref="BuildBearerChallenge"/> <c>invalid_token</c> challenge, which carries
+    /// the realm and the <c>resource_metadata</c> the <c>DPoP</c> challenges carry. The target URI is
     /// composed by <see cref="DpopRequestReading.ComposeTargetUri"/> from the issuer resolved only once the checks reach
     /// the proof, and is the audience of the resource's nonces
     /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-9">RFC 9449 Section 9</see>: "nonces will be only
@@ -511,9 +622,10 @@ internal static class CredentialEndpointDpopValidation
                 false => DpopTokenEndpointValidation.AlgorithmResolverAnsweredNoListDescription
             },
             JtiStoreUnavailableDescription = DpopResourceAccess.JtiReplayDefenseCouldNotRecordDescription,
-            BearerChallenge = BearerTokenValidation.InvalidTokenChallenge,
+            BearerChallenge = BuildBearerChallenge(OAuthErrors.InvalidToken, scope: null, challenge),
             Realm = challenge.Realm,
-            Scope = challenge.Scope
+            Scope = challenge.Scope,
+            ResourceMetadata = challenge.ResourceMetadata
         };
 
         DpopResourceDecision decision = await DpopResourceAccess.DecideCoreAsync(presentation, checks, cancellationToken).ConfigureAwait(false);
@@ -531,9 +643,12 @@ internal static class CredentialEndpointDpopValidation
     /// why the request was declined, if the request included an access token but failed authentication." and "An algs
     /// parameter SHOULD be included to signal to the client the JWS algorithms that are acceptable for the DPoP proof
     /// JWT.", the algorithms of <paramref name="challenge"/> a proof can be accepted under
-    /// (<see cref="DpopProofValidator.AcceptableProofAlgorithms"/>), the parameter absent when none remains. The
-    /// <paramref name="error"/> is one of the library's own OAuth error codes, within the RFC 6750 Section 3 attribute
-    /// charset.
+    /// (<see cref="AcceptableChallengeAlgorithms"/>), the parameter absent when none remains, and the
+    /// <c>resource_metadata</c> of <paramref name="challenge"/> where it names one
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-5.1">RFC 9728 Section 5.1</see>: "This parameter MAY also
+    /// be used in WWW-Authenticate responses using authorization schemes other than "Bearer" [RFC6750], such as the DPoP
+    /// scheme defined by [RFC9449]."). The <paramref name="error"/> is one of the library's own OAuth error codes, within
+    /// the RFC 6750 Section 3 attribute charset.
     /// </summary>
     /// <param name="error">The error code, for example <see cref="OAuthErrors.InvalidToken"/>, or <see langword="null"/> for none.</param>
     /// <param name="challenge">The parameters every <c>DPoP</c> challenge of the request carries.</param>
@@ -543,26 +658,48 @@ internal static class CredentialEndpointDpopValidation
             challenge.Realm,
             error,
             challenge.Scope,
-            challenge.Algorithms is IReadOnlyList<string> algorithms ? DpopProofValidator.AcceptableProofAlgorithms(algorithms) : null);
+            AcceptableChallengeAlgorithms(challenge.Algorithms),
+            challenge.ResourceMetadata);
+
+
+    /// <summary>
+    /// Composes the <c>Bearer</c> challenge of a library resource through <see cref="BearerTokenChallenge.BuildChallenge"/>,
+    /// the one composition every <c>Bearer</c> challenge of those resources is written by: the <c>realm</c> of
+    /// <paramref name="challenge"/>, the issuer the request is served under, as its <c>DPoP</c> challenge carries it, so the
+    /// resource is one protection space under both schemes
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 Section 3</see>: "A "realm" attribute MAY be
+    /// included to indicate the scope of protection in the manner described in HTTP/1.1 [RFC2617]. The "realm" attribute
+    /// MUST NOT appear more than once."; <see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.5">RFC 9110 Section
+    /// 11.5</see>: "The realm value is a string, generally assigned by the origin server"), then <paramref name="error"/>,
+    /// <paramref name="scope"/> and the <c>resource_metadata</c> of <paramref name="challenge"/> where it names one (RFC 6750
+    /// Section 3: "Other auth-param attributes MAY be used as well.").
+    /// </summary>
+    /// <param name="error">The RFC 6750 Section 3.1 error code, or <see langword="null"/> for none.</param>
+    /// <param name="scope">The <c>scope</c> the challenge names, or <see langword="null"/> for none.</param>
+    /// <param name="challenge">The parameters every challenge of the request carries.</param>
+    /// <returns>The <c>WWW-Authenticate</c> value.</returns>
+    internal static string BuildBearerChallenge(string? error, string? scope, ResourceChallengeContext challenge) =>
+        BearerTokenChallenge.BuildChallenge(
+            realm: challenge.Realm, error: error, scope: scope, resourceMetadata: challenge.ResourceMetadata);
 
 
     /// <summary>
     /// Composes the challenge a request that carries no usable <c>Authorization</c> header is answered
     /// with: one value naming both schemes the resource accepts,
-    /// <c>Bearer &lt;parameter&gt;, DPoP realm="...", algs="..."</c>, with no <c>error</c>.
+    /// <c>Bearer realm="...", ..., DPoP realm="...", algs="..."</c>, with no <c>error</c>.
     /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 §3.1</see>: "If the
     /// request lacks any authentication information (e.g., the client was unaware that authentication
     /// is necessary or attempted using an unsupported authentication method), the resource server
     /// SHOULD NOT include an error code or other error information." and
     /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 §7.2</see>: "If no
     /// authentication information has been included with the request, then the challenges SHOULD NOT
-    /// include an error code or other error information". The <c>Bearer</c> challenge keeps the auth-param
-    /// RFC 6750 §3 requires ("This scheme MUST be followed by one or more auth-param values"): the
-    /// <c>scope</c> the resource requires when it names one, and otherwise the <c>realm</c> of the
-    /// issuer the request is served under. The <c>DPoP</c> challenge is <see cref="BuildDpopChallenge"/>'s with no
-    /// <c>error</c>.
+    /// include an error code or other error information". The <c>Bearer</c> challenge is <see cref="BuildBearerChallenge"/>'s
+    /// with no <c>error</c>: the <c>realm</c> of the issuer the request is served under where one resolves, the
+    /// <c>scope</c> the resource requires when it names one and the <c>resource_metadata</c> where the request names one,
+    /// at least one of them the auth-param RFC 6750 Section 3 requires ("This scheme MUST be followed by one or more auth-param
+    /// values"). The <c>DPoP</c> challenge is <see cref="BuildDpopChallenge"/>'s with no <c>error</c>.
     /// </summary>
-    /// <param name="bearerChallenge">The <c>Bearer</c> challenge, <c>scope</c> or <c>realm</c>, composed by <see cref="BearerTokenChallenge.BuildChallenge"/>.</param>
+    /// <param name="bearerChallenge">The <c>Bearer</c> challenge composed by <see cref="BuildBearerChallenge"/>.</param>
     /// <param name="challenge">The parameters every <c>DPoP</c> challenge of the request carries.</param>
     /// <returns>The <c>WWW-Authenticate</c> value.</returns>
     internal static string BuildMissingCredentialsChallenge(string bearerChallenge, ResourceChallengeContext challenge) =>
@@ -574,23 +711,23 @@ internal static class CredentialEndpointDpopValidation
     /// body, since <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see> says the resource
     /// server "SHOULD NOT include an error code or other error information", and the challenge of
     /// <see cref="BuildMissingCredentialsChallenge"/>, attached through <see cref="WithDpopChallenge"/>, whose
-    /// <c>Bearer</c> part names the scope the resource requires or, where it names none, the realm. A resource that names
-    /// no scope at a server where no issuer resolves leaves the <c>Bearer</c> challenge no auth-param to carry
+    /// <c>Bearer</c> part names the realm, the scope the resource requires and the <c>resource_metadata</c>, each where the
+    /// request has it. A resource that names no scope at a server where no issuer resolves leaves the <c>Bearer</c>
+    /// challenge no auth-param to carry
     /// (<see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 Section 3</see>: "This scheme MUST be
     /// followed by one or more auth-param values."): the fault is the server's own wiring, and the request is answered
     /// 500 <c>server_error</c> with <see cref="WellKnownOAuthErrorDescriptions.ServerNotReady"/> and no challenge, as a
     /// token validation answers an issuer that does not resolve.
     /// </summary>
-    /// <param name="challenge">The parameters every <c>DPoP</c> challenge of the request carries.</param>
+    /// <param name="challenge">The parameters every challenge of the request carries.</param>
     /// <returns>The 401 refusal, or the 500 answer to an unresolved issuer.</returns>
     private static ServerHttpResponse RefuseMissingCredentials(ResourceChallengeContext challenge)
     {
         string? bearerChallenge = challenge switch
         {
-            { Scope: string scope } => BearerTokenChallenge.BuildChallenge(scope: scope),
-            { Realm: string realm } => BearerTokenChallenge.BuildChallenge(realm: realm),
+            { Realm: null, Scope: null, ResourceMetadata: null } => null,
 
-            _ => null
+            _ => BuildBearerChallenge(error: null, challenge.Scope, challenge)
         };
 
         return bearerChallenge is null
@@ -600,38 +737,76 @@ internal static class CredentialEndpointDpopValidation
 
 
     /// <summary>
-    /// The issuer in a form the <c>realm</c> quoted-string can carry. The realm's value is an
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.6.4">RFC 9110 §5.6.4</see>
+    /// The issuer in a form the <c>realm</c> quoted-string can carry, its URI form (<see cref="UriTextOf"/>). The
+    /// realm's value is an <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.6.4">RFC 9110 Section 5.6.4</see>
     /// quoted-string, whose characters are HTAB, SP and visible US-ASCII ("qdtext = HTAB / SP / %x21 /
     /// %x23-5B / %x5D-7E / obs-text", <c>"</c> and <c>\</c> through quoted-pair), while an issuer accepted by
-    /// <see cref="IssuerIdentifier.Parse"/> may hold Unicode text. An issuer written
-    /// in that repertoire is used as written. Otherwise it is mapped to its URI form as
-    /// <see href="https://www.rfc-editor.org/rfc/rfc3987#section-3.1">RFC 3987 Section 3.1</see> maps an IRI. A
-    /// non-ASCII host is written in its IDNA ASCII form, the conversion of the ireg-name the section
-    /// permits a system accepting IRIs to apply before its step 2: "Replace the ireg-name part of the IRI
-    /// by the part converted using the ToASCII operation specified in section 4.1 of [RFC3490] on each
-    /// dot-separated label, and by using U+002E (FULL STOP) as a label separator, with the flag
-    /// UseSTD3ASCIIRules set to TRUE, and with the flag AllowUnassigned set to FALSE for creating IRIs and
-    /// set to TRUE otherwise." Every other non-ASCII character is written as the percent-encoding of its
-    /// UTF-8 octets, the section's steps 2.1 and 2.2: "Convert the character to a sequence of one or more
-    /// octets using UTF-8 [RFC3629]." and "Convert each octet to %HH, where HH is the hexadecimal notation
-    /// of the octet value."
+    /// <see cref="IssuerIdentifier.Parse"/> may hold Unicode text.
     /// </summary>
     /// <param name="issuerUri">The issuer the request is served under.</param>
     /// <returns>The issuer text, in visible US-ASCII.</returns>
-    internal static string HeaderSafeIssuer(Uri issuerUri)
+    internal static string HeaderSafeIssuer(Uri issuerUri) => UriTextOf(issuerUri);
+
+
+    /// <summary>
+    /// The text every URL the library's resources write into a header or a document is written as, the URL's URI form,
+    /// so one URL has one text in the <c>realm</c>, the <c>resource_metadata</c> pointer, the documents'
+    /// <c>resource</c> and <c>authorization_servers</c>, the well-known location and the target comparison. A URL
+    /// written in visible US-ASCII is used as written. Otherwise it is mapped as
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3987#section-3.1">RFC 3987 Section 3.1</see> maps an IRI ("when an
+    /// IRI is used for resource retrieval, the resource that the IRI locates is the same as the one located by the URI
+    /// obtained after converting the IRI"). A non-ASCII host is written in its IDNA ASCII form
+    /// (<see cref="Uri.IdnHost"/>), the conversion of the ireg-name the section permits a system accepting IRIs to apply
+    /// before its step 2: "Replace the ireg-name part of the IRI by the part converted using the ToASCII operation
+    /// specified in section 4.1 of [RFC3490] on each dot-separated label, and by using U+002E (FULL STOP) as a label
+    /// separator, with the flag UseSTD3ASCIIRules set to TRUE, and with the flag AllowUnassigned set to FALSE for creating
+    /// IRIs and set to TRUE otherwise." Every other non-ASCII character is written as the percent-encoding of its UTF-8
+    /// octets (<see cref="Uri.AbsoluteUri"/>), the section's steps 2.1 and 2.2: "Convert the character to a sequence of
+    /// one or more octets using UTF-8 [RFC3629]." and "Convert each octet to %HH, where HH is the hexadecimal notation
+    /// of the octet value." A URL whose host the ToASCII operation does not map has no such form, and
+    /// <see cref="Uri.IdnHost"/> raises <see cref="UriFormatException"/> for it.
+    /// </summary>
+    /// <param name="uri">The absolute URL.</param>
+    /// <returns>The URL's text, in visible US-ASCII.</returns>
+    internal static string UriTextOf(Uri uri)
     {
-        string original = issuerUri.OriginalString;
+        string original = uri.OriginalString;
         if(IsVisibleAscii(original))
         {
             return original;
         }
 
-        Uri asciiHost = IsVisibleAscii(issuerUri.Host)
-            ? issuerUri
-            : new UriBuilder(issuerUri) { Host = issuerUri.IdnHost }.Uri;
+        Uri asciiHost = IsVisibleAscii(uri.Host)
+            ? uri
+            : new UriBuilder(uri) { Host = uri.IdnHost }.Uri;
 
         return asciiHost.AbsoluteUri;
+    }
+
+
+    /// <summary>
+    /// The URI form of <paramref name="uri"/> (<see cref="UriTextOf"/>), or <see langword="null"/> where it has none: a
+    /// relative URI, which names no host, and a URL whose host the IDNA ToASCII operation does not map
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc3987#section-3.1">RFC 3987 Section 3.1</see>: "The ToASCII operation
+    /// may fail, but this would mean that the IRI cannot be resolved.").
+    /// </summary>
+    /// <param name="uri">The URL.</param>
+    /// <returns>The URL's text in visible US-ASCII, or <see langword="null"/>.</returns>
+    internal static string? UriTextOrNullOf(Uri uri)
+    {
+        if(!uri.IsAbsoluteUri)
+        {
+            return null;
+        }
+
+        try
+        {
+            return UriTextOf(uri);
+        }
+        catch(UriFormatException)
+        {
+            return null;
+        }
     }
 
 
@@ -657,18 +832,24 @@ internal static class CredentialEndpointDpopValidation
     /// that <see cref="BearerTokenValidation"/> built with its <c>Bearer error="invalid_token"</c>
     /// challenge is answered, for a <c>DPoP</c>-scheme presentation, with the <c>DPoP</c> challenge
     /// carrying the same error instead (RFC 9449 §7.2, "the corresponding challenge SHOULD be used to
-    /// deliver error information"), attached through <see cref="WithDpopChallenge"/>. Any other response is returned
-    /// unchanged; a 500 server fault carries no challenge.
+    /// deliver error information"), attached through <see cref="WithDpopChallenge"/>, and for a <c>Bearer</c>-scheme
+    /// presentation with the resource's own <c>invalid_token</c> challenge, <see cref="BuildBearerChallenge"/>'s with the
+    /// realm and the <c>resource_metadata</c>, set by name over the validation's. Any other response is returned unchanged;
+    /// a 500 server fault carries no challenge.
     /// </summary>
     /// <param name="refusal">The refusal <see cref="BearerTokenValidation"/> returned.</param>
     /// <param name="isDpopPresentation">Whether the token was presented under the <c>DPoP</c> scheme.</param>
-    /// <param name="challenge">The parameters every <c>DPoP</c> challenge of the request carries.</param>
+    /// <param name="challenge">The parameters every challenge of the request carries.</param>
     /// <returns>The refusal with the challenge of the presentation's scheme.</returns>
     internal static ServerHttpResponse InPresentationScheme(
         ServerHttpResponse refusal, bool isDpopPresentation, ResourceChallengeContext challenge) =>
-        isDpopPresentation && refusal.StatusCode == 401
-            ? WithDpopChallenge(refusal, BuildDpopChallenge(OAuthErrors.InvalidToken, challenge))
-            : refusal;
+        (refusal.StatusCode, isDpopPresentation) switch
+        {
+            (401, true) => WithDpopChallenge(refusal, BuildDpopChallenge(OAuthErrors.InvalidToken, challenge)),
+            (401, false) => refusal.WithHeader(
+                WellKnownHttpHeaderNames.WwwAuthenticate, BuildBearerChallenge(OAuthErrors.InvalidToken, scope: null, challenge)),
+            _ => refusal
+        };
 
 
     /// <summary>
@@ -784,10 +965,16 @@ internal static class CredentialEndpointDpopValidation
     /// <c>DPoP</c> scheme, lines that all name <c>DPoP</c> (<see cref="AuthorizationFieldReading.RepeatedScheme"/>) are
     /// answered with the <c>DPoP</c> challenge alone, lines that all name <c>Bearer</c> with the <c>Bearer</c> challenge
     /// alone, and any other lines with both, the <c>Bearer</c> one first; a <c>DPoP</c> challenge is attached through
-    /// <see cref="WithDpopChallenge"/>. Without a <c>DPoP</c> challenge the <c>Bearer</c> one is sent alone.
+    /// <see cref="WithDpopChallenge"/>. Without a <c>DPoP</c> challenge the <c>Bearer</c> one is sent alone, composed from
+    /// <paramref name="bearerRealm"/>. At a resource accepting the <c>DPoP</c> scheme the <c>Bearer</c> challenge is
+    /// <see cref="BuildBearerChallenge"/>'s, the one composition of the library resources' <c>Bearer</c> challenges,
+    /// carrying the <c>realm</c> and the <c>resource_metadata</c> its <c>DPoP</c> challenge carries.
     /// </summary>
     /// <param name="authorization">The request's <c>Authorization</c> field reading, a repeated field.</param>
-    /// <param name="bearerRealm">The <c>realm</c> of the <c>Bearer</c> challenge, or <see langword="null"/> where no issuer resolves.</param>
+    /// <param name="bearerRealm">
+    /// The <c>realm</c> of the <c>Bearer</c> challenge at a resource that accepts no <c>DPoP</c> scheme, or
+    /// <see langword="null"/> where no issuer resolves.
+    /// </param>
     /// <param name="dpopChallenge">The parameters of the <c>DPoP</c> challenge, or <see langword="null"/> at a resource that accepts no <c>DPoP</c> scheme.</param>
     /// <returns>The 400 refusal with its challenge.</returns>
     private static ServerHttpResponse RefuseRepeatedField(
@@ -795,7 +982,12 @@ internal static class CredentialEndpointDpopValidation
     {
         ServerHttpResponse refusal = ServerHttpResponse.BadRequest(
             OAuthErrors.InvalidRequest, WellKnownOAuthErrorDescriptions.MalformedAuthorizationField);
-        string bearerChallenge = BearerTokenChallenge.BuildChallenge(realm: bearerRealm, error: OAuthErrors.InvalidRequest);
+        string bearerChallenge = dpopChallenge switch
+        {
+            null => BearerTokenChallenge.BuildChallenge(realm: bearerRealm, error: OAuthErrors.InvalidRequest),
+            { } resourceChallenge => BuildBearerChallenge(OAuthErrors.InvalidRequest, scope: null, resourceChallenge)
+        };
+
         if(dpopChallenge is null)
         {
             return refusal.WithHeader(WellKnownHttpHeaderNames.WwwAuthenticate, bearerChallenge);

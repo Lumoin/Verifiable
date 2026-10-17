@@ -29,6 +29,13 @@ internal sealed record InProcessAuthCodeDriveOptions
     public string? Nonce { get; init; }
 
     /// <summary>
+    /// The <c>resource</c> PAR field, the resource indicator of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 Section 2</see>, or
+    /// <see langword="null"/> to omit it.
+    /// </summary>
+    public string? Resource { get; init; }
+
+    /// <summary>
     /// The authorize-time session identifier (<c>sid</c>) to stamp via <c>SetSessionId</c>, or
     /// <see langword="null"/> to leave it unset.
     /// </summary>
@@ -129,6 +136,11 @@ internal static class InProcessAuthCodeDriver
         if(options.Nonce is not null)
         {
             parFields[WellKnownJwtClaimNames.Nonce] = options.Nonce;
+        }
+
+        if(options.Resource is not null)
+        {
+            parFields[OAuthRequestParameterNames.Resource] = options.Resource;
         }
 
         ServerHttpResponse parResponse = options.UsesRealWireTransport

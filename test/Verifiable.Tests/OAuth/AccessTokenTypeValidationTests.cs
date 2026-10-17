@@ -346,7 +346,10 @@ resolver,
             Method: WellKnownHttpMethods.Post,
             Fields: new RequestFields(),
             Headers: headers,
-            RouteValues: RouteValues.Empty);
+            RouteValues: RouteValues.Empty)
+        {
+            RequestTarget = path
+        };
 
         ExchangeContext context = [];
         context.SetTenantId(segment);

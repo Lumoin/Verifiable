@@ -366,7 +366,7 @@ public static class Oid4VciEndpoints
                 //(RFC 9449 Section 7.2).
                 CredentialEndpointDpopValidation.LibraryResourcePresentation presentation =
                     await CredentialEndpointDpopValidation.ReadPresentationAsync(
-                        server, registration, context, requiredScope: null, ct).ConfigureAwait(false);
+                        server, registration, context, WellKnownEndpointNames.Oid4VciCredential, ct).ConfigureAwait(false);
                 if(presentation.Refusal is not null)
                 {
                     return Respond(presentation.Refusal);
@@ -375,7 +375,7 @@ public static class Oid4VciEndpoints
                 string bearerToken = presentation.AccessToken!;
                 bool isDpopPresentation = presentation.IsDpopPresentation;
                 (JwtPayload? accessToken, ServerHttpResponse? validationFailure) =
-                    await BearerTokenValidation.ValidateAtLibraryResourceAsync(bearerToken, server, registration, context, ct)
+                    await BearerTokenValidation.ValidateAtLibraryResourceAsync(bearerToken, WellKnownEndpointNames.Oid4VciCredential, server, registration, context, ct)
                         .ConfigureAwait(false);
                 //RFC 9449 §7.2: the refusal of a token presented under the DPoP scheme is delivered
                 //in that scheme's challenge.
@@ -710,7 +710,7 @@ public static class Oid4VciEndpoints
                 //(RFC 9449 Section 7.2).
                 CredentialEndpointDpopValidation.LibraryResourcePresentation presentation =
                     await CredentialEndpointDpopValidation.ReadPresentationAsync(
-                        server, registration, context, requiredScope: null, ct).ConfigureAwait(false);
+                        server, registration, context, WellKnownEndpointNames.Oid4VciDeferredCredential, ct).ConfigureAwait(false);
                 if(presentation.Refusal is not null)
                 {
                     return Respond(presentation.Refusal);
@@ -719,7 +719,7 @@ public static class Oid4VciEndpoints
                 string bearerToken = presentation.AccessToken!;
                 bool isDpopPresentation = presentation.IsDpopPresentation;
                 (JwtPayload? accessToken, ServerHttpResponse? validationFailure) =
-                    await BearerTokenValidation.ValidateAtLibraryResourceAsync(bearerToken, server, registration, context, ct)
+                    await BearerTokenValidation.ValidateAtLibraryResourceAsync(bearerToken, WellKnownEndpointNames.Oid4VciDeferredCredential, server, registration, context, ct)
                         .ConfigureAwait(false);
                 //RFC 9449 §7.2: the refusal of a token presented under the DPoP scheme is delivered
                 //in that scheme's challenge.
@@ -1815,7 +1815,7 @@ public static class Oid4VciEndpoints
                 //(RFC 9449 Section 7.2).
                 CredentialEndpointDpopValidation.LibraryResourcePresentation presentation =
                     await CredentialEndpointDpopValidation.ReadPresentationAsync(
-                        server, registration, context, requiredScope: null, ct).ConfigureAwait(false);
+                        server, registration, context, WellKnownEndpointNames.Oid4VciNotification, ct).ConfigureAwait(false);
                 if(presentation.Refusal is not null)
                 {
                     return Respond(presentation.Refusal);
@@ -1824,7 +1824,7 @@ public static class Oid4VciEndpoints
                 string bearerToken = presentation.AccessToken!;
                 bool isDpopPresentation = presentation.IsDpopPresentation;
                 (JwtPayload? accessToken, ServerHttpResponse? validationFailure) =
-                    await BearerTokenValidation.ValidateAtLibraryResourceAsync(bearerToken, server, registration, context, ct)
+                    await BearerTokenValidation.ValidateAtLibraryResourceAsync(bearerToken, WellKnownEndpointNames.Oid4VciNotification, server, registration, context, ct)
                         .ConfigureAwait(false);
                 //RFC 9449 §7.2: the refusal of a token presented under the DPoP scheme is delivered
                 //in that scheme's challenge.

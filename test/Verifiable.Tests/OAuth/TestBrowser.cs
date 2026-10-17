@@ -106,7 +106,10 @@ internal static class TestBrowser
             Method: "GET",
             Fields: fields,
             Headers: RequestHeaders.Empty,
-            RouteValues: RouteValues.Empty);
+            RouteValues: RouteValues.Empty)
+        {
+            RequestTarget = authorizePath
+        };
 
         context.SetRegistration(registration);
 

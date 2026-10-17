@@ -8,6 +8,7 @@ using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vci;
+using Verifiable.OAuth.ProtectedResource;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tests.WebFinger;
@@ -589,6 +590,293 @@ internal sealed class Oid4VciDeferredAndNotificationTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-5.1">RFC 9728 Section 5.1</see>: "resource_metadata:
+    /// The URL of the protected resource metadata.", with <see href="https://www.rfc-editor.org/rfc/rfc9728#section-1.2">Section
+    /// 1.2</see>: "Resource Identifier: The protected resource's resource identifier, which is a URL that uses the https
+    /// scheme" and <see href="https://www.rfc-editor.org/rfc/rfc3987#section-3.1">RFC 3987 Section 3.1</see>: "Replace the
+    /// ireg-name part of the IRI by the part converted using the ToASCII operation specified in section 4.1 of [RFC3490]
+    /// on each dot-separated label". Under a registration allowing
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/> whose issuer is configured as
+    /// <c>https://b</c> U+00FC <c>cher.example/tenant</c>, a request without credentials sent over a raw TLS connection
+    /// to the resource a row addresses is answered 401 with an empty body and exactly the one challenge whose
+    /// <c>realm</c> is <c>https://xn--bcher-kva.example/tenant</c> and whose <c>resource_metadata</c> is the resource's
+    /// document URL under the host <c>xn--bcher-kva.example</c>, in both the <c>Bearer</c> and the <c>DPoP</c> challenge.
+    /// The rows: UserInfo, whose challenges carry <c>scope="openid"</c>; the Credential Endpoint; the Deferred Credential
+    /// Endpoint; the Notification Endpoint.
+    /// </summary>
+    /// <param name="row">The resource addressed.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(UserInfoEndpointRow)]
+    [DataRow(CredentialEndpointRow)]
+    [DataRow(DeferredEndpointRow)]
+    [DataRow(NotificationEndpointRow)]
+    public async Task LibraryResourceUnderAnInternationalizedIssuerNamesItsDocumentInUriFormAsync(string row)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, LibraryResourceCapabilities).ConfigureAwait(false);
+        await WireProtectedEndpointSeamsAsync(host).ConfigureAwait(false);
+        await ServeUnderTheInternationalizedIssuerAsync(host, material).ConfigureAwait(false);
+        string path = TestHostShell.ComposeEndpointPath(EndpointNameOf(row), material.Registration.TenantId.Value);
+        string documentUrl = $"{InternationalizedAuthorityInUriForm}/.well-known/oauth-protected-resource{path}";
+        string? scope = string.Equals(row, UserInfoEndpointRow, StringComparison.Ordinal) ? WellKnownScopes.OpenId : null;
+        string scopeParameter = scope is null ? string.Empty : $", scope=\"{scope}\"";
+
+        HttpResponseData response = await SendWithoutCredentialsAsync(host, material, row).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The request is answered without a server fault.");
+        Assert.AreEqual(401, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            $"Bearer realm=\"{InternationalizedIssuerInUriForm}\"{scopeParameter}, resource_metadata=\"{documentUrl}\", "
+                + ResourceDpopProofs.DpopChallenge(InternationalizedIssuerInUriForm, error: null, scope, new Uri(documentUrl)),
+            Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
+        Assert.AreEqual(string.Empty, response.Body, "No error code or other error information.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-2">RFC 9728 Section 2</see>: "resource REQUIRED. The
+    /// protected resource's resource identifier, as defined in Section 1.2." and "authorization_servers OPTIONAL. JSON
+    /// array containing a list of OAuth authorization server issuer identifiers", with
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3987#section-3.1">RFC 3987 Section 3.1</see>: "when an IRI is used for
+    /// resource retrieval, the resource that the IRI locates is the same as the one located by the URI obtained after
+    /// converting the IRI". Under a registration allowing
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/> whose issuer is configured as
+    /// <c>https://b</c> U+00FC <c>cher.example/tenant</c>, a GET of the document of the resource a row addresses over a raw
+    /// TLS connection is answered 200 with exactly the document whose <c>resource</c> is the resource's URL under the host
+    /// <c>xn--bcher-kva.example</c> and whose <c>authorization_servers</c> is
+    /// <c>["https://xn--bcher-kva.example/tenant"]</c>. The rows: UserInfo, its <c>scopes_supported</c>
+    /// <c>["openid"]</c>; the Deferred Credential Endpoint.
+    /// </summary>
+    /// <param name="row">The resource whose document is fetched.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(UserInfoEndpointRow)]
+    [DataRow(DeferredEndpointRow)]
+    public async Task LibraryResourceDocumentUnderAnInternationalizedIssuerNamesItsUrlsInUriFormAsync(string row)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, LibraryResourceCapabilities).ConfigureAwait(false);
+        await WireProtectedEndpointSeamsAsync(host).ConfigureAwait(false);
+        await ServeUnderTheInternationalizedIssuerAsync(host, material).ConfigureAwait(false);
+        string path = TestHostShell.ComposeEndpointPath(EndpointNameOf(row), material.Registration.TenantId.Value);
+        string scopesMember = string.Equals(row, UserInfoEndpointRow, StringComparison.Ordinal) ? ",\"scopes_supported\":[\"openid\"]" : string.Empty;
+        string algorithms = "[" + string.Join(",", ResourceDpopProofs.AcceptedProofAlgorithms.Split(' ').Select(static name => $"\"{name}\"")) + "]";
+
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Get, new Uri(host.Host("default").HttpBaseAddress!, "/.well-known/oauth-protected-resource" + path), [],
+            ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The document is served without a server fault.");
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            $"{{\"resource\":\"{InternationalizedAuthorityInUriForm}{path}\",\"authorization_servers\":[\"{InternationalizedIssuerInUriForm}\"]"
+            + $"{scopesMember},\"bearer_methods_supported\":[\"header\"],\"dpop_signing_alg_values_supported\":{algorithms}}}",
+            response.Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-2">RFC 9728 Section 2</see>: "resource REQUIRED. The
+    /// protected resource's resource identifier, as defined in Section 1.2.", with
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-1.2">Section 1.2</see>: "a URL that uses the https
+    /// scheme" and <see href="https://www.rfc-editor.org/rfc/rfc3987#section-3.1">RFC 3987 Section 3.1</see>: "Replace the
+    /// ireg-name part of the IRI by the part converted using the ToASCII operation". Under a registration allowing
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/> whose issuer is configured as
+    /// <c>https://b</c> U+00FC <c>cher.example/tenant</c>, a GET of the issuer's own document over a raw TLS connection is
+    /// answered 200 with the document whose <c>resource</c> is <c>https://xn--bcher-kva.example/tenant</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task IssuerDocumentUnderAnInternationalizedIssuerNamesTheIssuerInUriFormAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, LibraryResourceCapabilities).ConfigureAwait(false);
+        await WireProtectedEndpointSeamsAsync(host).ConfigureAwait(false);
+        await ServeUnderTheInternationalizedIssuerAsync(host, material).ConfigureAwait(false);
+
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Get,
+            new Uri(host.Host("default").HttpBaseAddress!,
+                TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.ProtectedResourceMetadata, material.Registration.TenantId.Value)),
+            [], ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+        using JsonDocument document = JsonDocument.Parse(response.Body);
+        Assert.AreEqual(InternationalizedIssuerInUriForm, document.RootElement.GetProperty("resource").GetString());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">RFC 9728 Section 3.3</see>: "The resource value
+    /// returned MUST be identical to the protected resource's resource identifier value into which the well-known URI
+    /// path suffix was inserted to create the URL used to retrieve the metadata.", with
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.2">Section 3.2</see>: "An error response uses the
+    /// applicable HTTP status code value." A document location two resources' documents are both located at, the same
+    /// path and the same query, names no one resource the document could state, a fault of the server's own wiring:
+    /// under a registration allowing <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>, a GET
+    /// of that location over a raw TLS connection is answered 500 with exactly the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c>, and a
+    /// UserInfo GET without credentials is answered 401 with a challenge naming no <c>resource_metadata</c>. The rows:
+    /// the endpoint resolver answering UserInfo at <c>/connect/&lt;t&gt;/resource</c> and the Credential Endpoint at
+    /// <c>/connect/&lt;t&gt;/resource/</c>, one location under Section 3.1's rule for the path's terminating slash ("any
+    /// terminating slash (/) following the host component MUST be removed"); UserInfo at <c>/&lt;t&gt;</c>, whose location
+    /// is the issuer's own document's, the UserInfo request not sent.
+    /// </summary>
+    /// <param name="row">The endpoint resolver's answers.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(TrailingSlashLocationsRow)]
+    [DataRow(IssuerDocumentLocationRow)]
+    public async Task DocumentLocationServingTwoResourcesIsAServerErrorAsync(string row)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, LibraryResourceCapabilities).ConfigureAwait(false);
+        await WireProtectedEndpointSeamsAsync(host).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        (string UserInfoUrlPath, string CredentialUrlPath, IReadOnlyList<string> Locations) wiring = row switch
+        {
+            TrailingSlashLocationsRow => (
+                $"/connect/{segment}/resource",
+                $"/connect/{segment}/resource/",
+                [$"/.well-known/oauth-protected-resource/connect/{segment}/resource"]),
+            IssuerDocumentLocationRow => (
+                $"/{segment}",
+                TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.Oid4VciCredential, segment),
+                [TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.ProtectedResourceMetadata, segment)]),
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown location row.")
+        };
+
+        string userInfoUrlPath = wiring.UserInfoUrlPath;
+        await AnswerUserInfoAndTheCredentialEndpointAtAsync(host, userInfoUrlPath, wiring.CredentialUrlPath).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Uri baseAddress = host.Host("default").HttpBaseAddress!;
+
+        foreach(string location in wiring.Locations)
+        {
+            HttpResponseData document = await RawHttpsRequest.SendAsync(
+                host, WellKnownHttpMethods.Get, new Uri(baseAddress, location), [], ReadOnlyMemory<byte>.Empty,
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The location is answered without a server fault.");
+            Assert.AreEqual(500, document.StatusCode, document.Body);
+            Assert.AreEqual(
+                /*lang=json,strict*/ "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}",
+                document.Body);
+        }
+
+        if(!string.Equals(row, IssuerDocumentLocationRow, StringComparison.Ordinal))
+        {
+            HttpResponseData challenged = await RawHttpsRequest.SendAsync(
+                host, WellKnownHttpMethods.Get, new Uri(baseAddress, userInfoUrlPath), [], ReadOnlyMemory<byte>.Empty,
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.AreEqual(401, challenged.StatusCode, challenged.Body);
+            Assert.IsNull(
+                ProtectedResourceChallenge.TryReadResourceMetadata(
+                    Assert.ContainsSingle(challenged.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate))),
+                "No challenge names a document.");
+        }
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3">RFC 9728 Section 3</see>: "available at a URL formed
+    /// by inserting a well-known URI string into the protected resource's resource identifier between the host component
+    /// and the path and/or query components, if any", with
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">Section 3.3</see>: "The resource value returned
+    /// MUST be identical to the protected resource's resource identifier value into which the well-known URI path suffix
+    /// was inserted to create the URL used to retrieve the metadata." Two resources whose identifiers differ in their
+    /// query alone have two document locations, the query kept after the inserted path: under a registration allowing
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/> whose endpoint resolver answers
+    /// UserInfo at <c>/connect/&lt;t&gt;/resource?kind=user</c> and the Credential Endpoint at
+    /// <c>/connect/&lt;t&gt;/resource?kind=credential</c>, a GET of the location of the resource a row names, over a raw TLS
+    /// connection, is answered 200 with the document whose <c>resource</c> is that resource's identifier. The rows:
+    /// UserInfo, whose GET without credentials at its identifier is also answered 401 with exactly the challenge naming
+    /// UserInfo's own location as <c>resource_metadata</c>; the Credential Endpoint.
+    /// </summary>
+    /// <param name="row">The resource whose document is fetched: <see cref="UserInfoEndpointRow"/> or <see cref="CredentialEndpointRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(UserInfoEndpointRow)]
+    [DataRow(CredentialEndpointRow)]
+    public async Task ResourcesWhoseIdentifiersDifferInTheirQueryAreServedTheirOwnDocumentsAsync(string row)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, LibraryResourceCapabilities).ConfigureAwait(false);
+        await WireProtectedEndpointSeamsAsync(host).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        string userInfoUrlPath = $"/connect/{segment}/resource?kind=user";
+        await AnswerUserInfoAndTheCredentialEndpointAtAsync(
+            host, userInfoUrlPath, $"/connect/{segment}/resource?kind=credential").ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Uri baseAddress = host.Host("default").HttpBaseAddress!;
+        string authority = new Uri(IssuerOf(host, material)).GetLeftPart(UriPartial.Authority);
+        string kind = string.Equals(row, UserInfoEndpointRow, StringComparison.Ordinal) ? "user" : "credential";
+        string identifier = $"{authority}/connect/{segment}/resource?kind={kind}";
+        string location = $"/.well-known/oauth-protected-resource/connect/{segment}/resource?kind={kind}";
+
+        HttpResponseData document = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Get, new Uri(baseAddress, location), [], ReadOnlyMemory<byte>.Empty,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The location is answered without a server fault.");
+        Assert.AreEqual(200, document.StatusCode, document.Body);
+        using JsonDocument parsed = JsonDocument.Parse(document.Body);
+        Assert.AreEqual(identifier, parsed.RootElement.GetProperty("resource").GetString());
+
+        if(string.Equals(row, UserInfoEndpointRow, StringComparison.Ordinal))
+        {
+            string issuer = IssuerOf(host, material);
+            string documentUrl = authority + location;
+            HttpResponseData challenged = await RawHttpsRequest.SendAsync(
+                host, WellKnownHttpMethods.Get, new Uri(baseAddress, userInfoUrlPath), [], ReadOnlyMemory<byte>.Empty,
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.AreEqual(401, challenged.StatusCode, challenged.Body);
+            Assert.AreEqual(
+                $"Bearer realm=\"{issuer}\", scope=\"openid\", resource_metadata=\"{documentUrl}\", "
+                    + ResourceDpopProofs.DpopChallenge(issuer, error: null, WellKnownScopes.OpenId, new Uri(documentUrl)),
+                Assert.ContainsSingle(challenged.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
+        }
+    }
+
+
+    /// <summary>
+    /// Wires the host's endpoint resolver to answer UserInfo at <paramref name="userInfoUrlPath"/> and the Credential
+    /// Endpoint at <paramref name="credentialUrlPath"/>, each under the authority of the URL it answers today, so the two
+    /// resources' identifiers and document locations are the ones a row names.
+    /// </summary>
+    /// <param name="host">The host whose integration is altered.</param>
+    /// <param name="userInfoUrlPath">UserInfo's path, with any query.</param>
+    /// <param name="credentialUrlPath">The Credential Endpoint's path, with any query.</param>
+    /// <returns>A task that completes when the alteration is published.</returns>
+    private static Task AnswerUserInfoAndTheCredentialEndpointAtAsync(TestHostShell host, string userInfoUrlPath, string credentialUrlPath) =>
+        TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            ResolveEndpointUriDelegate resolve = candidateIntegration.ResolveEndpointUriAsync!;
+            candidateIntegration.ResolveEndpointUriAsync = async (endpointKey, registration, context, cancellationToken) =>
+            {
+                Uri? resolved = await resolve(endpointKey, registration, context, cancellationToken).ConfigureAwait(false);
+
+                return (endpointKey, resolved) switch
+                {
+                    (string key, Uri url) when string.Equals(key, WellKnownEndpointNames.UserInfo, StringComparison.Ordinal) =>
+                        new Uri(url.GetLeftPart(UriPartial.Authority) + userInfoUrlPath),
+                    (string key, Uri url) when string.Equals(key, WellKnownEndpointNames.Oid4VciCredential, StringComparison.Ordinal) =>
+                        new Uri(url.GetLeftPart(UriPartial.Authority) + credentialUrlPath),
+                    _ => resolved
+                };
+            };
+        });
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 §7.2</see>: "If the
     /// mechanism used to attempt authentication could be established unambiguously, then the
     /// corresponding challenge SHOULD be used to deliver error information". An access token whose
@@ -854,7 +1142,7 @@ internal sealed class Oid4VciDeferredAndNotificationTests
     /// the issuer. An access token from the Pre-Authorized Code grant, issued while the application's audience
     /// resolver names another resource, carries that resource alone as its <c>aud</c>; presented over the wire
     /// under the <c>Bearer</c> scheme with a well-formed request body at the endpoint a row addresses, it is
-    /// refused with 401, <c>invalid_token</c> and the one challenge <c>Bearer error="invalid_token"</c>.
+    /// refused with 401, <c>invalid_token</c> and the one challenge <c>Bearer realm="&lt;issuer&gt;", error="invalid_token"</c>.
     /// </summary>
     /// <param name="endpointName">The protected endpoint addressed.</param>
     /// <returns>A task that completes when the assertions have run.</returns>
@@ -881,7 +1169,7 @@ internal sealed class Oid4VciDeferredAndNotificationTests
             host, material, endpointName, "Bearer " + accessToken, ProtectedRequestBody(endpointName)).ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        AssertInvalidTokenRefusal(response, body);
+        AssertInvalidTokenRefusal(response, body, IssuerOf(host, material));
     }
 
 
@@ -893,7 +1181,7 @@ internal sealed class Oid4VciDeferredAndNotificationTests
     /// audience." An access token from the Pre-Authorized Code grant, signed again under the registration's
     /// access-token key with its <c>aud</c> claim removed, presented over the wire under the <c>Bearer</c> scheme
     /// with a well-formed request body at the Credential, the Deferred Credential or the Notification endpoint, is
-    /// refused with 401, <c>invalid_token</c> and the one challenge <c>Bearer error="invalid_token"</c>.
+    /// refused with 401, <c>invalid_token</c> and the one challenge <c>Bearer realm="&lt;issuer&gt;", error="invalid_token"</c>.
     /// </summary>
     /// <param name="endpointName">The protected endpoint addressed.</param>
     /// <returns>A task that completes when the assertions have run.</returns>
@@ -917,8 +1205,122 @@ internal sealed class Oid4VciDeferredAndNotificationTests
             host, material, endpointName, "Bearer " + withoutAudience, ProtectedRequestBody(endpointName)).ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        AssertInvalidTokenRefusal(response, body);
+        AssertInvalidTokenRefusal(response, body, IssuerOf(host, material));
     }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-5.1">RFC 9728 Section 5.1</see>: "This parameter MAY
+    /// also be used in WWW-Authenticate responses using authorization schemes other than "Bearer" [RFC6750], such as the
+    /// DPoP scheme defined by [RFC9449]." Under a registration allowing
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>, a value that is no access token
+    /// presented under the <c>DPoP</c> scheme over the wire at the endpoint a row addresses is refused with 401 and exactly
+    /// the one challenge <c>DPoP realm="&lt;issuer&gt;", error="invalid_token", algs="...", resource_metadata="&lt;document&gt;"</c>,
+    /// the document's URL formed by inserting <c>/.well-known/oauth-protected-resource</c> between the host and the path
+    /// of the endpoint's URL. The rows: the Deferred Credential Endpoint; the Notification Endpoint.
+    /// </summary>
+    /// <param name="endpointName">The protected endpoint addressed.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(DeferredEndpointRow)]
+    [DataRow(NotificationEndpointRow)]
+    public async Task ProtectedEndpointDpopChallengeNamesItsResourceMetadataAsync(string endpointName)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, DocumentServingCapabilities).ConfigureAwait(false);
+        await WireProtectedEndpointSeamsAsync(host).ConfigureAwait(false);
+
+        using HttpResponseMessage response = await SendProtectedOverWireAsync(
+            host, material, endpointName, "DPoP not.an.access-token", ProtectedRequestBody(endpointName)).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
+        Assert.AreEqual(
+            ResourceDpopProofs.DpopChallenge(
+                IssuerOf(host, material), "invalid_token", resourceMetadata: new Uri(DocumentUrlOf(EndpointUrlOf(host, material, endpointName)))),
+            Assert.ContainsSingle(RawAuthCodeWirePushers.ChallengesOf(response)));
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3">RFC 9728 Section 3</see>: "Protected resources
+    /// supporting metadata MUST make a JSON document containing metadata as specified in Section 2 available at a URL
+    /// formed by inserting a well-known URI string into the protected resource's resource identifier between the host
+    /// component and the path and/or query components, if any.", with <see href="https://www.rfc-editor.org/rfc/rfc9728#section-2">Section
+    /// 2</see>: "resource REQUIRED. The protected resource's resource identifier, as defined in Section 1.2." and
+    /// "authorization_servers OPTIONAL. JSON array containing a list of OAuth authorization server issuer identifiers".
+    /// Under a registration allowing <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>, a GET
+    /// of the document of the endpoint a row addresses over a raw TLS connection is answered 200 <c>application/json</c>
+    /// with exactly the document
+    /// <c>{"resource":"&lt;endpoint&gt;","authorization_servers":["&lt;issuer&gt;"],"bearer_methods_supported":["header"],"dpop_signing_alg_values_supported":[...]}</c>,
+    /// no <c>jwks_uri</c> (the registration serves no JWK Set) and no <c>scopes_supported</c>. The rows: the Credential
+    /// Endpoint; the Deferred Credential Endpoint; the Notification Endpoint.
+    /// </summary>
+    /// <param name="endpointName">The protected endpoint addressed.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(CredentialEndpointRow)]
+    [DataRow(DeferredEndpointRow)]
+    [DataRow(NotificationEndpointRow)]
+    public async Task ProtectedEndpointProtectedResourceMetadataDocumentNamesTheEndpointAsync(string endpointName)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, DocumentServingCapabilities).ConfigureAwait(false);
+        await WireProtectedEndpointSeamsAsync(host).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Uri endpointUrl = EndpointUrlOf(host, material, endpointName);
+
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Get, new Uri(host.Host("default").HttpBaseAddress!, new Uri(DocumentUrlOf(endpointUrl)).AbsolutePath), [],
+            ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The document is served without a server fault.");
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            WellKnownMediaTypes.Application.Json,
+            Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.ContentType)).Split(';')[0].Trim());
+        string algorithms = "[" + string.Join(",", ResourceDpopProofs.AcceptedProofAlgorithms.Split(' ').Select(static name => $"\"{name}\"")) + "]";
+        Assert.AreEqual(
+            $"{{\"resource\":\"{endpointUrl}\",\"authorization_servers\":[\"{IssuerOf(host, material)}\"],"
+            + $"\"bearer_methods_supported\":[\"header\"],\"dpop_signing_alg_values_supported\":{algorithms}}}",
+            response.Body);
+    }
+
+
+    /// <summary>
+    /// The capabilities of <see cref="EndpointCapabilities"/>, the Credential Endpoint and
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>, under which the protected resource
+    /// metadata documents of the three protected endpoints are served.
+    /// </summary>
+    private static ImmutableHashSet<CapabilityIdentifier> DocumentServingCapabilities { get; } = EndpointCapabilities
+        .Add(WellKnownCapabilityIdentifiers.Oid4VciCredentialEndpoint)
+        .Add(WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata);
+
+
+    /// <summary>
+    /// The URL the host advertises for the endpoint a wire row addresses, its resource identifier: the endpoint's path
+    /// under the authority of the issuer the host holds for the registration, as the host's endpoint resolver composes it.
+    /// </summary>
+    /// <param name="host">The host holding the registration.</param>
+    /// <param name="material">The registration.</param>
+    /// <param name="row">The endpoint row.</param>
+    /// <returns>The endpoint's URL.</returns>
+    private static Uri EndpointUrlOf(TestHostShell host, VerifierKeyMaterial material, string row) =>
+        new(new Uri(IssuerOf(host, material)), TestHostShell.ComposeEndpointPath(EndpointNameOf(row), material.Registration.TenantId.Value));
+
+
+    /// <summary>
+    /// The URL a protected resource metadata document is served at for the resource <paramref name="identifier"/>
+    /// identifies, written out: <c>/.well-known/oauth-protected-resource</c> inserted between the host and the path
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.1">RFC 9728 Section 3.1</see>: "GET
+    /// /.well-known/oauth-protected-resource/resource1 HTTP/1.1").
+    /// </summary>
+    /// <param name="identifier">The resource identifier, an https URL with a path and no query.</param>
+    /// <returns>The document's URL.</returns>
+    private static string DocumentUrlOf(Uri identifier) =>
+        $"{identifier.GetLeftPart(UriPartial.Authority)}/.well-known/oauth-protected-resource{identifier.AbsolutePath}";
 
 
     /// <summary>The identifier of a resource other than this Authorization Server.</summary>
@@ -939,6 +1341,95 @@ internal sealed class Oid4VciDeferredAndNotificationTests
     /// <summary>The row whose configured issuer holds Unicode text in its host.</summary>
     private const string UnicodeHostIssuerRow = "unicode-host-issuer";
 
+    /// <summary>
+    /// The row addressing UserInfo. A constant, not a property, because a DataRow attribute argument must be a
+    /// compile-time constant.
+    /// </summary>
+    private const string UserInfoEndpointRow = "userinfo";
+
+    /// <summary>
+    /// The row whose endpoint resolver answers the Credential Endpoint at UserInfo's path with a terminating slash. A
+    /// constant, not a property, because a DataRow attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string TrailingSlashLocationsRow = "trailing-slash-locations";
+
+    /// <summary>
+    /// The row whose endpoint resolver answers UserInfo at the URL the issuer's own document is located from. A
+    /// constant, not a property, because a DataRow attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string IssuerDocumentLocationRow = "issuer-document-location";
+
+
+    /// <summary>
+    /// The capabilities of <see cref="DocumentServingCapabilities"/> and
+    /// <see cref="WellKnownCapabilityIdentifiers.OidcUserInfo"/>, under which the four resources of the library each
+    /// have a protected resource metadata document.
+    /// </summary>
+    private static ImmutableHashSet<CapabilityIdentifier> LibraryResourceCapabilities { get; } =
+        DocumentServingCapabilities.Add(WellKnownCapabilityIdentifiers.OidcUserInfo);
+
+
+    /// <summary>
+    /// The internationalized issuer the rows configure, <c>https://b</c> U+00FC <c>cher.example/tenant</c>, its host a
+    /// label above U+007F.
+    /// </summary>
+    private static Uri InternationalizedIssuer { get; } = new("https://b" + (char)0x00FC + "cher.example/tenant");
+
+    /// <summary>
+    /// <see cref="InternationalizedIssuer"/> in its URI form, the host converted by the IDNA ToASCII operation
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc3987#section-3.1">RFC 3987 Section 3.1</see>).
+    /// </summary>
+    private static string InternationalizedIssuerInUriForm { get; } = "https://xn--bcher-kva.example/tenant";
+
+    /// <summary>The scheme and authority of <see cref="InternationalizedIssuerInUriForm"/>.</summary>
+    private static string InternationalizedAuthorityInUriForm { get; } = "https://xn--bcher-kva.example";
+
+
+    /// <summary>
+    /// Starts the host's listener and replaces the registration the host serves with one whose issuer is
+    /// <see cref="InternationalizedIssuer"/>, so every URL the host's endpoint resolver answers carries its host.
+    /// </summary>
+    /// <param name="host">The host holding the registration.</param>
+    /// <param name="material">The registration.</param>
+    /// <returns>A task that completes when the registration is replaced.</returns>
+    private async Task ServeUnderTheInternationalizedIssuerAsync(TestHostShell host, VerifierKeyMaterial material)
+    {
+        Assert.IsTrue(IssuerIdentifier.Parse(InternationalizedIssuer.OriginalString).IsSuccess,
+            "The configured issuer is one the server accepts as an issuer identifier.");
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer served = host.Host("default");
+        ClientRecord internationalized = served.Registrations[material.Registration.TenantId.Value] with
+        {
+            IssuerUri = InternationalizedIssuer
+        };
+        served.Registrations[internationalized.TenantId.Value] = internationalized;
+        served.Registrations[internationalized.ClientId] = internationalized;
+    }
+
+
+    /// <summary>
+    /// Sends a request without credentials over a raw TLS connection to the resource a row addresses: a GET to
+    /// UserInfo, and a POST of a well-formed JSON body to an OID4VCI endpoint.
+    /// </summary>
+    /// <param name="host">The host whose listener serves the request.</param>
+    /// <param name="material">The registration whose endpoint path is addressed.</param>
+    /// <param name="row">The resource row.</param>
+    /// <returns>The wire response.</returns>
+    private async Task<HttpResponseData> SendWithoutCredentialsAsync(TestHostShell host, VerifierKeyMaterial material, string row)
+    {
+        Uri url = new(host.Host("default").HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(EndpointNameOf(row), material.Registration.TenantId.Value));
+        bool isUserInfo = string.Equals(row, UserInfoEndpointRow, StringComparison.Ordinal);
+
+        return isUserInfo
+            ? await RawHttpsRequest.SendAsync(
+                host, WellKnownHttpMethods.Get, url, [], ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false)
+            : await RawHttpsRequest.SendAsync(
+                host, WellKnownHttpMethods.Post, url,
+                [new(WellKnownHttpHeaderNames.ContentType, WellKnownMediaTypes.Application.Json)],
+                Encoding.UTF8.GetBytes(ProtectedRequestBody(row)), TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
 
     /// <summary>
     /// The endpoint name a wire row addresses.
@@ -950,6 +1441,7 @@ internal sealed class Oid4VciDeferredAndNotificationTests
         CredentialEndpointRow => WellKnownEndpointNames.Oid4VciCredential,
         DeferredEndpointRow => WellKnownEndpointNames.Oid4VciDeferredCredential,
         NotificationEndpointRow => WellKnownEndpointNames.Oid4VciNotification,
+        UserInfoEndpointRow => WellKnownEndpointNames.UserInfo,
         _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown endpoint row.")
     };
 
@@ -1007,17 +1499,18 @@ internal sealed class Oid4VciDeferredAndNotificationTests
 
     /// <summary>
     /// Asserts the refusal of a presented access token over the wire: 401, exactly one
-    /// <c>WWW-Authenticate</c> value <c>Bearer error="invalid_token"</c>, and <c>invalid_token</c> as the body's
-    /// <c>error</c>.
+    /// <c>WWW-Authenticate</c> value <c>Bearer realm="&lt;issuer&gt;", error="invalid_token"</c>, and <c>invalid_token</c> as
+    /// the body's <c>error</c>.
     /// </summary>
     /// <param name="response">The wire response.</param>
     /// <param name="body">The response body text.</param>
-    private static void AssertInvalidTokenRefusal(HttpResponseMessage response, string body)
+    /// <param name="issuer">The issuer the host holds for the registration, the challenge's realm.</param>
+    private static void AssertInvalidTokenRefusal(HttpResponseMessage response, string body, string issuer)
     {
         Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
         Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges),
             "RFC 6750 Section 3: the refusal carries a WWW-Authenticate challenge.");
-        Assert.AreEqual("Bearer error=\"invalid_token\"", challenges.Single());
+        Assert.AreEqual($"Bearer realm=\"{issuer}\", error=\"invalid_token\"", challenges.Single());
         using JsonDocument document = JsonDocument.Parse(body);
         Assert.AreEqual("invalid_token", document.RootElement.GetProperty("error").GetString());
     }

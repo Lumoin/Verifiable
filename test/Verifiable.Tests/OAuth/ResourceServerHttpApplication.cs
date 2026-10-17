@@ -407,7 +407,11 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
             Method: context.Request.Method,
             Fields: new RequestFields(),
             Headers: RequestHeaders.Empty,
-            RouteValues: RouteValues.Empty);
+            RouteValues: RouteValues.Empty)
+        {
+            RequestTarget = context.Features.Get<IHttpRequestFeature>()?.RawTarget
+                ?? throw new InvalidOperationException("The server answered no raw request-target for the request.")
+        };
 
         ServerHttpResponse response = await metadataEndpoint.Server.DispatchAsync(
             incomingRequest, [], context.RequestAborted).ConfigureAwait(false);

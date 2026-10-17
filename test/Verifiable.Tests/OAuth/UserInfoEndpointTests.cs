@@ -14,12 +14,14 @@ using Verifiable.Core.Assessment;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
+using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Diagnostics;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Oidc;
+using Verifiable.OAuth.ProtectedResource;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Metadata;
 using Verifiable.OAuth.Server.States;
@@ -75,7 +77,7 @@ internal sealed class UserInfoEndpointTests
     /// is necessary or attempted using an unsupported authentication method), the resource server
     /// SHOULD NOT include an error code or other error information." A UserInfo POST dispatched with no
     /// <c>Authorization</c> header is answered 401 with an empty body and the one challenge
-    /// <c>Bearer scope="openid", DPoP realm="&lt;issuer&gt;", scope="openid", algs="..."</c>, which carries no error.
+    /// <c>Bearer realm="&lt;issuer&gt;", scope="openid", DPoP realm="&lt;issuer&gt;", scope="openid", algs="..."</c>, which carries no error.
     /// </summary>
     [TestMethod]
     public async Task PostWithoutAuthorizationHeaderReturnsUnauthorized()
@@ -100,7 +102,7 @@ internal sealed class UserInfoEndpointTests
     /// (<see href="https://openid.net/specs/openid-connect-core-1_0.html#UserInfoRequest">OIDC Core
     /// §5.3.1</see>: "The Client sends the UserInfo Request using either HTTP GET or HTTP POST."); a GET dispatched
     /// with no <c>Authorization</c> header is answered 401 with an empty body and the one challenge
-    /// <c>Bearer scope="openid", DPoP realm="&lt;issuer&gt;", scope="openid", algs="..."</c>.
+    /// <c>Bearer realm="&lt;issuer&gt;", scope="openid", DPoP realm="&lt;issuer&gt;", scope="openid", algs="..."</c>.
     /// </summary>
     [TestMethod]
     public async Task GetWithoutAuthorizationHeaderReturnsUnauthorized()
@@ -124,7 +126,7 @@ internal sealed class UserInfoEndpointTests
     /// is necessary or attempted using an unsupported authentication method), the resource server
     /// SHOULD NOT include an error code or other error information." A UserInfo POST dispatched with an
     /// <c>Authorization</c> header under the unsupported <c>Basic</c> scheme is answered 401 with an
-    /// empty body and the one challenge <c>Bearer scope="openid", DPoP realm="&lt;issuer&gt;", scope="openid", algs="..."</c>.
+    /// empty body and the one challenge <c>Bearer realm="&lt;issuer&gt;", scope="openid", DPoP realm="&lt;issuer&gt;", scope="openid", algs="..."</c>.
     /// </summary>
     [TestMethod]
     public async Task PostWithMalformedAuthorizationHeaderReturnsUnauthorized()
@@ -219,7 +221,7 @@ internal sealed class UserInfoEndpointTests
     /// token issued by this server with its signature segment lengthened past
     /// <see cref="Jws.DefaultMaxJwsLength"/>, the longest compact JWS the library verifies, is malformed:
     /// presented in the <c>Authorization</c> header over the wire, UserInfo answers it 401
-    /// <c>invalid_token</c> with <c>Bearer error="invalid_token"</c>, never a server fault.
+    /// <c>invalid_token</c> with <c>Bearer realm="&lt;issuer&gt;", error="invalid_token"</c>, never a server fault.
     /// </summary>
     [TestMethod]
     public async Task UserInfoRefusesAnAccessTokenLongerThanTheVerifiedMaximumAsync()
@@ -236,7 +238,7 @@ internal sealed class UserInfoEndpointTests
         using HttpResponseMessage response = await SendUserInfoOverWireAsync(host, material, oversizedToken).ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        AssertRefused(response, body, HttpStatusCode.Unauthorized, "Bearer error=\"invalid_token\"", "invalid_token");
+        AssertRefused(response, body, HttpStatusCode.Unauthorized, UserInfoBearerChallenge(host, material, "invalid_token"), "invalid_token");
         using JsonDocument document = JsonDocument.Parse(body);
         Assert.AreEqual(
             "Access token exceeds the longest compact JWS this server verifies.",
@@ -699,7 +701,7 @@ internal sealed class UserInfoEndpointTests
     /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 §3</see> requires: "If the
     /// protected resource request does not include authentication credentials or does not contain an
     /// access token that enables access to the protected resource, the resource server MUST include the
-    /// HTTP "WWW-Authenticate" response header field", here <c>Bearer error="invalid_token"</c>. The
+    /// HTTP "WWW-Authenticate" response header field", here <c>Bearer realm="&lt;issuer&gt;", error="invalid_token"</c>. The
     /// rows are a key the registration lists for its client assertions and the access-token key of
     /// another registration on the same server; both verify the signature, neither signs access tokens
     /// for this registration.
@@ -739,7 +741,7 @@ internal sealed class UserInfoEndpointTests
         Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
         Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges),
             "RFC 6750 §3: the refusal carries a WWW-Authenticate challenge.");
-        Assert.AreEqual("Bearer error=\"invalid_token\"", challenges.Single());
+        Assert.AreEqual(UserInfoBearerChallenge(host, material, "invalid_token"), challenges.Single());
 
         using JsonDocument document = JsonDocument.Parse(body);
         Assert.AreEqual("invalid_token", document.RootElement.GetProperty("error").GetString());
@@ -799,7 +801,7 @@ internal sealed class UserInfoEndpointTests
     /// reasons. The resource SHOULD respond with the HTTP 401 (Unauthorized) status code." An access
     /// token whose protected header's <c>kid</c> is a single space names no key and is malformed: it is
     /// refused at UserInfo over the wire with 401 <c>invalid_token</c> and the challenge
-    /// <c>Bearer error="invalid_token"</c>, never a server error.
+    /// <c>Bearer realm="&lt;issuer&gt;", error="invalid_token"</c>, never a server error.
     /// </summary>
     [TestMethod]
     public async Task UserInfoRefusesAnAccessTokenWhoseKidIsWhitespaceAsync()
@@ -822,7 +824,7 @@ internal sealed class UserInfoEndpointTests
         Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
         Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges),
             "RFC 6750 §3: the refusal carries a WWW-Authenticate challenge.");
-        Assert.AreEqual("Bearer error=\"invalid_token\"", challenges.Single());
+        Assert.AreEqual(UserInfoBearerChallenge(host, material, "invalid_token"), challenges.Single());
 
         using JsonDocument document = JsonDocument.Parse(body);
         Assert.AreEqual("invalid_token", document.RootElement.GetProperty("error").GetString());
@@ -837,7 +839,7 @@ internal sealed class UserInfoEndpointTests
     /// HTTP "WWW-Authenticate" response header field". An access token that verifies under the
     /// registration's access-token key but carries no <c>sub</c> identifies no End-User, so UserInfo
     /// refuses it over the wire with 401 <c>invalid_token</c>, and the refusal carries the challenge
-    /// <c>Bearer error="invalid_token"</c>.
+    /// <c>Bearer realm="&lt;issuer&gt;", error="invalid_token"</c>.
     /// </summary>
     [TestMethod]
     public async Task UserInfoRefusalOfATokenWithoutSubjectCarriesABearerChallengeAsync()
@@ -865,7 +867,7 @@ internal sealed class UserInfoEndpointTests
         Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
         Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges),
             "RFC 6750 §3: the refusal carries a WWW-Authenticate challenge.");
-        Assert.AreEqual("Bearer error=\"invalid_token\"", challenges.Single());
+        Assert.AreEqual(UserInfoBearerChallenge(host, material, "invalid_token"), challenges.Single());
 
         using JsonDocument document = JsonDocument.Parse(body);
         Assert.AreEqual("invalid_token", document.RootElement.GetProperty("error").GetString());
@@ -880,7 +882,7 @@ internal sealed class UserInfoEndpointTests
     /// granted <c>profile</c> but not <c>openid</c> is refused at UserInfo over the wire with 403
     /// <c>insufficient_scope</c>, and the refusal carries the
     /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 §3</see> challenge naming
-    /// the scope UserInfo requires: <c>Bearer error="insufficient_scope", scope="openid"</c>.
+    /// the scope UserInfo requires and the realm, the issuer: <c>Bearer realm="&lt;issuer&gt;", error="insufficient_scope", scope="openid"</c>.
     /// </summary>
     [TestMethod]
     public async Task UserInfoRefusalForAMissingOpenIdScopeCarriesAnInsufficientScopeChallengeAsync()
@@ -901,7 +903,7 @@ internal sealed class UserInfoEndpointTests
         Assert.AreEqual(HttpStatusCode.Forbidden, response.StatusCode, body);
         Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges),
             "RFC 6750 §3: the refusal carries a WWW-Authenticate challenge.");
-        Assert.AreEqual("Bearer error=\"insufficient_scope\", scope=\"openid\"", challenges.Single());
+        Assert.AreEqual(UserInfoBearerChallenge(host, material, "insufficient_scope", "openid"), challenges.Single());
 
         using JsonDocument document = JsonDocument.Parse(body);
         Assert.AreEqual("insufficient_scope", document.RootElement.GetProperty("error").GetString());
@@ -913,7 +915,7 @@ internal sealed class UserInfoEndpointTests
     /// protected resource MUST reject a DPoP-bound access token received as a bearer token per
     /// [RFC6750]." An access token the token endpoint bound to the client's DPoP key (<c>cnf.jkt</c>),
     /// presented at UserInfo over the wire under the <c>Bearer</c> scheme with no DPoP proof, is refused
-    /// with 401 <c>invalid_token</c> and the challenge <c>Bearer error="invalid_token"</c>, and no claim
+    /// with 401 <c>invalid_token</c> and the challenge <c>Bearer realm="&lt;issuer&gt;", error="invalid_token"</c>, and no claim
     /// of the End-User is returned.
     /// </summary>
     [TestMethod]
@@ -936,7 +938,7 @@ internal sealed class UserInfoEndpointTests
         Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
         Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges),
             "RFC 6750 §3: the refusal carries a WWW-Authenticate challenge.");
-        Assert.AreEqual("Bearer error=\"invalid_token\"", challenges.Single());
+        Assert.AreEqual(UserInfoBearerChallenge(host, material, "invalid_token"), challenges.Single());
 
         using JsonDocument document = JsonDocument.Parse(body);
         Assert.AreEqual("invalid_token", document.RootElement.GetProperty("error").GetString());
@@ -1188,7 +1190,7 @@ internal sealed class UserInfoEndpointTests
     /// <c>DPoP</c> line naming its scheme alone and so carrying no credentials at all (the token is a
     /// <c>b64token</c>, <see href="https://www.rfc-editor.org/rfc/rfc6750#section-2.1">RFC 6750 Section 2.1</see>,
     /// "credentials = "Bearer" 1*SP b64token"), is refused with 401, an empty body and exactly one challenge
-    /// naming the two schemes UserInfo accepts and no error: <c>Bearer scope="openid", DPoP realm="&lt;issuer&gt;", scope="openid", algs="..."</c>.
+    /// naming the two schemes UserInfo accepts and no error: <c>Bearer realm="&lt;issuer&gt;", scope="openid", DPoP realm="&lt;issuer&gt;", scope="openid", algs="..."</c>.
     /// </summary>
     /// <param name="authorization">The <c>Authorization</c> header sent, or <see langword="null"/> for none.</param>
     [TestMethod]
@@ -2324,7 +2326,7 @@ internal sealed class UserInfoEndpointTests
     /// protected resource MUST reject a DPoP-bound access token received as a bearer token per
     /// [RFC6750]." An access token whose <c>cnf</c> claim binds it by a confirmation method UserInfo does
     /// not check (<c>x5t#S256</c>), presented over the wire under the <c>Bearer</c> scheme, is not served
-    /// as a bearer token: it is refused with 401 and <c>Bearer error="invalid_token"</c>, and no claim of
+    /// as a bearer token: it is refused with 401 and <c>Bearer realm="&lt;issuer&gt;", error="invalid_token"</c>, and no claim of
     /// the End-User is returned.
     /// </summary>
     /// <returns>A task that completes when the assertions have run.</returns>
@@ -2347,7 +2349,7 @@ internal sealed class UserInfoEndpointTests
             .ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        AssertRefused(response, body, HttpStatusCode.Unauthorized, "Bearer error=\"invalid_token\"", "invalid_token");
+        AssertRefused(response, body, HttpStatusCode.Unauthorized, UserInfoBearerChallenge(host, material, "invalid_token"), "invalid_token");
     }
 
 
@@ -2362,7 +2364,7 @@ internal sealed class UserInfoEndpointTests
     /// "Access token cnf claim carries a blank jkt." in the body and the challenge of the scheme it was presented under
     /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 Section 7.2</see>: "the corresponding
     /// challenge SHOULD be used to deliver error information"), and no claim of the End-User is returned. The rows: under
-    /// the <c>Bearer</c> scheme, the one challenge <c>Bearer error="invalid_token"</c>; under the <c>DPoP</c> scheme with
+    /// the <c>Bearer</c> scheme, the one challenge <c>Bearer realm="&lt;issuer&gt;", error="invalid_token"</c>; under the <c>DPoP</c> scheme with
     /// a proof by a DPoP key of the client's, the one challenge
     /// <c>DPoP realm="&lt;issuer&gt;", error="invalid_token", scope="openid", algs="..."</c>.
     /// </summary>
@@ -2400,7 +2402,7 @@ internal sealed class UserInfoEndpointTests
         Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The presentation is refused without a server fault.");
         AssertRefused(
             response, body, HttpStatusCode.Unauthorized,
-            scheme == "DPoP" ? UserInfoDpopChallenge(host, material, "invalid_token") : "Bearer error=\"invalid_token\"",
+            scheme == "DPoP" ? UserInfoDpopChallenge(host, material, "invalid_token") : UserInfoBearerChallenge(host, material, "invalid_token"),
             "invalid_token");
         using JsonDocument document = JsonDocument.Parse(body);
         Assert.AreEqual("Access token cnf claim carries a blank jkt.", document.RootElement.GetProperty("error_description").GetString(), body);
@@ -3087,7 +3089,7 @@ internal sealed class UserInfoEndpointTests
     /// <c>DPoP realm="&lt;issuer&gt;", error="use_dpop_nonce", scope="openid", algs="..."</c>; a proof signed by a DPoP key
     /// other than the bound one, 401 <c>DPoP realm="&lt;issuer&gt;", error="invalid_token", scope="openid", algs="..."</c>;
     /// and no <c>Authorization</c> field, 401 with an empty body and
-    /// <c>Bearer scope="openid", DPoP realm="&lt;issuer&gt;", scope="openid", algs="..."</c>.
+    /// <c>Bearer realm="&lt;issuer&gt;", scope="openid", DPoP realm="&lt;issuer&gt;", scope="openid", algs="..."</c>.
     /// </summary>
     /// <param name="row">Which refusal the request meets.</param>
     /// <returns>A task that completes when the assertions have run.</returns>
@@ -3190,7 +3192,7 @@ internal sealed class UserInfoEndpointTests
     /// NOT be used with the Proxy-Authenticate or Proxy-Authorization header fields." A DPoP-bound access token
     /// sent at UserInfo over a raw TLS connection in <c>Proxy-Authorization: DPoP</c>, with a valid proof in the
     /// <c>DPoP</c> field and no <c>Authorization</c> field, is no credential of the scheme: the request is refused
-    /// with 401, an empty body and the challenge <c>Bearer scope="openid", DPoP realm="&lt;issuer&gt;", scope="openid", algs="..."</c> a request without
+    /// with 401, an empty body and the challenge <c>Bearer realm="&lt;issuer&gt;", scope="openid", DPoP realm="&lt;issuer&gt;", scope="openid", algs="..."</c> a request without
     /// credentials is answered with, and the response carries no <c>Proxy-Authenticate</c> field.
     /// </summary>
     /// <returns>A task that completes when the assertions have run.</returns>
@@ -4079,8 +4081,9 @@ internal sealed class UserInfoEndpointTests
     /// challenge." A host whose signing-algorithm resolver answers <c>["ES 256"]</c> for DPoP proofs names an algorithm
     /// the space-delimited <c>algs</c> cannot carry: a UserInfo request sent over a raw TLS connection with no
     /// <c>Authorization</c> field is answered 401 with an empty body, the one challenge
-    /// <c>Bearer scope="openid", DPoP realm="&lt;issuer&gt;", scope="openid"</c>, the <c>DPoP</c> challenge sent without
-    /// <c>algs</c>, and the one field line <c>Access-Control-Expose-Headers: WWW-Authenticate, DPoP-Nonce</c>.
+    /// <c>Bearer realm="&lt;issuer&gt;", scope="openid", DPoP realm="&lt;issuer&gt;", scope="openid"</c>, the <c>DPoP</c>
+    /// challenge sent without <c>algs</c>, and the one field line
+    /// <c>Access-Control-Expose-Headers: WWW-Authenticate, DPoP-Nonce</c>.
     /// </summary>
     /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
@@ -4098,7 +4101,7 @@ internal sealed class UserInfoEndpointTests
         Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The request is answered without a server fault.");
         Assert.AreEqual(401, response.StatusCode, response.Body);
         Assert.AreEqual(
-            $"Bearer scope=\"openid\", DPoP realm=\"{IssuerOf(host, material)}\", scope=\"openid\"",
+            $"Bearer realm=\"{IssuerOf(host, material)}\", scope=\"openid\", DPoP realm=\"{IssuerOf(host, material)}\", scope=\"openid\"",
             Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
         Assert.AreEqual(
             ResourceDpopProofs.ExposedDpopResponseFields, Assert.ContainsSingle(response.Headers.Headers.GetValues("Access-Control-Expose-Headers")));
@@ -4134,9 +4137,11 @@ internal sealed class UserInfoEndpointTests
     /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-5.1">RFC 9728 Section 5.1</see>: "This parameter
     /// MAY also be used in WWW-Authenticate responses using authorization schemes other than "Bearer" [RFC6750],
-    /// such as the DPoP scheme defined by [RFC9449]." The resource takes the option not for the <c>DPoP</c>
-    /// scheme: a proof naming another target, presented with its DPoP-bound token at UserInfo over the wire, is
-    /// refused with 401 and a <c>DPoP</c> challenge whose auth-params carry no <c>resource_metadata</c>.
+    /// such as the DPoP scheme defined by [RFC9449]." A registration that does not allow
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/> is served no protected resource
+    /// metadata document, so there is no URL to name: a proof naming another target, presented with its DPoP-bound token
+    /// at UserInfo over the wire, is refused with 401 and a <c>DPoP</c> challenge whose auth-params carry no
+    /// <c>resource_metadata</c>.
     /// </summary>
     /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
@@ -4150,29 +4155,1078 @@ internal sealed class UserInfoEndpointTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-5.1">RFC 9728 Section 5.1</see>: "This parameter MAY
+    /// also be used in WWW-Authenticate responses using authorization schemes other than "Bearer" [RFC6750], such as the
+    /// DPoP scheme defined by [RFC9449]." and "The resource_metadata parameter MAY be combined with other parameters
+    /// defined in other extensions", with <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section
+    /// 7.1</see>: "Additional authentication parameters MAY be used, and unknown parameters MUST be ignored by
+    /// recipients." Under a registration allowing
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>, a proof naming another target,
+    /// presented with its DPoP-bound token at UserInfo over the wire, is refused with 401, exactly the one challenge
+    /// <c>DPoP realm="&lt;issuer&gt;", error="invalid_dpop_proof", scope="openid", algs="...", resource_metadata="&lt;document&gt;"</c>,
+    /// the document's URL formed by inserting <c>/.well-known/oauth-protected-resource</c> between the host and the path
+    /// of UserInfo's URL, and the one field line <c>Access-Control-Expose-Headers: WWW-Authenticate, DPoP-Nonce</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task UserInfoDpopChallengeNamesUserInfosResourceMetadataAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, capabilities: DocumentServingCapabilities).ConfigureAwait(false);
+        using DpopClientFixture fixture = await CreateDpopFixtureAsync(host, material).ConfigureAwait(false);
+        DpopPresentationContext presentation = await PrepareDpopPresentationWithoutTheChallengeLiteralAsync(
+            host, material, fixture).ConfigureAwait(false);
+        string proof = await ResourceDpopProofs.BuildAsync(
+            presentation.DpopKey, "POST", presentation.UserInfoUrl + "/other", presentation.AccessToken, presentation.Nonce,
+            TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        using HttpResponseMessage response = await SendUserInfoOverWireAsync(
+            host, material, presentation.AccessToken, scheme: "DPoP", dpopProof: proof).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
+        Assert.AreEqual(
+            ResourceDpopProofs.DpopChallenge(
+                IssuerOf(host, material), "invalid_dpop_proof", scope: "openid",
+                resourceMetadata: new Uri(InsertedDocumentUrl(AdvertisedUrlOf(host, material, WellKnownEndpointNames.UserInfo)))),
+            Assert.ContainsSingle(RawAuthCodeWirePushers.ChallengesOf(response)));
+        Assert.IsTrue(response.Headers.NonValidated.TryGetValues("Access-Control-Expose-Headers", out HeaderStringValues exposed),
+            "The refusal exposes its fields to a browser application.");
+        Assert.AreEqual(ResourceDpopProofs.ExposedDpopResponseFields, Assert.ContainsSingle(exposed));
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3">RFC 9728 Section 3</see>: "Protected resources
+    /// supporting metadata MUST make a JSON document containing metadata as specified in Section 2 available at a URL
+    /// formed by inserting a well-known URI string into the protected resource's resource identifier between the host
+    /// component and the path and/or query components, if any."; <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.2">Section
+    /// 3.2</see>: "A successful response MUST use the 200 OK HTTP status code and return a JSON object using the
+    /// application/json content type"; and <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">Section
+    /// 3.3</see>: "If the protected resource metadata was retrieved from a URL returned by the protected resource via the
+    /// WWW-Authenticate resource_metadata parameter, then the resource value returned MUST be identical to the URL that
+    /// the client used to make the request to the resource server." A UserInfo request without credentials sent over a
+    /// raw TLS connection, under a registration allowing
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>, is answered 401 with exactly the
+    /// challenge naming UserInfo's document; a GET of that URL is answered 200 <c>application/json</c> with exactly the
+    /// document whose <c>resource</c> is UserInfo's URL, whose <c>authorization_servers</c> is the issuer and whose
+    /// <c>dpop_signing_alg_values_supported</c> names exactly the <c>algs</c> of the challenge
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-2">Section 2</see>: "JSON array containing a list of
+    /// the JWS alg values ... supported by the resource server for validating Demonstrating Proof of Possession (DPoP)
+    /// proof JWTs"). The rows: the server's resources not requiring DPoP-bound access tokens (the challenge
+    /// <c>Bearer realm="&lt;issuer&gt;", scope="openid", resource_metadata="&lt;document&gt;", DPoP realm="&lt;issuer&gt;", scope="openid", algs="...", resource_metadata="&lt;document&gt;"</c>,
+    /// the document's <c>bearer_methods_supported</c> <c>["header"]</c>); requiring them (the <c>DPoP</c> challenge
+    /// alone, <c>"bearer_methods_supported":[]</c> and <c>"dpop_bound_access_tokens_required":true</c>, Section 2: "Boolean
+    /// value specifying whether the protected resource always requires the use of DPoP-bound access tokens"); a host
+    /// listing <c>ES256</c> and <c>HS256</c> for DPoP proofs, whose challenge and document both name <c>ES256</c> alone.
+    /// </summary>
+    /// <param name="row">The server's wiring: <see cref="RequirementUnsetRow"/>, <see cref="RequirementSetRow"/> or <see cref="SymmetricAlgorithmListedRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(RequirementUnsetRow)]
+    [DataRow(RequirementSetRow)]
+    [DataRow(SymmetricAlgorithmListedRow)]
+    public async Task UserInfoProtectedResourceMetadataDocumentNamesUserInfoAsync(string row)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, capabilities: DocumentServingCapabilities).ConfigureAwait(false);
+        Uri userInfoUrl = await UserInfoUrlAsync(host, material).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        bool isRequired = string.Equals(row, RequirementSetRow, StringComparison.Ordinal);
+        if(isRequired)
+        {
+            await RequireDpopBoundAccessTokensAtResourcesAsync(host).ConfigureAwait(false);
+        }
+
+        string algorithms = row switch
+        {
+            SymmetricAlgorithmListedRow => "ES256",
+            _ => ResourceDpopProofs.AcceptedProofAlgorithms
+        };
+        if(string.Equals(row, SymmetricAlgorithmListedRow, StringComparison.Ordinal))
+        {
+            await host.AcceptDpopProofsUnderAsync(["ES256", "HS256"]).ConfigureAwait(false);
+        }
+
+        string issuer = IssuerOf(host, material);
+        string identifier = AdvertisedUrlOf(host, material, WellKnownEndpointNames.UserInfo);
+        string documentUrl = InsertedDocumentUrl(identifier);
+        string dpopChallenge =
+            $"DPoP realm=\"{issuer}\", scope=\"openid\", algs=\"{algorithms}\", resource_metadata=\"{documentUrl}\"";
+        HttpResponseData challenged = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Post, userInfoUrl, [], ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(401, challenged.StatusCode, challenged.Body);
+        string challenge = Assert.ContainsSingle(challenged.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate));
+        Assert.AreEqual(
+            isRequired
+                ? dpopChallenge
+                : $"Bearer realm=\"{issuer}\", scope=\"openid\", resource_metadata=\"{documentUrl}\", {dpopChallenge}",
+            challenge);
+
+        HttpResponseData document = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Get, new Uri(host.Host("default").HttpBaseAddress!, new Uri(documentUrl).AbsolutePath), [],
+            ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The document is served without a server fault.");
+        Assert.AreEqual(200, document.StatusCode, document.Body);
+        Assert.AreEqual(
+            WellKnownMediaTypes.Application.Json,
+            Assert.ContainsSingle(document.Headers.Headers.GetValues(WellKnownHttpHeaderNames.ContentType)).Split(';')[0].Trim());
+        Assert.AreEqual(ExpectedLibraryResourceDocument(identifier, issuer, JwksUrlOf(host, material), "[\"openid\"]", algorithms, isRequired), document.Body);
+        ProtectedResourceMetadata? metadata = ProtectedResourceMetadataJsonParsing.ParseProtectedResourceMetadata(document.Body);
+        Assert.IsNotNull(metadata);
+        Assert.IsTrue(ProtectedResourceMetadataValidation.IsResourceMatch(metadata, identifier), "The document's resource is the URL requested.");
+        Assert.AreSequenceEqual(
+            DpopWireReading.ReadChallengeParameters(challenge, "DPoP")["algs"].Split(' '),
+            metadata.DpopSigningAlgValuesSupported!.ToArray(),
+            "The document names exactly the algorithms the challenge names.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 Section 3</see>: "A "realm" attribute MAY be
+    /// included to indicate the scope of protection in the manner described in HTTP/1.1 [RFC2617]. The "realm" attribute
+    /// MUST NOT appear more than once." and "Other auth-param attributes MAY be used as well.", with
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-5.1">RFC 9728 Section 5.1</see>'s example
+    /// "WWW-Authenticate: Bearer resource_metadata=" and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>: "insufficient_scope ...
+    /// The resource server SHOULD respond with the HTTP 403 (Forbidden) status code and MAY include the "scope" attribute
+    /// with the scope necessary to access the protected resource." Under a registration allowing
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>, every <c>Bearer</c> challenge UserInfo
+    /// answers over the wire carries the realm, the issuer, and the URL of UserInfo's document. The rows: a token whose
+    /// signature does not verify, 401 <c>Bearer realm="&lt;issuer&gt;", error="invalid_token", resource_metadata="&lt;document&gt;"</c>;
+    /// a token granted <c>profile</c> without <c>openid</c>, 403
+    /// <c>Bearer realm="&lt;issuer&gt;", error="insufficient_scope", scope="openid", resource_metadata="&lt;document&gt;"</c>;
+    /// no credentials, 401 with an empty body and
+    /// <c>Bearer realm="&lt;issuer&gt;", scope="openid", resource_metadata="&lt;document&gt;", DPoP realm="&lt;issuer&gt;", scope="openid", algs="...", resource_metadata="&lt;document&gt;"</c>;
+    /// a DPoP-bound token presented under <c>Bearer</c>, 401
+    /// <c>Bearer realm="&lt;issuer&gt;", error="invalid_token", resource_metadata="&lt;document&gt;"</c>.
+    /// </summary>
+    /// <param name="row">The presentation: <see cref="RefusedTokenRow"/>, <see cref="WithoutOpenIdScopeRow"/>, <see cref="NoCredentialsRow"/> or <see cref="DpopBoundTokenRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(RefusedTokenRow)]
+    [DataRow(WithoutOpenIdScopeRow)]
+    [DataRow(NoCredentialsRow)]
+    [DataRow(DpopBoundTokenRow)]
+    public async Task UserInfoBearerChallengesCarryTheRealmAndTheResourceMetadataAsync(string row)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        PolicyProfile? profile = row switch
+        {
+            DpopBoundTokenRow => null,
+            _ => PolicyProfile.Rfc6749WithPkce
+        };
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile, DocumentServingCapabilities).ConfigureAwait(false);
+        Uri userInfoUrl = await UserInfoUrlAsync(host, material).ConfigureAwait(false);
+
+        IReadOnlyList<KeyValuePair<string, string>> fieldLines = row switch
+        {
+            RefusedTokenRow => [new(WellKnownHttpHeaderNames.Authorization,
+                "Bearer " + TamperSignature(await IssueAccessTokenAsync(host, material, WellKnownScopes.OpenId).ConfigureAwait(false)))],
+            WithoutOpenIdScopeRow => [new(WellKnownHttpHeaderNames.Authorization,
+                "Bearer " + await IssueAccessTokenAsync(host, material, WellKnownScopes.Profile).ConfigureAwait(false))],
+            NoCredentialsRow => [],
+            DpopBoundTokenRow => [new(WellKnownHttpHeaderNames.Authorization,
+                "Bearer " + await IssueDpopBoundTokenToAFreshClientAsync(host, material).ConfigureAwait(false))],
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown presentation row.")
+        };
+        string issuer = IssuerOf(host, material);
+        string documentUrl = InsertedDocumentUrl(AdvertisedUrlOf(host, material, WellKnownEndpointNames.UserInfo));
+        (int status, string challenge) = row switch
+        {
+            WithoutOpenIdScopeRow => (403,
+                $"Bearer realm=\"{issuer}\", error=\"insufficient_scope\", scope=\"openid\", resource_metadata=\"{documentUrl}\""),
+            NoCredentialsRow => (401,
+                $"Bearer realm=\"{issuer}\", scope=\"openid\", resource_metadata=\"{documentUrl}\", "
+                + ResourceDpopProofs.DpopChallenge(issuer, error: null, scope: "openid", resourceMetadata: new Uri(documentUrl))),
+            _ => (401, $"Bearer realm=\"{issuer}\", error=\"invalid_token\", resource_metadata=\"{documentUrl}\"")
+        };
+
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Post, userInfoUrl, fieldLines, ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The request is answered without a server fault.");
+        Assert.AreEqual(status, response.StatusCode, response.Body);
+        Assert.AreEqual(challenge, Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
+        if(string.Equals(row, NoCredentialsRow, StringComparison.Ordinal))
+        {
+            Assert.AreEqual(string.Empty, response.Body, "No error code or other error information.");
+        }
+    }
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">RFC 9728 Section 3.3</see>: "If the protected
     /// resource metadata was retrieved from a URL returned by the protected resource via the WWW-Authenticate
     /// resource_metadata parameter, then the resource value returned MUST be identical to the URL that the client used to
     /// make the request to the resource server. If these values are not identical, the data contained in the response
-    /// MUST NOT be used." The protected resource metadata document a registration allowed
-    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/> is served for names the issuer as its
-    /// <c>resource</c>, not UserInfo's URL, so a pointer to it from UserInfo's challenge is one a conforming client
-    /// discards: a proof naming another target, presented with its DPoP-bound token at UserInfo over the wire under such
-    /// a registration, is refused with 401 and a <c>DPoP</c> challenge whose auth-params carry no
-    /// <c>resource_metadata</c> (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-5.1">RFC 9728 Section
-    /// 5.1</see>: "This parameter MAY also be used in WWW-Authenticate responses using authorization schemes other than
-    /// "Bearer" [RFC6750], such as the DPoP scheme defined by [RFC9449].").
+    /// MUST NOT be used." A host whose configuration names its listener's authority <c>https://as-alias.test</c>, unlike
+    /// UserInfo's URL, serves requests whose URL is not UserInfo's identifier, so a pointer to UserInfo's document is one
+    /// a conforming client discards: under a registration allowing
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>, a UserInfo request without credentials
+    /// sent over a raw TLS connection is answered 401 with a challenge whose <c>DPoP</c> challenge carries its
+    /// <c>realm</c>, the issuer, and no <c>resource_metadata</c>, and no <c>resource_metadata</c> in the field at all.
     /// </summary>
     /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
-    public async Task UserInfoDpopChallengeNamesNoResourceMetadataWhereNoDocumentNamesUserInfoAsync()
+    public async Task UserInfoChallengeNamesNoResourceMetadataUnderAListenerAliasAsync()
     {
-        (IReadOnlyDictionary<string, string> parameters, _) = await ReadRefusedDpopChallengeParametersAsync(
-            DefaultDpopCapabilities.Add(WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata)).ConfigureAwait(false);
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, capabilities: DocumentServingCapabilities).ConfigureAwait(false);
+        Uri userInfoUrl = await UserInfoUrlAsync(host, material).ConfigureAwait(false);
+        host.Host("default").TrustedListenerAuthority = new Uri("https://as-alias.test");
 
-        Assert.AreEqual("invalid_dpop_proof", parameters["error"]);
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Post, userInfoUrl, [], ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(401, response.StatusCode, response.Body);
+        string challenge = Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate));
+        IReadOnlyDictionary<string, string> parameters = DpopWireReading.ReadChallengeParameters(challenge, "DPoP");
+        Assert.AreEqual(IssuerOf(host, material), parameters["realm"], "The DPoP challenge carries the realm.");
         Assert.IsFalse(parameters.ContainsKey("resource_metadata"), "The DPoP challenge carries no resource_metadata parameter.");
+        Assert.IsNull(ProtectedResourceChallenge.TryReadResourceMetadata(challenge), "No challenge names a document.");
     }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">RFC 9728 Section 3.3</see>: "If the protected
+    /// resource metadata was retrieved from a URL returned by the protected resource via the WWW-Authenticate
+    /// resource_metadata parameter, then the resource value returned MUST be identical to the URL that the client used to
+    /// make the request to the resource server. If these values are not identical, the data contained in the response
+    /// MUST NOT be used.", with <see href="https://www.rfc-editor.org/rfc/rfc9728#section-6">Section 6</see>:
+    /// "Comparisons between the two strings MUST be performed as a Unicode code-point-to-code-point equality
+    /// comparison." The URL a client uses for <c>GET &lt;UserInfo&gt;?x=1</c> carries the query, and UserInfo's
+    /// identifier carries none, so a pointer to UserInfo's document is one that client discards: under a registration
+    /// allowing <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>, that request without
+    /// credentials, sent over a raw TLS connection, is answered 401 with a challenge naming no <c>resource_metadata</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task UserInfoChallengeNamesNoResourceMetadataForARequestCarryingAQueryAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, capabilities: DocumentServingCapabilities).ConfigureAwait(false);
+        Uri userInfoUrl = await UserInfoUrlAsync(host, material).ConfigureAwait(false);
+
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Get, new Uri(userInfoUrl + "?x=1"), [], ReadOnlyMemory<byte>.Empty,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The request is answered without a server fault.");
+        Assert.AreEqual(401, response.StatusCode, response.Body);
+        Assert.IsNull(
+            ProtectedResourceChallenge.TryReadResourceMetadata(
+                Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate))),
+            "No challenge names a document.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-1.2">RFC 9728 Section 1.2</see>: "it is recognized that
+    /// there are cases that make a query component a useful and necessary part of a resource identifier", with
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3">Section 3</see>: "available at a URL formed by
+    /// inserting a well-known URI string into the protected resource's resource identifier between the host component
+    /// and the path and/or query components, if any" and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">Section 3.3</see>: "the resource value returned
+    /// MUST be identical to the URL that the client used to make the request to the resource server." A host whose
+    /// endpoint resolver answers UserInfo at its URL with the query <c>?tenant=t1</c>, under a registration allowing
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>: a <c>GET</c> of exactly that URL
+    /// without credentials, sent over a raw TLS connection, is answered 401 with exactly the challenge
+    /// <c>Bearer realm="&lt;issuer&gt;", scope="openid", resource_metadata="&lt;document&gt;", DPoP realm="&lt;issuer&gt;", scope="openid", algs="...", resource_metadata="&lt;document&gt;"</c>,
+    /// the document's URL <c>/.well-known/oauth-protected-resource</c> inserted before the path and the query kept after
+    /// it; a <c>GET</c> of that URL is answered 200 with the document whose <c>resource</c> is the URL the client used.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task UserInfoChallengeNamesTheDocumentOfAnIdentifierCarryingAQueryAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, capabilities: DocumentServingCapabilities).ConfigureAwait(false);
+        Uri userInfoUrl = await UserInfoUrlAsync(host, material).ConfigureAwait(false);
+        await AnswerUserInfoWithTheQueryAsync(host, IdentifierQuery).ConfigureAwait(false);
+        string issuer = IssuerOf(host, material);
+        string identifier = AdvertisedUrlOf(host, material, WellKnownEndpointNames.UserInfo) + IdentifierQuery;
+        string documentUrl = InsertedDocumentUrl(identifier) + IdentifierQuery;
+
+        HttpResponseData challenged = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Get, new Uri(userInfoUrl + IdentifierQuery), [], ReadOnlyMemory<byte>.Empty,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The request is answered without a server fault.");
+        Assert.AreEqual(401, challenged.StatusCode, challenged.Body);
+        Assert.AreEqual(
+            $"Bearer realm=\"{issuer}\", scope=\"openid\", resource_metadata=\"{documentUrl}\", "
+                + ResourceDpopProofs.DpopChallenge(issuer, error: null, scope: "openid", resourceMetadata: new Uri(documentUrl)),
+            Assert.ContainsSingle(challenged.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
+
+        HttpResponseData document = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Get, new Uri(host.Host("default").HttpBaseAddress!, new Uri(documentUrl).PathAndQuery), [],
+            ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(200, document.StatusCode, document.Body);
+        ProtectedResourceMetadata? metadata = ProtectedResourceMetadataJsonParsing.ParseProtectedResourceMetadata(document.Body);
+        Assert.IsNotNull(metadata);
+        Assert.IsTrue(ProtectedResourceMetadataValidation.IsResourceMatch(metadata, identifier), "The document's resource is the URL the client used.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">RFC 9728 Section 3.3</see>: "The resource value
+    /// returned MUST be identical to the protected resource's resource identifier value into which the well-known URI
+    /// path suffix was inserted to create the URL used to retrieve the metadata." and "If the protected resource metadata
+    /// was retrieved from a URL returned by the protected resource via the WWW-Authenticate resource_metadata parameter,
+    /// then the resource value returned MUST be identical to the URL that the client used to make the request to the
+    /// resource server.", with <see href="https://www.rfc-editor.org/rfc/rfc9728#section-6">Section 6</see>: "a Unicode
+    /// code-point-to-code-point equality comparison". A host whose endpoint resolver answers UserInfo at its URL with the
+    /// query <c>?tenant=t1</c>, under a registration allowing
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>: a UserInfo <c>GET</c> without
+    /// credentials whose URL carries another query, or none, sent over a raw TLS connection, is answered 401 with a
+    /// challenge naming no <c>resource_metadata</c>, and a <c>GET</c> of the document location with that query in place
+    /// of <c>?tenant=t1</c> is answered 404, no document whose <c>resource</c> is a URL other than the one formed into
+    /// that location. The rows: the query <c>?tenant=t2</c>; no query.
+    /// </summary>
+    /// <param name="row">The query the client sends: <see cref="OtherQueryRow"/> or <see cref="NoQueryRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(OtherQueryRow)]
+    [DataRow(NoQueryRow)]
+    public async Task UserInfoIdentifierCarryingAQueryIsNotNamedOrServedUnderAnotherQueryAsync(string row)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, capabilities: DocumentServingCapabilities).ConfigureAwait(false);
+        Uri userInfoUrl = await UserInfoUrlAsync(host, material).ConfigureAwait(false);
+        await AnswerUserInfoWithTheQueryAsync(host, IdentifierQuery).ConfigureAwait(false);
+        string sentQuery = row switch
+        {
+            OtherQueryRow => "?tenant=t2",
+            NoQueryRow => string.Empty,
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown query row.")
+        };
+        string documentPath = new Uri(InsertedDocumentUrl(AdvertisedUrlOf(host, material, WellKnownEndpointNames.UserInfo))).AbsolutePath;
+
+        HttpResponseData challenged = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Get, new Uri(userInfoUrl + sentQuery), [], ReadOnlyMemory<byte>.Empty,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        HttpResponseData document = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Get, new Uri(host.Host("default").HttpBaseAddress!, documentPath + sentQuery), [],
+            ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The requests are answered without a server fault.");
+        Assert.AreEqual(401, challenged.StatusCode, challenged.Body);
+        Assert.IsNull(
+            ProtectedResourceChallenge.TryReadResourceMetadata(
+                Assert.ContainsSingle(challenged.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate))),
+            "No challenge names a document.");
+        Assert.AreEqual(404, document.StatusCode, document.Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">RFC 9728 Section 3.3</see>: "the resource value
+    /// returned MUST be identical to the URL that the client used to make the request to the resource server. If these
+    /// values are not identical, the data contained in the response MUST NOT be used.", with
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-6">Section 6</see>: "Comparisons between the two strings
+    /// MUST be performed as a Unicode code-point-to-code-point equality comparison." and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9112#section-3.2.1">RFC 9112 Section 3.2.1</see>: "origin-form =
+    /// absolute-path [ "?" query ]". A UserInfo request whose request-target spells the path's <c>u</c> of
+    /// <c>userinfo</c> as <c>%75</c> reaches UserInfo, but the URL that client used is not UserInfo's identifier code
+    /// point for code point, so a pointer to UserInfo's document is one it discards: under a registration allowing
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>, that <c>GET</c> without credentials,
+    /// sent over a raw TLS connection, is answered 401 with a challenge naming no <c>resource_metadata</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task UserInfoChallengeNamesNoResourceMetadataForAPercentEncodedSpellingOfItsPathAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, capabilities: DocumentServingCapabilities).ConfigureAwait(false);
+        Uri userInfoUrl = await UserInfoUrlAsync(host, material).ConfigureAwait(false);
+        string path = userInfoUrl.AbsolutePath;
+        int lastSegment = path.LastIndexOf("/userinfo", StringComparison.Ordinal);
+        Assert.IsGreaterThanOrEqualTo(0, lastSegment, "UserInfo's path ends in the segment userinfo.");
+        string encodedTarget = path[..lastSegment] + "/%75serinfo";
+
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Get, userInfoUrl, [], ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken,
+            requestTarget: encodedTarget).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The request is answered without a server fault.");
+        Assert.AreEqual(401, response.StatusCode, response.Body);
+        Assert.IsNull(
+            ProtectedResourceChallenge.TryReadResourceMetadata(
+                Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate))),
+            "No challenge names a document.");
+    }
+
+
+    /// <summary>
+    /// The query the endpoint resolver of the query rows appends to UserInfo's URL, the identifier's query component.
+    /// </summary>
+    private static string IdentifierQuery { get; } = "?tenant=t1";
+
+    /// <summary>
+    /// The row whose client sends a query other than the identifier's. A constant, not a property, because a DataRow
+    /// attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string OtherQueryRow = "other-query";
+
+    /// <summary>
+    /// The row whose client sends no query. A constant, not a property, because a DataRow attribute argument must be a
+    /// compile-time constant.
+    /// </summary>
+    private const string NoQueryRow = "no-query";
+
+
+    /// <summary>
+    /// Wires the host's endpoint resolver to answer UserInfo at the URL it answers today with <paramref name="query"/>
+    /// appended, so UserInfo's resource identifier carries that query component.
+    /// </summary>
+    /// <param name="host">The host whose integration is altered.</param>
+    /// <param name="query">The query, its <c>?</c> included.</param>
+    /// <returns>A task that completes when the alteration is published.</returns>
+    private static Task AnswerUserInfoWithTheQueryAsync(TestHostShell host, string query) =>
+        TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            ResolveEndpointUriDelegate resolve = candidateIntegration.ResolveEndpointUriAsync!;
+            candidateIntegration.ResolveEndpointUriAsync = async (endpointKey, registration, context, cancellationToken) =>
+            {
+                Uri? resolved = await resolve(endpointKey, registration, context, cancellationToken).ConfigureAwait(false);
+
+                return (endpointKey, resolved) switch
+                {
+                    (string key, Uri url) when string.Equals(key, WellKnownEndpointNames.UserInfo, StringComparison.Ordinal) =>
+                        new Uri(url.GetLeftPart(UriPartial.Path) + query),
+                    _ => resolved
+                };
+            };
+        });
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.2">RFC 9728 Section 3.2</see>: "An error response
+    /// uses the applicable HTTP status code value." UserInfo's document names the issuer as its
+    /// <c>authorization_servers</c>; a server whose application issuer resolver answers nothing cannot compose it, a fault
+    /// of the server's own wiring: under a registration allowing
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>, a GET of UserInfo's document over a
+    /// raw TLS connection is answered 500 with exactly the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c>, no captured
+    /// server fault and no document.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task UserInfoProtectedResourceMetadataDocumentWhereNoIssuerResolvesIsAServerErrorAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, capabilities: DocumentServingCapabilities).ConfigureAwait(false);
+        Uri userInfoUrl = await UserInfoUrlAsync(host, material).ConfigureAwait(false);
+        await MakeTheIssuerUnresolvableAsync(host, material, IssuerResolverAnswersNothingRow).ConfigureAwait(false);
+
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Get, new Uri(InsertedDocumentUrl(userInfoUrl.ToString())), [],
+            ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The request is answered without a server fault.");
+        Assert.AreEqual(500, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            /*lang=json,strict*/ "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}",
+            response.Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-2.2">RFC 9728 Section 2.2</see>: "In addition to JSON
+    /// elements, metadata values MAY also be provided as a signed_metadata value, which is a JSON Web Token (JWT) [JWT]
+    /// that asserts metadata values about the protected resource as a bundle." and "A signed_metadata parameter SHOULD NOT
+    /// appear as a claim in the JWT". Under a registration allowing
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/> and a signer answering
+    /// <c>header.payload.signature</c>, UserInfo's document fetched over a raw TLS connection carries
+    /// <c>"signed_metadata":"header.payload.signature"</c>, and the claims handed to the signer carry UserInfo's URL as
+    /// <c>resource</c>, the issuer as <c>authorization_servers</c>, <c>openid</c> as <c>scopes_supported</c> and no
+    /// <c>signed_metadata</c> claim.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task UserInfoProtectedResourceMetadataDocumentCarriesTheSignedMetadataAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, capabilities: DocumentServingCapabilities).ConfigureAwait(false);
+        Uri userInfoUrl = await UserInfoUrlAsync(host, material).ConfigureAwait(false);
+        ConcurrentQueue<JwtPayload> signedClaims = new();
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+            candidateIntegration.SignProtectedResourceMetadataAsync = (claims, _, _, _) =>
+            {
+                signedClaims.Enqueue(claims);
+
+                return ValueTask.FromResult<string?>("header.payload.signature");
+            }).ConfigureAwait(false);
+
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Get, new Uri(InsertedDocumentUrl(userInfoUrl.ToString())), [],
+            ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+        Assert.Contains("\"signed_metadata\":\"header.payload.signature\"", response.Body, StringComparison.Ordinal, response.Body);
+        JwtPayload claims = Assert.ContainsSingle(signedClaims);
+        Assert.AreEqual(AdvertisedUrlOf(host, material, WellKnownEndpointNames.UserInfo), claims[ProtectedResourceMetadataParameterNames.Resource]);
+        Assert.AreSequenceEqual(
+            [IssuerOf(host, material)],
+            Assert.IsInstanceOfType<IReadOnlyList<string>>(claims[ProtectedResourceMetadataParameterNames.AuthorizationServers]).ToArray());
+        Assert.AreSequenceEqual(
+            ["openid"],
+            Assert.IsInstanceOfType<IReadOnlyList<string>>(claims[ProtectedResourceMetadataParameterNames.ScopesSupported]).ToArray());
+        Assert.IsFalse(claims.ContainsKey(ProtectedResourceMetadataParameterNames.SignedMetadata), "No signed_metadata claim.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-2">RFC 9728 Section 2</see>: "resource_name
+    /// Human-readable name of the protected resource intended for display to the end user. It is RECOMMENDED that
+    /// protected resource metadata include this field." and "resource_documentation OPTIONAL. URL of a page containing
+    /// human-readable information that developers might want or need to know when using the protected resource.", with
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-2.1">Section 2.1</see>: "a resource could represent its
+    /// name in English as "resource_name#en": "My Resource"". Under a registration allowing
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>, an application contributing per
+    /// resource names UserInfo <c>Example UserInfo</c>, its documentation <c>https://docs.example.com/userinfo</c> and its
+    /// Finnish name <c>Esimerkki</c>, and names the issuer's resource <c>Example Signals Transmitter</c> with the scope
+    /// <c>ssf.read</c>: UserInfo's document fetched over a raw TLS connection carries exactly
+    /// <c>"resource_name":"Example UserInfo"</c>, <c>"resource_documentation":"https://docs.example.com/userinfo"</c> and
+    /// <c>"resource_name#fi":"Esimerkki"</c> with its own <c>scopes_supported</c> <c>["openid"]</c>, and the issuer's
+    /// document carries its own name and scope, neither document the other's.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task UserInfoProtectedResourceMetadataDocumentCarriesTheNamesContributedForItAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, capabilities: DocumentServingCapabilities).ConfigureAwait(false);
+        Uri userInfoUrl = await UserInfoUrlAsync(host, material).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, static candidateIntegration =>
+            candidateIntegration.ContributeProtectedResourceMetadataAsync = static (_, endpointName, _, _) =>
+                ValueTask.FromResult(endpointName switch
+                {
+                    string name when string.Equals(name, WellKnownEndpointNames.UserInfo, StringComparison.Ordinal) =>
+                        new ProtectedResourceMetadataContribution
+                        {
+                            ResourceName = "Example UserInfo",
+                            ResourceDocumentation = "https://docs.example.com/userinfo",
+                            LocalizedParameters = new Dictionary<string, string>(StringComparer.Ordinal) { ["resource_name#fi"] = "Esimerkki" }
+                        },
+                    _ => new ProtectedResourceMetadataContribution
+                    {
+                        ResourceName = "Example Signals Transmitter",
+                        ScopesSupported = [WellKnownScopes.SsfRead]
+                    }
+                })).ConfigureAwait(false);
+
+        HttpResponseData userInfoDocument = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Get, new Uri(InsertedDocumentUrl(userInfoUrl.ToString())), [],
+            ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+        HttpResponseData issuerDocument = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Get,
+            new Uri(host.Host("default").HttpBaseAddress!,
+                TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.ProtectedResourceMetadata, material.Registration.TenantId.Value)),
+            [], ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(200, userInfoDocument.StatusCode, userInfoDocument.Body);
+        Assert.Contains("\"scopes_supported\":[\"openid\"]", userInfoDocument.Body, StringComparison.Ordinal, userInfoDocument.Body);
+        Assert.Contains("\"resource_name\":\"Example UserInfo\"", userInfoDocument.Body, StringComparison.Ordinal, userInfoDocument.Body);
+        Assert.Contains("\"resource_documentation\":\"https://docs.example.com/userinfo\"", userInfoDocument.Body, StringComparison.Ordinal, userInfoDocument.Body);
+        Assert.Contains("\"resource_name#fi\":\"Esimerkki\"", userInfoDocument.Body, StringComparison.Ordinal, userInfoDocument.Body);
+        Assert.DoesNotContain("Example Signals Transmitter", userInfoDocument.Body, StringComparison.Ordinal, userInfoDocument.Body);
+        Assert.AreEqual(200, issuerDocument.StatusCode, issuerDocument.Body);
+        Assert.Contains("\"resource_name\":\"Example Signals Transmitter\"", issuerDocument.Body, StringComparison.Ordinal, issuerDocument.Body);
+        Assert.Contains($"\"scopes_supported\":[\"{WellKnownScopes.SsfRead}\"]", issuerDocument.Body, StringComparison.Ordinal, issuerDocument.Body);
+        Assert.DoesNotContain("Example UserInfo", issuerDocument.Body, StringComparison.Ordinal, issuerDocument.Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.2">RFC 9728 Section 3.2</see>: "An error response uses
+    /// the applicable HTTP status code value." UserInfo's document is composed by the library from what it knows; an
+    /// application contribution asked for UserInfo that states a member the library composes contradicts the server's own
+    /// resource, the server's wiring at fault: under a registration allowing
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>, a GET of UserInfo's document over a
+    /// raw TLS connection is answered 500 with exactly the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c> and no
+    /// document. The rows: a contribution naming the member <c>resource</c>; one naming <c>scopes_supported</c>.
+    /// </summary>
+    /// <param name="row">The contradicting contribution: <see cref="NamesTheResourceRow"/> or <see cref="NamesTheScopesRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(NamesTheResourceRow)]
+    [DataRow(NamesTheScopesRow)]
+    public async Task UserInfoProtectedResourceMetadataDocumentContributedAComposedMemberIsAServerErrorAsync(string row)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, capabilities: DocumentServingCapabilities).ConfigureAwait(false);
+        Uri userInfoUrl = await UserInfoUrlAsync(host, material).ConfigureAwait(false);
+        ProtectedResourceMetadataContribution contribution = row switch
+        {
+            NamesTheResourceRow => new ProtectedResourceMetadataContribution
+            {
+                LocalizedParameters = new Dictionary<string, string>(StringComparer.Ordinal) { ["resource"] = "https://attacker.example.com" }
+            },
+            NamesTheScopesRow => new ProtectedResourceMetadataContribution { ScopesSupported = [WellKnownScopes.SsfRead] },
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown contribution row.")
+        };
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+            candidateIntegration.ContributeProtectedResourceMetadataAsync = (_, endpointName, _, _) =>
+                ValueTask.FromResult(string.Equals(endpointName, WellKnownEndpointNames.UserInfo, StringComparison.Ordinal)
+                    ? contribution
+                    : ProtectedResourceMetadataContribution.Empty)).ConfigureAwait(false);
+
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Get, new Uri(InsertedDocumentUrl(userInfoUrl.ToString())), [],
+            ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The request is answered without a server fault.");
+        Assert.AreEqual(500, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            /*lang=json,strict*/ "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}",
+            response.Body);
+    }
+
+
+    /// <summary>
+    /// The row whose contribution for UserInfo names the member <c>resource</c>. A constant, not a property, because a
+    /// DataRow attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string NamesTheResourceRow = "names-the-resource";
+
+    /// <summary>
+    /// The row whose contribution for UserInfo names <c>scopes_supported</c>. A constant, not a property, because a
+    /// DataRow attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string NamesTheScopesRow = "names-the-scopes";
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-2.1">RFC 9728 Section 2.1</see>: "language tags [BCP47]
+    /// are added to resource metadata parameter names, delimited by a # character", with
+    /// <see href="https://www.rfc-editor.org/rfc/rfc5646#section-2.1">RFC 5646 Section 2.1</see>: "Subtags, in turn, are
+    /// a sequence of alphanumeric characters (letters and digits), distinguished and separated from other subtags in a
+    /// tag by a hyphen" and "All subtags have a maximum length of eight characters.  Whitespace is not permitted in a
+    /// language tag." A
+    /// contribution for UserInfo naming a human-readable member under a suffix that is no language tag states a member
+    /// the document cannot carry, the server's wiring at fault: under a registration allowing
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>, a GET of UserInfo's document over a
+    /// raw TLS connection is answered 500 with exactly the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c> and no
+    /// document. The rows: <c>resource_name#en#x</c>; <c>resource_name#</c> followed by SP.
+    /// </summary>
+    /// <param name="localizedName">The member name the contribution names.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("resource_name#en#x")]
+    [DataRow("resource_name# ")]
+    public async Task UserInfoProtectedResourceMetadataDocumentContributedAMalformedLanguageTagIsAServerErrorAsync(string localizedName)
+    {
+        HttpResponseData response = await FetchUserInfoDocumentWithLocalizedNameAsync(localizedName).ConfigureAwait(false);
+
+        Assert.AreEqual(500, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            /*lang=json,strict*/ "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}",
+            response.Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-2.1">RFC 9728 Section 2.1</see>: "language tags [BCP47]
+    /// are added to resource metadata parameter names, delimited by a # character", with
+    /// <see href="https://www.rfc-editor.org/rfc/rfc5646#section-2.1">RFC 5646 Section 2.1</see>'s
+    /// "language ["-" script] ["-" region]" form. Under a registration allowing
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>, a contribution for UserInfo naming
+    /// <c>resource_name#en-US</c> <c>Example UserInfo</c> is written into UserInfo's document fetched over a raw TLS
+    /// connection, answered 200 with <c>"resource_name#en-US":"Example UserInfo"</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task UserInfoProtectedResourceMetadataDocumentCarriesARegionTaggedNameAsync()
+    {
+        HttpResponseData response = await FetchUserInfoDocumentWithLocalizedNameAsync("resource_name#en-US").ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+        Assert.Contains("\"resource_name#en-US\":\"Example UserInfo\"", response.Body, StringComparison.Ordinal, response.Body);
+    }
+
+
+    /// <summary>
+    /// Registers a client allowing the protected resource metadata capability, wires a contribution naming
+    /// <paramref name="localizedName"/> <c>Example UserInfo</c> for UserInfo alone, and fetches UserInfo's document over a
+    /// raw TLS connection.
+    /// </summary>
+    /// <param name="localizedName">The member name the contribution names for UserInfo.</param>
+    /// <returns>The wire response.</returns>
+    private async Task<HttpResponseData> FetchUserInfoDocumentWithLocalizedNameAsync(string localizedName)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, capabilities: DocumentServingCapabilities).ConfigureAwait(false);
+        Uri userInfoUrl = await UserInfoUrlAsync(host, material).ConfigureAwait(false);
+        ProtectedResourceMetadataContribution contribution = new()
+        {
+            LocalizedParameters = new Dictionary<string, string>(StringComparer.Ordinal) { [localizedName] = "Example UserInfo" }
+        };
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+            candidateIntegration.ContributeProtectedResourceMetadataAsync = (_, endpointName, _, _) =>
+                ValueTask.FromResult(string.Equals(endpointName, WellKnownEndpointNames.UserInfo, StringComparison.Ordinal)
+                    ? contribution
+                    : ProtectedResourceMetadataContribution.Empty)).ConfigureAwait(false);
+
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Get, new Uri(InsertedDocumentUrl(userInfoUrl.ToString())), [],
+            ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The request is answered without a server fault.");
+
+        return response;
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-1.2">RFC 9728 Section 1.2</see>: "Resource Identifier:
+    /// The protected resource's resource identifier, which is a URL that uses the https scheme and has no fragment
+    /// component." A host whose endpoint resolver answers for UserInfo a URL that is no resource identifier names no
+    /// resource UserInfo publishes metadata for: under a registration allowing
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>, a UserInfo request without credentials
+    /// sent over a raw TLS connection is answered 401 with a challenge naming no <c>resource_metadata</c>, and a GET of
+    /// <c>/.well-known/oauth-protected-resource</c> inserted before UserInfo's path is not answered 200. The rows: the URL
+    /// in the <c>http</c> scheme; the URL with the fragment <c>#part</c>.
+    /// </summary>
+    /// <param name="row">The URL the resolver answers: <see cref="HttpSchemeIdentifierRow"/> or <see cref="FragmentIdentifierRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(HttpSchemeIdentifierRow)]
+    [DataRow(FragmentIdentifierRow)]
+    public async Task UserInfoChallengeNamesNoResourceMetadataForAnIdentifierThatIsNotAResourceIdentifierAsync(string row)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, capabilities: DocumentServingCapabilities).ConfigureAwait(false);
+        Uri userInfoUrl = await UserInfoUrlAsync(host, material).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            ResolveEndpointUriDelegate resolve = candidateIntegration.ResolveEndpointUriAsync!;
+            candidateIntegration.ResolveEndpointUriAsync = async (endpointKey, registration, context, cancellationToken) =>
+            {
+                Uri? resolved = await resolve(endpointKey, registration, context, cancellationToken).ConfigureAwait(false);
+                bool isUserInfo = string.Equals(endpointKey, WellKnownEndpointNames.UserInfo, StringComparison.Ordinal);
+
+                return (isUserInfo, resolved, row) switch
+                {
+                    (true, Uri url, HttpSchemeIdentifierRow) => new Uri("http://" + url.Authority + url.AbsolutePath),
+                    (true, Uri url, FragmentIdentifierRow) => new Uri(url.ToString() + "#part"),
+                    _ => resolved
+                };
+            };
+        }).ConfigureAwait(false);
+
+        HttpResponseData challenged = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Post, userInfoUrl, [], ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+        HttpResponseData document = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Get, new Uri(InsertedDocumentUrl(userInfoUrl.ToString())), [],
+            ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(401, challenged.StatusCode, challenged.Body);
+        Assert.IsNull(
+            ProtectedResourceChallenge.TryReadResourceMetadata(
+                Assert.ContainsSingle(challenged.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate))),
+            "No challenge names a document.");
+        Assert.AreNotEqual(200, document.StatusCode, document.Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-4">RFC 9068 Section 4</see>: "The resource server MUST
+    /// validate that the "aud" claim contains a resource indicator value corresponding to an identifier the resource
+    /// server expects for itself." UserInfo expects for itself the issuer and its own URL, the identifier its protected
+    /// resource metadata document names as <c>resource</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-7.4">RFC 9728 Section 7.4</see>: "the client SHOULD
+    /// request audience-restricted access tokens using [RFC8707]"), with
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 Section 2</see>: "The authorization server
+    /// SHOULD audience-restrict issued access tokens to the resource(s) indicated by the "resource" parameter." The
+    /// authorization-code flow whose pushed authorization request and token request are sent over the wire, the pushed
+    /// request naming UserInfo's URL as its <c>resource</c>, issues an access token whose <c>aud</c> is that URL alone;
+    /// presented at UserInfo over the wire under the <c>Bearer</c> scheme, it is served 200 with the End-User's
+    /// <c>sub</c>. The rows: the issuer the registration is configured with; the issuer <c>https://b</c> U+00FC
+    /// <c>cher.example/tenant</c>, UserInfo's URL then requested in its URI form under the host
+    /// <c>xn--bcher-kva.example</c> (<see href="https://www.rfc-editor.org/rfc/rfc3987#section-3.1">RFC 3987 Section
+    /// 3.1</see>: "converted using the ToASCII operation").
+    /// </summary>
+    /// <param name="issuerRow">The issuer: <see cref="ConfiguredIssuerRow"/> or <see cref="InternationalizedIssuerRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(ConfiguredIssuerRow)]
+    [DataRow(InternationalizedIssuerRow)]
+    public async Task UserInfoServesATokenAudiencedAtItsOwnIdentifierAsync(string issuerRow)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: DocumentServingCapabilities).ConfigureAwait(false);
+        _ = await UserInfoUrlAsync(host, material).ConfigureAwait(false);
+        string identifier = issuerRow switch
+        {
+            ConfiguredIssuerRow => AdvertisedUrlOf(host, material, WellKnownEndpointNames.UserInfo),
+            InternationalizedIssuerRow => "https://xn--bcher-kva.example"
+                + TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.UserInfo, material.Registration.TenantId.Value),
+            _ => throw new ArgumentOutOfRangeException(nameof(issuerRow), issuerRow, "Unknown issuer row.")
+        };
+
+        if(string.Equals(issuerRow, InternationalizedIssuerRow, StringComparison.Ordinal))
+        {
+            ReplaceRegistrationIssuer(host, material, new Uri("https://b" + (char)0x00FC + "cher.example/tenant"));
+        }
+
+        string accessToken = await IssueAccessTokenOverTheWireAsync(host, material, WellKnownScopes.OpenId, identifier).ConfigureAwait(false);
+        Assert.AreEqual($"[\"{identifier}\"]", ReadAudienceClaim(accessToken), "The token is audienced at UserInfo's URL alone.");
+
+        using HttpResponseMessage response = await SendUserInfoOverWireAsync(host, material, accessToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode, body);
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.AreEqual(SubjectId, document.RootElement.GetProperty("sub").GetString());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-4">RFC 9068 Section 4</see>: "The JWT access token MUST
+    /// be rejected if "aud" does not contain a resource indicator of the current resource server as a valid audience."
+    /// The Credential Endpoint's URL identifies another resource of this server. An access token issued while the
+    /// application's audience resolver grants the Credential Endpoint's URL alone as the audience, presented at UserInfo
+    /// over the wire under the <c>Bearer</c> scheme, is refused with 401, <c>invalid_token</c> and the one challenge
+    /// <c>Bearer realm="&lt;issuer&gt;", error="invalid_token", resource_metadata="&lt;document&gt;"</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task UserInfoRefusesATokenAudiencedAtTheCredentialEndpointsIdentifierAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: DocumentServingCapabilities).ConfigureAwait(false);
+        _ = await UserInfoUrlAsync(host, material).ConfigureAwait(false);
+        string credentialEndpoint = AdvertisedUrlOf(host, material, WellKnownEndpointNames.Oid4VciCredential);
+        await GrantTheAudienceAsync(host, credentialEndpoint).ConfigureAwait(false);
+
+        string accessToken = await IssueAccessTokenAsync(host, material, WellKnownScopes.OpenId).ConfigureAwait(false);
+        Assert.AreEqual($"[\"{credentialEndpoint}\"]", ReadAudienceClaim(accessToken), "The token is audienced at the Credential Endpoint's URL alone.");
+
+        using HttpResponseMessage response = await SendUserInfoOverWireAsync(host, material, accessToken).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        AssertRefused(
+            response, body, HttpStatusCode.Unauthorized,
+            $"Bearer realm=\"{IssuerOf(host, material)}\", error=\"invalid_token\", resource_metadata=\"{InsertedDocumentUrl(AdvertisedUrlOf(host, material, WellKnownEndpointNames.UserInfo))}\"",
+            "invalid_token");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-5.2">RFC 9728 Section 5.2</see>: "At any point, for any
+    /// reason determined by the resource server, the protected resource MAY respond with a new WWW-Authenticate challenge
+    /// that includes a value for the protected resource metadata URL to indicate that its metadata may have changed.",
+    /// with <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>: "invalid_request
+    /// The request is missing a required parameter, includes an unsupported parameter or parameter value, repeats the
+    /// same parameter, uses more than one method for including an access token, or is otherwise malformed." Under a
+    /// registration allowing <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>, a UserInfo POST
+    /// sent over a raw TLS connection with two <c>Authorization</c> field lines is answered 400 with
+    /// <c>invalid_request</c> in the body, no captured server fault, and a <c>Bearer</c> challenge carrying the realm and
+    /// the URL of UserInfo's document. The rows: two <c>Bearer</c> lines, exactly
+    /// <c>Bearer realm="&lt;issuer&gt;", error="invalid_request", resource_metadata="&lt;document&gt;"</c>; a
+    /// <c>Bearer</c> and a <c>DPoP</c> line, exactly
+    /// <c>Bearer realm="&lt;issuer&gt;", error="invalid_request", resource_metadata="&lt;document&gt;", DPoP realm="&lt;issuer&gt;", error="invalid_request", scope="openid", algs="...", resource_metadata="&lt;document&gt;"</c>.
+    /// </summary>
+    /// <param name="lines">Which <c>Authorization</c> field lines are sent: <see cref="TwoBearerLinesRow"/> or <see cref="BearerAndDpopLinesRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(TwoBearerLinesRow)]
+    [DataRow(BearerAndDpopLinesRow)]
+    public async Task UserInfoAnswersARepeatedAuthorizationFieldNamingUserInfosResourceMetadataAsync(string lines)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: DocumentServingCapabilities).ConfigureAwait(false);
+        Uri userInfoUrl = await UserInfoUrlAsync(host, material).ConfigureAwait(false);
+        string issuer = IssuerOf(host, material);
+        string documentUrl = InsertedDocumentUrl(AdvertisedUrlOf(host, material, WellKnownEndpointNames.UserInfo));
+        string bearerChallenge = $"Bearer realm=\"{issuer}\", error=\"invalid_request\", resource_metadata=\"{documentUrl}\"";
+        (IReadOnlyList<KeyValuePair<string, string>> FieldLines, string Challenge) expected = lines switch
+        {
+            TwoBearerLinesRow => (
+                [
+                    new(WellKnownHttpHeaderNames.Authorization, "Bearer first-access-token"),
+                    new(WellKnownHttpHeaderNames.Authorization, "Bearer second-access-token")],
+                bearerChallenge),
+            BearerAndDpopLinesRow => (
+                [
+                    new(WellKnownHttpHeaderNames.Authorization, "Bearer first-access-token"),
+                    new(WellKnownHttpHeaderNames.Authorization, "DPoP second-access-token")],
+                $"{bearerChallenge}, "
+                    + ResourceDpopProofs.DpopChallenge(issuer, "invalid_request", scope: "openid", resourceMetadata: new Uri(documentUrl))),
+            _ => throw new ArgumentOutOfRangeException(nameof(lines), lines, "Unknown field line row.")
+        };
+
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Post, userInfoUrl, expected.FieldLines, ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The repeated field is answered without a server fault.");
+        Assert.AreEqual(400, response.StatusCode, response.Body);
+        Assert.AreEqual(expected.Challenge, Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
+        using JsonDocument document = JsonDocument.Parse(response.Body);
+        Assert.AreEqual("invalid_request", document.RootElement.GetProperty("error").GetString());
+    }
+
+
+    /// <summary>
+    /// The capabilities of <see cref="DefaultDpopCapabilities"/> and
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>, under which UserInfo's protected
+    /// resource metadata document is served.
+    /// </summary>
+    private static ImmutableHashSet<CapabilityIdentifier> DocumentServingCapabilities =>
+        DefaultDpopCapabilities.Add(WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata);
+
+
+    /// <summary>
+    /// The row whose server's resources do not require DPoP-bound access tokens. A constant, not a property, because a
+    /// DataRow attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string RequirementUnsetRow = "requirement-unset";
+
+    /// <summary>
+    /// The row whose server's resources require DPoP-bound access tokens. A constant, not a property, because a DataRow
+    /// attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string RequirementSetRow = "requirement-set";
+
+    /// <summary>
+    /// The row whose host lists <c>ES256</c> and <c>HS256</c> for DPoP proofs. A constant, not a property, because a
+    /// DataRow attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string SymmetricAlgorithmListedRow = "symmetric-algorithm-listed";
+
+    /// <summary>
+    /// The row whose access token's signature does not verify. A constant, not a property, because a DataRow attribute
+    /// argument must be a compile-time constant.
+    /// </summary>
+    private const string RefusedTokenRow = "refused-token";
+
+    /// <summary>
+    /// The row whose endpoint resolver answers UserInfo's URL in the <c>http</c> scheme. A constant, not a property,
+    /// because a DataRow attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string HttpSchemeIdentifierRow = "http-scheme-identifier";
+
+    /// <summary>
+    /// The row whose endpoint resolver answers UserInfo's URL with a fragment. A constant, not a property, because a
+    /// DataRow attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string FragmentIdentifierRow = "fragment-identifier";
+
+    /// <summary>
+    /// The row serving the registration under the issuer it is configured with. A constant, not a property, because a
+    /// DataRow attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string ConfiguredIssuerRow = "configured-issuer";
+
+    /// <summary>
+    /// The row serving the registration under the issuer <c>https://b</c> U+00FC <c>cher.example/tenant</c>. A
+    /// constant, not a property, because a DataRow attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string InternationalizedIssuerRow = "internationalized-issuer";
+
+
+    /// <summary>
+    /// The URL a protected resource metadata document is served at for <paramref name="identifier"/>, written out:
+    /// <c>/.well-known/oauth-protected-resource</c> inserted between the host and the path
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.1">RFC 9728 Section 3.1</see>: "GET
+    /// /.well-known/oauth-protected-resource/resource1 HTTP/1.1").
+    /// </summary>
+    /// <param name="identifier">The resource identifier, an https URL with a path and no query.</param>
+    /// <returns>The document's URL.</returns>
+    private static string InsertedDocumentUrl(string identifier)
+    {
+        Uri resource = new(identifier);
+
+        return $"{resource.GetLeftPart(UriPartial.Authority)}/.well-known/oauth-protected-resource{resource.AbsolutePath}";
+    }
+
+
+    /// <summary>
+    /// The URL the host advertises for <paramref name="endpointName"/> of the registration, the endpoint's path under the
+    /// authority of the issuer the host holds for the registration, as the host's endpoint resolver composes it: for one
+    /// of the server's own resources, its resource identifier.
+    /// </summary>
+    /// <param name="host">The host holding the registration.</param>
+    /// <param name="material">The registration.</param>
+    /// <param name="endpointName">The endpoint's name.</param>
+    /// <returns>The URL's text.</returns>
+    private static string AdvertisedUrlOf(TestHostShell host, VerifierKeyMaterial material, string endpointName) =>
+        new Uri(new Uri(IssuerOf(host, material)),
+            TestHostShell.ComposeEndpointPath(endpointName, material.Registration.TenantId.Value)).ToString();
+
+
+    /// <summary>The URL of the registration's JWK Set the host advertises, the documents' <c>jwks_uri</c>.</summary>
+    /// <param name="host">The host holding the registration.</param>
+    /// <param name="material">The registration.</param>
+    /// <returns>The JWK Set URL.</returns>
+    private static string JwksUrlOf(TestHostShell host, VerifierKeyMaterial material) =>
+        AdvertisedUrlOf(host, material, WellKnownEndpointNames.MetadataJwks);
+
+
+    /// <summary>
+    /// The protected resource metadata document of one of the server's own resources, written out member by member in
+    /// the order the document is written: <c>resource</c>, <c>authorization_servers</c>, <c>jwks_uri</c>,
+    /// <c>scopes_supported</c> when given, <c>bearer_methods_supported</c> (<c>["header"]</c>, or <c>[]</c> under the
+    /// requirement), <c>dpop_signing_alg_values_supported</c>, then <c>dpop_bound_access_tokens_required</c> under the
+    /// requirement.
+    /// </summary>
+    /// <param name="identifier">The resource identifier.</param>
+    /// <param name="issuer">The issuer, the one authorization server named.</param>
+    /// <param name="jwksUrl">The JWK Set URL.</param>
+    /// <param name="scopes">The <c>scopes_supported</c> JSON array, or <see langword="null"/> for none.</param>
+    /// <param name="algorithms">The space-delimited algorithm names.</param>
+    /// <param name="isRequired">Whether the server's resources require DPoP-bound access tokens.</param>
+    /// <returns>The document text.</returns>
+    private static string ExpectedLibraryResourceDocument(
+        string identifier, string issuer, string jwksUrl, string? scopes, string algorithms, bool isRequired)
+    {
+        string algorithmArray = "[" + string.Join(",", algorithms.Split(' ').Select(static name => $"\"{name}\"")) + "]";
+        string scopesMember = scopes is null ? string.Empty : $",\"scopes_supported\":{scopes}";
+        string bearerMethods = isRequired ? "[]" : "[\"header\"]";
+        string requirement = isRequired ? ",\"dpop_bound_access_tokens_required\":true" : string.Empty;
+
+        return $"{{\"resource\":\"{identifier}\",\"authorization_servers\":[\"{issuer}\"],\"jwks_uri\":\"{jwksUrl}\"{scopesMember}"
+            + $",\"bearer_methods_supported\":{bearerMethods},\"dpop_signing_alg_values_supported\":{algorithmArray}{requirement}}}";
+    }
+
+
+    /// <summary>
+    /// Wires the application's audience resolver to grant <paramref name="audience"/> alone as the <c>aud</c> of every
+    /// access token the server issues.
+    /// </summary>
+    /// <param name="host">The host whose integration is altered.</param>
+    /// <param name="audience">The audience granted.</param>
+    /// <returns>A task that completes when the alteration is published.</returns>
+    private static Task GrantTheAudienceAsync(TestHostShell host, string audience) =>
+        TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+            candidateIntegration.ResolveAccessTokenAudienceAsync = (_, _, _) =>
+                ValueTask.FromResult<IReadOnlyList<string>?>([audience]));
 
 
     /// <summary>
@@ -4239,7 +5293,7 @@ internal sealed class UserInfoEndpointTests
     /// reasons. The resource SHOULD respond with the HTTP 401 (Unauthorized) status code." An access
     /// token whose protected header is a JSON array (<c>W10.e30.AA</c>, the header <c>[]</c>) is
     /// malformed: it is refused at UserInfo over the wire with 401 <c>invalid_token</c> and
-    /// <c>Bearer error="invalid_token"</c>, never a server error.
+    /// <c>Bearer realm="&lt;issuer&gt;", error="invalid_token"</c>, never a server error.
     /// </summary>
     [TestMethod]
     public async Task UserInfoRefusesAnAccessTokenWhoseHeaderIsNotAJsonObjectAsync()
@@ -4252,7 +5306,7 @@ internal sealed class UserInfoEndpointTests
             .ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        AssertRefused(response, body, HttpStatusCode.Unauthorized, "Bearer error=\"invalid_token\"", "invalid_token");
+        AssertRefused(response, body, HttpStatusCode.Unauthorized, UserInfoBearerChallenge(host, material, "invalid_token"), "invalid_token");
     }
 
 
@@ -4262,7 +5316,7 @@ internal sealed class UserInfoEndpointTests
     /// reasons. The resource SHOULD respond with the HTTP 401 (Unauthorized) status code." An access
     /// token signed under the registration's access-token key whose <c>exp</c> is
     /// 9223372036854775807, a NumericDate no instant is represented for, is malformed: it is refused at
-    /// UserInfo over the wire with 401 <c>invalid_token</c> and <c>Bearer error="invalid_token"</c>,
+    /// UserInfo over the wire with 401 <c>invalid_token</c> and <c>Bearer realm="&lt;issuer&gt;", error="invalid_token"</c>,
     /// never a server error.
     /// </summary>
     /// <returns>A task that completes when the assertions have run.</returns>
@@ -4283,7 +5337,7 @@ internal sealed class UserInfoEndpointTests
             .ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        AssertRefused(response, body, HttpStatusCode.Unauthorized, "Bearer error=\"invalid_token\"", "invalid_token");
+        AssertRefused(response, body, HttpStatusCode.Unauthorized, UserInfoBearerChallenge(host, material, "invalid_token"), "invalid_token");
     }
 
 
@@ -4293,7 +5347,7 @@ internal sealed class UserInfoEndpointTests
     /// fail to validate other kinds of JWTs." A registration whose access tokens and ID Tokens are
     /// issued under two distinct keys: an access token re-signed under the registration's own ID Token
     /// key, presented at UserInfo over the wire, is refused with 401 <c>invalid_token</c> and
-    /// <c>Bearer error="invalid_token"</c>, and no claim of the End-User is returned.
+    /// <c>Bearer realm="&lt;issuer&gt;", error="invalid_token"</c>, and no claim of the End-User is returned.
     /// </summary>
     [TestMethod]
     public async Task UserInfoRefusesAnAccessTokenSignedUnderTheRegistrationsIdTokenKeyAsync()
@@ -4314,7 +5368,7 @@ internal sealed class UserInfoEndpointTests
             .ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        AssertRefused(response, body, HttpStatusCode.Unauthorized, "Bearer error=\"invalid_token\"", "invalid_token");
+        AssertRefused(response, body, HttpStatusCode.Unauthorized, UserInfoBearerChallenge(host, material, "invalid_token"), "invalid_token");
         using JsonDocument document = JsonDocument.Parse(body);
         Assert.AreEqual(
             "Access token is not signed by a key this server issues access tokens with.",
@@ -4372,7 +5426,7 @@ internal sealed class UserInfoEndpointTests
     /// the registration's key for access tokens serves the access token at UserInfo over the wire with
     /// 200 and the End-User's <c>sub</c>; a resolver that holds the same key only for ID Tokens answers
     /// nothing for an access token, and UserInfo refuses it with 401 <c>invalid_token</c>,
-    /// <c>Bearer error="invalid_token"</c> and the fixed description "No verification key is available
+    /// <c>Bearer realm="&lt;issuer&gt;", error="invalid_token"</c> and the fixed description "No verification key is available
     /// for the access token.", which names no key identifier.
     /// </summary>
     /// <param name="row">Which usage the row's resolver holds the key under: <see cref="HeldForAccessTokensRow"/> or <see cref="HeldForIdTokensRow"/>.</param>
@@ -4426,7 +5480,7 @@ internal sealed class UserInfoEndpointTests
             return;
         }
 
-        AssertRefused(response, body, HttpStatusCode.Unauthorized, "Bearer error=\"invalid_token\"", "invalid_token");
+        AssertRefused(response, body, HttpStatusCode.Unauthorized, UserInfoBearerChallenge(host, material, "invalid_token"), "invalid_token");
         Assert.AreEqual(KeyUsageContext.AccessTokenIssuance, Assert.ContainsSingle(askedUsages));
         using JsonDocument refused = JsonDocument.Parse(body);
         Assert.AreEqual(
@@ -4444,7 +5498,7 @@ internal sealed class UserInfoEndpointTests
     /// resource of this Authorization Server, whose identifier is the issuer. A registration whose scope map
     /// names another resource for <c>openid</c> is issued an access token whose <c>aud</c> is that resource
     /// alone; presented at UserInfo over the wire under the <c>Bearer</c> scheme, it is refused with 401,
-    /// <c>invalid_token</c> and the one challenge <c>Bearer error="invalid_token"</c>.
+    /// <c>invalid_token</c> and the one challenge <c>Bearer realm="&lt;issuer&gt;", error="invalid_token"</c>.
     /// </summary>
     /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
@@ -4465,7 +5519,7 @@ internal sealed class UserInfoEndpointTests
         using HttpResponseMessage response = await SendUserInfoOverWireAsync(host, material, accessToken).ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        AssertRefused(response, body, HttpStatusCode.Unauthorized, "Bearer error=\"invalid_token\"", "invalid_token");
+        AssertRefused(response, body, HttpStatusCode.Unauthorized, UserInfoBearerChallenge(host, material, "invalid_token"), "invalid_token");
     }
 
 
@@ -4509,7 +5563,7 @@ internal sealed class UserInfoEndpointTests
     /// rejected if "aud" does not contain a resource indicator of the current resource server as a valid
     /// audience." An access token signed under the registration's access-token key whose claims carry no
     /// <c>aud</c> contains no audience at all; presented at UserInfo over the wire under the <c>Bearer</c>
-    /// scheme, it is refused with 401, <c>invalid_token</c> and the one challenge <c>Bearer error="invalid_token"</c>.
+    /// scheme, it is refused with 401, <c>invalid_token</c> and the one challenge <c>Bearer realm="&lt;issuer&gt;", error="invalid_token"</c>.
     /// </summary>
     /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
@@ -4529,7 +5583,7 @@ internal sealed class UserInfoEndpointTests
         using HttpResponseMessage response = await SendUserInfoOverWireAsync(host, material, withoutAudience).ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        AssertRefused(response, body, HttpStatusCode.Unauthorized, "Bearer error=\"invalid_token\"", "invalid_token");
+        AssertRefused(response, body, HttpStatusCode.Unauthorized, UserInfoBearerChallenge(host, material, "invalid_token"), "invalid_token");
     }
 
 
@@ -4681,7 +5735,7 @@ internal sealed class UserInfoEndpointTests
     /// presented at UserInfo over the wire under the <c>Bearer</c> scheme with the injected clock set relative to
     /// the token's <c>exp</c>: one second before it the token is served 200 with the End-User's <c>sub</c>; at the
     /// instant of <c>exp</c> it is refused with 401, <c>invalid_token</c>, the one challenge
-    /// <c>Bearer error="invalid_token"</c> and the description "Access token has expired.".
+    /// <c>Bearer realm="&lt;issuer&gt;", error="invalid_token"</c> and the description "Access token has expired.".
     /// </summary>
     /// <param name="secondsFromExp">The clock's offset from the token's <c>exp</c>, in seconds: -1 or 0.</param>
     /// <returns>A task that completes when the assertions have run.</returns>
@@ -4712,7 +5766,7 @@ internal sealed class UserInfoEndpointTests
             return;
         }
 
-        AssertRefused(response, body, HttpStatusCode.Unauthorized, "Bearer error=\"invalid_token\"", "invalid_token");
+        AssertRefused(response, body, HttpStatusCode.Unauthorized, UserInfoBearerChallenge(host, material, "invalid_token"), "invalid_token");
         using JsonDocument refused = JsonDocument.Parse(body);
         Assert.AreEqual("Access token has expired.", refused.RootElement.GetProperty("error_description").GetString());
     }
@@ -4722,7 +5776,7 @@ internal sealed class UserInfoEndpointTests
     /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>: "invalid_token The
     /// access token provided is expired, revoked, malformed, or invalid for other reasons." A malformed access token
     /// presented at UserInfo over the wire under the <c>Bearer</c> scheme is refused with 401, <c>invalid_token</c>
-    /// and the one challenge <c>Bearer error="invalid_token"</c>, and its description is a fixed text that carries
+    /// and the one challenge <c>Bearer realm="&lt;issuer&gt;", error="invalid_token"</c>, and its description is a fixed text that carries
     /// nothing a parser said about the token. The rows: a protected header that is a JSON array
     /// (<c>W10.e30.AA</c>), answered "Access token is malformed."; a payload, signed under the registration's
     /// access-token key, that is the JSON array <c>[]</c>, answered "Access token payload could not be parsed.".
@@ -4754,7 +5808,7 @@ internal sealed class UserInfoEndpointTests
         using HttpResponseMessage response = await SendUserInfoOverWireAsync(host, material, malformedToken).ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        AssertRefused(response, body, HttpStatusCode.Unauthorized, "Bearer error=\"invalid_token\"", "invalid_token");
+        AssertRefused(response, body, HttpStatusCode.Unauthorized, UserInfoBearerChallenge(host, material, "invalid_token"), "invalid_token");
         using JsonDocument document = JsonDocument.Parse(body);
         Assert.AreEqual(expectedDescription, document.RootElement.GetProperty("error_description").GetString());
     }
@@ -4821,7 +5875,7 @@ internal sealed class UserInfoEndpointTests
     /// <see cref="VerificationRaisedMessage"/> as the function for the token's verification key is resolved; a
     /// signature whose verification cannot run is a signature that does
     /// not verify, so the token is refused with 401, <c>invalid_token</c>, the one challenge
-    /// <c>Bearer error="invalid_token"</c> and exactly the description "Access token signature verification
+    /// <c>Bearer realm="&lt;issuer&gt;", error="invalid_token"</c> and exactly the description "Access token signature verification
     /// failed.", and the body carries nothing of the exception's message.
     /// </summary>
     /// <returns>A task that completes when the assertions have run.</returns>
@@ -4856,7 +5910,7 @@ internal sealed class UserInfoEndpointTests
 
         using(response)
         {
-            AssertRefused(response, body, HttpStatusCode.Unauthorized, "Bearer error=\"invalid_token\"", "invalid_token");
+            AssertRefused(response, body, HttpStatusCode.Unauthorized, UserInfoBearerChallenge(host, material, "invalid_token"), "invalid_token");
             using JsonDocument document = JsonDocument.Parse(body);
             Assert.AreEqual(
                 "Access token signature verification failed.",
@@ -5371,7 +6425,7 @@ internal sealed class UserInfoEndpointTests
 
     /// <summary>
     /// Asserts that an in-process UserInfo refusal of a request without usable credentials carries the
-    /// one <c>WWW-Authenticate</c> value <c>Bearer scope="openid", DPoP realm="&lt;issuer&gt;", scope="openid", algs="..."</c>
+    /// one <c>WWW-Authenticate</c> value <c>Bearer realm="&lt;issuer&gt;", scope="openid", DPoP realm="&lt;issuer&gt;", scope="openid", algs="..."</c>
     /// (RFC 6750 Section 3 and Section 3.1, RFC 9449 Section 7.1 and Section 7.2).
     /// </summary>
     /// <param name="response">The dispatched response.</param>
@@ -5386,12 +6440,31 @@ internal sealed class UserInfoEndpointTests
 
     /// <summary>
     /// The challenge UserInfo answers a request without usable credentials with, written out:
-    /// <c>Bearer scope="openid", DPoP realm="&lt;issuer&gt;", scope="openid", algs="..."</c>.
+    /// <c>Bearer realm="&lt;issuer&gt;", scope="openid", DPoP realm="&lt;issuer&gt;", scope="openid", algs="..."</c>, the realm of
+    /// both challenges the issuer.
     /// </summary>
-    /// <param name="issuer">The issuer the registration is served under, the <c>DPoP</c> challenge's realm.</param>
+    /// <param name="issuer">The issuer the registration is served under, the realm of both challenges.</param>
     /// <returns>The <c>WWW-Authenticate</c> value.</returns>
     private static string MissingCredentialsChallenge(string issuer) =>
-        $"Bearer scope=\"openid\", {ResourceDpopProofs.DpopChallenge(issuer, error: null, scope: "openid")}";
+        $"Bearer realm=\"{issuer}\", scope=\"openid\", {ResourceDpopProofs.DpopChallenge(issuer, error: null, scope: "openid")}";
+
+
+    /// <summary>
+    /// The <c>Bearer</c> challenge UserInfo answers a refused <c>Bearer</c> presentation with, written out:
+    /// <c>Bearer realm="&lt;issuer&gt;", error="&lt;error&gt;"</c>, followed by <c>, scope="&lt;scope&gt;"</c> when a scope is
+    /// named, the realm the issuer the host serves the registration under, as the <c>DPoP</c> challenge carries it
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 Section 3</see>: "A "realm" attribute MAY
+    /// be included to indicate the scope of protection in the manner described in HTTP/1.1 [RFC2617].").
+    /// </summary>
+    /// <param name="host">The host holding the registration.</param>
+    /// <param name="material">The registration.</param>
+    /// <param name="error">The challenge's <c>error</c>.</param>
+    /// <param name="scope">The challenge's <c>scope</c>, or <see langword="null"/> for none.</param>
+    /// <returns>The <c>WWW-Authenticate</c> value.</returns>
+    private static string UserInfoBearerChallenge(TestHostShell host, VerifierKeyMaterial material, string error, string? scope = null) =>
+        scope is null
+            ? $"Bearer realm=\"{IssuerOf(host, material)}\", error=\"{error}\""
+            : $"Bearer realm=\"{IssuerOf(host, material)}\", error=\"{error}\", scope=\"{scope}\"";
 
 
     /// <summary>
@@ -5551,6 +6624,30 @@ internal sealed class UserInfoEndpointTests
     }
 
 
+    /// <summary>
+    /// Issues an access token through the authorization-code flow whose pushed authorization request and token request
+    /// are sent over the wire, the pushed request naming <paramref name="resource"/> as its <c>resource</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 Section 2</see>), and returns it.
+    /// </summary>
+    /// <param name="host">The host the flow is driven against.</param>
+    /// <param name="material">The registration.</param>
+    /// <param name="scope">The requested scope.</param>
+    /// <param name="resource">The resource indicator the pushed request names.</param>
+    /// <returns>The access token.</returns>
+    private async ValueTask<string> IssueAccessTokenOverTheWireAsync(
+        TestHostShell host, VerifierKeyMaterial material, string scope, string resource)
+    {
+        InProcessAuthCodeDriveResult result = await InProcessAuthCodeDriver.DriveAsync(
+            host, material, SubjectId, RedirectUri,
+            new InProcessAuthCodeDriveOptions { Scope = scope, Resource = resource, UsesRealWireTransport = true },
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        using JsonDocument body = JsonDocument.Parse(result.TokenResponse.Body);
+
+        return body.RootElement.GetProperty("access_token").GetString()!;
+    }
+
+
     private async ValueTask<string> IssueAccessTokenAsync(
         TestHostShell host, VerifierKeyMaterial material, string scope)
     {
@@ -5585,7 +6682,10 @@ internal sealed class UserInfoEndpointTests
             Method: httpMethod,
             Fields: new RequestFields(),
             Headers: headers,
-            RouteValues: RouteValues.Empty);
+            RouteValues: RouteValues.Empty)
+        {
+            RequestTarget = path
+        };
 
         ExchangeContext context = [];
         context.SetTenantId(segment);

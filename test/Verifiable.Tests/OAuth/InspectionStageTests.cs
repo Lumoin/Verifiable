@@ -184,7 +184,10 @@ internal sealed class InspectionStageTests
             Method: "POST",
             Fields: new RequestFields(),
             Headers: RequestHeaders.Empty,
-            RouteValues: RouteValues.Empty);
+            RouteValues: RouteValues.Empty)
+        {
+            RequestTarget = $"/connect/{segment}/unknown-endpoint"
+        };
 
         ExchangeContext context = [];
         context.SetTenantId(segment);
@@ -233,7 +236,10 @@ internal sealed class InspectionStageTests
             Method: "POST",
             Fields: new RequestFields(),
             Headers: RequestHeaders.Empty,
-            RouteValues: RouteValues.Empty);
+            RouteValues: RouteValues.Empty)
+        {
+            RequestTarget = $"/connect/{segment}/unknown-endpoint"
+        };
 
         ExchangeContext context = [];
         context.SetTenantId(segment);

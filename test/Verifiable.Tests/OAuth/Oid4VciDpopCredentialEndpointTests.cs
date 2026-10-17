@@ -267,7 +267,7 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
     /// contain an access token that enables access to the protected resource, the resource server MUST
     /// include the HTTP "WWW-Authenticate" response header field". A DPoP-bound access token presented
     /// at the Credential Endpoint over the wire under the <c>Bearer</c> scheme is refused with 401
-    /// <c>invalid_token</c> and the single challenge <c>Bearer error="invalid_token"</c>.
+    /// <c>invalid_token</c> and the single challenge <c>Bearer realm="&lt;issuer&gt;", error="invalid_token"</c>.
     /// </summary>
     [TestMethod]
     public async Task DpopBoundTokenUnderBearerSchemeIsRejected()
@@ -285,7 +285,7 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
         Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
         Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges),
             "RFC 6750 §3: the refusal carries a WWW-Authenticate challenge.");
-        Assert.AreEqual("Bearer error=\"invalid_token\"", challenges.Single());
+        Assert.AreEqual($"Bearer realm=\"{IssuerOf(ctx)}\", error=\"invalid_token\"", challenges.Single());
         using JsonDocument document = JsonDocument.Parse(body);
         Assert.AreEqual("invalid_token", document.RootElement.GetProperty("error").GetString());
     }
@@ -751,8 +751,9 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
     /// the nonce its <c>DPoP-Nonce</c> header provides.
     /// </summary>
     /// <param name="ctx">The bound-token context.</param>
+    /// <param name="resourceMetadata">The <c>resource_metadata</c> the challenge names, or <see langword="null"/> for none.</param>
     /// <returns>The nonce the endpoint provided.</returns>
-    private async Task<string> ObtainResourceNonceAsync(BoundTokenContext ctx)
+    private async Task<string> ObtainResourceNonceAsync(BoundTokenContext ctx, Uri? resourceMetadata = null)
     {
         using HttpResponseMessage challenge = await PostCredentialAsync(ctx, ctx.AccessToken, dpopProof: null)
             .ConfigureAwait(false);
@@ -760,7 +761,7 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
 
         Assert.AreEqual(HttpStatusCode.Unauthorized, challenge.StatusCode, body);
         Assert.IsTrue(challenge.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges));
-        Assert.AreEqual(CredentialDpopChallenge(ctx, "use_dpop_nonce"), challenges.Single());
+        Assert.AreEqual(CredentialDpopChallenge(ctx, "use_dpop_nonce", resourceMetadata), challenges.Single());
         using JsonDocument document = JsonDocument.Parse(body);
         Assert.AreEqual("use_dpop_nonce", document.RootElement.GetProperty("error").GetString());
 
@@ -781,9 +782,10 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
     /// </summary>
     /// <param name="ctx">The bound-token context.</param>
     /// <param name="error">The challenge's <c>error</c>, or <see langword="null"/> for a challenge carrying none.</param>
+    /// <param name="resourceMetadata">The challenge's <c>resource_metadata</c>, or <see langword="null"/> for none.</param>
     /// <returns>The <c>WWW-Authenticate</c> value.</returns>
-    private static string CredentialDpopChallenge(BoundTokenContext ctx, string? error) =>
-        ResourceDpopProofs.DpopChallenge(IssuerOf(ctx), error);
+    private static string CredentialDpopChallenge(BoundTokenContext ctx, string? error, Uri? resourceMetadata = null) =>
+        ResourceDpopProofs.DpopChallenge(IssuerOf(ctx), error, resourceMetadata: resourceMetadata);
 
 
     /// <summary>
@@ -847,7 +849,7 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
         Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
         Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges),
             "RFC 6750 §3: the refusal carries a WWW-Authenticate challenge.");
-        Assert.AreEqual("Bearer error=\"invalid_token\"", challenges.Single());
+        Assert.AreEqual($"Bearer realm=\"{IssuerOf(ctx)}\", error=\"invalid_token\"", challenges.Single());
     }
 
 
@@ -857,7 +859,7 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
     /// reasons. The resource SHOULD respond with the HTTP 401 (Unauthorized) status code." An access
     /// token whose protected header's <c>kid</c> is a single space names no key and is malformed: it is
     /// refused at the Credential Endpoint over the wire with 401 <c>invalid_token</c> and the challenge
-    /// <c>Bearer error="invalid_token"</c>, never a server error.
+    /// <c>Bearer realm="&lt;issuer&gt;", error="invalid_token"</c>, never a server error.
     /// </summary>
     [TestMethod]
     public async Task CredentialEndpointRefusesAnAccessTokenWhoseKidIsWhitespaceAsync()
@@ -876,7 +878,7 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
         Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
         Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges),
             "RFC 6750 §3: the refusal carries a WWW-Authenticate challenge.");
-        Assert.AreEqual("Bearer error=\"invalid_token\"", challenges.Single());
+        Assert.AreEqual($"Bearer realm=\"{IssuerOf(ctx)}\", error=\"invalid_token\"", challenges.Single());
         using JsonDocument document = JsonDocument.Parse(body);
         Assert.AreEqual("invalid_token", document.RootElement.GetProperty("error").GetString());
         Assert.AreEqual("Access token header is missing kid.", document.RootElement.GetProperty("error_description").GetString());
@@ -977,6 +979,146 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
     }
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9068#section-4">RFC 9068 Section 4</see>: "The resource server MUST
+    /// validate that the "aud" claim contains a resource indicator value corresponding to an identifier the resource
+    /// server expects for itself.", with <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 Section
+    /// 2</see>: "The authorization server SHOULD audience-restrict issued access tokens to the resource(s) indicated by the
+    /// "resource" parameter." The Credential Endpoint expects for itself the issuer and its own URL, the identifier its
+    /// protected resource metadata document names as <c>resource</c>. The authorization-code flow over the wire whose
+    /// pushed request names the Credential Endpoint's URL as its <c>resource</c> issues a DPoP-bound access token whose
+    /// <c>aud</c> is that URL alone; presented at the Credential Endpoint over the wire under the <c>DPoP</c> scheme with a
+    /// proof from the bound key carrying the nonce the endpoint provided, it is served 200.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task CredentialEndpointServesATokenAudiencedAtItsOwnIdentifierAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        BoundTokenContext ctx = await AcquireAsync(
+            host, capabilities: DocumentServingCapabilities, requestedEndpointName: WellKnownEndpointNames.Oid4VciCredential).ConfigureAwait(false);
+        using DpopClientFixture fixture = ctx.Fixture;
+
+        using JsonDocument payload = JsonDocument.Parse(
+            SecurityEventTestJson.DecodeSegment(ctx.AccessToken.Split('.')[1], BaseMemoryPool.Shared));
+        Assert.AreEqual(
+            $"[\"{ctx.CredentialUrl}\"]", payload.RootElement.GetProperty("aud").GetRawText(),
+            "The requested resource, the Credential Endpoint's URL, is the token's audience.");
+
+        string nonce = await ObtainResourceNonceAsync(ctx, new Uri(DocumentUrlOf(ctx.CredentialUrl))).ConfigureAwait(false);
+        string proof = await BuildCredentialProofAsync(ctx, freshKey: null, nonce).ConfigureAwait(false);
+        using HttpResponseMessage response = await PostCredentialAsync(ctx, ctx.AccessToken, proof).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode, body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-5.1">RFC 9728 Section 5.1</see>: "This parameter MAY
+    /// also be used in WWW-Authenticate responses using authorization schemes other than "Bearer" [RFC6750], such as the
+    /// DPoP scheme defined by [RFC9449]." Under a registration allowing
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>, an access token whose signature does
+    /// not verify, presented at the Credential Endpoint over the wire under the <c>DPoP</c> scheme, is refused with 401
+    /// and exactly the one challenge
+    /// <c>DPoP realm="&lt;issuer&gt;", error="invalid_token", algs="...", resource_metadata="&lt;document&gt;"</c>, the
+    /// document's URL formed by inserting <c>/.well-known/oauth-protected-resource</c> between the host and the path of the
+    /// Credential Endpoint's URL.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task CredentialEndpointDpopChallengeNamesItsResourceMetadataAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        BoundTokenContext ctx = await AcquireAsync(host, capabilities: DocumentServingCapabilities).ConfigureAwait(false);
+        using DpopClientFixture fixture = ctx.Fixture;
+
+        using HttpResponseMessage response = await PostCredentialAsync(ctx, TamperSignature(ctx.AccessToken), dpopProof: null).ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode, body);
+        Assert.AreEqual(
+            ResourceDpopProofs.DpopChallenge(IssuerOf(ctx), "invalid_token", resourceMetadata: new Uri(DocumentUrlOf(ctx.CredentialUrl))),
+            Assert.ContainsSingle(RawAuthCodeWirePushers.ChallengesOf(response)));
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 Section 3</see>: "A "realm" attribute MAY be
+    /// included to indicate the scope of protection in the manner described in HTTP/1.1 [RFC2617]." and "Other
+    /// auth-param attributes MAY be used as well.", with <see href="https://www.rfc-editor.org/rfc/rfc9728#section-5.1">RFC
+    /// 9728 Section 5.1</see>'s example "WWW-Authenticate: Bearer resource_metadata=". Under a registration allowing
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>, every <c>Bearer</c> challenge the
+    /// Credential Endpoint answers over the wire carries the realm and the URL of its document. The rows: a Credential
+    /// Request without credentials, 401 with an empty body and exactly
+    /// <c>Bearer realm="&lt;issuer&gt;", resource_metadata="&lt;document&gt;", DPoP realm="&lt;issuer&gt;", algs="...", resource_metadata="&lt;document&gt;"</c>;
+    /// an access token whose signature does not verify under <c>Bearer</c>, 401 and exactly
+    /// <c>Bearer realm="&lt;issuer&gt;", error="invalid_token", resource_metadata="&lt;document&gt;"</c>.
+    /// </summary>
+    /// <param name="row">The presentation: <see cref="NoCredentialsRow"/> or <see cref="TamperedTokenRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(NoCredentialsRow)]
+    [DataRow(TamperedTokenRow)]
+    public async Task CredentialEndpointBearerChallengesCarryTheResourceMetadataAsync(string row)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        BoundTokenContext ctx = await AcquireAsync(host, capabilities: DocumentServingCapabilities).ConfigureAwait(false);
+        using DpopClientFixture fixture = ctx.Fixture;
+        string issuer = IssuerOf(ctx);
+        string documentUrl = DocumentUrlOf(ctx.CredentialUrl);
+
+        IReadOnlyList<KeyValuePair<string, string>> fieldLines = row switch
+        {
+            NoCredentialsRow => [],
+            TamperedTokenRow => [new(WellKnownHttpHeaderNames.Authorization, "Bearer " + TamperSignature(ctx.AccessToken))],
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown presentation row.")
+        };
+        string challenge = row switch
+        {
+            NoCredentialsRow => $"Bearer realm=\"{issuer}\", resource_metadata=\"{documentUrl}\", "
+                + ResourceDpopProofs.DpopChallenge(issuer, error: null, resourceMetadata: new Uri(documentUrl)),
+            _ => $"Bearer realm=\"{issuer}\", error=\"invalid_token\", resource_metadata=\"{documentUrl}\""
+        };
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Post, ctx.CredentialUrl,
+            [new(WellKnownHttpHeaderNames.ContentType, WellKnownMediaTypes.Application.Json), .. fieldLines],
+            Encoding.UTF8.GetBytes("{\"credential_configuration_id\":\"" + ConfigurationId + "\",\"proofs\":{\"jwt\":[\"p\"]}}"),
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The request is answered without a server fault.");
+        Assert.AreEqual(401, response.StatusCode, response.Body);
+        Assert.AreEqual(challenge, Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
+    }
+
+
+    /// <summary>
+    /// The capabilities of <see cref="Capabilities"/> and
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>, under which the protected resource
+    /// metadata documents of the Credential, Deferred Credential and Notification endpoints are served.
+    /// </summary>
+    private static ImmutableHashSet<CapabilityIdentifier> DocumentServingCapabilities { get; } =
+        Capabilities.Add(WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata);
+
+    /// <summary>
+    /// The challenge row whose request carries no credentials. A constant, not a property, because a DataRow attribute
+    /// argument must be a compile-time constant.
+    /// </summary>
+    private const string NoCredentialsRow = "no-credentials";
+
+
+    /// <summary>
+    /// The URL a protected resource metadata document is served at for the resource <paramref name="identifier"/>
+    /// identifies, written out: <c>/.well-known/oauth-protected-resource</c> inserted between the host and the path
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.1">RFC 9728 Section 3.1</see>: "GET
+    /// /.well-known/oauth-protected-resource/resource1 HTTP/1.1").
+    /// </summary>
+    /// <param name="identifier">The resource identifier, an https URL with a path and no query.</param>
+    /// <returns>The document's URL.</returns>
+    private static string DocumentUrlOf(Uri identifier) =>
+        $"{identifier.GetLeftPart(UriPartial.Authority)}/.well-known/oauth-protected-resource{identifier.AbsolutePath}";
+
+
     /// <summary>The identifier of a resource other than this Authorization Server.</summary>
     private static string OtherResourceAudience { get; } = "https://rs.example.com";
 
@@ -1026,14 +1168,23 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
     /// Whether the pushed authorization request names the registration's issuer, the Credential Issuer's
     /// identifier, as its <c>resource</c>; otherwise it names none.
     /// </param>
+    /// <param name="capabilities">The registration's capabilities, or <see langword="null"/> for <see cref="Capabilities"/>.</param>
+    /// <param name="requestedEndpointName">
+    /// The endpoint whose URL on the host's listener the pushed authorization request names as its <c>resource</c>, or
+    /// <see langword="null"/> to name none beyond <paramref name="isIssuerRequestedAsResource"/>.
+    /// </param>
     /// <returns>The bound-token context.</returns>
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "The host's key stores own and dispose the registration's key material; the returned " +
         "VerifierKeyMaterial is a handle to those same instances, released when the host is disposed.")]
-    private async Task<BoundTokenContext> AcquireAsync(TestHostShell host, bool isIssuerRequestedAsResource = false)
+    private async Task<BoundTokenContext> AcquireAsync(
+        TestHostShell host,
+        bool isIssuerRequestedAsResource = false,
+        ImmutableHashSet<CapabilityIdentifier>? capabilities = null,
+        string? requestedEndpointName = null)
     {
         VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
-            ClientId, ClientBaseUri, PolicyProfile.Haip10, Capabilities).ConfigureAwait(false);
+            ClientId, ClientBaseUri, PolicyProfile.Haip10, capabilities ?? Capabilities).ConfigureAwait(false);
         _ = await host.EnableDpopAsync().ConfigureAwait(false);
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
@@ -1055,9 +1206,13 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
         string segment = material.Registration.TenantId.Value;
 
         //Step 1 — PAR.
-        IReadOnlyList<string>? resource = isIssuerRequestedAsResource
-            ? [fixture.Registration.AuthorizationServerIssuer.OriginalString]
-            : null;
+        IReadOnlyList<string>? resource = (isIssuerRequestedAsResource, requestedEndpointName) switch
+        {
+            (true, _) => [fixture.Registration.AuthorizationServerIssuer.OriginalString],
+            (false, string endpointName) => [new Uri(host.Host("default").HttpBaseAddress!,
+                TestHostShell.ComposeEndpointPath(endpointName, segment)).ToString()],
+            _ => null
+        };
         AuthCodeFlowEndpointResult parResult = await fixture.Client.AuthCode.StartParAsync(
             fixture.Registration, RedirectUri, OAuthFormEncodedFieldsFixtures.OpenIdScope, [], resource, TestContext.CancellationToken)
             .ConfigureAwait(false);

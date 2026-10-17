@@ -323,7 +323,10 @@ internal sealed class WebFingerServerResponseTests
             Method: WellKnownHttpMethods.Get,
             Fields: ResourceFields(Resource),
             Headers: RequestHeaders.Empty,
-            RouteValues: RouteValues.Empty);
+            RouteValues: RouteValues.Empty)
+        {
+            RequestTarget = "/.well-known/not-webfinger"
+        };
 
         ServerHttpResponse response = await server.DispatchAsync(
             wrongPath, [], TestContext.CancellationToken).ConfigureAwait(false);
@@ -429,7 +432,10 @@ internal sealed class WebFingerServerResponseTests
             Method: WellKnownHttpMethods.Get,
             Fields: fields,
             Headers: headers ?? RequestHeaders.Empty,
-            RouteValues: RouteValues.Empty);
+            RouteValues: RouteValues.Empty)
+        {
+            RequestTarget = WellKnownWebFingerValues.WellKnownPath
+        };
 
 
     /// <summary>Dispatches a fresh request against <paramref name="server"/> through the real <see cref="EndpointServer.DispatchAsync"/>.</summary>

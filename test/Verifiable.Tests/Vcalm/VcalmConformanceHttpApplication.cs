@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
 using System.Buffers;
 using System.Diagnostics;
 using System.IO.Pipelines;
@@ -465,7 +466,11 @@ internal sealed class VcalmConformanceHttpApplication
             Method: method,
             Fields: fields,
             Headers: MapHeaders(request.Headers),
-            RouteValues: RouteValues.Empty);
+            RouteValues: RouteValues.Empty)
+        {
+            RequestTarget = request.HttpContext.Features.Get<IHttpRequestFeature>()?.RawTarget
+                ?? throw new InvalidOperationException("The server answered no raw request-target for the request.")
+        };
     }
 
 

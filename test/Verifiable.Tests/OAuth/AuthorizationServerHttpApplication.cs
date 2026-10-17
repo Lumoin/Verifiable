@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
@@ -254,23 +255,32 @@ internal sealed class AuthorizationServerHttpApplication
     /// <summary>
     /// Parses the tenant segment from <c>/connect/{segment}/...</c>, or from the segment after an
     /// inserted well-known suffix (<c>oauth-protected-resource</c>, <c>oauth-authorization-server</c>,
-    /// <c>openid-credential-issuer</c>). Returns <see langword="null"/> for any other path; the
-    /// dispatcher's prologue then reports a missing tenant and the response is the library's
-    /// standard 400.
+    /// <c>openid-credential-issuer</c>). An inserted suffix followed by <c>connect/</c> is the document of a
+    /// resource whose identifier is an endpoint URL of this skin, <c>/connect/{segment}/...</c>, so the
+    /// segment after <c>connect/</c> is read: <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3">RFC 9728
+    /// Section 3</see> inserts the suffix "between the host component and the path and/or query components", and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.1">Section 3.1</see>: "Using path components enables
+    /// supporting multiple resources per host. This is required in some multi-tenant hosting configurations." Returns
+    /// <see langword="null"/> for any other path; the dispatcher's prologue then reports a missing tenant and the
+    /// response is the library's standard 400.
     /// </summary>
     /// <param name="path">The request path as received, beginning with <c>/</c>.</param>
     /// <returns>The tenant segment, or <see langword="null"/> when the path carries none of the recognised forms.</returns>
     private static string? ExtractTenantSegmentFromPath(string path)
     {
+        const string prefix = "/connect/";
         foreach(string insertedPrefix in InsertedWellKnownPrefixes)
         {
             if(path.StartsWith(insertedPrefix, StringComparison.Ordinal))
             {
-                return ReadSegmentAfterPrefix(path, insertedPrefix);
+                string identifierPath = path[(insertedPrefix.Length - 1)..];
+
+                return identifierPath.StartsWith(prefix, StringComparison.Ordinal)
+                    ? ReadSegmentAfterPrefix(identifierPath, prefix)
+                    : ReadSegmentAfterPrefix(path, insertedPrefix);
             }
         }
 
-        const string prefix = "/connect/";
         if(!path.StartsWith(prefix, StringComparison.Ordinal))
         {
             return null;
@@ -399,10 +409,24 @@ internal sealed class AuthorizationServerHttpApplication
             Headers: headers,
             RouteValues: RouteValues.Empty)
         {
+            RequestTarget = RawTargetOf(request),
             Body = body,
             ListenerAuthority = listenerAuthority
         };
     }
+
+
+    /// <summary>
+    /// The request-target of <paramref name="request"/> exactly as the client sent it on the request line, the server's
+    /// raw target (<see cref="IHttpRequestFeature.RawTarget"/>), never decoded and never read from a request field:
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9112#section-3.2.1">RFC 9112 Section 3.2.1</see>,
+    /// "origin-form = absolute-path [ "?" query ]".
+    /// </summary>
+    /// <param name="request">The inbound HTTP request.</param>
+    /// <returns>The raw request-target.</returns>
+    private static string RawTargetOf(HttpRequest request) =>
+        request.HttpContext.Features.Get<IHttpRequestFeature>()?.RawTarget
+        ?? throw new InvalidOperationException("The server answered no raw request-target for the request.");
 
 
     /// <summary>

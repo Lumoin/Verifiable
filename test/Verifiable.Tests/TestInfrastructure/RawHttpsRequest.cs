@@ -58,6 +58,11 @@ internal static class RawHttpsRequest
     /// the connection still goes to <paramref name="target"/>'s loopback port, so a request names an authority its
     /// listener does not serve under.
     /// </param>
+    /// <param name="requestTarget">
+    /// The request-target written on the request line as given, or <see langword="null"/> for the path and query of
+    /// <paramref name="target"/>; <see cref="Uri"/> writes a percent-encoded unreserved character decoded, so a spelling
+    /// such as <c>%75</c> reaches the wire only through this value.
+    /// </param>
     /// <returns>The status, every received field line and the body.</returns>
     internal static Task<HttpResponseData> SendAsync(
         TestHostShell host,
@@ -66,11 +71,12 @@ internal static class RawHttpsRequest
         IReadOnlyList<KeyValuePair<string, string>> fieldLines,
         ReadOnlyMemory<byte> body,
         CancellationToken cancellationToken,
-        string? hostFieldValue = null)
+        string? hostFieldValue = null,
+        string? requestTarget = null)
     {
         ArgumentNullException.ThrowIfNull(host);
 
-        return SendPinnedAsync(host.ServerCertificate, method, target, fieldLines, body, cancellationToken, hostFieldValue);
+        return SendPinnedAsync(host.ServerCertificate, method, target, fieldLines, body, cancellationToken, hostFieldValue, requestTarget);
     }
 
 
@@ -87,6 +93,7 @@ internal static class RawHttpsRequest
     /// <param name="body">The body bytes, sent as given.</param>
     /// <param name="cancellationToken">Cancels the exchange.</param>
     /// <param name="hostFieldValue">The value of the <c>Host</c> field line, or <see langword="null"/> for the authority of <paramref name="target"/>.</param>
+    /// <param name="requestTarget">The request-target written on the request line as given, or <see langword="null"/> for the path and query of <paramref name="target"/>.</param>
     /// <returns>The status, every received field line and the body.</returns>
     internal static async Task<HttpResponseData> SendPinnedAsync(
         X509Certificate2 serverCertificate,
@@ -95,7 +102,8 @@ internal static class RawHttpsRequest
         IReadOnlyList<KeyValuePair<string, string>> fieldLines,
         ReadOnlyMemory<byte> body,
         CancellationToken cancellationToken,
-        string? hostFieldValue = null)
+        string? hostFieldValue = null,
+        string? requestTarget = null)
     {
         ArgumentNullException.ThrowIfNull(serverCertificate);
         ArgumentException.ThrowIfNullOrWhiteSpace(method);
@@ -103,7 +111,7 @@ internal static class RawHttpsRequest
         ArgumentNullException.ThrowIfNull(fieldLines);
 
         StringBuilder head = new();
-        _ = head.Append(method).Append(' ').Append(target.PathAndQuery).Append(" HTTP/1.1").Append(LineEnd);
+        _ = head.Append(method).Append(' ').Append(requestTarget ?? target.PathAndQuery).Append(" HTTP/1.1").Append(LineEnd);
         _ = head.Append("Host: ").Append(hostFieldValue ?? target.Authority).Append(LineEnd);
         foreach(KeyValuePair<string, string> fieldLine in fieldLines)
         {

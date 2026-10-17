@@ -44,7 +44,7 @@ internal sealed class ProtectedResourceMetadataTests
 
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            candidateIntegration.ContributeProtectedResourceMetadataAsync = static (_, _, _) =>
+            candidateIntegration.ContributeProtectedResourceMetadataAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(new ProtectedResourceMetadataContribution
                 {
                     AuthorizationServers = ["https://as.example.com"],
@@ -129,7 +129,7 @@ internal sealed class ProtectedResourceMetadataTests
 
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            candidateIntegration.ContributeProtectedResourceMetadataAsync = static (_, _, _) =>
+            candidateIntegration.ContributeProtectedResourceMetadataAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(new ProtectedResourceMetadataContribution
                 {
                     ScopesSupported = [WellKnownScopes.SsfRead]
@@ -185,22 +185,23 @@ internal sealed class ProtectedResourceMetadataTests
     /// used to indicate that no bearer methods are supported." and "dpop_bound_access_tokens_required OPTIONAL. Boolean
     /// value specifying whether the protected resource always requires the use of DPoP-bound access tokens [RFC9449].",
     /// with <see href="https://www.rfc-editor.org/rfc/rfc9728#section-2.2">Section 2.2</see>: "signed_metadata A JWT
-    /// containing metadata parameters about the protected resource as claims." At a server whose resources require
-    /// DPoP-bound access tokens, a resource contributing an empty <c>bearer_methods_supported</c> serves, over the wire, a
-    /// document whose <c>signed_metadata</c> is the signer's JWT, and the claims handed to the signer carry
-    /// <c>bearer_methods_supported</c> as an empty list and <c>dpop_bound_access_tokens_required</c> as
-    /// <see langword="true"/>, the values the plain document carries.
+    /// containing metadata parameters about the protected resource as claims." The issuer's document describes the
+    /// resource the issuer identifies, which the requirement of the server's own resources does not govern. At a server
+    /// whose resources require DPoP-bound access tokens, a resource contributing an empty
+    /// <c>bearer_methods_supported</c> serves, over the wire, a document whose <c>signed_metadata</c> is the signer's
+    /// JWT, and the claims handed to the signer carry <c>bearer_methods_supported</c> as the contributed empty list and
+    /// no <c>dpop_bound_access_tokens_required</c>, the values the plain document carries.
     /// </summary>
     /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
-    public async Task SignedMetadataCarriesTheEmptyBearerMethodsAndTheDpopRequirementAsync()
+    public async Task SignedMetadataCarriesTheContributedBearerMethodsUnderTheResourcesRequirementAsync()
     {
         JwtPayload? signedClaims = null;
         await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial resource = await RegisterProtectedResourceAsync(app).ConfigureAwait(false);
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            candidateIntegration.ContributeProtectedResourceMetadataAsync = (_, _, _) =>
+            candidateIntegration.ContributeProtectedResourceMetadataAsync = (_, _, _, _) =>
                 ValueTask.FromResult(new ProtectedResourceMetadataContribution { BearerMethodsSupported = [] });
         }).ConfigureAwait(false);
         await RequireDpopBoundAccessTokensAsync(app).ConfigureAwait(false);
@@ -233,9 +234,8 @@ internal sealed class ProtectedResourceMetadataTests
         Assert.IsTrue(signedClaims.TryGetValue(ProtectedResourceMetadataParameterNames.BearerMethodsSupported, out object? bearerMethods),
             "The signed claims carry bearer_methods_supported.");
         Assert.IsEmpty(Assert.IsInstanceOfType<IReadOnlyList<string>>(bearerMethods), "The signed bearer_methods_supported is the empty list.");
-        Assert.IsTrue(signedClaims.TryGetValue(ProtectedResourceMetadataParameterNames.DpopBoundAccessTokensRequired, out object? isRequired),
-            "The signed claims carry dpop_bound_access_tokens_required.");
-        Assert.IsTrue(Assert.IsInstanceOfType<bool>(isRequired), "The signed dpop_bound_access_tokens_required is true.");
+        Assert.IsFalse(signedClaims.ContainsKey(ProtectedResourceMetadataParameterNames.DpopBoundAccessTokensRequired),
+            "The signed claims carry no dpop_bound_access_tokens_required the contribution does not state.");
     }
 
 
@@ -296,7 +296,7 @@ internal sealed class ProtectedResourceMetadataTests
             candidateIntegration.AuthorizeSsfRequestAsync = static (evaluation, registration, context, ct) =>
                 ValueTask.FromResult(SsfRequestDecision.Deny(SsfRequestDenialReason.AuthenticationRequired));
 
-            candidateIntegration.ContributeProtectedResourceMetadataAsync = static (_, _, _) =>
+            candidateIntegration.ContributeProtectedResourceMetadataAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(new ProtectedResourceMetadataContribution
                 {
                     ScopesSupported = [WellKnownScopes.SsfRead, WellKnownScopes.SsfManage]
@@ -632,58 +632,231 @@ internal sealed class ProtectedResourceMetadataTests
     /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-2">RFC 9728 Section 2</see>:
     /// "dpop_bound_access_tokens_required OPTIONAL. Boolean value specifying whether the protected resource always
-    /// requires the use of DPoP-bound access tokens [RFC9449]." and "The empty array [] can be used to indicate that no
-    /// bearer methods are supported." At a server whose resources require DPoP-bound access tokens, a resource whose
-    /// contribution states neither member serves, over the wire, a document carrying
-    /// <c>"dpop_bound_access_tokens_required":true</c> and <c>"bearer_methods_supported":[]</c>, and the consumer reads
-    /// <see langword="true"/> and an empty list.
+    /// requires the use of DPoP-bound access tokens [RFC9449]. If omitted, the default value is false." The issuer's
+    /// document describes the resource the issuer identifies, which the requirement of the server's own resources does not
+    /// govern; those resources state it in their own documents. At a server whose resources require DPoP-bound access
+    /// tokens, a resource whose contribution states neither member serves, over the wire, a document carrying neither
+    /// <c>dpop_bound_access_tokens_required</c> nor <c>bearer_methods_supported</c>, and the consumer reads no stated value
+    /// for either.
     /// </summary>
     /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
-    public async Task DocumentStatesThatTheResourcesRequireDpopBoundAccessTokensAsync()
+    public async Task IssuerDocumentStatesOnlyItsContributionUnderTheResourcesRequirementAsync()
     {
         (string body, ProtectedResourceMetadata? metadata) = await FetchContributedDocumentAsync(
             new ProtectedResourceMetadataContribution { ScopesSupported = [WellKnownScopes.SsfRead] },
             RequireDpopBoundAccessTokensAsync).ConfigureAwait(false);
 
-        Assert.Contains("\"dpop_bound_access_tokens_required\":true", body, StringComparison.Ordinal, body);
-        Assert.Contains("\"bearer_methods_supported\":[]", body, StringComparison.Ordinal, body);
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.IsFalse(document.RootElement.TryGetProperty(ProtectedResourceMetadataParameterNames.DpopBoundAccessTokensRequired, out _),
+            "The issuer's document states no dpop_bound_access_tokens_required its contribution does not state.");
+        Assert.IsFalse(document.RootElement.TryGetProperty(ProtectedResourceMetadataParameterNames.BearerMethodsSupported, out _),
+            "The issuer's document states no bearer_methods_supported its contribution does not state.");
         Assert.IsNotNull(metadata);
-        Assert.IsTrue(metadata.DpopBoundAccessTokensRequired);
-        Assert.IsNotNull(metadata.BearerMethodsSupported);
-        Assert.IsEmpty(metadata.BearerMethodsSupported);
+        Assert.IsNull(metadata.DpopBoundAccessTokensRequired);
+        Assert.IsNull(metadata.BearerMethodsSupported);
     }
 
 
     /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-2">RFC 9728 Section 2</see>:
     /// "dpop_bound_access_tokens_required OPTIONAL. Boolean value specifying whether the protected resource always
-    /// requires the use of DPoP-bound access tokens [RFC9449]."; the document states what the resources do. At a server
-    /// whose resources require DPoP-bound access tokens, a contribution that states otherwise contradicts the resources
-    /// and no document is served: the fetch over the wire is answered 500 with <c>server_error</c> in the body. The rows:
-    /// a contribution stating <c>dpop_bound_access_tokens_required: false</c>; one naming the bearer method
-    /// <c>header</c>.
+    /// requires the use of DPoP-bound access tokens [RFC9449]."; the issuer's document states what the resource the
+    /// issuer identifies does, which the requirement of the server's own resources does not govern. At a server whose
+    /// resources require DPoP-bound access tokens, the issuer's document is served over the wire 200 with the
+    /// contribution's member as stated. The rows: a contribution stating <c>dpop_bound_access_tokens_required: false</c>,
+    /// served as <c>"dpop_bound_access_tokens_required":false</c>; one naming the bearer method <c>header</c>, served as
+    /// <c>"bearer_methods_supported":["header"]</c>.
     /// </summary>
-    /// <param name="row">The contradicting contribution: <see cref="StatesNotRequiredRow"/> or <see cref="NamesABearerMethodRow"/>.</param>
+    /// <param name="row">The contribution: <see cref="StatesNotRequiredRow"/> or <see cref="NamesABearerMethodRow"/>.</param>
     /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
     [DataRow(StatesNotRequiredRow)]
     [DataRow(NamesABearerMethodRow)]
-    public async Task DocumentContradictingTheDpopRequirementIsNotServedAsync(string row)
+    public async Task IssuerDocumentServesItsContributionUnderTheResourcesRequirementAsync(string row)
     {
-        ProtectedResourceMetadataContribution contribution = row switch
+        (ProtectedResourceMetadataContribution contribution, string member) = row switch
         {
-            StatesNotRequiredRow => new ProtectedResourceMetadataContribution { DpopBoundAccessTokensRequired = false },
-            NamesABearerMethodRow => new ProtectedResourceMetadataContribution { BearerMethodsSupported = [BearerMethodValues.Header] },
+            StatesNotRequiredRow => (new ProtectedResourceMetadataContribution { DpopBoundAccessTokensRequired = false },
+                "\"dpop_bound_access_tokens_required\":false"),
+            NamesABearerMethodRow => (new ProtectedResourceMetadataContribution { BearerMethodsSupported = [BearerMethodValues.Header] },
+                "\"bearer_methods_supported\":[\"header\"]"),
             _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown contribution row.")
         };
 
-        (string body, _) = await FetchContributedDocumentAsync(contribution, RequireDpopBoundAccessTokensAsync, expectedStatusCode: 500).ConfigureAwait(false);
+        (string body, ProtectedResourceMetadata? metadata) = await FetchContributedDocumentAsync(
+            contribution, RequireDpopBoundAccessTokensAsync).ConfigureAwait(false);
+
+        Assert.IsNotNull(metadata);
+        Assert.Contains(member, body, StringComparison.Ordinal, body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-2">RFC 9728 Section 2</see>, <c>jwks_uri</c>: "URL of
+    /// the protected resource's JSON Web Key (JWK) Set [JWK] document. ... This URL MUST use the https scheme." A host
+    /// whose endpoint resolver answers the JWK Set's URL in the <c>http</c> scheme serves, over the wire, the issuer's
+    /// document without a <c>jwks_uri</c> member.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task DocumentOmitsAJwksUriThatIsNotHttpsAsync()
+    {
+        (string body, ProtectedResourceMetadata? metadata) = await FetchContributedDocumentAsync(
+            ProtectedResourceMetadataContribution.Empty,
+            static app => TestHostShell.AlterAsync(app.Server, static candidateIntegration =>
+            {
+                ResolveEndpointUriDelegate resolve = candidateIntegration.ResolveEndpointUriAsync!;
+                candidateIntegration.ResolveEndpointUriAsync = async (endpointKey, registration, context, cancellationToken) =>
+                {
+                    Uri? resolved = await resolve(endpointKey, registration, context, cancellationToken).ConfigureAwait(false);
+
+                    return (string.Equals(endpointKey, WellKnownEndpointNames.MetadataJwks, StringComparison.Ordinal), resolved) switch
+                    {
+                        (true, Uri url) => new Uri("http://" + url.Authority + url.AbsolutePath),
+                        _ => resolved
+                    };
+                };
+            })).ConfigureAwait(false);
+
+        using JsonDocument document = JsonDocument.Parse(body);
+        Assert.IsFalse(document.RootElement.TryGetProperty(ProtectedResourceMetadataParameterNames.JwksUri, out _),
+            "A jwks_uri that is not https is not written.");
+        Assert.IsNotNull(metadata);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-2">RFC 9728 Section 2</see>,
+    /// <c>resource_signing_alg_values_supported</c>: "No default algorithms are implied if this entry is omitted. The
+    /// value none MUST NOT be used." and <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.2">Section
+    /// 3.2</see>: "An error response uses the applicable HTTP status code value." A contribution naming <c>RS256</c> and
+    /// <c>none</c> is the server's own wiring at fault: the fetch over the wire is answered 500 with
+    /// <c>server_error</c> in the body and no document.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task DocumentNamingNoneAmongTheResourceSigningAlgorithmsIsNotServedAsync()
+    {
+        (string body, _) = await FetchContributedDocumentAsync(
+            new ProtectedResourceMetadataContribution { ResourceSigningAlgValuesSupported = ["RS256", "none"] },
+            expectedStatusCode: 500).ConfigureAwait(false);
 
         using JsonDocument document = JsonDocument.Parse(body);
         Assert.AreEqual("server_error", document.RootElement.GetProperty("error").GetString(), body);
         Assert.IsFalse(document.RootElement.TryGetProperty(ProtectedResourceMetadataParameterNames.Resource, out _), "No document is served.");
     }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-2">RFC 9728 Section 2</see>:
+    /// "dpop_signing_alg_values_supported OPTIONAL. JSON array containing a list of the JWS alg values ... supported by the
+    /// resource server for validating Demonstrating Proof of Possession (DPoP) proof JWTs [RFC9449].", with
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-11.6">RFC 9449 Section 11.6</see>: "In particular, the
+    /// algorithm none MUST NOT be allowed." and <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.2">Section
+    /// 4.2</see>: "alg: An identifier for a JWS asymmetric digital signature algorithm". A server validating DPoP proofs
+    /// whose host lists <c>ES256</c> and <c>HS256</c> for them serves, over the wire, the issuer's document whose
+    /// <c>dpop_signing_alg_values_supported</c> is exactly <c>["ES256"]</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task DocumentPublishesOnlyTheAsymmetricDpopAlgorithmsTheHostListsAsync()
+    {
+        (string body, _) = await FetchContributedDocumentAsync(
+            ProtectedResourceMetadataContribution.Empty,
+            static async app =>
+            {
+                _ = await app.EnableDpopAsync().ConfigureAwait(false);
+                await app.AcceptDpopProofsUnderAsync(["ES256", "HS256"]).ConfigureAwait(false);
+            }).ConfigureAwait(false);
+
+        Assert.Contains("\"dpop_signing_alg_values_supported\":[\"ES256\"]", body, StringComparison.Ordinal, body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-2">RFC 9728 Section 2</see>:
+    /// "dpop_signing_alg_values_supported OPTIONAL. JSON array containing a list of the JWS alg values ... supported by the
+    /// resource server for validating Demonstrating Proof of Possession (DPoP) proof JWTs [RFC9449].", with
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9110#section-5.6.2">RFC 9110 Section 5.6.2</see>: "token = 1*tchar".
+    /// A host whose list for DPoP proofs holds a name that is no token beside <c>ES256</c> answers no list a proof can be
+    /// validated under, the list a resource's challenges then name no <c>algs</c> for: a server validating DPoP proofs
+    /// serves, over the wire, the issuer's document with no <c>dpop_signing_alg_values_supported</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task DocumentOmitsTheDpopAlgorithmsWhereTheHostListsANameThatIsNoTokenAsync()
+    {
+        (string body, _) = await FetchContributedDocumentAsync(
+            ProtectedResourceMetadataContribution.Empty,
+            static async app =>
+            {
+                _ = await app.EnableDpopAsync().ConfigureAwait(false);
+                await app.AcceptDpopProofsUnderAsync(["ES256", "ES 384"]).ConfigureAwait(false);
+            }).ConfigureAwait(false);
+
+        Assert.DoesNotContain(ProtectedResourceMetadataParameterNames.DpopSigningAlgValuesSupported, body, StringComparison.Ordinal, body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.2">RFC 9728 Section 3.2</see>: "An error response uses
+    /// the applicable HTTP status code value." The issuer's document names the issuer as its <c>resource</c>; a server
+    /// that cannot resolve the issuer cannot compose it, a fault of the server's own wiring: the GET of the document over
+    /// the wire is answered 500 with exactly the body
+    /// <c>{"error":"server_error","error_description":"The server is not ready to serve this request."}</c> and no
+    /// captured server fault. The rows: the registration's issuer replaced by one the default issuer resolver refuses
+    /// (<c>http</c> scheme); an application issuer resolver that answers nothing.
+    /// </summary>
+    /// <param name="row">Which part of the wiring fails: <see cref="IssuerUnresolvableRow"/> or <see cref="IssuerResolverAnswersNothingRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(IssuerUnresolvableRow)]
+    [DataRow(IssuerResolverAnswersNothingRow)]
+    public async Task IssuerDocumentWhereNoIssuerResolvesIsAServerErrorAsync(string row)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial resource = await RegisterProtectedResourceAsync(app).ConfigureAwait(false);
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer host = app.Host("default");
+        string segment = resource.Registration.TenantId.Value;
+        if(string.Equals(row, IssuerResolverAnswersNothingRow, StringComparison.Ordinal))
+        {
+            await TestHostShell.AlterAsync(app.Server, static candidateIntegration =>
+                candidateIntegration.ResolveIssuerAsync = static (_, _, _) => ValueTask.FromResult<Uri?>(null)).ConfigureAwait(false);
+        }
+        else
+        {
+            ClientRecord replaced = host.Registrations[segment] with { IssuerUri = new Uri("http://issuer.test/" + segment) };
+            host.Registrations[replaced.TenantId.Value] = replaced;
+            host.Registrations[replaced.ClientId] = replaced;
+        }
+
+        using HttpResponseMessage response = await host.SharedHttpClient!
+            .GetAsync(
+                new Uri(host.HttpBaseAddress!, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.ProtectedResourceMetadata, segment)),
+                TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        string body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.ConsumeHttpFaults(), "The fetch is answered without a server fault.");
+        Assert.AreEqual(500, (int)response.StatusCode, body);
+        Assert.AreEqual(
+            /*lang=json,strict*/ "{\"error\":\"server_error\",\"error_description\":\"The server is not ready to serve this request.\"}", body);
+    }
+
+
+    /// <summary>
+    /// The wiring row whose registration names an issuer the default resolver refuses. A constant, not a property,
+    /// because a DataRow attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string IssuerUnresolvableRow = "issuer-unresolvable";
+
+    /// <summary>
+    /// The wiring row whose application issuer resolver answers nothing. A constant, not a property, because a DataRow
+    /// attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string IssuerResolverAnswersNothingRow = "issuer-resolver-answers-nothing";
 
 
     /// <summary>
@@ -753,7 +926,7 @@ internal sealed class ProtectedResourceMetadataTests
         using VerifierKeyMaterial resource = await RegisterProtectedResourceAsync(app).ConfigureAwait(false);
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
-            candidateIntegration.ContributeProtectedResourceMetadataAsync = (_, _, _) => ValueTask.FromResult(contribution);
+            candidateIntegration.ContributeProtectedResourceMetadataAsync = (_, _, _, _) => ValueTask.FromResult(contribution);
         }).ConfigureAwait(false);
         if(arrange is not null)
         {

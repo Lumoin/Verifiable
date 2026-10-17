@@ -7846,7 +7846,10 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
             Method: WellKnownHttpMethods.Get,
             Fields: new RequestFields(),
             Headers: RequestHeaders.Empty,
-            RouteValues: RouteValues.Empty));
+            RouteValues: RouteValues.Empty)
+        {
+            RequestTarget = resolvedUri.PathAndQuery
+        });
         RequestFields fields = new()
         {
             [OAuthRequestParameterNames.ClientId] = ClientId
@@ -7929,7 +7932,10 @@ internal sealed class AuthCodeParPkceRealWireFlowTests
             Method: WellKnownHttpMethods.Get,
             Fields: new RequestFields(),
             Headers: RequestHeaders.Empty,
-            RouteValues: RouteValues.Empty));
+            RouteValues: RouteValues.Empty)
+        {
+            RequestTarget = resolvedUri.PathAndQuery
+        });
         RequestFields fields = new()
         {
             [OAuthRequestParameterNames.ClientId] = ClientId

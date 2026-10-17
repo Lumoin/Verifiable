@@ -91,6 +91,17 @@ internal sealed class ResourceServerChallengeTests
     }
 
 
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">RFC 9728 Section 3.3</see>: "If the protected
+    /// resource metadata was retrieved from a URL returned by the protected resource via the WWW-Authenticate
+    /// resource_metadata parameter, then the resource value returned MUST be identical to the URL that the client used to
+    /// make the request to the resource server. If these values are not identical, the data contained in the response
+    /// MUST NOT be used." A request to <c>https://127.0.0.1:{port}/protected</c> without credentials over the wire is
+    /// answered 401 with a <c>Bearer</c> challenge carrying no error and the pointer
+    /// <c>https://127.0.0.1:{port}/.well-known/oauth-protected-resource/protected</c>; the document fetched there names
+    /// the URL requested as its <c>resource</c> and the authorization server the resource server trusts.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
     public async Task UnauthenticatedRequestChallengeCompletesMetadataDiscovery()
     {
@@ -123,12 +134,14 @@ internal sealed class ResourceServerChallengeTests
         Assert.IsNull(parameters.Error,
             "RFC 6750 §3: a request without authentication information gets a challenge without an error code.");
 
-        //§5.1: the challenge advertises the metadata URL...
+        //Section 5.1: the challenge advertises the metadata URL, the Section 3 path-insertion form of the URL requested.
+        string origin = rs.HttpBaseAddress!.GetLeftPart(UriPartial.Authority);
+        string requestUrl = origin + "/protected";
         string? advertised = ProtectedResourceChallenge.TryReadResourceMetadata(challenge);
-        Assert.AreEqual(rs.MetadataUrl!.OriginalString, advertised);
+        Assert.AreEqual(origin + "/.well-known/oauth-protected-resource/protected", advertised);
 
-        //...and fetching it over the wire completes the §5 discovery loop:
-        //parse strictly, then validate §3.3 against the RS identity.
+        //Fetching it over the wire completes the Section 5 discovery loop: parse strictly, then validate Section 3.3
+        //against the URL the client requested.
         Uri advertisedUrl = new(advertised!);
         using HttpResponseMessage metadataResponse = await client.GetAsync(
             new Uri(advertisedUrl.AbsolutePath, UriKind.Relative), TestContext.CancellationToken)
@@ -140,10 +153,113 @@ internal sealed class ResourceServerChallengeTests
         ProtectedResourceMetadata? metadata =
             ProtectedResourceMetadataJsonParsing.ParseProtectedResourceMetadata(metadataBody);
         Assert.IsNotNull(metadata);
-        Assert.IsTrue(ProtectedResourceMetadataValidation.IsResourceMatch(
-            metadata!, rs.ResourceIdentity!.OriginalString));
-        Assert.AreEqual(Issuer, metadata!.AuthorizationServers!.Single(),
+        Assert.AreEqual(requestUrl, metadata.Resource, "The document names the URL requested as its resource.");
+        Assert.IsTrue(ProtectedResourceMetadataValidation.IsResourceMatch(metadata, requestUrl));
+        Assert.AreEqual(Issuer, metadata.AuthorizationServers!.Single(),
             "Discovery lands on the AS the resource server trusts.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3">RFC 9728 Section 3</see>: "Protected resources
+    /// supporting metadata MUST make a JSON document containing metadata as specified in Section 2 available at a URL
+    /// formed by inserting a well-known URI string into the protected resource's resource identifier between the host
+    /// component and the path and/or query components, if any.", with <see href="https://www.rfc-editor.org/rfc/rfc9728#section-1.2">Section
+    /// 1.2</see>: "it is recognized that there are cases that make a query component a useful and necessary part of a
+    /// resource identifier." A resource server whose identifier is <c>https://127.0.0.1:{port}/protected?tenant=t1</c>
+    /// answers a request without credentials over the wire with 401 and a <c>Bearer</c> challenge naming
+    /// <c>https://127.0.0.1:{port}/.well-known/oauth-protected-resource/protected?tenant=t1</c>, the query kept after the
+    /// path; the document fetched there names the identifier as its <c>resource</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ResourceIdentifierWithAQueryKeepsItAfterTheInsertedSuffixAsync()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        FakeTimeProvider time = new(NowInstant);
+
+        await using TestResourceServerShell rs = new(
+            trustedIssuer: new Uri(Issuer),
+            expectedAudience: Audience,
+            resolveVerificationKey: BuildResolver(keys.PublicKey),
+            verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
+            timeProvider: time,
+            resourceIdentifierQuery: "?tenant=t1");
+        await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string origin = rs.HttpBaseAddress!.GetLeftPart(UriPartial.Authority);
+
+        using HttpClient client = LoopbackTls.CreatePinnedHttpClient(rs.HttpCertificate!, rs.HttpBaseAddress);
+        using HttpResponseMessage denied = await client.GetAsync(
+            new Uri("/protected?tenant=t1", UriKind.Relative), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.Unauthorized, denied.StatusCode);
+        Assert.IsTrue(denied.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges));
+        string challenge = challenges!.Single(static value => value.StartsWith(WellKnownAuthenticationSchemes.Bearer, StringComparison.OrdinalIgnoreCase));
+        string? advertised = ProtectedResourceChallenge.TryReadResourceMetadata(challenge);
+        Assert.AreEqual(origin + "/.well-known/oauth-protected-resource/protected?tenant=t1", advertised);
+
+        using HttpResponseMessage metadataResponse = await client.GetAsync(
+            new Uri(new Uri(advertised!).PathAndQuery, UriKind.Relative), TestContext.CancellationToken).ConfigureAwait(false);
+        string metadataBody = await metadataResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)metadataResponse.StatusCode, metadataBody);
+        ProtectedResourceMetadata? metadata = ProtectedResourceMetadataJsonParsing.ParseProtectedResourceMetadata(metadataBody);
+        Assert.IsNotNull(metadata);
+        Assert.AreEqual(origin + "/protected?tenant=t1", metadata.Resource, "The document names the identifier, its query kept.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.1">RFC 9728 Section 3.1</see>: "If the resource
+    /// identifier value contains a path or query component, any terminating slash (/) following the host component MUST
+    /// be removed before inserting /.well-known/ and the well-known URI path suffix between the host component and the
+    /// path and/or query components.", with <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3">Section
+    /// 3</see>: "inserting a well-known URI string into the protected resource's resource identifier between the host
+    /// component and the path and/or query components, if any". The query component is inserted after, never edited. A
+    /// resource server whose identifier is <c>https://127.0.0.1:{port}/protected</c> followed by the text a row names
+    /// answers a request without credentials over the wire with 401 and a <c>Bearer</c> challenge naming exactly the
+    /// location a row names; the document fetched there names the identifier as its <c>resource</c>. The rows: the query
+    /// <c>?x=/</c>, ending in a slash, the location <c>.../.well-known/oauth-protected-resource/protected?x=/</c>; the
+    /// path's terminating slash and the query <c>?v=1</c>, the location
+    /// <c>.../.well-known/oauth-protected-resource/protected?v=1</c>.
+    /// </summary>
+    /// <param name="identifierSuffix">The text the identifier carries after <c>/protected</c>.</param>
+    /// <param name="locationSuffix">The text the document's location carries after the inserted suffix.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("?x=/", "/protected?x=/")]
+    [DataRow("/?v=1", "/protected?v=1")]
+    public async Task ResourceIdentifierEndingInASlashKeepsItsQueryWholeAfterTheInsertedSuffixAsync(string identifierSuffix, string locationSuffix)
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        FakeTimeProvider time = new(NowInstant);
+
+        await using TestResourceServerShell rs = new(
+            trustedIssuer: new Uri(Issuer),
+            expectedAudience: Audience,
+            resolveVerificationKey: BuildResolver(keys.PublicKey),
+            verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
+            timeProvider: time,
+            resourceIdentifierQuery: identifierSuffix);
+        await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string origin = rs.HttpBaseAddress!.GetLeftPart(UriPartial.Authority);
+
+        using HttpClient client = LoopbackTls.CreatePinnedHttpClient(rs.HttpCertificate!, rs.HttpBaseAddress);
+        using HttpResponseMessage denied = await client.GetAsync(
+            new Uri("/protected", UriKind.Relative), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.Unauthorized, denied.StatusCode);
+        Assert.IsTrue(denied.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges));
+        string challenge = challenges!.Single(static value => value.StartsWith(WellKnownAuthenticationSchemes.Bearer, StringComparison.OrdinalIgnoreCase));
+        string? advertised = ProtectedResourceChallenge.TryReadResourceMetadata(challenge);
+        Assert.AreEqual(origin + "/.well-known/oauth-protected-resource" + locationSuffix, advertised);
+
+        using HttpResponseMessage metadataResponse = await client.GetAsync(
+            new Uri(new Uri(advertised!).PathAndQuery, UriKind.Relative), TestContext.CancellationToken).ConfigureAwait(false);
+        string metadataBody = await metadataResponse.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, (int)metadataResponse.StatusCode, metadataBody);
+        ProtectedResourceMetadata? metadata = ProtectedResourceMetadataJsonParsing.ParseProtectedResourceMetadata(metadataBody);
+        Assert.IsNotNull(metadata);
+        Assert.AreEqual(origin + "/protected" + identifierSuffix, metadata.Resource, "The document names the identifier as given.");
     }
 
 

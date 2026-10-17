@@ -26,9 +26,16 @@ namespace Verifiable.Server;
 /// </para>
 /// <list type="bullet">
 /// <item><description>
-/// <see cref="Path"/> — the raw path as it appeared on the wire, including
-/// the tenant prefix if any. Matchers do their own substring/suffix checks
-/// against the relevant suffix.
+/// <see cref="Path"/>: the path the server's own request parsing answers,
+/// including the tenant prefix if any: decoded and without the query, the
+/// form routing reads. Matchers do their own substring/suffix checks against
+/// the relevant suffix.
+/// </description></item>
+/// <item><description>
+/// <see cref="RequestTarget"/>: the request-target exactly as the client sent
+/// it, the path and the query in the client's own spelling, the form a
+/// request's identity is compared in. Set by the skin from the server's raw
+/// target, never from a request field.
 /// </description></item>
 /// <item><description>
 /// <see cref="Method"/> — uppercase HTTP method (<c>"GET"</c>, <c>"POST"</c>,
@@ -76,6 +83,35 @@ public sealed record IncomingRequest(
     public RequestBody Body { get; init; } = RequestBody.None;
 
     /// <summary>
+    /// The request-target exactly as the client sent it on the request line, in origin-form: the absolute path and,
+    /// when present, <c>?</c> and the query, with percent-encoding, dot segments and letter case as the client wrote
+    /// them, never decoded. <see href="https://www.rfc-editor.org/rfc/rfc9112#section-3.2.1">RFC 9112 Section
+    /// 3.2.1</see>: "origin-form = absolute-path [ "?" query ]" and "a client MUST send only the absolute path and query
+    /// components of the target URI as the request-target."
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The skin sets it from the server's own raw target (in ASP.NET Core, the
+    /// <c>Microsoft.AspNetCore.Http.Features.IHttpRequestFeature.RawTarget</c> of the request's features), never from a
+    /// request field (<see cref="Fields"/> merges the client's query and body, so a conventional key there is a value a client
+    /// can send), for the reason <see cref="ListenerAuthority"/> states: a value a client chooses would let the client
+    /// choose the target a request is judged against. It is required so that every skin sets it.
+    /// </para>
+    /// <para>
+    /// <see cref="Path"/> is the server's decoded path, the form routing reads; this value is the client's own spelling,
+    /// the form a request's identity is compared in. The library's own resources read it where a URL the client used is
+    /// compared code point for code point
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-6">RFC 9728 Section 6</see>: "Comparisons between the
+    /// two strings MUST be performed as a Unicode code-point-to-code-point equality comparison."): a challenge names a
+    /// resource's protected resource metadata document only when the request's scheme and authority followed by this
+    /// value is the resource's identifier, and a resource's document is served only at the request-target that is its
+    /// location's path and query (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">RFC 9728 Section
+    /// 3.3</see>).
+    /// </para>
+    /// </remarks>
+    public required string RequestTarget { get; init; }
+
+    /// <summary>
     /// The scheme and authority of the listener that received the request, as the host's own
     /// configuration names it, or <see langword="null"/> when the host names none. The host sets it
     /// when it builds the request from the listener that accepted the connection; it is never read
@@ -98,7 +134,9 @@ public sealed record IncomingRequest(
     /// The value is an absolute URI. Only its scheme and authority are read
     /// (<see cref="Uri.GetLeftPart(UriPartial)"/> with <see cref="UriPartial.Authority"/>); a path,
     /// query or fragment the value carries takes no part, and a relative URI, which has no authority
-    /// to read, fails every DPoP-checked request it is stamped on. A host that fills it from a request
+    /// to read, fails every DPoP-checked request it is stamped on and every request to one of the
+    /// library's own resources whose protected resource metadata document is served, whose challenges
+    /// compare the request's target with the resource's identifier. A host that fills it from a request
     /// field lets a client choose it; the value is the host's configuration, and so is its failure,
     /// a relative value among them.
     /// </para>

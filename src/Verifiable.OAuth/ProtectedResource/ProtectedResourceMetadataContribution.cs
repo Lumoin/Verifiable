@@ -4,12 +4,15 @@ using System.Diagnostics.CodeAnalysis;
 namespace Verifiable.OAuth.ProtectedResource;
 
 /// <summary>
-/// Application-supplied values for the OAuth 2.0 Protected Resource Metadata
+/// Application-supplied values for an OAuth 2.0 Protected Resource Metadata
 /// document (RFC 9728 §2) — everything the library cannot derive from the
 /// endpoint chain. Returned from the
-/// <see cref="Server.ContributeProtectedResourceMetadataDelegate"/> seam. The
-/// library derives <c>resource</c> (the resolved issuer identity) and
-/// <c>jwks_uri</c> (the chain's JWKS endpoint) itself.
+/// <see cref="Server.ContributeProtectedResourceMetadataDelegate"/> seam for the resource it is asked for. The
+/// library derives <c>resource</c> and <c>jwks_uri</c> (the chain's JWKS endpoint, when https) itself. Every member
+/// feeds the document whose <c>resource</c> is the issuer; for one of the library's own resources only the
+/// human-readable and documentation members are read (<c>resource_name</c>, <c>resource_documentation</c>,
+/// <c>resource_policy_uri</c>, <c>resource_tos_uri</c> and their language-tagged forms), and any other member stated is
+/// answered <c>server_error</c> with no document.
 /// </summary>
 /// <remarks>
 /// Per §3.2, parameters with zero values are omitted from the document: a
@@ -35,15 +38,14 @@ public sealed record ProtectedResourceMetadataContribution
 
     /// <summary>
     /// The <c>bearer_methods_supported</c> values; see <see cref="BearerMethodValues"/>. An empty list is written as
-    /// <c>[]</c>, no bearer method supported, and <see langword="null"/> omits the member. When the server's resources
-    /// require DPoP-bound access tokens
-    /// (<see cref="Server.AuthorizationServerIntegration.IsDpopBoundAccessTokenRequiredAtResources"/>) the requirement
-    /// governs it: the document states <c>[]</c>, and a list naming any method is answered <c>server_error</c> with no
-    /// document.
+    /// <c>[]</c>, no bearer method supported, and <see langword="null"/> omits the member.
     /// </summary>
     public IReadOnlyList<string>? BearerMethodsSupported { get; init; }
 
-    /// <summary>The <c>resource_signing_alg_values_supported</c> values. The value <c>none</c> MUST NOT be used (§2).</summary>
+    /// <summary>
+    /// The <c>resource_signing_alg_values_supported</c> values. The value <c>none</c> MUST NOT be used (Section 2): a list
+    /// naming it is answered <c>server_error</c> with no document.
+    /// </summary>
     public IReadOnlyList<string>? ResourceSigningAlgValuesSupported { get; init; }
 
     /// <summary>The <c>resource_name</c> (§2, RECOMMENDED).</summary>
@@ -72,11 +74,9 @@ public sealed record ProtectedResourceMetadataContribution
     public IReadOnlyList<string>? DpopSigningAlgValuesSupported { get; init; }
 
     /// <summary>
-    /// The <c>dpop_bound_access_tokens_required</c> boolean; omitted when <see langword="null"/>. When the server's
-    /// resources require DPoP-bound access tokens
-    /// (<see cref="Server.AuthorizationServerIntegration.IsDpopBoundAccessTokenRequiredAtResources"/>) the requirement
-    /// governs it: the document states <see langword="true"/>, and a contribution stating <see langword="false"/> is
-    /// answered <c>server_error</c> with no document.
+    /// The <c>dpop_bound_access_tokens_required</c> boolean; omitted when <see langword="null"/>. The requirement of the
+    /// library's own resources (<see cref="Server.AuthorizationServerIntegration.IsDpopBoundAccessTokenRequiredAtResources"/>)
+    /// is stated by their own documents, never through this member.
     /// </summary>
     public bool? DpopBoundAccessTokensRequired { get; init; }
 

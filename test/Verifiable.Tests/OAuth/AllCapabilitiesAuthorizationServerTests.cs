@@ -317,7 +317,7 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
 
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ContributeProtectedResourceMetadataAsync = static (_, _, _) =>
+            candidateIntegration.ContributeProtectedResourceMetadataAsync = static (_, _, _, _) =>
                 ValueTask.FromResult(new Verifiable.OAuth.ProtectedResource.ProtectedResourceMetadataContribution
                 {
                     ScopesSupported = [WellKnownScopes.SsfRead, WellKnownScopes.SsfManage],
