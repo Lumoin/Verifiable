@@ -8,8 +8,12 @@ namespace Verifiable.OAuth.Server;
 /// </summary>
 public enum ClientAssertionFamily
 {
-    /// <summary>The method authenticates by no assertion: <c>none</c>, <c>client_secret_basic</c>, <c>client_secret_post</c> and the mutual TLS methods.</summary>
-    None,
+    /// <summary>
+    /// The method is known to authenticate by no client assertion: <c>none</c> (RFC 7591 Section 2), <c>client_secret_basic</c> and
+    /// <c>client_secret_post</c> (RFC 6749 Section 2.3.1), and the mutual TLS methods <c>tls_client_auth</c> and
+    /// <c>self_signed_tls_client_auth</c> (RFC 8705 Section 2).
+    /// </summary>
+    NoAssertion,
 
     /// <summary>
     /// <c>client_secret_jwt</c>: an assertion MACed under the octets of the client's secret by one of RFC 7518 Section 3.2's HMAC
@@ -21,7 +25,15 @@ public enum ClientAssertionFamily
     /// <c>private_key_jwt</c>: an assertion signed under a key the client registered or published (RFC 7523 Section 2.2), verified
     /// under its public half alone and never handed to an HMAC.
     /// </summary>
-    DigitalSignature
+    DigitalSignature,
+
+    /// <summary>
+    /// The rule classifies the method under no family: an application-defined method (<see cref="ClientAuthenticationMethod.Create"/>),
+    /// or one whose credential neither family judges - <c>attest_jwt_client_auth</c>'s attestation and proof of possession and
+    /// <c>spiffe_jwt</c>'s JWT-SVID under its trust domain's bundle. Nothing is concluded about whether it presents an assertion: a
+    /// caller verifies no assertion of such a client under either family, and refuses it.
+    /// </summary>
+    Unsupported
 }
 
 
@@ -34,13 +46,24 @@ public enum ClientAssertionFamily
 /// </summary>
 public static class ClientAssertionFamilies
 {
-    /// <summary>The family an assertion of a client registered under a method is verified under.</summary>
+    /// <summary>
+    /// The family an assertion of a client registered under a method is verified under, each known method classified by name and
+    /// every other answered <see cref="ClientAssertionFamily.Unsupported"/>, never taken for a method that presents no assertion.
+    /// </summary>
     /// <param name="method">The method the client registered.</param>
-    /// <returns>The family, or <see cref="ClientAssertionFamily.None"/> for a method that presents no assertion.</returns>
+    /// <returns>
+    /// The family; <see cref="ClientAssertionFamily.NoAssertion"/> for a method known to present no assertion; or
+    /// <see cref="ClientAssertionFamily.Unsupported"/> for one this rule classifies under no family.
+    /// </returns>
     public static ClientAssertionFamily Of(ClientAuthenticationMethod method) =>
         method == ClientAuthenticationMethod.ClientSecretJwt ? ClientAssertionFamily.MessageAuthenticationCode
         : method == ClientAuthenticationMethod.PrivateKeyJwt ? ClientAssertionFamily.DigitalSignature
-        : ClientAssertionFamily.None;
+        : method == ClientAuthenticationMethod.None
+            || method == ClientAuthenticationMethod.ClientSecretBasic
+            || method == ClientAuthenticationMethod.ClientSecretPost
+            || method == ClientAuthenticationMethod.TlsClientAuth
+            || method == ClientAuthenticationMethod.SelfSignedTlsClientAuth ? ClientAssertionFamily.NoAssertion
+        : ClientAssertionFamily.Unsupported;
 }
 
 

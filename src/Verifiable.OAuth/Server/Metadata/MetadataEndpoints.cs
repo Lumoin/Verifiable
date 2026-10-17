@@ -698,7 +698,7 @@ public static class MetadataEndpoints
                                 "The registration's client authentication methods are not all among the deployment's declaration."));
                         }
 
-                        string[] authMethodNames = [.. authMethods.Select(ClientAuthenticationMethodNames.GetName)];
+                        var authMethodNames = authMethods.Select(ClientAuthenticationMethodNames.GetName).ToArray();
                         AppendStringArrayField(
                             sb,
                             AuthorizationServerMetadataParameterNames.TokenEndpointAuthMethodsSupported,

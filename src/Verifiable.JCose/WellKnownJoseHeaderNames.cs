@@ -140,6 +140,16 @@ public static class WellKnownJoseHeaderNames
     /// </summary>
     public static string Jwt { get; } = Utf8Constants.ToInternedString(JwtUtf8);
 
+    /// <summary>The UTF-8 source literal of <see cref="Crit"/>.</summary>
+    public static ReadOnlySpan<byte> CritUtf8 => "crit"u8;
+
+    /// <summary>
+    /// The <c>crit</c> (Critical) header parameter per RFC 7515 §4.1.11: it "indicates that extensions to this specification
+    /// and/or [JWA] are being used that MUST be understood and processed", and "If any of the listed extension Header
+    /// Parameters are not understood and supported by the recipient, then the JWS is invalid."
+    /// </summary>
+    public static string Crit { get; } = Utf8Constants.ToInternedString(CritUtf8);
+
 
     /// <summary>Whether <paramref name="name"/> is <see cref="Alg"/>.</summary>
     public static bool IsAlg(string name) => Equals(name, Alg);
@@ -174,6 +184,9 @@ public static class WellKnownJoseHeaderNames
     /// <summary>Whether <paramref name="name"/> is <see cref="Jwt"/>.</summary>
     public static bool IsJwt(string name) => Equals(name, Jwt);
 
+    /// <summary>Whether <paramref name="name"/> is <see cref="Crit"/>.</summary>
+    public static bool IsCrit(string name) => Equals(name, Crit);
+
 
     /// <summary>
     /// Returns the interned constant for a known JOSE header parameter name,
@@ -192,6 +205,7 @@ public static class WellKnownJoseHeaderNames
         _ when IsSkid(name) => Skid,
         _ when IsJwk(name) => Jwk,
         _ when IsJwt(name) => Jwt,
+        _ when IsCrit(name) => Crit,
         _ => name
     };
 

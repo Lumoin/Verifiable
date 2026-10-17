@@ -57,8 +57,9 @@ public enum ClientAssertionClaimRefusal
     Expired,
 
     /// <summary>
-    /// The assertion carries no <c>jti</c>, or one that is no non-empty string: nothing a replay guard could hold it to a single
-    /// use by (RFC 7523 Section 3 item 7; OpenID Connect Core 1.0 Section 9 has the claim REQUIRED).
+    /// The assertion carries no <c>jti</c>, or one that names no identifier - no string, or one of white space alone
+    /// (<see cref="ClientAssertionClaimRules.IsIdentifier"/>): nothing a replay guard could hold it to a single use by (RFC 7523
+    /// Section 3 item 7; OpenID Connect Core 1.0 Section 9 has the claim REQUIRED).
     /// </summary>
     IdentifierNotPresented,
 
@@ -127,9 +128,15 @@ public sealed record ClientAssertionClaimsJudgement
     /// <param name="jti">The assertion's <c>jti</c>.</param>
     /// <param name="acceptedUntil">The instant it stops being accepted.</param>
     /// <returns>The judgement.</returns>
+    /// <exception cref="ArgumentException">The jti names no identifier (<see cref="ClientAssertionClaimRules.IsIdentifier"/>).</exception>
     public static ClientAssertionClaimsJudgement Accepted(string jti, DateTimeOffset acceptedUntil)
     {
-        ArgumentException.ThrowIfNullOrEmpty(jti);
+        ArgumentNullException.ThrowIfNull(jti);
+
+        if(!ClientAssertionClaimRules.IsIdentifier(jti))
+        {
+            throw new ArgumentException("An accepted client assertion's jti names an identifier: a string holding a character other than white space.", nameof(jti));
+        }
 
         return new ClientAssertionClaimsJudgement(refusal: null, jti, acceptedUntil);
     }
@@ -164,8 +171,10 @@ public sealed record ClientAssertionClaimsJudgement
 /// </summary>
 /// <remarks>
 /// A NumericDate is a JSON number of seconds since the epoch, which may carry a fraction (RFC 7519 Section 2); a string of digits is
-/// none. A fraction is taken to the whole second on the side that never widens the window the claim bounds - an <c>nbf</c> up, an
-/// <c>exp</c> and an <c>iat</c> down - and a count naming an instant no <see cref="DateTimeOffset"/> represents is none.
+/// none. A fraction names its own instant, kept to the tick a <see cref="DateTimeOffset"/> holds, so a date a fraction past a bound
+/// is past it; only a remainder finer than a tick is taken, on the side that never widens the window the claim bounds - an
+/// <c>iat</c> and an <c>nbf</c> up, an <c>exp</c> down - and a count naming an instant no <see cref="DateTimeOffset"/> represents is
+/// none.
 /// </remarks>
 public static class ClientAssertionClaimRules
 {
@@ -174,6 +183,12 @@ public static class ClientAssertionClaimRules
 
     /// <summary>The latest whole second a <see cref="DateTimeOffset"/> represents, as seconds since the epoch.</summary>
     private const long LatestRepresentableSeconds = 253_402_300_799;
+
+    /// <summary>The earliest instant a <see cref="DateTimeOffset"/> represents, as ticks since the epoch.</summary>
+    private const long EarliestRepresentableTicks = EarliestRepresentableSeconds * TimeSpan.TicksPerSecond;
+
+    /// <summary>The latest instant a <see cref="DateTimeOffset"/> represents, as ticks since the epoch: the last tick of its latest whole second.</summary>
+    private const long LatestRepresentableTicks = ((LatestRepresentableSeconds + 1) * TimeSpan.TicksPerSecond) - 1;
 
 
     /// <summary>
@@ -310,7 +325,7 @@ public static class ClientAssertionClaimRules
             return ClientAssertionClaimsJudgement.Refused(ClientAssertionClaimRefusal.Expired);
         }
 
-        if(StringClaimOf(claims, WellKnownJwtClaimNames.Jti) is not { Length: > 0 } jti)
+        if(StringClaimOf(claims, WellKnownJwtClaimNames.Jti) is not { } jti || !IsIdentifier(jti))
         {
             return ClientAssertionClaimsJudgement.Refused(ClientAssertionClaimRefusal.IdentifierNotPresented);
         }
@@ -408,9 +423,10 @@ public static class ClientAssertionClaimRules
 
 
     /// <summary>
-    /// The instant a NumericDate claim names, at the whole second on the side that never widens the window the claim bounds - the
-    /// second at or after it for <c>nbf</c>, at or before it for every other claim - or <see langword="null"/> when the value is no
-    /// JSON number or names an instant no <see cref="DateTimeOffset"/> represents.
+    /// The instant a NumericDate claim names, its fraction of a second kept to the tick a <see cref="DateTimeOffset"/> holds, and a
+    /// remainder finer than a tick taken on the side that never widens the window the claim bounds - up for <c>iat</c> and
+    /// <c>nbf</c>, which bound how early an assertion is accepted, down for <c>exp</c> and every other claim - or
+    /// <see langword="null"/> when the value is no JSON number or names an instant no <see cref="DateTimeOffset"/> represents.
     /// </summary>
     /// <param name="claimName">The claim the value was read from, which decides the side.</param>
     /// <param name="value">The claim's value as the claims set holds it.</param>
@@ -419,25 +435,38 @@ public static class ClientAssertionClaimRules
     {
         ArgumentNullException.ThrowIfNull(claimName);
 
-        var roundsUp = string.Equals(claimName, WellKnownJwtClaimNames.Nbf, StringComparison.Ordinal);
-        var whole = value switch
+        var roundsUp = string.Equals(claimName, WellKnownJwtClaimNames.Nbf, StringComparison.Ordinal)
+            || string.Equals(claimName, WellKnownJwtClaimNames.Iat, StringComparison.Ordinal);
+        var ticks = value switch
         {
-            long seconds => seconds,
-            int seconds => seconds,
-            short seconds => seconds,
-            byte seconds => seconds,
-            uint seconds => seconds,
-            ulong seconds when seconds <= long.MaxValue => (long)seconds,
-            decimal seconds => WholeSecondsOf(seconds, roundsUp),
-            double seconds => WholeSecondsOf(seconds, roundsUp),
-            float seconds => WholeSecondsOf(seconds, roundsUp),
+            long seconds => TicksOfWholeSeconds(seconds),
+            int seconds => TicksOfWholeSeconds(seconds),
+            short seconds => TicksOfWholeSeconds(seconds),
+            byte seconds => TicksOfWholeSeconds(seconds),
+            uint seconds => TicksOfWholeSeconds(seconds),
+            ulong seconds when seconds <= long.MaxValue => TicksOfWholeSeconds((long)seconds),
+            decimal seconds => TicksOf(seconds, roundsUp),
+            double seconds => TicksOf(seconds, roundsUp),
+            float seconds => TicksOf(seconds, roundsUp),
             _ => null
         };
 
-        return whole is long count && count is >= EarliestRepresentableSeconds and <= LatestRepresentableSeconds
-            ? DateTimeOffset.FromUnixTimeSeconds(count)
+        return ticks is long sinceEpoch && sinceEpoch is >= EarliestRepresentableTicks and <= LatestRepresentableTicks
+            ? new DateTimeOffset(DateTimeOffset.UnixEpoch.Ticks + sinceEpoch, TimeSpan.Zero)
             : null;
     }
+
+
+    /// <summary>
+    /// The one contract of a client assertion's identifier every reader of an assertion holds it to: its <c>jti</c> is a string
+    /// holding a character other than white space. RFC 7519 Section 4.1.7 has the value "a case-sensitive string" a replay guard
+    /// keys by; a string of white space alone names nothing an issuer told apart from another, so the judgement refuses it
+    /// (<see cref="ClientAssertionClaimRefusal.IdentifierNotPresented"/>) before any success is built, and every success factory
+    /// accepts exactly what the judgement accepts.
+    /// </summary>
+    /// <param name="jti">The claim's value.</param>
+    /// <returns><see langword="true"/> when it names an identifier.</returns>
+    public static bool IsIdentifier(string? jti) => !string.IsNullOrWhiteSpace(jti);
 
 
     /// <summary>A string claim's value, or <see langword="null"/> for any other value or none.</summary>
@@ -488,26 +517,52 @@ public static class ClientAssertionClaimRules
     }
 
 
-    /// <summary>The whole seconds a count with a fraction names on the side given, or <see langword="null"/> past what a <see cref="long"/> holds.</summary>
+    /// <summary>The ticks since the epoch a whole count of seconds names, or <see langword="null"/> outside the representable range.</summary>
     /// <param name="seconds">The count.</param>
-    /// <param name="roundsUp">Whether the count is taken up rather than down.</param>
-    /// <returns>The whole count, or <see langword="null"/>.</returns>
-    private static long? WholeSecondsOf(decimal seconds, bool roundsUp)
-    {
-        var whole = roundsUp ? decimal.Ceiling(seconds) : decimal.Floor(seconds);
+    /// <returns>The ticks, or <see langword="null"/>.</returns>
+    private static long? TicksOfWholeSeconds(long seconds) =>
+        seconds is >= EarliestRepresentableSeconds and <= LatestRepresentableSeconds ? seconds * TimeSpan.TicksPerSecond : null;
 
-        return whole is >= long.MinValue and <= long.MaxValue ? (long)whole : null;
+
+    /// <summary>
+    /// The ticks since the epoch a decimal count of seconds names, exactly where it falls on a tick and on the side given where it
+    /// falls between two, or <see langword="null"/> outside the representable range.
+    /// </summary>
+    /// <param name="seconds">The count.</param>
+    /// <param name="roundsUp">Whether a remainder finer than a tick is taken up rather than down.</param>
+    /// <returns>The ticks, or <see langword="null"/>.</returns>
+    private static long? TicksOf(decimal seconds, bool roundsUp)
+    {
+        if(seconds is < EarliestRepresentableSeconds or > LatestRepresentableSeconds + 1)
+        {
+            return null;
+        }
+
+        var ticks = seconds * TimeSpan.TicksPerSecond;
+
+        return (long)(roundsUp ? decimal.Ceiling(ticks) : decimal.Floor(ticks));
     }
 
 
-    /// <summary>The whole seconds a floating count names on the side given, or <see langword="null"/> for no finite count within the representable range.</summary>
+    /// <summary>
+    /// The ticks since the epoch a floating count of seconds names, its whole seconds kept exactly and its fraction to the tick on
+    /// the side given, or <see langword="null"/> for no finite count within the representable range.
+    /// </summary>
     /// <param name="seconds">The count.</param>
-    /// <param name="roundsUp">Whether the count is taken up rather than down.</param>
-    /// <returns>The whole count, or <see langword="null"/>.</returns>
-    private static long? WholeSecondsOf(double seconds, bool roundsUp)
+    /// <param name="roundsUp">Whether a remainder finer than a tick is taken up rather than down.</param>
+    /// <returns>The ticks, or <see langword="null"/>.</returns>
+    private static long? TicksOf(double seconds, bool roundsUp)
     {
-        var whole = roundsUp ? Math.Ceiling(seconds) : Math.Floor(seconds);
+        if(!double.IsFinite(seconds) || seconds is < EarliestRepresentableSeconds or > LatestRepresentableSeconds + 1)
+        {
+            return null;
+        }
 
-        return double.IsFinite(whole) && whole is >= EarliestRepresentableSeconds and <= LatestRepresentableSeconds ? (long)whole : null;
+        //A double holds every whole second of the range exactly, and the count less its whole seconds is exact too, so only the
+        //fraction's ticks are rounded.
+        var whole = Math.Floor(seconds);
+        var fractionTicks = (seconds - whole) * TimeSpan.TicksPerSecond;
+
+        return ((long)whole * TimeSpan.TicksPerSecond) + (long)(roundsUp ? Math.Ceiling(fractionTicks) : Math.Floor(fractionTicks));
     }
 }

@@ -1,9 +1,11 @@
 using Microsoft.Extensions.Time.Testing;
+using System.Security.Cryptography;
 using System.Text;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
+using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestInfrastructure;
@@ -110,12 +112,12 @@ internal sealed class ClientSecretAssertionVerificationTests
         var mac = macOctets.Memory.Span[..32].ToArray();
         macOctets.Dispose();
 
-        string[] changed =
-        [
+        var changed = new[]
+        {
             $"{parts[0]}.{otherParts[1]}.{parts[2]}",
             $"{parts[0]}.{parts[1]}.{TestSetup.Base64UrlEncoder(mac.AsSpan(0, 31))}",
             $"{parts[0]}.{parts[1]}.{TestSetup.Base64UrlEncoder([.. mac, 0])}"
-        ];
+        };
 
         Assert.IsTrue((await VerifyAsync(assertion, secret, WellKnownJwaValues.Hs256).ConfigureAwait(false)).IsSuccess);
 
@@ -141,8 +143,8 @@ internal sealed class ClientSecretAssertionVerificationTests
         var assertion = await ComposeAsync(secret, WellKnownJwaValues.Hs256).ConfigureAwait(false);
         var parts = assertion.Split('.');
 
-        string[] malformed =
-        [
+        var malformed = new[]
+        {
             $"{parts[0]}.{parts[1]}",
             $"{parts[0]}.{parts[1]}.{parts[2]}.{parts[2]}",
             $".{parts[1]}.{parts[2]}",
@@ -151,7 +153,7 @@ internal sealed class ClientSecretAssertionVerificationTests
             $"{parts[0]}.{parts[1]}.{parts[2]}=",
             $"{parts[0]}.{parts[1]}.{parts[2]}+",
             $"{parts[0]}.{new string('A', Jws.DefaultMaxJwsLength)}.{parts[2]}"
-        ];
+        };
 
         foreach(var candidate in malformed)
         {
@@ -274,6 +276,90 @@ internal sealed class ClientSecretAssertionVerificationTests
 
 
     /// <summary>
+    /// RFC 7515 Section 4.1.11: a recipient that does not understand an extension the protected header lists in <c>crit</c>
+    /// holds the JWS invalid, and this server understands none. An assertion whose MAC the secret verifies - recomputed here
+    /// over the very header it carries - is still refused before any secret is read where its header names <c>crit</c>: an
+    /// unknown extension, an empty list, a value that is no list, or a list naming a parameter RFC 7515 itself defines.
+    /// </summary>
+    /// <param name="header">The protected header's JSON text.</param>
+    /// <returns>A task completing once the header is judged.</returns>
+    [TestMethod]
+    [DataRow(/*lang=json*/ "{\"alg\":\"HS256\",\"typ\":\"JWT\",\"crit\":[\"urn:example:ext\"],\"urn:example:ext\":true}")]
+    [DataRow(/*lang=json*/ "{\"alg\":\"HS256\",\"crit\":[]}")]
+    [DataRow(/*lang=json*/ "{\"alg\":\"HS256\",\"crit\":\"urn:example:ext\",\"urn:example:ext\":1}")]
+    [DataRow(/*lang=json*/ "{\"alg\":\"HS256\",\"crit\":[\"alg\"]}")]
+    [DataRow(/*lang=json*/ "{\"crit\":[\"b64\"],\"b64\":true,\"alg\":\"HS256\"}")]
+    public async Task AHeaderListingACriticalParameterIsRefusedThoughItsMacVerifies(string header)
+    {
+        using var secret = SecretOf(LongClientSecret);
+        var accepted = new ClientSecretAssertionAlgorithms([WellKnownJwaValues.Hs256]);
+        var composed = await ComposeAsync(secret, WellKnownJwaValues.Hs256).ConfigureAwait(false);
+        var assertion = MacedUnder(LongClientSecret, header, composed.Split('.')[1]);
+
+        Assert.IsTrue((await VerifyAsync(assertion, secret, WellKnownJwaValues.Hs256).ConfigureAwait(false)).IsSuccess,
+            "The assertion carries the secret's MAC of its own signing input.");
+
+        var admission = AdmitHeader(WellKnownClientAssertionTypes.JwtBearer, assertion, accepted);
+
+        Assert.IsFalse(admission.IsAdmitted, $"A header naming crit is not admitted: {header}");
+        Assert.AreEqual(ClientSecretAssertionHeaderRefusal.CriticalHeaderParameterNotUnderstood, admission.Refusal, header);
+
+        var reading = ClientAssertionHeaderRules.Read(assertion, TestSetup.Base64UrlDecoder, HeaderDeserializer, Pool);
+
+        Assert.AreEqual(ClientAssertionHeaderRefusal.CriticalHeaderParameterNotUnderstood, reading.Refusal, "The shared reading every key source judges by refuses it alike.");
+        Assert.IsNotNull(reading.Header, "The header read as one object is kept for what a refused header named.");
+        Assert.IsNull(reading.Algorithm);
+    }
+
+
+    /// <summary>
+    /// The one reading every key source judges an assertion's header by, before any key or secret is read: the composition's own
+    /// assertion is read with its members and its algorithm, and each rule is refused under its own name, none throwing.
+    /// </summary>
+    /// <returns>A task completing once every header is read.</returns>
+    [TestMethod]
+    public async Task TheSharedReadingNamesEachRuleOfTheHeader()
+    {
+        using var secret = SecretOf(LongClientSecret);
+        var assertion = await ComposeAsync(secret, WellKnownJwaValues.Hs256).ConfigureAwait(false);
+        var parts = assertion.Split('.');
+
+        var read = ClientAssertionHeaderRules.Read(assertion, TestSetup.Base64UrlDecoder, HeaderDeserializer, Pool);
+
+        Assert.IsNull(read.Refusal);
+        Assert.AreEqual(WellKnownJwaValues.Hs256, read.Algorithm);
+        Assert.IsNotNull(read.Header);
+        Assert.AreEqual(WellKnownJwkValues.TypeJwt, read.Header[WellKnownJoseHeaderNames.Typ]);
+
+        var cases = new[]
+        {
+            new HeaderCase($"{parts[0]}.{parts[1]}", ClientAssertionHeaderRefusal.NotACompactJws),
+            new HeaderCase($"{parts[0]}.{parts[1]}.{parts[2]}=", ClientAssertionHeaderRefusal.NotACompactJws),
+            new HeaderCase(WithHeader("[\"HS256\"]", parts), ClientAssertionHeaderRefusal.HeaderNotAnObject),
+            new HeaderCase(WithHeader(/*lang=json*/ "{\"alg\":\"HS256\",\"alg\":\"RS256\"}", parts), ClientAssertionHeaderRefusal.HeaderNotAnObject),
+            new HeaderCase(WithHeader(/*lang=json*/ "{\"alg\":\"NONE\"}", parts), ClientAssertionHeaderRefusal.SignatureAlgorithmNotNamed),
+            new HeaderCase(WithHeader(/*lang=json*/ "{\"typ\":\"JWT\"}", parts), ClientAssertionHeaderRefusal.SignatureAlgorithmNotNamed),
+            new HeaderCase(WithHeader(/*lang=json*/ "{\"alg\":\"ES256\",\"crit\":[\"exp\"]}", parts), ClientAssertionHeaderRefusal.CriticalHeaderParameterNotUnderstood)
+        };
+
+        foreach(var headerCase in cases)
+        {
+            var refused = ClientAssertionHeaderRules.Read(headerCase.Assertion, TestSetup.Base64UrlDecoder, HeaderDeserializer, Pool);
+
+            Assert.AreEqual(headerCase.Expected, refused.Refusal, headerCase.Assertion);
+            Assert.IsNull(refused.Algorithm);
+            Assert.AreEqual(headerCase.Expected is ClientAssertionHeaderRefusal.SignatureAlgorithmNotNamed or ClientAssertionHeaderRefusal.CriticalHeaderParameterNotUnderstood, refused.Header is not null, headerCase.Assertion);
+        }
+    }
+
+
+    /// <summary>An assertion and the rule the shared reading refuses it under.</summary>
+    /// <param name="Assertion">The compact value.</param>
+    /// <param name="Expected">The rule.</param>
+    private sealed record HeaderCase(string Assertion, ClientAssertionHeaderRefusal Expected);
+
+
+    /// <summary>
     /// The accepted algorithms are named once and hold HMAC algorithms alone: a list naming a signature algorithm, <c>none</c>,
     /// a name in another letter case, a name twice, or nothing is refused when it is made; a list of HMAC algorithms accepts
     /// exactly the names it holds, in the order it names them.
@@ -281,7 +367,7 @@ internal sealed class ClientSecretAssertionVerificationTests
     [TestMethod]
     public void TheAcceptedAlgorithmsHoldHmacAlgorithmsAlone()
     {
-        string[][] refused = [["RS256"], ["HS256", "ES256"], ["none"], ["hs256"], ["HS256", "HS256"], []];
+        var refused = new[] { new[] { "RS256" }, ["HS256", "ES256"], ["none"], ["hs256"], ["HS256", "HS256"], [] };
 
         foreach(var algorithms in refused)
         {
@@ -301,7 +387,9 @@ internal sealed class ClientSecretAssertionVerificationTests
 
     /// <summary>
     /// The registered method chooses the family an assertion is verified under: <c>client_secret_jwt</c> the MAC family,
-    /// <c>private_key_jwt</c> the signature family, and every method that presents no assertion neither.
+    /// <c>private_key_jwt</c> the signature family, every method known to present no assertion neither, and a method neither
+    /// family judges - attestation-based, SPIFFE, or one an application defined - is answered unsupported, never taken for one that
+    /// presents no assertion.
     /// </summary>
     [TestMethod]
     public void TheRegisteredMethodChoosesTheFamily()
@@ -309,11 +397,21 @@ internal sealed class ClientSecretAssertionVerificationTests
         Assert.AreEqual(ClientAssertionFamily.MessageAuthenticationCode, ClientAssertionFamilies.Of(ClientAuthenticationMethod.ClientSecretJwt));
         Assert.AreEqual(ClientAssertionFamily.DigitalSignature, ClientAssertionFamilies.Of(ClientAuthenticationMethod.PrivateKeyJwt));
 
-        foreach(var method in new[] { ClientAuthenticationMethod.None, ClientAuthenticationMethod.ClientSecretBasic, ClientAuthenticationMethod.ClientSecretPost })
+        foreach(var method in new[] { ClientAuthenticationMethod.None, ClientAuthenticationMethod.ClientSecretBasic, ClientAuthenticationMethod.ClientSecretPost, ClientAuthenticationMethod.TlsClientAuth, ClientAuthenticationMethod.SelfSignedTlsClientAuth })
         {
-            Assert.AreEqual(ClientAssertionFamily.None, ClientAssertionFamilies.Of(method), ClientAuthenticationMethodNames.GetName(method));
+            Assert.AreEqual(ClientAssertionFamily.NoAssertion, ClientAssertionFamilies.Of(method), ClientAuthenticationMethodNames.GetName(method));
+        }
+
+        foreach(var method in new[] { ClientAuthenticationMethod.AttestJwtClientAuth, ClientAuthenticationMethod.SpiffeJwt, UnfamiliarMethod })
+        {
+            Assert.AreEqual(ClientAssertionFamily.Unsupported, ClientAssertionFamilies.Of(method),
+                $"A method neither family judges, {method.Code}, is not concluded to present no assertion.");
         }
     }
+
+
+    /// <summary>An application-defined client authentication method, which no rule of the library knows.</summary>
+    private static ClientAuthenticationMethod UnfamiliarMethod { get; } = ClientAuthenticationMethod.Create(41_797);
 
 
     /// <summary>Judges an assertion's header as the authorization server does before any secret is read.</summary>
@@ -333,8 +431,25 @@ internal sealed class ClientSecretAssertionVerificationTests
         $"{TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(header))}.{parts[1]}.{parts[2]}";
 
 
+    /// <summary>
+    /// A compact value of the protected header given and a payload segment, carrying the HMAC-SHA-256 of its signing input under
+    /// the secret's UTF-8 octets, computed by the platform's own HMAC apart from the library's.
+    /// </summary>
+    /// <param name="secret">The secret.</param>
+    /// <param name="header">The header's JSON text.</param>
+    /// <param name="payloadSegment">The payload segment.</param>
+    /// <returns>The compact value.</returns>
+    private static string MacedUnder(string secret, string header, string payloadSegment)
+    {
+        var signingInput = $"{TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(header))}.{payloadSegment}";
+        var mac = HMACSHA256.HashData(Encoding.UTF8.GetBytes(secret), Encoding.ASCII.GetBytes(signingInput));
+
+        return $"{signingInput}.{TestSetup.Base64UrlEncoder(mac)}";
+    }
+
+
     /// <summary>Reads a protected header.</summary>
-    private static Verifiable.OAuth.JwtHeaderDeserializer HeaderDeserializer { get; } =
+    private static JwtHeaderDeserializer HeaderDeserializer { get; } =
         static bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(bytes, TestSetup.DefaultSerializationOptions)
             ?? throw new FormatException("The header parsed to null.");
 

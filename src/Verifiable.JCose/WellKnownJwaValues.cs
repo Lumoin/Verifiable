@@ -244,6 +244,18 @@ namespace Verifiable.JCose
         }
 
         /// <summary>
+        /// Whether <paramref name="alg"/> spells <see cref="None"/> in any letter case. RFC 7518 Section 3.6 registers the one
+        /// spelling, but a verifier refusing an unsecured JWS refuses every spelling of it (RFC 8725 Section 3.2), so a header
+        /// writing <c>NONE</c> or <c>None</c> names no signature algorithm either.
+        /// </summary>
+        /// <param name="alg">The algorithm as a header spells it.</param>
+        /// <returns><see langword="true"/> when it is <see cref="None"/> but for the case of its letters.</returns>
+        public static bool IsNoneInAnyLetterCase(string alg)
+        {
+            return string.Equals(None, alg, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
         /// If <paramref name="alg"/> is <see cref="Hs256"/> or not.
         /// </summary>
         /// <param name="alg">The algorithm</param>.

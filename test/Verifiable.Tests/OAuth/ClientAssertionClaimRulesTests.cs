@@ -1,6 +1,8 @@
+using System.Globalization;
 using System.Text;
 using Verifiable.JCose;
 using Verifiable.Json;
+using Verifiable.OAuth;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -9,8 +11,8 @@ namespace Verifiable.Tests.OAuth;
 /// <summary>
 /// Tests the one judgement of a client assertion's claims (<see cref="ClientAssertionClaimRules"/>) every key source and every
 /// assertion method shares, against RFC 7523 Section 3 and RFC 7519 Sections 2 and 4.1 as their text reads: each rule refused
-/// under its own name and in the order the rules are judged, the NumericDate read as a JSON number alone with a fraction taken
-/// on the side that never widens the window, the audience rule refusing a foreign value beside this server's, the instant an
+/// under its own name and in the order the rules are judged, the NumericDate read as a JSON number alone with a fraction kept to
+/// the tick and a finer remainder taken on the side that never widens the window, one identifier contract, the audience rule refusing a foreign value beside this server's, the instant an
 /// assertion stops being accepted, and the replay guard consulted only for claims every other rule accepts.
 /// </summary>
 [TestClass]
@@ -88,6 +90,7 @@ internal sealed class ClientAssertionClaimRulesTests
     [DataRow("nbf", "future", ClientAssertionClaimRefusal.NotYetValid)]
     [DataRow("jti", "remove", ClientAssertionClaimRefusal.IdentifierNotPresented)]
     [DataRow("jti", "empty", ClientAssertionClaimRefusal.IdentifierNotPresented)]
+    [DataRow("jti", "blank", ClientAssertionClaimRefusal.IdentifierNotPresented)]
     public void EachRuleIsRefusedUnderItsOwnName(string claim, string change, ClientAssertionClaimRefusal expected)
     {
         var claims = ValidClaims();
@@ -163,8 +166,9 @@ internal sealed class ClientAssertionClaimRulesTests
 
     /// <summary>
     /// RFC 7519 Section 2: a NumericDate is a JSON number, which may carry a fraction. Whole numbers of every width read as their
-    /// instant; a fraction is taken down for exp and iat and up for nbf, so the window never widens; a string of digits, a count no
-    /// instant represents, and a value of any other kind read as none.
+    /// instant; a fraction names its own instant to the tick, and only a remainder finer than a tick is taken - down for exp, up for
+    /// iat and nbf - so the window never widens; a string of digits, a count no instant represents, and a value of any other kind
+    /// read as none.
     /// </summary>
     [TestMethod]
     public void ANumericDateIsAJsonNumberTakenOnTheSideThatNeverWidensTheWindow()
@@ -174,11 +178,14 @@ internal sealed class ClientAssertionClaimRulesTests
         Assert.AreEqual(Now, ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Exp, second));
         Assert.AreEqual(Now, ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Exp, (int)second));
         Assert.AreEqual(Now, ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Exp, (ulong)second));
-        Assert.AreEqual(Now, ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Exp, second + 0.75m));
-        Assert.AreEqual(Now, ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Iat, second + 0.75d));
-        Assert.AreEqual(Now.AddSeconds(1), ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Nbf, second + 0.25m));
+        Assert.AreEqual(Now.AddMilliseconds(750), ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Exp, second + 0.75m), "A fraction names its own instant.");
+        Assert.AreEqual(Now.AddMilliseconds(750), ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Iat, second + 0.75d), "A floating fraction names its own instant.");
+        Assert.AreEqual(Now.AddMilliseconds(250), ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Nbf, second + 0.25m));
         Assert.AreEqual(Now, ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Nbf, second + 0m));
-        Assert.IsNull(ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Exp, second.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        Assert.AreEqual(Now, ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Exp, second + 0.00000001m), "A remainder finer than a tick is taken down for exp.");
+        Assert.AreEqual(Now.AddTicks(1), ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Iat, second + 0.00000001m), "A remainder finer than a tick is taken up for iat.");
+        Assert.AreEqual(Now.AddTicks(1), ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Nbf, second + 0.00000001m), "A remainder finer than a tick is taken up for nbf.");
+        Assert.IsNull(ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Exp, second.ToString(CultureInfo.InvariantCulture)));
         Assert.IsNull(ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Exp, long.MaxValue));
         Assert.IsNull(ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Exp, double.NaN));
         Assert.IsNull(ClientAssertionClaimRules.NumericDateOf(WellKnownJwtClaimNames.Exp, decimal.MaxValue));
@@ -204,6 +211,70 @@ internal sealed class ClientAssertionClaimRulesTests
 
 
     /// <summary>
+    /// RFC 7519 Section 4.1.6 with the tolerance read exactly: an iat at the current instant plus the tolerance is accepted, and
+    /// one a fraction of a second past it - 0.75 s, as a decimal and as a floating count - is refused as issued in the future,
+    /// since the fraction names an instant past the window and is never taken back into it.
+    /// </summary>
+    /// <param name="fraction">The fraction of a second past the tolerance, as the claims set holds it.</param>
+    [TestMethod]
+    [DataRow("decimal")]
+    [DataRow("double")]
+    public void AnIssuanceAFractionPastTheToleranceIsRefused(string fraction)
+    {
+        var edge = Now.ToUnixTimeSeconds() + (long)Skew.TotalSeconds;
+        var claims = ValidClaims();
+        claims[WellKnownJwtClaimNames.Exp] = Now.AddMinutes(5).ToUnixTimeSeconds();
+        claims[WellKnownJwtClaimNames.Iat] = edge;
+
+        Assert.IsTrue(ClientAssertionClaimRules.Judge(claims, ClientId, Audiences, Now, Skew).IsAccepted, "An iat at the tolerance's edge is accepted.");
+
+        claims[WellKnownJwtClaimNames.Iat] = string.Equals(fraction, "decimal", StringComparison.Ordinal) ? edge + 0.75m : edge + 0.75d;
+
+        Assert.AreEqual(ClientAssertionClaimRefusal.IssuedInTheFuture, ClientAssertionClaimRules.Judge(claims, ClientId, Audiences, Now, Skew).Refusal,
+            "An iat 0.75 s past the tolerance is issued in the future.");
+    }
+
+
+    /// <summary>
+    /// A fractional exp names its own instant: an exp a quarter second after the instant the tolerance reaches back to is still
+    /// accepted until that quarter second, and refused from it on.
+    /// </summary>
+    [TestMethod]
+    public void AFractionalExpiryIsAcceptedUntilItsOwnInstant()
+    {
+        var claims = ValidClaims();
+        claims[WellKnownJwtClaimNames.Iat] = Now.AddMinutes(-3).ToUnixTimeSeconds();
+        claims[WellKnownJwtClaimNames.Exp] = Now.ToUnixTimeSeconds() - (long)Skew.TotalSeconds + 0.25m;
+
+        var judged = ClientAssertionClaimRules.Judge(claims, ClientId, Audiences, Now, Skew);
+
+        Assert.IsTrue(judged.IsAccepted, judged.Refusal?.ToString());
+        Assert.AreEqual(Now.AddMilliseconds(250), judged.AcceptedUntil);
+        Assert.AreEqual(ClientAssertionClaimRefusal.Expired, ClientAssertionClaimRules.Judge(claims, ClientId, Audiences, Now.AddMilliseconds(250), Skew).Refusal);
+    }
+
+
+    /// <summary>
+    /// One identifier contract: a jti of white space alone names nothing a replay guard could hold the assertion to, so the
+    /// judgement refuses it before any success is built, and the private_key_jwt validator judging by it answers a refusal
+    /// rather than throwing from its success factory.
+    /// </summary>
+    [TestMethod]
+    public void AWhiteSpaceIdentifierIsRefusedBeforeAnySuccessIsBuilt()
+    {
+        var claims = ValidClaims();
+        claims[WellKnownJwtClaimNames.Jti] = " ";
+
+        Assert.AreEqual(ClientAssertionClaimRefusal.IdentifierNotPresented, ClientAssertionClaimRules.Judge(claims, ClientId, Audiences, Now, Skew).Refusal);
+
+        var validated = PrivateKeyJwtClientAuthentication.Validate(new JwtPayload(claims), ClientId, Audiences, Now, Skew);
+
+        Assert.IsFalse(validated.IsValid, "The validator refuses a white-space jti.");
+        Assert.IsNull(validated.Jti);
+    }
+
+
+    /// <summary>
     /// RFC 7523 Section 3 item 7: claims every other rule accepts are accepted only on the first use of their jti, the guard handed
     /// the jti and the instant the assertion stops being accepted; every other outcome is refused under its own name; and claims
     /// another rule refuses never reach the guard.
@@ -214,14 +285,14 @@ internal sealed class ClientAssertionClaimRulesTests
     {
         var consulted = new List<string>();
 
-        ReplayCase[] cases =
-        [
-            new(JtiReplayOutcome.FirstUse, null),
-            new(JtiReplayOutcome.Replayed, ClientAssertionClaimRefusal.IdentifierReplayed),
-            new(JtiReplayOutcome.Unacceptable, ClientAssertionClaimRefusal.IdentifierNotTrackable),
-            new(JtiReplayOutcome.StoreUnavailable, ClientAssertionClaimRefusal.ReplayRecordUnavailable),
-            new((JtiReplayOutcome)99, ClientAssertionClaimRefusal.ReplayOutcomeNotRecognised)
-        ];
+        var cases = new[]
+        {
+            new ReplayCase(JtiReplayOutcome.FirstUse, null),
+            new ReplayCase(JtiReplayOutcome.Replayed, ClientAssertionClaimRefusal.IdentifierReplayed),
+            new ReplayCase(JtiReplayOutcome.Unacceptable, ClientAssertionClaimRefusal.IdentifierNotTrackable),
+            new ReplayCase(JtiReplayOutcome.StoreUnavailable, ClientAssertionClaimRefusal.ReplayRecordUnavailable),
+            new ReplayCase((JtiReplayOutcome)99, ClientAssertionClaimRefusal.ReplayOutcomeNotRecognised)
+        };
 
         foreach(var replayCase in cases)
         {
@@ -287,7 +358,7 @@ internal sealed class ClientAssertionClaimRulesTests
 
 
     /// <summary>Reads a claims set.</summary>
-    private static Verifiable.OAuth.JwtPayloadDeserializer PayloadDeserializer { get; } =
+    private static JwtPayloadDeserializer PayloadDeserializer { get; } =
         static bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(bytes, TestSetup.DefaultSerializationOptions)
             ?? throw new FormatException("The payload parsed to null.");
 
@@ -302,7 +373,8 @@ internal sealed class ClientAssertionClaimRulesTests
         "mixed" => new List<object> { Issuer, "https://evil.example" },
         "empty-array" => new List<object>(),
         "empty" => string.Empty,
-        "digits" => Now.ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture),
+        "blank" => " \t",
+        "digits" => Now.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture),
         "past" => Now.AddMinutes(-2).ToUnixTimeSeconds(),
         "after-exp" => Now.AddMinutes(2).ToUnixTimeSeconds(),
         "future" => Now.AddMinutes(2).ToUnixTimeSeconds(),

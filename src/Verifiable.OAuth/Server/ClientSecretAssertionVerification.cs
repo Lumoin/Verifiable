@@ -1,5 +1,5 @@
-using System.Buffers;
 using System.Collections.Frozen;
+using System.Diagnostics;
 using System.Text;
 using Verifiable.Core;
 using Verifiable.Cryptography;
@@ -97,19 +97,19 @@ public static class ClientSecretAssertionVerification
         //is the ASCII octets of the first two and the period between them (Section 5.2). A segment outside the alphabet has no
         //such octets, so it carries no MAC this check could recompute.
         if(clientAssertion.Length > Jws.DefaultMaxJwsLength
-            || SigningInputLengthOf(clientAssertion) is not int signingInputLength)
+            || ClientAssertionHeaderRules.SigningInputLengthOf(clientAssertion) is not int signingInputLength)
         {
             return refused;
         }
 
         var signatureSegment = clientAssertion.AsSpan(signingInputLength + 1);
 
-        if(!IsSignatureSegment(signatureSegment))
+        if(!ClientAssertionHeaderRules.IsSignatureSegment(signatureSegment))
         {
             return refused;
         }
 
-        using var presentedMac = DecodedOrNull(signatureSegment, base64UrlDecoder, pool);
+        using var presentedMac = ClientAssertionHeaderRules.DecodedOrNull(signatureSegment, base64UrlDecoder, pool);
 
         if(presentedMac is null)
         {
@@ -123,7 +123,7 @@ public static class ClientSecretAssertionVerification
             var verified = await mac.VerifyAsync(
                 secretOctets,
                 signingInput.Memory[..signingInputLength],
-                presentedMac.Memory[..DecodedLengthOf(signatureSegment.Length)],
+                presentedMac.Memory[..ClientAssertionHeaderRules.DecodedLengthOf(signatureSegment.Length)],
                 pool,
                 context,
                 cancellationToken).ConfigureAwait(false);
@@ -136,10 +136,10 @@ public static class ClientSecretAssertionVerification
     /// <summary>
     /// The authorization server's judgement of a <c>client_secret_jwt</c> assertion before its client's secret is read, by the
     /// rules nothing of the secret decides: the assertion is presented under RFC 7523 Section 2.2's JWT bearer assertion type
-    /// (RFC 7521 Section 4.2), it is a compact JWS of three non-empty base64url segments (RFC 7515 Section 7.1) no longer than
-    /// <see cref="Jws.DefaultMaxJwsLength"/>, its protected header is one JSON object naming each member once (RFC 7515 Section 4),
-    /// that header names a signature algorithm and not <c>none</c> in any letter case (RFC 7515 Section 4.1.1; RFC 7518 Section
-    /// 3.6; RFC 8725 Section 3.2), and the algorithm is one the server accepts such an assertion under - an HMAC algorithm, since
+    /// (RFC 7521 Section 4.2), its compact form and protected header hold every rule of the shared reading every key source and
+    /// method is judged by (<see cref="ClientAssertionHeaderRules.Read"/>: a compact JWS no longer than the verifier reads, a header
+    /// of one JSON object naming an algorithm that is not <c>none</c>, and no critical extension listed, RFC 7515 Section 4.1.11),
+    /// and the algorithm is one the server accepts such an assertion under - an HMAC algorithm, since
     /// the client's registered method chose that family (<see cref="ClientAssertionFamilies"/>), whatever the header names. An
     /// admitted assertion's MAC is then checked under the secret (<see cref="VerifyAsync"/>) and its claims judged
     /// (<see cref="ClientAssertionClaimRules"/>). Nothing the assertion presents throws.
@@ -170,144 +170,31 @@ public static class ClientSecretAssertionVerification
             return ClientSecretAssertionHeaderAdmission.Refused(ClientSecretAssertionHeaderRefusal.NotJwtBearer);
         }
 
-        if(clientAssertion.Length > Jws.DefaultMaxJwsLength
-            || SigningInputLengthOf(clientAssertion) is not int signingInputLength
-            || !IsSignatureSegment(clientAssertion.AsSpan(signingInputLength + 1)))
+        var reading = ClientAssertionHeaderRules.Read(clientAssertion, base64UrlDecoder, headerDeserializer, pool);
+
+        if(reading.Refusal is ClientAssertionHeaderRefusal refusal)
         {
-            return ClientSecretAssertionHeaderAdmission.Refused(ClientSecretAssertionHeaderRefusal.NotACompactJws);
+            return ClientSecretAssertionHeaderAdmission.Refused(RefusalOf(refusal));
         }
 
-        if(ReadHeader(clientAssertion.AsSpan(0, clientAssertion.IndexOf('.', StringComparison.Ordinal)), base64UrlDecoder, headerDeserializer, pool)
-            is not { } header)
-        {
-            return ClientSecretAssertionHeaderAdmission.Refused(ClientSecretAssertionHeaderRefusal.HeaderNotAnObject);
-        }
-
-        if(SignatureAlgorithmNamedBy(header) is not string algorithm)
-        {
-            return ClientSecretAssertionHeaderAdmission.Refused(ClientSecretAssertionHeaderRefusal.SignatureAlgorithmNotNamed);
-        }
-
-        return accepted.Accepts(algorithm)
+        return reading.Algorithm is { } algorithm && accepted.Accepts(algorithm)
             ? ClientSecretAssertionHeaderAdmission.Admitted(algorithm)
             : ClientSecretAssertionHeaderAdmission.Refused(ClientSecretAssertionHeaderRefusal.SignatureAlgorithmNotAccepted);
     }
 
 
-    /// <summary>
-    /// The signature algorithm a protected header names, or <see langword="null"/> when it names none: its <c>alg</c> is absent,
-    /// is no string, is empty, or is <c>none</c> in any letter case. RFC 7518 registers the one spelling of <c>none</c>; a header
-    /// spelling it otherwise names no algorithm either, so the name is compared with the registered one without regard to case.
-    /// </summary>
-    /// <param name="header">The protected header's members.</param>
-    /// <returns>The algorithm's name as the header spells it, or <see langword="null"/>.</returns>
-    private static string? SignatureAlgorithmNamedBy(IReadOnlyDictionary<string, object> header)
+    /// <summary>The rule a <c>client_secret_jwt</c> assertion breaks for the shared reading's refusal of its header, under the same name.</summary>
+    /// <param name="refusal">The shared reading's refusal.</param>
+    /// <returns>The rule.</returns>
+    /// <exception cref="UnreachableException">The shared reading named a rule this admission names no rule for: the two lists are kept as one.</exception>
+    private static ClientSecretAssertionHeaderRefusal RefusalOf(ClientAssertionHeaderRefusal refusal) => refusal switch
     {
-        return header.TryGetValue(WellKnownJoseHeaderNames.Alg, out var value)
-            && value is string { Length: > 0 } algorithm
-            && !string.Equals(algorithm, WellKnownJwaValues.None, StringComparison.OrdinalIgnoreCase)
-                ? algorithm
-                : null;
-    }
-
-
-    /// <summary>
-    /// The protected header of a compact JWS, read unverified: the segment base64url-decoded, exactly one JSON object naming each
-    /// member once, parsed by the header reader given; <see langword="null"/> for a segment of any other content, never throwing.
-    /// </summary>
-    /// <param name="segment">The header segment.</param>
-    /// <param name="base64UrlDecoder">Decodes the segment.</param>
-    /// <param name="headerDeserializer">Reads the object's members.</param>
-    /// <param name="pool">The pool the decoded segment is rented from.</param>
-    /// <returns>The members, or <see langword="null"/>.</returns>
-    private static IReadOnlyDictionary<string, object>? ReadHeader(
-        ReadOnlySpan<char> segment, DecodeDelegate base64UrlDecoder, JwtHeaderDeserializer headerDeserializer, BaseMemoryPool pool)
-    {
-        using var decoded = DecodedOrNull(segment, base64UrlDecoder, pool);
-
-        if(decoded is null)
-        {
-            return null;
-        }
-
-        var octets = decoded.Memory.Span[..DecodedLengthOf(segment.Length)];
-
-        if(octets.TrimStart(" \t\n\r"u8) is not [(byte)'{', ..] || !JwkJsonReader.IsWellFormedJsonDocument(octets))
-        {
-            return null;
-        }
-
-        try
-        {
-            return headerDeserializer(octets);
-        }
-        catch(Exception exception) when(exception is FormatException or InvalidOperationException or System.Text.Json.JsonException)
-        {
-            return null;
-        }
-    }
-
-
-    /// <summary>A base64url segment's octets, or <see langword="null"/> when the decoder refuses it; the caller disposes them.</summary>
-    /// <param name="segment">The segment.</param>
-    /// <param name="base64UrlDecoder">The decoder.</param>
-    /// <param name="pool">The pool the octets are rented from.</param>
-    /// <returns>The octets, or <see langword="null"/>.</returns>
-    private static IMemoryOwner<byte>? DecodedOrNull(ReadOnlySpan<char> segment, DecodeDelegate base64UrlDecoder, BaseMemoryPool pool)
-    {
-        try
-        {
-            return base64UrlDecoder(segment, pool);
-        }
-        catch(FormatException)
-        {
-            return null;
-        }
-    }
-
-
-    /// <summary>Whether a compact JWS's signature segment is non-empty and written in the base64url alphabet (RFC 7515 Section 2).</summary>
-    /// <param name="segment">The segment after the signing input's last period.</param>
-    /// <returns><see langword="true"/> for a segment that could carry a MAC.</returns>
-    private static bool IsSignatureSegment(ReadOnlySpan<char> segment) => !segment.IsEmpty && !segment.ContainsAnyExcept(Base64UrlCharacters);
-
-    /// <summary>The characters of the base64url alphabet (RFC 4648 Section 5), unpadded as RFC 7515 Section 2 writes a segment.</summary>
-    private static SearchValues<char> Base64UrlCharacters { get; } =
-        SearchValues.Create("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_");
-
-
-    /// <summary>
-    /// The length of a compact JWS's signing input - its protected header segment, the period and its payload segment - when the
-    /// JWS is three non-empty base64url segments, or <see langword="null"/> when it is not.
-    /// </summary>
-    /// <param name="compactJws">The compact serialization.</param>
-    /// <returns>The signing input's length in characters, each one octet, or <see langword="null"/>.</returns>
-    private static int? SigningInputLengthOf(string compactJws)
-    {
-        var firstPeriod = compactJws.IndexOf('.', StringComparison.Ordinal);
-        var lastPeriod = compactJws.LastIndexOf('.', StringComparison.Ordinal);
-
-        if(firstPeriod <= 0 || lastPeriod <= firstPeriod + 1)
-        {
-            return null;
-        }
-
-        var header = compactJws.AsSpan(0, firstPeriod);
-        var payload = compactJws.AsSpan(firstPeriod + 1, lastPeriod - firstPeriod - 1);
-
-        return header.ContainsAnyExcept(Base64UrlCharacters) || payload.ContainsAnyExcept(Base64UrlCharacters)
-            ? null
-            : lastPeriod;
-    }
-
-
-    /// <summary>
-    /// The octets an unpadded base64url segment of the given length decodes to: six bits a character, the bits short of a whole
-    /// octet at the end dropped.
-    /// </summary>
-    /// <param name="characters">The segment's length.</param>
-    /// <returns>The decoded length.</returns>
-    private static int DecodedLengthOf(int characters) => characters * 3 / 4;
+        ClientAssertionHeaderRefusal.NotACompactJws => ClientSecretAssertionHeaderRefusal.NotACompactJws,
+        ClientAssertionHeaderRefusal.HeaderNotAnObject => ClientSecretAssertionHeaderRefusal.HeaderNotAnObject,
+        ClientAssertionHeaderRefusal.SignatureAlgorithmNotNamed => ClientSecretAssertionHeaderRefusal.SignatureAlgorithmNotNamed,
+        ClientAssertionHeaderRefusal.CriticalHeaderParameterNotUnderstood => ClientSecretAssertionHeaderRefusal.CriticalHeaderParameterNotUnderstood,
+        _ => throw new UnreachableException($"The shared reading refused a client assertion's header under {refusal}, a rule this admission names no rule for.")
+    };
 }
 
 /// <summary>
@@ -338,7 +225,13 @@ public enum ClientSecretAssertionHeaderRefusal
     /// The protected header names an algorithm the server accepts no <c>client_secret_jwt</c> assertion under - a signature
     /// algorithm of the other family among them - so no secret is read for it (RFC 8725 Section 3.1).
     /// </summary>
-    SignatureAlgorithmNotAccepted
+    SignatureAlgorithmNotAccepted,
+
+    /// <summary>
+    /// The protected header carries <c>crit</c>, listing extensions the server must understand, and it understands none (RFC 7515
+    /// Section 4.1.11; <see cref="ClientAssertionHeaderRefusal.CriticalHeaderParameterNotUnderstood"/>).
+    /// </summary>
+    CriticalHeaderParameterNotUnderstood
 }
 
 

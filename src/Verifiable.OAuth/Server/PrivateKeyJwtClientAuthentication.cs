@@ -80,7 +80,13 @@ public sealed record PrivateKeyJwtClientAuthenticationResult
         string clientId, string jti, DateTimeOffset expiration)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(clientId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(jti);
+        ArgumentNullException.ThrowIfNull(jti);
+
+        //The one identifier contract the judgement of the claims refuses by, so no claims it accepts reach this throw.
+        if(!ClientAssertionClaimRules.IsIdentifier(jti))
+        {
+            throw new ArgumentException("A client assertion's jti names an identifier: a string holding a character other than white space.", nameof(jti));
+        }
 
         return new PrivateKeyJwtClientAuthenticationResult
         {
@@ -421,6 +427,21 @@ public static class PrivateKeyJwtClientAuthentication
                 clientJwksJson = jwksResolution.Jwks;
             }
 
+            //The compact form and the protected header are judged by the one reading every key source shares before any key is
+            //selected: three base64url segments no longer than the verifier reads, a header of one JSON object naming each member
+            //once and an algorithm that is not none (RFC 8725 Section 3.1), and no critical extension, none being understood here
+            //(RFC 7515 Section 4.1.11).
+            var headerReading = ClientAssertionHeaderRules.Read(
+                clientAssertion,
+                oauth.Codecs.Decoder,
+                oauth.Codecs.JwtHeaderDeserializer,
+                oauth.MemoryPool!);
+
+            if(headerReading is not { Algorithm: { } alg, Header: { } presentedHeader })
+            {
+                return false;
+            }
+
             UnverifiedJwsMessage unverified;
             try
             {
@@ -437,19 +458,7 @@ public static class PrivateKeyJwtClientAuthentication
 
             using(unverified)
             {
-                UnverifiedJwtHeader header = unverified.Signatures[0].ProtectedHeader;
-
-                //RFC 8725 §3.1: alg=none is rejected unconditionally — an assertion with no
-                //signature algorithm cannot authenticate a confidential client.
-                if(!header.TryGetValue(WellKnownJwkMemberNames.Alg, out object? algObj)
-                    || algObj is not string alg
-                    || string.IsNullOrEmpty(alg)
-                    || string.Equals(alg, "none", StringComparison.OrdinalIgnoreCase))
-                {
-                    return false;
-                }
-
-                string? kid = header.TryGetValue(WellKnownJwkMemberNames.Kid, out object? kidObj)
+                string? kid = presentedHeader.TryGetValue(WellKnownJwkMemberNames.Kid, out object? kidObj)
                     && kidObj is string kidValue
                     ? kidValue
                     : null;
