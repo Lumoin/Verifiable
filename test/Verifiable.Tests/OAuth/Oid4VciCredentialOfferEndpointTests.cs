@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
 using System.Text.Json;
+using Verifiable.OAuth;
+using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestInfrastructure;
@@ -42,45 +44,90 @@ internal sealed class Oid4VciCredentialOfferEndpointTests
     /// <summary>The id the credential_offer_uri carries; the offer store is keyed by it.</summary>
     private const string OfferId = "GkurKxf5T0Y-mnPFCHqWOMiZi4VS138cQO_V7PZHAdM";
 
+    /// <summary>The opaque <c>issuer_state</c> an Authorization Code offer carries.</summary>
+    private static string OfferIssuerState { get; } = "eyJhbGciOiJSU0Et...FYUaBy";
+
     private static ImmutableHashSet<CapabilityIdentifier> OfferCapabilities { get; } =
         ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.Oid4VciCredentialOfferEndpoint);
 
 
     /// <summary>
-    /// A wired Credential Offer Endpoint serves the stored offer as the §4.1.1 JSON object: the
-    /// response is 200 <c>application/json</c> and strict-parses back to the same Pre-Authorized
-    /// Code the offer was built with.
+    /// A Credential Offer Object fetched over the real wire with an HTTP GET of its
+    /// <c>credential_offer_uri</c> is answered 200 with an unsigned <c>application/json</c> body
+    /// carrying the stored offer's parameters: the <c>credential_issuer</c>, the
+    /// <c>credential_configuration_ids</c> and, per row, the Pre-Authorized Code grant whose
+    /// <c>tx_code</c> object is empty, or the Authorization Code grant's <c>issuer_state</c>.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-4.1.1">OID4VCI 1.0 Section 4.1.1</see>:
+    /// "credential_issuer: REQUIRED.", "credential_configuration_ids: REQUIRED. A non-empty array of
+    /// unique strings", "tx_code: OPTIONAL. Object indicating that a Transaction Code is required if
+    /// present, even if empty." and "If no length, description, or input_mode is given, this object
+    /// MAY be empty."
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-4.1.3">OID4VCI 1.0 Section 4.1.3</see>:
+    /// "The response from the Credential Issuer that contains a Credential Offer Object MUST use the
+    /// media type application/json." and "The Credential Offer cannot be signed and MUST NOT use
+    /// application/jwt with "alg": "none"."
     /// </summary>
+    /// <param name="grantType">The grant the stored offer carries: <c>pre-authorized</c> or <c>authorization-code</c>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
-    public async Task ServesStoredOfferByReference()
+    [DataRow("pre-authorized")]
+    [DataRow("authorization-code")]
+    public async Task OfferEndpointServesTheStoredOfferOverTheWireAsync(string grantType)
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = await host.RegisterClientAsync(ClientId, ClientBaseUri, OfferCapabilities).ConfigureAwait(false);
         string segment = material.Registration.TenantId.Value;
 
+        bool isPreAuthorized = string.Equals(grantType, "pre-authorized", StringComparison.Ordinal);
+        CredentialOffer stored = isPreAuthorized
+            ? BuildStoredOffer()
+            : new CredentialOffer
+            {
+                CredentialIssuer = OfferIssuer,
+                CredentialConfigurationIds = [ConfigurationId],
+                AuthorizationCodeGrant = new AuthorizationCodeOfferGrant { IssuerState = OfferIssuerState }
+            };
+
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
             candidateIntegration.ResolveCredentialOfferAsync =
                 (offerId, context, ct) => ValueTask.FromResult<CredentialOffer?>(
-                    string.Equals(offerId, OfferId, StringComparison.Ordinal) ? BuildStoredOffer() : null);
+                    string.Equals(offerId, OfferId, StringComparison.Ordinal) ? stored : null);
         }).ConfigureAwait(false);
 
-        ServerHttpResponse response = await DispatchOfferAsync(host, segment, OfferId).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Uri offerEndpoint = TestHostShell.ComposeEndpointUri(
+            host.Host("default").HttpBaseAddress!, segment, WellKnownEndpointNames.Oid4VciCredentialOffer);
+        HttpResponseData response = await HttpClientTransport.SendJsonGetAsync(
+            host.Host("default").SharedHttpClient!,
+            new Uri($"{offerEndpoint}?{CredentialOfferParameterNames.Id}={OfferId}"),
+            OutgoingHeaders.Empty,
+            TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
-        Assert.AreEqual("application/json", response.ContentType);
+        Assert.AreEqual("application/json", response.Headers.Headers.ContentType, response.Body);
 
-        //§4.1.3: the body is the §4.1.1 JSON object — it round-trips through the serializer's
-        //parse path to the same issuer, configuration, and pre-authorized_code.
-        using JsonDocument doc = JsonDocument.Parse(response.Body);
-        JsonElement root = doc.RootElement;
+        using JsonDocument document = JsonDocument.Parse(response.Body);
+        JsonElement root = document.RootElement;
+        Assert.AreEqual("https://credential-issuer.example.com", root.GetProperty("credential_issuer").GetString());
+        Assert.AreSequenceEqual(
+            ["UniversityDegree_dc_sd_jwt"],
+            root.GetProperty("credential_configuration_ids").EnumerateArray().Select(static id => id.GetString()).ToArray());
 
-        Assert.AreEqual(OfferIssuer.OriginalString, root.GetProperty("credential_issuer").GetString());
-        Assert.AreEqual(ConfigurationId, root.GetProperty("credential_configuration_ids")[0].GetString());
-        Assert.AreEqual(PreAuthorizedCode,
-            root.GetProperty("grants")
-                .GetProperty(WellKnownGrantTypes.PreAuthorizedCode)
-                .GetProperty("pre-authorized_code").GetString());
+        JsonElement grants = root.GetProperty("grants");
+        if(isPreAuthorized)
+        {
+            JsonElement grant = grants.GetProperty(WellKnownGrantTypes.PreAuthorizedCode);
+            Assert.AreEqual("oaKazRN8I0IbtZ0C7JuMn5", grant.GetProperty("pre-authorized_code").GetString());
+            Assert.IsTrue(grant.TryGetProperty("tx_code", out JsonElement txCode),
+                "The served offer carries the tx_code object its stored grant requires, even when empty.");
+            Assert.AreEqual(JsonValueKind.Object, txCode.ValueKind);
+            Assert.IsEmpty(txCode.EnumerateObject(), "The empty tx_code requirement is served as an empty object.");
+        }
+        else
+        {
+            Assert.AreEqual(OfferIssuerState, grants.GetProperty(WellKnownGrantTypes.AuthorizationCode).GetProperty("issuer_state").GetString());
+        }
     }
 
 

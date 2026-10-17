@@ -6,6 +6,7 @@ using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Oid4Vci;
+using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -51,6 +52,17 @@ internal sealed class Oid4VciConfigurationConstraintsTests
             WellKnownCapabilityIdentifiers.Oid4VciCredentialIssuerMetadata);
 
 
+    /// <summary>
+    /// A Credential Request sent over the real wire by a <c>credential_configuration_id</c> whose
+    /// declared <c>scope</c> <c>UniversityDegree</c> is a value of the Access Token's scope (granted
+    /// beside <c>openid</c>, which the Pre-Authorized Code grant narrows away) is served 200: the
+    /// configuration's value grants the request.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-5.1.2">OID4VCI 1.0 Section 5.1.2</see>:
+    /// "Credential Issuers MUST interpret each scope value as a request to access the Credential
+    /// Endpoint as defined in Section 8 for the issuance of a Credential type identified by that scope
+    /// value."
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
     public async Task ScopeMatchingConfigurationIssues()
     {
@@ -58,16 +70,31 @@ internal sealed class Oid4VciConfigurationConstraintsTests
         using VerifierKeyMaterial material = await RegisterIssuerAsync(host).ConfigureAwait(false);
         await WireCatalogAsync(host, configurationScope: ConfigurationScope, batchSize: null).ConfigureAwait(false);
 
-        //The token is granted exactly the configuration's scope.
+        //The token is granted exactly the configuration's scope beside openid.
         string accessToken = await MintAccessTokenAsync(host, material, credentialScope: ConfigurationScope)
             .ConfigureAwait(false);
-        ServerHttpResponse response = await DispatchCredentialAsync(
+        HttpResponseData response = await PostCredentialAsync(
             host, material, accessToken, CredentialRequestBody("proof-1")).ConfigureAwait(false);
 
         Assert.AreEqual((int)HttpStatusCode.OK, response.StatusCode, response.Body);
     }
 
 
+    /// <summary>
+    /// A Credential Request sent over the real wire by a <c>credential_configuration_id</c> whose
+    /// declared <c>scope</c> is none of the values of the Access Token's scope
+    /// <c>SomeOtherCredential</c> is refused 400 <c>invalid_credential_request</c>: the token's scope
+    /// value requests another Credential type, so it does not grant this one.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-5.1.2">OID4VCI 1.0 Section 5.1.2</see>:
+    /// "Credential Issuers MUST interpret each scope value as a request to access the Credential
+    /// Endpoint as defined in Section 8 for the issuance of a Credential type identified by that scope
+    /// value."
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.1">OID4VCI 1.0 Section 6.1</see>:
+    /// "When the Pre-Authorized Grant Type is used, it is RECOMMENDED that the Credential Issuer issues
+    /// an Access Token valid only for the Credentials indicated in the Credential Offer (see Section
+    /// 4.1)."
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
     public async Task ScopeNotMatchingConfigurationIsRefused()
     {
@@ -78,11 +105,96 @@ internal sealed class Oid4VciConfigurationConstraintsTests
         //The token is granted a DIFFERENT scope than the requested configuration declares.
         string accessToken = await MintAccessTokenAsync(host, material, credentialScope: "SomeOtherCredential")
             .ConfigureAwait(false);
-        ServerHttpResponse response = await DispatchCredentialAsync(
+        HttpResponseData response = await PostCredentialAsync(
             host, material, accessToken, CredentialRequestBody("proof-1")).ConfigureAwait(false);
 
         Assert.AreEqual((int)HttpStatusCode.BadRequest, response.StatusCode, response.Body);
-        Assert.Contains(Oid4VciCredentialErrors.InvalidCredentialRequest, response.Body);
+        Assert.AreEqual("invalid_credential_request", ReadError(response.Body));
+        Assert.AreEqual(
+            "The requested credential_configuration_id is not authorized by the Access Token's scope (section 8.2).",
+            ReadErrorDescription(response.Body));
+    }
+
+
+    /// <summary>
+    /// A scope value that names no Credential type the Credential Issuer knows is passed over without
+    /// refusal, over the real wire: a pushed authorization request whose <c>scope</c> is
+    /// <c>openid x-unknown-scope</c> is answered 201 with a <c>request_uri</c>, and a Credential
+    /// Request under an Access Token whose scope is <c>x-unknown-scope UniversityDegree</c> is served
+    /// 200 for the configuration declaring <c>UniversityDegree</c>, each value interpreted on its own.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-5.1.2">OID4VCI 1.0 Section 5.1.2</see>:
+    /// "Credential Issuers MUST interpret each scope value as a request to access the Credential
+    /// Endpoint as defined in Section 8 for the issuance of a Credential type identified by that scope
+    /// value. Multiple scope values MAY be present in a single request whereby each occurrence MUST be
+    /// interpreted individually." and "Credential Issuers MUST ignore unknown scope values in a
+    /// request."
+    /// </summary>
+    /// <param name="siteName">Where the unknown value arrives: <c>pushed-authorization-request</c> or <c>credential-endpoint</c>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("pushed-authorization-request")]
+    [DataRow("credential-endpoint")]
+    public async Task AnUnknownScopeValueIsIgnoredAsync(string siteName)
+    {
+        await using TestHostShell host = new(TimeProvider);
+
+        (int statusCode, string body) = siteName switch
+        {
+            "pushed-authorization-request" => await PushUnknownScopeAsync(host).ConfigureAwait(false),
+            "credential-endpoint" => await PostCredentialUnderUnknownScopeAsync(host).ConfigureAwait(false),
+            _ => throw new ArgumentOutOfRangeException(nameof(siteName), siteName, "No such site.")
+        };
+
+        int expectedStatusCode = string.Equals(siteName, "pushed-authorization-request", StringComparison.Ordinal)
+            ? (int)HttpStatusCode.Created
+            : (int)HttpStatusCode.OK;
+        Assert.AreEqual(expectedStatusCode, statusCode, body);
+        if(expectedStatusCode == (int)HttpStatusCode.Created)
+        {
+            Assert.Contains("\"request_uri\":", body, StringComparison.Ordinal, body);
+        }
+    }
+
+
+    /// <summary>
+    /// Sends, over the real wire, a pushed authorization request whose <c>scope</c> is
+    /// <c>openid x-unknown-scope</c>, under a registration of the issuance capabilities with
+    /// pushed authorization requests.
+    /// </summary>
+    /// <param name="host">The fixture owning the listener.</param>
+    /// <returns>The pushed authorization request endpoint's status code and body.</returns>
+    private async Task<(int StatusCode, string Body)> PushUnknownScopeAsync(TestHostShell host)
+    {
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce,
+            IssuanceCapabilities.Add(WellKnownCapabilityIdentifiers.OAuthPushedAuthorization)).ConfigureAwait(false);
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+        List<KeyValuePair<string, string>> fields = RawAuthCodeWirePushers.BuildParFields(
+            ClientId, pkce, "https://client.example.com/callback", $"{WellKnownScopes.OpenId} x-unknown-scope");
+
+        return await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, material.Registration.TenantId.Value, fields, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Sends, over the real wire, a Credential Request by <see cref="ConfigurationId"/>, which declares
+    /// <see cref="ConfigurationScope"/>, under an Access Token granted <c>openid x-unknown-scope
+    /// UniversityDegree</c>, which the Pre-Authorized Code grant narrows to
+    /// <c>x-unknown-scope UniversityDegree</c>.
+    /// </summary>
+    /// <param name="host">The fixture owning the listener.</param>
+    /// <returns>The Credential Endpoint's status code and body.</returns>
+    private async Task<(int StatusCode, string Body)> PostCredentialUnderUnknownScopeAsync(TestHostShell host)
+    {
+        using VerifierKeyMaterial material = await RegisterIssuerAsync(host).ConfigureAwait(false);
+        await WireCatalogAsync(host, configurationScope: ConfigurationScope, batchSize: null).ConfigureAwait(false);
+        string accessToken = await MintAccessTokenAsync(
+            host, material, credentialScope: $"x-unknown-scope {ConfigurationScope}").ConfigureAwait(false);
+        HttpResponseData response = await PostCredentialAsync(
+            host, material, accessToken, CredentialRequestBody("proof-1")).ConfigureAwait(false);
+
+        return (response.StatusCode, response.Body);
     }
 
 

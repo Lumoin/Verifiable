@@ -7,6 +7,7 @@ using Verifiable.Cryptography;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
+using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.OAuth;
 
@@ -163,6 +164,30 @@ internal static class RawAuthCodeWirePushers
 
         return fields;
     }
+
+
+    /// <summary>
+    /// Builds the pushed authorization request's base form fields, in order: the <c>code</c> response
+    /// type, <paramref name="clientId"/>, the S256 challenge of <paramref name="pkce"/>,
+    /// <paramref name="redirectUri"/> and <paramref name="scope"/>. A caller appends its own members (an
+    /// <c>authorization_details</c>, an <c>issuer_state</c>, a parameter no specification defines) to the
+    /// returned list before it pushes the request, so the shared fields are written once.
+    /// </summary>
+    /// <param name="clientId">The <c>client_id</c> of the pushed request.</param>
+    /// <param name="pkce">The PKCE parameters whose encoded challenge the request carries.</param>
+    /// <param name="redirectUri">The registered redirect URI.</param>
+    /// <param name="scope">The <c>scope</c> value.</param>
+    /// <returns>The base form fields, a list the caller extends.</returns>
+    public static List<KeyValuePair<string, string>> BuildParFields(
+        string clientId, PkceParameters pkce, string redirectUri, string scope) =>
+        [
+            new(OAuthRequestParameterNames.ResponseType, WellKnownResponseTypes.Code),
+            new(OAuthRequestParameterNames.ClientId, clientId),
+            new(OAuthRequestParameterNames.CodeChallenge, pkce.EncodedChallenge),
+            new(OAuthRequestParameterNames.CodeChallengeMethod, WellKnownCodeChallengeMethods.S256),
+            new(OAuthRequestParameterNames.RedirectUri, redirectUri),
+            new(OAuthRequestParameterNames.Scope, scope)
+        ];
 
 
     /// <summary>

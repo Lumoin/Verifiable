@@ -254,51 +254,20 @@ internal sealed class Oid4VciAuthorizationDetailsTests
 
 
     /// <summary>
-    /// §6.1.1: the token request may narrow the authorized details to a subset of the pushed
-    /// configurations — the seam then receives only the narrowed set.
-    /// </summary>
-    [TestMethod]
-    public async Task TokenRequestMayNarrowToAnAuthorizedSubset()
-    {
-        await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities).ConfigureAwait(false);
-        IReadOnlyList<CredentialAuthorizationDetail>? seenDetails = null;
-        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
-        {
-            _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
-            candidateIntegration.ResolveCredentialAuthorizationAsync =
-                (details, subject, registration, context, ct) =>
-                {
-                    seenDetails = details;
-
-                    return ValueTask.FromResult(GrantAllRequested(details));
-                };
-        }).ConfigureAwait(false);
-
-        //§13.10: keep the plain-bearer credential token within the long-lived threshold.
-        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
-
-        ServerHttpResponse tokenResponse = await RunAuthCodeFlowAsync(
-            host, material,
-            parDetails: TwoDetails(DegreeConfigurationId, LicenseConfigurationId),
-            tokenRequestDetails: SingleDetail(LicenseConfigurationId)).ConfigureAwait(false);
-
-        Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
-        Assert.IsNotNull(seenDetails);
-        Assert.HasCount(1, seenDetails);
-        Assert.AreEqual(LicenseConfigurationId, seenDetails[0].CredentialConfigurationId);
-
-        using JsonDocument doc = JsonDocument.Parse(tokenResponse.Body);
-        JsonElement details = doc.RootElement.GetProperty("authorization_details");
-        Assert.AreEqual(1, details.GetArrayLength());
-        Assert.AreEqual(LicenseConfigurationId,
-            details[0].GetProperty("credential_configuration_id").GetString());
-    }
-
-
-    /// <summary>
-    /// §6.1.1: a token-request configuration outside the authorized set is refused with
-    /// <c>invalid_authorization_details</c> before the seam is consulted.
+    /// A Token Request whose <c>authorization_details</c> names a configuration the authorization
+    /// request did not authorize is refused 400 <c>invalid_authorization_details</c> and the credential
+    /// authorization decision seam is not consulted for it; the same grant shape narrowed to its own
+    /// authorized configuration is answered 200 and reaches the seam.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.1.1">OID4VCI 1.0 Section 6.1.1</see>:
+    /// "With respect to authorization_details items using the credential_configuration_id introduced in
+    /// this specification, it is RECOMMENDED that the AS would accept a request from the Wallet
+    /// containing a subset of credential_configuration_id parameters received in the original
+    /// Authorization Request and issue a token for the reduced set."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9396#section-6">RFC 9396 Section 6</see>: "The AS
+    /// checks whether the underlying grant (in case of grant types authorization_code, refresh_token,
+    /// etc.) or the client's policy (in case of grant type client_credentials) allows the issuance of
+    /// an access token with the requested authorization details. Otherwise, the AS refuses the request
+    /// with the error code invalid_authorization_details (similar to invalid_scope)."
     /// </summary>
     [TestMethod]
     public async Task TokenRequestBeyondTheAuthorizedSetIsRejected()
@@ -340,9 +309,20 @@ internal sealed class Oid4VciAuthorizationDetailsTests
 
 
     /// <summary>
-    /// §5.1.1 shape enforcement at PAR receipt: malformed JSON, an unsupported authorization
-    /// details type, and a missing <c>credential_configuration_id</c> are each refused with
-    /// <c>invalid_authorization_details</c>.
+    /// A pushed authorization request whose <c>authorization_details</c> is no JSON at all, names a
+    /// type the server does not support, carries an <c>openid_credential</c> object without its
+    /// <c>credential_configuration_id</c>, or is an empty array is refused
+    /// <c>invalid_authorization_details</c>, and the credential authorization decision seam is not
+    /// consulted.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-5.1.1">OID4VCI 1.0 Section 5.1.1</see>:
+    /// "type: REQUIRED. String that determines the authorization details type. It MUST be set to
+    /// openid_credential for the purpose of this specification."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9396#section-5">RFC 9396 Section 5</see>: "The AS
+    /// MUST refuse to process any unknown authorization details type or authorization details not
+    /// conforming to the respective type definition. The AS MUST abort processing and respond with an
+    /// error invalid_authorization_details to the client if any of the following are true of the
+    /// objects in the authorization_details structure: contains an unknown authorization details type
+    /// value, ... is missing required fields for the authorization details type."
     /// </summary>
     [TestMethod]
     public async Task MalformedShapesAreRejectedAtPar()
@@ -373,6 +353,142 @@ internal sealed class Oid4VciAuthorizationDetailsTests
         await AssertParRejectsAsync(host, material,
             "[{\"type\":\"openid_credential\"}]").ConfigureAwait(false);
         await AssertParRejectsAsync(host, material, "[]").ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// A pushed authorization request sent over the real wire is held to the <c>openid_credential</c>
+    /// object's shape: an object without <c>credential_configuration_id</c> is refused 400
+    /// <c>invalid_authorization_details</c> naming the member, an empty array is refused 400
+    /// <c>invalid_authorization_details</c>, an object carrying a data field this specification does
+    /// not define is accepted 201 with a <c>request_uri</c>, and an <c>openid_credential</c> object
+    /// beside an object of a second authorization details type the server registers is accepted 201
+    /// with a <c>request_uri</c>.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-5.1.1">OID4VCI 1.0 Section 5.1.1</see>:
+    /// "type: REQUIRED. String that determines the authorization details type. It MUST be set to
+    /// openid_credential for the purpose of this specification.", "credential_configuration_id:
+    /// REQUIRED. String specifying a unique identifier of the Credential being described in the
+    /// credential_configurations_supported map in the Credential Issuer Metadata", "Additional
+    /// authorization_details data fields MAY be defined and used when the type value is
+    /// openid_credential. Note that this effectively defines an authorization details type that is
+    /// never considered invalid due to unknown fields." and "Note: Applications MAY combine
+    /// authorization details of type openid_credential with any other authorization details types in
+    /// an Authorization Request."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9396#section-2">RFC 9396 Section 2</see>: "The
+    /// request parameter authorization_details contains, in JSON notation, an array of objects."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9396#section-5">RFC 9396 Section 5</see>: "The AS
+    /// MUST abort processing and respond with an error invalid_authorization_details to the client if
+    /// any of the following are true of the objects in the authorization_details structure: ... is
+    /// missing required fields for the authorization details type." An empty array conveys no
+    /// Credential at all, which this library refuses with the same error.
+    /// </summary>
+    /// <param name="authorizationDetails">The <c>authorization_details</c> value pushed.</param>
+    /// <param name="isSecondTypeRegistered">Whether the server registers the <c>payment_initiation</c> type beside <c>openid_credential</c>.</param>
+    /// <param name="expectedStatusCode">The status the pushed authorization request endpoint answers.</param>
+    /// <param name="expectedDescription">The <c>error_description</c> of a refusal, or <see langword="null"/> for an accepted request.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("[{\"type\":\"openid_credential\"}]", false, 400, "credential_configuration_id is required in an openid_credential authorization details object.")]
+    [DataRow("[]", false, 400, "authorization_details must be a non-empty array.")]
+    [DataRow("[{\"type\":\"openid_credential\",\"credential_configuration_id\":\"UniversityDegree_dc_sd_jwt\",\"vendor_extension\":{\"tier\":\"gold\"}}]", false, 201, null)]
+    [DataRow("[{\"type\":\"openid_credential\",\"credential_configuration_id\":\"UniversityDegree_dc_sd_jwt\"},{\"type\":\"payment_initiation\",\"instructedAmount\":{\"amount\":\"1.00\"},\"currency\":\"EUR\"}]", true, 201, null)]
+    public async Task OpenIdCredentialShapesAreHeldAtThePushedRequestOverTheWireAsync(
+        string authorizationDetails, bool isSecondTypeRegistered, int expectedStatusCode, string? expectedDescription)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities).ConfigureAwait(false);
+
+        //The pushed request is answered before any token grant, so the credential decision seam
+        //must not be consulted.
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            if(isSecondTypeRegistered)
+            {
+                candidateIntegration.AuthorizationDetailTypes.Register(StrictPaymentInitiationHandler());
+            }
+
+            _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
+            candidateIntegration.ResolveCredentialAuthorizationAsync =
+                static (details, subject, registration, context, ct) =>
+                {
+                    Assert.Fail("A pushed authorization request never reaches the credential decision seam.");
+
+                    return ValueTask.FromResult(
+                        CredentialAuthorizationDecision.Deny(CredentialAuthorizationDenialReason.AuthorizationDenied));
+                };
+        }).ConfigureAwait(false);
+
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, Pool);
+        (int statusCode, string body) = await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, material.Registration.TenantId.Value, BuildPushedFields(pkce, authorizationDetails), TestContext.CancellationToken)
+            .ConfigureAwait(false);
+
+        if(expectedDescription is null)
+        {
+            Assert.AreEqual(expectedStatusCode, statusCode, body);
+            Assert.Contains("\"request_uri\":", body, StringComparison.Ordinal, body);
+        }
+        else
+        {
+            DpopCodeBindingWire.AssertError(statusCode, body, expectedStatusCode, OAuthErrors.InvalidAuthorizationDetails, expectedDescription);
+        }
+    }
+
+
+    /// <summary>
+    /// A Token Request sent over the real wire whose <c>authorization_details</c> names a subset of
+    /// the configurations the pushed authorization request authorized is answered 200 with a token
+    /// granting that subset alone; one naming a configuration the authorization request did not
+    /// authorize is refused 400 <c>invalid_authorization_details</c> naming the configuration.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.1.1">OID4VCI 1.0 Section 6.1.1</see>:
+    /// "With respect to authorization_details items using the credential_configuration_id introduced in
+    /// this specification, it is RECOMMENDED that the AS would accept a request from the Wallet
+    /// containing a subset of credential_configuration_id parameters received in the original
+    /// Authorization Request and issue a token for the reduced set."
+    /// </summary>
+    /// <param name="caseName">The Token Request's relation to the authorized set: <c>subset</c> or <c>outside-the-authorized-set</c>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("subset")]
+    [DataRow("outside-the-authorized-set")]
+    public async Task TokenRequestNarrowingIsHeldOverTheWireAsync(string caseName)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
+            candidateIntegration.ResolveCredentialAuthorizationAsync =
+                static (details, subject, registration, context, ct) => ValueTask.FromResult(GrantAllRequested(details));
+        }).ConfigureAwait(false);
+
+        //OID4VCI 1.0 Section 13.10: a plain bearer Credential token stays within five minutes.
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
+
+        (string pushedDetails, string tokenRequestDetails) = caseName switch
+        {
+            "subset" => (TwoDetails(DegreeConfigurationId, LicenseConfigurationId), SingleDetail(LicenseConfigurationId)),
+            "outside-the-authorized-set" => (SingleDetail(DegreeConfigurationId), SingleDetail(LicenseConfigurationId)),
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, "No such case.")
+        };
+
+        (int statusCode, string body) = await RedeemOverTheWireAsync(
+            host, material, pushedDetails, tokenRequestDetails).ConfigureAwait(false);
+
+        if(string.Equals(caseName, "subset", StringComparison.Ordinal))
+        {
+            Assert.AreEqual(200, statusCode, body);
+            using JsonDocument document = JsonDocument.Parse(body);
+            JsonElement granted = document.RootElement.GetProperty("authorization_details");
+            Assert.AreEqual(1, granted.GetArrayLength(), body);
+            Assert.AreEqual(LicenseConfigurationId, granted[0].GetProperty("credential_configuration_id").GetString(), body);
+        }
+        else
+        {
+            DpopCodeBindingWire.AssertError(
+                statusCode, body, 400, OAuthErrors.InvalidAuthorizationDetails,
+                "credential_configuration_id 'org.iso.18013.5.1.mDL' was not authorized by the authorization request.");
+        }
     }
 
 
@@ -966,9 +1082,13 @@ internal sealed class Oid4VciAuthorizationDetailsTests
 
 
     /// <summary>
-    /// The lenient <c>openid_credential</c> profile (OID4VCI 1.0 §5.1.1, never invalid due to
-    /// unknown fields) keeps accepting an object carrying an unknown member at PAR, even while a
-    /// strict second type is registered — the strictness framework does not change the profile.
+    /// An <c>openid_credential</c> object carrying a data field this specification does not define is
+    /// accepted at the pushed authorization request while a strict second authorization details type,
+    /// which refuses unknown fields of its own objects, is registered beside it.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-5.1.1">OID4VCI 1.0 Section 5.1.1</see>:
+    /// "Additional authorization_details data fields MAY be defined and used when the type value is
+    /// openid_credential. Note that this effectively defines an authorization details type that is
+    /// never considered invalid due to unknown fields."
     /// </summary>
     [TestMethod]
     public async Task OpenIdCredentialStaysLenientForUnknownFieldsAtPar()
@@ -1179,6 +1299,54 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     private static string TwoDetails(string firstConfigurationId, string secondConfigurationId) =>
         "[{\"type\":\"openid_credential\",\"credential_configuration_id\":\"" + firstConfigurationId
         + "\"},{\"type\":\"openid_credential\",\"credential_configuration_id\":\"" + secondConfigurationId + "\"}]";
+
+
+    /// <summary>
+    /// Composes the form fields of a pushed authorization request for <see cref="ClientId"/> through
+    /// <see cref="RawAuthCodeWirePushers.BuildParFields"/>: the base fields with the registered
+    /// redirect URI and the <c>openid</c> scope, then <paramref name="authorizationDetails"/> as given.
+    /// </summary>
+    /// <param name="pkce">The PKCE parameters whose challenge the request carries.</param>
+    /// <param name="authorizationDetails">The <c>authorization_details</c> value, sent verbatim.</param>
+    /// <returns>The form fields in the order they are sent.</returns>
+    private static List<KeyValuePair<string, string>> BuildPushedFields(PkceParameters pkce, string authorizationDetails)
+    {
+        List<KeyValuePair<string, string>> fields = RawAuthCodeWirePushers.BuildParFields(
+            ClientId, pkce, RedirectUri.OriginalString, WellKnownScopes.OpenId);
+        fields.Add(new(OAuthRequestParameterNames.AuthorizationDetails, authorizationDetails));
+
+        return fields;
+    }
+
+
+    /// <summary>
+    /// Drives the Authorization Code flow over the real wire: pushes
+    /// <paramref name="pushedDetails"/>, sends the browser's authorize GET as <see cref="SubjectId"/>,
+    /// and redeems the code at the token endpoint with <paramref name="tokenRequestDetails"/> as the
+    /// Token Request's <c>authorization_details</c>.
+    /// </summary>
+    /// <param name="host">The fixture owning the listener.</param>
+    /// <param name="material">The registration the flow runs under.</param>
+    /// <param name="pushedDetails">The <c>authorization_details</c> of the pushed authorization request.</param>
+    /// <param name="tokenRequestDetails">The <c>authorization_details</c> of the Token Request.</param>
+    /// <returns>The token endpoint's status code and body.</returns>
+    private async Task<(int StatusCode, string Body)> RedeemOverTheWireAsync(
+        TestHostShell host, VerifierKeyMaterial material, string pushedDetails, string tokenRequestDetails)
+    {
+        string segment = material.Registration.TenantId.Value;
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, Pool);
+        (int parStatusCode, string parBody, Uri? location, int authorizeStatusCode) = await RawAuthCodeWirePushers.PushParAndAuthorizeAsync(
+            host, segment, ClientId, SubjectId, BuildPushedFields(pkce, pushedDetails), TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(201, parStatusCode, parBody);
+        string code = DpopCodeBindingWire.ReadCode(authorizeStatusCode, location);
+
+        Dictionary<string, string> tokenFields = RawAuthCodeWirePushers.BuildTokenFields(
+            ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString);
+        tokenFields[OAuthRequestParameterNames.AuthorizationDetails] = tokenRequestDetails;
+
+        return await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, tokenFields, TestContext.CancellationToken).ConfigureAwait(false);
+    }
 
 
     /// <summary>

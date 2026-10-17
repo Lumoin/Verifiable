@@ -58,41 +58,6 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
 
 
     /// <summary>
-    /// §5.1.3: "This request parameter is used to pass the issuer_state value back to the
-    /// Credential Issuer." An <c>issuer_state</c> pushed at PAR reaches the application's
-    /// authorization-decision seam verbatim — the §5.1.3 Note requires the issuer to treat it as
-    /// possibly attacker-injected, so the library surfaces it untrusted and the application
-    /// correlates it.
-    /// </summary>
-    [TestMethod]
-    public async Task IssuerStateReachesTheAuthorizationDecisionSeam()
-    {
-        await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities).ConfigureAwait(false);
-
-        string? seenIssuerState = "<unset>";
-        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
-        {
-            candidateIntegration.EvaluateAuthorizationRequestAsync =
-                (evaluation, registration, context, ct) =>
-                {
-                    seenIssuerState = evaluation.RequestedIssuerState;
-
-                    return ValueTask.FromResult(AuthorizationRequestDecision.Permit());
-                };
-        }).ConfigureAwait(false);
-
-        ServerHttpResponse authorizeResponse = await RunToAuthorizeAsync(
-            host, material, issuerState: OfferIssuerState).ConfigureAwait(false);
-
-        Assert.AreEqual(302, authorizeResponse.StatusCode, authorizeResponse.Body);
-        Assert.AreEqual(OfferIssuerState, seenIssuerState,
-            "The pushed issuer_state must reach the authorization-decision seam verbatim.");
-    }
-
-
-    /// <summary>
     /// §5.1.3: <c>issuer_state</c> is OPTIONAL — a request that omits it still completes, and the
     /// seam observes <see langword="null"/> rather than an empty placeholder.
     /// </summary>
@@ -124,70 +89,105 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
 
 
     /// <summary>
-    /// §5.1.3 untrusted handling: "the Credential Issuer MUST take into account that the
-    /// issuer_state is not guaranteed to originate from this Credential Issuer ... It could have
-    /// been injected by an attacker." The library validates nothing about the value — when the
-    /// application cannot correlate it to an Offer it created, it refuses at the seam and the
-    /// library maps the denial to the OAuth error.
+    /// An <c>issuer_state</c> pushed over the real wire reaches the application's
+    /// authorization-decision seam byte for byte, whatever its origin: the value the Credential
+    /// Offer carried is permitted and the authorize response redirects with a <c>code</c>; a value
+    /// the application cannot correlate to an offer, as an attacker would inject, is denied at the
+    /// seam and the authorize response redirects with <c>error=access_denied</c>.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-5.1.3">OID4VCI 1.0 Section 5.1.3</see>:
+    /// "issuer_state: OPTIONAL. String value identifying a certain processing context at the
+    /// Credential Issuer. ... This request parameter is used to pass the issuer_state value back to
+    /// the Credential Issuer." and "Note: When processing the Authorization Request, the Credential
+    /// Issuer MUST take into account that the issuer_state is not guaranteed to originate from this
+    /// Credential Issuer in all circumstances. It could have been injected by an attacker."
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-5.3">OID4VCI 1.0 Section 5.3</see>:
+    /// "The Authorization Error Response MUST be made as defined in [RFC6749]." The denied row's
+    /// redirect carries the RFC 6749 <c>error</c> parameter with the value <c>access_denied</c>.
     /// </summary>
+    /// <param name="issuerState">The <c>issuer_state</c> pushed.</param>
+    /// <param name="isCorrelated">Whether the application correlates the value to an offer it created.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
-    public async Task IssuerStateThatTheApplicationCannotCorrelateIsDeniedAtTheSeam()
+    [DataRow(OfferIssuerState, true)]
+    [DataRow("attacker-injected-state", false)]
+    public async Task IssuerStateReachesTheDecisionSeamOverTheWireAsync(string issuerState, bool isCorrelated)
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities).ConfigureAwait(false);
 
-        //The application owns the Offer store; only an issuer_state it minted correlates. A value
-        //it does not recognise — possibly attacker-injected — is denied.
+        string? seenIssuerState = "<unset>";
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
             candidateIntegration.EvaluateAuthorizationRequestAsync =
                 (evaluation, registration, context, ct) =>
-                    ValueTask.FromResult(
+                {
+                    seenIssuerState = evaluation.RequestedIssuerState;
+
+                    return ValueTask.FromResult(
                         string.Equals(evaluation.RequestedIssuerState, OfferIssuerState, StringComparison.Ordinal)
                             ? AuthorizationRequestDecision.Permit()
                             : AuthorizationRequestDecision.Deny(
                                 AuthorizationDenialReason.AccessDenied,
                                 "issuer_state does not correlate to a known Credential Offer."));
+                };
         }).ConfigureAwait(false);
 
-        ServerHttpResponse permitted = await RunToAuthorizeAsync(
-            host, material, issuerState: OfferIssuerState).ConfigureAwait(false);
-        Assert.AreEqual(302, permitted.StatusCode, permitted.Body);
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, Pool);
+        List<KeyValuePair<string, string>> pushedFields = RawAuthCodeWirePushers.BuildParFields(ClientId, pkce, RedirectUri.OriginalString, WellKnownScopes.OpenId);
+        pushedFields.Add(new(OAuthRequestParameterNames.IssuerState, issuerState));
+        (int parStatusCode, string parBody, Uri? location, int authorizeStatusCode) = await RawAuthCodeWirePushers.PushParAndAuthorizeAsync(
+            host, material.Registration.TenantId.Value, ClientId, SubjectId, pushedFields, TestContext.CancellationToken).ConfigureAwait(false);
 
-        ServerHttpResponse refused = await RunToAuthorizeAsync(
-            host, material, issuerState: "attacker-injected-state").ConfigureAwait(false);
-        Assert.AreEqual(302, refused.StatusCode, refused.Body);
-        Assert.Contains(OAuthErrors.AccessDenied, refused.Location!,
-            "An uncorrelated issuer_state must be refused via the seam's denial.");
+        Assert.AreEqual(201, parStatusCode, parBody);
+        Assert.AreEqual(issuerState, seenIssuerState,
+            "The pushed issuer_state must reach the authorization-decision seam byte for byte.");
+        Assert.AreEqual(302, authorizeStatusCode, "The authorization endpoint answers with a redirect.");
+        Assert.IsNotNull(location, "The redirect carries a Location.");
+        if(isCorrelated)
+        {
+            Assert.IsNotNull(TestBrowser.ExtractQueryParam(location.ToString(), OAuthRequestParameterNames.Code),
+                $"A correlated issuer_state is permitted and the redirect carries a code: '{location}'.");
+        }
+        else
+        {
+            Assert.AreEqual(OAuthErrors.AccessDenied, TestBrowser.ExtractQueryParam(location.ToString(), OAuthRequestParameterNames.Error),
+                $"An uncorrelated issuer_state is denied at the seam: '{location}'.");
+        }
     }
 
 
     /// <summary>
-    /// §5.1.2 precedence: "if both [a scope and an authorization_details openid_credential object]
-    /// request the same Credential type, then the Credential Issuer MUST follow the request as
-    /// given by the authorization details object." The §6.2 token response carries the Credential
-    /// type ONCE, with the details-derived grant — not double-granted.
+    /// A pushed authorization request sent over the real wire whose <c>scope</c> and
+    /// <c>openid_credential</c> object request the same Credential type yields a Token Response
+    /// granting that type once, with the identifiers of the authorization details object.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-5.1.2">OID4VCI 1.0 Section 5.1.2</see>:
+    /// "If a scope value related to Credential issuance and the authorization_details request
+    /// parameter containing objects of type openid_credential are both present in a single request,
+    /// the Credential Issuer MUST interpret these individually. However, if both request the same
+    /// Credential type, then the Credential Issuer MUST follow the request as given by the
+    /// authorization details object."
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.2">OID4VCI 1.0 Section 6.2</see>:
+    /// "authorization_details: REQUIRED when the authorization_details parameter, as defined in
+    /// Section 5.1.1, is used in either the Authorization Request or Token Request." and
+    /// "credential_identifiers: REQUIRED. A non-empty array of strings, each uniquely identifying a
+    /// Credential Dataset that can be issued using the Access Token returned in this response."
     /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
     [TestMethod]
-    public async Task ScopeAndDetailsForTheSameTypeAreGrantedOnce()
+    public async Task ScopeAndDetailsForTheSameTypeAreGrantedOnceOverTheWireAsync()
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities).ConfigureAwait(false);
 
-        //Both authorization-details seams are coupled changes and are published together in ONE
-        //alteration (EndpointServer.RequestAlterationAsync's own doc): a candidate wiring only the
-        //parser is itself a half-wired server the composition-time pairing check now refuses. The
-        //seam models the §5.1.2 collision: the request carried both a scope that maps to
-        //DegreeConfigurationId and an authorization_details object for the same configuration, so a
-        //naive issuer would grant the type twice (one scope-derived, one details-derived). The
-        //library collapses the duplicate so the §6.2 response names the type once.
+        //The seam answers a details-derived grant and a scope-derived grant for the same Credential
+        //type, the details-derived grant first.
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
             _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
             candidateIntegration.ResolveCredentialAuthorizationAsync =
-                (details, subject, registration, context, ct) =>
+                static (details, subject, registration, context, ct) =>
                     ValueTask.FromResult(CredentialAuthorizationDecision.Grant(
                     [
                         new GrantedCredentialAuthorization
@@ -195,8 +195,6 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
                             CredentialConfigurationId = DegreeConfigurationId,
                             CredentialIdentifiers = ["CivilEngineeringDegree-2026"]
                         },
-                        //The scope-derived grant for the SAME Credential type — the details object
-                        //takes precedence, so this duplicate must not appear in the response.
                         new GrantedCredentialAuthorization
                         {
                             CredentialConfigurationId = DegreeConfigurationId,
@@ -205,29 +203,91 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
                     ]));
         }).ConfigureAwait(false);
 
-        //OID4VCI 1.0 §13.10: "Long-lived Access Tokens giving access to Credentials MUST not be
-        //issued unless sender-constrained." Keep this plain-bearer credential token within the
-        //long-lived threshold (lifetimes longer than 5 minutes are considered long lived).
+        //OID4VCI 1.0 Section 13.10: a plain bearer Credential token stays within five minutes.
         await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
 
-        ServerHttpResponse tokenResponse = await RunAuthCodeFlowAsync(
-            host, material,
-            scope: $"{WellKnownScopes.OpenId} {DegreeConfigurationId}",
-            parDetails: SingleDetail(DegreeConfigurationId)).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, Pool);
+        List<KeyValuePair<string, string>> pushedFields = RawAuthCodeWirePushers.BuildParFields(ClientId, pkce, RedirectUri.OriginalString, $"{WellKnownScopes.OpenId} {DegreeConfigurationId}");
+        pushedFields.Add(new(OAuthRequestParameterNames.AuthorizationDetails, SingleDetail(DegreeConfigurationId)));
+        (int parStatusCode, string parBody, Uri? location, int authorizeStatusCode) = await RawAuthCodeWirePushers.PushParAndAuthorizeAsync(
+            host, segment, ClientId, SubjectId, pushedFields, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(201, parStatusCode, parBody);
+        string code = DpopCodeBindingWire.ReadCode(authorizeStatusCode, location);
 
-        Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
+        (int statusCode, string body) = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildTokenFields(ClientId, code, pkce.EncodedVerifier, RedirectUri.OriginalString),
+            TestContext.CancellationToken).ConfigureAwait(false);
 
-        using JsonDocument doc = JsonDocument.Parse(tokenResponse.Body);
-        JsonElement details = doc.RootElement.GetProperty("authorization_details");
-        Assert.AreEqual(1, details.GetArrayLength(),
-            "The Credential type must be granted ONCE — the authorization_details object takes precedence over the scope.");
-        Assert.AreEqual(DegreeConfigurationId,
-            details[0].GetProperty("credential_configuration_id").GetString());
-        //The details-derived grant is the one kept (it was first); the scope-derived duplicate is dropped.
-        JsonElement identifiers = details[0].GetProperty("credential_identifiers");
-        Assert.AreEqual(1, identifiers.GetArrayLength());
-        Assert.AreEqual("CivilEngineeringDegree-2026", identifiers[0].GetString(),
-            "The details-derived grant must win; the scope-derived duplicate identifiers must not appear.");
+        Assert.AreEqual(200, statusCode, body);
+        using JsonDocument document = JsonDocument.Parse(body);
+        JsonElement granted = document.RootElement.GetProperty("authorization_details");
+        Assert.AreEqual(1, granted.GetArrayLength(),
+            "The Credential type is granted once, as the authorization details object requests it.");
+        Assert.AreEqual(DegreeConfigurationId, granted[0].GetProperty("credential_configuration_id").GetString(), body);
+        Assert.AreSequenceEqual(
+            ["CivilEngineeringDegree-2026"],
+            granted[0].GetProperty("credential_identifiers").EnumerateArray().Select(static identifier => identifier.GetString()).ToArray(),
+            "The identifiers granted are those of the authorization details object.");
+    }
+
+
+    /// <summary>
+    /// A request carrying a parameter this specification does not define is served over the real
+    /// wire as if the parameter were absent: a pushed authorization request carrying
+    /// <c>x_vendor=1</c> is answered 201 with a <c>request_uri</c>, and a Pre-Authorized Code Token
+    /// Request carrying <c>x_vendor=1</c> is answered 200 with an <c>access_token</c>.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-5.1.3">OID4VCI 1.0 Section 5.1.3</see>:
+    /// "Additional Authorization Request parameters MAY be defined and used, as described in [RFC6749].
+    /// The Authorization Server MUST ignore any unrecognized parameters."
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.1">OID4VCI 1.0 Section 6.1</see>:
+    /// "Additional Token Request parameters MAY be defined and used, as described in [RFC6749]. The
+    /// Authorization Server MUST ignore any unrecognized parameters."
+    /// </summary>
+    /// <param name="requestName">The request carrying the parameter: <c>pushed-authorization-request</c> or <c>pre-authorized-token-request</c>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("pushed-authorization-request")]
+    [DataRow("pre-authorized-token-request")]
+    public async Task UnrecognizedParametersAreIgnoredOverTheWireAsync(string requestName)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce,
+            AuthCodeCapabilities.Add(WellKnownCapabilityIdentifiers.Oid4VciPreAuthorizedCodeGrant)).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidatePreAuthorizedCodeAsync =
+                static (code, txCode, clientId, registration, context, ct) =>
+                    ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(SubjectId, DegreeConfigurationId));
+        }).ConfigureAwait(false);
+
+        //OID4VCI 1.0 Section 13.10: a plain bearer Credential token stays within five minutes.
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        string segment = material.Registration.TenantId.Value;
+        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, Pool);
+        List<KeyValuePair<string, string>> pushedFields = RawAuthCodeWirePushers.BuildParFields(ClientId, pkce, RedirectUri.OriginalString, WellKnownScopes.OpenId);
+        pushedFields.Add(new("x_vendor", "1"));
+        List<KeyValuePair<string, string>> tokenFields =
+        [
+            new(OAuthRequestParameterNames.GrantType, WellKnownGrantTypes.PreAuthorizedCode),
+            new(OAuthRequestParameterNames.PreAuthorizedCode, "SplxlOBeZQQYbYS6WxSbIA"),
+            new("x_vendor", "1")
+        ];
+
+        (int expectedStatusCode, string expectedMember, (int statusCode, string body)) = requestName switch
+        {
+            "pushed-authorization-request" => (201, "\"request_uri\":", await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+                host, segment, pushedFields, TestContext.CancellationToken).ConfigureAwait(false)),
+            "pre-authorized-token-request" => (200, "\"access_token\":", await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+                host, segment, tokenFields, TestContext.CancellationToken).ConfigureAwait(false)),
+            _ => throw new ArgumentOutOfRangeException(nameof(requestName), requestName, "No such request.")
+        };
+
+        Assert.AreEqual(expectedStatusCode, statusCode, body);
+        Assert.Contains(expectedMember, body, StringComparison.Ordinal, body);
     }
 
 
@@ -546,87 +606,10 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
     }
 
 
-    /// <summary>
-    /// Drives the full PAR → authorize → token flow, pushing the given <paramref name="scope"/>
-    /// and <paramref name="parDetails"/>, and returns the token response.
-    /// </summary>
-    private async ValueTask<ServerHttpResponse> RunAuthCodeFlowAsync(
-        TestHostShell host,
-        VerifierKeyMaterial material,
-        string scope,
-        string parDetails)
-    {
-        string segment = material.Registration.TenantId.Value;
-        PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, Pool);
-
-        RequestFields parFields = new()
-        {
-            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
-            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
-            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
-            [OAuthRequestParameterNames.Scope] = scope,
-            [OAuthRequestParameterNames.AuthorizationDetails] = parDetails
-        };
-        ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
-            segment, WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, [],
-            TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
-        string requestUri = ExtractFromBody(parResponse.Body, "request_uri");
-
-        RequestFields authorizeFields = new()
-        {
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.RequestUri] = requestUri
-        };
-        ExchangeContext authorizeContext = [];
-        authorizeContext.SetSubjectId(SubjectId);
-        ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
-            segment, WellKnownEndpointNames.AuthCodeAuthorize, WellKnownHttpMethods.Get,
-            authorizeFields, authorizeContext,
-            TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.AreEqual(302, authorizeResponse.StatusCode, authorizeResponse.Body);
-        string code = ExtractCode(authorizeResponse.Location!);
-
-        RequestFields tokenFields = new()
-        {
-            [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.AuthorizationCode,
-            [OAuthRequestParameterNames.Code] = code,
-            [OAuthRequestParameterNames.CodeVerifier] = pkce.EncodedVerifier,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString
-        };
-
-        return await host.DispatchAtEndpointAsync(
-            segment, WellKnownEndpointNames.AuthCodeToken, "POST",
-            tokenFields, [],
-            TestContext.CancellationToken).ConfigureAwait(false);
-    }
-
-
     private static string ExtractFromBody(string body, string property)
     {
         using JsonDocument doc = JsonDocument.Parse(body);
 
         return doc.RootElement.GetProperty(property).GetString()!;
-    }
-
-
-    private static string ExtractCode(string location)
-    {
-        int q = location.IndexOf('?', StringComparison.Ordinal);
-        foreach(string pair in location[(q + 1)..].Split('&'))
-        {
-            int eq = pair.IndexOf('=', StringComparison.Ordinal);
-            if(eq > 0 && string.Equals(
-                pair[..eq], OAuthRequestParameterNames.Code, StringComparison.Ordinal))
-            {
-                return Uri.UnescapeDataString(pair[(eq + 1)..]);
-            }
-        }
-
-        throw new InvalidOperationException("No code parameter on the authorize redirect.");
     }
 }

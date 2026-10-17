@@ -49,91 +49,16 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
             WellKnownCapabilityIdentifiers.OAuthPushedAuthorization);
 
 
-    // §5.1.1 / §6.1.1 — the authorization_details `locations` rule.
-
     /// <summary>
-    /// OID4VCI 1.0 §5.1.1: "If the Credential Issuer metadata contains an authorization_servers
-    /// parameter, the authorization detail's locations common data field MUST be set to the
-    /// Credential Issuer Identifier value." A PAR-pushed openid_credential detail that OMITS
-    /// locations is refused at the authorization endpoint (PAR) with invalid_authorization_details.
-    /// </summary>
-    [TestMethod]
-    public async Task LocationsOmittedWithAuthorizationServersIsRejectedAtPar()
-    {
-        await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities).ConfigureAwait(false);
-        //The composition-time pairing check requires ResolveCredentialAuthorizationAsync alongside
-        //the parser (no further authorization details type is registered here). This test never
-        //reaches the token grant — it is refused at PAR — so invoking the decision seam fails the
-        //test rather than merely going unobserved.
-        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
-        {
-            _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
-            candidateIntegration.ResolveCredentialAuthorizationAsync =
-                static (details, subject, registration, context, ct) =>
-                {
-                    Assert.Fail("This test never reaches the token grant; the credential decision seam must not be consulted.");
-
-                    return ValueTask.FromResult(
-                        CredentialAuthorizationDecision.Deny(CredentialAuthorizationDenialReason.AuthorizationDenied));
-                };
-        }).ConfigureAwait(false);
-        await ConfigureAuthorizationServersMetadataAsync(host).ConfigureAwait(false);
-
-        ServerHttpResponse parResponse = await DispatchParAsync(
-            host, material, DetailWithoutLocations(DegreeConfigurationId)).ConfigureAwait(false);
-
-        Assert.AreEqual(400, parResponse.StatusCode, parResponse.Body);
-        Assert.Contains(OAuthErrors.InvalidAuthorizationDetails, parResponse.Body);
-    }
-
-
-    /// <summary>
-    /// §5.1.1: a locations value that does NOT name the Credential Issuer Identifier is equally
-    /// non-conformant — the field MUST be set to the Credential Issuer Identifier value — so PAR
-    /// refuses it.
-    /// </summary>
-    [TestMethod]
-    public async Task WrongLocationsWithAuthorizationServersIsRejectedAtPar()
-    {
-        await using TestHostShell host = new(TimeProvider);
-        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
-            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities).ConfigureAwait(false);
-        //The composition-time pairing check requires ResolveCredentialAuthorizationAsync alongside
-        //the parser (no further authorization details type is registered here). This test never
-        //reaches the token grant — it is refused at PAR — so invoking the decision seam fails the
-        //test rather than merely going unobserved.
-        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
-        {
-            _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
-            candidateIntegration.ResolveCredentialAuthorizationAsync =
-                static (details, subject, registration, context, ct) =>
-                {
-                    Assert.Fail("This test never reaches the token grant; the credential decision seam must not be consulted.");
-
-                    return ValueTask.FromResult(
-                        CredentialAuthorizationDecision.Deny(CredentialAuthorizationDenialReason.AuthorizationDenied));
-                };
-        }).ConfigureAwait(false);
-        await ConfigureAuthorizationServersMetadataAsync(host).ConfigureAwait(false);
-
-        ServerHttpResponse parResponse = await DispatchParAsync(
-            host, material,
-            DetailWithLocations(DegreeConfigurationId, "https://not-this-issuer.example.com"))
-            .ConfigureAwait(false);
-
-        Assert.AreEqual(400, parResponse.StatusCode, parResponse.Body);
-        Assert.Contains(OAuthErrors.InvalidAuthorizationDetails, parResponse.Body);
-    }
-
-
-    /// <summary>
-    /// §6.1.1: "If the Token Request contains an authorization_details parameter ... of type
-    /// openid_credential and the Credential Issuer's metadata contains an authorization_servers
-    /// parameter, the authorization_details object MUST contain the Credential Issuer's identifier
-    /// in the locations element." A correctly-located detail rides PAR → authorize, and a
-    /// token-request value that OMITS locations is refused at the token endpoint.
+    /// Under Credential Issuer metadata declaring <c>authorization_servers</c>, an authorization code
+    /// Token Request whose <c>authorization_details</c> carries no <c>locations</c> is refused 400
+    /// <c>invalid_authorization_details</c> after a correctly located object was pushed and authorized,
+    /// and the credential authorization decision seam is not consulted for the refused request.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.1">OID4VCI 1.0 Section 6.1</see>:
+    /// "If the Token Request contains an authorization_details parameter (as defined by [RFC9396]) of
+    /// type openid_credential and the Credential Issuer's metadata contains an authorization_servers
+    /// parameter, the authorization_details object MUST contain the Credential Issuer's identifier in
+    /// the locations element."
     /// </summary>
     [TestMethod]
     public async Task LocationsOmittedWithAuthorizationServersIsRejectedAtToken()
@@ -170,9 +95,19 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
 
 
     /// <summary>
-    /// §5.1.1 / §6.1.1 happy path: with authorization_servers configured, a request whose
-    /// openid_credential detail sets locations to the Credential Issuer Identifier succeeds end to
-    /// end — at the authorization endpoint (PAR) and at the token endpoint.
+    /// Under Credential Issuer metadata declaring <c>authorization_servers</c>, an
+    /// <c>openid_credential</c> object whose <c>locations</c> names the Credential Issuer Identifier is
+    /// accepted at the pushed authorization request and redeemed at the token endpoint, which answers
+    /// 200 with the granted <c>authorization_details</c> naming the configuration.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-5.1.1">OID4VCI 1.0 Section 5.1.1</see>:
+    /// "If the Credential Issuer metadata contains an authorization_servers parameter, the
+    /// authorization detail's locations common data field MUST be set to the Credential Issuer
+    /// Identifier value."
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.1">OID4VCI 1.0 Section 6.1</see>:
+    /// "If the Token Request contains an authorization_details parameter (as defined by [RFC9396]) of
+    /// type openid_credential and the Credential Issuer's metadata contains an authorization_servers
+    /// parameter, the authorization_details object MUST contain the Credential Issuer's identifier in
+    /// the locations element."
     /// </summary>
     [TestMethod]
     public async Task LocationsNamingTheIssuerWithAuthorizationServersSucceeds()
@@ -235,7 +170,95 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
     }
 
 
-    // §13.10 — protecting a long-lived Access Token giving access to Credentials.
+    /// <summary>
+    /// Under Credential Issuer metadata declaring two <c>authorization_servers</c>, the
+    /// <c>locations</c> rule is held over the real wire: a pushed <c>openid_credential</c> object
+    /// without <c>locations</c>, or with a <c>locations</c> naming another issuer, is refused 400
+    /// <c>invalid_authorization_details</c> naming the Credential Issuer Identifier; one whose
+    /// <c>locations</c> names that identifier is accepted 201; and a Pre-Authorized Code Token Request
+    /// whose <c>authorization_details</c> carries no <c>locations</c> is refused 400
+    /// <c>invalid_authorization_details</c>.
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-5.1.1">OID4VCI 1.0 Section 5.1.1</see>:
+    /// "If the Credential Issuer metadata contains an authorization_servers parameter, the
+    /// authorization detail's locations common data field MUST be set to the Credential Issuer
+    /// Identifier value."
+    /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.1">OID4VCI 1.0 Section 6.1</see>:
+    /// "If the Token Request contains an authorization_details parameter (as defined by [RFC9396]) of
+    /// type openid_credential and the Credential Issuer's metadata contains an authorization_servers
+    /// parameter, the authorization_details object MUST contain the Credential Issuer's identifier in
+    /// the locations element."
+    /// </summary>
+    /// <param name="caseName">The request and its <c>locations</c>: <c>pushed-without-locations</c>, <c>pushed-naming-another-issuer</c>, <c>pushed-naming-the-issuer</c> or <c>pre-authorized-token-without-locations</c>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow("pushed-without-locations")]
+    [DataRow("pushed-naming-another-issuer")]
+    [DataRow("pushed-naming-the-issuer")]
+    [DataRow("pre-authorized-token-without-locations")]
+    public async Task LocationsAreHeldOverTheWireAsync(string caseName)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce,
+            AuthCodeCapabilities.Add(WellKnownCapabilityIdentifiers.Oid4VciPreAuthorizedCodeGrant)).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
+            candidateIntegration.ResolveCredentialAuthorizationAsync =
+                static (details, subject, registration, context, ct) => ValueTask.FromResult(GrantAllRequested(details));
+            candidateIntegration.ValidatePreAuthorizedCodeAsync =
+                static (code, txCode, clientId, registration, context, ct) =>
+                    ValueTask.FromResult(PreAuthorizedCodeDecision.Grant(SubjectId));
+            candidateIntegration.ContributeCredentialIssuerMetadataAsync =
+                static (registration, context, ct) => ValueTask.FromResult(
+                    new CredentialIssuerMetadataContribution
+                    {
+                        AuthorizationServers = ["https://as.example.com", "https://as-two.example.com"]
+                    });
+        }).ConfigureAwait(false);
+
+        //OID4VCI 1.0 Section 13.10: a plain bearer Credential token stays within five minutes.
+        await host.SetAccessTokenLifetimeAsync(material, TimeSpan.FromMinutes(5)).ConfigureAwait(false);
+
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        string issuerIdentifier = material.Registration.IssuerUri!.OriginalString;
+        string expectedDescription = "The Credential Issuer metadata declares authorization_servers, so each "
+            + "openid_credential authorization details object MUST set its locations element to the Credential "
+            + $"Issuer Identifier '{issuerIdentifier}'.";
+
+        (int statusCode, string body) = caseName switch
+        {
+            "pushed-without-locations" => await PushOverTheWireAsync(
+                host, segment, DetailWithoutLocations(DegreeConfigurationId)).ConfigureAwait(false),
+            "pushed-naming-another-issuer" => await PushOverTheWireAsync(
+                host, segment, DetailWithLocations(DegreeConfigurationId, "https://not-this-issuer.example.com")).ConfigureAwait(false),
+            "pushed-naming-the-issuer" => await PushOverTheWireAsync(
+                host, segment, DetailWithLocations(DegreeConfigurationId, issuerIdentifier)).ConfigureAwait(false),
+            "pre-authorized-token-without-locations" => await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+                host,
+                segment,
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.PreAuthorizedCode,
+                    [OAuthRequestParameterNames.PreAuthorizedCode] = "SplxlOBeZQQYbYS6WxSbIA",
+                    [OAuthRequestParameterNames.AuthorizationDetails] = DetailWithoutLocations(DegreeConfigurationId)
+                },
+                TestContext.CancellationToken).ConfigureAwait(false),
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName), caseName, "No such case.")
+        };
+
+        if(string.Equals(caseName, "pushed-naming-the-issuer", StringComparison.Ordinal))
+        {
+            Assert.AreEqual(201, statusCode, body);
+            Assert.Contains("\"request_uri\":", body, StringComparison.Ordinal, body);
+        }
+        else
+        {
+            DpopCodeBindingWire.AssertError(statusCode, body, 400, OAuthErrors.InvalidAuthorizationDetails, expectedDescription);
+        }
+    }
+
 
     /// <summary>
     /// OID4VCI 1.0 §13.10: "Long-lived Access Tokens giving access to Credentials MUST not be
@@ -450,26 +473,26 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
         + "\",\"locations\":[\"" + location + "\"]}]";
 
 
-    private async ValueTask<ServerHttpResponse> DispatchParAsync(
-        TestHostShell host, VerifierKeyMaterial material, string authorizationDetails)
+    /// <summary>
+    /// Sends a pushed authorization request over the real wire carrying
+    /// <paramref name="authorizationDetails"/> beside the <c>code</c> response type, an S256 PKCE
+    /// challenge, the registered redirect URI and the <c>openid</c> scope, starting the listener on
+    /// first use.
+    /// </summary>
+    /// <param name="host">The fixture owning the listener.</param>
+    /// <param name="segment">The tenant route segment.</param>
+    /// <param name="authorizationDetails">The <c>authorization_details</c> value, sent verbatim.</param>
+    /// <returns>The pushed authorization request endpoint's status code and body.</returns>
+    private async Task<(int StatusCode, string Body)> PushOverTheWireAsync(
+        TestHostShell host, string segment, string authorizationDetails)
     {
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, Pool);
-        RequestFields parFields = new()
-        {
-            [OAuthRequestParameterNames.ResponseType] = WellKnownResponseTypes.Code,
-            [OAuthRequestParameterNames.ClientId] = ClientId,
-            [OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge,
-            [OAuthRequestParameterNames.CodeChallengeMethod] = WellKnownCodeChallengeMethods.S256,
-            [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
-            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId,
-            [OAuthRequestParameterNames.AuthorizationDetails] = authorizationDetails
-        };
+        List<KeyValuePair<string, string>> fields = RawAuthCodeWirePushers.BuildParFields(
+            ClientId, pkce, RedirectUri.OriginalString, WellKnownScopes.OpenId);
+        fields.Add(new(OAuthRequestParameterNames.AuthorizationDetails, authorizationDetails));
 
-        return await host.DispatchAtEndpointAsync(
-            material.Registration.TenantId.Value,
-            WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, [],
-            TestContext.CancellationToken).ConfigureAwait(false);
+        return await RawAuthCodeWirePushers.PushRawParFieldsAsync(
+            host, segment, fields, TestContext.CancellationToken).ConfigureAwait(false);
     }
 
 
