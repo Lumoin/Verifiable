@@ -33,6 +33,12 @@ internal sealed class OpenIdSignInTests
     /// <summary>The key identifier the provider publishes its signing key under.</summary>
     private const string ProviderKeyId = "op-key-1";
 
+    /// <summary>How long a sign-in's flow state is held from its start for the person to return with the code: ten minutes.</summary>
+    private static TimeSpan SignInLifetime { get; } = TimeSpan.FromMinutes(10);
+
+    /// <summary>The skew the ID Token's instants are judged with against the relying party's clock: sixty seconds.</summary>
+    private static TimeSpan IdTokenClockSkew { get; } = TimeSpan.FromSeconds(60);
+
     /// <summary>The relying party's callback.</summary>
     private static Uri Callback { get; } = new("https://rp.example.com/callback");
 
@@ -57,7 +63,7 @@ internal sealed class OpenIdSignInTests
         var client = new OAuthClient(provider.Infrastructure).AuthCode;
 
         var started = await client.StartOpenIdAsync(
-            Registration(), Callback, Scope(), [], resource: null, TimeSpan.FromMinutes(10), TestContext.CancellationToken).ConfigureAwait(false);
+            Registration(), Callback, Scope(), [], resource: null, SignInLifetime, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, started.Outcome);
         var query = HttpUtility.ParseQueryString(started.RedirectUri!.Query);
@@ -87,7 +93,7 @@ internal sealed class OpenIdSignInTests
         var client = new OAuthClient(provider.Infrastructure).AuthCode;
 
         var started = await client.StartOpenIdAsync(
-            Registration(), Callback, Scope(), [], resource: null, TimeSpan.FromMinutes(10), TestContext.CancellationToken).ConfigureAwait(false);
+            Registration(), Callback, Scope(), [], resource: null, SignInLifetime, TestContext.CancellationToken).ConfigureAwait(false);
         var state = HttpUtility.ParseQueryString(started.RedirectUri!.Query)[OAuthRequestParameterNames.State]!;
 
         provider.IdTokenNonce = "another-sign-ins-nonce";
@@ -110,7 +116,7 @@ internal sealed class OpenIdSignInTests
         var client = new OAuthClient(provider.Infrastructure).AuthCode;
 
         var started = await client.StartOpenIdAsync(
-            Registration(), Callback, Scope(), [], resource: null, TimeSpan.FromMinutes(10), TestContext.CancellationToken).ConfigureAwait(false);
+            Registration(), Callback, Scope(), [], resource: null, SignInLifetime, TestContext.CancellationToken).ConfigureAwait(false);
         var query = HttpUtility.ParseQueryString(started.RedirectUri!.Query);
 
         provider.IdTokenNonce = query[OAuthRequestParameterNames.Nonce];
@@ -133,7 +139,7 @@ internal sealed class OpenIdSignInTests
         var client = new OAuthClient(provider.Infrastructure).AuthCode;
 
         var started = await client.StartOpenIdAsync(
-            Registration(), Callback, Scope(), [], resource: null, TimeSpan.FromMinutes(10), TestContext.CancellationToken).ConfigureAwait(false);
+            Registration(), Callback, Scope(), [], resource: null, SignInLifetime, TestContext.CancellationToken).ConfigureAwait(false);
         var query = HttpUtility.ParseQueryString(started.RedirectUri!.Query);
 
         provider.IdTokenNonce = query[OAuthRequestParameterNames.Nonce];
@@ -158,7 +164,7 @@ internal sealed class OpenIdSignInTests
         var client = new OAuthClient(provider.Infrastructure).AuthCode;
 
         var started = await client.StartOpenIdAsync(
-            Registration(), Callback, Scope(), [], resource: null, TimeSpan.FromMinutes(10), TestContext.CancellationToken).ConfigureAwait(false);
+            Registration(), Callback, Scope(), [], resource: null, SignInLifetime, TestContext.CancellationToken).ConfigureAwait(false);
         var query = HttpUtility.ParseQueryString(started.RedirectUri!.Query);
 
         provider.IdTokenNonce = query[OAuthRequestParameterNames.Nonce];
@@ -169,7 +175,7 @@ internal sealed class OpenIdSignInTests
         Assert.AreEqual(0, provider.KeyRequests, "No key of another algorithm than the registered one is asked for.");
 
         var again = await client.StartOpenIdAsync(
-            Registration(), Callback, Scope(), [], resource: null, TimeSpan.FromMinutes(10), TestContext.CancellationToken).ConfigureAwait(false);
+            Registration(), Callback, Scope(), [], resource: null, SignInLifetime, TestContext.CancellationToken).ConfigureAwait(false);
         var againQuery = HttpUtility.ParseQueryString(again.RedirectUri!.Query);
 
         provider.IdTokenNonce = againQuery[OAuthRequestParameterNames.Nonce];
@@ -190,7 +196,7 @@ internal sealed class OpenIdSignInTests
         var client = new OAuthClient(provider.Infrastructure).AuthCode;
 
         var started = await client.StartAsync(
-            Registration(), Callback, Scope(), [], resource: null, TimeSpan.FromMinutes(10), TestContext.CancellationToken).ConfigureAwait(false);
+            Registration(), Callback, Scope(), [], resource: null, SignInLifetime, TestContext.CancellationToken).ConfigureAwait(false);
         var query = HttpUtility.ParseQueryString(started.RedirectUri!.Query);
         Assert.IsNull(query[OAuthRequestParameterNames.Nonce], "A plain start sends no nonce.");
 
@@ -241,7 +247,7 @@ internal sealed class OpenIdSignInTests
                 },
                 Parser = JwsAccessTokenTestSupport.Parser,
                 Base64UrlDecoder = TestSetup.Base64UrlDecoder,
-                ClockSkew = TimeSpan.FromSeconds(60),
+                ClockSkew = IdTokenClockSkew,
                 RegisteredAlgorithm = registeredAlgorithm
             },
             TestContext.CancellationToken).ConfigureAwait(false);

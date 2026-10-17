@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using Verifiable.JCose;
 using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Server;
@@ -192,7 +193,7 @@ public static class OpenIdSignInHandlers
 
         //§3.1.3.7 item 7: the token is judged under the algorithm the client registered, so no key of another algorithm the
         //provider publishes is ever asked for (RFC 8725 §3.1: the algorithm the client accepts is the client's to fix).
-        if(!string.Equals(algorithm, verification.RegisteredAlgorithm, StringComparison.Ordinal))
+        if(!WellKnownJwaValues.Equals(algorithm, verification.RegisteredAlgorithm))
         {
             return new OpenIdSignInResult { Exchange = exchange, Refusal = OpenIdSignInRefusal.AlgorithmNotRegistered, RefreshToken = refreshToken };
         }

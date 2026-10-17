@@ -1122,6 +1122,127 @@ public static class JwkJsonReader
 
 
     /// <summary>
+    /// The members at the top level of the one JSON object a document is (RFC 8259 section 4), read as the JSON it is rather
+    /// than searched as text: each member of the object's own level in document order, its name and a string value each
+    /// decoded once (RFC 8259 section 7), and no member of an object or array nested beneath it, so a member a nested object
+    /// carries is never read as the object's own. <see cref="IsWellFormedJsonDocument"/> judges the whole document first, so a
+    /// document that is not exactly one well-formed JSON value, or that repeats a member name in any object, is answered as no
+    /// object, and so is a well-formed value that is no object. A member whose name decodes to no Unicode text - an escape
+    /// naming an unpaired surrogate, which the grammar admits (RFC 8259 section 8.2) - is left out, as no name a reader asks for
+    /// spells one; a string value doing so is answered as <see cref="JsonTopLevelValueKind.UndecodableString"/>, carrying no
+    /// text. This method never throws.
+    /// </summary>
+    /// <param name="json">The UTF-8 bytes of the document.</param>
+    /// <returns>The object's top-level members, or <see langword="null"/> when the document is not one well-formed JSON object.</returns>
+    public static IReadOnlyList<JsonTopLevelMember>? ReadTopLevelMembers(ReadOnlySpan<byte> json)
+    {
+        if(!IsWellFormedJsonDocument(json))
+        {
+            return null;
+        }
+
+        var pos = 0;
+        SkipWhitespace(json, ref pos);
+
+        if(json[pos] != (byte)'{')
+        {
+            return null;
+        }
+
+        pos++;
+        List<JsonTopLevelMember> members = [];
+
+        //The document is well formed, so every step below lands on the next member's name, a separator or the closing brace.
+        while(true)
+        {
+            SkipWhitespace(json, ref pos);
+
+            if(json[pos] == (byte)',')
+            {
+                pos++;
+                SkipWhitespace(json, ref pos);
+            }
+
+            if(json[pos] == (byte)'}')
+            {
+                return members;
+            }
+
+            var nameStart = pos + 1;
+            var afterName = SkipString(json, pos);
+            var name = DecodeContentToString(json, nameStart, afterName - 1 - nameStart);
+            var valueStart = SkipWhitespaceAndColon(json, afterName);
+            var valueEnd = SkipValue(json, valueStart);
+
+            if(!HoldsUnpairedSurrogate(name))
+            {
+                members.Add(TopLevelMemberAt(json, name, valueStart, valueEnd));
+            }
+
+            pos = valueEnd;
+        }
+    }
+
+
+    /// <summary>One top-level member of an already-validated object, its value spanning <c>[valueStart, valueEnd)</c>.</summary>
+    /// <param name="json">The document.</param>
+    /// <param name="name">The member's name, decoded.</param>
+    /// <param name="valueStart">The position of the value's first byte.</param>
+    /// <param name="valueEnd">The position one past the value's last byte.</param>
+    /// <returns>The member.</returns>
+    private static JsonTopLevelMember TopLevelMemberAt(ReadOnlySpan<byte> json, string name, int valueStart, int valueEnd)
+    {
+        if(json[valueStart] == (byte)'"')
+        {
+            var text = DecodeContentToString(json, valueStart + 1, valueEnd - valueStart - 2);
+
+            return HoldsUnpairedSurrogate(text)
+                ? new JsonTopLevelMember(name, JsonTopLevelValueKind.UndecodableString, string.Empty)
+                : new JsonTopLevelMember(name, JsonTopLevelValueKind.String, text);
+        }
+
+        var kind = json[valueStart] switch
+        {
+            (byte)'{' => JsonTopLevelValueKind.Object,
+            (byte)'[' => JsonTopLevelValueKind.Array,
+            (byte)'t' => JsonTopLevelValueKind.True,
+            (byte)'f' => JsonTopLevelValueKind.False,
+            (byte)'n' => JsonTopLevelValueKind.Null,
+            _ => JsonTopLevelValueKind.Number
+        };
+
+        return new JsonTopLevelMember(name, kind, Encoding.UTF8.GetString(json[valueStart..valueEnd]));
+    }
+
+
+    /// <summary>
+    /// Whether decoded text holds a surrogate no other completes into a code point - text an escape spelled that names no
+    /// Unicode scalar value (RFC 8259 section 8.2).
+    /// </summary>
+    /// <param name="text">The decoded text.</param>
+    /// <returns><see langword="true"/> when the text holds an unpaired surrogate.</returns>
+    private static bool HoldsUnpairedSurrogate(string text)
+    {
+        for(var index = 0; index < text.Length; index++)
+        {
+            if(char.IsHighSurrogate(text[index]) && index + 1 < text.Length && char.IsLowSurrogate(text[index + 1]))
+            {
+                index++;
+
+                continue;
+            }
+
+            if(char.IsSurrogate(text[index]))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+
+    /// <summary>
     /// The greatest container nesting <see cref="IsWellFormedJsonDocument"/> admits before it refuses
     /// a document outright. No JWK set, JOSE header, client identifier metadata document, or federation
     /// entity statement this reader parses nests past roughly ten containers (a JWKS's <c>keys</c> array

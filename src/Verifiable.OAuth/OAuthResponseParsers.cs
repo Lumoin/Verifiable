@@ -1,19 +1,30 @@
 using System.Globalization;
+using System.Text;
 using Verifiable.Core;
+using Verifiable.JCose;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.Client;
 
 namespace Verifiable.OAuth;
 
 /// <summary>
-/// Default span-based parsers for OAuth 2.0 protocol endpoint responses.
+/// Default parsers for OAuth 2.0 protocol endpoint responses.
 /// </summary>
 /// <remarks>
 /// <para>
 /// These parsers implement the delegate contracts defined in
 /// <see cref="ParseParResponseDelegate"/> and <see cref="ParseTokenResponseDelegate"/>.
-/// They use <see cref="ReadOnlySpan{T}"/> scanning with no dependency on
-/// <c>System.Text.Json</c> or any serialization infrastructure.
+/// They take no dependency on <c>System.Text.Json</c> or any serialization infrastructure.
+/// </para>
+/// <para>
+/// A response's parameters are the members at the top level of the one JSON object its body is: RFC 6749 §5.1 has a token
+/// response's parameters serialized "into a JSON structure by adding each parameter at the highest structure level", as
+/// RFC 9126 §2.2 has a pushed authorization response's. The body is read as that object
+/// (<see cref="JwkJsonReader.ReadTopLevelMembers"/>), never searched as text: each name and string value decoded once
+/// (RFC 8259 §7), a member an object nested beneath the top level carries never read as a parameter, and a body that is
+/// not one well-formed JSON object, or that repeats a member name (RFC 8259 §4), answered as malformed. A reader of the same
+/// body as the JSON it is - a client's check of the credentials it carries - therefore reads the very values these parsers
+/// answer.
 /// </para>
 /// <para>
 /// Both parsers handle two response shapes:
@@ -53,12 +64,12 @@ public static class OAuthResponseParsers
     /// Parses a PAR endpoint response per
     /// <see href="https://www.rfc-editor.org/rfc/rfc9126#section-2.2">RFC 9126 §2.2</see>.
     /// </summary>
+    /// <param name="response">The response.</param>
+    /// <returns>The request URI and its lifetime, the error the response names, or the refusal of a malformed response.</returns>
     public static Result<ParResponse, OAuthParseError> ParseParResponse(
         HttpResponseData response)
     {
-        ReadOnlySpan<char> body = response.Body.AsSpan().Trim();
-
-        if(body.IsEmpty)
+        if(response.Body.AsSpan().Trim().IsEmpty)
         {
             return Result.Failure<ParResponse, OAuthParseError>(
                 new OAuthMalformedResponse(
@@ -73,19 +84,27 @@ public static class OAuthResponseParsers
                     }).WithTransportMetadata(response));
         }
 
+        var members = MembersOf(response.Body);
+
         if(response.IsProblemJson)
         {
-            return ParseProblemJson<ParResponse>(body, response);
+            return ParseProblemJson<ParResponse>(members ?? [], response);
         }
 
-        if(TryGetStringField(body, "error", out ReadOnlySpan<char> errorCode))
+        if(members is null)
         {
-            return BuildProtocolError<ParResponse>(errorCode, body, response,
+            return Result.Failure<ParResponse, OAuthParseError>(
+                NotOneObject(response, "PAR", "RFC 9126 §2.2").WithTransportMetadata(response));
+        }
+
+        if(StringOf(members, OAuthRequestParameterNames.Error) is { } errorCode)
+        {
+            return BuildProtocolError<ParResponse>(errorCode, members, response,
                 endpoint: "PAR",
                 specReference: "RFC 9126 §2.3");
         }
 
-        if(!TryGetStringField(body, "request_uri", out ReadOnlySpan<char> requestUriSpan))
+        if(StringOf(members, OAuthRequestParameterNames.RequestUri) is not { } requestUriString)
         {
             return Result.Failure<ParResponse, OAuthParseError>(
                 new OAuthMalformedResponse(
@@ -101,7 +120,6 @@ public static class OAuthResponseParsers
                     }).WithTransportMetadata(response));
         }
 
-        string requestUriString = requestUriSpan.ToString();
         //Absolute URI AND an acceptable scheme. UriKind.Absolute alone is not enough: on
         //Unix a leading-slash value like "/relative/path" parses as an absolute file: URI
         //(it is a valid Unix file path), so a relative request_uri would slip through there
@@ -126,7 +144,7 @@ public static class OAuthResponseParsers
                     }).WithTransportMetadata(response));
         }
 
-        if(!TryGetIntField(body, "expires_in", out int expiresIn))
+        if(!TryIntegerOf(members, OAuthRequestParameterNames.ExpiresIn, out int expiresIn))
         {
             return Result.Failure<ParResponse, OAuthParseError>(
                 new OAuthMalformedResponse(
@@ -162,13 +180,14 @@ public static class OAuthResponseParsers
     /// Parses a token endpoint response per
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 §5.1</see>.
     /// </summary>
+    /// <param name="response">The response.</param>
+    /// <param name="receivedAt">The instant the response was received.</param>
+    /// <returns>The token response, the error the response names, or the refusal of a malformed response.</returns>
     public static Result<TokenResponse, OAuthParseError> ParseTokenResponse(
         HttpResponseData response,
         DateTimeOffset receivedAt)
     {
-        ReadOnlySpan<char> body = response.Body.AsSpan().Trim();
-
-        if(body.IsEmpty)
+        if(response.Body.AsSpan().Trim().IsEmpty)
         {
             return Result.Failure<TokenResponse, OAuthParseError>(
                 new OAuthMalformedResponse(
@@ -183,20 +202,27 @@ public static class OAuthResponseParsers
                     }).WithTransportMetadata(response));
         }
 
+        var members = MembersOf(response.Body);
+
         if(response.IsProblemJson)
         {
-            return ParseProblemJson<TokenResponse>(body, response);
+            return ParseProblemJson<TokenResponse>(members ?? [], response);
         }
 
-        if(TryGetStringField(body, "error", out ReadOnlySpan<char> errorCode))
+        if(members is null)
         {
-            return BuildProtocolError<TokenResponse>(errorCode, body, response,
+            return Result.Failure<TokenResponse, OAuthParseError>(
+                NotOneObject(response, "token", "RFC 6749 §5.1").WithTransportMetadata(response));
+        }
+
+        if(StringOf(members, OAuthRequestParameterNames.Error) is { } errorCode)
+        {
+            return BuildProtocolError<TokenResponse>(errorCode, members, response,
                 endpoint: "token",
                 specReference: "RFC 6749 §5.2");
         }
 
-        if(!TryGetStringField(body, "access_token", out ReadOnlySpan<char> accessTokenSpan)
-            || accessTokenSpan.IsEmpty)
+        if(StringOf(members, OAuthRequestParameterNames.AccessToken) is not { Length: > 0 } accessToken)
         {
             return Result.Failure<TokenResponse, OAuthParseError>(
                 new OAuthMalformedResponse(
@@ -205,13 +231,13 @@ public static class OAuthResponseParsers
                     {
                         LikelyCause = "The server did not return a valid token response. " +
                                       "The response may be an error without using the " +
-                                      "standard error field.",
+                                      "standard error field, or carry its parameters below " +
+                                      "the highest structure level.",
                         SpecificationReference = "RFC 6749 §5.1"
                     }).WithTransportMetadata(response));
         }
 
-        if(!TryGetStringField(body, "token_type", out ReadOnlySpan<char> tokenTypeSpan)
-            || tokenTypeSpan.IsEmpty)
+        if(StringOf(members, OAuthRequestParameterNames.TokenType) is not { Length: > 0 } tokenType)
         {
             return Result.Failure<TokenResponse, OAuthParseError>(
                 new OAuthMalformedResponse(
@@ -225,7 +251,7 @@ public static class OAuthResponseParsers
         }
 
         int? expiresIn = null;
-        if(TryGetIntField(body, "expires_in", out int expiresInValue))
+        if(TryIntegerOf(members, OAuthRequestParameterNames.ExpiresIn, out int expiresInValue))
         {
             if(expiresInValue <= 0)
             {
@@ -243,71 +269,143 @@ public static class OAuthResponseParsers
             expiresIn = expiresInValue;
         }
 
-        string? refreshToken = TryGetStringField(body, "refresh_token", out ReadOnlySpan<char> rt)
-            ? rt.ToString() : null;
-
-        string? scope = TryGetStringField(body, "scope", out ReadOnlySpan<char> sc)
-            ? sc.ToString() : null;
-
-        string? idToken = TryGetStringField(body, "id_token", out ReadOnlySpan<char> idt)
-            ? idt.ToString() : null;
-
-        var issuedTokenType = TryGetStringField(body, OAuthRequestParameterNames.IssuedTokenType, out ReadOnlySpan<char> issued)
-            ? issued.ToString() : null;
-
         return Result.Success<TokenResponse, OAuthParseError>(
             new TokenResponse
             {
-                AccessToken = accessTokenSpan.ToString(),
-                TokenType = tokenTypeSpan.ToString(),
+                AccessToken = accessToken,
+                TokenType = tokenType,
                 ExpiresIn = expiresIn,
-                RefreshToken = refreshToken,
-                Scope = scope,
-                IdToken = idToken,
-                IssuedTokenType = issuedTokenType
+                RefreshToken = StringOf(members, OAuthRequestParameterNames.RefreshToken),
+                Scope = StringOf(members, OAuthRequestParameterNames.Scope),
+                IdToken = StringOf(members, OAuthRequestParameterNames.IdToken),
+                IssuedTokenType = StringOf(members, OAuthRequestParameterNames.IssuedTokenType)
             });
     }
 
 
+    /// <summary>
+    /// The parameters a response body carries: the members at the top level of the one JSON object it is, each name and
+    /// string value decoded once, or <see langword="null"/> for a body that is not one well-formed JSON object.
+    /// </summary>
+    /// <param name="body">The response body.</param>
+    /// <returns>The top-level members, or <see langword="null"/>.</returns>
+    private static IReadOnlyList<JsonTopLevelMember>? MembersOf(string body) =>
+        JwkJsonReader.ReadTopLevelMembers(Encoding.UTF8.GetBytes(body));
+
+
+    /// <summary>
+    /// The decoded string a top-level parameter carries, or <see langword="null"/> when the response carries no such parameter
+    /// or carries it as no string, or as a string naming no Unicode text. A well-formed object names each member once, so the
+    /// member found is the one the object carries.
+    /// </summary>
+    /// <param name="members">The response's top-level members.</param>
+    /// <param name="name">The parameter's name.</param>
+    /// <returns>The parameter's value, or <see langword="null"/>.</returns>
+    private static string? StringOf(IReadOnlyList<JsonTopLevelMember> members, string name)
+    {
+        foreach(var member in members)
+        {
+            if(member.Kind is JsonTopLevelValueKind.String && string.Equals(member.Name, name, StringComparison.Ordinal))
+            {
+                return member.Text;
+            }
+        }
+
+        return null;
+    }
+
+
+    /// <summary>
+    /// Reads a top-level parameter carried as a JSON number naming an integer within the range of <see cref="int"/>.
+    /// </summary>
+    /// <param name="members">The response's top-level members.</param>
+    /// <param name="name">The parameter's name.</param>
+    /// <param name="value">The integer, or zero when none is read.</param>
+    /// <returns><see langword="true"/> when the parameter is carried as such a number.</returns>
+    private static bool TryIntegerOf(IReadOnlyList<JsonTopLevelMember> members, string name, out int value)
+    {
+        foreach(var member in members)
+        {
+            if(member.Kind is JsonTopLevelValueKind.Number && string.Equals(member.Name, name, StringComparison.Ordinal))
+            {
+                return int.TryParse(member.Text, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out value);
+            }
+        }
+
+        value = 0;
+
+        return false;
+    }
+
+
+    /// <summary>
+    /// The refusal of a response body that is not one well-formed JSON object, whose top-level members alone are a
+    /// response's parameters.
+    /// </summary>
+    /// <param name="response">The response.</param>
+    /// <param name="endpoint">The endpoint that answered it.</param>
+    /// <param name="specReference">The clause the response's form is given by.</param>
+    /// <returns>The refusal.</returns>
+    private static OAuthMalformedResponse NotOneObject(HttpResponseData response, string endpoint, string specReference) => new(
+        response.Body,
+        new DecisionSupport($"The {endpoint} endpoint's response is not one well-formed JSON object.")
+        {
+            LikelyCause = "The body is no JSON object, is not well-formed JSON, or repeats a member name " +
+                          "(RFC 8259 §4), so it names no parameter one way.",
+            SpecificationReference = specReference
+        });
+
+
+    /// <summary>
+    /// The OAuth error response a body's top-level <c>error</c> names (RFC 6749 §5.2), with the description and the URI it
+    /// carries beside it.
+    /// </summary>
+    /// <typeparam name="T">The success type the endpoint's parser answers.</typeparam>
+    /// <param name="errorCode">The <c>error</c> the response names.</param>
+    /// <param name="members">The response's top-level members.</param>
+    /// <param name="response">The response.</param>
+    /// <param name="endpoint">The endpoint that answered it.</param>
+    /// <param name="specReference">The clause the error response is given by.</param>
+    /// <returns>The protocol error.</returns>
     private static Result<T, OAuthParseError> BuildProtocolError<T>(
-        ReadOnlySpan<char> errorCode,
-        ReadOnlySpan<char> body,
+        string errorCode,
+        IReadOnlyList<JsonTopLevelMember> members,
         HttpResponseData response,
         string endpoint,
         string specReference)
     {
-        _ = TryGetStringField(body, "error_description", out ReadOnlySpan<char> descSpan);
-        _ = TryGetStringField(body, "error_uri", out ReadOnlySpan<char> errorUriSpan);
-
-        string errorCodeString = errorCode.ToString();
-        string? description = descSpan.IsEmpty ? null : descSpan.ToString();
+        string? description = StringOf(members, OAuthRequestParameterNames.ErrorDescription) is { Length: > 0 } carried ? carried : null;
 
         Uri? errorUri = null;
-        if(!errorUriSpan.IsEmpty)
+        if(StringOf(members, "error_uri") is { Length: > 0 } errorUriText)
         {
-            _ = Uri.TryCreate(errorUriSpan.ToString(), UriKind.Absolute, out errorUri);
+            _ = Uri.TryCreate(errorUriText, UriKind.Absolute, out errorUri);
         }
 
         DecisionSupport support = BuildProtocolErrorSupport(
-            errorCodeString, description, endpoint, specReference);
+            errorCode, description, endpoint, specReference);
 
         return Result.Failure<T, OAuthParseError>(
-            new OAuthProtocolError(errorCodeString, support, description, errorUri)
+            new OAuthProtocolError(errorCode, support, description, errorUri)
                 .WithTransportMetadata(response));
     }
 
 
+    /// <summary>
+    /// The RFC 9457 problem a <c>problem+json</c> response states, read from its top-level <c>type</c>, <c>detail</c> and
+    /// <c>instance</c> members, none of them where the body is no JSON object.
+    /// </summary>
+    /// <typeparam name="T">The success type the endpoint's parser answers.</typeparam>
+    /// <param name="members">The response's top-level members, empty where the body is no JSON object.</param>
+    /// <param name="response">The response.</param>
+    /// <returns>The protocol error.</returns>
     private static Result<T, OAuthParseError> ParseProblemJson<T>(
-        ReadOnlySpan<char> body,
+        IReadOnlyList<JsonTopLevelMember> members,
         HttpResponseData response)
     {
-        _ = TryGetStringField(body, "type", out ReadOnlySpan<char> typeSpan);
-        _ = TryGetStringField(body, "detail", out ReadOnlySpan<char> detailSpan);
-        _ = TryGetStringField(body, "instance", out ReadOnlySpan<char> instanceSpan);
-
-        string errorCode = typeSpan.IsEmpty ? "problem" : typeSpan.ToString();
-        string? detail = detailSpan.IsEmpty ? null : detailSpan.ToString();
-        string? instance = instanceSpan.IsEmpty ? null : instanceSpan.ToString();
+        string errorCode = StringOf(members, "type") is { Length: > 0 } type ? type : "problem";
+        string? detail = StringOf(members, "detail") is { Length: > 0 } carriedDetail ? carriedDetail : null;
+        string? instance = StringOf(members, "instance") is { Length: > 0 } carriedInstance ? carriedInstance : null;
 
         DecisionSupport support = new(
             $"The server returned an RFC 9457 problem+json response: {errorCode}.")
@@ -323,6 +421,12 @@ public static class OAuthResponseParsers
     }
 
 
+    /// <summary>The decision support an OAuth error code is answered with: its likely cause and the guidance acting on it.</summary>
+    /// <param name="errorCode">The error code.</param>
+    /// <param name="serverDescription">The description the server wrote, or <see langword="null"/>.</param>
+    /// <param name="endpoint">The endpoint that answered it.</param>
+    /// <param name="specReference">The clause the error response is given by.</param>
+    /// <returns>The decision support.</returns>
     private static DecisionSupport BuildProtocolErrorSupport(
         string errorCode,
         string? serverDescription,
@@ -385,260 +489,5 @@ public static class OAuthResponseParsers
             ActionableGuidance = guidance,
             SpecificationReference = specReference
         };
-    }
-
-
-    /// <summary>
-    /// Finds <c>"key":"value"</c> in a flat JSON object and returns the value span.
-    /// Handles optional whitespace around the colon and before the value string.
-    /// Returns <see langword="false"/> if the key is not present or the value is
-    /// not a JSON string.
-    /// </summary>
-    internal static bool TryGetStringField(
-        ReadOnlySpan<char> json,
-        string key,
-        out ReadOnlySpan<char> value)
-    {
-        value = default;
-
-        //Search for the quoted key — "key" — then find the colon after it,
-        //skipping any whitespace between the closing quote and the colon.
-        Span<char> keyPattern = stackalloc char[key.Length + 2];
-        keyPattern[0] = '"';
-        key.AsSpan().CopyTo(keyPattern[1..]);
-        keyPattern[key.Length + 1] = '"';
-
-        int keyIndex = json.IndexOf(keyPattern);
-        if(keyIndex < 0)
-        {
-            return false;
-        }
-
-        ReadOnlySpan<char> afterKey = json[(keyIndex + keyPattern.Length)..].TrimStart();
-
-        if(afterKey.IsEmpty || afterKey[0] != ':')
-        {
-            return false;
-        }
-
-        ReadOnlySpan<char> afterColon = afterKey[1..].TrimStart();
-
-        if(afterColon.IsEmpty || afterColon[0] != '"')
-        {
-            return false;
-        }
-
-        afterColon = afterColon[1..];
-        int end = FindClosingQuote(afterColon);
-        if(end < 0)
-        {
-            return false;
-        }
-
-        value = afterColon[..end];
-        return true;
-    }
-
-
-    /// <summary>
-    /// Finds <c>"key":number</c> in a flat JSON object and returns the parsed integer.
-    /// Handles optional whitespace around the colon.
-    /// Returns <see langword="false"/> if the key is not present or the value is not
-    /// a parseable integer.
-    /// </summary>
-    internal static bool TryGetIntField(
-        ReadOnlySpan<char> json,
-        string key,
-        out int value)
-    {
-        value = 0;
-
-        Span<char> keyPattern = stackalloc char[key.Length + 2];
-        keyPattern[0] = '"';
-        key.AsSpan().CopyTo(keyPattern[1..]);
-        keyPattern[key.Length + 1] = '"';
-
-        int keyIndex = json.IndexOf(keyPattern);
-        if(keyIndex < 0)
-        {
-            return false;
-        }
-
-        ReadOnlySpan<char> afterKey = json[(keyIndex + keyPattern.Length)..].TrimStart();
-
-        if(afterKey.IsEmpty || afterKey[0] != ':')
-        {
-            return false;
-        }
-
-        ReadOnlySpan<char> afterColon = afterKey[1..].TrimStart();
-        if(afterColon.IsEmpty)
-        {
-            return false;
-        }
-
-        int end = 0;
-        while(end < afterColon.Length
-            && afterColon[end] != ','
-            && afterColon[end] != '}'
-            && !char.IsWhiteSpace(afterColon[end]))
-        {
-            ++end;
-        }
-
-        return int.TryParse(afterColon[..end], out value);
-    }
-
-
-    /// <summary>
-    /// Finds <c>"key":[...]</c> in a flat JSON object and returns its elements as strings.
-    /// Handles optional whitespace around the colon, before the opening bracket, and between
-    /// elements. Returns <see langword="false"/> (with <paramref name="values"/> set to an empty
-    /// list) if the key is not present, the value is not a JSON array, or an element is not a
-    /// JSON string.
-    /// </summary>
-    internal static bool TryGetStringArrayField(
-        ReadOnlySpan<char> json,
-        string key,
-        out List<string> values)
-    {
-        values = [];
-
-        Span<char> keyPattern = stackalloc char[key.Length + 2];
-        keyPattern[0] = '"';
-        key.AsSpan().CopyTo(keyPattern[1..]);
-        keyPattern[key.Length + 1] = '"';
-
-        int keyIndex = json.IndexOf(keyPattern);
-        if(keyIndex < 0)
-        {
-            return false;
-        }
-
-        ReadOnlySpan<char> afterKey = json[(keyIndex + keyPattern.Length)..].TrimStart();
-        if(afterKey.IsEmpty || afterKey[0] != ':')
-        {
-            return false;
-        }
-
-        ReadOnlySpan<char> afterColon = afterKey[1..].TrimStart();
-        if(afterColon.IsEmpty || afterColon[0] != '[')
-        {
-            return false;
-        }
-
-        ReadOnlySpan<char> cursor = afterColon[1..].TrimStart();
-        if(!cursor.IsEmpty && cursor[0] == ']')
-        {
-            return true;
-        }
-
-        while(true)
-        {
-            if(cursor.IsEmpty || cursor[0] != '"')
-            {
-                values = [];
-
-                return false;
-            }
-
-            cursor = cursor[1..];
-            int end = FindClosingQuote(cursor);
-            if(end < 0)
-            {
-                values = [];
-
-                return false;
-            }
-
-            values.Add(cursor[..end].ToString());
-            cursor = cursor[(end + 1)..].TrimStart();
-
-            if(!cursor.IsEmpty && cursor[0] == ',')
-            {
-                cursor = cursor[1..].TrimStart();
-
-                continue;
-            }
-
-            if(!cursor.IsEmpty && cursor[0] == ']')
-            {
-                return true;
-            }
-
-            values = [];
-
-            return false;
-        }
-    }
-
-
-    /// <summary>
-    /// Finds <c>"key":true|false</c> in a flat JSON object and returns the parsed boolean.
-    /// Handles optional whitespace around the colon. Returns <see langword="false"/> (with
-    /// <paramref name="value"/> set to <see langword="false"/>) if the key is not present or the
-    /// value is not a JSON boolean literal.
-    /// </summary>
-    internal static bool TryGetBooleanField(
-        ReadOnlySpan<char> json,
-        string key,
-        out bool value)
-    {
-        value = false;
-
-        Span<char> keyPattern = stackalloc char[key.Length + 2];
-        keyPattern[0] = '"';
-        key.AsSpan().CopyTo(keyPattern[1..]);
-        keyPattern[key.Length + 1] = '"';
-
-        int keyIndex = json.IndexOf(keyPattern);
-        if(keyIndex < 0)
-        {
-            return false;
-        }
-
-        ReadOnlySpan<char> afterKey = json[(keyIndex + keyPattern.Length)..].TrimStart();
-        if(afterKey.IsEmpty || afterKey[0] != ':')
-        {
-            return false;
-        }
-
-        ReadOnlySpan<char> afterColon = afterKey[1..].TrimStart();
-
-        if(afterColon.StartsWith("true", StringComparison.Ordinal))
-        {
-            value = true;
-
-            return true;
-        }
-
-        if(afterColon.StartsWith("false", StringComparison.Ordinal))
-        {
-            value = false;
-
-            return true;
-        }
-
-        return false;
-    }
-
-
-    private static int FindClosingQuote(ReadOnlySpan<char> span)
-    {
-        for(int i = 0; i < span.Length; ++i)
-        {
-            if(span[i] == '\\' && i + 1 < span.Length)
-            {
-                ++i;
-                continue;
-            }
-
-            if(span[i] == '"')
-            {
-                return i;
-            }
-        }
-
-        return -1;
     }
 }

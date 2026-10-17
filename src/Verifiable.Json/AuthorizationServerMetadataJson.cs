@@ -279,6 +279,7 @@ public static class AuthorizationServerMetadataJson
                 DeviceAuthorizationEndpoint = deviceAuthorizationEndpoint,
                 ResponseTypesSupported = responseTypesSupported,
                 GrantTypesSupported = grantTypesSupported,
+
                 //RFC 8414 §2 gives an omitted list a meaning of its own, client_secret_basic alone, which a list stated empty does
                 //not have, so the omission is kept as such.
                 TokenEndpointAuthMethodsSupported = body.TryGetProperty(AuthorizationServerMetadataParameterNames.TokenEndpointAuthMethodsSupported, out _)

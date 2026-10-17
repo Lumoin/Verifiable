@@ -384,6 +384,117 @@ internal sealed class OAuthResponseParsersTests
 
 
 
+    /// <summary>
+    /// RFC 6749 §5.1 has a token response's parameters serialized "into a JSON structure by adding each parameter at the
+    /// highest structure level": an otherwise valid token response carried inside an extension object, with no parameter at the
+    /// top level, is no token response, and an <c>error</c> an extension object carries is no error response either. Each is
+    /// refused as malformed, nothing read from the nested object.
+    /// </summary>
+    /// <param name="body">The response body.</param>
+    [TestMethod]
+    [DataRow(/*lang=json,strict*/ """{"ext":{"access_token":"nested-access-token","token_type":"Bearer","expires_in":3600}}""", DisplayName = "A token response inside an extension object")]
+    [DataRow(/*lang=json,strict*/ """{"ext":{"error":"invalid_grant","error_description":"nested"}}""", DisplayName = "An error inside an extension object")]
+    [DataRow(/*lang=json,strict*/ """{"ext":[{"access_token":"nested-access-token","token_type":"Bearer"}]}""", DisplayName = "A token response inside an extension array")]
+    public void ParseTokenResponseReadsNoParameterANestedValueCarries(string body)
+    {
+        var result = OAuthResponseParsers.ParseTokenResponse(Respond(body), DateTimeOffset.UnixEpoch);
+
+        Assert.IsFalse(result.IsSuccess, "A response carrying its parameters below the top level is refused.");
+        _ = Assert.IsInstanceOfType<OAuthMalformedResponse>(result.Error, "Nothing nested is read as the response's parameter.");
+    }
+
+
+    /// <summary>
+    /// A token response carrying an extension object whose members compete with its own, written before them: each parameter is
+    /// read from the top level alone, the object's <c>access_token</c>, <c>token_type</c>, <c>refresh_token</c>,
+    /// <c>id_token</c>, <c>issued_token_type</c> and <c>error</c> never in their place, so a reader of the same body as the
+    /// JSON it is reads the very values this parser answers.
+    /// </summary>
+    [TestMethod]
+    public void ParseTokenResponseReadsTheTopLevelParametersBesideACompetingExtensionObject()
+    {
+        var body = /*lang=json,strict*/ """
+            {"ext":{"access_token":"nested-access-token","token_type":"DPoP","refresh_token":"nested-refresh-token","id_token":"nested-id-token","issued_token_type":"urn:nested","error":"invalid_grant","expires_in":1},
+             "access_token":"top-access-token","token_type":"Bearer","refresh_token":"top-refresh-token","id_token":"top-id-token",
+             "issued_token_type":"urn:ietf:params:oauth:token-type:id-jag","expires_in":900}
+            """;
+
+        var result = OAuthResponseParsers.ParseTokenResponse(Respond(body), DateTimeOffset.UnixEpoch);
+
+        Assert.IsTrue(result.IsSuccess, $"The top-level response is read; refused by {(result.IsSuccess ? null : result.Error.Support.Summary)}.");
+        Assert.AreEqual("top-access-token", result.Value.AccessToken);
+        Assert.AreEqual("Bearer", result.Value.TokenType);
+        Assert.AreEqual("top-refresh-token", result.Value.RefreshToken);
+        Assert.AreEqual("top-id-token", result.Value.IdToken);
+        Assert.AreEqual(WellKnownTokenTypeIdentifiers.IdJag, result.Value.IssuedTokenType);
+        Assert.AreEqual(900, result.Value.ExpiresIn);
+    }
+
+
+    /// <summary>
+    /// RFC 8259 §7: a member name or a string value may be spelled with escapes, and the parameter is what the escapes decode
+    /// to, decoded once. A response naming <c>access_token</c> and <c>token_type</c> through escapes is read by those names,
+    /// and an access token, an ID Token and a refresh token spelled with <c>\/</c> and <c>\u002e</c> are answered decoded,
+    /// never as the backslashes the body spells.
+    /// </summary>
+    [TestMethod]
+    public void ParseTokenResponseReadsEscapedNamesAndValuesDecodedOnce()
+    {
+        var body = /*lang=json,strict*/ """{"acc\u0065ss_token":"access\/token\u002eone","token_\u0074ype":"Bearer","id_token":"head\u002ebody\u002esig","refresh_token":"refresh\\u002e"}""";
+
+        var result = OAuthResponseParsers.ParseTokenResponse(Respond(body), DateTimeOffset.UnixEpoch);
+
+        Assert.IsTrue(result.IsSuccess, $"The escaped names are the parameters' names; refused by {(result.IsSuccess ? null : result.Error.Support.Summary)}.");
+        Assert.AreEqual("access/token.one", result.Value.AccessToken, "The access token is its decoded text.");
+        Assert.AreEqual("Bearer", result.Value.TokenType);
+        Assert.AreEqual("head.body.sig", result.Value.IdToken, "The ID Token is its decoded text.");
+        Assert.AreEqual(@"refresh\u002e", result.Value.RefreshToken, "An escaped backslash is decoded once, so the escape it begins is never decoded again.");
+    }
+
+
+    /// <summary>
+    /// A body that names a parameter in more than one way is refused as malformed (RFC 8259 §4: "the behavior of software that
+    /// receives such an object is unpredictable"), as is a body that is no JSON object or no well-formed JSON at all, and an
+    /// <c>access_token</c> spelled as a string naming no Unicode text (RFC 8259 §8.2) is no access token.
+    /// </summary>
+    /// <param name="body">The response body.</param>
+    [TestMethod]
+    [DataRow(/*lang=json*/ """{"access_token":"first","access_token":"second","token_type":"Bearer"}""", DisplayName = "An access_token named twice")]
+    [DataRow(/*lang=json*/ """{"access_token":"at","token_type":"Bearer","ext":{"note":"one","note":"two"}}""", DisplayName = "A name repeated in an extension object")]
+    [DataRow(/*lang=json,strict*/ """["access_token","at","token_type","Bearer"]""", DisplayName = "An array")]
+    [DataRow("{\"access_token\":\"at\",\"token_type\":\"Bearer\"", DisplayName = "An object never closed")]
+    [DataRow(/*lang=json*/ """{"access_token":"\uD800","token_type":"Bearer"}""", DisplayName = "An access_token naming an unpaired surrogate")]
+    public void ParseTokenResponseRefusesABodyNamingNoOneAccessToken(string body)
+    {
+        var result = OAuthResponseParsers.ParseTokenResponse(Respond(body), DateTimeOffset.UnixEpoch);
+
+        Assert.IsFalse(result.IsSuccess, "No access token is read from the body.");
+        _ = Assert.IsInstanceOfType<OAuthMalformedResponse>(result.Error);
+    }
+
+
+    /// <summary>
+    /// The pushed authorization response is read from the top level alone as the token response is (RFC 9126 §2.2): a
+    /// <c>request_uri</c> and <c>expires_in</c> an extension object carries are no parameters, and the escaped spelling of the
+    /// top-level ones is read decoded.
+    /// </summary>
+    [TestMethod]
+    public void ParseParResponseReadsTheTopLevelParametersAlone()
+    {
+        var nested = OAuthResponseParsers.ParseParResponse(Respond(
+            /*lang=json,strict*/ """{"ext":{"request_uri":"urn:ietf:params:oauth:request_uri:nested","expires_in":60}}"""));
+
+        Assert.IsFalse(nested.IsSuccess, "A request_uri nested in an extension object is no parameter.");
+        _ = Assert.IsInstanceOfType<OAuthMalformedResponse>(nested.Error);
+
+        var escaped = OAuthResponseParsers.ParseParResponse(Respond(
+            /*lang=json,strict*/ """{"ext":{"request_uri":"urn:ietf:params:oauth:request_uri:nested"},"request\u005furi":"urn:ietf:params:oauth:request\u005furi:top","expires_in":60}"""));
+
+        Assert.IsTrue(escaped.IsSuccess, "The escaped top-level request_uri is read.");
+        Assert.AreEqual("urn:ietf:params:oauth:request_uri:top", escaped.Value.RequestUri.OriginalString, "The top-level value is read, decoded.");
+    }
+
+
     [TestMethod]
     public void AllKnownOAuthErrorCodesProduceLikelyCause()
     {

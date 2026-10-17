@@ -281,20 +281,19 @@ internal sealed class OAuthAttackMitigationTests
     }
 
 
-    //RFC 9207 §2.4 — the registration's profile judges an error response as it judges a success response.
-    //
-    //Attacker capability: a network attacker (A2) able to deliver to the client a forged error response carrying the pending
-    //request's state and naming no iss, or another authorization server's, so the client attributes an error of the
-    //attacker's making to the intended authorization server.
-    //
-    //Mitigation: the callback rules of the registration's profile apply to both callback forms - an iss the profile requires
-    //is required on the error response too - and an error response any of them refused is the library's judgement.
-
+    /// <summary>
+    /// RFC 9207 section 2.4: the registration's profile judges an error response as it judges a success response. A network
+    /// attacker able to deliver to the client a forged error response carrying the pending request's state and naming no
+    /// iss would have the client attribute an error of the attacker's making to the intended authorization server; under the
+    /// HAIP 1.0 profile, which requires iss, the error response naming none is refused as <c>invalid_request</c>, the library's
+    /// judgement, its failed claim the profile's <c>CallbackIssPresent</c>.
+    /// </summary>
+    /// <returns>The running test.</returns>
     [TestMethod]
     public async Task Rfc9207Section2Point4ErrorCallbackWithoutTheIssuerTheProfileRequiresIsTheLibrarysJudgement()
     {
         var store = new Dictionary<string, FlowState>();
-        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, PolicyProfile.Haip10);
+        var (infrastructure, registration) = CreateInfrastructureAndRegistration(store, PolicyProfile.Haip10);
         _ = await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
@@ -302,7 +301,7 @@ internal sealed class OAuthAttackMitigationTests
         var result = await AuthCodeFlowHandlers.HandleCallbackAsync(
             new Dictionary<string, string>
             {
-                [OAuthRequestParameterNames.Error] = "access_denied",
+                [OAuthRequestParameterNames.Error] = OAuthErrors.AccessDenied,
                 [OAuthRequestParameterNames.ErrorDescription] = "User declined consent.",
                 [OAuthRequestParameterNames.State] = flowId
             },
@@ -311,18 +310,24 @@ internal sealed class OAuthAttackMitigationTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, result.Outcome);
-        Assert.AreEqual("invalid_request", result.ErrorCode, "An error naming no iss under a profile requiring it is refused, never passed through as access_denied.");
+        Assert.AreEqual(OAuthErrors.InvalidRequest, result.ErrorCode, "An error naming no iss under a profile requiring it is refused, never passed through as access_denied.");
         Assert.AreEqual(AuthCodeFlowRefusalOrigin.ClientJudgement, result.RefusalOrigin, "An error response the profile's iss rule refused is the library's judgement.");
         AssertClaimFailed(result.ValidationClaims, ValidationClaimIds.CallbackIssPresent,
             "The absent iss produces the failed CallbackIssPresent claim on the error path as on the success path.");
     }
 
 
+    /// <summary>
+    /// RFC 9207 section 2.4 under the RFC 6749 profile, which does not require iss: an error response naming another
+    /// authorization server's iss - a forged error of a mix-up attacker's making - is refused as <c>invalid_request</c> all the
+    /// same, the library's judgement, its failed claim the profile's <c>IssuerMatchesExpectedWhenPresent</c>.
+    /// </summary>
+    /// <returns>The running test.</returns>
     [TestMethod]
     public async Task Rfc9207Section2Point4ErrorCallbackWithAnotherIssuerUnderRfc6749IsTheLibrarysJudgement()
     {
         var store = new Dictionary<string, FlowState>();
-        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, PolicyProfile.Rfc6749WithPkce);
+        var (infrastructure, registration) = CreateInfrastructureAndRegistration(store, PolicyProfile.Rfc6749WithPkce);
         _ = await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
@@ -330,7 +335,7 @@ internal sealed class OAuthAttackMitigationTests
         var result = await AuthCodeFlowHandlers.HandleCallbackAsync(
             new Dictionary<string, string>
             {
-                [OAuthRequestParameterNames.Error] = "access_denied",
+                [OAuthRequestParameterNames.Error] = OAuthErrors.AccessDenied,
                 [OAuthRequestParameterNames.State] = flowId,
                 [OAuthRequestParameterNames.Iss] = "https://attacker.example.com"
             },
@@ -338,18 +343,24 @@ internal sealed class OAuthAttackMitigationTests
             registration,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual("invalid_request", result.ErrorCode, "An error naming another issuer is refused under the profile not requiring iss as well.");
+        Assert.AreEqual(OAuthErrors.InvalidRequest, result.ErrorCode, "An error naming another issuer is refused under the profile not requiring iss as well.");
         Assert.AreEqual(AuthCodeFlowRefusalOrigin.ClientJudgement, result.RefusalOrigin, "An error response the issuer rule refused is the library's judgement.");
         AssertClaimFailed(result.ValidationClaims, ValidationClaimIds.IssuerMatchesExpectedWhenPresent,
             "The other issuer produces the failed IssuerMatchesExpectedWhenPresent claim of the RFC 6749 profile.");
     }
 
 
+    /// <summary>
+    /// The control of the two rows before it, under the RFC 6749 profile, which does not require iss: an error response naming
+    /// none that every rule of the profile accepts is passed through as the authorization server's own <c>access_denied</c>,
+    /// its answer, every claim succeeded.
+    /// </summary>
+    /// <returns>The running test.</returns>
     [TestMethod]
     public async Task Rfc9207Section2Point4ErrorCallbackWithoutIssuerUnderRfc6749IsTheAuthorizationServersAnswer()
     {
         var store = new Dictionary<string, FlowState>();
-        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, PolicyProfile.Rfc6749WithPkce);
+        var (infrastructure, registration) = CreateInfrastructureAndRegistration(store, PolicyProfile.Rfc6749WithPkce);
         _ = await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
@@ -357,14 +368,14 @@ internal sealed class OAuthAttackMitigationTests
         var result = await AuthCodeFlowHandlers.HandleCallbackAsync(
             new Dictionary<string, string>
             {
-                [OAuthRequestParameterNames.Error] = "access_denied",
+                [OAuthRequestParameterNames.Error] = OAuthErrors.AccessDenied,
                 [OAuthRequestParameterNames.State] = flowId
             },
             infrastructure,
             registration,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual("access_denied", result.ErrorCode, "A profile not requiring iss passes an error naming none through as the server's error.");
+        Assert.AreEqual(OAuthErrors.AccessDenied, result.ErrorCode, "A profile not requiring iss passes an error naming none through as the server's error.");
         Assert.AreEqual(AuthCodeFlowRefusalOrigin.AuthorizationServerAnswer, result.RefusalOrigin, "An error response every rule of the profile accepted is the authorization server's answer.");
         AssertAllClaimsSucceeded(result.ValidationClaims);
     }
