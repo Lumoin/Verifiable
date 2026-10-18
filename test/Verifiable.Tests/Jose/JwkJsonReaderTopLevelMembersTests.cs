@@ -364,10 +364,11 @@ internal sealed class JwkJsonReaderTopLevelMembersTests
     [TestMethod]
     public void AMemberAskedForByNameIsAnsweredAsOneTypedCase()
     {
-        var document = /*lang=json,strict*/ """{"s":"café","n":-1.5e3,"t":true,"z":null,"o":{"nested":"x"},"a":[1],"escaped":"v"}""";
+        var document = /*lang=json,strict*/ """{"s":"café","n":-1.5e3,"t":true,"z":null,"o":{"nested":"x"},"a":[1],"esc\u0061ped":"v"}""";
         var reading = JwkJsonReader.ReadTopLevelMembers(Encoding.UTF8.GetBytes(document));
         var members = Assert.IsInstanceOfType<JsonTopLevelMembers>(reading, "A well-formed object is read.");
 
+        Assert.Contains("esc\\u0061ped", document, "The name is spelled through an escape of its letter a.");
         Assert.AreEqual(new JsonMemberString("café"), members.Find("s"), "A string, decoded.");
         Assert.AreEqual(new JsonMemberNumber("-1.5e3"), members.Find("n"), "A number, its spelling as written.");
         Assert.AreEqual(new JsonMemberOfOtherKind(JsonTopLevelValueKind.True), members.Find("t"), "A literal names its kind.");

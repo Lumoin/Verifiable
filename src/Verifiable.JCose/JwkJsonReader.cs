@@ -1154,33 +1154,13 @@ public static class JwkJsonReader
             return refused;
         }
 
-        var pos = 0;
-        SkipWhitespace(json, ref pos);
-        pos++;
         var members = new List<JsonTopLevelMember>();
+        var pos = TopLevelContentStart(json);
 
-        //The document is well formed, so every step below lands on the next member's name, a separator or the closing brace.
-        while(true)
+        while(TryReadTopLevelMember(json, ref pos, out var place))
         {
-            SkipWhitespace(json, ref pos);
-
-            if(json[pos] == (byte)',')
-            {
-                pos++;
-                SkipWhitespace(json, ref pos);
-            }
-
-            if(json[pos] == (byte)'}')
-            {
-                return new JsonTopLevelMembers(members);
-            }
-
-            var nameStart = pos + 1;
-            var afterName = SkipString(json, pos);
-            var name = DecodeContentToString(json, nameStart, afterName - 1 - nameStart);
-            var valueStart = SkipWhitespaceAndColon(json, afterName);
-            var valueEnd = SkipValue(json, valueStart);
-            var member = name is null ? null : TopLevelMemberAt(json, name, valueStart, valueEnd);
+            var name = DecodeContentToString(json, place.NameStart, place.NameLength);
+            var member = name is null ? null : TopLevelMemberAt(json, name, place.ValueStart, place.ValueEnd);
 
             //Every string the validation admits decodes to text, so a name or a value that decodes to none is no well-formed
             //document and the document is answered as no object.
@@ -1190,8 +1170,71 @@ public static class JwkJsonReader
             }
 
             members.Add(member);
-            pos = valueEnd;
         }
+
+        return new JsonTopLevelMembers(members);
+    }
+
+
+    /// <summary>
+    /// Where one member at the top level of an already-validated object lies: its name's content, between its quotes, and its
+    /// value, spanning <c>[ValueStart, ValueEnd)</c>.
+    /// </summary>
+    /// <param name="NameStart">The position of the name's content, immediately after its opening quote.</param>
+    /// <param name="NameLength">The length of the name's content, up to (not including) its closing quote.</param>
+    /// <param name="ValueStart">The position of the value's first byte.</param>
+    /// <param name="ValueEnd">The position one past the value's last byte.</param>
+    private readonly record struct TopLevelMemberPlace(int NameStart, int NameLength, int ValueStart, int ValueEnd);
+
+
+    /// <summary>The position just inside the opening brace of an already-validated object, where the walk over its top-level members starts.</summary>
+    /// <param name="json">The document, one well-formed object.</param>
+    /// <returns>The position after the opening brace.</returns>
+    private static int TopLevelContentStart(ReadOnlySpan<byte> json)
+    {
+        var pos = 0;
+        SkipWhitespace(json, ref pos);
+
+        return pos + 1;
+    }
+
+
+    /// <summary>
+    /// One step of the one walk over the members at the top level of an already-validated object, which the reading of its
+    /// members (<see cref="ReadTopLevelMembers"/>) and the account of them observed (<see cref="TopLevelAccountOf"/>) both
+    /// consume: past the separator before the next member, where its name and its value lie, and the position after its value,
+    /// or the end of the object at its closing brace. Each consumer decides itself what a member naming no Unicode text is to it.
+    /// </summary>
+    /// <param name="json">The document, one well-formed object.</param>
+    /// <param name="pos">The position after the previous member, or <see cref="TopLevelContentStart"/>; advanced past the member read.</param>
+    /// <param name="place">Where the member read lies, or the default when the object has ended.</param>
+    /// <returns><see langword="true"/> when a member was read; <see langword="false"/> at the object's closing brace.</returns>
+    private static bool TryReadTopLevelMember(ReadOnlySpan<byte> json, ref int pos, out TopLevelMemberPlace place)
+    {
+        //The document is well formed, so every step below lands on the next member's name, a separator or the closing brace.
+        SkipWhitespace(json, ref pos);
+
+        if(json[pos] == (byte)',')
+        {
+            pos++;
+            SkipWhitespace(json, ref pos);
+        }
+
+        if(json[pos] == (byte)'}')
+        {
+            place = default;
+
+            return false;
+        }
+
+        var nameStart = pos + 1;
+        var afterName = SkipString(json, pos);
+        var valueStart = SkipWhitespaceAndColon(json, afterName);
+        var valueEnd = SkipValue(json, valueStart);
+        place = new TopLevelMemberPlace(nameStart, afterName - 1 - nameStart, valueStart, valueEnd);
+        pos = valueEnd;
+
+        return true;
     }
 
 
@@ -1276,40 +1319,18 @@ public static class JwkJsonReader
     private static JsonTopLevelAccount TopLevelAccountOf(ReadOnlySpan<byte> json)
     {
         var observed = new List<JsonTopLevelObservation>();
-        var pos = 0;
-        SkipWhitespace(json, ref pos);
-        pos++;
+        var pos = TopLevelContentStart(json);
 
-        //The document is well formed, so every step below lands on the next member's name, a separator or the closing brace.
-        while(true)
+        while(TryReadTopLevelMember(json, ref pos, out var place))
         {
-            SkipWhitespace(json, ref pos);
-
-            if(json[pos] == (byte)',')
+            if(UnicodeTextLength(json, place.NameStart, place.NameLength) is not null
+                && DecodeContentToString(json, place.NameStart, place.NameLength) is { } name)
             {
-                pos++;
-                SkipWhitespace(json, ref pos);
+                observed.Add(new JsonTopLevelObservation(name, ValueObservationAt(json, place.ValueStart, place.ValueEnd)));
             }
-
-            if(json[pos] == (byte)'}')
-            {
-                return new JsonTopLevelAccount(observed);
-            }
-
-            var nameStart = pos + 1;
-            var afterName = SkipString(json, pos);
-            var nameLength = afterName - 1 - nameStart;
-            var valueStart = SkipWhitespaceAndColon(json, afterName);
-            var valueEnd = SkipValue(json, valueStart);
-
-            if(UnicodeTextLength(json, nameStart, nameLength) is not null
-                && DecodeContentToString(json, nameStart, nameLength) is { } name)
-            {
-                observed.Add(new JsonTopLevelObservation(name, ValueObservationAt(json, valueStart, valueEnd)));
-            }
-
-            pos = valueEnd;
         }
+
+        return new JsonTopLevelAccount(observed);
     }
 
 

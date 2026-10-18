@@ -53,6 +53,12 @@ namespace Verifiable.OAuth;
 ///   </item>
 ///   <item>
 ///     <description>
+///       <see cref="OAuthInvalidLifetime"/> — the response carries <c>expires_in</c>, but as
+///       no positive integer within the library's range, naming why.
+///     </description>
+///   </item>
+///   <item>
+///     <description>
 ///       <see cref="OAuthAuthorizationServerMetadataUnresolved"/> — the flow could not resolve the
 ///       authorization server metadata document the call needed before a request could even be
 ///       built.
@@ -162,7 +168,10 @@ public sealed record OAuthProtocolError(
 /// Common causes: the wrong endpoint was called, a reverse proxy or firewall
 /// returned an HTML error page, the connection was truncated, or the server
 /// has a bug. The raw <see cref="Body"/> is preserved for logging and diagnostic
-/// purposes.
+/// purposes. It is the whole body as received, so it can carry credential text: a token
+/// answer refused for carrying no <c>token_type</c> carries its access token there, and one
+/// that is no well-formed JSON object or carries no <c>access_token</c> carries whatever
+/// refresh token or ID Token it holds.
 /// </remarks>
 public sealed record OAuthMalformedResponse(
     string Body,
@@ -229,14 +238,72 @@ public sealed record OAuthUndecodableMemberValue(
 /// according to the specification.
 /// </summary>
 /// <remarks>
-/// Examples: <c>expires_in</c> was zero or negative (RFC 9126 §2.2 requires a
-/// positive integer), <c>request_uri</c> was a relative URI rather than an
-/// absolute one, or <c>access_token</c> was an empty string.
+/// Examples: <c>request_uri</c> was a relative URI rather than an absolute one, or the
+/// <c>issued_token_type</c> named another token type than the one asked for. A present
+/// <c>expires_in</c> that is no lifetime the library admits is refused as
+/// <see cref="OAuthInvalidLifetime"/>.
 /// </remarks>
 public sealed record OAuthInvalidFieldValue(
     string FieldName,
     string ReceivedValue,
     string Reason,
+    DecisionSupport Support) : OAuthParseError(Support);
+
+
+/// <summary>
+/// Why a present <c>expires_in</c> is no lifetime the library admits: the token and the pushed authorization parsers judge the
+/// member by one rule, a positive integer number of seconds within the range of <see cref="int"/>, and answer the same defect
+/// for the same spelling. A spelling holding more than one defect is answered by the first in this order: a fraction, an
+/// exponent, a sign or value naming no positive integer, then the range.
+/// </summary>
+public enum OAuthLifetimeDefect
+{
+    /// <summary>The member is carried as a value that is no JSON number: a string, a literal, an object or an array.</summary>
+    NoNumber,
+
+    /// <summary>The number is spelled with a fraction part (RFC 8259 section 6), <c>1.5</c> among them, so it names no integer.</summary>
+    Fractional,
+
+    /// <summary>
+    /// The number is spelled with an exponent part and no fraction part (RFC 8259 section 6), <c>1e3</c> among them: RFC 6749
+    /// appendix A.14 spells <c>expires_in</c> by digits alone, so the exponent form is no spelling of it.
+    /// </summary>
+    Exponent,
+
+    /// <summary>
+    /// The number is an integer that is zero or negative. RFC 9126 section 2.2 requires a positive integer at the pushed
+    /// authorization endpoint. At the token endpoint the refusal of zero is this library's policy, not a requirement: RFC 6749
+    /// section 5.1 and appendix A.14 define <c>expires_in</c> by digits, which zero fits, and permit its omission; the library
+    /// admits no access token whose lifetime has ended as it is received, so both endpoints judge the lifetime by the one rule.
+    /// </summary>
+    NotPositive,
+
+    /// <summary>
+    /// The number is a positive integer past the range of <see cref="int"/>, which the library's token and pushed authorization
+    /// responses carry a lifetime in; neither RFC bounds the value, so this bound is the library's.
+    /// </summary>
+    OutOfRange
+}
+
+
+/// <summary>
+/// A token or pushed authorization response carries <c>expires_in</c>, but as no lifetime the library admits
+/// (<see cref="OAuthLifetimeDefect"/>). A present member is judged as present, never read as an omitted one: RFC 6749 section
+/// 5.1 permits a token response to omit <c>expires_in</c>, which is answered as no lifetime, and RFC 9126 section 2.2 requires
+/// a pushed authorization response to carry it, so its omission is answered as a malformed response; neither permission makes
+/// a malformed present value valid.
+/// </summary>
+/// <param name="MemberName">The member's name, <c>expires_in</c>.</param>
+/// <param name="Carried">
+/// The member as the JSON reader answered it: a number with its spelling as the response writes it, a string with its decoded
+/// text, or a value of another kind naming which.
+/// </param>
+/// <param name="Defect">Why the member is no lifetime the library admits.</param>
+/// <param name="Support">Guidance for the calling application.</param>
+public sealed record OAuthInvalidLifetime(
+    string MemberName,
+    JsonMemberLookup Carried,
+    OAuthLifetimeDefect Defect,
     DecisionSupport Support) : OAuthParseError(Support);
 
 

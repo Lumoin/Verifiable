@@ -8,8 +8,10 @@ namespace Verifiable.OAuth;
 /// <summary>
 /// A token endpoint's answer as the one reading of its body answers it (<see cref="OAuthResponseParsers.ReadTokenResponse"/>):
 /// the token or the refusal of the answer (<see cref="Outcome"/>), and beside it the credential members that very reading
-/// observed (<see cref="Credentials"/>), success and refusal alike, so a client deciding what to withhold and what a receipt
-/// records reads both from the library and reads the body no second time. Its text names no credential.
+/// observed (<see cref="Credentials"/>), success and refusal alike, so a client weighing what a receipt records reads both from
+/// the library and reads the body no second time. Its text (<see cref="ToString"/>) names no credential; the outcome can carry
+/// credential text, in a success's token and in the body an <see cref="OAuthMalformedResponse"/> carries, as
+/// <see cref="OAuthResponseParsers.ReadTokenResponse"/> lists.
 /// </summary>
 /// <param name="Outcome">The token response, the error the answer names, or the refusal of the answer.</param>
 /// <param name="Credentials">The credential members the reading observed, never their values.</param>
@@ -31,7 +33,9 @@ public sealed record TokenResponseReading(Result<TokenResponse, OAuthParseError>
 /// a value that is no string. A member the answer repeats is observed at every occurrence, so the count of a member's
 /// occurrences is the length of its list. The observations are read from every answer the reading judged as one well-formed
 /// JSON object - one refused for a repeated name or for a member naming no Unicode text included - and an answer that is no such
-/// object observes none. No credential text is carried, here or in any refusal.
+/// object observes none. The observations carry no credential text: they supply counts, order, lengths and readability, never
+/// the text a client withholding a credential from its copies and exports matches, which is the client's to take from where it
+/// holds it. Which refusals carry credential text is listed at <see cref="OAuthResponseParsers.ReadTokenResponse"/>.
 /// </summary>
 /// <param name="AccessToken">Every occurrence of <c>access_token</c>, in document order.</param>
 /// <param name="RefreshToken">Every occurrence of <c>refresh_token</c>, in document order.</param>
@@ -47,10 +51,13 @@ public sealed record TokenAnswerCredentialObservations(
 
     /// <summary>
     /// The credential members a reading of an answer's body observed: from the top-level members it answered, or from the
-    /// account a refusal of a well-formed object carries; none from a body that is no one well-formed JSON object.
+    /// account a refusal of a well-formed object carries; none from a body that is no one well-formed JSON object
+    /// (<see cref="JsonNotOneObject"/>), the one case observing nothing. A reading of any other type is no case the JSON reader
+    /// answers, so no observation is established from it and it is refused rather than answered as observing nothing.
     /// </summary>
     /// <param name="reading">The reading of the answer's body.</param>
     /// <returns>The observations.</returns>
+    /// <exception cref="ArgumentException">The reading is of a type the JSON reader never answers.</exception>
     public static TokenAnswerCredentialObservations Of(JsonTopLevelReading reading)
     {
         ArgumentNullException.ThrowIfNull(reading);
@@ -60,7 +67,10 @@ public sealed record TokenAnswerCredentialObservations(
             JsonTopLevelMembers members => members.TopLevel,
             JsonRepeatedMemberName repeated => repeated.TopLevel,
             JsonUndecodableMember undecodable => undecodable.TopLevel,
-            _ => JsonTopLevelAccount.None
+            JsonNotOneObject => JsonTopLevelAccount.None,
+            _ => throw new ArgumentException(
+                $"The reading {reading.GetType().FullName} is no case the JSON reader answers, so no credential observation is established from it.",
+                nameof(reading))
         };
 
         return new TokenAnswerCredentialObservations(

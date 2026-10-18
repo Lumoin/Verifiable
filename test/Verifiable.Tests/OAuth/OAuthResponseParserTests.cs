@@ -218,21 +218,88 @@ internal sealed class OAuthResponseParsersTests
         _ = Assert.IsInstanceOfType<OAuthMalformedResponse>(result.Error);
     }
 
+    /// <summary>
+    /// RFC 9126 §2.2 requires a pushed authorization response's <c>expires_in</c> to be a positive integer. A present one that is
+    /// a fraction, an exponent spelling, an integer past the range the lifetime is carried in, zero, a negative integer or no
+    /// number at all is refused by its defect, naming the member and the value as the reader answered it, never answered as a
+    /// malformed response, by the one rule the token parser judges its own lifetime by.
+    /// </summary>
+    /// <param name="lifetime">The <c>expires_in</c> value as the body writes it.</param>
+    /// <param name="expectedDefect">The defect the refusal names.</param>
     [TestMethod]
-    public void ParseParResponseReturnsInvalidFieldValueForNegativeExpiresIn()
+    [DataRow("1.5", OAuthLifetimeDefect.Fractional, DisplayName = "A fraction")]
+    [DataRow("1e3", OAuthLifetimeDefect.Exponent, DisplayName = "An exponent spelling")]
+    [DataRow("2147483648", OAuthLifetimeDefect.OutOfRange, DisplayName = "An integer past the range of int")]
+    [DataRow("0", OAuthLifetimeDefect.NotPositive, DisplayName = "Zero")]
+    [DataRow("-1", OAuthLifetimeDefect.NotPositive, DisplayName = "A negative integer")]
+    [DataRow(""" "60" """, OAuthLifetimeDefect.NoNumber, DisplayName = "A string")]
+    [DataRow("null", OAuthLifetimeDefect.NoNumber, DisplayName = "The null literal")]
+    public void APushedAuthorizationAnswerCarryingAnInadmissibleLifetimeIsRefusedByItsDefect(string lifetime, OAuthLifetimeDefect expectedDefect)
     {
-        HttpResponseData response = Respond(
-            /*lang=json,strict*/ """{"request_uri":"urn:ietf:params:oauth:request_uri:x","expires_in":-1}""");
+        var result = OAuthResponseParsers.ParseParResponse(Respond(
+            $$"""{"request_uri":"urn:ietf:params:oauth:request_uri:x","expires_in":{{lifetime}}}"""));
 
-        Result<ParResponse, OAuthParseError> result =
-            OAuthResponseParsers.ParseParResponse(response);
-
-        Assert.IsFalse(result.IsSuccess);
-        OAuthInvalidFieldValue ifv =
-            Assert.IsInstanceOfType<OAuthInvalidFieldValue>(result.Error);
-        Assert.AreEqual("expires_in", ifv.FieldName);
-        Assert.AreEqual("-1", ifv.ReceivedValue);
+        AssertRefusedLifetime(result.IsSuccess ? null : result.Error, lifetime, expectedDefect, "RFC 9126 §2.2");
     }
+
+
+    /// <summary>
+    /// A token response's <c>expires_in</c> present as no positive integer within the range the lifetime is carried in is refused
+    /// by its defect, never read as an omitted lifetime: RFC 6749 §5.1 permits omitting the member, which answers no lifetime, and
+    /// that permission makes no malformed present value valid. Zero is refused by the library's policy, as RFC 6749 appendix
+    /// A.14 spells the member by digits, which zero fits; the answer for each spelling is the pushed authorization parser's.
+    /// </summary>
+    /// <param name="lifetime">The <c>expires_in</c> value as the body writes it.</param>
+    /// <param name="expectedDefect">The defect the refusal names.</param>
+    [TestMethod]
+    [DataRow("1.5", OAuthLifetimeDefect.Fractional, DisplayName = "A fraction")]
+    [DataRow("1e3", OAuthLifetimeDefect.Exponent, DisplayName = "An exponent spelling")]
+    [DataRow("2147483648", OAuthLifetimeDefect.OutOfRange, DisplayName = "An integer past the range of int")]
+    [DataRow("0", OAuthLifetimeDefect.NotPositive, DisplayName = "Zero")]
+    [DataRow("-1", OAuthLifetimeDefect.NotPositive, DisplayName = "A negative integer")]
+    [DataRow(""" "3600" """, OAuthLifetimeDefect.NoNumber, DisplayName = "A string")]
+    [DataRow("null", OAuthLifetimeDefect.NoNumber, DisplayName = "The null literal")]
+    public void ATokenAnswerCarryingAnInadmissibleLifetimeIsRefusedByItsDefect(string lifetime, OAuthLifetimeDefect expectedDefect)
+    {
+        var result = OAuthResponseParsers.ParseTokenResponse(
+            Respond($$"""{"access_token":"access-credential-text","token_type":"Bearer","expires_in":{{lifetime}}}"""),
+            DateTimeOffset.UnixEpoch);
+
+        AssertRefusedLifetime(result.IsSuccess ? null : result.Error, lifetime, expectedDefect, "RFC 6749 §5.1");
+    }
+
+
+    /// <summary>
+    /// The lifetime absent and the lifetime valid are answered as such: a token response omitting <c>expires_in</c> is a success
+    /// carrying no lifetime (RFC 6749 §5.1), a pushed authorization response omitting it is malformed (RFC 9126 §2.2 requires it),
+    /// and a positive integer is the lifetime at both endpoints, the greatest the range carries included.
+    /// </summary>
+    [TestMethod]
+    public void AnAbsentLifetimeAndAValidOneAreAnsweredAsSuchAtBothEndpoints()
+    {
+        var tokenAbsent = OAuthResponseParsers.ParseTokenResponse(
+            Respond(/*lang=json,strict*/ """{"access_token":"at","token_type":"Bearer"}"""),
+            DateTimeOffset.UnixEpoch);
+
+        var tokenValid = OAuthResponseParsers.ParseTokenResponse(
+            Respond(/*lang=json,strict*/ """{"access_token":"at","token_type":"Bearer","expires_in":2147483647}"""),
+            DateTimeOffset.UnixEpoch);
+
+        var pushedAbsent = OAuthResponseParsers.ParseParResponse(
+            Respond(/*lang=json,strict*/ """{"request_uri":"urn:ietf:params:oauth:request_uri:x"}"""));
+
+        var pushedValid = OAuthResponseParsers.ParseParResponse(
+            Respond(/*lang=json,strict*/ """{"request_uri":"urn:ietf:params:oauth:request_uri:x","expires_in":60}"""));
+
+        Assert.IsTrue(tokenAbsent.IsSuccess, "A token response may omit its lifetime.");
+        Assert.IsNull(tokenAbsent.Value.ExpiresIn, "An omitted lifetime is no lifetime.");
+        Assert.IsTrue(tokenValid.IsSuccess, "A positive integer within the range is a lifetime.");
+        Assert.AreEqual(int.MaxValue, tokenValid.Value.ExpiresIn, "The greatest lifetime the range carries.");
+        _ = Assert.IsInstanceOfType<OAuthMalformedResponse>(pushedAbsent.Error, "A pushed authorization response must carry its lifetime.");
+        Assert.IsTrue(pushedValid.IsSuccess, "A positive integer is the request URI's lifetime.");
+        Assert.AreEqual(60, pushedValid.Value.ExpiresIn);
+    }
+
 
     [TestMethod]
     public void ParseParResponseReturnsInvalidFieldValueForRelativeRequestUri()
@@ -347,21 +414,6 @@ internal sealed class OAuthResponseParsersTests
 
         Assert.IsFalse(result.IsSuccess);
         _ = Assert.IsInstanceOfType<OAuthMalformedResponse>(result.Error);
-    }
-
-    [TestMethod]
-    public void ParseTokenResponseReturnsInvalidFieldValueForZeroExpiresIn()
-    {
-        HttpResponseData response = Respond(
-            /*lang=json,strict*/ """{"access_token":"at","token_type":"Bearer","expires_in":0}""");
-
-        Result<TokenResponse, OAuthParseError> result =
-            OAuthResponseParsers.ParseTokenResponse(response, DateTimeOffset.UnixEpoch);
-
-        Assert.IsFalse(result.IsSuccess);
-        OAuthInvalidFieldValue ifv =
-            Assert.IsInstanceOfType<OAuthInvalidFieldValue>(result.Error);
-        Assert.AreEqual("expires_in", ifv.FieldName);
     }
 
     [TestMethod]
@@ -961,6 +1013,65 @@ internal sealed class OAuthResponseParsersTests
         }
     }
 
+
+
+    /// <summary>
+    /// The one case of the JSON reader's reading observing nothing is answered as such: a body that is no one well-formed JSON
+    /// object observes no credential. A reading of a type the reader never answers - a subtype a program composes - is refused,
+    /// naming its type, never answered as an answer observing nothing.
+    /// </summary>
+    [TestMethod]
+    public void AReadingTheReaderNeverAnswersIsRefusedRatherThanObservedAsNone()
+    {
+        Assert.AreEqual(
+            TokenAnswerCredentialObservations.None,
+            TokenAnswerCredentialObservations.Of(new JsonNotOneObject()),
+            "A body that is no one well-formed object observes nothing.");
+
+        var refused = Assert.ThrowsExactly<ArgumentException>(
+            () => TokenAnswerCredentialObservations.Of(new ComposedReading()),
+            "A reading the reader never answers establishes no observation.");
+
+        Assert.Contains(nameof(ComposedReading), refused.Message, "The refusal names the reading's type.");
+        Assert.AreEqual("reading", refused.ParamName, "The refusal names the argument.");
+    }
+
+
+    /// <summary>
+    /// Asserts a lifetime refusal: the member's name, the value as the reader answered it, the defect, the clause the response's
+    /// form is given by, and a summary naming the member.
+    /// </summary>
+    /// <param name="refusal">The parser's refusal, or <see langword="null"/> when it answered a success.</param>
+    /// <param name="lifetime">The <c>expires_in</c> value as the body writes it.</param>
+    /// <param name="expectedDefect">The defect the refusal names.</param>
+    /// <param name="expectedSpecificationReference">The clause the response's form is given by.</param>
+    private static void AssertRefusedLifetime(
+        OAuthParseError? refusal,
+        string lifetime,
+        OAuthLifetimeDefect expectedDefect,
+        string expectedSpecificationReference)
+    {
+        var refused = Assert.IsInstanceOfType<OAuthInvalidLifetime>(refusal, $"A present expires_in of {lifetime} is refused as a lifetime.");
+        Assert.AreEqual(OAuthRequestParameterNames.ExpiresIn, refused.MemberName, "The member refused.");
+        Assert.AreEqual(expectedDefect, refused.Defect, "The defect of the spelling.");
+        Assert.AreEqual(expectedSpecificationReference, refused.Support.SpecificationReference, "The clause the response's form is given by.");
+        Assert.Contains(OAuthRequestParameterNames.ExpiresIn, refused.Support.Summary, "The summary names the member.");
+        Assert.DoesNotContain("credential-text", refused.Support.Summary, "No credential the body carries is in the summary.");
+
+        if(expectedDefect is not OAuthLifetimeDefect.NoNumber)
+        {
+            Assert.AreEqual(new JsonMemberNumber(lifetime), refused.Carried, "The number, its spelling as the body writes it.");
+            Assert.Contains(lifetime, refused.Support.Summary, "The summary names the number's spelling.");
+        }
+        else
+        {
+            Assert.IsNotInstanceOfType<JsonMemberNumber>(refused.Carried, "The value carried is no number.");
+        }
+    }
+
+
+    /// <summary>A reading of a type the JSON reader never answers, composed by a program.</summary>
+    private sealed record ComposedReading : JsonTopLevelReading;
 
 
     /// <summary>An answer of status 400 under the problem details media type.</summary>

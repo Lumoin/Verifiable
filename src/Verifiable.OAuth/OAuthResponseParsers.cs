@@ -157,32 +157,24 @@ public static class OAuthResponseParsers
                     }).WithTransportMetadata(response));
         }
 
-        if(!TryIntegerOf(members, OAuthRequestParameterNames.ExpiresIn, out var expiresIn))
+        var lifetime = members.Find(OAuthRequestParameterNames.ExpiresIn);
+
+        if(lifetime is JsonMemberAbsent)
         {
             return Result.Failure<ParResponse, OAuthParseError>(
                 new OAuthMalformedResponse(
                     response.Body,
-                    new DecisionSupport("The PAR response did not contain a valid expires_in field.")
+                    new DecisionSupport("The PAR response did not contain an expires_in field.")
                     {
-                        LikelyCause = "The expires_in field is missing or not a number.",
+                        LikelyCause = "The server left out the lifetime of the request URI, which RFC 9126 §2.2 requires.",
                         SpecificationReference = "RFC 9126 §2.2"
                     }).WithTransportMetadata(response));
         }
 
-        if(expiresIn <= 0)
+        if(LifetimeDefectOf(lifetime, out var expiresIn) is { } defect)
         {
             return Result.Failure<ParResponse, OAuthParseError>(
-                new OAuthInvalidFieldValue(
-                    "expires_in",
-                    expiresIn.ToString(CultureInfo.InvariantCulture),
-                    "The expires_in value must be a positive integer. " +
-                    "RFC 9126 §2.2 requires the request URI to have a positive lifetime.",
-                    new DecisionSupport("The PAR response contained an invalid expires_in value.")
-                    {
-                        LikelyCause = "The authorization server returned zero or a negative " +
-                                      "lifetime, which is not permitted.",
-                        SpecificationReference = "RFC 9126 §2.2"
-                    }).WithTransportMetadata(response));
+                LifetimeRefusal(lifetime, defect, "PAR", "RFC 9126 §2.2").WithTransportMetadata(response));
         }
 
         return Result.Success<ParResponse, OAuthParseError>(new ParResponse(requestUri, expiresIn));
@@ -211,9 +203,29 @@ public static class OAuthResponseParsers
     /// response, the error it names or the refusal of the response, and beside it the occurrences of the credential members
     /// <c>access_token</c>, <c>refresh_token</c> and <c>id_token</c> that reading observed, each without its value
     /// (<see cref="TokenAnswerCredentialObservations"/>), the refusal of a body repeating a name or holding a member naming no
-    /// Unicode text included. A client decides from them what it withholds and what a receipt of the answer records, and reads
-    /// the body no second time; no credential text is carried in any refusal or in the observations.
+    /// Unicode text included. A client reads from them how many times each credential member occurs, in which order, whether
+    /// each occurrence is readable text and the length of its text, for what a receipt of the answer records and the floors it
+    /// judges, and reads the body no second time. The observations hold no credential text, so they supply no text a client
+    /// withholding a credential from its copies and exports matches: that text is the client's to take from where it holds it.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Which answers carry credential text: the observations carry none; neither do the refusals the shared reading of a
+    /// well-formed object answers, <see cref="OAuthRepeatedMemberName"/> and <see cref="OAuthUndecodableMemberValue"/>, which name
+    /// a member and where it is; and the text of the reading and of the observations names no credential. An
+    /// <see cref="OAuthMalformedResponse"/> carries the whole body as received in <see cref="OAuthMalformedResponse.Body"/>, so it
+    /// can carry credential text: it is answered for an empty body, for a body that is no one well-formed JSON object, for an
+    /// answer carrying no <c>access_token</c> and for one carrying an access token but no <c>token_type</c>. An
+    /// <see cref="OAuthProtocolError"/> carries the description and the problem detail the server wrote, in its summary too, and
+    /// an <see cref="OAuthInvalidLifetime"/> the <c>expires_in</c> member as the answer carries it.
+    /// </para>
+    /// <para>
+    /// A present <c>expires_in</c> is judged as present, never read as an omitted one: a lifetime that is no positive integer
+    /// within the range of <see cref="int"/> is refused as <see cref="OAuthInvalidLifetime"/>, by the rule the pushed
+    /// authorization parser judges its own by. Refusing zero here is this library's policy: RFC 6749 section 5.1 and appendix
+    /// A.14 define <c>expires_in</c> by digits, which zero fits, and permit its omission, which is answered as no lifetime.
+    /// </para>
+    /// </remarks>
     /// <param name="response">The response.</param>
     /// <returns>The outcome and the credential members observed.</returns>
     public static TokenResponseReading ReadTokenResponse(HttpResponseData response)
@@ -297,24 +309,19 @@ public static class OAuthResponseParsers
                     }).WithTransportMetadata(response));
         }
 
+        var lifetime = members.Find(OAuthRequestParameterNames.ExpiresIn);
         int? expiresIn = null;
 
-        if(TryIntegerOf(members, OAuthRequestParameterNames.ExpiresIn, out var expiresInValue))
+        //RFC 6749 §5.1 permits omitting expires_in, so only an omitted one is no lifetime; a present one is judged as present.
+        if(lifetime is not JsonMemberAbsent)
         {
-            if(expiresInValue <= 0)
+            if(LifetimeDefectOf(lifetime, out var seconds) is { } defect)
             {
                 return Result.Failure<TokenResponse, OAuthParseError>(
-                    new OAuthInvalidFieldValue(
-                        "expires_in",
-                        expiresInValue.ToString(CultureInfo.InvariantCulture),
-                        "expires_in must be a positive integer.",
-                        new DecisionSupport("The token response contained an invalid expires_in value.")
-                        {
-                            SpecificationReference = "RFC 6749 §5.1"
-                        }).WithTransportMetadata(response));
+                    LifetimeRefusal(lifetime, defect, "token", "RFC 6749 §5.1").WithTransportMetadata(response));
             }
 
-            expiresIn = expiresInValue;
+            expiresIn = seconds;
         }
 
         return Result.Success<TokenResponse, OAuthParseError>(
@@ -346,8 +353,9 @@ public static class OAuthResponseParsers
     /// The refusal of a response body the reader read no members from, by the reader's reason: a repeated member name is
     /// refused as such, naming it (RFC 8259 §4); a member whose name or string value names no Unicode text as such, naming it
     /// (RFC 8259 §8.2); and the reader's remaining refusal, <see cref="JsonNotOneObject"/>, as a body that is not one
-    /// well-formed JSON object.
+    /// well-formed JSON object. A reading of any other type is no case the reader answers and is given no meaning.
     /// </summary>
+    /// <exception cref="ArgumentException">The reading is of a type the reader never answers.</exception>
     /// <param name="reading">The reader's refusal.</param>
     /// <param name="response">The response.</param>
     /// <param name="endpoint">The endpoint that answered it.</param>
@@ -363,7 +371,10 @@ public static class OAuthResponseParsers
         {
             JsonRepeatedMemberName repeated => RepeatedMemberRefusal(repeated, endpoint),
             JsonUndecodableMember undecodable => UndecodableMemberRefusal(undecodable, endpoint),
-            _ => NotOneObject(response, endpoint, specReference)
+            JsonNotOneObject => NotOneObject(response, endpoint, specReference),
+            _ => throw new ArgumentException(
+                $"The reading {reading.GetType().FullName} is no refusal the JSON reader answers, so no refusal is given for it.",
+                nameof(reading))
         };
     }
 
@@ -443,23 +454,91 @@ public static class OAuthResponseParsers
 
 
     /// <summary>
-    /// Reads a top-level parameter carried as a JSON number naming an integer within the range of <see cref="int"/>, through the
-    /// reader's typed answer for the member (<see cref="JsonTopLevelMembers.Find"/>).
+    /// The one rule both parsers judge a present <c>expires_in</c> by, read through the reader's typed answer for the member
+    /// (<see cref="JsonTopLevelMembers.Find"/>): a JSON number spelled as a positive integer within the range of
+    /// <see cref="int"/> is the lifetime in seconds, and any other value is answered by its defect (<see cref="OAuthLifetimeDefect"/>),
+    /// the first in the order a fraction, an exponent, a sign or value naming no positive integer, then the range. The grammar
+    /// admitted the spelling, so it is an optional minus, digits, an optional fraction and an optional exponent, and reading it
+    /// here converts it to the range the lifetime needs.
     /// </summary>
-    /// <param name="members">The response's top-level members.</param>
-    /// <param name="name">The parameter's name.</param>
-    /// <param name="value">The integer, or zero when none is read.</param>
-    /// <returns><see langword="true"/> when the parameter is carried as such a number.</returns>
-    private static bool TryIntegerOf(JsonTopLevelMembers members, string name, out int value)
+    /// <param name="carried">The member as the reader answered it, a present member.</param>
+    /// <param name="seconds">The lifetime in seconds, or zero when the member is none.</param>
+    /// <returns>The defect, or <see langword="null"/> when the member is a lifetime the library admits.</returns>
+    private static OAuthLifetimeDefect? LifetimeDefectOf(JsonMemberLookup carried, out int seconds)
     {
-        if(members.Find(name) is JsonMemberNumber { Spelling: var spelling })
+        seconds = 0;
+
+        if(carried is not JsonMemberNumber { Spelling: var spelling })
         {
-            return int.TryParse(spelling, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out value);
+            return OAuthLifetimeDefect.NoNumber;
         }
 
-        value = 0;
+        if(spelling.Contains('.', StringComparison.Ordinal))
+        {
+            return OAuthLifetimeDefect.Fractional;
+        }
 
-        return false;
+        if(spelling.AsSpan().IndexOfAny('e', 'E') >= 0)
+        {
+            return OAuthLifetimeDefect.Exponent;
+        }
+
+        if(spelling.StartsWith('-', StringComparison.Ordinal))
+        {
+            return OAuthLifetimeDefect.NotPositive;
+        }
+
+        if(!int.TryParse(spelling, NumberStyles.None, CultureInfo.InvariantCulture, out seconds))
+        {
+            return OAuthLifetimeDefect.OutOfRange;
+        }
+
+        return seconds > 0 ? null : OAuthLifetimeDefect.NotPositive;
+    }
+
+
+    /// <summary>
+    /// The refusal of a response carrying <c>expires_in</c> as no lifetime the library admits, naming the member, the value as
+    /// the reader answered it and the defect; the summary names a number's spelling and of any other value its kind alone.
+    /// </summary>
+    /// <param name="carried">The member as the reader answered it.</param>
+    /// <param name="defect">Why it is no lifetime the library admits.</param>
+    /// <param name="endpoint">The endpoint that answered it.</param>
+    /// <param name="specReference">The clause the response's form is given by.</param>
+    /// <returns>The refusal.</returns>
+    private static OAuthInvalidLifetime LifetimeRefusal(
+        JsonMemberLookup carried,
+        OAuthLifetimeDefect defect,
+        string endpoint,
+        string specReference)
+    {
+        var value = carried switch
+        {
+            JsonMemberNumber { Spelling: var spelling } => $"the number {spelling}",
+            JsonMemberString => "a string",
+            JsonMemberOfOtherKind { Kind: var kind } => $"a value of the kind {kind}",
+            _ => $"a member answered as {carried.GetType().Name}"
+        };
+
+        var cause = defect switch
+        {
+            OAuthLifetimeDefect.NoNumber => "is no JSON number",
+            OAuthLifetimeDefect.Fractional => "has a fraction part, so it names no integer",
+            OAuthLifetimeDefect.Exponent => "is spelled with an exponent, where expires_in is spelled by digits alone",
+            OAuthLifetimeDefect.NotPositive => "names no positive integer",
+            OAuthLifetimeDefect.OutOfRange => "is past the range of the lifetime the library carries",
+            _ => $"has the defect {defect}"
+        };
+
+        return new OAuthInvalidLifetime(
+            OAuthRequestParameterNames.ExpiresIn,
+            carried,
+            defect,
+            new DecisionSupport($"The {endpoint} endpoint's response carries expires_in as {value}, which {cause}.")
+            {
+                LikelyCause = "The authorization server wrote the lifetime in seconds as something other than a positive integer.",
+                SpecificationReference = specReference
+            });
     }
 
 

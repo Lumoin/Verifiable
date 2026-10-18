@@ -496,6 +496,11 @@ internal static class TokenEndpointClientOperations
                 AuthCodeFlowRefusalOrigin.ClientJudgement,
                 OAuthClientErrors.InvalidResponse,
                 $"{ifv.FieldName}: {ifv.Reason}"),
+            OAuthInvalidLifetime lifetime => AuthCodeFlowEndpointResult.Refused(
+                AuthCodeFlowEndpointOutcome.BadRequest,
+                AuthCodeFlowRefusalOrigin.ClientJudgement,
+                OAuthClientErrors.InvalidResponse,
+                $"{lifetime.MemberName}: {lifetime.Support.Summary}"),
             OAuthMalformedResponse mr => AuthCodeFlowEndpointResult.Refused(
                 AuthCodeFlowEndpointOutcome.InternalError,
                 AuthCodeFlowRefusalOrigin.ClientJudgement,
