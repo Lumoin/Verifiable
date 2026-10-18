@@ -18,9 +18,10 @@ namespace Verifiable.Tests.TestInfrastructure;
 /// </summary>
 /// <remarks>
 /// Binds through <see cref="WebApplication.CreateSlimBuilder()"/> with a single explicit HTTPS
-/// <c>Listen</c> call presenting <see cref="Certificate"/> — there is no plaintext fallback — serving GET
-/// requests from a published-content map, 404 for an unknown path and 405 for a non-GET method, with
-/// per-path request counts the firewall assertions read. Callers pin their
+/// <c>Listen</c> call presenting <see cref="Certificate"/>, with no plaintext fallback. A path published by
+/// <see cref="PublishChallenge"/> is answered with its status and its one <c>WWW-Authenticate</c> field line, no
+/// body, for every method; every other path is served for a GET request from a published-content map, 404 for an
+/// unknown path and 405 for a non-GET method, with per-path request counts the firewall assertions read. Callers pin their
 /// <see cref="System.Net.Http.HttpClient"/> to <see cref="Certificate"/> via
 /// <see cref="LoopbackTls.CreatePinnedHttpClient(X509Certificate2, Uri?)"/>.
 /// </remarks>
@@ -58,6 +59,19 @@ internal sealed class StaticContentHost: IAsyncDisposable
     /// <param name="body">The bytes served at the path.</param>
     /// <param name="contentType">The content type the path is served with.</param>
     public void Publish(string path, ReadOnlyMemory<byte> body, string contentType) => Application.Publish(path, body, contentType);
+
+
+    /// <summary>
+    /// Publishes a challenge at a path: a request at the path, with any method, is answered with
+    /// <paramref name="statusCode"/>, the one <c>WWW-Authenticate</c> field line <paramref name="wwwAuthenticate"/> and no
+    /// body, and is recorded as every request is, as a protected resource answers a request that carries no access token
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-11.6.1">RFC 9110 Section 11.6.1</see>). Content
+    /// published at other paths is served as before.
+    /// </summary>
+    /// <param name="path">The request path (for example <c>/mcp</c>).</param>
+    /// <param name="statusCode">The status the path is answered with, typically 401.</param>
+    /// <param name="wwwAuthenticate">The value of the <c>WWW-Authenticate</c> field line.</param>
+    public void PublishChallenge(string path, int statusCode, string wwwAuthenticate) => Application.PublishChallenge(path, statusCode, wwwAuthenticate);
 
 
     /// <summary>
@@ -115,14 +129,19 @@ internal sealed class StaticContentHost: IAsyncDisposable
 
 
     /// <summary>
-    /// The request-handler skin serving GET <c>{path}</c> from a published-content map — mounted as the
-    /// host pipeline's <c>RequestDelegate</c> via <c>app.Run(application.ProcessRequestAsync)</c>: 404
-    /// for an unknown path, 405 for a non-GET method. Every requested path is recorded so the cross-wire assertions
-    /// can prove the socket was hit.
+    /// The request-handler skin, mounted as the host pipeline's <c>RequestDelegate</c> via
+    /// <c>app.Run(application.ProcessRequestAsync)</c>: a path published as a challenge is answered with its status and
+    /// its one <c>WWW-Authenticate</c> field line, no body, for every method; every other path is served for GET
+    /// <c>{path}</c> from a published-content map, 404 for an unknown path, 405 for a non-GET method. Every requested
+    /// path is recorded so the cross-wire assertions can prove the socket was hit.
     /// </summary>
     private sealed class StaticContentApplication
     {
         private ConcurrentDictionary<string, (byte[] Body, string ContentType)> Content { get; } = new(StringComparer.Ordinal);
+
+        /// <summary>The challenges published by path: the status and the <c>WWW-Authenticate</c> field value answered for every method.</summary>
+        private ConcurrentDictionary<string, (int StatusCode, string WwwAuthenticate)> Challenges { get; } = new(StringComparer.Ordinal);
+
         private ConcurrentDictionary<string, int> RequestCounts { get; } = new(StringComparer.Ordinal);
         private int totalRequests;
 
@@ -141,13 +160,27 @@ internal sealed class StaticContentHost: IAsyncDisposable
         }
 
 
+        /// <summary>Publishes a challenge answered at a path for every method.</summary>
+        /// <param name="path">The request path.</param>
+        /// <param name="statusCode">The status answered.</param>
+        /// <param name="wwwAuthenticate">The <c>WWW-Authenticate</c> field value answered.</param>
+        public void PublishChallenge(string path, int statusCode, string wwwAuthenticate)
+        {
+            Challenges[path] = (statusCode, wwwAuthenticate);
+        }
+
+
         /// <summary>Whether a path was requested at least once.</summary>
         /// <param name="path">The request path to test.</param>
         /// <returns><see langword="true"/> when the path was requested.</returns>
         public bool WasRequested(string path) => RequestCounts.ContainsKey(path);
 
 
-        /// <summary>Serves a GET request from the published-content map, recording the requested path.</summary>
+        /// <summary>
+        /// Answers a request at a path published as a challenge with its status and its one <c>WWW-Authenticate</c> field
+        /// line, no body, for every method, and serves any other path for a GET request from the published-content map,
+        /// recording the requested path.
+        /// </summary>
         /// <param name="context">The HTTP context.</param>
         /// <returns>A task that completes when the response is written.</returns>
         public async Task ProcessRequestAsync(HttpContext context)
@@ -157,6 +190,14 @@ internal sealed class StaticContentHost: IAsyncDisposable
 
             _ = Interlocked.Increment(ref totalRequests);
             _ = RequestCounts.AddOrUpdate(path, 1, static (_, count) => count + 1);
+
+            if(Challenges.TryGetValue(path, out (int StatusCode, string WwwAuthenticate) challenge))
+            {
+                httpResponse.StatusCode = challenge.StatusCode;
+                httpResponse.Headers.WWWAuthenticate = challenge.WwwAuthenticate;
+
+                return;
+            }
 
             if(!HttpMethods.IsGet(context.Request.Method))
             {

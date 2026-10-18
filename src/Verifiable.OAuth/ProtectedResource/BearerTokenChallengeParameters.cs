@@ -19,11 +19,12 @@ namespace Verifiable.OAuth.ProtectedResource;
 /// <param name="ErrorDescription">The developer-readable explanation of the error (RFC 6750 §3).</param>
 /// <param name="Scope">The space-delimited scopes the resource requires (RFC 6750 §3, RFC 6749 §3.3).</param>
 /// <param name="ResourceMetadata">
-/// The RFC 9728 §5.1 <c>resource_metadata</c> URL. Per RFC 9728 §3.3, the
-/// fetched document's <c>resource</c> value MUST be identical to the URL the
-/// client used to make the resource request — verify with
-/// <see cref="ProtectedResourceMetadataValidation.IsResourceMatch"/> before
-/// using the document.
+/// The RFC 9728 Section 5.1 <c>resource_metadata</c> URL. The pointer is resolved by
+/// <see cref="ProtectedResourceMetadataDocuments.ResolveFromChallengeAsync"/>, which admits the location
+/// formed from the request URL and the root location of its origin, sends no request to any other pointer,
+/// and names the identity rule the document's <c>resource</c> satisfied
+/// (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">RFC 9728 Section 3.3</see>) in
+/// <see cref="ProtectedResourceMetadataResolved.Identity"/>.
 /// </param>
 [DebuggerDisplay("BearerTokenChallengeParameters Error={Error} Scope={Scope}")]
 public sealed record BearerTokenChallengeParameters(

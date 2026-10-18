@@ -934,9 +934,11 @@ internal sealed class ProtectedResourceMetadataTests
     /// values obtained, after validating them as described in Section 3.3." A UserInfo request without credentials sent
     /// over the wire is answered with a challenge naming UserInfo's document; the resolution of that pointer for the URL
     /// the request was sent to fetches the document over the wire and answers it resolved: <c>resource</c> the request
-    /// URL, <c>authorization_servers</c> the issuer alone, the twelve DPoP algorithms the server accepts. The rows: the
-    /// server's resources not requiring DPoP-bound access tokens (no <c>dpop_bound_access_tokens_required</c>,
-    /// <c>bearer_methods_supported</c> <c>["header"]</c>); requiring them (<c>true</c> and <c>[]</c>).
+    /// URL, <c>authorization_servers</c> the issuer alone, the twelve DPoP algorithms the server accepts, under the rule
+    /// that its <c>resource</c> names the request URL at the location formed from it, which meets both paragraphs of
+    /// Section 3.3. The rows: the server's resources not requiring DPoP-bound access tokens (no
+    /// <c>dpop_bound_access_tokens_required</c>, <c>bearer_methods_supported</c> <c>["header"]</c>); requiring them
+    /// (<c>true</c> and <c>[]</c>).
     /// </summary>
     /// <param name="row">The server's wiring: <see cref="ResolutionRequirementUnsetRow"/> or <see cref="ResolutionRequirementSetRow"/>.</param>
     /// <returns>A task that completes when the assertions have run.</returns>
@@ -959,6 +961,8 @@ internal sealed class ProtectedResourceMetadataTests
         Assert.AreSequenceEqual(ResourceDpopProofs.AcceptedProofAlgorithms.Split(' '), resolved.Metadata.DpopSigningAlgValuesSupported!.ToArray());
         Assert.AreEqual<bool?>(isRequired ? true : null, resolved.Metadata.DpopBoundAccessTokensRequired);
         Assert.AreSequenceEqual(isRequired ? Array.Empty<string>() : [BearerMethodValues.Header], resolved.Metadata.BearerMethodsSupported!.ToArray());
+        ResourceNamesTheRequestUrl identity = AssertIdentityCase<ResourceNamesTheRequestUrl>(resolved.Identity);
+        Assert.AreEqual(requestUri, identity.RequestUri);
     }
 
 
@@ -1366,6 +1370,430 @@ internal sealed class ProtectedResourceMetadataTests
 
 
     /// <summary>
+    /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/authorization-server-discovery#protected-resource-metadata-discovery-requirements">MCP
+    /// 2026-07-28, Protected Resource Metadata Discovery Requirements</see>: "MCP clients MUST support both discovery
+    /// mechanisms and use the resource metadata URL from the parsed WWW-Authenticate headers when present", the
+    /// locations named being "At the path of the server's MCP endpoint" and "At the root:
+    /// <c>https://example.com/.well-known/oauth-protected-resource</c>";
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.1">RFC 9728 Section 3.1</see>, the root location being
+    /// the one formed "since the resource identifier contains no path component: GET /.well-known/oauth-protected-resource";
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">Section 3.3</see>: "The resource value returned MUST
+    /// be identical to the protected resource's resource identifier value into which the well-known URI path suffix was
+    /// inserted to create the URL used to retrieve the metadata."; the trailing slash as
+    /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization#canonical-server-uri">MCP
+    /// 2026-07-28, Canonical Server URI</see> states it: "While both <c>https://mcp.example.com/</c> (with trailing slash)
+    /// and <c>https://mcp.example.com</c> (without trailing slash) are technically valid absolute URIs according to RFC
+    /// 3986". A POST without a token to <c>/mcp</c> at a loopback resource is answered over a raw TLS connection with 401
+    /// and the one field line <c>WWW-Authenticate: Bearer resource_metadata="{origin}/.well-known/oauth-protected-resource",
+    /// scope="{scope}"</c>, <c>{scope}</c> the scope the challenge names; the challenge is read by
+    /// <see cref="BearerTokenChallenge.TryParse"/>, its pointer the root location of the request URL's own origin; the
+    /// resolution fetches the document over the wire and answers it resolved under the rule that its <c>resource</c> names
+    /// the origin, with the request URL, the origin and the published spelling as the rule's evidence. The rows: the
+    /// document's <c>resource</c> the origin written without a trailing slash; with one.
+    /// </summary>
+    /// <param name="row">The published spelling: <see cref="OriginWithoutTrailingSlashRow"/> or <see cref="OriginWithTrailingSlashRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(OriginWithoutTrailingSlashRow)]
+    [DataRow(OriginWithTrailingSlashRow)]
+    public async Task ResolutionFromAChallengeReadsTheRootDocumentThatNamesTheOriginAsync(string row)
+    {
+        await using StaticContentHost resource = await StaticContentHost.StartAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string origin = OriginOf(resource);
+        string published = row switch
+        {
+            OriginWithoutTrailingSlashRow => origin,
+            OriginWithTrailingSlashRow => $"{origin}/",
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown spelling row.")
+        };
+        Uri requestUri = new($"{origin}/mcp");
+        PublishChallengeNaming(resource, "/mcp", $"{origin}/.well-known/oauth-protected-resource");
+        PublishRootDocument(resource, published);
+        Uri pointer = await ReadBearerChallengePointerAsync(resource, requestUri).ConfigureAwait(false);
+        Assert.AreEqual($"{origin}/.well-known/oauth-protected-resource", pointer.OriginalString);
+
+        ProtectedResourceMetadataResolution resolution = await ResolveAtResourceAsync(resource, requestUri, pointer).ConfigureAwait(false);
+
+        ProtectedResourceMetadataResolved resolved = AssertResolutionCase<ProtectedResourceMetadataResolved>(resolution);
+        Assert.AreEqual(published, resolved.Metadata.Resource);
+        Assert.AreEqual($"{origin}/.well-known/oauth-protected-resource", resolved.MetadataLocation.OriginalString);
+        Assert.AreSequenceEqual(new[] { origin }, resolved.Metadata.AuthorizationServers!.ToArray());
+        Assert.AreEqual(ChallengeScope, Assert.ContainsSingle(resolved.Metadata.ScopesSupported!));
+        Assert.AreSequenceEqual(new[] { BearerMethodValues.Header }, resolved.Metadata.BearerMethodsSupported!.ToArray());
+        ResourceNamesTheOrigin identity = AssertIdentityCase<ResourceNamesTheOrigin>(resolved.Identity);
+        Assert.AreEqual($"{origin}/mcp", identity.RequestUri.OriginalString);
+        Assert.AreEqual(origin, identity.Origin.OriginalString);
+        Assert.AreEqual(published, identity.PublishedResource);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">RFC 9728 Section 3.3</see>: "The resource value
+    /// returned MUST be identical to the protected resource's resource identifier value into which the well-known URI path
+    /// suffix was inserted to create the URL used to retrieve the metadata. If these values are not identical, the data
+    /// contained in the response MUST NOT be used." At the location formed from the request URL the identifier the suffix
+    /// was inserted into is the request URL, so a document there naming the origin is not identical to it, whatever the
+    /// origin rule admits at the root location. A POST without a token to <c>/mcp</c> at a loopback resource is answered
+    /// over a raw TLS connection with a <c>Bearer</c> challenge naming the location formed from the request URL,
+    /// <c>{origin}/.well-known/oauth-protected-resource/mcp</c>, and the document served there, and not at the root
+    /// location, names the origin as its <c>resource</c>; the resolution answers the mismatch, naming the request URL,
+    /// the published <c>resource</c> as served and the location formed from the request URL. The rows: the origin
+    /// written without a trailing slash; with one.
+    /// </summary>
+    /// <param name="row">The published spelling: <see cref="OriginWithoutTrailingSlashRow"/> or <see cref="OriginWithTrailingSlashRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(OriginWithoutTrailingSlashRow)]
+    [DataRow(OriginWithTrailingSlashRow)]
+    public async Task ResolutionFromAChallengeRefusesAPathLocationDocumentThatNamesTheOriginAsync(string row)
+    {
+        await using StaticContentHost resource = await StaticContentHost.StartAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string origin = OriginOf(resource);
+        string published = row switch
+        {
+            OriginWithoutTrailingSlashRow => origin,
+            OriginWithTrailingSlashRow => $"{origin}/",
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown spelling row.")
+        };
+        Uri requestUri = new($"{origin}/mcp");
+        string pathLocation = $"{origin}/.well-known/oauth-protected-resource/mcp";
+        PublishChallengeNaming(resource, "/mcp", pathLocation);
+        PublishDocument(resource, "/.well-known/oauth-protected-resource/mcp", published);
+        Uri pointer = await ReadBearerChallengePointerAsync(resource, requestUri).ConfigureAwait(false);
+        Assert.AreEqual(pathLocation, pointer.OriginalString);
+
+        ProtectedResourceMetadataResolution resolution = await ResolveAtResourceAsync(resource, requestUri, pointer).ConfigureAwait(false);
+
+        ProtectedResourceMetadataResourceMismatch mismatch = AssertResolutionCase<ProtectedResourceMetadataResourceMismatch>(resolution);
+        Assert.AreEqual(requestUri, mismatch.RequestUri);
+        Assert.AreEqual(published, mismatch.PublishedResource);
+        Assert.AreEqual(pathLocation, mismatch.MetadataLocation.OriginalString);
+        Assert.IsTrue(
+            resource.WasRequested("/.well-known/oauth-protected-resource/mcp"),
+            "The document at the location formed from the request URL is fetched over the wire.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">RFC 9728 Section 3.3</see>: "The resource value
+    /// returned MUST be identical to the protected resource's resource identifier value into which the well-known URI path
+    /// suffix was inserted to create the URL used to retrieve the metadata.";
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.1">Section 3.1</see>, the root location formed "since
+    /// the resource identifier contains no path component: GET /.well-known/oauth-protected-resource", which
+    /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/authorization-server-discovery#protected-resource-metadata-discovery-requirements">MCP
+    /// 2026-07-28, Protected Resource Metadata Discovery Requirements</see> names "At the root:
+    /// <c>https://example.com/.well-known/oauth-protected-resource</c>"; and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-7.7">Section 7.7</see>: "Clients SHOULD take appropriate
+    /// precautions against SSRF attacks". A POST without a token to <c>/mcp</c> at a loopback resource is answered over a
+    /// raw TLS connection with 401 and a <c>Bearer</c> challenge whose pointer is read by
+    /// <see cref="BearerTokenChallenge.TryParse"/>; the pointer is not the root location of the request URL's own origin,
+    /// nor the location formed from the request URL, so the resolution answers that it is not derived from the request,
+    /// naming both locations it admits, and sends no request. The resolution runs through a recording transport pinned to
+    /// the first listener's certificate, and the transport's record holding no request is the proof that none is sent.
+    /// The outbound policy's allow list names the host <c>127.0.0.1</c>, which both listeners share, so the refusal is
+    /// the resolution's own and not the policy's. The rows: the root location at another origin, a second loopback
+    /// listener's at another port; the root location with the segment <c>/other</c> appended, which is no path inserted
+    /// from the request URL; with the query <c>?x=1</c>; with the fragment <c>#f</c>, which
+    /// <see cref="Uri.OriginalString"/> keeps and the code-point comparison refuses; under the well-known suffix
+    /// <c>oauth-authorization-server</c>.
+    /// </summary>
+    /// <param name="row">The pointer the challenge names: <see cref="RootAtAnotherOriginRow"/>, <see cref="RootWithASegmentRow"/>, <see cref="RootWithAQueryRow"/>, <see cref="RootWithAFragmentRow"/> or <see cref="RootUnderAnotherSuffixRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(RootAtAnotherOriginRow)]
+    [DataRow(RootWithASegmentRow)]
+    [DataRow(RootWithAQueryRow)]
+    [DataRow(RootWithAFragmentRow)]
+    [DataRow(RootUnderAnotherSuffixRow)]
+    public async Task ResolutionFromAChallengeRefusesARootPointerNotAtTheRequestOriginAsync(string row)
+    {
+        await using StaticContentHost resource = await StaticContentHost.StartAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        await using StaticContentHost other = await StaticContentHost.StartAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string origin = OriginOf(resource);
+        string named = row switch
+        {
+            RootAtAnotherOriginRow => $"{OriginOf(other)}/.well-known/oauth-protected-resource",
+            RootWithASegmentRow => $"{origin}/.well-known/oauth-protected-resource/other",
+            RootWithAQueryRow => $"{origin}/.well-known/oauth-protected-resource?x=1",
+            RootWithAFragmentRow => $"{origin}/.well-known/oauth-protected-resource#f",
+            RootUnderAnotherSuffixRow => $"{origin}/.well-known/oauth-authorization-server",
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown pointer row.")
+        };
+        Uri requestUri = new($"{origin}/mcp");
+        PublishChallengeNaming(resource, "/mcp", named);
+        PublishRootDocument(resource, origin);
+        PublishRootDocument(other, OriginOf(other));
+        Uri pointer = await ReadBearerChallengePointerAsync(resource, requestUri).ConfigureAwait(false);
+        Assert.AreEqual(named, pointer.OriginalString);
+        using HttpClient client = LoopbackTls.CreateSingleHopPinnedHttpClient(resource.Certificate);
+        (OutboundTransportDelegate transport, Func<IReadOnlyList<OutboundRequest>> requests) =
+            RecordingOutboundTransport.WrapRequests(GuardedHttpClientTransport.BuildSingleHopTransport(client));
+
+        ProtectedResourceMetadataResolution resolution = await ResolveAtResourceAsync(resource, requestUri, pointer, transport).ConfigureAwait(false);
+
+        ProtectedResourceMetadataPointerNotDerivedFromRequest notDerived =
+            AssertResolutionCase<ProtectedResourceMetadataPointerNotDerivedFromRequest>(resolution);
+        Assert.AreEqual(requestUri, notDerived.RequestUri);
+        Assert.AreEqual(named, notDerived.Pointer.OriginalString);
+        Assert.AreEqual($"{origin}/.well-known/oauth-protected-resource/mcp", notDerived.ExpectedPointer.OriginalString);
+        Assert.AreEqual($"{origin}/.well-known/oauth-protected-resource", notDerived.RootFormPointer.OriginalString);
+        Assert.IsEmpty(requests(), "No request is sent to a pointer the resolution does not admit.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">RFC 9728 Section 3.3</see>: "The resource value
+    /// returned MUST be identical to the protected resource's resource identifier value into which the well-known URI path
+    /// suffix was inserted to create the URL used to retrieve the metadata. If these values are not identical, the data
+    /// contained in the response MUST NOT be used.", compared as
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-6">Section 6</see> states: "Comparisons between the two
+    /// strings MUST be performed as a Unicode code-point-to-code-point equality comparison." A POST without a token to
+    /// <c>/mcp</c> at a loopback resource is answered over a raw TLS connection with a <c>Bearer</c> challenge naming the
+    /// root location of its own origin
+    /// (<see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/authorization-server-discovery#protected-resource-metadata-discovery-requirements">MCP
+    /// 2026-07-28, Protected Resource Metadata Discovery Requirements</see>: "At the root:
+    /// <c>https://example.com/.well-known/oauth-protected-resource</c>"), and the document served there names a
+    /// <c>resource</c> that is neither the request URL nor the origin; the resolution answers the mismatch, naming the
+    /// request URL, the published <c>resource</c> as served and the root location. The rows: another URL,
+    /// <c>https://other.example</c>; the origin at another port, <c>https://127.0.0.1:1</c>; the origin with its scheme
+    /// written in upper case, <c>HTTPS://127.0.0.1:{port}</c>, a spelling
+    /// <see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.1">RFC 3986 Section 6.2.2.1</see> holds equivalent
+    /// ("the scheme and host are case-insensitive") and a code-point comparison holds different, the comparison
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-6">RFC 9728 Section 6</see> states ("Unicode
+    /// Normalization [USA15] MUST NOT be applied at any point to either the JSON string or the string it is to be compared
+    /// against.") departing from the sentence of
+    /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization#canonical-server-uri">MCP
+    /// 2026-07-28, Canonical Server URI</see>: "implementations SHOULD accept uppercase scheme and host components for
+    /// robustness and interoperability"; another path on the same origin, <c>{origin}/other</c>, a <c>resource</c> that
+    /// is neither the request URL nor the origin although it shares the origin as its prefix, held to
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-7.3">RFC 9728 Section 7.3</see>: "the client MUST ensure
+    /// that the resource identifier URL it is using as the prefix for the metadata request exactly matches the value of
+    /// the resource metadata parameter in the protected resource metadata document received by the client".
+    /// </summary>
+    /// <param name="row">The served <c>resource</c>: <see cref="AnotherUrlResourceRow"/>, <see cref="OriginAtAnotherPortResourceRow"/>, <see cref="OriginInUpperCaseResourceRow"/> or <see cref="SameOriginOtherPathResourceRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(AnotherUrlResourceRow)]
+    [DataRow(OriginAtAnotherPortResourceRow)]
+    [DataRow(OriginInUpperCaseResourceRow)]
+    [DataRow(SameOriginOtherPathResourceRow)]
+    public async Task ResolutionFromAChallengeRefusesARootDocumentThatNamesNeitherTheRequestUrlNorTheOriginAsync(string row)
+    {
+        await using StaticContentHost resource = await StaticContentHost.StartAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string origin = OriginOf(resource);
+        string published = row switch
+        {
+            AnotherUrlResourceRow => "https://other.example",
+            OriginAtAnotherPortResourceRow => "https://127.0.0.1:1",
+            OriginInUpperCaseResourceRow => $"HTTPS://127.0.0.1:{resource.BaseAddress.Port}",
+            SameOriginOtherPathResourceRow => $"{origin}/other",
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown resource row.")
+        };
+        Uri requestUri = new($"{origin}/mcp");
+        PublishChallengeNaming(resource, "/mcp", $"{origin}/.well-known/oauth-protected-resource");
+        PublishRootDocument(resource, published);
+        Uri pointer = await ReadBearerChallengePointerAsync(resource, requestUri).ConfigureAwait(false);
+
+        ProtectedResourceMetadataResolution resolution = await ResolveAtResourceAsync(resource, requestUri, pointer).ConfigureAwait(false);
+
+        ProtectedResourceMetadataResourceMismatch mismatch = AssertResolutionCase<ProtectedResourceMetadataResourceMismatch>(resolution);
+        Assert.AreEqual(requestUri, mismatch.RequestUri);
+        Assert.AreEqual(published, mismatch.PublishedResource);
+        Assert.AreEqual($"{origin}/.well-known/oauth-protected-resource", mismatch.MetadataLocation.OriginalString);
+        Assert.IsTrue(resource.WasRequested("/.well-known/oauth-protected-resource"), "The root document is fetched over the wire.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">RFC 9728 Section 3.3</see>: "If the protected
+    /// resource metadata was retrieved from a URL returned by the protected resource via the WWW-Authenticate
+    /// resource_metadata parameter, then the resource value returned MUST be identical to the URL that the client used to
+    /// make the request to the resource server.", at the location
+    /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/authorization-server-discovery#protected-resource-metadata-discovery-requirements">MCP
+    /// 2026-07-28, Protected Resource Metadata Discovery Requirements</see> names "At the root:
+    /// <c>https://example.com/.well-known/oauth-protected-resource</c>". A POST without a token to <c>/mcp</c> at a
+    /// loopback resource is answered over a raw TLS connection with a <c>Bearer</c> challenge naming the root location of
+    /// its own origin, and the document served there names the request URL <c>{origin}/mcp</c> as its <c>resource</c>; the
+    /// resolution answers it resolved under the rule that its <c>resource</c> names the request URL at the root location,
+    /// with the request URL and the origin as the rule's evidence.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ResolutionFromAChallengeReadsTheRootDocumentThatNamesTheRequestUrlAsync()
+    {
+        await using StaticContentHost resource = await StaticContentHost.StartAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string origin = OriginOf(resource);
+        Uri requestUri = new($"{origin}/mcp");
+        PublishChallengeNaming(resource, "/mcp", $"{origin}/.well-known/oauth-protected-resource");
+        PublishRootDocument(resource, $"{origin}/mcp");
+        Uri pointer = await ReadBearerChallengePointerAsync(resource, requestUri).ConfigureAwait(false);
+
+        ProtectedResourceMetadataResolution resolution = await ResolveAtResourceAsync(resource, requestUri, pointer).ConfigureAwait(false);
+
+        ProtectedResourceMetadataResolved resolved = AssertResolutionCase<ProtectedResourceMetadataResolved>(resolution);
+        Assert.AreEqual($"{origin}/mcp", resolved.Metadata.Resource);
+        Assert.AreEqual($"{origin}/.well-known/oauth-protected-resource", resolved.MetadataLocation.OriginalString);
+        ResourceNamesTheRequestUrlAtTheRootLocation identity = AssertIdentityCase<ResourceNamesTheRequestUrlAtTheRootLocation>(resolved.Identity);
+        Assert.AreEqual($"{origin}/mcp", identity.RequestUri.OriginalString);
+        Assert.AreEqual(origin, identity.Origin.OriginalString);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.1">RFC 9728 Section 3.1</see>: "If the resource
+    /// identifier value contains a path or query component, any terminating slash (/) following the host component MUST be
+    /// removed before inserting /.well-known/ and the well-known URI path suffix", and the location of an identifier with
+    /// no path component, "GET /.well-known/oauth-protected-resource"; so an endpoint at the origin, written without or
+    /// with the trailing slash, has the root location as its one location. RFC 9728
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">Section 3.3</see>: "The resource value returned MUST
+    /// be identical to the protected resource's resource identifier value into which the well-known URI path suffix was
+    /// inserted to create the URL used to retrieve the metadata."; the two spellings as
+    /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization#canonical-server-uri">MCP
+    /// 2026-07-28, Canonical Server URI</see> states them: "While both <c>https://mcp.example.com/</c> (with trailing
+    /// slash) and <c>https://mcp.example.com</c> (without trailing slash) are technically valid absolute URIs according to
+    /// RFC 3986, implementations SHOULD consistently use the form without the trailing slash". A POST without a token to
+    /// <c>/</c> at a loopback resource is answered over a raw TLS connection with a <c>Bearer</c> challenge naming the root
+    /// location; the resolution answers the root document resolved. The rows: the request URL and the document's
+    /// <c>resource</c> both the origin without a trailing slash, the request URL named, code point for code point; the
+    /// request URL with the trailing slash and the <c>resource</c> without it, the origin named; the request URL without
+    /// the trailing slash and the <c>resource</c> with it, the server's spelling departing from the SHOULD, the origin
+    /// named with the slash spelling as published.
+    /// </summary>
+    /// <param name="row">The spellings: <see cref="OriginRequestOriginResourceRow"/>, <see cref="SlashRequestOriginResourceRow"/> or <see cref="OriginRequestSlashResourceRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(OriginRequestOriginResourceRow)]
+    [DataRow(SlashRequestOriginResourceRow)]
+    [DataRow(OriginRequestSlashResourceRow)]
+    public async Task ResolutionFromAChallengeReadsTheRootDocumentOfAnEndpointAtTheOriginAsync(string row)
+    {
+        await using StaticContentHost resource = await StaticContentHost.StartAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string origin = OriginOf(resource);
+        (string requestText, string published) = row switch
+        {
+            OriginRequestOriginResourceRow => (origin, origin),
+            SlashRequestOriginResourceRow => ($"{origin}/", origin),
+            OriginRequestSlashResourceRow => (origin, $"{origin}/"),
+            _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown spelling row.")
+        };
+        Uri requestUri = new(requestText);
+        PublishChallengeNaming(resource, "/", $"{origin}/.well-known/oauth-protected-resource");
+        PublishRootDocument(resource, published);
+        Uri pointer = await ReadBearerChallengePointerAsync(resource, requestUri).ConfigureAwait(false);
+        Assert.AreEqual($"{origin}/.well-known/oauth-protected-resource", pointer.OriginalString);
+
+        ProtectedResourceMetadataResolution resolution = await ResolveAtResourceAsync(resource, requestUri, pointer).ConfigureAwait(false);
+
+        ProtectedResourceMetadataResolved resolved = AssertResolutionCase<ProtectedResourceMetadataResolved>(resolution);
+        Assert.AreEqual(published, resolved.Metadata.Resource);
+        Assert.AreEqual(
+            row switch
+            {
+                OriginRequestOriginResourceRow => $"RequestUrl {origin}",
+                SlashRequestOriginResourceRow => $"Origin {origin}/ {origin} {origin}",
+                OriginRequestSlashResourceRow => $"Origin {origin} {origin} {origin}/",
+                _ => throw new ArgumentOutOfRangeException(nameof(row), row, "Unknown spelling row.")
+            },
+            DescribeIdentity(resolved.Identity));
+    }
+
+
+    /// <summary>
+    /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/authorization-server-discovery#protected-resource-metadata-discovery-requirements">MCP
+    /// 2026-07-28, Protected Resource Metadata Discovery Requirements</see>: "MCP clients MUST support both discovery
+    /// mechanisms and use the resource metadata URL from the parsed WWW-Authenticate headers when present; otherwise, they
+    /// MUST fall back to constructing and requesting the well-known URIs in the order listed above.", the order being "At
+    /// the path of the server's MCP endpoint: <c>https://example.com/public/mcp</c> could host metadata at
+    /// <c>https://example.com/.well-known/oauth-protected-resource/public/mcp</c>" and then "At the root:
+    /// <c>https://example.com/.well-known/oauth-protected-resource</c>"; RFC 9728
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.1">Section 3.1</see>: "any terminating slash (/)
+    /// following the host component MUST be removed", so an endpoint at the origin has one location, the case the MCP
+    /// page's diagram marks on the path-inserted request
+    /// (<see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/authorization-server-discovery">MCP
+    /// 2026-07-28, Authorization Server Discovery</see>: "Not applicable if the MCP server is at the root"). The candidate
+    /// locations of a request URL are derived without a request sent. The rows: <c>https://host/mcp</c>, the path-inserted
+    /// location then the root location; <c>https://host</c> and <c>https://host/</c>, the root location alone, an MCP
+    /// server at the root; <c>https://host/a/b?x=1</c>, the path and the query inserted after the suffix, then the root
+    /// location; a host whose first label carries the letter U+00FC, both locations formed from its IDNA ASCII form
+    /// <c>xn--bcher-kva.example</c> (<see href="https://www.rfc-editor.org/rfc/rfc3987#section-3.1">RFC 3987 Section
+    /// 3.1</see>: "when an IRI is used for resource retrieval, the resource that the IRI locates is the same as the one
+    /// located by the URI obtained after converting the IRI"); <c>https://host:443/mcp</c>, both locations formed without
+    /// the default port (<see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.3">RFC 3986 Section 6.2.3</see>:
+    /// "Likewise, an explicit ":port", for which the port is empty or the default for the scheme, is equivalent to one
+    /// where the port and its ":" delimiter are elided and thus should be removed by scheme-based normalization.");
+    /// <c>https://HOST/mcp</c>, both locations formed with the host in lower case
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc3986#section-6.2.2.1">RFC 3986 Section 6.2.2.1</see>: "When a URI
+    /// uses components of the generic syntax, the component syntax equivalence rules always apply; namely, that the scheme
+    /// and host are case-insensitive and therefore should be normalized to lowercase.").
+    /// </summary>
+    /// <param name="requestUrl">The request URL.</param>
+    /// <param name="expected">The candidate locations expected, in order, separated by a space.</param>
+    [TestMethod]
+    [DataRow("https://host/mcp", "https://host/.well-known/oauth-protected-resource/mcp https://host/.well-known/oauth-protected-resource")]
+    [DataRow("https://host", "https://host/.well-known/oauth-protected-resource")]
+    [DataRow("https://host/", "https://host/.well-known/oauth-protected-resource")]
+    [DataRow("https://host/a/b?x=1", "https://host/.well-known/oauth-protected-resource/a/b?x=1 https://host/.well-known/oauth-protected-resource")]
+    [DataRow("https://b\u00FCcher.example/mcp", "https://xn--bcher-kva.example/.well-known/oauth-protected-resource/mcp https://xn--bcher-kva.example/.well-known/oauth-protected-resource")]
+    [DataRow("https://host:443/mcp", "https://host/.well-known/oauth-protected-resource/mcp https://host/.well-known/oauth-protected-resource")]
+    [DataRow("https://HOST/mcp", "https://host/.well-known/oauth-protected-resource/mcp https://host/.well-known/oauth-protected-resource")]
+    public void CandidateLocationsAreThePathInsertedLocationThenTheRootLocation(string requestUrl, string expected)
+    {
+        IReadOnlyList<Uri> candidates = ProtectedResourceMetadataDocuments.CandidateLocationsOf(new Uri(requestUrl), WellKnownPaths.OAuthProtectedResource);
+
+        Assert.AreSequenceEqual(expected.Split(' '), candidates.Select(static candidate => candidate.OriginalString).ToArray());
+    }
+
+
+    /// <summary>
+    /// <see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/authorization-server-discovery#protected-resource-metadata-discovery-requirements">MCP
+    /// 2026-07-28, Protected Resource Metadata Discovery Requirements</see>: "otherwise, they MUST fall back to
+    /// constructing and requesting the well-known URIs in the order listed above."; RFC 9728
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">Section 3.3</see>: "The resource value returned MUST
+    /// be identical to the protected resource's resource identifier value into which the well-known URI path suffix was
+    /// inserted to create the URL used to retrieve the metadata." A loopback resource serves its document at the root
+    /// location alone, its <c>resource</c> the origin, and no challenge is read; the test walks the candidate locations of
+    /// <c>{origin}/mcp</c> in order, as an application does, resolving each with the candidate as the pointer and stopping
+    /// at the first document resolved: the path-inserted location is answered 404 over the wire, a document not answered,
+    /// and the root location's document is resolved under the rule that its <c>resource</c> names the origin; the
+    /// transport sends the two GET requests in that order.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ResolutionOfTheCandidateLocationsReadsTheRootDocumentAfterThePathLocationAsync()
+    {
+        await using StaticContentHost resource = await StaticContentHost.StartAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string origin = OriginOf(resource);
+        Uri requestUri = new($"{origin}/mcp");
+        PublishRootDocument(resource, origin);
+        using HttpClient client = LoopbackTls.CreateSingleHopPinnedHttpClient(resource.Certificate);
+        (OutboundTransportDelegate transport, Func<IReadOnlyList<OutboundRequest>> requests) =
+            RecordingOutboundTransport.WrapRequests(GuardedHttpClientTransport.BuildSingleHopTransport(client));
+
+        List<string> outcomes = [];
+        foreach(Uri candidate in ProtectedResourceMetadataDocuments.CandidateLocationsOf(requestUri, WellKnownPaths.OAuthProtectedResource))
+        {
+            ProtectedResourceMetadataResolution resolution = await ResolveAtResourceAsync(resource, requestUri, candidate, transport).ConfigureAwait(false);
+            outcomes.Add(resolution.Value is ProtectedResourceMetadataResolved resolved
+                ? $"{DescribeResolution(resolution)} {DescribeIdentity(resolved.Identity)}"
+                : DescribeResolution(resolution));
+            if(resolution.Value is ProtectedResourceMetadataResolved)
+            {
+                break;
+            }
+        }
+
+        Assert.AreSequenceEqual(
+            new[] { "NotAnswered 404", $"Resolved {origin} Origin {origin}/mcp {origin} {origin}" },
+            outcomes.ToArray());
+        Assert.AreSequenceEqual(
+            new[] { $"{origin}/.well-known/oauth-protected-resource/mcp", $"{origin}/.well-known/oauth-protected-resource" },
+            requests().Select(static sent => sent.Target.OriginalString).ToArray());
+        Assert.IsTrue(resource.WasRequested("/.well-known/oauth-protected-resource/mcp"), "The path-inserted location is asked over the wire.");
+        Assert.IsTrue(resource.WasRequested("/.well-known/oauth-protected-resource"), "The root location is asked over the wire.");
+    }
+
+
+    /// <summary>
     /// Registers a protected resource, wires <paramref name="contribution"/> as its metadata contribution, runs
     /// <paramref name="arrange"/> on the server when given, starts the listener, and fetches the document over the wire
     /// at the location <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3">RFC 9728 Section 3</see> derives
@@ -1488,8 +1916,56 @@ internal sealed class ProtectedResourceMetadataTests
     /// <summary>The answer row whose document is answered with the content type <c>text/html</c>.</summary>
     private const string AnsweredAsHtmlRow = "answered-text-html";
 
+    /// <summary>The spelling row whose root document names the origin without a trailing slash.</summary>
+    private const string OriginWithoutTrailingSlashRow = "origin-without-trailing-slash";
+
+    /// <summary>The spelling row whose root document names the origin with a trailing slash.</summary>
+    private const string OriginWithTrailingSlashRow = "origin-with-trailing-slash";
+
+    /// <summary>The pointer row naming the root location of another origin.</summary>
+    private const string RootAtAnotherOriginRow = "root-at-another-origin";
+
+    /// <summary>The pointer row naming the root location with a segment appended.</summary>
+    private const string RootWithASegmentRow = "root-with-a-segment";
+
+    /// <summary>The pointer row naming the root location with a query.</summary>
+    private const string RootWithAQueryRow = "root-with-a-query";
+
+    /// <summary>The pointer row naming the root location with a fragment.</summary>
+    private const string RootWithAFragmentRow = "root-with-a-fragment";
+
+    /// <summary>The pointer row naming the root location under another well-known suffix.</summary>
+    private const string RootUnderAnotherSuffixRow = "root-under-another-suffix";
+
+    /// <summary>The resource row whose root document names another URL.</summary>
+    private const string AnotherUrlResourceRow = "another-url";
+
+    /// <summary>The resource row whose root document names the origin's host at another port.</summary>
+    private const string OriginAtAnotherPortResourceRow = "origin-at-another-port";
+
+    /// <summary>The resource row whose root document names the origin with its scheme in upper case.</summary>
+    private const string OriginInUpperCaseResourceRow = "origin-in-upper-case";
+
+    /// <summary>The resource row whose root document names another path on the request URL's own origin.</summary>
+    private const string SameOriginOtherPathResourceRow = "same-origin-other-path";
+
+    /// <summary>The spelling row whose request URL and root document's <c>resource</c> are both the origin without a trailing slash.</summary>
+    private const string OriginRequestOriginResourceRow = "origin-request-origin-resource";
+
+    /// <summary>The spelling row whose request URL carries the trailing slash and whose root document's <c>resource</c> does not.</summary>
+    private const string SlashRequestOriginResourceRow = "slash-request-origin-resource";
+
+    /// <summary>The spelling row whose request URL carries no trailing slash and whose root document's <c>resource</c> does.</summary>
+    private const string OriginRequestSlashResourceRow = "origin-request-slash-resource";
+
     /// <summary>The byte cap the resolution rows read a document under.</summary>
     private static long MaximumDocumentBytes { get; } = 64 * 1024;
+
+    /// <summary>
+    /// The scope a challenge names in the rows over <see cref="StaticContentHost"/>, and the one scope the document
+    /// there lists: a synthetic application identifier in the URI-shaped form <c>api://{guid}/{name}</c>.
+    /// </summary>
+    private static string ChallengeScope { get; } = "api://00000000-0000-4000-8000-000000000001/mcp.access";
 
 
     /// <summary>
@@ -1626,6 +2102,109 @@ internal sealed class ProtectedResourceMetadataTests
         GuardedHttpClientTransport.BuildSingleHopTransport(client);
 
 
+    /// <summary>
+    /// The origin of <paramref name="resource"/>'s listener as the test writes it: the scheme <c>https</c>, the IPv4
+    /// loopback address and the listener's port, no trailing slash.
+    /// </summary>
+    /// <param name="resource">The listener.</param>
+    /// <returns>The origin's text.</returns>
+    private static string OriginOf(StaticContentHost resource) => $"https://127.0.0.1:{resource.BaseAddress.Port}";
+
+
+    /// <summary>
+    /// Publishes at <paramref name="path"/> of <paramref name="resource"/> the answer of a protected resource to a request
+    /// without a token: 401 and the one field line
+    /// <c>WWW-Authenticate: Bearer resource_metadata="{pointer}", scope="{scope}"</c>, <c>{scope}</c> the scope the
+    /// challenge names (<see cref="ChallengeScope"/>).
+    /// </summary>
+    /// <param name="resource">The listener.</param>
+    /// <param name="path">The endpoint's path.</param>
+    /// <param name="pointer">The <c>resource_metadata</c> value the challenge names.</param>
+    private static void PublishChallengeNaming(StaticContentHost resource, string path, string pointer) =>
+        resource.PublishChallenge(path, 401, $"Bearer resource_metadata=\"{pointer}\", scope=\"{ChallengeScope}\"");
+
+
+    /// <summary>
+    /// Publishes at the root location of <paramref name="resource"/>'s origin, <c>/.well-known/oauth-protected-resource</c>,
+    /// the document <see cref="PublishDocument"/> states.
+    /// </summary>
+    /// <param name="resource">The listener.</param>
+    /// <param name="documentResource">The document's <c>resource</c>, ASCII with no character JSON escapes.</param>
+    private static void PublishRootDocument(StaticContentHost resource, string documentResource) =>
+        PublishDocument(resource, "/.well-known/oauth-protected-resource", documentResource);
+
+
+    /// <summary>
+    /// Publishes at <paramref name="path"/> of <paramref name="resource"/> the one-line <c>application/json</c> document
+    /// <c>{"resource":"{documentResource}","authorization_servers":["{origin}"],"scopes_supported":["{scope}"],"bearer_methods_supported":["header"]}</c>,
+    /// <c>{scope}</c> the scope the challenge names (<see cref="ChallengeScope"/>).
+    /// </summary>
+    /// <param name="resource">The listener.</param>
+    /// <param name="path">The path the document is served at.</param>
+    /// <param name="documentResource">The document's <c>resource</c>, ASCII with no character JSON escapes.</param>
+    private static void PublishDocument(StaticContentHost resource, string path, string documentResource) =>
+        resource.Publish(
+            path,
+            Encoding.ASCII.GetBytes(
+                $"{{\"resource\":\"{documentResource}\",\"authorization_servers\":[\"{OriginOf(resource)}\"],"
+                + $"\"scopes_supported\":[\"{ChallengeScope}\"],"
+                + "\"bearer_methods_supported\":[\"header\"]}"),
+            WellKnownMediaTypes.Application.Json);
+
+
+    /// <summary>
+    /// Sends a POST without a token to <paramref name="requestUri"/> on <paramref name="resource"/>'s listener over a raw
+    /// TLS connection pinned to its certificate, asserts the 401 answer and its one <c>WWW-Authenticate</c> field line,
+    /// reads that line as a client reads a <c>Bearer</c> challenge (<see cref="BearerTokenChallenge.TryParse"/>), asserts
+    /// the scope it names, and answers its <c>resource_metadata</c> pointer.
+    /// </summary>
+    /// <param name="resource">The listener.</param>
+    /// <param name="requestUri">The URL the request is sent to.</param>
+    /// <returns>The pointer the challenge named.</returns>
+    private async Task<Uri> ReadBearerChallengePointerAsync(StaticContentHost resource, Uri requestUri)
+    {
+        HttpResponseData challenged = await RawHttpsRequest.SendPinnedAsync(
+            resource.Certificate, WellKnownHttpMethods.Post, requestUri, [], ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(401, challenged.StatusCode, challenged.Body);
+        string challengeLine = Assert.ContainsSingle(challenged.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate));
+        Assert.IsTrue(BearerTokenChallenge.TryParse(challengeLine, out BearerTokenChallengeParameters parameters), challengeLine);
+        Assert.AreEqual(ChallengeScope, parameters.Scope);
+        Assert.IsNotNull(parameters.ResourceMetadata, challengeLine);
+
+        return parameters.ResourceMetadata;
+    }
+
+
+    /// <summary>
+    /// Resolves <paramref name="pointer"/> for <paramref name="requestUri"/> under
+    /// <see cref="WellKnownPaths.OAuthProtectedResource"/>, through <paramref name="transport"/> (by default the
+    /// single-hop transport pinned to <paramref name="resource"/>'s certificate) under the loopback outbound policy
+    /// allowing <paramref name="requestUri"/>'s host alone, with the JSON leaf's strict reading of the bytes and
+    /// <see cref="MaximumDocumentBytes"/>.
+    /// </summary>
+    /// <param name="resource">The listener serving the document.</param>
+    /// <param name="requestUri">The URL the challenged request was sent to.</param>
+    /// <param name="pointer">The pointer resolved.</param>
+    /// <param name="transport">The transport, or <see langword="null"/> for the single-hop transport pinned to the listener.</param>
+    /// <returns>The resolution.</returns>
+    private async Task<ProtectedResourceMetadataResolution> ResolveAtResourceAsync(
+        StaticContentHost resource, Uri requestUri, Uri pointer, OutboundTransportDelegate? transport = null)
+    {
+        using HttpClient singleHopClient = LoopbackTls.CreateSingleHopPinnedHttpClient(resource.Certificate);
+
+        return await ProtectedResourceMetadataDocuments.ResolveFromChallengeAsync(
+            requestUri,
+            pointer,
+            WellKnownPaths.OAuthProtectedResource,
+            TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy with { HostAllowList = [requestUri.Host] }),
+            transport ?? GuardedHttpClientTransport.BuildSingleHopTransport(singleHopClient),
+            ProtectedResourceMetadataJsonParsing.ParseProtectedResourceMetadata,
+            MaximumDocumentBytes,
+            TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
     /// <summary>The issuer the host holds for <paramref name="material"/>'s registration, as written.</summary>
     /// <param name="app">The host holding the registration.</param>
     /// <param name="material">The registration.</param>
@@ -1660,5 +2239,27 @@ internal sealed class ProtectedResourceMetadataTests
         MetadataDocumentUnsupportedMediaType unsupported => $"UnsupportedMediaType {unsupported.ContentType}",
         ProtectedResourceMetadataUnreadable unreadable => $"Unreadable {unreadable.MetadataLocation}",
         ProtectedResourceMetadataResourceMismatch mismatch => $"ResourceMismatch {mismatch.PublishedResource}"
+    };
+
+
+    /// <summary>Asserts that <paramref name="identity"/> holds the case <typeparamref name="T"/> and answers it.</summary>
+    /// <typeparam name="T">The case type expected.</typeparam>
+    /// <param name="identity">The identity rule a resolved document satisfied.</param>
+    /// <returns>The case.</returns>
+    private static T AssertIdentityCase<T>(ProtectedResourceIdentity identity) where T : class =>
+        Assert.IsInstanceOfType<T>(identity.Value, $"Expected {typeof(T).Name}; got {DescribeIdentity(identity)}.");
+
+
+    /// <summary>
+    /// States an identity rule for an assertion: the case and its evidence as written, through a switch over every case
+    /// of the union, so the statement covers each rule the resolution can name.
+    /// </summary>
+    /// <param name="identity">The identity rule.</param>
+    /// <returns>The statement.</returns>
+    private static string DescribeIdentity(ProtectedResourceIdentity identity) => identity switch
+    {
+        ResourceNamesTheRequestUrl requestUrl => $"RequestUrl {requestUrl.RequestUri.OriginalString}",
+        ResourceNamesTheRequestUrlAtTheRootLocation atRoot => $"RequestUrlAtTheRootLocation {atRoot.RequestUri.OriginalString} {atRoot.Origin.OriginalString}",
+        ResourceNamesTheOrigin origin => $"Origin {origin.RequestUri.OriginalString} {origin.Origin.OriginalString} {origin.PublishedResource}"
     };
 }

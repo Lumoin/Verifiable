@@ -6,12 +6,19 @@ namespace Verifiable.OAuth.ProtectedResource;
 
 /// <summary>
 /// The outcome of resolving a protected resource metadata document from the <c>resource_metadata</c> pointer a
-/// <c>WWW-Authenticate</c> challenge named (<see cref="ProtectedResourceMetadataDocuments.ResolveFromChallengeAsync"/>):
-/// exactly one of its ten case types. <c>default(ProtectedResourceMetadataResolution)</c> holds no case; the library
-/// never answers it. Only <see cref="ProtectedResourceMetadataResolved"/> carries a document, and that document passed
-/// the validation <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">RFC 9728 Section 3.3</see> requires
-/// before use: "If these values are not identical, the data contained in the response MUST NOT be used."; every other
-/// case carries the evidence of why no document is usable.
+/// <c>WWW-Authenticate</c> challenge named, or from a candidate of
+/// <see cref="ProtectedResourceMetadataDocuments.CandidateLocationsOf"/>
+/// (<see cref="ProtectedResourceMetadataDocuments.ResolveFromChallengeAsync"/>): exactly one of its ten case types.
+/// <c>default(ProtectedResourceMetadataResolution)</c> holds no case; the library never answers it. Only
+/// <see cref="ProtectedResourceMetadataResolved"/> carries a document, and that document's <c>resource</c> satisfied the
+/// identity rule of the location it was read at, named by <see cref="ProtectedResourceMetadataResolved.Identity"/>: at
+/// the location formed from the request URL both paragraphs of
+/// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">RFC 9728 Section 3.3</see> are met; at the root
+/// location of an endpoint with a path or a query one is met and the other departed from, and the application's switch
+/// over <see cref="ProtectedResourceMetadataResolved.Identity"/> decides whether a departure is accepted. A document
+/// whose <c>resource</c> satisfies no rule is <see cref="ProtectedResourceMetadataResourceMismatch"/>, the case that
+/// holds Section 3.3's "If these values are not identical, the data contained in the response MUST NOT be used."; every
+/// other case carries the evidence of why no document is usable.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -79,13 +86,38 @@ public readonly union ProtectedResourceMetadataResolution(
 
 
 /// <summary>
-/// A protected resource metadata document fetched from the pointer a challenge named, read, and whose <c>resource</c> is
-/// the URL the client used to make the request
-/// (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">RFC 9728 Section 3.3</see>: "the resource value
-/// returned MUST be identical to the URL that the client used to make the request to the resource server").
+/// A protected resource metadata document fetched from a pointer the resolution admits, read, and whose <c>resource</c>
+/// satisfies the identity rule of the location it was read at, the rule named by <see cref="Identity"/>
+/// (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">RFC 9728 Section 3.3</see>: "If these values are not
+/// identical, the data contained in the response MUST NOT be used.").
 /// </summary>
 public sealed class ProtectedResourceMetadataResolved
 {
+    /// <summary>
+    /// The rule the document's <c>resource</c> satisfied and the values it was compared with: the request URL at the
+    /// location formed from it, which meets both paragraphs of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">RFC 9728 Section 3.3</see>; or, at the root
+    /// location of the request URL's origin, the request URL or the origin, each meeting one paragraph and departing from
+    /// the other. Which rule a deployment accepts is the application's policy, read with a switch over
+    /// <see cref="ProtectedResourceIdentity"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The rule is judged at the location the pointer was admitted at. <see cref="MetadataLocation"/> is the final URL
+    /// under the application's redirect policy, so an application whose outbound policy follows a redirect compares
+    /// <see cref="MetadataLocation"/> with the admitted location before it accepts the document.
+    /// </para>
+    /// <para>
+    /// Under <see cref="ResourceNamesTheOrigin"/> the document is the origin's root document, served by the origin's
+    /// owner, and it speaks for every path endpoint on the origin: its <c>authorization_servers</c> become the client's
+    /// authorities for the request URL, and a tenant scoped to a path on the origin cannot serve it;
+    /// <see cref="ResourceNamesTheOrigin.RequestUri"/> is the most specific URI, and an
+    /// application that names <see cref="ResourceNamesTheOrigin.PublishedResource"/> as the RFC 8707 <c>resource</c> is
+    /// issued a token whose audience is the whole origin, as the case's remarks state.
+    /// </para>
+    /// </remarks>
+    public required ProtectedResourceIdentity Identity { get; init; }
+
     /// <summary>
     /// The document as read. Its <see cref="ProtectedResourceMetadata.SignedMetadata"/> is carried as the unverified
     /// string the document holds: <see href="https://www.rfc-editor.org/rfc/rfc9728#section-2.2">RFC 9728 Section
@@ -107,13 +139,32 @@ public sealed class ProtectedResourceMetadataResolved
 
 
 /// <summary>
-/// The challenge's pointer is not the location formed from the URL the client used to make the request, so no document
-/// it names can be used, and no request was sent to it.
+/// The challenge's pointer is neither of the two locations the resolution admits for the URL the client used to make the
+/// request, so no document it names can be used, and no request was sent to it
+/// (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-7.7">RFC 9728 Section 7.7</see>: "Clients SHOULD take
+/// appropriate precautions against SSRF attacks").
+/// </summary>
+/// <remarks>
+/// <para>
+/// The first location, <see cref="ExpectedPointer"/>, is formed from the request URL:
 /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">RFC 9728 Section 3.3</see> holds the document's
 /// <c>resource</c> to both "the protected resource's resource identifier value into which the well-known URI path suffix
 /// was inserted to create the URL used to retrieve the metadata" and "the URL that the client used to make the request to
-/// the resource server", so only the location formed from that URL can yield a usable document.
-/// </summary>
+/// the resource server", and a document there can satisfy both.
+/// </para>
+/// <para>
+/// The second, <see cref="RootFormPointer"/>, is the root location of the request URL's own origin, the location of an
+/// identifier with no path component (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.1">RFC 9728 Section
+/// 3.1</see>: "since the resource identifier contains no path component: GET /.well-known/oauth-protected-resource"),
+/// which the MCP authorization specification names as a location an MCP server hosts its metadata at
+/// (<see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/authorization-server-discovery#protected-resource-metadata-discovery-requirements">MCP
+/// 2026-07-28, Protected Resource Metadata Discovery Requirements</see>: "At the root:
+/// <c>https://example.com/.well-known/oauth-protected-resource</c>"); a document there at an endpoint with a path or a
+/// query satisfies one paragraph of Section 3.3 and departs from the other, and
+/// <see cref="ProtectedResourceMetadataResolved.Identity"/> names which. For a request URL with no path and no query the
+/// two locations are the same text.
+/// </para>
+/// </remarks>
 public sealed class ProtectedResourceMetadataPointerNotDerivedFromRequest
 {
     /// <summary>The URL the client used to make the request, as the caller passed it.</summary>
@@ -124,6 +175,12 @@ public sealed class ProtectedResourceMetadataPointerNotDerivedFromRequest
 
     /// <summary>The location formed from <see cref="RequestUri"/> under the application's well-known suffix.</summary>
     public required Uri ExpectedPointer { get; init; }
+
+    /// <summary>
+    /// The root location of <see cref="RequestUri"/>'s origin under the application's well-known suffix: the same
+    /// scheme, host and port, the path exactly <c>/.well-known/</c> and the suffix, no query and no fragment.
+    /// </summary>
+    public required Uri RootFormPointer { get; init; }
 }
 
 
@@ -144,10 +201,17 @@ public sealed class ProtectedResourceMetadataUnreadable
 
 
 /// <summary>
-/// A readable document whose <c>resource</c> is not the URL the client used to make the request; its metadata must not be
-/// used (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">RFC 9728 Section 3.3</see>: "If these values
-/// are not identical, the data contained in the response MUST NOT be used.").
+/// A readable document whose <c>resource</c> satisfies no identity rule of the location it was read at; its metadata
+/// must not be used (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">RFC 9728 Section 3.3</see>: "If
+/// these values are not identical, the data contained in the response MUST NOT be used.").
 /// </summary>
+/// <remarks>
+/// The values compared with, each code point for code point
+/// (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-6">RFC 9728 Section 6</see>): at the location formed from
+/// the request URL, the request URL alone; at the root location of the request URL's origin, the request URL, then the
+/// origin spelled without a trailing slash, then the origin spelled with one, the origin as the well-known location
+/// reads it (the scheme and host in lower case, an internationalized host in its IDNA ASCII form, no default port).
+/// </remarks>
 public sealed class ProtectedResourceMetadataResourceMismatch
 {
     /// <summary>

@@ -283,9 +283,47 @@ public static class WellKnownPaths
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(identifier);
 
-        Uri baseUri = new(Oid4Vci.CredentialEndpointDpopValidation.UriTextOf(new Uri(identifier)));
+        Uri baseUri = UriFormOf(identifier);
         string path = baseUri.AbsolutePath.TrimEnd('/');
 
-        return new Uri($"{baseUri.Scheme}://{baseUri.Authority}/.well-known/{suffix}{path}{baseUri.Query}");
+        return new Uri($"{OriginTextOf(baseUri)}/.well-known/{suffix}{path}{baseUri.Query}");
     }
+
+
+    /// <summary>
+    /// The origin of <paramref name="identifier"/> as <see cref="OAuthProtectedResource"/> reads it: the scheme and the
+    /// authority of its URI form (<see cref="UriFormOf"/>), the scheme and host in lower case, an internationalized host
+    /// in its IDNA ASCII form, no default port and no userinfo, written <c>{scheme}://{authority}</c> without a trailing
+    /// slash. It is the identifier with no path component whose location
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.1">RFC 9728 Section 3.1</see> states for the root:
+    /// "since the resource identifier contains no path component: GET /.well-known/oauth-protected-resource".
+    /// </summary>
+    /// <param name="identifier">The absolute URL.</param>
+    /// <returns>The origin's text.</returns>
+    /// <exception cref="UriFormatException"><paramref name="identifier"/>'s host has no IDNA ASCII form.</exception>
+    internal static string OriginOf(string identifier)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(identifier);
+
+        return OriginTextOf(UriFormOf(identifier));
+    }
+
+
+    /// <summary>
+    /// <paramref name="identifier"/> parsed and read in its URI form
+    /// (<see cref="Oid4Vci.CredentialEndpointDpopValidation.UriTextOf"/>, an internationalized host in its IDNA ASCII
+    /// form, <see href="https://www.rfc-editor.org/rfc/rfc3987#section-3.1">RFC 3987 Section 3.1</see>), the one URI-form
+    /// rule both <see cref="ComputeWellKnownWithPathAndQueryInsertion"/> and <see cref="OriginOf"/> apply to an
+    /// identifier, each parsing the text it is given.
+    /// </summary>
+    /// <param name="identifier">The absolute URL.</param>
+    /// <returns>The URL in its URI form.</returns>
+    private static Uri UriFormOf(string identifier) =>
+        new(Oid4Vci.CredentialEndpointDpopValidation.UriTextOf(new Uri(identifier)));
+
+
+    /// <summary>The text <c>{scheme}://{authority}</c> of <paramref name="uri"/>, its <see cref="Uri.Scheme"/> and <see cref="Uri.Authority"/>.</summary>
+    /// <param name="uri">The absolute URL, in its URI form.</param>
+    /// <returns>The origin's text, without a trailing slash.</returns>
+    private static string OriginTextOf(Uri uri) => $"{uri.Scheme}://{uri.Authority}";
 }

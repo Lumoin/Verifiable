@@ -18,8 +18,8 @@ public static class ProtectedResourceMetadataDocuments
     /// (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-5.1">RFC 9728 Section 5.1</see>: "resource_metadata:
     /// The URL of the protected resource metadata."), as seven decisions in order, each answered by one case of
     /// <see cref="ProtectedResourceMetadataResolution"/>:
-    /// (1) the pointer must be the location formed from the URL the client used to make the request, or no request is
-    /// sent (<see cref="ProtectedResourceMetadataPointerNotDerivedFromRequest"/>);
+    /// (1) the pointer must be the location formed from the URL the client used to make the request or the root location
+    /// of that URL's own origin, or no request is sent (<see cref="ProtectedResourceMetadataPointerNotDerivedFromRequest"/>);
     /// (2) the document is fetched once through the guarded <see cref="OutboundFetch"/> under the context's
     /// <see cref="OutboundFetchPolicy"/> with an HTTP GET and the byte cap, a fetch that ends without a response answered
     /// by its shared case (<see cref="MetadataDocumentUnreachable"/>, <see cref="MetadataDocumentTooLarge"/>,
@@ -27,9 +27,9 @@ public static class ProtectedResourceMetadataDocuments
     /// (3) the status must be 200 (<see cref="MetadataDocumentNotAnswered"/>);
     /// (4) the media type must be exactly <c>application/json</c> (<see cref="MetadataDocumentUnsupportedMediaType"/>);
     /// (5) the application's parser must read a document (<see cref="ProtectedResourceMetadataUnreadable"/>);
-    /// (6) the document's <c>resource</c> must be the URL the client used, code point for code point
-    /// (<see cref="ProtectedResourceMetadataResourceMismatch"/>);
-    /// (7) otherwise the document is answered with the response's HTTP freshness
+    /// (6) the document's <c>resource</c> must satisfy an identity rule of the location the pointer was admitted at, code
+    /// point for code point (<see cref="ProtectedResourceMetadataResourceMismatch"/>);
+    /// (7) otherwise the document is answered with the rule it satisfied and the response's HTTP freshness
     /// (<see cref="ProtectedResourceMetadataResolved"/>).
     /// </summary>
     /// <remarks>
@@ -39,22 +39,50 @@ public static class ProtectedResourceMetadataDocuments
     /// well-known URI path suffix was inserted to create the URL used to retrieve the metadata." and "If the protected
     /// resource metadata was retrieved from a URL returned by the protected resource via the WWW-Authenticate
     /// resource_metadata parameter, then the resource value returned MUST be identical to the URL that the client used to
-    /// make the request to the resource server." Both hold only when the pointer is the location formed by inserting the
-    /// application's suffix into that URL, so a pointer that is not that location can yield no usable document, and the
-    /// library sends no request to it: <see href="https://www.rfc-editor.org/rfc/rfc9728#section-7.3">Section 7.3</see>,
-    /// "the client MUST ensure that the resource identifier URL it is using as the prefix for the metadata request exactly
-    /// matches the value of the resource metadata parameter in the protected resource metadata document received by the
-    /// client", and <see href="https://www.rfc-editor.org/rfc/rfc9728#section-7.7">Section 7.7</see>, "Clients SHOULD take
-    /// appropriate precautions against SSRF attacks". The one text form compared: the pointer is derived when
+    /// make the request to the resource server." Both hold when the pointer is the location formed by inserting the
+    /// application's suffix into that URL, the first location admitted (<see cref="ProtectedResourceMetadataPointerNotDerivedFromRequest.ExpectedPointer"/>):
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-7.3">Section 7.3</see>, "the client MUST ensure that the
+    /// resource identifier URL it is using as the prefix for the metadata request exactly matches the value of the
+    /// resource metadata parameter in the protected resource metadata document received by the client". The second
+    /// location admitted is the root location of the request URL's own origin
+    /// (<see cref="ProtectedResourceMetadataPointerNotDerivedFromRequest.RootFormPointer"/>): the same scheme, host and
+    /// port, the path exactly <c>/.well-known/</c> and the suffix, no query and no fragment, the location of an identifier
+    /// with no path component (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.1">Section 3.1</see>: "since
+    /// the resource identifier contains no path component: GET /.well-known/oauth-protected-resource"), which the MCP
+    /// authorization specification names as a location an MCP server hosts its metadata at
+    /// (<see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/authorization-server-discovery#protected-resource-metadata-discovery-requirements">MCP
+    /// 2026-07-28, Protected Resource Metadata Discovery Requirements</see>: "At the root:
+    /// <c>https://example.com/.well-known/oauth-protected-resource</c>", and "MCP clients MUST support both discovery
+    /// mechanisms and use the resource metadata URL from the parsed WWW-Authenticate headers when present"); a document
+    /// there at an endpoint with a path or a query can satisfy one paragraph of Section 3.3 and departs from the other,
+    /// which decision (6) names. A pointer that is neither location can yield no usable document, and the library sends no
+    /// request to it: <see href="https://www.rfc-editor.org/rfc/rfc9728#section-7.7">Section 7.7</see>, "Clients SHOULD
+    /// take appropriate precautions against SSRF attacks". The one text form compared: the pointer is admitted when
     /// <paramref name="resourceMetadata"/>'s <see cref="Uri.OriginalString"/> equals, ordinally, the
     /// <see cref="Uri.OriginalString"/> of <paramref name="wellKnownPath"/>'s <see cref="WellKnownPath.ComputeUri"/> of
-    /// <paramref name="requestUri"/>'s <see cref="Uri.OriginalString"/>. For
-    /// <see cref="WellKnownPaths.OAuthProtectedResource"/> that location is formed from the URL as <see cref="Uri"/> reads
-    /// it: the scheme and host in lower case, no default port, no userinfo or fragment, the path's dot segments removed
-    /// and its terminating slashes trimmed, the percent-encodings of unreserved characters decoded, an internationalized
-    /// host in its IDNA ASCII form, and the query kept after the inserted suffix; so a request URL spelled with a Unicode
-    /// host and the same URL spelled in its IDNA form derive the same location. The caller passes the request URL in the
-    /// form the resource names itself by, which is the form the location is formed from.
+    /// <paramref name="requestUri"/>'s <see cref="Uri.OriginalString"/>, or of that <see cref="WellKnownPath.ComputeUri"/>
+    /// of the origin's text. For <see cref="WellKnownPaths.OAuthProtectedResource"/> that location is formed from the URL
+    /// as <see cref="Uri"/> reads it: the scheme and host in lower case, no default port, no userinfo or fragment, the
+    /// path's dot segments removed and its terminating slashes trimmed, the percent-encodings of unreserved characters
+    /// decoded, an internationalized host in its IDNA ASCII form, and the query kept after the inserted suffix; so a
+    /// request URL spelled with a Unicode host and the same URL spelled in its IDNA form derive the same location. The
+    /// origin is read by that same URI-form rule (<see cref="WellKnownPaths.OriginOf"/>), whatever suffix
+    /// <paramref name="wellKnownPath"/> names: its scheme and authority, written without a trailing slash. For
+    /// <see cref="WellKnownPaths.OAuthProtectedResource"/> the one rule is applied to the request URL and to its origin,
+    /// the request URL's text parsed once for the origin and once for the location formed from it, two parses of one
+    /// text, deterministic and equal. For a request URL with no path and no query the two locations are the same text,
+    /// and one pointer is admitted. The caller passes the request URL in the form the resource names itself by, which is
+    /// the form the locations are formed from.
+    /// </para>
+    /// <para>
+    /// A fragment in the request URL is dropped from both locations, while the rules of decision (6) that compare the
+    /// request URL compare its <see cref="Uri.OriginalString"/>, the fragment kept, so only a document whose
+    /// <c>resource</c> carries the same fragment matches them, a <c>resource</c>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 Section 2</see> excludes: "The URI MUST NOT
+    /// include a fragment component." The locations are defined for <c>http</c> and <c>https</c> request URLs; for a
+    /// request URL of another scheme a location is formed that an outbound policy whose
+    /// <see cref="OutboundFetchPolicy.AllowedSchemes"/> does not name that scheme refuses before any request, as
+    /// <see cref="OutboundFetchPolicy.SecureDefault"/> names <c>https</c> alone.
     /// </para>
     /// <para>
     /// Decisions (2) to (5). <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.1">Section 3.1</see>: "A protected
@@ -71,14 +99,43 @@ public static class ProtectedResourceMetadataDocuments
     /// redirect is answered <see cref="MetadataDocumentRedirectRefused"/>.
     /// </para>
     /// <para>
-    /// Decision (6). <see cref="ProtectedResourceMetadataValidation.IsResourceMatch"/> of the document and
-    /// <paramref name="requestUri"/>'s <see cref="Uri.OriginalString"/>:
+    /// Decision (6). The document's <c>resource</c> is judged by the location the pointer was admitted at, each
+    /// comparison <see cref="ProtectedResourceMetadataValidation.IsResourceMatch"/> of the document and one text:
     /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-6">Section 6</see>, "Unicode Normalization [USA15] MUST
     /// NOT be applied at any point to either the JSON string or the string it is to be compared against." and
     /// "Comparisons between the two strings MUST be performed as a Unicode code-point-to-code-point equality comparison."
-    /// The request URL is compared as the caller wrote it, so the caller passes the URL text it made the request to as
-    /// the resource names itself: a resource writing its identifier in the URI form is matched by a caller passing that
-    /// form, and a Unicode spelling of the same host is a <see cref="ProtectedResourceMetadataResourceMismatch"/>.
+    /// The rules, in order, each named by its case of <see cref="ProtectedResourceIdentity"/> in
+    /// <see cref="ProtectedResourceMetadataResolved.Identity"/>: at the location formed from the request URL, the
+    /// <c>resource</c> is <paramref name="requestUri"/>'s <see cref="Uri.OriginalString"/>
+    /// (<see cref="ResourceNamesTheRequestUrl"/>, both paragraphs of Section 3.3 met); at the root location of an endpoint
+    /// with a path or a query, the <c>resource</c> is that same text (<see cref="ResourceNamesTheRequestUrlAtTheRootLocation"/>,
+    /// the paragraph for a URL a challenge returned met); at the root location, the <c>resource</c> is the origin written
+    /// without a trailing slash, or with one (<see cref="ResourceNamesTheOrigin"/>, the paragraph for the identifier the
+    /// suffix was inserted into met). Both spellings of the origin are compared, each code point for code point, because
+    /// both are the origin
+    /// (<see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization#canonical-server-uri">MCP
+    /// 2026-07-28, Canonical Server URI</see>: "While both <c>https://mcp.example.com/</c> (with trailing slash) and
+    /// <c>https://mcp.example.com</c> (without trailing slash) are technically valid absolute URIs according to RFC
+    /// 3986"); its "SHOULD consistently use the form without the trailing slash" binds the spelling a server publishes. A
+    /// <c>resource</c> satisfying no rule is <see cref="ProtectedResourceMetadataResourceMismatch"/>. The library decides
+    /// nothing about which rule an application accepts: the application reads
+    /// <see cref="ProtectedResourceMetadataResolved.Identity"/> with a switch expression and applies its own policy. The
+    /// request URL is compared as the caller wrote it, so the caller passes the URL text it made the request to as the
+    /// resource names itself: a resource writing its identifier in the URI form is matched by a caller passing that form,
+    /// and a Unicode spelling of the same host is a <see cref="ProtectedResourceMetadataResourceMismatch"/>.
+    /// </para>
+    /// <para>
+    /// A request without a challenge. The application that requests the locations of
+    /// <see cref="CandidateLocationsOf"/> resolves a document it fetched from a candidate by this method with the candidate
+    /// as <paramref name="resourceMetadata"/>; a candidate no challenge named is held to the same decisions and the same
+    /// identity rules. The paragraph of Section 3.3 for a URL a challenge returned binds a pointer a challenge named alone;
+    /// the paragraph that binds every document
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">Section 3.3</see>: "The resource value returned
+    /// MUST be identical to the protected resource's resource identifier value into which the well-known URI path suffix
+    /// was inserted to create the URL used to retrieve the metadata.") is the rule
+    /// <see cref="ResourceNamesTheRequestUrl"/> and <see cref="ResourceNamesTheOrigin"/> name;
+    /// <see cref="ResourceNamesTheRequestUrlAtTheRootLocation"/> departs from it for a candidate as for a pointer a
+    /// challenge named, and an application that accepts no departure for a candidate refuses that case.
     /// </para>
     /// <para>
     /// The library's one attempt. It caches nothing and retries nothing: the application's resolver composing this call
@@ -152,16 +209,20 @@ public static class ProtectedResourceMetadataDocuments
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        //Decision (1), RFC 9728 Section 3.3 and Section 7.3: only the location formed from the request URL can yield a
-        //usable document, so any other pointer is refused before a request is sent (Section 7.7).
-        Uri expectedPointer = wellKnownPath.ComputeUri(requestUri.OriginalString);
-        if(!string.Equals(resourceMetadata.OriginalString, expectedPointer.OriginalString, StringComparison.Ordinal))
+        //Decision (1), RFC 9728 Section 3.3 and Section 7.3, and the MCP root location (RFC 9728 Section 3.1): only the
+        //location formed from the request URL and the root location of its own origin are admitted, so any other pointer
+        //is refused before a request is sent (Section 7.7).
+        (Uri requestLocation, Uri rootLocation, string origin) = AdmittedLocationsOf(requestUri, wellKnownPath);
+        bool isAtRequestLocation = string.Equals(resourceMetadata.OriginalString, requestLocation.OriginalString, StringComparison.Ordinal);
+        bool isAtRootLocation = string.Equals(resourceMetadata.OriginalString, rootLocation.OriginalString, StringComparison.Ordinal);
+        if(!isAtRequestLocation && !isAtRootLocation)
         {
             return new ProtectedResourceMetadataPointerNotDerivedFromRequest
             {
                 RequestUri = requestUri,
                 Pointer = resourceMetadata,
-                ExpectedPointer = expectedPointer
+                ExpectedPointer = requestLocation,
+                RootFormPointer = rootLocation
             };
         }
 
@@ -221,8 +282,10 @@ public static class ProtectedResourceMetadataDocuments
             return new ProtectedResourceMetadataUnreadable { MetadataLocation = fetch.FinalUri };
         }
 
-        //Decision (6), RFC 9728 Section 3.3 and Section 6: the resource is the request URL code point for code point.
-        if(!ProtectedResourceMetadataValidation.IsResourceMatch(metadata, requestUri.OriginalString))
+        //Decision (6), RFC 9728 Section 3.3 and Section 6: the resource satisfies an identity rule of the location the
+        //pointer was admitted at, code point for code point.
+        ProtectedResourceIdentity identity = IdentityOf(metadata, requestUri, origin, isAtRequestLocation, isAtRootLocation);
+        if(identity.Value is null)
         {
             return new ProtectedResourceMetadataResourceMismatch
             {
@@ -232,12 +295,133 @@ public static class ProtectedResourceMetadataDocuments
             };
         }
 
-        //Decision (7): the document, with the HTTP freshness reported for the application's cache (Section 7.10).
+        //Decision (7): the document, with the rule it satisfied and the HTTP freshness reported for the application's
+        //cache (Section 7.10).
         return new ProtectedResourceMetadataResolved
         {
+            Identity = identity,
             Metadata = metadata,
             MetadataLocation = fetch.FinalUri,
             Freshness = HttpCacheFreshness.Compute(response)
+        };
+    }
+
+
+    /// <summary>
+    /// The locations a protected resource metadata document for <paramref name="requestUri"/> is looked for at when no
+    /// challenge named one, in the order the MCP authorization specification states
+    /// (<see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/authorization-server-discovery#protected-resource-metadata-discovery-requirements">MCP
+    /// 2026-07-28, Protected Resource Metadata Discovery Requirements</see>: "MCP clients MUST support both discovery
+    /// mechanisms and use the resource metadata URL from the parsed WWW-Authenticate headers when present; otherwise, they
+    /// MUST fall back to constructing and requesting the well-known URIs in the order listed above."): first the location
+    /// formed from the request URL ("At the path of the server's MCP endpoint"), then the root location of the request
+    /// URL's origin ("At the root: <c>https://example.com/.well-known/oauth-protected-resource</c>"); one entry when the two
+    /// are the same text, as for a request URL with no path and no query, the case the specification's diagram marks on
+    /// the path-inserted request
+    /// (<see href="https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/authorization-server-discovery">MCP
+    /// 2026-07-28, Authorization Server Discovery</see>: "Not applicable if the MCP server is at the root").
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A pure derivation: it sends nothing and decides nothing. The requests, the order they are sent in, when to stop and
+    /// what a failure means are the application's. A document the application fetches from a candidate is resolved by
+    /// <see cref="ResolveFromChallengeAsync"/> with the candidate as the pointer, which holds it to the same decisions as
+    /// a pointer a challenge named.
+    /// </para>
+    /// <para>
+    /// Each location is formed by <paramref name="wellKnownPath"/>'s <see cref="WellKnownPath.ComputeUri"/>, the first from
+    /// <paramref name="requestUri"/>'s <see cref="Uri.OriginalString"/> and the second from its origin, the scheme, host
+    /// and port as that location reads them (the scheme and host in lower case, an internationalized host in its IDNA
+    /// ASCII form, no default port), so the two entries are the two pointers
+    /// <see cref="ResolveFromChallengeAsync"/> admits.
+    /// </para>
+    /// <para>
+    /// A fragment in the request URL is dropped from both locations, while the rules of
+    /// <see cref="ResolveFromChallengeAsync"/> that compare the request URL compare its <see cref="Uri.OriginalString"/>,
+    /// the fragment kept, so only a document whose <c>resource</c> carries the same fragment matches them, a
+    /// <c>resource</c> <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2">RFC 8707 Section 2</see> excludes: "The
+    /// URI MUST NOT include a fragment component." The locations are defined for <c>http</c> and <c>https</c> request
+    /// URLs; for a request URL of another scheme a location is formed that an outbound policy whose
+    /// <see cref="OutboundFetchPolicy.AllowedSchemes"/> does not name that scheme refuses before any request, as
+    /// <see cref="OutboundFetchPolicy.SecureDefault"/> names <c>https</c> alone.
+    /// </para>
+    /// </remarks>
+    /// <param name="requestUri">The absolute URL of the request the client makes or made to the resource.</param>
+    /// <param name="wellKnownPath">The well-known suffix the application uses, typically <see cref="WellKnownPaths.OAuthProtectedResource"/>.</param>
+    /// <returns>The candidate locations, in the order they are to be requested.</returns>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="requestUri"/> is relative.</exception>
+    /// <exception cref="UriFormatException"><paramref name="requestUri"/>'s host has no IDNA ASCII form.</exception>
+    public static IReadOnlyList<Uri> CandidateLocationsOf(Uri requestUri, WellKnownPath wellKnownPath)
+    {
+        ArgumentNullException.ThrowIfNull(requestUri);
+        ArgumentNullException.ThrowIfNull(wellKnownPath);
+        if(!requestUri.IsAbsoluteUri)
+        {
+            throw new ArgumentException("The request URL must be absolute.", nameof(requestUri));
+        }
+
+        (Uri requestLocation, Uri rootLocation, _) = AdmittedLocationsOf(requestUri, wellKnownPath);
+
+        return string.Equals(requestLocation.OriginalString, rootLocation.OriginalString, StringComparison.Ordinal) switch
+        {
+            true => [requestLocation],
+            false => [requestLocation, rootLocation]
+        };
+    }
+
+
+    /// <summary>
+    /// The two locations a protected resource metadata document for <paramref name="requestUri"/> is admitted at and the
+    /// origin the second is formed from: the location formed from <paramref name="requestUri"/>'s
+    /// <see cref="Uri.OriginalString"/> by <paramref name="wellKnownPath"/>'s <see cref="WellKnownPath.ComputeUri"/>, and
+    /// the root location formed by that <see cref="WellKnownPath.ComputeUri"/> from the origin's text
+    /// (<see cref="WellKnownPaths.OriginOf"/>: the scheme and authority of the URL's URI form, without a trailing slash),
+    /// the location <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.1">RFC 9728 Section 3.1</see> states for
+    /// an identifier with no path component. The origin is read by the URI-form rule of
+    /// <see cref="WellKnownPaths.OAuthProtectedResource"/>'s location whatever suffix <paramref name="wellKnownPath"/>
+    /// names, and for that suffix the one rule forms both locations, applied to the request URL and to its origin: the
+    /// request URL's text is parsed for the origin and again for the location formed from it, two parses of one text,
+    /// deterministic and equal.
+    /// </summary>
+    /// <param name="requestUri">The absolute URL the client used or uses to make the request.</param>
+    /// <param name="wellKnownPath">The well-known suffix the application uses.</param>
+    /// <returns>The location formed from the request URL, the root location and the origin's text.</returns>
+    private static (Uri RequestLocation, Uri RootLocation, string Origin) AdmittedLocationsOf(Uri requestUri, WellKnownPath wellKnownPath)
+    {
+        string origin = WellKnownPaths.OriginOf(requestUri.OriginalString);
+
+        return (wellKnownPath.ComputeUri(requestUri.OriginalString), wellKnownPath.ComputeUri(origin), origin);
+    }
+
+
+    /// <summary>
+    /// The identity rule <paramref name="metadata"/>'s <c>resource</c> satisfies at the location the pointer was admitted
+    /// at, the rules tried in order, each comparison <see cref="ProtectedResourceMetadataValidation.IsResourceMatch"/>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-6">RFC 9728 Section 6</see>, code point for code point):
+    /// at the location formed from the request URL, the request URL (<see cref="ResourceNamesTheRequestUrl"/>); at the
+    /// root location alone, the request URL (<see cref="ResourceNamesTheRequestUrlAtTheRootLocation"/>); at the root
+    /// location, the origin written without a trailing slash or with one (<see cref="ResourceNamesTheOrigin"/>).
+    /// </summary>
+    /// <param name="metadata">The document read.</param>
+    /// <param name="requestUri">The URL the client used to make the request.</param>
+    /// <param name="origin">The origin's text the root location was formed from, without a trailing slash.</param>
+    /// <param name="isAtRequestLocation">Whether the pointer is the location formed from the request URL.</param>
+    /// <param name="isAtRootLocation">Whether the pointer is the root location of the request URL's origin.</param>
+    /// <returns>The rule satisfied, or <c>default</c>, holding no case, when the <c>resource</c> satisfies none.</returns>
+    private static ProtectedResourceIdentity IdentityOf(
+        ProtectedResourceMetadata metadata, Uri requestUri, string origin, bool isAtRequestLocation, bool isAtRootLocation)
+    {
+        bool isRequestUrl = ProtectedResourceMetadataValidation.IsResourceMatch(metadata, requestUri.OriginalString);
+        bool isOrigin = ProtectedResourceMetadataValidation.IsResourceMatch(metadata, origin)
+            || ProtectedResourceMetadataValidation.IsResourceMatch(metadata, $"{origin}/");
+
+        return (isAtRequestLocation, isAtRootLocation, isRequestUrl, isOrigin) switch
+        {
+            (true, _, true, _) => new ResourceNamesTheRequestUrl { RequestUri = requestUri },
+            (false, true, true, _) => new ResourceNamesTheRequestUrlAtTheRootLocation { RequestUri = requestUri, Origin = new Uri(origin) },
+            (_, true, _, true) => new ResourceNamesTheOrigin { RequestUri = requestUri, Origin = new Uri(origin), PublishedResource = metadata.Resource },
+            _ => default
         };
     }
 
