@@ -825,6 +825,58 @@ internal sealed class DiscoveryEndpointTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-4">RFC 8259 §4</see>: "The names within an object SHOULD be
+    /// unique." UserInfo answers GET and POST at one URL (OpenID Connect Core 1.0 §5.3), two endpoints under
+    /// <c>userinfo_endpoint</c>; the document served over the socket at both well-known locations names each member once, so the
+    /// library's strict reader of a document's top-level members reads it, where a repeated name refuses the whole document,
+    /// and its <c>userinfo_endpoint</c> is the one URL both endpoints answer at.
+    /// </summary>
+    /// <param name="location">The well-known location the document is fetched at.</param>
+    [TestMethod]
+    [DataRow(nameof(WellKnownEndpointNames.MetadataDiscovery))]
+    [DataRow(nameof(WellKnownEndpointNames.MetadataOAuthAuthorizationServer))]
+    public async Task DiscoveryServedOverTheSocketNamesEveryMemberOnce(string location)
+    {
+        await using var host = new TestHostShell(TimeProvider);
+        using var material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        var endpointName = location switch
+        {
+            nameof(WellKnownEndpointNames.MetadataDiscovery) => WellKnownEndpointNames.MetadataDiscovery,
+            nameof(WellKnownEndpointNames.MetadataOAuthAuthorizationServer) => WellKnownEndpointNames.MetadataOAuthAuthorizationServer,
+            _ => throw new ArgumentOutOfRangeException(nameof(location), location, "Unknown well-known location row.")
+        };
+
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        var hosted = host.Host("default");
+        var documentUrl = new Uri(hosted.HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(endpointName, material.Registration.TenantId.Value));
+
+        using var response = await hosted.SharedHttpClient!.GetAsync(documentUrl, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        var body = await response.Content.ReadAsByteArrayAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+
+        var reading = JwkJsonReader.ReadTopLevelMembers(body);
+        var members = Assert.IsInstanceOfType<JsonTopLevelMembers>(reading,
+            $"The served document is read as one object naming each member once; the reading was {reading}.");
+
+        Assert.HasCount(
+            members.Members.Count,
+            members.Members.Select(static member => member.Name).Distinct(StringComparer.Ordinal),
+            "Every top-level member is named once.");
+
+        var userInfo = Assert.IsInstanceOfType<JsonMemberString>(members.Find(OpenIdProviderMetadataParameterNames.UserinfoEndpoint));
+        Assert.AreEqual(
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.UserInfo, material.Registration.TenantId.Value),
+            new Uri(userInfo.Text).AbsolutePath,
+            "userinfo_endpoint names the one URL both UserInfo endpoints answer at.");
+    }
+
+
+    /// <summary>
     /// RFC 9470 §7 / RFC 8414 §2 — the AS advertises <c>acr_values_supported</c> so clients
     /// and resource servers know which <c>acr</c> values they may demand at step-up. The
     /// supported assurance levels are deployment authentication knowledge the transport-agnostic

@@ -331,11 +331,13 @@ public static class MetadataEndpoints
                     //
                     //Endpoints share a DiscoveryMetadataKey when they share a URL
                     //(JAR variants of PAR/Authorize advertise under their non-JAR
-                    //sibling's key; refresh-token shares the token endpoint URL).
-                    //The JAR variants and refresh-token carry
-                    //DiscoveryMetadataKey=null specifically to avoid double-
-                    //emission, so the skip-null guard below is the only
-                    //deduplication this loop needs.
+                    //sibling's key; refresh-token shares the token endpoint URL;
+                    //UserInfo answers GET and POST at one URL, OpenID Connect Core
+                    //section 5.3, as two endpoints under userinfo_endpoint). Each
+                    //member is written once (RFC 8259 section 4): a later endpoint
+                    //under a key already advertised at the same URL adds nothing,
+                    //and one advertising the key at another URL names no location
+                    //one way, so the document is not served.
                     EndpointChain? chain = context.EndpointChain;
                     if(chain is null)
                     {
@@ -354,6 +356,7 @@ public static class MetadataEndpoints
                     bool introspectionOnChain = false;
                     bool tokenExchangeOnChain = false;
                     bool jwtBearerOnChain = false;
+                    var advertisedLocations = new Dictionary<string, string>(StringComparer.Ordinal);
                     foreach(ServerEndpoint chainEndpoint in chain)
                     {
                         if(chainEndpoint.Capability == WellKnownCapabilityIdentifiers.OAuthAuthorizationCode)
@@ -396,12 +399,24 @@ public static class MetadataEndpoints
                             jwtBearerOnChain = true;
                         }
 
-                        if(chainEndpoint.DiscoveryMetadataKey is null) { continue; }
-                        AppendField(
-                            sb,
-                            chainEndpoint.DiscoveryMetadataKey,
-                            chainEndpoint.ResolvedUri.ToString(),
-                            emittedFieldNames);
+                        if(chainEndpoint.DiscoveryMetadataKey is not { } metadataKey) { continue; }
+
+                        var location = chainEndpoint.ResolvedUri.ToString();
+
+                        if(advertisedLocations.TryGetValue(metadataKey, out var advertisedLocation))
+                        {
+                            if(!string.Equals(advertisedLocation, location, StringComparison.Ordinal))
+                            {
+                                return (null, ServerHttpResponse.ServerError(
+                                    OAuthErrors.ServerError,
+                                    $"Two endpoints on the chain advertise the discovery member {metadataKey} at different locations."));
+                            }
+
+                            continue;
+                        }
+
+                        advertisedLocations.Add(metadataKey, location);
+                        AppendField(sb, metadataKey, location, emittedFieldNames);
                     }
 
                     //OIDC Discovery 1.0 §3 REQUIRED fields. The library's subject
