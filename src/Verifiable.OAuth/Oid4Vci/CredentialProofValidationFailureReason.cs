@@ -10,7 +10,12 @@ namespace Verifiable.OAuth.Oid4Vci;
 /// </summary>
 public enum CredentialProofValidationFailureReason
 {
-    /// <summary>The proof string is not parseable as a compact JWS.</summary>
+    /// <summary>
+    /// The proof string is not parseable as a compact JWS, its header or claims set is not one JSON object naming each member
+    /// once and naming Unicode text throughout, or its claims set carries an <c>iat</c> that is no NumericDate (RFC 7519 Section
+    /// 2): a present <c>iat</c> that names no date is a malformed proof, told from an omitted one, which is
+    /// <see cref="IatOutOfWindow"/>.
+    /// </summary>
     Malformed,
 
     /// <summary>

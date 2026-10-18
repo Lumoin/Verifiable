@@ -1945,7 +1945,7 @@ internal sealed class JwtBearerGrantTests
         Assert.HasCount(3, segments);
         using IMemoryOwner<byte> payloadBytes = TestSetup.Base64UrlDecoder(segments[1], Pool);
 
-        return JwsAccessTokenTestSupport.Parser.ParseClaims(payloadBytes.Memory);
+        return JwsAccessTokenTestSupport.PayloadOf(payloadBytes.Memory);
     }
 
 

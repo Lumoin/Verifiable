@@ -110,11 +110,20 @@ public static class SelfIssuedIdTokenValidation
                 //a repeated name at any nesting depth, including inside the nested "sub_jwk" object — before
                 //extracting a single field, so alg/kid/sub_jwk selection below never runs against a first
                 //occurrence while a duplicate second occurrence goes unnoticed.
-                if(!JwkJsonReader.IsWellFormedJsonDocument(header) || !JwkJsonReader.IsWellFormedJsonDocument(payload))
+                if(!JwkJsonReader.IsWellFormedJsonDocument(header) || JwkJsonReader.ReadTopLevelMembers(payload) is not JsonTopLevelMembers claims)
                 {
                     throw new FormatException(
                         "Self-issued ID Token header or payload is not well-formed JSON, or contains a "
                         + "duplicate member name.");
+                }
+
+                //RFC 7519 Section 2: exp and iat are NumericDates, read as written. One the payload carries that names no date makes
+                //the token structurally invalid, never one read as carrying no date: an omitted exp leaves the token expired below,
+                //and an iat a relying party polices is never surfaced as absent when the token carries one it cannot read.
+                if(NumericDateClaims.Read(claims, WellKnownJwtClaimNames.Exp, out expiresAt) is NumericDateReadResult.Malformed
+                    || NumericDateClaims.Read(claims, WellKnownJwtClaimNames.Iat, out issuedAt) is NumericDateReadResult.Malformed)
+                {
+                    throw new FormatException("Self-issued ID Token exp or iat is not a NumericDate.");
                 }
 
                 alg = JwkJsonReader.ExtractStringValue(header, WellKnownJwkMemberNames.AlgUtf8);
@@ -125,11 +134,6 @@ public static class SelfIssuedIdTokenValidation
                 audString = JwkJsonReader.ExtractStringValue(payload, WellKnownJwtClaimNames.AudUtf8);
                 audArray = JwkJsonReader.ExtractStringArrayProperty(payload, WellKnownJwtClaimNames.AudUtf8);
                 nonce = JwkJsonReader.ExtractStringValue(payload, WellKnownJwtClaimNames.NonceUtf8);
-
-                //RFC 7519 Section 2: exp and iat are NumericDates, read as written.
-                expiresAt = JwkJsonReader.ExtractNumericDate(payload, WellKnownJwtClaimNames.ExpUtf8);
-                issuedAt = JwkJsonReader.ExtractNumericDate(payload, WellKnownJwtClaimNames.IatUtf8);
-
                 subJwk = JwkJsonReader.ExtractObjectProperties(payload, WellKnownJwtClaimNames.SubJwkUtf8);
 
                 isStructurallyValid = true;

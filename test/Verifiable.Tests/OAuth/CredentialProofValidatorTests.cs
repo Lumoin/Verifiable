@@ -513,6 +513,90 @@ internal sealed class CredentialProofValidatorTests
     }
 
 
+    /// <summary>
+    /// §F.1: "iat: REQUIRED (number)", a NumericDate (RFC 7519 Section 2). An <c>iat</c> the claims set carries that names no
+    /// date - a string of digits, a literal, an object, a number naming an instant no clock represents - is refused as a
+    /// malformed proof, never read as an omitted <c>iat</c>. The proof is otherwise well formed and signed over its exact bytes,
+    /// so only the reading of the date can refuse it.
+    /// </summary>
+    /// <param name="iat">The <c>iat</c> value as the claims set writes it.</param>
+    [TestMethod]
+    [DataRow("\"1700000000\"", DisplayName = "A string of digits")]
+    [DataRow("true", DisplayName = "The true literal")]
+    [DataRow("null", DisplayName = "The null literal")]
+    [DataRow("{}", DisplayName = "An object")]
+    [DataRow("1e400", DisplayName = "A number naming no instant a clock represents")]
+    public async Task AProofWhoseIatIsNoNumericDateIsRefusedAsMalformed(string iat)
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = keys.PublicKey;
+        using PrivateKeyMemory holderPrivate = keys.PrivateKey;
+
+        var proof = await SignRawAsync(
+            holderPrivate,
+            RawProofHeaderJson(holderPrivate, holderPublic),
+            "{\"aud\":\"" + Audience + "\",\"nonce\":\"" + CredentialNonce + "\",\"iat\":" + iat + "}",
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        var result = await ValidateAsync(proof).ConfigureAwait(false);
+
+        Assert.AreEqual(CredentialProofValidationFailureReason.Malformed, result.FailureReason);
+    }
+
+
+    /// <summary>
+    /// The answers a malformed <c>iat</c> is told from: a proof omitting the REQUIRED <c>iat</c> is refused by the window check
+    /// (§F.4), as before, and one carrying a NumericDate with a fraction (RFC 7519 Section 2: "non-integer values can be
+    /// represented") within the window validates, carrying the date as written.
+    /// </summary>
+    [TestMethod]
+    public async Task AProofOmittingItsIatIsOutOfWindowAndOneCarryingANumericDateValidates()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory holderPublic = keys.PublicKey;
+        using PrivateKeyMemory holderPrivate = keys.PrivateKey;
+        var header = RawProofHeaderJson(holderPrivate, holderPublic);
+        var writtenIat = NowInstant.ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture) + ".25";
+
+        var omitted = await SignRawAsync(
+            holderPrivate,
+            header,
+            "{\"aud\":\"" + Audience + "\",\"nonce\":\"" + CredentialNonce + "\"}",
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        var carried = await SignRawAsync(
+            holderPrivate,
+            header,
+            "{\"aud\":\"" + Audience + "\",\"nonce\":\"" + CredentialNonce + "\",\"iat\":" + writtenIat + "}",
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        var omittedResult = await ValidateAsync(omitted).ConfigureAwait(false);
+        var carriedResult = await ValidateAsync(carried).ConfigureAwait(false);
+
+        Assert.AreEqual(CredentialProofValidationFailureReason.IatOutOfWindow, omittedResult.FailureReason);
+        Assert.IsTrue(carriedResult.IsValid, $"A NumericDate iat within the window validates; got {carriedResult.FailureReason}.");
+        Assert.AreEqual(writtenIat, carriedResult.IssuedAt!.ToString());
+    }
+
+
+    /// <summary>The protected header of a hand-built §F.1 proof: the holder key's algorithm, the proof type and its public key.</summary>
+    /// <param name="holderPrivate">The holder's private key, whose tag names the algorithm.</param>
+    /// <param name="holderPublic">The holder's public key, embedded as the header's <c>jwk</c>.</param>
+    /// <returns>The header's JSON text.</returns>
+    private static string RawProofHeaderJson(PrivateKeyMemory holderPrivate, PublicKeyMemory holderPublic)
+    {
+        var algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(holderPrivate.Tag);
+        var jwk = CryptoFormatConversions.DefaultAlgorithmToJwkConverter(
+            holderPublic.Tag.Get<CryptoAlgorithm>(),
+            holderPublic.Tag.Get<Purpose>(),
+            holderPublic.AsReadOnlySpan(),
+            TestSetup.Base64UrlEncoder);
+
+        return "{\"alg\":\"" + algorithm + "\",\"typ\":\"" + Oid4VciProofIssuance.ProofJwtType + "\",\"jwk\":"
+            + "{\"kty\":\"" + jwk.Kty + "\",\"crv\":\"" + jwk.Crv + "\",\"x\":\"" + jwk.X + "\",\"y\":\"" + jwk.Y + "\"}}";
+    }
+
+
     //Signs a hand-built header/payload JSON pair over their exact UTF-8 bytes with the project's
     //signing primitive, never through HeaderSerializer/PayloadSerializer — proves the well-formedness
     //gate's refusal is independent of how a JSON serializer would itself react to a repeated member.

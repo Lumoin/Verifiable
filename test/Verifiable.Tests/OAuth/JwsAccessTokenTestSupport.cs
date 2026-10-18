@@ -1,97 +1,29 @@
-using System.Runtime.InteropServices;
-using System.Text.Json;
 using Verifiable.JCose;
 using Verifiable.OAuth;
 
 namespace Verifiable.Tests.OAuth;
 
 /// <summary>
-/// System.Text.Json-backed <see cref="JwsAccessTokenJsonParser"/> for the
-/// resource-server test infrastructure. Parallel of
-/// <see cref="Verifiable.Tests.OAuth.DpopTestSupport"/> for the
-/// access-token side.
+/// The access-token side's readings for the resource-server test infrastructure: the library's own
+/// (<see cref="JwsAccessTokenJsonParser.Default"/>), and the parts of a token a row reads directly, each
+/// read through the same readings and required to be read.
 /// </summary>
 internal static class JwsAccessTokenTestSupport
 {
-    public static JwsAccessTokenJsonParser Parser { get; } = new()
-    {
-        ParseHeader = ParseHeaderJson,
-        ParseClaims = ParseClaimsJson
-    };
+    /// <summary>The library's readings of a signed JWT's header and claims.</summary>
+    public static JwsAccessTokenJsonParser Parser { get; } = JwsAccessTokenJsonParser.Default;
 
 
-    private static JwtHeader ParseHeaderJson(ReadOnlyMemory<byte> bytes)
-    {
-        using JsonDocument doc = JsonDocument.Parse(bytes);
-        JwtHeader header = new(capacity: 4);
-        foreach(JsonProperty prop in doc.RootElement.EnumerateObject())
-        {
-            object? value = ConvertJsonElement(prop.Value);
-            if(value is not null)
-            {
-                header[prop.Name] = value;
-            }
-        }
-        return header;
-    }
+    /// <summary>The header a decoded header segment reads to, through <see cref="Parser"/>; a refused one fails the row.</summary>
+    /// <param name="bytes">The decoded header segment.</param>
+    /// <returns>The header.</returns>
+    public static JwtHeader HeaderOf(ReadOnlyMemory<byte> bytes) =>
+        Assert.IsInstanceOfType<JwtPartRead<JwtHeader>>(Parser.ParseHeader(bytes), "The header reads to one JSON object.").Part;
 
 
-    private static JwtPayload ParseClaimsJson(ReadOnlyMemory<byte> bytes)
-    {
-        using JsonDocument doc = JsonDocument.Parse(bytes);
-        JwtPayload payload = new(capacity: 8);
-        foreach(JsonProperty prop in doc.RootElement.EnumerateObject())
-        {
-            object? value = ConvertJsonElement(prop.Value);
-            if(value is not null)
-            {
-                payload[prop.Name] = value;
-            }
-        }
-        return payload;
-    }
-
-
-    private static object? ConvertJsonElement(JsonElement element) => element.ValueKind switch
-    {
-        JsonValueKind.String => element.GetString(),
-        JsonValueKind.Number => element.TryGetInt64(out var whole) ? whole : DecimalNumber.FromJsonNumber(JsonMarshal.GetRawUtf8Value(element))!.ToClaimValue(),
-        JsonValueKind.True => true,
-        JsonValueKind.False => false,
-        JsonValueKind.Null => null,
-        JsonValueKind.Array => ConvertArray(element),
-        JsonValueKind.Object => ConvertObject(element),
-        JsonValueKind.Undefined => null,
-        _ => null,
-    };
-
-
-    private static List<object> ConvertArray(JsonElement element)
-    {
-        List<object> list = [];
-        foreach(JsonElement item in element.EnumerateArray())
-        {
-            object? value = ConvertJsonElement(item);
-            if(value is not null)
-            {
-                list.Add(value);
-            }
-        }
-        return list;
-    }
-
-
-    private static Dictionary<string, object> ConvertObject(JsonElement element)
-    {
-        Dictionary<string, object> dict = new(StringComparer.Ordinal);
-        foreach(JsonProperty prop in element.EnumerateObject())
-        {
-            object? value = ConvertJsonElement(prop.Value);
-            if(value is not null)
-            {
-                dict[prop.Name] = value;
-            }
-        }
-        return dict;
-    }
+    /// <summary>The claims set a decoded payload segment reads to, through <see cref="Parser"/>; a refused one fails the row.</summary>
+    /// <param name="bytes">The decoded payload segment.</param>
+    /// <returns>The claims set.</returns>
+    public static JwtPayload PayloadOf(ReadOnlyMemory<byte> bytes) =>
+        Assert.IsInstanceOfType<JwtPartRead<JwtPayload>>(Parser.ParseClaims(bytes), "The claims set reads to one JSON object.").Part;
 }

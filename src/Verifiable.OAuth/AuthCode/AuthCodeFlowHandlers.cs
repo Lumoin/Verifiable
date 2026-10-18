@@ -565,7 +565,7 @@ public static class AuthCodeFlowHandlers
             query,
             nonce is null
                 ? additionalFields
-                : additionalFields.Where(static field => !string.Equals(field.Key, OAuthRequestParameterNames.Nonce, StringComparison.Ordinal))
+                : additionalFields.Where(static field => !OAuthRequestParameterNames.IsNonce(field.Key))
                     .ToDictionary(static field => field.Key, static field => field.Value, StringComparer.Ordinal));
 
         StringBuilder builder = new();
@@ -1375,6 +1375,7 @@ public static class AuthCodeFlowHandlers
             Nonce = nonce,
             CodeChallenge = pkce.EncodedChallenge,
             CodeChallengeMethod = pkce.Method.ToString().ToUpperInvariant(),
+
             //The request object's dates are written to the whole second, the integers most authorization servers read.
             Iat = NumericDate.WholeSecondAtOrBefore(now),
             Nbf = NumericDate.WholeSecondAtOrBefore(now),
@@ -1453,6 +1454,7 @@ public static class AuthCodeFlowHandlers
             Nonce = nonce,
             CodeChallenge = pkce.EncodedChallenge,
             CodeChallengeMethod = pkce.Method.ToString().ToUpperInvariant(),
+
             //The request object's dates are written to the whole second, the integers most authorization servers read.
             Iat = NumericDate.WholeSecondAtOrBefore(now),
             Nbf = NumericDate.WholeSecondAtOrBefore(now),

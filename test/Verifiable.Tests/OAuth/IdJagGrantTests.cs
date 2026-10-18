@@ -3631,13 +3631,13 @@ internal sealed class IdJagGrantTests
         JwtHeader header;
         using(IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(parts[0], Pool))
         {
-            header = JwsAccessTokenTestSupport.Parser.ParseHeader(headerBytes.Memory);
+            header = JwsAccessTokenTestSupport.HeaderOf(headerBytes.Memory);
         }
 
         JwtPayload payload;
         using(IMemoryOwner<byte> payloadBytes = TestSetup.Base64UrlDecoder(parts[1], Pool))
         {
-            payload = JwsAccessTokenTestSupport.Parser.ParseClaims(payloadBytes.Memory);
+            payload = JwsAccessTokenTestSupport.PayloadOf(payloadBytes.Memory);
         }
 
         return (header, payload);
@@ -7030,7 +7030,7 @@ internal sealed class IdJagGrantTests
         JwtHeader header;
         using(IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(parts[0], Pool))
         {
-            header = JwsAccessTokenTestSupport.Parser.ParseHeader(headerBytes.Memory);
+            header = JwsAccessTokenTestSupport.HeaderOf(headerBytes.Memory);
         }
 
         if(!header.TryGetValue(WellKnownJwkMemberNames.Kid, out object? kidObj) || kidObj is not string kid)
@@ -7056,7 +7056,7 @@ internal sealed class IdJagGrantTests
         JwtPayload payload;
         using(IMemoryOwner<byte> payloadBytes = TestSetup.Base64UrlDecoder(parts[1], Pool))
         {
-            payload = JwsAccessTokenTestSupport.Parser.ParseClaims(payloadBytes.Memory);
+            payload = JwsAccessTokenTestSupport.PayloadOf(payloadBytes.Memory);
         }
 
         IdJagAssertionValidationResult result = rule is null

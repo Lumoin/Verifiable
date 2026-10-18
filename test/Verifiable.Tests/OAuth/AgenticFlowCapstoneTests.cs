@@ -1584,7 +1584,7 @@ internal sealed class AgenticFlowCapstoneTests
             JwtHeader header;
             using(IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(parts[0], Pool))
             {
-                header = JwsAccessTokenTestSupport.Parser.ParseHeader(headerBytes.Memory);
+                header = JwsAccessTokenTestSupport.HeaderOf(headerBytes.Memory);
             }
 
             if(!header.TryGetValue(WellKnownJwkMemberNames.Kid, out object? kidValue) || kidValue is not string kid)
@@ -1623,7 +1623,7 @@ internal sealed class AgenticFlowCapstoneTests
             JwtPayload payload;
             using(IMemoryOwner<byte> payloadBytes = TestSetup.Base64UrlDecoder(parts[1], Pool))
             {
-                payload = JwsAccessTokenTestSupport.Parser.ParseClaims(payloadBytes.Memory);
+                payload = JwsAccessTokenTestSupport.PayloadOf(payloadBytes.Memory);
             }
 
             //ID-JAG §4.3.3 / ICHAIN-017: the Identity Assertion's audience must be the
@@ -1718,7 +1718,7 @@ internal sealed class AgenticFlowCapstoneTests
             JwtHeader header;
             using(IMemoryOwner<byte> headerBytes = TestSetup.Base64UrlDecoder(parts[0], Pool))
             {
-                header = JwsAccessTokenTestSupport.Parser.ParseHeader(headerBytes.Memory);
+                header = JwsAccessTokenTestSupport.HeaderOf(headerBytes.Memory);
             }
 
             if(!header.TryGetValue(WellKnownJwkMemberNames.Kid, out object? kidValue) || kidValue is not string kid)
@@ -1729,7 +1729,7 @@ internal sealed class AgenticFlowCapstoneTests
             JwtPayload payload;
             using(IMemoryOwner<byte> payloadBytes = TestSetup.Base64UrlDecoder(parts[1], Pool))
             {
-                payload = JwsAccessTokenTestSupport.Parser.ParseClaims(payloadBytes.Memory);
+                payload = JwsAccessTokenTestSupport.PayloadOf(payloadBytes.Memory);
             }
 
             //ID-JAG §9.5: trust in the grant derives from its own iss, never from a

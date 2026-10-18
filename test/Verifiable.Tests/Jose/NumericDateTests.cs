@@ -11,8 +11,8 @@ namespace Verifiable.Tests.Jose;
 /// <summary>
 /// Tests the library's one reading of a JWT NumericDate (<see cref="NumericDate"/>) against RFC 7519 Section 2 as its text reads -
 /// "A JSON numeric value representing the number of seconds from 1970-01-01T00:00:00Z UTC", in which "non-integer values can be
-/// represented" - and the readers that judge a window by it: the span reader of a claims set
-/// (<see cref="JwkJsonReader.ExtractNumericDate"/>), the claims dictionary the library's JSON layer parses, and the time-bound
+/// represented" - and the readers that judge a window by it: the reading of a claims set's members
+/// (<see cref="JwkJsonReader.ReadTopLevelMembers"/>, <see cref="JsonMemberNumber.ToNumericDate"/>), the claims dictionary the library's JSON layer parses, and the time-bound
 /// checks of a claims set (<see cref="JwtChecks"/>). Every digit written is kept, and each comparison judges the date against the
 /// bound it keeps exactly, whichever side of the bound that is.
 /// </summary>
@@ -109,7 +109,7 @@ internal sealed class NumericDateTests
 
 
     /// <summary>
-    /// No digit is lost before the tick is judged: a count with more digits than a decimal keeps, read through the span reader and
+    /// No digit is lost before the tick is judged: a count with more digits than a decimal keeps, read through the members reading and
     /// through the claims dictionary the library's JSON layer parses, lies a part of a tick past its whole second, so the tick at
     /// or after it is the next; and the smallest double below zero lies in the tick before the epoch, where subtracting its whole
     /// second first took it to the epoch itself.
@@ -121,7 +121,8 @@ internal sealed class NumericDateTests
         const string PastADecimal = "1700000060.00000000000000000001";
 
         var fromToken = NumericDate.FromJsonNumber(Encoding.UTF8.GetBytes(PastADecimal))!;
-        var fromSpan = JwkJsonReader.ExtractNumericDate(Encoding.UTF8.GetBytes($"{{\"iat\":{PastADecimal}}}"), WellKnownJwtClaimNames.IatUtf8)!;
+        var members = Assert.IsInstanceOfType<JsonTopLevelMembers>(JwkJsonReader.ReadTopLevelMembers(Encoding.UTF8.GetBytes($"{{\"iat\":{PastADecimal}}}")));
+        var fromSpan = Assert.IsInstanceOfType<JsonMemberNumber>(members.Find(WellKnownJwtClaimNames.Iat)).ToNumericDate()!;
         var claims = JsonSerializer.Deserialize<Dictionary<string, object>>($"{{\"iat\":{PastADecimal}}}", JsonOptions)!;
         var fromDictionary = NumericDate.Of(claims[WellKnownJwtClaimNames.Iat])!;
 

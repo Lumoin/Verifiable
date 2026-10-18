@@ -304,6 +304,12 @@ public static class OAuthRequestParameterNames
     /// </summary>
     public static string RefreshToken { get; } = Utf8Constants.ToInternedString(RefreshTokenUtf8);
 
+    /// <summary>Returns <see langword="true"/> when <paramref name="value"/> is exactly <c>refresh_token</c>.</summary>
+    /// <param name="value">The parameter name to recognize.</param>
+    /// <returns><see langword="true"/> when <paramref name="value"/> names the <see cref="RefreshToken"/> parameter.</returns>
+    public static bool IsRefreshToken(string value) =>
+        string.Equals(value, RefreshToken, StringComparison.Ordinal);
+
     /// <summary>The UTF-8 source literal of <see cref="IdToken"/>.</summary>
     public static ReadOnlySpan<byte> IdTokenUtf8 => "id_token"u8;
 
@@ -314,6 +320,12 @@ public static class OAuthRequestParameterNames
     /// <see href="https://openid.net/specs/openid-connect-core-1_0.html#TokenResponse">OpenID Connect Core 1.0 §3.1.3.3</see>.
     /// </summary>
     public static string IdToken { get; } = Utf8Constants.ToInternedString(IdTokenUtf8);
+
+    /// <summary>Returns <see langword="true"/> when <paramref name="value"/> is exactly <c>id_token</c>.</summary>
+    /// <param name="value">The parameter name to recognize.</param>
+    /// <returns><see langword="true"/> when <paramref name="value"/> names the <see cref="IdToken"/> parameter.</returns>
+    public static bool IsIdToken(string value) =>
+        string.Equals(value, IdToken, StringComparison.Ordinal);
 
     //Revocation parameters — RFC 7009.
 
@@ -656,4 +668,10 @@ public static class OAuthRequestParameterNames
     /// 1.0 §3.1.2.1</see>).
     /// </summary>
     public static string Nonce { get; } = Utf8Constants.ToInternedString(NonceUtf8);
+
+    /// <summary>Returns <see langword="true"/> when <paramref name="value"/> is exactly <c>nonce</c>.</summary>
+    /// <param name="value">The parameter name to recognize.</param>
+    /// <returns><see langword="true"/> when <paramref name="value"/> names the <see cref="Nonce"/> parameter.</returns>
+    public static bool IsNonce(string value) =>
+        string.Equals(value, Nonce, StringComparison.Ordinal);
 }

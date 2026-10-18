@@ -1099,6 +1099,111 @@ internal sealed class SdJwtVpTokenVerificationPathTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9901#section-4.3">RFC 9901, Section 4.3</see> has the Key Binding JWT's
+    /// <c>iat</c> REQUIRED, a NumericDate (RFC 7519 Section 2). A KB-JWT carrying it as a value that names no date - a string of
+    /// digits, a literal, an object, a number naming an instant no clock represents - makes the presentation malformed, never
+    /// one read as carrying no <c>iat</c>. The KB-JWT is otherwise the holder's, signed over its exact bytes.
+    /// </summary>
+    /// <param name="iat">The <c>iat</c> value as the KB-JWT writes it.</param>
+    [TestMethod]
+    [DataRow("\"1700000000\"", DisplayName = "A string of digits")]
+    [DataRow("true", DisplayName = "The true literal")]
+    [DataRow("null", DisplayName = "The null literal")]
+    [DataRow("{}", DisplayName = "An object")]
+    [DataRow("1e400", DisplayName = "A number naming no instant a clock represents")]
+    public async Task AKeyBindingJwtWhoseIatIsNoNumericDateIsRefusedAsMalformed(string iat)
+    {
+        var presentation = await PresentWithKeyBindingClaimsAsync(iat, TestContext.CancellationToken).ConfigureAwait(false);
+        using PublicKeyMemory issuerKey = presentation.IssuerPublicKey;
+        var vpToken = presentation.VpToken;
+
+        var exception = await Assert.ThrowsExactlyAsync<FormatException>(
+            async () => await VerifyPresentationAsync(vpToken, issuerKey, TestContext.CancellationToken).ConfigureAwait(false),
+            "An iat the KB-JWT carries that names no date is refused, never read as absent.").ConfigureAwait(false);
+
+        Assert.Contains("iat", exception.Message, "The refusal names the iat as its reason.");
+    }
+
+
+    /// <summary>
+    /// The answers a malformed KB-JWT <c>iat</c> is told from, on KB-JWTs signed over their exact bytes as the malformed ones are:
+    /// one omitting it carries none, which the key-binding checks answer as absent, and one carrying a NumericDate with a
+    /// fraction (RFC 7519 Section 2: "non-integer values can be represented") carries it as written, its signature and
+    /// <c>sd_hash</c> verified.
+    /// </summary>
+    [TestMethod]
+    public async Task AKeyBindingJwtOmittingItsIatCarriesNoneAndOneCarryingANumericDateCarriesItAsWritten()
+    {
+        var writtenIat = TimeProvider.GetUtcNow().ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture) + ".125";
+
+        var omitted = await PresentWithKeyBindingClaimsAsync(iat: null, TestContext.CancellationToken).ConfigureAwait(false);
+        using PublicKeyMemory omittedIssuerKey = omitted.IssuerPublicKey;
+        var carried = await PresentWithKeyBindingClaimsAsync(writtenIat, TestContext.CancellationToken).ConfigureAwait(false);
+        using PublicKeyMemory carriedIssuerKey = carried.IssuerPublicKey;
+
+        var omittedParsed = await VerifyPresentationAsync(omitted.VpToken, omittedIssuerKey, TestContext.CancellationToken).ConfigureAwait(false);
+        var carriedParsed = await VerifyPresentationAsync(carried.VpToken, carriedIssuerKey, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsNull(omittedParsed.KbJwtIat, "An omitted iat is none.");
+        Assert.IsTrue(omittedParsed.KbJwtSignatureValid);
+        Assert.IsTrue(carriedParsed.KbJwtSignatureValid);
+        Assert.IsTrue(carriedParsed.SdHashValid);
+        Assert.AreEqual(writtenIat, carriedParsed.KbJwtIat!.ToString());
+    }
+
+
+    /// <summary>
+    /// Mints the holder-bound nested credential, has the holder release the Disclosure at <c>/employer/family_name</c>, and binds
+    /// the presentation with a Key Binding JWT whose claims are written by hand - the nonce, the audience, the <c>sd_hash</c> over
+    /// the presentation and an <c>iat</c> written as given - signed under the holder's key over their exact bytes, never through a
+    /// serializer, so the bytes the verifier reads are the bytes written.
+    /// </summary>
+    /// <param name="iat">The <c>iat</c> value as JSON text, or <see langword="null"/> to omit the claim.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The presentation and the issuer public key, the caller's to dispose.</returns>
+    private static async ValueTask<KeyBoundPresentation> PresentWithKeyBindingClaimsAsync(
+        string? iat,
+        CancellationToken cancellationToken)
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> holderKeys =
+            TestKeyMaterialProvider.CreateEd25519KeyMaterial();
+        using PublicKeyMemory holderPublicKey = holderKeys.PublicKey;
+        using PrivateKeyMemory holderPrivateKey = holderKeys.PrivateKey;
+
+        (string serializedSdJwt, PublicKeyMemory issuerPublicKey) = await NestedSdJwtVcFixtures.MintHolderBoundCredentialAsync(
+            holderPublicKey, NestedSdJwtVcFixtures.Vct, cancellationToken).ConfigureAwait(false);
+
+        using SdToken<string> storedToken = SdJwtSerializer.ParseToken(
+            serializedSdJwt, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag);
+        using SdToken<string> presentationToken = storedToken.SelectDisclosures(
+            new HashSet<CredentialPath> { CredentialPath.FromJsonPointer(NestedSdJwtVcFixtures.NestedFamilyNamePointer) }, Pool).Token;
+
+        var hashInput = SdJwtSerializer.GetSdJwtForHashing(presentationToken, TestSetup.Base64UrlEncoder);
+        var sdHash = TestSetup.Base64UrlEncoder(System.Security.Cryptography.SHA256.HashData(Encoding.ASCII.GetBytes(hashInput)));
+        var iatMember = iat is null ? string.Empty : ",\"iat\":" + iat;
+        var payloadJson = "{\"nonce\":\"" + KeyBindingNonce + "\",\"aud\":\"" + VerifierClientId + "\",\"sd_hash\":\"" + sdHash + "\"" + iatMember + "}";
+        var algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(holderPrivateKey.Tag);
+        var headerSegment = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes("{\"alg\":\"" + algorithm + "\",\"typ\":\"kb+jwt\"}"));
+        var payloadSegment = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(payloadJson));
+
+        using var signature = await holderPrivateKey.SignAsync(
+            Encoding.ASCII.GetBytes($"{headerSegment}.{payloadSegment}"), Pool, cancellationToken).ConfigureAwait(false);
+
+        var compactKbJwt = $"{headerSegment}.{payloadSegment}.{TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan())}";
+
+        using SdToken<string> tokenWithKeyBinding = presentationToken.WithKeyBinding(compactKbJwt, Pool);
+
+        return new KeyBoundPresentation(SdJwtSerializer.SerializeToken(tokenWithKeyBinding, TestSetup.Base64UrlEncoder), issuerPublicKey);
+    }
+
+
+    /// <summary>A presentation bound by a hand-written Key Binding JWT, and the issuer key the trust framework resolves for it.</summary>
+    /// <param name="VpToken">The vp_token value.</param>
+    /// <param name="IssuerPublicKey">The issuer public key, the receiver's to dispose.</param>
+    private sealed record KeyBoundPresentation(string VpToken, PublicKeyMemory IssuerPublicKey);
+
+
+    /// <summary>
     /// <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-21#section-11.3">
     /// Token Status List, Section 11.3</see>: "If the Issuer of the Referenced Token is the same entity
     /// as the Status Issuer, then the same key that is embedded into the Referenced Token may be used for

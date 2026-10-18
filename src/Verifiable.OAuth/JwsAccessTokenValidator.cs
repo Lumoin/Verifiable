@@ -37,8 +37,9 @@ namespace Verifiable.OAuth;
 /// token to the resource server as though its subject were acting directly, and dropping a
 /// malformed <c>may_act</c> would erase a constraint the subject placed on who may act for it —
 /// both are the permissive reading of a token the issuer did not write. As with <c>cnf</c>, the
-/// nested object is read through the dictionary shapes a JSON object materialises as, so the
-/// supplied <see cref="JwsAccessTokenJsonParser"/> must map JSON objects to
+/// nested object is read through the dictionary shapes a JSON object materialises as:
+/// <see cref="JwsAccessTokenJsonParser.Default"/> reads a JSON object as a
+/// <see cref="Dictionary{TKey, TValue}"/>, and a parser composed otherwise must map JSON objects to
 /// <see cref="IReadOnlyDictionary{TKey, TValue}"/> or <see cref="IDictionary{TKey, TValue}"/>
 /// values.
 /// </para>
@@ -273,19 +274,28 @@ public static class JwsAccessTokenValidator
 
         //2. Decode and parse header to extract alg + kid before signature
         //verify (alg=none is rejected without touching the signature path).
-        JwtHeader header;
+        JwtPartReading<JwtHeader> headerReading;
         try
         {
             using IMemoryOwner<byte> headerBytes = base64UrlDecoder(parts[0], memoryPool);
-            header = parser.ParseHeader(headerBytes.Memory);
+            headerReading = parser.ParseHeader(headerBytes.Memory);
         }
         catch
         {
-            //The token is client-supplied wire input, structurally unverified at this point; any
-            //decode/parse failure is an invalid header rather than an internal fault.
+            //The token is client-supplied wire input, structurally unverified at this point; a segment
+            //that does not decode is an invalid header rather than an internal fault.
             return SignedJwtValidationOutcome.Failure(
                 JwsAccessTokenValidationFailureReason.InvalidHeader,
                 "Failed to parse JWS header.");
+        }
+
+        //A header the reading refuses - no one JSON object, a member name repeated, a member naming no Unicode text - names no
+        //alg, kid or typ one way, so it is an invalid header.
+        if(headerReading is not JwtPartRead<JwtHeader> { Part: var header })
+        {
+            return SignedJwtValidationOutcome.Failure(
+                JwsAccessTokenValidationFailureReason.InvalidHeader,
+                "JWS header is not one JSON object naming each member once and naming Unicode text throughout.");
         }
 
         if(!header.TryGetValue(WellKnownJwkMemberNames.Alg, out object? algValue)
@@ -381,19 +391,27 @@ public static class JwsAccessTokenValidator
         }
 
         //5. Decode and parse payload.
-        JwtPayload payload;
+        JwtPartReading<JwtPayload> payloadReading;
         try
         {
             using IMemoryOwner<byte> payloadBytes = base64UrlDecoder(parts[1], memoryPool);
-            payload = parser.ParseClaims(payloadBytes.Memory);
+            payloadReading = parser.ParseClaims(payloadBytes.Memory);
         }
         catch
         {
-            //Same rationale as the header parse above: the token is untrusted wire input, so any
-            //decode/parse failure here is malformed rather than an internal fault.
+            //Same rationale as the header decode above: the token is untrusted wire input, so a
+            //segment that does not decode is malformed rather than an internal fault.
             return SignedJwtValidationOutcome.Failure(
                 JwsAccessTokenValidationFailureReason.Malformed,
                 "Failed to parse JWS payload.");
+        }
+
+        //A claims set the reading refuses names no claim one way, so the token is malformed.
+        if(payloadReading is not JwtPartRead<JwtPayload> { Part: var payload })
+        {
+            return SignedJwtValidationOutcome.Failure(
+                JwsAccessTokenValidationFailureReason.Malformed,
+                "JWS payload is not one JSON object naming each claim once and naming Unicode text throughout.");
         }
 
         //6. Standard claim checks.

@@ -27,7 +27,11 @@ public sealed record SelfIssuedIdTokenValidationResult
 {
     /// <summary>
     /// Whether the token parsed as a three-part compact JWS with well-formed
-    /// base64url-encoded JSON header and payload.
+    /// base64url-encoded JSON header and payload, the payload one JSON object naming each
+    /// member once and naming Unicode text throughout, whose <c>exp</c> and <c>iat</c>, where
+    /// carried, are NumericDates (RFC 7519 Section 2). A carried <c>exp</c> or <c>iat</c> that
+    /// names no date makes the token structurally invalid, told from an omitted one, which
+    /// leaves <see cref="ExpiresAt"/> or <see cref="IssuedAt"/> <see langword="null"/>.
     /// </summary>
     public bool IsStructurallyValid { get; init; }
 

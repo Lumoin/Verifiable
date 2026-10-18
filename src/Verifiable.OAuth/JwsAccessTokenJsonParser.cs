@@ -3,27 +3,33 @@ using Verifiable.JCose;
 namespace Verifiable.OAuth;
 
 /// <summary>
-/// Delegate-bundle wiring the JSON deserialization of access-token JWS
-/// segments. Parallel to
-/// <see cref="Verifiable.OAuth.Dpop.DpopJwsPartParser"/> on the DPoP side.
-/// The application supplies these via its JSON layer; the validator does
-/// not pick a JSON library.
+/// The readings of a signed JWT's decoded segments the shared validation core consumes
+/// (<see cref="JwsAccessTokenValidator.ValidateAsync"/>, <see cref="Oidc10IdTokenValidator.ValidateAsync"/>, and the OpenID
+/// Connect sign-in's <see cref="AuthCode.OpenIdTokenVerification.Parser"/>). <see cref="Default"/> reads both through the
+/// library's one strict judgement of a document a protocol reads as one JSON object (<see cref="JwtHeader.Read"/>,
+/// <see cref="JwtPayload.Read"/>), so a receiver parses nothing itself and no JSON layer of its own is asked for; each reading
+/// answers the part or the reader's typed refusal of its document (<see cref="JwtPartReading{TPart}"/>), never an exception.
+/// Which members a part must carry, and of which kind, the validator judges, not the reading.
 /// </summary>
 public sealed record JwsAccessTokenJsonParser
 {
-    /// <summary>
-    /// Parses the JSON bytes of the header segment into a typed
-    /// <see cref="JwtHeader"/>. Implementations throw on malformed JSON or
-    /// missing structural members; the validator catches and reports as
-    /// <see cref="JwsAccessTokenValidationFailureReason.InvalidHeader"/>.
-    /// </summary>
-    public required Func<ReadOnlyMemory<byte>, JwtHeader> ParseHeader { get; init; }
+    /// <summary>The library's readings: <see cref="JwtHeader.Read"/> and <see cref="JwtPayload.Read"/>.</summary>
+    public static JwsAccessTokenJsonParser Default { get; } = new()
+    {
+        ParseHeader = static bytes => JwtHeader.Read(bytes.Span),
+        ParseClaims = static bytes => JwtPayload.Read(bytes.Span)
+    };
+
 
     /// <summary>
-    /// Parses the JSON bytes of the payload segment into a typed
-    /// <see cref="JwtPayload"/>. Same throwing semantics as
-    /// <see cref="ParseHeader"/>; the validator catches and reports as
-    /// <see cref="JwsAccessTokenValidationFailureReason.Malformed"/>.
+    /// Reads the JSON bytes of the header segment into a <see cref="JwtHeader"/> or the refusal of its document; the validator
+    /// answers a refusal as <see cref="JwsAccessTokenValidationFailureReason.InvalidHeader"/>.
     /// </summary>
-    public required Func<ReadOnlyMemory<byte>, JwtPayload> ParseClaims { get; init; }
+    public required Func<ReadOnlyMemory<byte>, JwtPartReading<JwtHeader>> ParseHeader { get; init; }
+
+    /// <summary>
+    /// Reads the JSON bytes of the payload segment into a <see cref="JwtPayload"/> or the refusal of its document; the validator
+    /// answers a refusal as <see cref="JwsAccessTokenValidationFailureReason.Malformed"/>.
+    /// </summary>
+    public required Func<ReadOnlyMemory<byte>, JwtPartReading<JwtPayload>> ParseClaims { get; init; }
 }

@@ -59,6 +59,13 @@ namespace Verifiable.OAuth;
 ///   </item>
 ///   <item>
 ///     <description>
+///       <see cref="OAuthMemberNotAString"/> — the token response carries a parameter defined as a
+///       string, <c>refresh_token</c>, <c>scope</c>, <c>id_token</c> or <c>issued_token_type</c>, but as
+///       a value of another kind, naming the parameter and the kind and never the value.
+///     </description>
+///   </item>
+///   <item>
+///     <description>
 ///       <see cref="OAuthAuthorizationServerMetadataUnresolved"/> — the flow could not resolve the
 ///       authorization server metadata document the call needed before a request could even be
 ///       built.
@@ -308,6 +315,27 @@ public sealed record OAuthInvalidLifetime(
     string MemberName,
     JsonMemberLookup Carried,
     OAuthLifetimeDefect Defect,
+    DecisionSupport Support) : OAuthParseError(Support);
+
+
+/// <summary>
+/// A token response carries a parameter its specification defines as a string - <c>refresh_token</c> and <c>scope</c> (RFC 6749
+/// section 5.1, appendices A.17 and A.4), <c>id_token</c> (OpenID Connect Core 1.0 section 3.1.3.3) or <c>issued_token_type</c>
+/// (RFC 8693 section 2.2.1) - but as a value of another kind: a number, a literal, an object or an array. A present member is
+/// judged as present, never read as an omitted one: RFC 6749 section 5.1 lets a response omit <c>scope</c> only when the scope
+/// granted is the scope requested, so reading a present scope of another kind as an omitted one would record the scope requested
+/// as granted.
+/// </summary>
+/// <remarks>
+/// Names the parameter and the kind of value it carries, the facts the JSON reader answered, and no value: a number's spelling
+/// is not carried either, as a member a server writes under a credential's name is no text this refusal copies.
+/// </remarks>
+/// <param name="MemberName">The parameter's name.</param>
+/// <param name="Kind">The kind of value the response carries under it, never <see cref="JsonTopLevelValueKind.String"/>.</param>
+/// <param name="Support">Guidance for the calling application.</param>
+public sealed record OAuthMemberNotAString(
+    string MemberName,
+    JsonTopLevelValueKind Kind,
     DecisionSupport Support) : OAuthParseError(Support);
 
 

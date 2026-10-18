@@ -842,6 +842,109 @@ internal sealed class JwsAccessTokenValidatorTests
 
 
     /// <summary>
+    /// A token whose parts are written by hand and signed over their exact bytes is read through the library's own readings
+    /// (<see cref="JwsAccessTokenJsonParser.Default"/>) and validates: its array <c>aud</c>, its fractional <c>iat</c>, its
+    /// <c>cnf</c> (RFC 7800 section 3) and its nested <c>act</c> chain (RFC 8693 section 4.1) read back as the claims it
+    /// answers.
+    /// </summary>
+    [TestMethod]
+    public async Task ValidatorReadsAHandWrittenTokenThroughTheLibrarysReadingAndAcceptsIt()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        var token = await SignRawAsync(keys.PrivateKey, RawHeaderJson, RawPayloadJson(string.Empty, string.Empty)).ConfigureAwait(false);
+
+        var result = await ValidateAsync(token, keys.PublicKey).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsSuccess, $"Validation must succeed; got {result.FailureReason}: {result.FailureDescription}");
+        Assert.AreEqual(DefaultSubject, result.Claims!.Subject);
+        Assert.AreSequenceEqual(new[] { DefaultAudience, "another-resource" }, result.Claims.Audience);
+        Assert.AreEqual(RawIssuedAt, result.Claims.IssuedAt.ToString());
+        Assert.AreEqual("bound-key-thumbprint", result.Claims.Confirmation!.JwkThumbprint);
+        Assert.AreEqual("agent", result.Claims.Act!.Subject);
+        Assert.AreEqual("earlier-agent", result.Claims.Act.DelegationHistory[0].Subject);
+    }
+
+
+    /// <summary>
+    /// A part the library's reading refuses, or a claims set missing or misshaping a claim the validator requires, is refused
+    /// with its typed reason, on a token otherwise valid and signed over its exact bytes: a header repeating a member names no
+    /// <c>alg</c> one way and is an invalid header; a claims set repeating a claim (RFC 8259 section 4) or holding one naming no
+    /// Unicode text (RFC 8259 section 8.2) is malformed; an <c>exp</c> that is no NumericDate (RFC 7519 section 2) is malformed,
+    /// never read as absent; and a claims set omitting the <c>sub</c> RFC 9068 section 2.2 requires is missing a required claim.
+    /// </summary>
+    /// <param name="headerMember">A member appended to the header, as JSON text after a comma, or empty.</param>
+    /// <param name="omittedClaim">The claim the claims set leaves out, or empty.</param>
+    /// <param name="payloadMember">A member appended to the claims set, as JSON text after a comma, or empty.</param>
+    /// <param name="expected">The reason the refusal names.</param>
+    [TestMethod]
+    [DataRow(",\"alg\":\"ES256\"", "", "", JwsAccessTokenValidationFailureReason.InvalidHeader, DisplayName = "A header repeating alg")]
+    [DataRow("", "", ",\"scope\":\"more\"", JwsAccessTokenValidationFailureReason.Malformed, DisplayName = "A claims set repeating scope")]
+    [DataRow("", "", ",\"note\":\"\\uD800\"", JwsAccessTokenValidationFailureReason.Malformed, DisplayName = "A claim naming no Unicode text")]
+    [DataRow("", "exp", ",\"exp\":\"1900000000\"", JwsAccessTokenValidationFailureReason.Malformed, DisplayName = "An exp of digits in a string")]
+    [DataRow("", "exp", ",\"exp\":1e400", JwsAccessTokenValidationFailureReason.Malformed, DisplayName = "An exp naming no instant a clock represents")]
+    [DataRow("", "sub", "", JwsAccessTokenValidationFailureReason.MissingRequiredClaim, DisplayName = "A claims set omitting sub")]
+    public async Task ValidatorRefusesWhatTheReadingOrTheClaimsRefuseByItsReason(
+        string headerMember,
+        string omittedClaim,
+        string payloadMember,
+        JwsAccessTokenValidationFailureReason expected)
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        var header = string.Concat(RawHeaderJson.AsSpan(0, RawHeaderJson.Length - 1), headerMember, "}");
+        var token = await SignRawAsync(keys.PrivateKey, header, RawPayloadJson(omittedClaim, payloadMember)).ConfigureAwait(false);
+
+        var result = await ValidateAsync(token, keys.PublicKey).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.AreEqual(expected, result.FailureReason, result.FailureDescription);
+    }
+
+
+    /// <summary>The header of a hand-written access token: ES256 under this suite's key identifier, typed <c>at+jwt</c> (RFC 9068 section 2.1).</summary>
+    private static string RawHeaderJson => "{\"alg\":\"ES256\",\"kid\":\"" + DefaultKid + "\",\"typ\":\"at+jwt\"}";
+
+    /// <summary>The hand-written token's <c>iat</c>, a NumericDate with a fraction, one minute before the clock.</summary>
+    private static string RawIssuedAt => (NowInstant - TimeSpan.FromMinutes(1)).ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture) + ".25";
+
+    /// <summary>The hand-written token's <c>exp</c>, an hour after the clock.</summary>
+    private static string RawExpiry => (NowInstant + TimeSpan.FromHours(1)).ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+
+    /// <summary>
+    /// The claims set of a hand-written access token valid for this suite, with one claim left out and a member appended as
+    /// written.
+    /// </summary>
+    /// <param name="omitted">The claim left out, <c>sub</c> or <c>exp</c>, or empty for none.</param>
+    /// <param name="appended">JSON text appended after the last claim, beginning with its comma, or empty.</param>
+    /// <returns>The claims set's JSON text.</returns>
+    private static string RawPayloadJson(string omitted, string appended) =>
+        "{\"iss\":\"" + DefaultIssuer + "\","
+        + (WellKnownJwtClaimNames.IsSub(omitted) ? string.Empty : "\"sub\":\"" + DefaultSubject + "\",")
+        + "\"aud\":[\"" + DefaultAudience + "\",\"another-resource\"],"
+        + (WellKnownJwtClaimNames.IsExp(omitted) ? string.Empty : "\"exp\":" + RawExpiry + ",")
+        + "\"iat\":" + RawIssuedAt + ",\"client_id\":\"" + DefaultClientId + "\",\"scope\":\"" + DefaultScope + "\","
+        + "\"jti\":\"token-1\",\"cnf\":{\"jkt\":\"bound-key-thumbprint\"},\"act\":{\"sub\":\"agent\",\"act\":{\"sub\":\"earlier-agent\"}}"
+        + appended + "}";
+
+
+    /// <summary>Signs a hand-written header and claims set over their exact UTF-8 bytes, never through a serializer.</summary>
+    /// <param name="privateKey">The signing key.</param>
+    /// <param name="headerJson">The header's JSON text.</param>
+    /// <param name="payloadJson">The claims set's JSON text.</param>
+    /// <returns>The compact token.</returns>
+    private async Task<string> SignRawAsync(PrivateKeyMemory privateKey, string headerJson, string payloadJson)
+    {
+        var headerSegment = TestSetup.Base64UrlEncoder(System.Text.Encoding.UTF8.GetBytes(headerJson));
+        var payloadSegment = TestSetup.Base64UrlEncoder(System.Text.Encoding.UTF8.GetBytes(payloadJson));
+
+        using var signature = await privateKey.SignAsync(
+            System.Text.Encoding.ASCII.GetBytes($"{headerSegment}.{payloadSegment}"), BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+
+        return $"{headerSegment}.{payloadSegment}.{TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan())}";
+    }
+
+
+    /// <summary>
     /// The fixture's baseline RFC 9068 access-token payload — valid <c>iss</c>/<c>aud</c>/timing for
     /// this suite's trust anchor — that the <c>act</c>/<c>may_act</c> tests overlay their claim under
     /// test onto.

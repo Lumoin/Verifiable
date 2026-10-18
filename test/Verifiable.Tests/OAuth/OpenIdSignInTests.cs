@@ -207,6 +207,38 @@ internal sealed class OpenIdSignInTests
     }
 
 
+    /// <summary>
+    /// A caller's own field named <c>nonce</c> is dropped for the nonce the OpenID Connect start mints and holds, the one
+    /// recognition of the parameter's name deciding which field it is (OpenID Connect Core 1.0 §3.1.2.1), so the redirect carries
+    /// one nonce and it is the one held with the flow.
+    /// </summary>
+    [TestMethod]
+    public async Task ACallersNonceFieldIsDroppedForTheNonceTheStartMints()
+    {
+        const string CallersNonce = "the-callers-own-nonce";
+        var keys = TestKeyMaterialProvider.CreateP256KeyMaterial();
+        using var publicKey = keys.PublicKey;
+        using var privateKey = keys.PrivateKey;
+        var provider = new StandInProvider(this, privateKey);
+        var client = new OAuthClient(provider.Infrastructure).AuthCode;
+        var fields = new OAuthFormEncodedFields(new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId,
+            [OAuthRequestParameterNames.Nonce] = CallersNonce
+        });
+
+        var started = await client.StartOpenIdAsync(
+            Registration(), Callback, fields, [], resource: null, SignInLifetime, TestContext.CancellationToken).ConfigureAwait(false);
+        var query = HttpUtility.ParseQueryString(started.RedirectUri!.Query);
+        var sent = query.GetValues(OAuthRequestParameterNames.Nonce);
+
+        Assert.IsNotNull(sent);
+        Assert.HasCount(1, sent, "The redirect carries one nonce.");
+        Assert.AreNotEqual(CallersNonce, sent[0], "The caller's field of the flow-owned name is dropped.");
+        Assert.AreEqual(sent[0], Assert.IsInstanceOfType<ParCompletedState>(provider.States[query[OAuthRequestParameterNames.State]!]).Nonce);
+    }
+
+
     /// <summary>Answers the callback with a code for the state, then exchanges it as an OpenID Connect sign-in.</summary>
     /// <param name="client">The client.</param>
     /// <param name="provider">The stand-in provider.</param>

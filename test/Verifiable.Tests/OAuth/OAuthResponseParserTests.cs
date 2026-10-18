@@ -301,6 +301,84 @@ internal sealed class OAuthResponseParsersTests
     }
 
 
+    /// <summary>
+    /// A token response's <c>scope</c> present as a value of another kind than the string RFC 6749 §5.1 and appendix A.4 define is
+    /// refused naming the member and the kind, never read as an omitted scope: §5.1 lets a response omit the scope only when the
+    /// scope granted is the one requested, so reading a present scope of another kind as omitted would have a client record the
+    /// scope it requested as granted. The refusal carries no value, the text an array or an object holds among none.
+    /// </summary>
+    /// <param name="scope">The <c>scope</c> value as the body writes it.</param>
+    /// <param name="expectedKind">The kind the refusal names.</param>
+    [TestMethod]
+    [DataRow("5", JsonTopLevelValueKind.Number, DisplayName = "A number")]
+    [DataRow("""["openid"]""", JsonTopLevelValueKind.Array, DisplayName = "An array")]
+    [DataRow("""{"openid":"openid"}""", JsonTopLevelValueKind.Object, DisplayName = "An object")]
+    [DataRow("true", JsonTopLevelValueKind.True, DisplayName = "The true literal")]
+    [DataRow("null", JsonTopLevelValueKind.Null, DisplayName = "The null literal")]
+    public void ATokenAnswerCarryingAScopeOfAnotherKindIsRefusedNamingTheScope(string scope, JsonTopLevelValueKind expectedKind)
+    {
+        var reading = OAuthResponseParsers.ReadTokenResponse(
+            Respond($$"""{"access_token":"access-credential-text","token_type":"Bearer","scope":{{scope}}}"""));
+
+        Assert.IsFalse(reading.Outcome.IsSuccess, "A present scope of another kind is no scope the answer omits.");
+
+        var refused = Assert.IsInstanceOfType<OAuthMemberNotAString>(reading.Outcome.Error);
+
+        Assert.AreEqual(OAuthRequestParameterNames.Scope, refused.MemberName);
+        Assert.AreEqual(expectedKind, refused.Kind);
+        Assert.AreEqual("RFC 6749 §5.1", refused.Support.SpecificationReference);
+        Assert.DoesNotContain("openid", refused.Support.Summary, "The refusal names the kind, never the value.");
+        Assert.DoesNotContain("access-credential-text", refused.Support.Summary, "The refusal copies no credential.");
+    }
+
+
+    /// <summary>
+    /// The other optional parameters a token response defines as strings - <c>refresh_token</c> (RFC 6749 §5.1), <c>id_token</c>
+    /// (OpenID Connect Core 1.0 §3.1.3.3) and <c>issued_token_type</c> (RFC 8693 §2.2.1) - are judged by the same one reading:
+    /// present as a number, each is refused naming it, never read as the answer issuing none.
+    /// </summary>
+    /// <param name="name">The parameter carried as a number.</param>
+    /// <param name="expectedReference">The clause defining it as a string.</param>
+    [TestMethod]
+    [DataRow("refresh_token", "RFC 6749 §5.1", DisplayName = "refresh_token")]
+    [DataRow("id_token", "OpenID Connect Core 1.0 §3.1.3.3", DisplayName = "id_token")]
+    [DataRow("issued_token_type", "RFC 8693 §2.2.1", DisplayName = "issued_token_type")]
+    public void EveryOptionalStringParameterOfAnotherKindIsRefusedNamingIt(string name, string expectedReference)
+    {
+        var reading = OAuthResponseParsers.ReadTokenResponse(
+            Respond($$"""{"access_token":"at","token_type":"Bearer","{{name}}":12345}"""));
+
+        Assert.IsFalse(reading.Outcome.IsSuccess, "A present parameter of another kind is no parameter the answer omits.");
+
+        var refused = Assert.IsInstanceOfType<OAuthMemberNotAString>(reading.Outcome.Error);
+
+        Assert.AreEqual(name, refused.MemberName);
+        Assert.AreEqual(JsonTopLevelValueKind.Number, refused.Kind);
+        Assert.AreEqual(expectedReference, refused.Support.SpecificationReference);
+        Assert.DoesNotContain("12345", refused.Support.Summary, "A number's spelling is not carried either.");
+    }
+
+
+    /// <summary>
+    /// The scope a token response carries as a string is the scope read, decoded once, and a scope it omits is none, as RFC 6749
+    /// §5.1 has it: the two answers the refusal of a scope of another kind is told apart from.
+    /// </summary>
+    [TestMethod]
+    public void AStringScopeIsReadAndAnOmittedScopeIsNone()
+    {
+        var carried = OAuthResponseParsers.ReadTokenResponse(
+            Respond(/*lang=json,strict*/ """{"access_token":"at","token_type":"Bearer","scope":"openid profile"}"""));
+
+        var omitted = OAuthResponseParsers.ReadTokenResponse(
+            Respond(/*lang=json,strict*/ """{"access_token":"at","token_type":"Bearer"}"""));
+
+        Assert.IsTrue(carried.Outcome.IsSuccess);
+        Assert.AreEqual("openid profile", carried.Outcome.Value.Scope);
+        Assert.IsTrue(omitted.Outcome.IsSuccess);
+        Assert.IsNull(omitted.Outcome.Value.Scope, "An omitted scope is no scope.");
+    }
+
+
     [TestMethod]
     public void ParseParResponseReturnsInvalidFieldValueForRelativeRequestUri()
     {

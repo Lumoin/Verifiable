@@ -10,6 +10,7 @@ using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
+using Verifiable.OAuth.Validation;
 
 namespace Verifiable.OAuth.Oid4Vp.Server;
 
@@ -142,9 +143,13 @@ public static class SdJwtVpTokenVerification
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The parsed and crypto-verified VP token contents.</returns>
     /// <exception cref="FormatException">
-    /// Thrown when the issuer-signed payload repeats a top-level claim name, or when it carries a
-    /// <c>status</c> claim whose value does not meet Token Status List Section 6.1/6.2. Both are
-    /// Wallet-attributable malformed presentations on the executor's own malformed route.
+    /// Thrown when the issuer-signed payload repeats a top-level claim name, when it carries a
+    /// <c>status</c> claim whose value does not meet Token Status List Section 6.1/6.2, when the
+    /// KB-JWT's payload is not one JSON object naming each claim once and naming Unicode text
+    /// throughout, or when the KB-JWT carries an <c>iat</c> that is no NumericDate (RFC 7519 Section
+    /// 2), which is told from an omitted <c>iat</c>, answered as <see cref="VpTokenParsed.KbJwtIat"/>
+    /// <see langword="null"/>. Each is a Wallet-attributable malformed presentation on the executor's
+    /// own malformed route.
     /// </exception>
     public static async ValueTask<VpTokenParsed> VerifyAsync(
         string vpToken,
@@ -294,12 +299,25 @@ public static class SdJwtVpTokenVerification
                 using IMemoryOwner<byte> kbPayloadBytes = decoder(kbParts[1], pool);
                 ReadOnlySpan<byte> kbPayload = kbPayloadBytes.Memory.Span;
 
+                //The KB-JWT's claims set is read as the one JSON object it is, as the issuer-signed payload is: one repeating a
+                //claim name shows one verifier one value and another a different one, so the presentation is malformed.
+                if(JwkJsonReader.ReadTopLevelMembers(kbPayload) is not JsonTopLevelMembers kbClaims)
+                {
+                    throw new FormatException(
+                        "The KB-JWT's payload is not one well-formed JSON object naming each claim once and naming Unicode text throughout.");
+                }
+
                 kbNonce = JwkJsonReader.ExtractStringValue(kbPayload, "nonce"u8);
                 kbAud = JwkJsonReader.ExtractStringValue(kbPayload, "aud"u8);
                 claimedSdHash = JwkJsonReader.ExtractStringValue(kbPayload, "sd_hash"u8);
 
-                //RFC 7519 Section 2: the KB-JWT's iat is a NumericDate, read as written.
-                kbIat = JwkJsonReader.ExtractNumericDate(kbPayload, WellKnownJwtClaimNames.IatUtf8);
+                //RFC 7519 Section 2: the KB-JWT's iat is a NumericDate, read as written. RFC 9901 Section 4.3 has iat REQUIRED; one
+                //the KB-JWT carries that names no date makes the presentation malformed, never one read as carrying no iat, which
+                //the key-binding checks answer as absent.
+                if(NumericDateClaims.Read(kbClaims, WellKnownJwtClaimNames.Iat, out kbIat) is NumericDateReadResult.Malformed)
+                {
+                    throw new FormatException("The KB-JWT's iat is not a NumericDate.");
+                }
 
                 //OID4VP 1.0 §8.4: optional transaction_data_hashes array bound
                 //into the KB-JWT when the Authorization Request carried a

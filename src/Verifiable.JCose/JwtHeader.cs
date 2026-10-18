@@ -55,6 +55,24 @@ public sealed class JwtHeader : JoseDictionary, IEquatable<JwtHeader>
         : base(parameters) { }
 
 
+    /// <summary>
+    /// Reads a decoded JWS protected header once through the library's one strict judgement of a document a protocol reads as one
+    /// JSON object (<see cref="JwkJsonReader.ReadTopLevelMembers"/>), every member at every depth held as a claims set holds it, a
+    /// present <c>null</c> held as a member with no value; a document the judgement refuses is answered with its refusal. What
+    /// the members name is the reader of the header's to judge. Never throws on the bytes it is handed.
+    /// </summary>
+    /// <param name="json">The header's UTF-8 JSON bytes, the protected header segment base64url-decoded.</param>
+    /// <returns>The header, or the refusal of its document.</returns>
+    public static JwtPartReading<JwtHeader> Read(ReadOnlySpan<byte> json)
+    {
+        var header = new JwtHeader();
+
+        return JwkJsonReader.ReadObjectValuesInto(json, header) is { } refused
+            ? new JwtPartRefused<JwtHeader>(refused)
+            : new JwtPartRead<JwtHeader>(header);
+    }
+
+
     /// <inheritdoc/>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool Equals(JwtHeader? other)

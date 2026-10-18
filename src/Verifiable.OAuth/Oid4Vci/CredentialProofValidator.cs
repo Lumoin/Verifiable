@@ -499,7 +499,7 @@ public static class CredentialProofValidator
         List<string>? x5cValues;
         Dictionary<string, object>? jwkMembers;
         string? audience;
-        var issuedAt = default(NumericDate);
+        NumericDate? issuedAt;
         string? nonce;
         try
         {
@@ -512,8 +512,17 @@ public static class CredentialProofValidator
             //RFC 7515 §4 / RFC 7519 §4: gate both the header and the claims set for well-formedness — a
             //repeated name at any nesting depth, including inside a nested "jwk" — before extracting a
             //single field from either, so typ/alg/kid/jwk/aud/nonce selection below never runs against a
-            //first occurrence while a duplicate second occurrence goes unnoticed.
-            if(!JwkJsonReader.IsWellFormedJsonDocument(header) || !JwkJsonReader.IsWellFormedJsonDocument(payload))
+            //first occurrence while a duplicate second occurrence goes unnoticed. The claims set is read as
+            //the one JSON object it is, so its claims are read as its members.
+            if(!JwkJsonReader.IsWellFormedJsonDocument(header) || JwkJsonReader.ReadTopLevelMembers(payload) is not JsonTopLevelMembers claims)
+            {
+                return CredentialProofValidationResult.Failure(CredentialProofValidationFailureReason.Malformed);
+            }
+
+            //§F.1: "iat: REQUIRED (number)", a NumericDate (RFC 7519 Section 2). One the claims set carries that names no date -
+            //a string of digits, another kind of value, a count no clock represents - makes the proof malformed, never one read
+            //as carrying no iat; an omitted iat is answered by the window check below.
+            if(NumericDateClaims.Read(claims, WellKnownJwtClaimNames.Iat, out issuedAt) is NumericDateReadResult.Malformed)
             {
                 return CredentialProofValidationResult.Failure(CredentialProofValidationFailureReason.Malformed);
             }
@@ -529,9 +538,8 @@ public static class CredentialProofValidator
                 ? JwkJsonReader.ExtractObjectProperties(header, WellKnownJoseHeaderNames.JwkUtf8)
                 : null;
 
-            audience = JwkJsonReader.ExtractStringValue(payload, WellKnownJwtClaimNames.AudUtf8);
-            issuedAt = JwkJsonReader.ExtractNumericDate(payload, WellKnownJwtClaimNames.IatUtf8);
-            nonce = JwkJsonReader.ExtractStringValue(payload, WellKnownJwtClaimNames.NonceUtf8);
+            audience = claims.Find(WellKnownJwtClaimNames.Aud) is JsonMemberString { Text: var audienceText } ? audienceText : null;
+            nonce = claims.Find(WellKnownJwtClaimNames.Nonce) is JsonMemberString { Text: var nonceText } ? nonceText : null;
         }
         catch
         {

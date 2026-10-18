@@ -1,6 +1,7 @@
 using System.Buffers;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
+using Verifiable.OAuth.Validation;
 
 namespace Verifiable.OAuth.Oid4Vci;
 
@@ -71,10 +72,8 @@ public static class KeyAttestationParser
         //Appendix D.1: iat and exp are NumericDates (RFC 7519 Section 2). A date the body omits is absent; one it carries that
         //is no NumericDate - a string of digits, another kind of value, a count no clock represents - makes the attestation
         //malformed, never one read as carrying no date, so a present exp is always enforced.
-        var issuedAt = DateClaimOf(bodyMembers, WellKnownJwtClaimNames.Iat);
-        var expiresAt = DateClaimOf(bodyMembers, WellKnownJwtClaimNames.Exp);
-
-        if(issuedAt is DateClaimMalformed || expiresAt is DateClaimMalformed)
+        if(NumericDateClaims.Read(bodyMembers, WellKnownJwtClaimNames.Iat, out var issuedAt) is NumericDateReadResult.Malformed
+            || NumericDateClaims.Read(bodyMembers, WellKnownJwtClaimNames.Exp, out var expiresAt) is NumericDateReadResult.Malformed)
         {
             return false;
         }
@@ -105,42 +104,10 @@ public static class KeyAttestationParser
             Nonce = JwkJsonReader.ExtractStringValue(body, WellKnownJwtClaimNames.NonceUtf8),
             Certification = JwkJsonReader.ExtractStringValue(
                 body, AttestationProofParameterNames.CertificationUtf8),
-            IssuedAt = (issuedAt as DateClaimCarried)?.Date,
-            ExpiresAt = (expiresAt as DateClaimCarried)?.Date
+            IssuedAt = issuedAt,
+            ExpiresAt = expiresAt
         };
 
         return true;
     }
-
-
-    /// <summary>
-    /// What the body carries under a date claim's name: no such member, a JSON number naming a NumericDate, or a member
-    /// naming no date - a string, another kind of value, or a number naming an instant no clock represents.
-    /// </summary>
-    /// <param name="members">The body's top-level members.</param>
-    /// <param name="name">The claim's name.</param>
-    /// <returns>The claim's reading.</returns>
-    private static DateClaim DateClaimOf(JsonTopLevelMembers members, string name) => members.Find(name) switch
-    {
-        JsonMemberAbsent => new DateClaimAbsent(),
-        JsonMemberNumber number when number.ToNumericDate() is NumericDate date => new DateClaimCarried(date),
-        _ => new DateClaimMalformed()
-    };
-
-
-    /// <summary>The reading of one date claim of the body.</summary>
-    private abstract record DateClaim;
-
-
-    /// <summary>The body carries no member of the claim's name.</summary>
-    private sealed record DateClaimAbsent : DateClaim;
-
-
-    /// <summary>The body carries the claim as a JSON number naming a NumericDate.</summary>
-    /// <param name="Date">The date as written.</param>
-    private sealed record DateClaimCarried(NumericDate Date) : DateClaim;
-
-
-    /// <summary>The body carries the claim as a member naming no NumericDate.</summary>
-    private sealed record DateClaimMalformed : DateClaim;
 }

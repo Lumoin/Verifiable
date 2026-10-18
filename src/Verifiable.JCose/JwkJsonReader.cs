@@ -579,59 +579,6 @@ public static class JwkJsonReader
 
 
     /// <summary>
-    /// Extracts a NumericDate claim from a top-level JSON property by key (RFC 7519 Section 2: "A JSON numeric value
-    /// representing the number of seconds from 1970-01-01T00:00:00Z UTC", in which "non-integer values can be represented")
-    /// as the date it names, every digit kept (<see cref="NumericDate.FromJsonNumber"/>), so the reader judges the date its
-    /// issuer wrote against each bound exactly. The value is one JSON number token (RFC 8259 Section 6: an optional minus, an
-    /// integer part without a leading zero before another digit, an optional fraction and an optional exponent) closed by a
-    /// structural byte or white space; any other value - a string of digits among them - is none.
-    /// </summary>
-    /// <param name="json">UTF-8 JSON bytes to search.</param>
-    /// <param name="key">The property key as a UTF-8 literal.</param>
-    /// <returns>
-    /// The date, if the key was found and its value is a NumericDate naming an instant a clock represents; otherwise,
-    /// <see langword="null"/>.
-    /// </returns>
-    public static NumericDate? ExtractNumericDate(ReadOnlySpan<byte> json, ReadOnlySpan<byte> key)
-    {
-        var keyStart = IndexOfKey(json, key);
-
-        if(keyStart < 0)
-        {
-            return null;
-        }
-
-        var start = SkipWhitespaceAndColon(json, keyStart + key.Length + 1);
-
-        if(start < 0 || start >= json.Length)
-        {
-            return null;
-        }
-
-        var end = start;
-
-        while(end < json.Length && IsNumberTokenByte(json[end]))
-        {
-            end++;
-        }
-
-        if(end < json.Length && !IsNumberTerminator(json[end]))
-        {
-            return null;
-        }
-
-        return NumericDate.FromJsonNumber(json[start..end]);
-    }
-
-
-    /// <summary>Whether a byte may appear in a JSON number token (RFC 8259 Section 6): a digit, a sign, a point or an exponent mark.</summary>
-    /// <param name="value">The byte.</param>
-    /// <returns><see langword="true"/> for a byte a number token may carry.</returns>
-    private static bool IsNumberTokenByte(byte value) =>
-        value is (>= (byte)'0' and <= (byte)'9') or (byte)'-' or (byte)'+' or (byte)'.' or (byte)'e' or (byte)'E';
-
-
-    /// <summary>
     /// Extracts an object-valued JSON property and returns it as a string,
     /// including the outer braces. The returned string is a self-contained
     /// JSON object: <c>{...}</c>.
@@ -1226,6 +1173,144 @@ public static class JwkJsonReader
         }
 
         return new JsonTopLevelMembers(members);
+    }
+
+
+    /// <summary>
+    /// Reads every member of the one JSON object a document is, at every depth, into the claims dictionary a JOSE part is held as
+    /// (<see cref="JwtHeader.Read"/>, <see cref="JwtPayload.Read"/>), after the one strict judgement <see cref="ReadTopLevelMembers"/>
+    /// answers a document by: a string as its text decoded once (RFC 8259 section 7), a number as the claims set holds it
+    /// (<see cref="DecimalNumber.ToClaimValue"/>, every digit kept), <c>true</c> and <c>false</c> as booleans, <c>null</c> as a
+    /// member present with no value, an object as a dictionary of its members and an array as a list of its elements, each read
+    /// the same way, so a member is never dropped for its kind and a present <c>null</c> is never read as an absent member.
+    /// </summary>
+    /// <param name="json">The UTF-8 bytes of the document.</param>
+    /// <param name="values">The dictionary the members are read into, empty.</param>
+    /// <returns>The refusal of the document with its reason, or <see langword="null"/> when every member was read.</returns>
+    internal static JsonTopLevelReading? ReadObjectValuesInto(ReadOnlySpan<byte> json, JoseDictionary values)
+    {
+        if(StrictRefusalOf(json) is { } refused)
+        {
+            return refused;
+        }
+
+        var objectStart = 0;
+        SkipWhitespace(json, ref objectStart);
+
+        //Every string and number the validation admits reads to its value, so one that reads to none is no well-formed document.
+        return TryReadAdmittedObject(json, objectStart, values) ? null : new JsonNotOneObject();
+    }
+
+
+    /// <summary>Reads the members of an object of an admitted document into a dictionary, each value as <see cref="TryReadAdmittedValue"/> reads it.</summary>
+    /// <param name="json">The admitted document.</param>
+    /// <param name="objectStart">The position of the object's opening brace.</param>
+    /// <param name="into">The dictionary the members are read into.</param>
+    /// <returns><see langword="true"/> when every member was read.</returns>
+    private static bool TryReadAdmittedObject(ReadOnlySpan<byte> json, int objectStart, Dictionary<string, object> into)
+    {
+        var pos = objectStart + 1;
+
+        while(TryReadTopLevelMember(json, ref pos, out var place))
+        {
+            if(DecodeContentToString(json, place.NameStart, place.NameLength) is not { } name
+                || !TryReadAdmittedValue(json, place.ValueStart, place.ValueEnd, out var value))
+            {
+                return false;
+            }
+
+            //A JSON null is held as a member present with no value, as the library's JSON layer holds it, never left out.
+            into[name] = value!;
+        }
+
+        return true;
+    }
+
+
+    /// <summary>Reads the elements of an array of an admitted document into a list, each as <see cref="TryReadAdmittedValue"/> reads it.</summary>
+    /// <param name="json">The admitted document.</param>
+    /// <param name="arrayStart">The position of the array's opening bracket.</param>
+    /// <param name="into">The list the elements are read into, in document order.</param>
+    /// <returns><see langword="true"/> when every element was read.</returns>
+    private static bool TryReadAdmittedArray(ReadOnlySpan<byte> json, int arrayStart, List<object> into)
+    {
+        var pos = arrayStart + 1;
+        SkipWhitespace(json, ref pos);
+
+        //The document is well formed, so every step lands on an element, a separator or the closing bracket.
+        while(json[pos] != (byte)']')
+        {
+            if(json[pos] == (byte)',')
+            {
+                pos++;
+                SkipWhitespace(json, ref pos);
+            }
+
+            var end = SkipValue(json, pos);
+
+            if(!TryReadAdmittedValue(json, pos, end, out var element))
+            {
+                return false;
+            }
+
+            //A JSON null element is held as an element with no value, never left out of the list.
+            into.Add(element!);
+            pos = end;
+            SkipWhitespace(json, ref pos);
+        }
+
+        return true;
+    }
+
+
+    /// <summary>
+    /// Reads one value of an admitted document, spanning <c>[start, end)</c>, as a claims set holds it: a string decoded once, a
+    /// number as <see cref="DecimalNumber.ToClaimValue"/> boxes it, a literal as a boolean or no value, an object as a dictionary
+    /// and an array as a list.
+    /// </summary>
+    /// <param name="json">The admitted document.</param>
+    /// <param name="start">The position of the value's first byte.</param>
+    /// <param name="end">The position one past the value's last byte.</param>
+    /// <param name="value">The value read, <see langword="null"/> for a JSON null or a value that reads to none.</param>
+    /// <returns><see langword="true"/> when the value was read.</returns>
+    /// <exception cref="InvalidOperationException">The value's kind is none the reader names.</exception>
+    private static bool TryReadAdmittedValue(ReadOnlySpan<byte> json, int start, int end, out object? value)
+    {
+        value = null;
+
+        switch(KindAt(json, start))
+        {
+            case JsonTopLevelValueKind.String:
+                value = DecodeContentToString(json, start + 1, end - start - 2);
+
+                return value is not null;
+            case JsonTopLevelValueKind.Number:
+                value = DecimalNumber.FromJsonNumber(json[start..end])?.ToClaimValue();
+
+                return value is not null;
+            case JsonTopLevelValueKind.True:
+                value = true;
+
+                return true;
+            case JsonTopLevelValueKind.False:
+                value = false;
+
+                return true;
+            case JsonTopLevelValueKind.Null:
+                return true;
+            case JsonTopLevelValueKind.Object:
+                var members = new Dictionary<string, object>(StringComparer.Ordinal);
+                value = members;
+
+                return TryReadAdmittedObject(json, start, members);
+            case JsonTopLevelValueKind.Array:
+                var elements = new List<object>();
+                value = elements;
+
+                return TryReadAdmittedArray(json, start, elements);
+            default:
+                throw new InvalidOperationException($"The value's kind {KindAt(json, start)} is none the reader names.");
+        }
     }
 
 
@@ -3156,12 +3241,15 @@ public static class JwkJsonReader
     /// </summary>
     /// <param name="jwksJson">The JWK Set document as UTF-8 JSON bytes.</param>
     /// <returns>The refusal, or <see langword="null"/> when the set is admitted.</returns>
+    /// <exception cref="InvalidOperationException">The judgement answered a reading it never answers, which no outcome is given for.</exception>
     private static JwkSelectionResult? AdmissionRefusalOf(ReadOnlySpan<byte> jwksJson) => StrictRefusalOf(jwksJson) switch
     {
         null => null,
         JsonRepeatedMemberName repeated => JwkSelectionResult.RepeatedMemberName(repeated),
         JsonUndecodableMember undecodable => JwkSelectionResult.UndecodableMember(undecodable),
-        _ => JwkSelectionResult.MalformedDocument()
+        JsonNotOneObject => JwkSelectionResult.MalformedDocument(),
+        var unanswered => throw new InvalidOperationException(
+            $"The strict judgement answered {unanswered.GetType().FullName}, no refusal it gives, so no selection outcome is given for it.")
     };
 
 

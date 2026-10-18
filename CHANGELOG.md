@@ -28,7 +28,6 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - `Verifiable.JCose.DecimalNumber`: a number in decimal notation held exactly (`FromJsonNumber`, `FromInteger`, `FromDecimal`,
   `FromDouble`, `Of`), compared exactly and written back as the JSON number it is; `ToClaimValue` boxes it as the library's
   JSON layer boxes a number it reads.
-- `JwkJsonReader.ExtractNumericDate`, the span reader's NumericDate, returning the date or none.
 - `JwsAlgorithmVerification`, `JwsKeyAlgorithmBinding` and `JwsKeyAlgorithmRefusal`: a supplied JWS verification bound to the
   one algorithm it performs, and the header's algorithm judged against the key before anything is verified.
 - `CryptoFormatConversions.ResolveJwaAlgorithm` and `JwaAlgorithmResolution`: the JWA algorithm a key type is named by, as a
@@ -48,6 +47,17 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - `ClientAssertionClaimRules.IsAcceptedToTheClocksEnd` and `ClientAssertionClaimsJudgement.AcceptedToTheClocksEnd`: whether a
   client assertion's window, its `exp` extended by the clock-skew tolerance, reaches past the clock's last instant, stated
   as a fact rather than an instant clipped to the clock; `ClientAssertionClaimsJudgement.Expiry` carries the `exp` as written.
+- `OAuthMemberNotAString` (`Verifiable.OAuth`, public, an `OAuthParseError` case; its name, home and visibility await the
+  owner's word): a token response carrying `refresh_token`, `scope`, `id_token` or `issued_token_type` as a value of another
+  kind than the string each is defined as, naming the parameter and the kind (`JsonTopLevelValueKind`) and carrying no value.
+- `OAuthRequestParameterNames.IsRefreshToken`, `IsIdToken` and `IsNonce`: the recognitions of those parameter names beside
+  `IsAccessToken`, each an exact ordinal comparison.
+- `JwtHeader.Read` and `JwtPayload.Read` (`Verifiable.JCose`): a signed JWT's decoded header and claims set read once
+  through the strict judgement `JwkJsonReader.ReadTopLevelMembers` answers a document by, every member at every depth held
+  as a claims set holds it (a number every digit kept, an object as a dictionary, an array as a list, a present `null` as a
+  member with no value), answering `JwtPartReading<TPart>` (`JwtPartRead<TPart>`, `JwtPartRefused<TPart>` carrying the
+  reader's own refusal), never throwing; `JwsAccessTokenJsonParser.Default` is the pair, so a receiver of an access token or
+  an ID Token parses no part of it itself. The reading types' names and home await the owner's word.
 
 ### Changed
 
@@ -89,6 +99,25 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   represents - so `KeyAttestationVerifier` refuses such an attestation as `Malformed` where a malformed `exp` was read as
   none and its expiry was not enforced; an attestation omitting `exp` (OPTIONAL, OID4VCI 1.0 Appendix D.1) still verifies.
   A body holding a string naming no Unicode text is refused too.
+- `OAuthResponseParsers.ReadTokenResponse` and `ParseTokenResponse` refuse a present `refresh_token`, `scope`, `id_token` or
+  `issued_token_type` of another kind than a string as `OAuthMemberNotAString` where it was read as omitted: a `scope` that
+  is a number, an array, an object or a literal no longer reads as the scope requested having been granted. The code
+  exchange answers such a refusal as `invalid_response`, as it answers an inadmissible lifetime.
+- `JwsAccessTokenJsonParser.ParseHeader` and `ParseClaims` answer a `JwtPartReading<TPart>` in place of a part or an
+  exception; the shared validator answers a refused header as `InvalidHeader` and a refused claims set as `Malformed`. A
+  token whose header or claims set names a member twice at any depth, or holds a string naming no Unicode text, is refused
+  through the library's reading; a present `null` claim is held as present, so a `null` `exp`, `nbf` or `act` is refused
+  as malformed rather than read as absent.
+- `CredentialProofValidator` reads the proof's claims set as the one JSON object it is and refuses an `iat` that is no
+  NumericDate as `Malformed` where it was answered as `IatOutOfWindow`, an omitted `iat` staying `IatOutOfWindow`; a claims set
+  holding a string naming no Unicode text is refused as `Malformed` too.
+- `SelfIssuedIdTokenValidation` answers a token carrying an `exp` or an `iat` that is no NumericDate as structurally
+  invalid where the date was read as absent, so a malformed `iat` is no longer surfaced as none; an omitted `iat` still
+  validates and an omitted `exp` is still not unexpired.
+- `SdJwtVpTokenVerification` refuses a KB-JWT whose payload is not one JSON object naming each claim once, or whose `iat` is
+  no NumericDate, as a malformed presentation (`FormatException`) where the `iat` was read as absent.
+- The JWK Set admission names the reader's `JsonNotOneObject` as `MalformedDocument` explicitly and refuses any other
+  reading as no outcome, so no refusal the reader comes to answer is folded into `MalformedDocument` unread.
 
 ### Removed
 
@@ -96,7 +125,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   comparison.
 - `AuthorizationServerCodecs.ClientAssertionPayloadDeserializer`: the payload codec states every member as written, so a
   client assertion's claims set is read through `JwtPayloadDeserializer` like every other.
-- `JwkJsonReader.TryExtractNumericDate`, replaced by `ExtractNumericDate`.
+- `JwkJsonReader.TryExtractNumericDate`, and its successor `JwkJsonReader.ExtractNumericDate` (published locally as 1023): the
+  text-scan reader turned a present malformed date into absence; every reader of a date reads the members of its claims set
+  (`JwkJsonReader.ReadTopLevelMembers`, `JsonMemberNumber.ToNumericDate`) and tells the two apart.
 
 ### Fixed
 

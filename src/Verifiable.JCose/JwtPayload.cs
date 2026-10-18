@@ -59,6 +59,26 @@ public sealed class JwtPayload : JoseDictionary, IEquatable<JwtPayload>
         : base(claims) { }
 
 
+    /// <summary>
+    /// Reads a decoded JWS claims set once through the library's one strict judgement of a document a protocol reads as one JSON
+    /// object (<see cref="JwkJsonReader.ReadTopLevelMembers"/>), every claim at every depth held as a claims set holds it: a
+    /// number with every digit kept (<see cref="DecimalNumber.ToClaimValue"/>), an object as a dictionary, an array as a list, a
+    /// present <c>null</c> as a claim with no value, never left out. A document the judgement refuses is answered with its
+    /// refusal. What the claims name - a required claim's absence, a date's bound - is the validator's to judge. Never throws on
+    /// the bytes it is handed.
+    /// </summary>
+    /// <param name="json">The claims set's UTF-8 JSON bytes, the payload segment base64url-decoded.</param>
+    /// <returns>The claims set, or the refusal of its document.</returns>
+    public static JwtPartReading<JwtPayload> Read(ReadOnlySpan<byte> json)
+    {
+        var payload = new JwtPayload();
+
+        return JwkJsonReader.ReadObjectValuesInto(json, payload) is { } refused
+            ? new JwtPartRefused<JwtPayload>(refused)
+            : new JwtPartRead<JwtPayload>(payload);
+    }
+
+
     /// <inheritdoc/>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool Equals(JwtPayload? other)

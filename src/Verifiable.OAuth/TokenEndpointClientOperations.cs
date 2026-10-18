@@ -504,6 +504,11 @@ internal static class TokenEndpointClientOperations
                 AuthCodeFlowRefusalOrigin.ClientJudgement,
                 OAuthClientErrors.InvalidResponse,
                 $"{lifetime.MemberName}: {lifetime.Support.Summary}"),
+            OAuthMemberNotAString notAString => AuthCodeFlowEndpointResult.Refused(
+                AuthCodeFlowEndpointOutcome.BadRequest,
+                AuthCodeFlowRefusalOrigin.ClientJudgement,
+                OAuthClientErrors.InvalidResponse,
+                $"{notAString.MemberName}: {notAString.Support.Summary}"),
             OAuthMalformedResponse mr => AuthCodeFlowEndpointResult.Refused(
                 AuthCodeFlowEndpointOutcome.InternalError,
                 AuthCodeFlowRefusalOrigin.ClientJudgement,

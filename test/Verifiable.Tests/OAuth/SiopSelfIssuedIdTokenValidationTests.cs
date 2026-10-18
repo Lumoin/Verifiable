@@ -629,6 +629,129 @@ unresolvable,
     }
 
 
+    /// <summary>
+    /// RFC 7519 Section 2: <c>exp</c> and <c>iat</c> are NumericDates. A token carrying either as a value that names no date - a
+    /// string of digits, a literal, an object, an array, a number naming an instant no clock represents - is structurally
+    /// invalid, never one read as carrying no date: a relying party policing <c>iat</c> is never handed an absent date for a
+    /// token that carries one, and an unreadable <c>exp</c> is told from an omitted one. Everything else about the token is valid
+    /// and it is signed over its exact bytes.
+    /// </summary>
+    /// <param name="claim">The date claim written malformed.</param>
+    /// <param name="value">Its value as the payload writes it.</param>
+    [TestMethod]
+    [DataRow("exp", "\"1893456000\"", DisplayName = "exp as a string of digits")]
+    [DataRow("exp", "true", DisplayName = "exp as the true literal")]
+    [DataRow("exp", "null", DisplayName = "exp as the null literal")]
+    [DataRow("exp", "1e400", DisplayName = "exp naming no instant a clock represents")]
+    [DataRow("iat", "\"1700000000\"", DisplayName = "iat as a string of digits")]
+    [DataRow("iat", "{}", DisplayName = "iat as an object")]
+    [DataRow("iat", "[1700000000]", DisplayName = "iat as an array")]
+    public async Task ATokenWhoseExpOrIatIsNoNumericDateIsStructurallyInvalid(string claim, string value)
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory subjectPublic = keys.PublicKey;
+        using PrivateKeyMemory subjectPrivate = keys.PrivateKey;
+
+        (string sub, Dictionary<string, object> subJwk) = ComposeThumbprintSubject(subjectPublic);
+        DateTimeOffset? expiresAt = WellKnownJwtClaimNames.IsExp(claim) ? null : TimeProvider.GetUtcNow().AddMinutes(5);
+        DateTimeOffset? issuedAt = WellKnownJwtClaimNames.IsIat(claim) ? null : TimeProvider.GetUtcNow();
+        var payload = ComposePayload(sub, sub, ClientId, RequestNonce, expiresAt, issuedAt, subJwk);
+        var idToken = await SignRawAsync(subjectPrivate, WithRawMember(payload, claim, value)).ConfigureAwait(false);
+
+        var result = await SelfIssuedIdTokenValidation.ValidateAsync(
+            idToken, ClientId, RequestNonce, AllowedAlgorithms, TimeProvider.GetUtcNow(),
+            resolveDidVerificationKey: null,
+            TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsFalse(result.IsStructurallyValid, "A date the token carries that names no date makes it structurally invalid.");
+        Assert.IsFalse(result.IsValid);
+    }
+
+
+    /// <summary>
+    /// The answers a malformed date is told from, on tokens signed over their exact bytes as the malformed ones are: a token
+    /// carrying both dates as NumericDates validates, a fraction kept as written (RFC 7519 Section 2: "non-integer values can be
+    /// represented"); one omitting <c>iat</c> validates with no <c>iat</c> surfaced; and one omitting the <c>exp</c> §11.1 judges
+    /// is structurally valid but not unexpired.
+    /// </summary>
+    [TestMethod]
+    public async Task NumericDatesValidateAnOmittedIatIsNoneAndAnOmittedExpIsNotUnexpired()
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys =
+            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using PublicKeyMemory subjectPublic = keys.PublicKey;
+        using PrivateKeyMemory subjectPrivate = keys.PrivateKey;
+
+        (string sub, Dictionary<string, object> subJwk) = ComposeThumbprintSubject(subjectPublic);
+        var now = TimeProvider.GetUtcNow();
+        var writtenExp = now.AddMinutes(5).ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture) + ".5";
+        var bothDates = WithRawMember(ComposePayload(sub, sub, ClientId, RequestNonce, null, now, subJwk), WellKnownJwtClaimNames.Exp, writtenExp);
+        var noIat = WithRawMember(ComposePayload(sub, sub, ClientId, RequestNonce, null, null, subJwk), WellKnownJwtClaimNames.Exp, writtenExp);
+        var noExp = Encoding.UTF8.GetString(PayloadSerializer(ComposePayload(sub, sub, ClientId, RequestNonce, null, now, subJwk)));
+
+        var bothResult = await ValidateRawAsync(await SignRawAsync(subjectPrivate, bothDates).ConfigureAwait(false)).ConfigureAwait(false);
+        var noIatResult = await ValidateRawAsync(await SignRawAsync(subjectPrivate, noIat).ConfigureAwait(false)).ConfigureAwait(false);
+        var noExpResult = await ValidateRawAsync(await SignRawAsync(subjectPrivate, noExp).ConfigureAwait(false)).ConfigureAwait(false);
+
+        Assert.IsTrue(bothResult.IsValid);
+        Assert.AreEqual(writtenExp, bothResult.ExpiresAt!.ToString());
+        Assert.IsTrue(noIatResult.IsValid, "SIOPv2 section 11.1 judges no iat, so a token omitting it validates.");
+        Assert.IsNull(noIatResult.IssuedAt, "An omitted iat is none.");
+        Assert.IsTrue(noExpResult.IsStructurallyValid, "An omitted exp is no malformed one.");
+        Assert.IsFalse(noExpResult.IsUnexpired, "SIOPv2 section 11.1: a token with no exp is not before its expiry.");
+        Assert.IsFalse(noExpResult.IsValid);
+    }
+
+
+    /// <summary>Validates a self-issued ID Token under this class's relying party, nonce, algorithms and clock.</summary>
+    /// <param name="idToken">The compact token.</param>
+    /// <returns>The validation outcome.</returns>
+    private async Task<SelfIssuedIdTokenValidationResult> ValidateRawAsync(string idToken) =>
+        await SelfIssuedIdTokenValidation.ValidateAsync(
+            idToken, ClientId, RequestNonce, AllowedAlgorithms, TimeProvider.GetUtcNow(),
+            resolveDidVerificationKey: null,
+            TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+
+    /// <summary>
+    /// The payload's JSON text with one member appended whose value is written as given, raw, so a value no serializer of a
+    /// claims set writes - a string of digits for a date, a number no double holds - reaches the validator as written.
+    /// </summary>
+    /// <param name="payload">The claims serialized first, none named <paramref name="name"/>.</param>
+    /// <param name="name">The appended member's name.</param>
+    /// <param name="rawValue">The appended member's value as JSON text.</param>
+    /// <returns>The payload's JSON text.</returns>
+    private static string WithRawMember(JwtPayload payload, string name, string rawValue)
+    {
+        var json = Encoding.UTF8.GetString(PayloadSerializer(payload));
+
+        return json[..^1] + ",\"" + name + "\":" + rawValue + "}";
+    }
+
+
+    /// <summary>
+    /// Signs a payload's exact JSON text under the subject's key with the header <c>{"alg":...,"typ":"JWT"}</c>, never through a
+    /// serializer, so the bytes the validator reads are the bytes written.
+    /// </summary>
+    /// <param name="signingKey">The subject's private key.</param>
+    /// <param name="payloadJson">The payload's JSON text.</param>
+    /// <returns>The compact token.</returns>
+    private async Task<string> SignRawAsync(PrivateKeyMemory signingKey, string payloadJson)
+    {
+        var algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(signingKey.Tag);
+        var headerSegment = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes("{\"alg\":\"" + algorithm + "\",\"typ\":\"JWT\"}"));
+        var payloadSegment = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(payloadJson));
+        var signingInput = Encoding.ASCII.GetBytes($"{headerSegment}.{payloadSegment}");
+
+        using var signature = await signingKey.SignAsync(signingInput, Pool, TestContext.CancellationToken).ConfigureAwait(false);
+
+        return $"{headerSegment}.{payloadSegment}.{TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan())}";
+    }
+
+
     //Composes the RFC 9278 thumbprint subject and the sub_jwk claim value for a key:
     //the same projection a wallet performs when it self-issues.
     private static (string Sub, Dictionary<string, object> SubJwk) ComposeThumbprintSubject(

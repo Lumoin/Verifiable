@@ -221,13 +221,20 @@ public static class OAuthResponseParsers
     /// can carry credential text: it is answered for an empty body, for a body that is no one well-formed JSON object, for an
     /// answer carrying no <c>access_token</c> and for one carrying an access token but no <c>token_type</c>. An
     /// <see cref="OAuthProtocolError"/> carries the description and the problem detail the server wrote, in its summary too, and
-    /// an <see cref="OAuthInvalidLifetime"/> the <c>expires_in</c> member as the answer carries it.
+    /// an <see cref="OAuthInvalidLifetime"/> the <c>expires_in</c> member as the answer carries it. An
+    /// <see cref="OAuthMemberNotAString"/> carries the name of the parameter it refuses and the kind of its value, and no value.
     /// </para>
     /// <para>
     /// A present <c>expires_in</c> is judged as present, never read as an omitted one: a lifetime that is no positive integer
     /// within the range of <see cref="int"/> is refused as <see cref="OAuthInvalidLifetime"/>, by the rule the pushed
     /// authorization parser judges its own by. Refusing zero here is this library's policy: RFC 6749 section 5.1 and appendix
     /// A.14 define <c>expires_in</c> by digits, which zero fits, and permit its omission, which is answered as no lifetime.
+    /// </para>
+    /// <para>
+    /// A present <c>refresh_token</c>, <c>scope</c>, <c>id_token</c> or <c>issued_token_type</c> is judged as present too: each is
+    /// defined as a string, and one carried as a value of another kind is refused as <see cref="OAuthMemberNotAString"/>, naming
+    /// the parameter and the kind and carrying no value, so a client never reads it as omitted - an omitted <c>scope</c> meaning
+    /// the scope requested was granted (RFC 6749 section 5.1). The four are judged in that order, after <c>expires_in</c>.
     /// </para>
     /// </remarks>
     /// <param name="response">The response.</param>
@@ -328,18 +335,98 @@ public static class OAuthResponseParsers
             expiresIn = seconds;
         }
 
+        //Each optional string parameter a present member of another kind carries is refused as present, never read as omitted:
+        //an omitted scope means the scope requested was granted (RFC 6749 section 5.1), which a scope the answer does carry
+        //never establishes.
+        if(OptionalStringRefusal(members, OAuthRequestParameterNames.RefreshToken, "RFC 6749 §5.1", out var refreshToken) is { } refusedRefreshToken)
+        {
+            return Result.Failure<TokenResponse, OAuthParseError>(refusedRefreshToken.WithTransportMetadata(response));
+        }
+
+        if(OptionalStringRefusal(members, OAuthRequestParameterNames.Scope, "RFC 6749 §5.1", out var scope) is { } refusedScope)
+        {
+            return Result.Failure<TokenResponse, OAuthParseError>(refusedScope.WithTransportMetadata(response));
+        }
+
+        if(OptionalStringRefusal(members, OAuthRequestParameterNames.IdToken, "OpenID Connect Core 1.0 §3.1.3.3", out var idToken) is { } refusedIdToken)
+        {
+            return Result.Failure<TokenResponse, OAuthParseError>(refusedIdToken.WithTransportMetadata(response));
+        }
+
+        if(OptionalStringRefusal(members, OAuthRequestParameterNames.IssuedTokenType, "RFC 8693 §2.2.1", out var issuedTokenType) is { } refusedIssuedTokenType)
+        {
+            return Result.Failure<TokenResponse, OAuthParseError>(refusedIssuedTokenType.WithTransportMetadata(response));
+        }
+
         return Result.Success<TokenResponse, OAuthParseError>(
             new TokenResponse
             {
                 AccessToken = accessToken,
                 TokenType = tokenType,
                 ExpiresIn = expiresIn,
-                RefreshToken = StringOf(members, OAuthRequestParameterNames.RefreshToken),
-                Scope = StringOf(members, OAuthRequestParameterNames.Scope),
-                IdToken = StringOf(members, OAuthRequestParameterNames.IdToken),
-                IssuedTokenType = StringOf(members, OAuthRequestParameterNames.IssuedTokenType)
+                RefreshToken = refreshToken,
+                Scope = scope,
+                IdToken = idToken,
+                IssuedTokenType = issuedTokenType
             });
     }
+
+
+    /// <summary>
+    /// The one reading of an optional token response parameter defined as a string, through the reader's typed answer for the
+    /// member (<see cref="JsonTopLevelMembers.Find"/>): a string is the parameter's value, an absent member is no value, and a
+    /// member of any other kind is refused as present (<see cref="OAuthMemberNotAString"/>), naming the parameter and the kind
+    /// and none of the value.
+    /// </summary>
+    /// <param name="members">The response's top-level members.</param>
+    /// <param name="name">The parameter's name.</param>
+    /// <param name="specReference">The clause defining the parameter as a string.</param>
+    /// <param name="value">The parameter's value, or <see langword="null"/> when it is absent or refused.</param>
+    /// <returns>The refusal, or <see langword="null"/> when the parameter is a string or absent.</returns>
+    private static OAuthMemberNotAString? OptionalStringRefusal(
+        JsonTopLevelMembers members,
+        string name,
+        string specReference,
+        out string? value)
+    {
+        var carried = members.Find(name);
+        value = carried is JsonMemberString { Text: var text } ? text : null;
+
+        if(carried is JsonMemberString or JsonMemberAbsent)
+        {
+            return null;
+        }
+
+        var kind = KindOf(carried);
+
+        return new OAuthMemberNotAString(
+            name,
+            kind,
+            new DecisionSupport($"The token endpoint's response carries {name} as a value of the kind {kind}, where it is a string.")
+            {
+                LikelyCause = "The authorization server wrote the parameter as another kind of JSON value than the string its "
+                              + "specification defines; a present parameter is never read as an omitted one.",
+                SpecificationReference = specReference
+            });
+    }
+
+
+    /// <summary>
+    /// The kind of value a present member carries, as the reader's typed answer for it names it. An answer of any other type is
+    /// no case the reader answers for a present member and is given no meaning.
+    /// </summary>
+    /// <exception cref="ArgumentException">The answer is of a type the reader never answers for a present member.</exception>
+    /// <param name="carried">The member as the reader answered it, a present member.</param>
+    /// <returns>The kind.</returns>
+    private static JsonTopLevelValueKind KindOf(JsonMemberLookup carried) => carried switch
+    {
+        JsonMemberString => JsonTopLevelValueKind.String,
+        JsonMemberNumber => JsonTopLevelValueKind.Number,
+        JsonMemberOfOtherKind { Kind: var kind } => kind,
+        _ => throw new ArgumentException(
+            $"The answer {carried.GetType().FullName} is no answer the JSON reader gives for a present member, so it names no kind.",
+            nameof(carried))
+    };
 
 
     /// <summary>

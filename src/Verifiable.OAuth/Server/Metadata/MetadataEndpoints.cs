@@ -357,6 +357,7 @@ public static class MetadataEndpoints
                     bool tokenExchangeOnChain = false;
                     bool jwtBearerOnChain = false;
                     var advertisedLocations = new Dictionary<string, string>(StringComparer.Ordinal);
+
                     foreach(ServerEndpoint chainEndpoint in chain)
                     {
                         if(chainEndpoint.Capability == WellKnownCapabilityIdentifiers.OAuthAuthorizationCode)
