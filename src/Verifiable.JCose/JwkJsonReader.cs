@@ -1126,20 +1126,26 @@ public static class JwkJsonReader
     /// The members at the top level of the one JSON object a document is (RFC 8259 section 4), read as the JSON it is rather
     /// than searched as text: each member of the object's own level in document order, its name and a string value each
     /// decoded once (RFC 8259 section 7), and no member of an object or array nested beneath it, so a member a nested object
-    /// carries is never read as the object's own. The whole document is judged first, and each refusal is a reason of its own:
-    /// a document that is not exactly one well-formed JSON value, that holds a name or a string, at any depth, that is no
-    /// well-formed UTF-8 (RFC 8259 section 8.1), or that is a well-formed value that is no object, is answered as
-    /// <see cref="JsonNotOneObject"/>; a well-formed object one of whose objects repeats a member name (RFC 8259 section 4) is
-    /// answered as <see cref="JsonRepeatedMemberName"/>, naming the first repetition. A member whose name decodes to no Unicode
-    /// text - an escape naming an unpaired surrogate, which the grammar admits (RFC 8259 section 8.2) - is left out, as no name a
-    /// reader asks for spells one; a string value doing so is answered as <see cref="JsonTopLevelValueKind.UndecodableString"/>,
-    /// carrying no text, so its reader refuses it by the member's name. This method never throws.
+    /// carries is never read as the object's own. The whole document is judged first, as one rule for every member at every
+    /// depth, whether or not its reader reads that member, and each refusal is a reason of its own. A document that is not
+    /// exactly one well-formed JSON value, that holds a name or a string, at any depth, that is no well-formed UTF-8 (RFC 8259
+    /// section 8.1), or that is a well-formed value that is no object, is answered as <see cref="JsonNotOneObject"/>, whatever
+    /// else it holds. Otherwise the first defect in document order is answered: a member name an object repeats (RFC 8259
+    /// section 4) as <see cref="JsonRepeatedMemberName"/>, at the repeating occurrence of the name; a member whose name, or a
+    /// string its value is or holds in an array, names no Unicode text - an escape naming an unpaired surrogate, which the
+    /// grammar admits and of which RFC 8259 section 8.2 says the behavior of software receiving it is unpredictable - as
+    /// <see cref="JsonUndecodableMember"/>, at that string. When both stand, the one the document reaches first is answered,
+    /// the order a reader of the document meets them in, so the answer never depends on which rule is judged first: a member
+    /// whose own value names no text, written before a later member repeating its name, is answered as undecodable, and one
+    /// written after the repeating occurrence as the repetition; a name naming no text is always answered at its first
+    /// occurrence, before any repetition of it. A member no reader reads therefore refuses the document as a member every
+    /// reader reads does, as no text such a document holds is one its readers agree on. This method never throws.
     /// </summary>
     /// <param name="json">The UTF-8 bytes of the document.</param>
     /// <returns>The object's top-level members, or the refusal of the document with its reason.</returns>
     public static JsonTopLevelReading ReadTopLevelMembers(ReadOnlySpan<byte> json)
     {
-        if(!IsOneJsonValue(json, out var repeatedName))
+        if(!IsOneJsonValue(json, out var defects))
         {
             return new JsonNotOneObject();
         }
@@ -1152,9 +1158,14 @@ public static class JwkJsonReader
             return new JsonNotOneObject();
         }
 
+        if(defects.Undecodable is { } undecodable && (defects.RepeatedName is not { } repetition || undecodable.Position < repetition.Start))
+        {
+            return UndecodableMemberAt(json, undecodable);
+        }
+
         //The document is one well-formed object, so the first name it repeats decodes and is answered by its decoded spelling;
         //a spelling that decoded to none would be no well-formed document.
-        if(repeatedName is { } repeated)
+        if(defects.RepeatedName is { } repeated)
         {
             return DecodeContentToString(json, repeated.Start, repeated.Length) is { } repeatedSpelling
                 ? new JsonRepeatedMemberName(repeatedSpelling, repeated.Depth)
@@ -1194,13 +1205,35 @@ public static class JwkJsonReader
                 return new JsonNotOneObject();
             }
 
-            if(!HoldsUnpairedSurrogate(member.Name))
-            {
-                members.Add(member);
-            }
-
+            members.Add(member);
             pos = valueEnd;
         }
+    }
+
+
+    /// <summary>
+    /// The refusal of a well-formed object by its first member whose name, or a string its value is or holds, names no Unicode
+    /// text: the name as it can be written - decoded when the value is the defect, as the document spells it when the name is -
+    /// the depth of the object carrying it and which part names no text.
+    /// </summary>
+    /// <param name="json">The document, one well-formed object.</param>
+    /// <param name="undecodable">Where the walk found the member.</param>
+    /// <returns>The refusal.</returns>
+    private static JsonTopLevelReading UndecodableMemberAt(ReadOnlySpan<byte> json, UndecodableString undecodable)
+    {
+        if(undecodable.Part is JsonUndecodableMemberPart.Name)
+        {
+            //The validation admitted the name's bytes as well-formed UTF-8, so its spelling, escapes as written, is text.
+            var spelling = Encoding.UTF8.GetString(json.Slice(undecodable.MemberNameStart, undecodable.MemberNameLength));
+
+            return new JsonUndecodableMember(spelling, undecodable.ObjectDepth, JsonUndecodableMemberPart.Name);
+        }
+
+        //A name naming no text is met before its value, so the name of a member whose value is the first defect decodes to text;
+        //a spelling that decoded to none would be no well-formed document.
+        return DecodeContentToString(json, undecodable.MemberNameStart, undecodable.MemberNameLength) is { } name
+            ? new JsonUndecodableMember(name, undecodable.ObjectDepth, JsonUndecodableMemberPart.Value)
+            : new JsonNotOneObject();
     }
 
 
@@ -1214,13 +1247,9 @@ public static class JwkJsonReader
     {
         if(json[valueStart] == (byte)'"')
         {
-            return DecodeContentToString(json, valueStart + 1, valueEnd - valueStart - 2) switch
-            {
-                null => null,
-                var text when HoldsUnpairedSurrogate(text) =>
-                    new JsonTopLevelMember(name, JsonTopLevelValueKind.UndecodableString, string.Empty),
-                var text => new JsonTopLevelMember(name, JsonTopLevelValueKind.String, text)
-            };
+            return DecodeContentToString(json, valueStart + 1, valueEnd - valueStart - 2) is { } text
+                ? new JsonTopLevelMember(name, JsonTopLevelValueKind.String, text)
+                : null;
         }
 
         var kind = json[valueStart] switch
@@ -1238,29 +1267,62 @@ public static class JwkJsonReader
 
 
     /// <summary>
-    /// Whether decoded text holds a surrogate no other completes into a code point - text an escape spelled that names no
-    /// Unicode scalar value (RFC 8259 section 8.2).
+    /// Whether an already-validated string's raw content span names Unicode text: every surrogate its escapes name is completed
+    /// by its pair into a code point, so none is an unpaired surrogate (RFC 8259 section 8.2). Decodes one UTF-16 code unit at a
+    /// time with <see cref="NameCursor"/>, allocating nothing.
     /// </summary>
-    /// <param name="text">The decoded text.</param>
-    /// <returns><see langword="true"/> when the text holds an unpaired surrogate.</returns>
-    private static bool HoldsUnpairedSurrogate(string text)
+    /// <param name="json">The document the span was taken from.</param>
+    /// <param name="start">The start of the span, immediately after its opening quote.</param>
+    /// <param name="length">The length of the span, up to (not including) its closing quote.</param>
+    /// <returns><see langword="true"/> when the span names Unicode text.</returns>
+    private static bool SpellsUnicodeText(ReadOnlySpan<byte> json, int start, int length)
     {
-        for(var index = 0; index < text.Length; index++)
+        //Only an escape names a surrogate: bytes outside one are well-formed UTF-8, which the validation judged, and so text.
+        if(json.Slice(start, length).IndexOf((byte)'\\') < 0)
         {
-            if(char.IsHighSurrogate(text[index]) && index + 1 < text.Length && char.IsLowSurrogate(text[index + 1]))
-            {
-                index++;
-
-                continue;
-            }
-
-            if(char.IsSurrogate(text[index]))
-            {
-                return true;
-            }
+            return true;
         }
 
-        return false;
+        var cursor = new NameCursor(start, start + length, decodeEscapes: true);
+        var awaitsLowSurrogate = false;
+
+        while(true)
+        {
+            switch(cursor.ReadNext(json, out var unit))
+            {
+                case NameCursorStep.CodeUnit when awaitsLowSurrogate:
+                {
+                    if(!char.IsLowSurrogate(unit))
+                    {
+                        return false;
+                    }
+
+                    awaitsLowSurrogate = false;
+
+                    break;
+                }
+                case NameCursorStep.CodeUnit:
+                {
+                    if(char.IsLowSurrogate(unit))
+                    {
+                        return false;
+                    }
+
+                    awaitsLowSurrogate = char.IsHighSurrogate(unit);
+
+                    break;
+                }
+                case NameCursorStep.End:
+                {
+                    return !awaitsLowSurrogate;
+                }
+                case NameCursorStep.Undecodable:
+                {
+                    //A sequence that decodes to no text spells none.
+                    return false;
+                }
+            }
+        }
     }
 
 
@@ -1322,22 +1384,23 @@ public static class JwkJsonReader
     /// three bounds is reported as a refusal, never an exception. This method never throws.
     /// </returns>
     public static bool IsWellFormedJsonDocument(ReadOnlySpan<byte> json) =>
-        IsOneJsonValue(json, out var repeatedName) && repeatedName is null;
+        IsOneJsonValue(json, out var defects) && defects.RepeatedName is null;
 
 
     /// <summary>
     /// Whether <paramref name="json"/> is exactly one JSON value of the grammar (RFC 8259 section 2) within the reader's
     /// bounds, every name and string at any depth well-formed UTF-8 (RFC 8259 section 8.1), with the first member name an
-    /// object repeats (RFC 8259 section 4) answered beside it, as a repetition breaks no rule of the grammar.
-    /// <see cref="IsWellFormedJsonDocument"/> refuses a repetition as it refuses a grammar fault; <see cref="ReadTopLevelMembers"/>
-    /// answers each as a reason of its own. This method never throws.
+    /// object repeats (RFC 8259 section 4) and the first member whose name or string value names no Unicode text (RFC 8259
+    /// section 8.2) answered beside it, as neither breaks a rule of the grammar. <see cref="IsWellFormedJsonDocument"/> refuses
+    /// a repetition as it refuses a grammar fault; <see cref="ReadTopLevelMembers"/> answers each as a reason of its own. This
+    /// method never throws.
     /// </summary>
     /// <param name="json">UTF-8 JSON bytes to validate.</param>
-    /// <param name="repeatedName">The first repeated member name in document order, or <see langword="null"/> when none is.</param>
+    /// <param name="defects">The first repetition and the first undecodable member in document order, each where the walk met it.</param>
     /// <returns><see langword="true"/> when the whole span is exactly one JSON value within the bounds.</returns>
-    private static bool IsOneJsonValue(ReadOnlySpan<byte> json, out SeenName? repeatedName)
+    private static bool IsOneJsonValue(ReadOnlySpan<byte> json, out DocumentDefects defects)
     {
-        repeatedName = null;
+        defects = new DocumentDefects();
 
         if(json.Length > MaximumDocumentLength)
         {
@@ -1357,7 +1420,7 @@ public static class JwkJsonReader
         Span<SeenName> seenNames = stackalloc SeenName[MaximumLiveMemberNames];
         int seenNameCount = 0;
 
-        if(!ValidateFrames(json, ref pos, frames, ref top, ref depth, seenNames, ref seenNameCount, bareRootObject: false, ref repeatedName))
+        if(!ValidateFrames(json, ref pos, frames, ref top, ref depth, seenNames, ref seenNameCount, bareRootObject: false, ref defects))
         {
             return false;
         }
@@ -1408,16 +1471,16 @@ public static class JwkJsonReader
         Span<SeenName> seenNames = stackalloc SeenName[MaximumLiveMemberNames];
         int seenNameCount = 0;
         int pos = 0;
-        SeenName? repeatedName = null;
+        var defects = new DocumentDefects();
 
-        if(!ValidateFrames(objectContent, ref pos, frames, ref top, ref depth, seenNames, ref seenNameCount, bareRootObject: true, ref repeatedName))
+        if(!ValidateFrames(objectContent, ref pos, frames, ref top, ref depth, seenNames, ref seenNameCount, bareRootObject: true, ref defects))
         {
             return false;
         }
 
         SkipWhitespace(objectContent, ref pos);
 
-        return pos == objectContent.Length && repeatedName is null;
+        return pos == objectContent.Length && defects.RepeatedName is null;
     }
 
 
@@ -1444,9 +1507,10 @@ public static class JwkJsonReader
     /// Whether the frame at index 0 is a virtual object with no bytes of its own for <c>{</c> or
     /// <c>}</c>, so that frame closes on end of input rather than on a literal <c>}</c>.
     /// </param>
-    /// <param name="repeatedName">
-    /// The first member name, in document order, that an object repeats (RFC 8259 §4), or <see langword="null"/> while
-    /// none has; a repetition breaks no rule of the grammar, so the walk goes on past it and its caller weighs it.
+    /// <param name="defects">
+    /// The first member name, in document order, that an object repeats (RFC 8259 §4), and the first member whose name or
+    /// string value names no Unicode text (RFC 8259 §8.2), each where the walk met it; neither breaks a rule of the grammar, so
+    /// the walk goes on past them and its caller weighs them.
     /// </param>
     /// <returns><see langword="true"/> when every frame closed without a grammar violation or a bound exceeded.</returns>
     private static bool ValidateFrames(
@@ -1458,7 +1522,7 @@ public static class JwkJsonReader
         Span<SeenName> seenNames,
         ref int seenNameCount,
         bool bareRootObject,
-        ref SeenName? repeatedName)
+        ref DocumentDefects defects)
     {
         bool rootParsed = false;
 
@@ -1471,7 +1535,7 @@ public static class JwkJsonReader
                     break;
                 }
 
-                if(!TryConsumeValue(json, ref pos, frames, ref top, ref depth))
+                if(!TryConsumeValue(json, ref pos, frames, ref top, ref depth, ref defects))
                 {
                     return false;
                 }
@@ -1537,11 +1601,20 @@ public static class JwkJsonReader
                             return false;
                         }
 
-                        //A repeated name breaks no rule of the grammar, so the walk goes on past it: a document that is also no
-                        //well-formed JSON is answered as that, and the first repetition is reported beside a well-formed one.
+                        //A name naming no Unicode text and a repeated name break no rule of the grammar, so the walk goes on past
+                        //them: a document that is also no well-formed JSON is answered as that, and the first of each is reported
+                        //beside a well-formed one.
+                        if(!SpellsUnicodeText(json, nameStart, nameLength))
+                        {
+                            defects.Undecodable ??= new UndecodableString(nameStart, nameStart, nameLength, depth, JsonUndecodableMemberPart.Name);
+                        }
+
+                        frames[top].MemberNameStart = nameStart;
+                        frames[top].MemberNameLength = nameLength;
+
                         if(HasNameAtDepth(json, seenNames, seenNameCount, depth, nameStart, nameLength))
                         {
-                            repeatedName ??= new SeenName(nameStart, nameLength, depth);
+                            defects.RepeatedName ??= new SeenName(nameStart, nameLength, depth);
                         }
                         else
                         {
@@ -1571,7 +1644,7 @@ public static class JwkJsonReader
                         continue;
 
                     case ObjectPhase.ExpectValue:
-                        if(!TryConsumeValue(json, ref pos, frames, ref top, ref depth))
+                        if(!TryConsumeValue(json, ref pos, frames, ref top, ref depth, ref defects))
                         {
                             return false;
                         }
@@ -1658,7 +1731,7 @@ public static class JwkJsonReader
                             continue;
                         }
 
-                        if(!TryConsumeValue(json, ref pos, frames, ref top, ref depth))
+                        if(!TryConsumeValue(json, ref pos, frames, ref top, ref depth, ref defects))
                         {
                             return false;
                         }
@@ -1747,10 +1820,19 @@ public static class JwkJsonReader
     private struct NestingFrame
     {
         /// <summary>Whether this frame is an object (<see langword="true"/>) or an array (<see langword="false"/>).</summary>
-        public bool IsObject;
+        public bool IsObject { get; set; }
 
         /// <summary>The frame's current phase, as the enum <see cref="IsObject"/> selects.</summary>
-        public byte Phase;
+        public byte Phase { get; set; }
+
+        /// <summary>
+        /// For an object frame, the byte offset of the content of the name of the member last read in it, the member whose value
+        /// the walk is in; unused for an array frame.
+        /// </summary>
+        public int MemberNameStart { get; set; }
+
+        /// <summary>For an object frame, the length in raw content bytes of that name; unused for an array frame.</summary>
+        public int MemberNameLength { get; set; }
     }
 
 
@@ -1766,6 +1848,38 @@ public static class JwkJsonReader
 
 
     /// <summary>
+    /// A string the validation walk met that names no Unicode text (RFC 8259 section 8.2): a member's name, or a string that
+    /// member's value is or holds in an array, recorded as spans into the document so nothing is decoded during the walk.
+    /// </summary>
+    /// <param name="Position">The byte offset of the string's first content byte, where the document reaches it.</param>
+    /// <param name="MemberNameStart">The byte offset of the first content byte of the member's name.</param>
+    /// <param name="MemberNameLength">The number of raw content bytes of the member's name, excluding both quotes.</param>
+    /// <param name="ObjectDepth">The nesting depth of the object carrying the member.</param>
+    /// <param name="Part">Whether the string is the member's name or in its value.</param>
+    private readonly record struct UndecodableString(
+        int Position,
+        int MemberNameStart,
+        int MemberNameLength,
+        int ObjectDepth,
+        JsonUndecodableMemberPart Part);
+
+
+    /// <summary>
+    /// What the validation walk met in a document that breaks no rule of the grammar but that <see cref="ReadTopLevelMembers"/>
+    /// refuses the document for: the first repeated member name and the first string naming no Unicode text, each kept apart so
+    /// the first of either is known whatever the other holds.
+    /// </summary>
+    private struct DocumentDefects
+    {
+        /// <summary>The first member name an object repeats, at its repeating occurrence, or <see langword="null"/> while none has.</summary>
+        public SeenName? RepeatedName { get; set; }
+
+        /// <summary>The first string naming no Unicode text, or <see langword="null"/> while none has.</summary>
+        public UndecodableString? Undecodable { get; set; }
+    }
+
+
+    /// <summary>
     /// Consumes one JSON value at <paramref name="pos"/>: a scalar advances <paramref name="pos"/> past it
     /// and folds it into the current top frame via <see cref="AdvanceAfterValue"/>, while an object or array
     /// pushes a new frame onto <paramref name="frames"/> for the caller's loop to continue processing —
@@ -1776,13 +1890,15 @@ public static class JwkJsonReader
     /// <param name="frames">The open-container frame stack.</param>
     /// <param name="top">The index of the current top frame, or -1 at the root; updated on a container push.</param>
     /// <param name="depth">The current nesting depth; updated on a container push.</param>
+    /// <param name="defects">Where a string value naming no Unicode text is recorded, when it is the first one met.</param>
     /// <returns><see langword="true"/> when a value's first token was consumed without a grammar violation.</returns>
     private static bool TryConsumeValue(
         ReadOnlySpan<byte> json,
         ref int pos,
         Span<NestingFrame> frames,
         ref int top,
-        ref int depth)
+        ref int depth,
+        ref DocumentDefects defects)
     {
         SkipWhitespace(json, ref pos);
         if(pos >= json.Length)
@@ -1796,7 +1912,7 @@ public static class JwkJsonReader
         {
             (byte)'{' => TryPushContainer(true, frames, ref top, ref depth, ref pos),
             (byte)'[' => TryPushContainer(false, frames, ref top, ref depth, ref pos),
-            (byte)'"' => TryConsumeString(json, ref pos, frames, top),
+            (byte)'"' => TryConsumeString(json, ref pos, frames, top, depth, ref defects),
             (byte)'t' => TryConsumeLiteral(json, ref pos, "true"u8, frames, top),
             (byte)'f' => TryConsumeLiteral(json, ref pos, "false"u8, frames, top),
             (byte)'n' => TryConsumeLiteral(json, ref pos, "null"u8, frames, top),
@@ -1823,12 +1939,50 @@ public static class JwkJsonReader
     }
 
 
-    /// <summary>Validates a string value and folds it into the current top frame as a completed value.</summary>
-    private static bool TryConsumeString(ReadOnlySpan<byte> json, ref int pos, Span<NestingFrame> frames, int top)
+    /// <summary>
+    /// Validates a string value and folds it into the current top frame as a completed value. A string naming no Unicode text
+    /// (RFC 8259 section 8.2) is recorded, when it is the first one met, against the member whose value it is or holds: the
+    /// member last named in the nearest object frame beneath the arrays it lies in. A string with no object frame beneath it,
+    /// the root value or one in an array that is the root, belongs to no member; such a document is no object.
+    /// </summary>
+    /// <param name="json">UTF-8 JSON bytes being validated.</param>
+    /// <param name="pos">The opening quote's position; advanced past the closing quote on success.</param>
+    /// <param name="frames">The open-container frame stack.</param>
+    /// <param name="top">The index of the current top frame, or -1 at the root.</param>
+    /// <param name="depth">The current nesting depth, that of the frame at <paramref name="top"/>.</param>
+    /// <param name="defects">Where a string naming no Unicode text is recorded.</param>
+    /// <returns><see langword="true"/> when the string is well formed.</returns>
+    private static bool TryConsumeString(
+        ReadOnlySpan<byte> json,
+        ref int pos,
+        Span<NestingFrame> frames,
+        int top,
+        int depth,
+        ref DocumentDefects defects)
     {
-        if(!TryValidateString(json, ref pos, out _, out _))
+        if(!TryValidateString(json, ref pos, out var contentStart, out var contentLength))
         {
             return false;
+        }
+
+        if(defects.Undecodable is null && !SpellsUnicodeText(json, contentStart, contentLength))
+        {
+            var owner = top;
+
+            while(owner >= 0 && !frames[owner].IsObject)
+            {
+                owner--;
+            }
+
+            if(owner >= 0)
+            {
+                defects.Undecodable = new UndecodableString(
+                    contentStart,
+                    frames[owner].MemberNameStart,
+                    frames[owner].MemberNameLength,
+                    depth - (top - owner),
+                    JsonUndecodableMemberPart.Value);
+            }
         }
 
         _ = AdvanceAfterValue(frames, top);

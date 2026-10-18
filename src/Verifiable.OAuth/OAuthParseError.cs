@@ -1,5 +1,6 @@
 using System.Globalization;
 using Verifiable.Core;
+using Verifiable.JCose;
 using Verifiable.OAuth.Client;
 
 namespace Verifiable.OAuth;
@@ -38,8 +39,10 @@ namespace Verifiable.OAuth;
 ///   </item>
 ///   <item>
 ///     <description>
-///       <see cref="OAuthUndecodableMemberValue"/> — a parameter the response carries is a
-///       string naming no Unicode text (RFC 8259 §8.2), so it has no value a client can read.
+///       <see cref="OAuthUndecodableMemberValue"/> — the response body is one well-formed JSON
+///       object, but a member of one of its objects, read as a parameter or not, has a name or a
+///       string value naming no Unicode text (RFC 8259 §8.2), so the body holds text no reader
+///       agrees on.
 ///     </description>
 ///   </item>
 ///   <item>
@@ -67,6 +70,13 @@ namespace Verifiable.OAuth;
 ///       <see cref="OAuthClientAssertionRefused"/> — the client authentication assertion the request was to
 ///       present was refused as its credential was formed from the registration, before anything was resolved,
 ///       composed or sent.
+///     </description>
+///   </item>
+///   <item>
+///     <description>
+///       <see cref="OAuthClientAuthenticationRefused"/> — the client authentication the exchange was to
+///       present was refused as the exchange was composed: a secret method whose registration carries no
+///       secret, or an assertion method handed no assertion inputs, before anything was resolved or sent.
 ///     </description>
 ///   </item>
 /// </list>
@@ -183,19 +193,32 @@ public sealed record OAuthRepeatedMemberName(
 
 
 /// <summary>
-/// A parameter the response carries, at the top level of the one JSON object its body is, is a string whose escapes name an
-/// unpaired surrogate, which the grammar admits and which encodes no Unicode character
-/// (<see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.2">RFC 8259 §8.2</see>), so the parameter has no value a
-/// client can read.
+/// The response body is one well-formed JSON object, but a member of one of its objects, its own or one nested within it, has
+/// a name or a string value whose escapes name an unpaired surrogate, which the grammar admits and which encodes no Unicode
+/// character (<see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.2">RFC 8259 §8.2</see>), so the body holds text no
+/// reader agrees on and is refused whether or not the member is a parameter the client reads.
 /// </summary>
 /// <remarks>
-/// Carries the parameter's name, so the application reads the reason without parsing a sentence;
-/// <see cref="DecisionSupport.Summary"/> is composed from it. None of the parameter's value is carried.
+/// Names the first such member in document order and carries the facts the JSON reader answered
+/// (<see cref="Verifiable.JCose.JsonUndecodableMember"/>): its name as it can be written, the depth of the object carrying it,
+/// and whether its name or its value names no text, so the application reads the reason without parsing a sentence;
+/// <see cref="DecisionSupport.Summary"/> is composed from them. No value the response carries, the member's or any other, is
+/// carried.
 /// </remarks>
-/// <param name="MemberName">The parameter's name.</param>
+/// <param name="MemberName">
+/// When <paramref name="Part"/> is <see cref="Verifiable.JCose.JsonUndecodableMemberPart.Value"/>, the member's name decoded
+/// once (RFC 8259 §7); when it is <see cref="Verifiable.JCose.JsonUndecodableMemberPart.Name"/>, the name as the response
+/// spells it, its escapes as written, which is text that can be written, as the decoded name is not.
+/// </param>
+/// <param name="ObjectDepth">
+/// The nesting depth of the object carrying the member: one for the response's own object, whose members are its parameters.
+/// </param>
+/// <param name="Part">Whether the member's name or its value names no Unicode text.</param>
 /// <param name="Support">Guidance for the calling application.</param>
 public sealed record OAuthUndecodableMemberValue(
     string MemberName,
+    int ObjectDepth,
+    JsonUndecodableMemberPart Part,
     DecisionSupport Support) : OAuthParseError(Support);
 
 

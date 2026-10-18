@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Globalization;
 using System.Text;
 using Verifiable.Core;
@@ -23,12 +22,14 @@ namespace Verifiable.OAuth;
 /// RFC 9126 §2.2 has a pushed authorization response's. The body is read as that object
 /// (<see cref="JwkJsonReader.ReadTopLevelMembers"/>), never searched as text: each name and string value decoded once
 /// (RFC 8259 §7), a member an object nested beneath the top level carries never read as a parameter, and a body that is
-/// not one well-formed JSON object answered as malformed. A body that is one well-formed object but repeats a member name in
-/// any of its objects (RFC 8259 §4) is refused as <see cref="OAuthRepeatedMemberName"/>, and a parameter these parsers read
-/// that is a string naming no Unicode text (RFC 8259 §8.2) is refused as <see cref="OAuthUndecodableMemberValue"/>, each
-/// naming the member and none of its value, never answered as a body that is no object or as a parameter not carried. A
-/// reader of the same body as the JSON it is - a client's check of the credentials it carries - therefore reads the very
-/// values these parsers answer.
+/// not one well-formed JSON object answered as malformed. The reader judges the whole body by one rule, and these parsers
+/// answer its judgement: a body that is one well-formed object but repeats a member name in any of its objects (RFC 8259 §4)
+/// is refused as <see cref="OAuthRepeatedMemberName"/>, and one a member of whose objects has a name or a string value naming
+/// no Unicode text (RFC 8259 §8.2) as <see cref="OAuthUndecodableMemberValue"/>, the first of either in document order, each
+/// naming the member and none of its value, never answered as a body that is no object or as a parameter not carried. Such a
+/// member refuses the body whether or not it is a parameter these parsers read, an extension member included, as no text the
+/// body holds is then one its readers agree on. A reader of the same body as the JSON it is - a client's check of the
+/// credentials it carries - therefore reads the very values these parsers answer.
 /// </para>
 /// <para>
 /// Both parsers handle two response shapes:
@@ -100,12 +101,7 @@ public static class OAuthResponseParsers
 
         if(response.IsProblemJson)
         {
-            return ParseProblemJson<ParResponse>(members, response, "PAR");
-        }
-
-        if(UndecodableAmong(members, [OAuthRequestParameterNames.Error]) is { } undecodableError)
-        {
-            return UndecodableRefusal<ParResponse>(undecodableError, response, "PAR");
+            return ParseProblemJson<ParResponse>(members, response);
         }
 
         if(StringOf(members, OAuthRequestParameterNames.Error) is { } errorCode)
@@ -113,11 +109,6 @@ public static class OAuthResponseParsers
             return BuildProtocolError<ParResponse>(errorCode, members, response,
                 endpoint: "PAR",
                 specReference: "RFC 9126 §2.3");
-        }
-
-        if(UndecodableAmong(members, [OAuthRequestParameterNames.RequestUri]) is { } undecodableRequestUri)
-        {
-            return UndecodableRefusal<ParResponse>(undecodableRequestUri, response, "PAR");
         }
 
         if(StringOf(members, OAuthRequestParameterNames.RequestUri) is not { } requestUriString)
@@ -228,12 +219,7 @@ public static class OAuthResponseParsers
 
         if(response.IsProblemJson)
         {
-            return ParseProblemJson<TokenResponse>(members, response, "token");
-        }
-
-        if(UndecodableAmong(members, [OAuthRequestParameterNames.Error]) is { } undecodableError)
-        {
-            return UndecodableRefusal<TokenResponse>(undecodableError, response, "token");
+            return ParseProblemJson<TokenResponse>(members, response);
         }
 
         if(StringOf(members, OAuthRequestParameterNames.Error) is { } errorCode)
@@ -241,22 +227,6 @@ public static class OAuthResponseParsers
             return BuildProtocolError<TokenResponse>(errorCode, members, response,
                 endpoint: "token",
                 specReference: "RFC 6749 §5.2");
-        }
-
-        //Every parameter a success is read from is refused by its name when the response carries it as a string naming no
-        //Unicode text, so none is answered as not carried, nor dropped from the answer.
-        if(UndecodableAmong(
-            members,
-            [
-                OAuthRequestParameterNames.AccessToken,
-                OAuthRequestParameterNames.TokenType,
-                OAuthRequestParameterNames.RefreshToken,
-                OAuthRequestParameterNames.Scope,
-                OAuthRequestParameterNames.IdToken,
-                OAuthRequestParameterNames.IssuedTokenType
-            ]) is { } undecodableParameter)
-        {
-            return UndecodableRefusal<TokenResponse>(undecodableParameter, response, "token");
         }
 
         if(StringOf(members, OAuthRequestParameterNames.AccessToken) is not { Length: > 0 } accessToken)
@@ -323,8 +293,8 @@ public static class OAuthResponseParsers
 
     /// <summary>
     /// The parameters a response body carries: the members at the top level of the one JSON object it is, each name and
-    /// string value decoded once, or the reader's refusal of a body that is not one well-formed JSON object or that repeats a
-    /// member name.
+    /// string value decoded once, or the reader's refusal of a body that is not one well-formed JSON object, that repeats a
+    /// member name, or a member of which has a name or a string value naming no Unicode text.
     /// </summary>
     /// <param name="body">The response body.</param>
     /// <returns>The top-level members, or the refusal with its reason.</returns>
@@ -334,7 +304,9 @@ public static class OAuthResponseParsers
 
     /// <summary>
     /// The refusal of a response body the reader read no members from, by the reader's reason: a repeated member name is
-    /// refused as such, naming it (RFC 8259 §4); every other body is not one well-formed JSON object.
+    /// refused as such, naming it (RFC 8259 §4); a member whose name or string value names no Unicode text as such, naming it
+    /// (RFC 8259 §8.2); and the reader's remaining refusal, <see cref="JsonNotOneObject"/>, as a body that is not one
+    /// well-formed JSON object.
     /// </summary>
     /// <param name="reading">The reader's refusal.</param>
     /// <param name="response">The response.</param>
@@ -350,57 +322,43 @@ public static class OAuthResponseParsers
         return reading switch
         {
             JsonRepeatedMemberName repeated => RepeatedMemberRefusal(repeated, endpoint),
+            JsonUndecodableMember undecodable => UndecodableMemberRefusal(undecodable, endpoint),
             _ => NotOneObject(response, endpoint, specReference)
         };
     }
 
 
     /// <summary>
-    /// The first of the named parameters, in the order they are named, that the response carries as a string naming no
-    /// Unicode text (RFC 8259 §8.2), or <see langword="null"/> when it carries each of them otherwise or not at all.
+    /// The refusal of a response a member of one of whose objects has a name or a string value naming no Unicode text (RFC
+    /// 8259 §8.2), naming the member as it can be written, where it is and which part names no text, and none of the values
+    /// the response carries.
     /// </summary>
-    /// <param name="members">The response's top-level members.</param>
-    /// <param name="names">The parameters' names, in the order they are judged.</param>
-    /// <returns>The name of the parameter carried so, or <see langword="null"/>.</returns>
-    private static string? UndecodableAmong(IReadOnlyList<JsonTopLevelMember> members, ReadOnlySpan<string> names)
-    {
-        foreach(var name in names)
-        {
-            foreach(var member in members)
-            {
-                if(member.Kind is JsonTopLevelValueKind.UndecodableString && string.Equals(member.Name, name, StringComparison.Ordinal))
-                {
-                    return name;
-                }
-            }
-        }
-
-        return null;
-    }
-
-
-    /// <summary>
-    /// The refusal of a response carrying a parameter it reads as a string naming no Unicode text (RFC 8259 §8.2), naming
-    /// the parameter and none of its value.
-    /// </summary>
-    /// <typeparam name="T">The success type the endpoint's parser answers.</typeparam>
-    /// <param name="memberName">The parameter's name.</param>
-    /// <param name="response">The response.</param>
+    /// <param name="undecodable">The reader's refusal, the member, the depth of the object carrying it and the part.</param>
     /// <param name="endpoint">The endpoint that answered it.</param>
     /// <returns>The refusal.</returns>
-    private static Result<T, OAuthParseError> UndecodableRefusal<T>(string memberName, HttpResponseData response, string endpoint) =>
-        Result.Failure<T, OAuthParseError>(
-            new OAuthUndecodableMemberValue(
-                memberName,
-                new DecisionSupport(
-                    $"The {endpoint} endpoint's response carries {memberName} as a string whose escapes name an unpaired "
-                    + "surrogate, which encodes no Unicode character (RFC 8259 §8.2), so the parameter has no value to read "
-                    + "and the response is refused.")
-                {
-                    LikelyCause = "The server escaped one half of a surrogate pair alone, or cut a value between the two "
-                                  + "halves of a pair.",
-                    SpecificationReference = "RFC 8259 §8.2"
-                }).WithTransportMetadata(response));
+    private static OAuthUndecodableMemberValue UndecodableMemberRefusal(JsonUndecodableMember undecodable, string endpoint)
+    {
+        var named = undecodable.Part is JsonUndecodableMemberPart.Name
+            ? $"a member whose name, spelled {undecodable.Name}, has escapes naming"
+            : $"the member {undecodable.Name} with a string value whose escapes name";
+
+        var where = undecodable.ObjectDepth == 1
+            ? "its own object, whose members are its parameters"
+            : "an object nested within it";
+
+        return new OAuthUndecodableMemberValue(
+            undecodable.Name,
+            undecodable.ObjectDepth,
+            undecodable.Part,
+            new DecisionSupport(
+                $"The {endpoint} endpoint's response carries, in {where}, {named} an unpaired surrogate, which encodes no "
+                + "Unicode character (RFC 8259 §8.2), so the response holds text no reader agrees on and is refused.")
+            {
+                LikelyCause = "The server escaped one half of a surrogate pair alone, or cut a value between the two "
+                              + "halves of a pair.",
+                SpecificationReference = "RFC 8259 §8.2"
+            });
+    }
 
 
     /// <summary>
@@ -412,10 +370,6 @@ public static class OAuthResponseParsers
     /// <returns>The refusal.</returns>
     private static OAuthRepeatedMemberName RepeatedMemberRefusal(JsonRepeatedMemberName repeated, string endpoint)
     {
-        var named = IsUnicodeText(repeated.Name)
-            ? $"the member {repeated.Name}"
-            : "a member whose name's escapes name an unpaired surrogate";
-
         var where = repeated.ObjectDepth == 1
             ? "its own object, whose members are its parameters"
             : "an object nested within it";
@@ -424,8 +378,8 @@ public static class OAuthResponseParsers
             repeated.Name,
             repeated.ObjectDepth,
             new DecisionSupport(
-                $"The {endpoint} endpoint's response names {named} more than once in {where}, where the names within an object "
-                + "SHOULD be unique (RFC 8259 §4), so it names no parameter one way and is refused.")
+                $"The {endpoint} endpoint's response names the member {repeated.Name} more than once in {where}, where the names "
+                + "within an object SHOULD be unique (RFC 8259 §4), so it names no parameter one way and is refused.")
             {
                 LikelyCause = "Readers of a repeated name differ in which value they take, so the value one reader checks and "
                               + "the value another uses could differ.",
@@ -435,34 +389,9 @@ public static class OAuthResponseParsers
 
 
     /// <summary>
-    /// Whether text is a sequence of Unicode scalar values, every surrogate in it completed by its pair, so it can be written
-    /// as text.
-    /// </summary>
-    /// <param name="text">The text.</param>
-    /// <returns><see langword="true"/> when every surrogate in it is paired.</returns>
-    private static bool IsUnicodeText(string text)
-    {
-        var remaining = text.AsSpan();
-
-        while(!remaining.IsEmpty)
-        {
-            if(Rune.DecodeFromUtf16(remaining, out _, out var consumed) is not OperationStatus.Done)
-            {
-                return false;
-            }
-
-            remaining = remaining[consumed..];
-        }
-
-        return true;
-    }
-
-
-    /// <summary>
     /// The decoded string a top-level parameter carries, or <see langword="null"/> when the response carries no such parameter
-    /// or carries it as no string, or as a string naming no Unicode text, which its reader refuses first by the parameter's
-    /// name (<see cref="UndecodableAmong"/>). A body whose objects repeat no name is the only one read, so the member found is
-    /// the one the object carries.
+    /// or carries it as no string. A body whose objects repeat no name and none of whose members names no Unicode text is the
+    /// only one read, so the member found is the one the object carries and its text is Unicode text.
     /// </summary>
     /// <param name="members">The response's top-level members.</param>
     /// <param name="name">The parameter's name.</param>
@@ -525,7 +454,7 @@ public static class OAuthResponseParsers
 
     /// <summary>
     /// The OAuth error response a body's top-level <c>error</c> names (RFC 6749 §5.2), with the description and the URI it
-    /// carries beside it; a description or a URI carried as a string naming no Unicode text is refused by its name.
+    /// carries beside it.
     /// </summary>
     /// <typeparam name="T">The success type the endpoint's parser answers.</typeparam>
     /// <param name="errorCode">The <c>error</c> the response names.</param>
@@ -541,13 +470,6 @@ public static class OAuthResponseParsers
         string endpoint,
         string specReference)
     {
-        if(UndecodableAmong(
-            members,
-            [OAuthRequestParameterNames.ErrorDescription, OAuthRequestParameterNames.ErrorInformationLocation]) is { } undecodable)
-        {
-            return UndecodableRefusal<T>(undecodable, response, endpoint);
-        }
-
         var description = StringOf(members, OAuthRequestParameterNames.ErrorDescription) is { Length: > 0 } carried ? carried : null;
 
         Uri? errorUri = null;
@@ -568,31 +490,18 @@ public static class OAuthResponseParsers
 
     /// <summary>
     /// The RFC 9457 problem a <c>problem+json</c> response states, read from the top-level <c>type</c>, <c>detail</c> and
-    /// <c>instance</c> members of the one JSON object its body is; a body that is no such object, or that repeats a member
-    /// name, never reaches this reading, as it is refused for that whatever its media type, and a <c>type</c>,
-    /// <c>detail</c> or <c>instance</c> carried as a string naming no Unicode text is refused by its name.
+    /// <c>instance</c> members of the one JSON object its body is; a body that is no such object, that repeats a member name,
+    /// or a member of which has a name or a string value naming no Unicode text, never reaches this reading, as it is refused
+    /// for that whatever its media type.
     /// </summary>
     /// <typeparam name="T">The success type the endpoint's parser answers.</typeparam>
     /// <param name="members">The response's top-level members.</param>
     /// <param name="response">The response.</param>
-    /// <param name="endpoint">The endpoint that answered it.</param>
-    /// <returns>The protocol error, or the refusal of a member it cannot read.</returns>
+    /// <returns>The protocol error.</returns>
     private static Result<T, OAuthParseError> ParseProblemJson<T>(
         IReadOnlyList<JsonTopLevelMember> members,
-        HttpResponseData response,
-        string endpoint)
+        HttpResponseData response)
     {
-        if(UndecodableAmong(
-            members,
-            [
-                WellKnownProblemDetailsMemberNames.Type,
-                WellKnownProblemDetailsMemberNames.Detail,
-                WellKnownProblemDetailsMemberNames.Instance
-            ]) is { } undecodable)
-        {
-            return UndecodableRefusal<T>(undecodable, response, endpoint);
-        }
-
         var errorCode = StringOf(members, WellKnownProblemDetailsMemberNames.Type) is { Length: > 0 } type ? type : "problem";
 
         var detail = StringOf(members, WellKnownProblemDetailsMemberNames.Detail) is { Length: > 0 } carriedDetail

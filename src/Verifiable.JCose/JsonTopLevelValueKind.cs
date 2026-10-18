@@ -6,14 +6,11 @@ namespace Verifiable.JCose;
 /// </summary>
 public enum JsonTopLevelValueKind
 {
-    /// <summary>A string whose escapes name Unicode text, read decoded once (RFC 8259 section 7).</summary>
-    String,
-
     /// <summary>
-    /// A string whose escapes name no Unicode text - an unpaired surrogate, which the grammar admits and of which RFC 8259
-    /// section 8.2 says receivers "might ... even suffer fatal runtime exceptions" - so no text is read from it.
+    /// A string, read decoded once (RFC 8259 section 7); a document holding a string naming no Unicode text is refused whole
+    /// (<see cref="JsonUndecodableMember"/>), so every string read is Unicode text.
     /// </summary>
-    UndecodableString,
+    String,
 
     /// <summary>A number (RFC 8259 section 6), its text as written.</summary>
     Number,

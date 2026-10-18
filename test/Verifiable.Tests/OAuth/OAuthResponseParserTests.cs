@@ -521,70 +521,169 @@ internal sealed class OAuthResponseParsersTests
 
 
     /// <summary>
-    /// RFC 8259 §8.2: an escape naming an unpaired surrogate is grammatical but names no Unicode text. A token response carrying
-    /// a parameter its success is read from - the access token, the token type, a refresh token - or its <c>error</c> as such a
-    /// string is refused by that parameter's name, never answered as a response carrying no such parameter, and a parameter so
-    /// spelled is never dropped from a success; the summary carries none of the values the body holds.
+    /// RFC 8259 §8.2: an escape naming an unpaired surrogate is grammatical but names no Unicode text. A token response a member
+    /// of which has a name or a string value so spelled - a parameter its success is read from, its <c>error</c>, or an
+    /// extension member it reads nothing from, at the top level or nested - is refused by the first such member in document
+    /// order, its name, the depth of the object carrying it and which part names no text, never answered as a response carrying
+    /// no such parameter, and a parameter so spelled is never dropped from a success; the summary carries none of the values the
+    /// body holds.
     /// </summary>
     /// <param name="body">The response body.</param>
-    /// <param name="expectedName">The parameter carried as such a string.</param>
+    /// <param name="expectedName">The member's name as the refusal carries it.</param>
+    /// <param name="expectedDepth">The depth of the object carrying the member.</param>
+    /// <param name="expectedPart">Which part of the member names no Unicode text.</param>
     [TestMethod]
     [DataRow(
         /*lang=json*/ """{"access_token":"\uD800","token_type":"Bearer","refresh_token":"refresh-credential-text"}""",
         "access_token",
+        1,
+        JsonUndecodableMemberPart.Value,
         DisplayName = "An access_token naming an unpaired surrogate")]
     [DataRow(
         /*lang=json*/ """{"access_token":"access-credential-text","token_type":"\uDC00"}""",
         "token_type",
+        1,
+        JsonUndecodableMemberPart.Value,
         DisplayName = "A token_type naming an unpaired surrogate")]
     [DataRow(
         /*lang=json*/ """{"access_token":"access-credential-text","token_type":"Bearer","refresh_token":"x\uD800"}""",
         "refresh_token",
+        1,
+        JsonUndecodableMemberPart.Value,
         DisplayName = "A refresh_token naming an unpaired surrogate")]
     [DataRow(
         /*lang=json*/ """{"refresh_token":"\uD800","access_token":"\uDBFF","token_type":"Bearer"}""",
-        "access_token",
-        DisplayName = "The access_token judged before a refresh_token written ahead of it")]
+        "refresh_token",
+        1,
+        JsonUndecodableMemberPart.Value,
+        DisplayName = "The first in document order, a refresh_token written ahead of the access_token")]
     [DataRow(
         /*lang=json*/ """{"error":"\uD800","access_token":"access-credential-text","token_type":"Bearer"}""",
         "error",
+        1,
+        JsonUndecodableMemberPart.Value,
         DisplayName = "An error naming an unpaired surrogate beside a success")]
-    public void ParseTokenResponseRefusesAnUndecodableParameterByItsName(string body, string expectedName)
+    [DataRow(
+        /*lang=json*/ """{"access_token":"access-credential-text","token_type":"Bearer","ext":"\uD800"}""",
+        "ext",
+        1,
+        JsonUndecodableMemberPart.Value,
+        DisplayName = "An extension member the parser reads nothing from")]
+    [DataRow(
+        /*lang=json*/ """{"access_token":"access-credential-text","token_type":"Bearer","ext":{"note":["\uDC00"]}}""",
+        "note",
+        2,
+        JsonUndecodableMemberPart.Value,
+        DisplayName = "A string an array holds in an extension object")]
+    [DataRow(
+        /*lang=json*/ """{"access_token":"access-credential-text","token_type":"Bearer","\uDC00":"x"}""",
+        "\\uDC00",
+        1,
+        JsonUndecodableMemberPart.Name,
+        DisplayName = "A member name naming an unpaired surrogate, spelled as the body escapes it")]
+    public void ParseTokenResponseRefusesAnUndecodableMemberByItsName(
+        string body,
+        string expectedName,
+        int expectedDepth,
+        JsonUndecodableMemberPart expectedPart)
     {
         var result = OAuthResponseParsers.ParseTokenResponse(Respond(body), DateTimeOffset.UnixEpoch);
 
         Assert.IsFalse(result.IsSuccess, "No token is read from the body.");
 
-        var refused = Assert.IsInstanceOfType<OAuthUndecodableMemberValue>(result.Error, "The undecodable parameter is the reason.");
-        Assert.AreEqual(expectedName, refused.MemberName, "The parameter carried as no Unicode text.");
+        var refused = Assert.IsInstanceOfType<OAuthUndecodableMemberValue>(result.Error, "The undecodable member is the reason.");
+        Assert.AreEqual(expectedName, refused.MemberName, "The member's name as it can be written.");
+        Assert.AreEqual(expectedDepth, refused.ObjectDepth, "The depth of the object carrying it.");
+        Assert.AreEqual(expectedPart, refused.Part, "Which part names no Unicode text.");
         Assert.AreEqual("RFC 8259 §8.2", refused.Support.SpecificationReference, "The rule broken.");
-        Assert.Contains(expectedName, refused.Support.Summary, "The summary names the parameter.");
+        Assert.Contains(expectedName, refused.Support.Summary, "The summary names the member.");
         Assert.DoesNotContain("credential-text", refused.Support.Summary, "No value the body carries is in the summary.");
         Assert.DoesNotContain("credential-text", refused.Support.LikelyCause ?? string.Empty, "No value the body carries is in the cause.");
     }
 
 
     /// <summary>
-    /// The error a response names keeps its precedence over the parameters a success is read from: an error response carrying
-    /// an <c>access_token</c> that names no Unicode text is answered as the error it names, under the token endpoint's own media
-    /// type and the problem details media type alike, as neither reads an access token.
+    /// The error a readable response names keeps its precedence over the parameters a success is read from: an error response
+    /// carrying a complete success beside its error is answered as the error it names, at the token and the pushed authorization
+    /// endpoints alike, and under the problem details media type as the problem it names.
     /// </summary>
     [TestMethod]
-    public void AnErrorResponseIsAnsweredAsItsErrorWhateverAccessTokenItCarries()
+    public void TheErrorAReadableResponseNamesKeepsItsPrecedenceOverASuccess()
+    {
+        var token = OAuthResponseParsers.ParseTokenResponse(
+            Respond(/*lang=json,strict*/ """{"error":"invalid_grant","access_token":"access-credential-text","token_type":"Bearer"}""", statusCode: 400),
+            DateTimeOffset.UnixEpoch);
+
+        var pushed = OAuthResponseParsers.ParseParResponse(
+            Respond(/*lang=json,strict*/ """{"error":"invalid_request","request_uri":"urn:ietf:params:oauth:request_uri:x","expires_in":60}""", statusCode: 400));
+
+        var problem = OAuthResponseParsers.ParseTokenResponse(
+            Problem(/*lang=json,strict*/ """{"type":"invalid_grant","access_token":"access-credential-text","token_type":"Bearer"}"""),
+            DateTimeOffset.UnixEpoch);
+
+        Assert.AreEqual("invalid_grant", Assert.IsInstanceOfType<OAuthProtocolError>(token.Error).ErrorCode, "The error the token answer names.");
+        Assert.AreEqual("invalid_request", Assert.IsInstanceOfType<OAuthProtocolError>(pushed.Error).ErrorCode, "The error the pushed answer names.");
+        Assert.AreEqual("invalid_grant", Assert.IsInstanceOfType<OAuthProtocolError>(problem.Error).ErrorCode, "The problem the body names.");
+    }
+
+
+    /// <summary>
+    /// An error response one of whose members names no Unicode text is no readable response, so its error has no precedence:
+    /// an <c>error</c> or a problem <c>type</c> beside an <c>access_token</c> naming an unpaired surrogate is refused by the
+    /// <c>access_token</c>, under the token endpoint's own media type and the problem details media type alike, though neither
+    /// reads an access token.
+    /// </summary>
+    [TestMethod]
+    public void AnErrorResponseHoldingAMemberNamingNoUnicodeTextIsRefusedByThatMember()
     {
         var error = OAuthResponseParsers.ParseTokenResponse(
             Respond(/*lang=json*/ """{"error":"invalid_grant","access_token":"\uD800"}""", statusCode: 400),
             DateTimeOffset.UnixEpoch);
 
         var problem = OAuthResponseParsers.ParseTokenResponse(
-            Respond(
-                /*lang=json*/ """{"type":"invalid_grant","access_token":"\uD800"}""",
-                statusCode: 400,
-                contentType: WellKnownMediaTypes.Application.ProblemJson),
+            Problem(/*lang=json*/ """{"type":"invalid_grant","access_token":"\uD800"}"""),
             DateTimeOffset.UnixEpoch);
 
-        Assert.AreEqual("invalid_grant", Assert.IsInstanceOfType<OAuthProtocolError>(error.Error).ErrorCode, "The error the body names.");
-        Assert.AreEqual("invalid_grant", Assert.IsInstanceOfType<OAuthProtocolError>(problem.Error).ErrorCode, "The problem the body names.");
+        Assert.AreEqual(
+            OAuthRequestParameterNames.AccessToken,
+            Assert.IsInstanceOfType<OAuthUndecodableMemberValue>(error.Error).MemberName,
+            "The error answer's access_token.");
+
+        Assert.AreEqual(
+            OAuthRequestParameterNames.AccessToken,
+            Assert.IsInstanceOfType<OAuthUndecodableMemberValue>(problem.Error).MemberName,
+            "The problem answer's access_token.");
+    }
+
+
+    /// <summary>
+    /// A member no parser reads, holding a string naming no Unicode text, refuses every answer that holds it, as the reader's one
+    /// rule judges the whole body: an answer carrying a complete token success, a complete pushed authorization success and a
+    /// problem type beside an extension object whose member names no text is refused by that member at the token and the pushed
+    /// authorization endpoints, under their own media type and the problem details media type, naming the member, its depth and
+    /// its part and none of the values the answer holds.
+    /// </summary>
+    [TestMethod]
+    public void AMemberNoParserReadsNamingNoUnicodeTextRefusesEveryAnswer()
+    {
+        var body = /*lang=json*/ """{"access_token":"access-credential-text","token_type":"Bearer","request_uri":"urn:ietf:params:oauth:request_uri:credential-text","expires_in":60,"type":"invalid_grant","ext":{"note":"\uDC00"}}""";
+
+        OAuthParseError?[] refusals =
+        [
+            OAuthResponseParsers.ParseTokenResponse(Respond(body), DateTimeOffset.UnixEpoch).Error,
+            OAuthResponseParsers.ParseParResponse(Respond(body)).Error,
+            OAuthResponseParsers.ParseTokenResponse(Problem(body), DateTimeOffset.UnixEpoch).Error,
+            OAuthResponseParsers.ParseParResponse(Problem(body)).Error
+        ];
+
+        foreach(var refusal in refusals)
+        {
+            var refused = Assert.IsInstanceOfType<OAuthUndecodableMemberValue>(refusal, "The extension member is the reason.");
+            Assert.AreEqual("note", refused.MemberName, "The member naming no Unicode text.");
+            Assert.AreEqual(2, refused.ObjectDepth, "The extension object carrying it.");
+            Assert.AreEqual(JsonUndecodableMemberPart.Value, refused.Part, "Its value names no Unicode text.");
+            Assert.DoesNotContain("credential-text", refused.Support.Summary, "No value the body carries is in the summary.");
+        }
     }
 
 

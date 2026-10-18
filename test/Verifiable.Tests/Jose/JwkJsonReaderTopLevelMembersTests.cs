@@ -63,8 +63,8 @@ internal sealed class JwkJsonReaderTopLevelMembersTests
 
     /// <summary>
     /// A document that is not exactly one well-formed JSON object is no object: an array, a string, one never closed and one
-    /// followed by more text, each also when it repeats a name, as a document that is no well-formed object names no member at
-    /// all, once or more than once.
+    /// followed by more text, each also when it repeats a name or holds a string naming no Unicode text, as a document that is
+    /// no well-formed object names no member at all, once, more than once or in no text.
     /// </summary>
     /// <param name="document">The document.</param>
     [TestMethod]
@@ -81,6 +81,11 @@ internal sealed class JwkJsonReaderTopLevelMembersTests
     [DataRow(
         """{"access_token":"first","access_token":"second"}{"access_token":"third"}""",
         DisplayName = "An object repeating a name followed by another")]
+    [DataRow("{\"access_token\":\"\\uD800\"", DisplayName = "An object never closed whose member names no Unicode text")]
+    [DataRow(/*lang=json*/ """["\uD800"]""", DisplayName = "An array holding a string that names no Unicode text")]
+    [DataRow(
+        """{"access_token":"\uD800"}{"token_type":"Bearer"}""",
+        DisplayName = "An object whose member names no Unicode text followed by another")]
     public void ADocumentThatIsNotOneWellFormedObjectIsNone(string document)
     {
         var reading = JwkJsonReader.ReadTopLevelMembers(Encoding.UTF8.GetBytes(document));
@@ -105,7 +110,7 @@ internal sealed class JwkJsonReaderTopLevelMembersTests
         1,
         DisplayName = "A name repeated at the top level")]
     [DataRow(
-        /*lang=json*/ """{"access_token":"first","access_token":"second"}""",
+        /*lang=json*/ """{"access_token":"first","access\u005ftoken":"second"}""",
         "access_token",
         1,
         DisplayName = "A name repeated through an escape")]
@@ -131,28 +136,157 @@ internal sealed class JwkJsonReaderTopLevelMembersTests
 
 
     /// <summary>
-    /// RFC 8259 section 8.2: an escape naming an unpaired surrogate is grammatical but names no Unicode text. A string value so
-    /// spelled is read as undecodable, carrying no text, and a member whose name is so spelled is left out, every other member
-    /// still read.
+    /// RFC 8259 section 8.2: an escape naming an unpaired surrogate is grammatical but names no Unicode text, and the behavior
+    /// of software receiving it is unpredictable. A well-formed object one of whose members has a name or a string value so
+    /// spelled - at the top level or nested, in a member any reader reads or in one none reads, the value itself or a string an
+    /// array value holds - is refused by that member: its name as it can be written, the depth of the object carrying it and
+    /// which part names no text. A name that is the defect is answered as the document spells it, escapes as written, so the
+    /// refusal holds text a strict encoder writes.
     /// </summary>
+    /// <param name="document">The document.</param>
+    /// <param name="expectedName">The member's name as the refusal carries it.</param>
+    /// <param name="expectedDepth">The depth of the object carrying the member.</param>
+    /// <param name="expectedPart">Which part of the member names no Unicode text.</param>
     [TestMethod]
-    public void TextNamingAnUnpairedSurrogateIsReadAsUndecodable()
+    [DataRow(
+        /*lang=json*/ """{"access_token":"at","token_type":"Bearer","ext":"\uD800"}""",
+        "ext",
+        1,
+        JsonUndecodableMemberPart.Value,
+        DisplayName = "A value in a top-level member no reader reads")]
+    [DataRow(
+        /*lang=json*/ """{"access_token":"at","ext":{"note":"x\uDC00"}}""",
+        "note",
+        2,
+        JsonUndecodableMemberPart.Value,
+        DisplayName = "A value in a nested object")]
+    [DataRow(
+        /*lang=json*/ """{"access_token":"at","aud":["one","\uD800"]}""",
+        "aud",
+        1,
+        JsonUndecodableMemberPart.Value,
+        DisplayName = "A string an array value holds")]
+    [DataRow(
+        /*lang=json*/ """{"ext":{"list":[["\uDBFF"]]}}""",
+        "list",
+        2,
+        JsonUndecodableMemberPart.Value,
+        DisplayName = "A string an array within an array holds, in a nested object")]
+    [DataRow(
+        /*lang=json*/ """{"v":"\uD800\uD800\uDC00"}""",
+        "v",
+        1,
+        JsonUndecodableMemberPart.Value,
+        DisplayName = "A high surrogate followed by a pair")]
+    [DataRow(
+        /*lang=json*/ """{"acc\u0065ss_token":"\uDFFF"}""",
+        "access_token",
+        1,
+        JsonUndecodableMemberPart.Value,
+        DisplayName = "A value whose member is named through an escape, the name decoded")]
+    [DataRow(
+        /*lang=json*/ """{"access_token":"at","\uDC00":"v"}""",
+        "\\uDC00",
+        1,
+        JsonUndecodableMemberPart.Name,
+        DisplayName = "A top-level name, spelled as the document escapes it")]
+    [DataRow(
+        /*lang=json*/ """{"ext":{"a\uD800b":1}}""",
+        "a\\uD800b",
+        2,
+        JsonUndecodableMemberPart.Name,
+        DisplayName = "A nested name, spelled as the document escapes it")]
+    public void AMemberNamingNoUnicodeTextRefusesTheDocument(
+        string document,
+        string expectedName,
+        int expectedDepth,
+        JsonUndecodableMemberPart expectedPart)
     {
-        var reading = JwkJsonReader.ReadTopLevelMembers(
-            Encoding.UTF8.GetBytes(/*lang=json*/ """{"access_token":"\uD800","\uDC00":"left-out","token_type":"Bearer"}"""));
+        var reading = JwkJsonReader.ReadTopLevelMembers(Encoding.UTF8.GetBytes(document));
 
-        var members = Assert.IsInstanceOfType<JsonTopLevelMembers>(reading, "The document is well formed.").Members;
-        Assert.HasCount(2, members, "The member whose name names no Unicode text is left out.");
-        Assert.AreEqual(new JsonTopLevelMember("access_token", JsonTopLevelValueKind.UndecodableString, string.Empty), members[0]);
-        Assert.AreEqual(new JsonTopLevelMember("token_type", JsonTopLevelValueKind.String, "Bearer"), members[1]);
+        var undecodable = Assert.IsInstanceOfType<JsonUndecodableMember>(reading, $"The member is the reason; read {reading}.");
+        Assert.AreEqual(expectedName, undecodable.Name, "The member's name as it can be written.");
+        Assert.AreEqual(expectedDepth, undecodable.ObjectDepth, "The depth of the object carrying it.");
+        Assert.AreEqual(expectedPart, undecodable.Part, "Which part names no Unicode text.");
+
+        var strict = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+        Assert.AreEqual(undecodable.Name, strict.GetString(strict.GetBytes(undecodable.Name)), "The name is text a strict encoder writes.");
+    }
+
+
+    /// <summary>
+    /// When a well-formed object both repeats a name and holds a member naming no Unicode text, the defect the document reaches
+    /// first is answered, the order a reader meets them in: a value naming no text written before the repeating occurrence of
+    /// its member's name, or a string an array holds before a later repetition, is answered as undecodable, and a name naming
+    /// no text as undecodable at its first occurrence, before its repetition.
+    /// </summary>
+    /// <param name="document">The document.</param>
+    /// <param name="expectedName">The member's name as the refusal carries it.</param>
+    /// <param name="expectedDepth">The depth of the object carrying the member.</param>
+    /// <param name="expectedPart">Which part of the member names no Unicode text.</param>
+    [TestMethod]
+    [DataRow(
+        /*lang=json*/ """{"a":"\uD800","a":"x"}""",
+        "a",
+        1,
+        JsonUndecodableMemberPart.Value,
+        DisplayName = "A value naming no text before its name is repeated")]
+    [DataRow(
+        /*lang=json*/ """{"v":["\uDC00"],"list":[{"b":1,"b":2}]}""",
+        "v",
+        1,
+        JsonUndecodableMemberPart.Value,
+        DisplayName = "A string an array holds before a later repetition")]
+    [DataRow(
+        /*lang=json*/ """{"\uD800":1,"\uD800":2}""",
+        "\\uD800",
+        1,
+        JsonUndecodableMemberPart.Name,
+        DisplayName = "A name naming no text, repeated")]
+    public void AnUndecodableMemberTheDocumentReachesFirstIsAnsweredBeforeARepetition(
+        string document,
+        string expectedName,
+        int expectedDepth,
+        JsonUndecodableMemberPart expectedPart)
+    {
+        var reading = JwkJsonReader.ReadTopLevelMembers(Encoding.UTF8.GetBytes(document));
+
+        Assert.AreEqual(new JsonUndecodableMember(expectedName, expectedDepth, expectedPart), reading, "The first defect in document order.");
+    }
+
+
+    /// <summary>
+    /// A repetition the document reaches before any member naming no Unicode text is answered as the repetition: a value naming
+    /// no text written after the repeating occurrence of its member's name, and one in a member after a repetition in an object
+    /// within an array.
+    /// </summary>
+    /// <param name="document">The document.</param>
+    /// <param name="expectedName">The repeated name.</param>
+    /// <param name="expectedDepth">The depth of the object repeating it.</param>
+    [TestMethod]
+    [DataRow(
+        /*lang=json*/ """{"a":"x","a":"\uD800"}""",
+        "a",
+        1,
+        DisplayName = "A value naming no text after its name is repeated")]
+    [DataRow(
+        /*lang=json*/ """{"list":[{"b":1,"b":2}],"v":"\uDC00"}""",
+        "b",
+        3,
+        DisplayName = "A repetition in an object within an array before a value naming no text")]
+    public void ARepetitionTheDocumentReachesFirstIsAnsweredBeforeAnUndecodableMember(string document, string expectedName, int expectedDepth)
+    {
+        var reading = JwkJsonReader.ReadTopLevelMembers(Encoding.UTF8.GetBytes(document));
+
+        Assert.AreEqual(new JsonRepeatedMemberName(expectedName, expectedDepth), reading, "The first defect in document order.");
     }
 
 
     /// <summary>
     /// RFC 8259 section 8.1: JSON text exchanged between systems "MUST be encoded using UTF-8". A document holding bytes that are
     /// no well-formed UTF-8 - in a member name, in a string value, in a name or a string nested beneath the top level - is no
-    /// well-formed document, so it is no object, never one whose text holds a character its bytes do not encode. The rows are
-    /// bytes, as no managed string carries such a sequence.
+    /// well-formed document, so it is no object, never one whose text holds a character its bytes do not encode, also when a
+    /// string before them names no Unicode text. The rows are bytes, as no managed string carries such a sequence.
     /// </summary>
     /// <param name="document">The document's bytes.</param>
     [TestMethod]
@@ -178,6 +312,13 @@ internal sealed class JwkJsonReaderTopLevelMembersTests
     [DataRow(
         new byte[] { 0x7B, 0x22, 0x76, 0x22, 0x3A, 0x22, 0xF4, 0x90, 0x80, 0x80, 0x22, 0x7D },
         DisplayName = "A code point past U+10FFFF")]
+    [DataRow(
+        new byte[]
+        {
+            0x7B, 0x22, 0x76, 0x22, 0x3A, 0x22, 0x5C, 0x75, 0x44, 0x38, 0x30, 0x30, 0x22,
+            0x2C, 0x22, 0x77, 0x22, 0x3A, 0x22, 0xFF, 0x22, 0x7D
+        },
+        DisplayName = "FF after a value naming no Unicode text")]
     public void ADocumentHoldingBytesThatAreNoUtf8IsNone(byte[] document)
     {
         var reading = JwkJsonReader.ReadTopLevelMembers(document);
