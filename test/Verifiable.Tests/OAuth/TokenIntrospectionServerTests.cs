@@ -1,11 +1,17 @@
 using Microsoft.Extensions.Time.Testing;
+using System.Collections.Concurrent;
 using System.Collections.Immutable;
+using System.Text;
 using System.Text.Json;
+using Verifiable.Cryptography;
+using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
+using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Introspection;
 using Verifiable.OAuth.Server;
 using Verifiable.Server.Routing;
+using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -543,6 +549,124 @@ internal sealed class TokenIntrospectionServerTests
             ["token_type"] = "Bearer"
         }
     };
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.2">RFC 9449 Section 6.2</see>: "Note that the resource
+    /// server does not send a DPoP proof with the introspection request, and the authorization server does not validate
+    /// an access token's DPoP binding at the introspection endpoint." The sentence holds for a bound token too: at an
+    /// authorization server wiring DPoP, an introspection request posted over the wire for a token the application
+    /// answers as active, of the type <c>DPoP</c> and bound to one key, with a valid DPoP proof by another, unrelated key
+    /// in its <c>DPoP</c> field, is served as the same request without the field is: 200, the body byte for byte the body
+    /// answered without it, both bodies carrying <c>cnf.jkt</c> equal to the bound key's JWK SHA-256 Thumbprint, and no
+    /// <c>DPoP-Nonce</c> field line. The authorization server does not hold the token's binding against the proof at the
+    /// introspection endpoint.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task IntrospectionEndpointServesARequestCarryingADpopProofAsItServesOneWithoutAsync()
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> boundKey = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> unrelatedKey = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            string boundThumbprint = new DpopKey(boundKey, WellKnownJwaValues.Es256).GetThumbprint(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
+            await using TestHostShell host = new(TimeProvider);
+            using VerifierKeyMaterial material = await host.RegisterClientAsync(
+                ClientId, ClientBaseUri, IntrospectionCapabilities).ConfigureAwait(false);
+            _ = await host.EnableDpopAsync().ConfigureAwait(false);
+            await WireIntrospectionAsync(host, new TokenIntrospectionResult
+            {
+                IsActive = true,
+                Subject = "Z5O3upPC88QrAjx00dis",
+                Scope = "read",
+                TokenType = "DPoP",
+                Confirmation = new ConfirmationMethod { JwkThumbprint = boundThumbprint }
+            }).ConfigureAwait(false);
+            await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+            string segment = material.Registration.TenantId.Value;
+            Uri endpoint = new(host.Host("default").HttpBaseAddress!,
+                TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeIntrospect, segment));
+            Dictionary<string, string> fields = new(StringComparer.Ordinal)
+            {
+                [OAuthRequestParameterNames.Token] = "introspected-access-token",
+                [OAuthRequestParameterNames.ClientId] = ClientId
+            };
+
+            string proof = await ResourceDpopProofs.BuildAsync(
+                new DpopKey(unrelatedKey, WellKnownJwaValues.Es256), WellKnownHttpMethods.Post, endpoint.OriginalString,
+                accessToken: null, nonce: null, TimeProvider.GetUtcNow(), TestContext.CancellationToken).ConfigureAwait(false);
+
+            HttpResponseData withoutProof = await RawAuthCodeWirePushers.PushRawIntrospectionFieldsAsync(
+                host, segment, fields, OutgoingHeaders.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The request without a proof is answered without a server fault.");
+            HttpResponseData withProof = await RawAuthCodeWirePushers.PushRawIntrospectionFieldsAsync(
+                host, segment, fields, OutgoingHeaders.Empty.WithDpop(proof), TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The request with a proof is answered without a server fault.");
+
+            Assert.AreEqual(200, withoutProof.StatusCode, withoutProof.Body);
+            Assert.AreEqual(200, withProof.StatusCode, withProof.Body);
+            Assert.AreSequenceEqual(Encoding.UTF8.GetBytes(withoutProof.Body), Encoding.UTF8.GetBytes(withProof.Body));
+            Assert.IsEmpty(withProof.Headers.Headers.GetValues(WellKnownHttpHeaderNames.DPoPNonce), "The endpoint provides no DPoP nonce.");
+            foreach(HttpResponseData answered in new[] { withoutProof, withProof })
+            {
+                using JsonDocument document = JsonDocument.Parse(answered.Body);
+                Assert.AreEqual(boundThumbprint, document.RootElement.GetProperty("cnf").GetProperty("jkt").GetString(), answered.Body);
+            }
+        }
+        finally
+        {
+            boundKey.PublicKey.Dispose();
+            boundKey.PrivateKey.Dispose();
+            unrelatedKey.PublicKey.Dispose();
+            unrelatedKey.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7662#section-2.1">RFC 7662 Section 2.1</see>: "If the server is
+    /// unable to locate the token using the given hint, it MUST extend its search across all of its supported token
+    /// types. An authorization server MAY ignore this parameter, particularly if it is able to detect the token type
+    /// automatically. Values for this field are defined in the "OAuth Token Type Hints" registry defined in OAuth Token
+    /// Revocation [RFC7009]." The hint is the application's to read: an introspection request posted over the wire with
+    /// <c>token_type_hint=DPoP</c>, a value outside that registry, is answered 200 and the application's introspection
+    /// seam receives the hint <c>DPoP</c> as sent.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task IntrospectionEndpointHandsATokenTypeHintToTheApplicationAsSentAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterClientAsync(
+            ClientId, ClientBaseUri, IntrospectionCapabilities).ConfigureAwait(false);
+        ConcurrentQueue<string?> hints = new();
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidateClientCredentialsAsync = static (_, _, _, _) => ValueTask.FromResult(true);
+            candidateIntegration.IntrospectTokenAsync = (_, hint, _, _, _) =>
+            {
+                hints.Enqueue(hint);
+
+                return ValueTask.FromResult(new TokenIntrospectionResult { IsActive = true, Subject = "Z5O3upPC88QrAjx00dis" });
+            };
+        }).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        HttpResponseData response = await RawAuthCodeWirePushers.PushRawIntrospectionFieldsAsync(
+            host, material.Registration.TenantId.Value,
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [OAuthRequestParameterNames.Token] = "introspected-access-token",
+                [OAuthRequestParameterNames.TokenTypeHint] = "DPoP",
+                [OAuthRequestParameterNames.ClientId] = ClientId
+            },
+            OutgoingHeaders.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The introspection request is answered without a server fault.");
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+        Assert.AreEqual("DPoP", Assert.ContainsSingle(hints));
+    }
 
 
     /// <summary>

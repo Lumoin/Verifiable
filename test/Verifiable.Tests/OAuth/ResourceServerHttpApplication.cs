@@ -9,7 +9,9 @@ using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.OAuth;
+using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
+using Verifiable.OAuth.Introspection;
 using Verifiable.OAuth.ProtectedResource;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -54,6 +56,15 @@ namespace Verifiable.Tests.OAuth;
 /// library's resources answer it: with the <c>DPoP</c> challenge under the requirement or where
 /// every line names <c>DPoP</c>, the <c>Bearer</c> challenge where every line names
 /// <c>Bearer</c>, and both for lines naming two schemes.
+/// </para>
+/// <para>
+/// Introspection mode: given a <see cref="ResourceServerIntrospection"/>, the application validates a presented token by
+/// the library's introspection operation at the authorization server in place of <see cref="JwsAccessTokenValidator"/>
+/// (<see cref="ServeIntrospectedTokenAsync"/>): a failure result or a transport exception
+/// (<see cref="HttpRequestException"/>) of the introspection is answered 500 <c>server_error</c> with no challenge, the
+/// application's own policy; a token answered as not active 401 <c>invalid_token</c> under the presented
+/// scheme's challenge; an active token's binding, its <see cref="TokenIntrospectionResult.Confirmation"/>,
+/// goes to <see cref="DpopResourceAccess.DecideAsync"/> as a JWT's <c>cnf</c> does.
 /// </para>
 /// <para>
 /// Span decoration: token-validated and scope-checked outcomes are attached
@@ -102,6 +113,24 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
     private ConcurrentQueue<(Activity? Activity, bool IsStopped)>? AmbientActivitiesAfterDecision { get; }
 
     /// <summary>
+    /// The resource's introspection mode, or <see langword="null"/> when every presented token is validated as a JWT
+    /// access token by <see cref="JwsAccessTokenValidator"/>.
+    /// </summary>
+    private ResourceServerIntrospection? Introspection { get; }
+
+    /// <summary>
+    /// The <c>error_description</c> of the refusal of a token the authorization server answers as not active, the one
+    /// <see cref="WriteBearerChallengeAsync"/> carries in the <c>Bearer</c> challenge.
+    /// </summary>
+    private static string InactiveTokenDescription { get; } = "The access token is not active.";
+
+    /// <summary>
+    /// The <c>error_description</c> of the resource's answer when the introspection of a presented token fails, so the
+    /// resource cannot decide whether to serve it.
+    /// </summary>
+    private static string IntrospectionFailureDescription { get; } = "The access token could not be introspected.";
+
+    /// <summary>
     /// The RFC 9728 serving surface, assigned by
     /// <see cref="TestResourceServerShell.StartHttpHostAsync"/> once the
     /// listener is bound and the resource identity (scheme://host:port) is
@@ -127,13 +156,18 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
     /// Receives the activity current when each decision returned and whether it had stopped then, or
     /// <see langword="null"/> to observe nothing.
     /// </param>
+    /// <param name="introspection">
+    /// The resource's introspection mode, or <see langword="null"/> to validate every presented token as a JWT access
+    /// token.
+    /// </param>
     public ResourceServerHttpApplication(
         ResourceServerIntegration integration,
         VerificationDelegate verifySignature,
         Func<Uri?> resolveTargetAuthority,
         string? requiredScope = null,
         bool requiresDpop = false,
-        ConcurrentQueue<(Activity? Activity, bool IsStopped)>? ambientActivitiesAfterDecision = null)
+        ConcurrentQueue<(Activity? Activity, bool IsStopped)>? ambientActivitiesAfterDecision = null,
+        ResourceServerIntrospection? introspection = null)
     {
         ArgumentNullException.ThrowIfNull(integration);
         ArgumentNullException.ThrowIfNull(verifySignature);
@@ -144,6 +178,7 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
         this.RequiredScope = requiredScope;
         this.RequiresDpop = requiresDpop;
         this.AmbientActivitiesAfterDecision = ambientActivitiesAfterDecision;
+        this.Introspection = introspection;
     }
 
 
@@ -278,6 +313,13 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
 
         ExchangeContext exchangeContext = [];
 
+        if(Introspection is { } introspection)
+        {
+            await ServeIntrospectedTokenAsync(context, introspection, accessToken!, isDpopPresentation, exchangeContext).ConfigureAwait(false);
+
+            return;
+        }
+
         JwsAccessTokenValidationResult tokenResult = await JwsAccessTokenValidator.ValidateAsync(
             accessToken!,
             Integration.TrustedIssuer.OriginalString,
@@ -327,18 +369,163 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
 
         JwsAccessTokenClaims claims = tokenResult.Claims!;
 
-        //RFC 9449 Section 7.1: the token's binding, the request's DPoP field lines and the resource's own protection
-        //space go to the library's composition of the resource checks, which answers a permit or the exact refusal.
+        if(!await IsBindingPermittedAsync(
+            context, accessToken!, isDpopPresentation, claims.Confirmation is not null, claims.Confirmation?.JwkThumbprint, exchangeContext).ConfigureAwait(false))
+        {
+            return;
+        }
+
+        if(!await IsScopeSatisfiedAsync(context, claims.Scope).ConfigureAwait(false))
+        {
+            return;
+        }
+
+        await WriteClaimsAsync(context, claims).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Answers a presented token in the introspection mode: the token is sent to the authorization server's
+    /// introspection endpoint through the library's operation with the hint <c>access_token</c>, and the answer decides
+    /// the presentation. A failure result or a transport exception (<see cref="HttpRequestException"/>) of the
+    /// introspection, either of which leaves the resource unable to decide, is answered 500 <c>server_error</c> with no
+    /// challenge, this application's own policy for an authorization server it cannot reach or read (the library holds no
+    /// failure policy: no retry, no cache, no fallback, and a transport exception passes to the application through
+    /// <see cref="TryIntrospectAsync"/>). A token the authorization server answers as
+    /// not active is refused 401 <c>invalid_token</c> under the presented scheme's challenge
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7662#section-2.2">RFC 7662 Section 2.2</see>: "If the introspection
+    /// call is properly authorized but the token is not active, does not exist on this server, or the protected resource
+    /// is not allowed to introspect this particular token, then the authorization server MUST return an introspection
+    /// response with the "active" field set to "false"."). An active token's binding is the answer's
+    /// <see cref="TokenIntrospectionResult.Confirmation"/>, presented to <see cref="DpopResourceAccess.DecideAsync"/> as
+    /// <see cref="DpopResourceRequest.IsSenderConstrained"/> and <see cref="DpopResourceRequest.BoundThumbprint"/>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.2">RFC 9449 Section 6.2</see>: "Rather, the resource
+    /// server uses the data of the introspection response to validate the access token binding itself locally."), then
+    /// the scope is checked against the answer's <see cref="TokenIntrospectionResult.Scope"/> and the answer's claims are
+    /// served.
+    /// </summary>
+    /// <param name="context">The request's context.</param>
+    /// <param name="introspection">The resource's introspection mode.</param>
+    /// <param name="accessToken">The token as presented.</param>
+    /// <param name="isDpopPresentation">Whether the token was presented under the <c>DPoP</c> scheme.</param>
+    /// <param name="exchangeContext">The per-request exchange context.</param>
+    /// <returns>A task that completes when the answer is written.</returns>
+    private async Task ServeIntrospectedTokenAsync(
+        HttpContext context,
+        ResourceServerIntrospection introspection,
+        string accessToken,
+        bool isDpopPresentation,
+        ExchangeContext exchangeContext)
+    {
+        Result<TokenIntrospectionResult, OAuthParseError>? introspected = await TryIntrospectAsync(
+            context, introspection, accessToken, exchangeContext).ConfigureAwait(false);
+        if(introspected is not { IsSuccess: true } readable)
+        {
+            await WriteServerResponseAsync(
+                context, ServerHttpResponse.ServerError(OAuthErrors.ServerError, IntrospectionFailureDescription)).ConfigureAwait(false);
+
+            return;
+        }
+
+        TokenIntrospectionResult result = readable.Value;
+        if(!result.IsActive)
+        {
+            _ = (Activity.Current?.SetTag(ResourceServerTagNames.TokenValidated, false));
+            _ = (Activity.Current?.AddEvent(new ActivityEvent(ResourceServerEventNames.TokenRejected)));
+            await (isDpopPresentation switch
+            {
+                true => WriteDpopChallengeAsync(
+                    context, ServerHttpResponse.Unauthorized(OAuthErrors.InvalidToken, InactiveTokenDescription), OAuthErrors.InvalidToken),
+                false => WriteBearerChallengeAsync(
+                    context, StatusCodes.Status401Unauthorized, OAuthErrors.InvalidToken, InactiveTokenDescription, scope: null)
+            }).ConfigureAwait(false);
+
+            return;
+        }
+
+        _ = (Activity.Current?.SetTag(ResourceServerTagNames.TokenValidated, true));
+        _ = (Activity.Current?.AddEvent(new ActivityEvent(ResourceServerEventNames.TokenValidated)));
+
+        if(!await IsBindingPermittedAsync(
+            context, accessToken, isDpopPresentation, result.Confirmation is not null, result.Confirmation?.JwkThumbprint, exchangeContext).ConfigureAwait(false))
+        {
+            return;
+        }
+
+        if(!await IsScopeSatisfiedAsync(context, result.Scope).ConfigureAwait(false))
+        {
+            return;
+        }
+
+        await WriteIntrospectedClaimsAsync(context, result).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Introspects <paramref name="accessToken"/> through the library's operation with the hint <c>access_token</c>, and
+    /// answers <see langword="null"/> when the transport throws <see cref="HttpRequestException"/> (a refused connection,
+    /// a reset, a TLS failure), so <see cref="ServeIntrospectedTokenAsync"/> answers it as it answers a failure result.
+    /// <see cref="OperationCanceledException"/> and every other exception pass on: cancellation keeps its meaning, and a
+    /// fault of this application's own wiring reaches the host's catch-all.
+    /// </summary>
+    /// <param name="context">The request's context.</param>
+    /// <param name="introspection">The resource's introspection mode.</param>
+    /// <param name="accessToken">The token as presented.</param>
+    /// <param name="exchangeContext">The per-request exchange context.</param>
+    /// <returns>The operation's answer, or <see langword="null"/> when the transport failed.</returns>
+    private static async Task<Result<TokenIntrospectionResult, OAuthParseError>?> TryIntrospectAsync(
+        HttpContext context,
+        ResourceServerIntrospection introspection,
+        string accessToken,
+        ExchangeContext exchangeContext)
+    {
+        try
+        {
+            return await introspection.Client.Introspection.IntrospectAsync(
+                introspection.Registration,
+                new TokenIntrospectionRequest { Token = accessToken, TokenTypeHint = "access_token" },
+                exchangeContext,
+                introspection.ClientAssertionOptions,
+                context.RequestAborted).ConfigureAwait(false);
+        }
+        catch(HttpRequestException)
+        {
+            return null;
+        }
+    }
+
+
+    /// <summary>
+    /// Presents a validated token's binding, the request's <c>DPoP</c> field lines and the resource's own protection space
+    /// to the library's composition of the resource checks, <see cref="DpopResourceAccess.DecideAsync"/>, and writes its
+    /// refusal when it answers one (<see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">RFC 9449 Section
+    /// 7.1</see>: "The resource server MUST NOT grant access to the resource unless all checks are successful.").
+    /// </summary>
+    /// <param name="context">The request's context.</param>
+    /// <param name="accessToken">The token as presented.</param>
+    /// <param name="isDpopPresentation">Whether the token was presented under the <c>DPoP</c> scheme.</param>
+    /// <param name="isSenderConstrained">Whether the token is bound to a key.</param>
+    /// <param name="boundThumbprint">The bound key's JWK SHA-256 Thumbprint, or <see langword="null"/>.</param>
+    /// <param name="exchangeContext">The per-request exchange context.</param>
+    /// <returns><see langword="true"/> when the decision permits the request; otherwise the refusal is written.</returns>
+    private async Task<bool> IsBindingPermittedAsync(
+        HttpContext context,
+        string accessToken,
+        bool isDpopPresentation,
+        bool isSenderConstrained,
+        string? boundThumbprint,
+        ExchangeContext exchangeContext)
+    {
         Uri targetAuthority = ResolveTargetAuthority()
             ?? throw new InvalidOperationException("The resource server names no target authority before its listener is bound.");
         DpopResourceDecision decision = await DpopResourceAccess.DecideAsync(
             Integration,
             new DpopResourceRequest
             {
-                AccessToken = accessToken!,
+                AccessToken = accessToken,
                 IsDpopPresentation = isDpopPresentation,
-                IsSenderConstrained = claims.Confirmation is not null,
-                BoundThumbprint = claims.Confirmation?.JwkThumbprint,
+                IsSenderConstrained = isSenderConstrained,
+                BoundThumbprint = boundThumbprint,
                 HttpMethod = context.Request.Method,
                 TargetUri = new Uri(targetAuthority.GetLeftPart(UriPartial.Authority) + context.Request.Path.ToUriComponent()),
                 DpopFieldLines = context.Request.Headers.TryGetValue("DPoP", out StringValues dpopFieldLines)
@@ -359,31 +546,89 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
             _ = (Activity.Current?.SetTag(ResourceServerTagNames.ChallengeError, refusal.ErrorCode));
             await WriteServerResponseAsync(context, refusal).ConfigureAwait(false);
 
-            return;
+            return false;
         }
 
-        if(RequiredScope is not null)
+        return true;
+    }
+
+
+    /// <summary>
+    /// Checks the granted scope against <see cref="RequiredScope"/> when the resource requires one, and writes the 403
+    /// <c>insufficient_scope</c> refusal when it is not carried
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6750#section-3.1">RFC 6750 Section 3.1</see>: "insufficient_scope
+    /// The request requires higher privileges than provided by the access token. The resource server SHOULD respond with
+    /// the HTTP 403 (Forbidden) status code and MAY include the "scope" attribute with the scope necessary to access the
+    /// protected resource.").
+    /// </summary>
+    /// <param name="context">The request's context.</param>
+    /// <param name="grantedScope">The token's space-separated scope, or <see langword="null"/> when it carries none.</param>
+    /// <returns><see langword="true"/> when no scope is required or the required one is granted; otherwise the refusal is written.</returns>
+    private async Task<bool> IsScopeSatisfiedAsync(HttpContext context, string? grantedScope)
+    {
+        if(RequiredScope is null)
         {
-            bool isScopeSatisfied = HasScope(claims.Scope, RequiredScope);
-            _ = (Activity.Current?.SetTag(ResourceServerTagNames.ScopeRequired, RequiredScope));
-            _ = (Activity.Current?.SetTag(ResourceServerTagNames.ScopeSatisfied, isScopeSatisfied));
-            _ = (Activity.Current?.AddEvent(new ActivityEvent(ResourceServerEventNames.ScopeChecked)));
-
-            if(!isScopeSatisfied)
-            {
-                //RFC 6750 §3.1: insufficient_scope maps to 403 and the
-                //challenge's scope attribute names the scope necessary to
-                //access the resource.
-                await WriteBearerChallengeAsync(
-                    context, StatusCodes.Status403Forbidden,
-                    OAuthErrors.InsufficientScope,
-                    "The access token does not carry the scope this resource requires.",
-                    scope: RequiredScope).ConfigureAwait(false);
-                return;
-            }
+            return true;
         }
 
-        await WriteClaimsAsync(context, claims).ConfigureAwait(false);
+        bool isScopeSatisfied = HasScope(grantedScope, RequiredScope);
+        _ = (Activity.Current?.SetTag(ResourceServerTagNames.ScopeRequired, RequiredScope));
+        _ = (Activity.Current?.SetTag(ResourceServerTagNames.ScopeSatisfied, isScopeSatisfied));
+        _ = (Activity.Current?.AddEvent(new ActivityEvent(ResourceServerEventNames.ScopeChecked)));
+        if(!isScopeSatisfied)
+        {
+            await WriteBearerChallengeAsync(
+                context, StatusCodes.Status403Forbidden,
+                OAuthErrors.InsufficientScope,
+                "The access token does not carry the scope this resource requires.",
+                scope: RequiredScope).ConfigureAwait(false);
+
+            return false;
+        }
+
+        return true;
+    }
+
+
+    /// <summary>
+    /// Serves the claims of a token the authorization server answered as active: 200 <c>application/json</c> with
+    /// <c>Cache-Control: no-store</c>, carrying <c>sub</c>, <c>scope</c>, <c>client_id</c> and <c>cnf.jkt</c> as the
+    /// answer states them, each written only when present.
+    /// </summary>
+    /// <param name="context">The request's context.</param>
+    /// <param name="result">The introspection answer.</param>
+    /// <returns>A task that completes when the answer is written.</returns>
+    private static async Task WriteIntrospectedClaimsAsync(HttpContext context, TokenIntrospectionResult result)
+    {
+        Dictionary<string, object?> body = new(StringComparer.Ordinal);
+        if(result.Subject is not null)
+        {
+            body["sub"] = result.Subject;
+        }
+
+        if(result.Scope is not null)
+        {
+            body["scope"] = result.Scope;
+        }
+
+        if(result.ClientId is not null)
+        {
+            body["client_id"] = result.ClientId;
+        }
+
+        if(result.Confirmation?.JwkThumbprint is { } jkt)
+        {
+            body["cnf"] = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                ["jkt"] = jkt
+            };
+        }
+
+        byte[] json = JsonSerializer.SerializeToUtf8Bytes(body);
+        context.Response.StatusCode = StatusCodes.Status200OK;
+        context.Response.ContentType = "application/json";
+        context.Response.Headers.CacheControl = "no-store";
+        _ = await context.Response.BodyWriter.WriteAsync(json, context.RequestAborted).ConfigureAwait(false);
     }
 
 

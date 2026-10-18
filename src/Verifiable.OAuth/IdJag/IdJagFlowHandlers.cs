@@ -84,7 +84,7 @@ public static class IdJagFlowHandlers
             form[OAuthRequestParameterNames.AuthorizationDetails] = options.AuthorizationDetails;
         }
 
-        if(EvaluateOutboundPolicy(tokenEndpoint, context, infrastructure) is OAuthOutboundFetchPolicyDenied mintPolicyDenial)
+        if(EvaluateOutboundPolicy(tokenEndpoint, context, infrastructure, TokenEndpointPolicyReference) is OAuthOutboundFetchPolicyDenied mintPolicyDenial)
         {
             return Result<TokenResponse, OAuthParseError>.Failure(mintPolicyDenial);
         }
@@ -157,7 +157,7 @@ public static class IdJagFlowHandlers
             [OAuthRequestParameterNames.Assertion] = options.Assertion
         };
 
-        if(EvaluateOutboundPolicy(tokenEndpoint, context, infrastructure) is OAuthOutboundFetchPolicyDenied redeemPolicyDenial)
+        if(EvaluateOutboundPolicy(tokenEndpoint, context, infrastructure, TokenEndpointPolicyReference) is OAuthOutboundFetchPolicyDenied redeemPolicyDenial)
         {
             return Result<TokenResponse, OAuthParseError>.Failure(redeemPolicyDenial);
         }
@@ -205,23 +205,28 @@ public static class IdJagFlowHandlers
     /// <summary>
     /// Evaluates <paramref name="target"/> against <paramref name="context"/>'s
     /// <see cref="OutboundFetchPolicy"/> (falling back to <paramref name="infrastructure"/>'s
-    /// deployment default) before a client-side dial to the token endpoint named by resolved
-    /// authorization-server metadata — the same SSRF-hardening class as the AuthCode PAR and token
-    /// sends, since the token endpoint is likewise read out of a discovered document rather than
-    /// chosen by this library.
+    /// deployment default) before a client-side dial to an endpoint named by resolved
+    /// authorization-server metadata, the endpoint the flow is about to dial: the token endpoint of
+    /// <see cref="MintAsync"/> and <see cref="RedeemAsync"/>, and the introspection endpoint of
+    /// <see cref="Introspection.TokenIntrospectionClient.IntrospectAsync"/>. The same SSRF-hardening class
+    /// as the AuthCode PAR and token sends, since such an endpoint is read out of a discovered document
+    /// rather than chosen by this library. A denial never reaches the transport.
     /// </summary>
-    /// <param name="target">The token endpoint the flow is about to dial.</param>
+    /// <param name="target">The endpoint the flow is about to dial.</param>
     /// <param name="context">The per-operation exchange context carrying the policy.</param>
     /// <param name="infrastructure">
     /// Supplies <see cref="OAuthClientInfrastructure.OutboundFetchPolicy"/>, the deployment
     /// default applied when <paramref name="context"/> carries none.
     /// </param>
+    /// <param name="specificationReference">
+    /// The clause the denial cites at the calling endpoint, its <see cref="DecisionSupport.SpecificationReference"/>.
+    /// </param>
     /// <returns>
     /// <see langword="null"/> when <paramref name="target"/> is allowed; otherwise the typed
-    /// denial to return from <see cref="MintAsync"/> or <see cref="RedeemAsync"/>.
+    /// denial the flow returns.
     /// </returns>
-    private static OAuthOutboundFetchPolicyDenied? EvaluateOutboundPolicy(
-        Uri target, ExchangeContext context, OAuthClientInfrastructure infrastructure)
+    internal static OAuthOutboundFetchPolicyDenied? EvaluateOutboundPolicy(
+        Uri target, ExchangeContext context, OAuthClientInfrastructure infrastructure, string specificationReference)
     {
         OutboundFetchPolicy policy = context.ResolveOutboundFetchPolicy(infrastructure.OutboundFetchPolicy);
         OutboundFetchDecision decision = policy.Evaluate(target);
@@ -242,17 +247,25 @@ public static class IdJagFlowHandlers
         return new OAuthOutboundFetchPolicyDenied(
             target,
             decision.DenyReason!,
-            new DecisionSupport("The token endpoint was refused by the outbound fetch policy.")
+            new DecisionSupport("The endpoint was refused by the outbound fetch policy.")
             {
-                SpecificationReference = "RFC 8707 §2"
+                SpecificationReference = specificationReference
             });
     }
 
 
+    /// <summary>The specification reference a denial at the token endpoint of <see cref="MintAsync"/> and <see cref="RedeemAsync"/> cites.</summary>
+    private static string TokenEndpointPolicyReference { get; } = "RFC 8707 \u00A72";
+
+
     /// <summary>
-    /// Preserves the complete typed resolution failure for the in-process caller of this exchange.
+    /// Preserves the complete typed resolution failure for the in-process caller of the exchange whose metadata did not
+    /// resolve: <see cref="MintAsync"/>, <see cref="RedeemAsync"/> and
+    /// <see cref="Introspection.TokenIntrospectionClient.IntrospectAsync"/>.
     /// </summary>
-    private static OAuthAuthorizationServerMetadataUnresolved BuildAuthorizationServerMetadataResolutionFailure(
+    /// <param name="resolution">The resolution that did not resolve.</param>
+    /// <returns>The typed failure carrying the resolution.</returns>
+    internal static OAuthAuthorizationServerMetadataUnresolved BuildAuthorizationServerMetadataResolutionFailure(
         AuthorizationServerMetadataResolution resolution) =>
         new(
             resolution,

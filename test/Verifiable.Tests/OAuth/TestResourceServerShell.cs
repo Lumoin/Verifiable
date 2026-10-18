@@ -169,6 +169,20 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
 
 
     /// <summary>
+    /// The resource's introspection mode, or <see langword="null"/> when it validates every presented token as a JWT
+    /// access token itself (<see cref="ResourceServerIntrospection"/>).
+    /// </summary>
+    public ResourceServerIntrospection? Introspection { get; }
+
+
+    /// <summary>
+    /// Every exchange the resource had with the authorization server's introspection endpoint, in the order sent; empty
+    /// when the resource introspects nothing.
+    /// </summary>
+    public IReadOnlyList<IntrospectionExchange> IntrospectionExchanges => Introspection is null ? [] : [.. Introspection.Recorder.Exchanges];
+
+
+    /// <summary>
     /// Creates the resource server: its integration trusting <paramref name="trustedIssuer"/>'s tokens for
     /// <paramref name="expectedAudience"/>, its <c>jti</c> record over <see cref="ReplayCache"/> and its DPoP checks as
     /// the arguments wire them. The listener starts with <see cref="StartHttpHostAsync"/>.
@@ -199,6 +213,10 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
     /// The text the resource identifier carries after <c>/protected</c>, its query component starting with <c>?</c> or a
     /// terminating <c>/</c> followed by one, or <see langword="null"/> for none.
     /// </param>
+    /// <param name="introspection">
+    /// The resource's introspection mode, or <see langword="null"/> to validate every presented token as a JWT access
+    /// token.
+    /// </param>
     public TestResourceServerShell(
         Uri trustedIssuer,
         string expectedAudience,
@@ -213,7 +231,8 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
         Func<ValidateDpopProofDelegate, ValidateDpopProofDelegate>? wrapDpopProofValidation = null,
         Func<ConsultDpopProofJtiDelegate, ConsultDpopProofJtiDelegate>? wrapDpopProofJtiClaim = null,
         StartTraceActivityDelegate? startTraceActivity = null,
-        string? resourceIdentifierQuery = null)
+        string? resourceIdentifierQuery = null,
+        ResourceServerIntrospection? introspection = null)
     {
         ArgumentNullException.ThrowIfNull(trustedIssuer);
         ArgumentException.ThrowIfNullOrWhiteSpace(expectedAudience);
@@ -239,6 +258,7 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
         RequiresDpop = requiresDpop;
         IsDpopProofValidationWired = isDpopProofValidationWired;
         IsDpopProofJtiRecordWired = isDpopProofJtiRecordWired;
+        Introspection = introspection;
         ReplayCache = new InMemoryDpopReplayCache(timeProvider);
         NonceKeySet = CreateNonceKeySet();
 
@@ -403,7 +423,7 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
         global::Microsoft.AspNetCore.Builder.WebApplication app = builder.Build();
 
         ResourceServerHttpApplication application = new(
-            Integration, VerifySignature, () => TargetAuthority, RequiredScope, RequiresDpop, AmbientActivitiesAfterDecision);
+            Integration, VerifySignature, () => TargetAuthority, RequiredScope, RequiresDpop, AmbientActivitiesAfterDecision, Introspection);
         app.Run(application.ProcessRequestAsync);
 
         await app.StartAsync(cancellationToken).ConfigureAwait(false);

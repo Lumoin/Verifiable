@@ -1,10 +1,12 @@
 using System.Buffers;
+using System.Collections.Frozen;
 using System.Globalization;
 using System.Text;
 using Verifiable.Core;
 using Verifiable.JCose;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.Client;
+using Verifiable.OAuth.Introspection;
 using Verifiable.OAuth.Oid4Vci;
 
 namespace Verifiable.OAuth;
@@ -286,6 +288,758 @@ public static class OAuthResponseParsers
 
 
     /// <summary>
+    /// Parses a token introspection endpoint's answer per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7662#section-2.2">RFC 7662 Section 2.2</see> and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7662#section-2.3">Section 2.3</see> into a
+    /// <see cref="TokenIntrospectionResult"/>: the answer of a protected resource's introspection request, or the
+    /// authorization server's error.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// An empty body is an <see cref="OAuthMalformedResponse"/>. An RFC 9457 problem answer, named by the
+    /// <c>transport.content_type</c> metadata (<see cref="HttpResponseData.IsProblemJson"/>) or by the received
+    /// <c>Content-Type</c> field (<see cref="WellKnownMediaTypes.Application.IsProblemJson"/>), is read as the
+    /// problem. Any other body is read as one JSON document, as the token response is read: a body longer than
+    /// <see cref="JwkJsonReader.MaximumDocumentLength"/>, counted in chars and then in UTF-8 bytes, is refused before
+    /// any buffer is rented; the body is then copied to UTF-8 once into a buffer rented from
+    /// <paramref name="memoryPool"/>, the caller's pool, which is cleared before it is returned, since the answer may
+    /// carry a credential's metadata; and a body that is not well-formed JSON
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8259#section-2">RFC 8259 Section 2</see>), repeats a member name
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8259#section-4">RFC 8259 Section 4</see>), holds a string the
+    /// reader refuses (<see href="https://www.rfc-editor.org/rfc/rfc7493#section-2.1">RFC 7493 Section 2.1</see>, and
+    /// an escaped U+0000, this library's own rule under
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-9">RFC 8259 Section 9</see>) or is no object is an
+    /// <see cref="OAuthMalformedResponse"/>. An object carrying an <c>error</c> member is the authorization server's
+    /// error, read as the token endpoint's error is read
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>), an
+    /// <see cref="OAuthProtocolError"/>; an answer of a status other than 200 without one is an
+    /// <see cref="OAuthMalformedResponse"/>; a 200 answer is read by <see cref="ReadTokenIntrospectionMembers"/>.
+    /// A refusal carries the body only when it is an HTML or XML document; every other refused body carries
+    /// <see cref="string.Empty"/>.
+    /// </para>
+    /// <para>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7662#section-2.2">RFC 7662 Section 2.2</see>: "The server responds
+    /// with a JSON object [RFC7159] in "application/json" format with the following top-level members."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7662#section-2.3">Section 2.3</see>: "If the protected resource uses
+    /// OAuth 2.0 client credentials to authenticate to the introspection endpoint and its credentials are invalid, the
+    /// authorization server responds with an HTTP 401 (Unauthorized) as described in Section 5.2 of OAuth 2.0
+    /// [RFC6749]." and "Note that a properly formed and authorized query for an inactive or otherwise invalid token (or
+    /// a token the protected resource is not allowed to know about) is not considered an error response by this
+    /// specification. In these cases, the authorization server MUST instead respond with an introspection response with
+    /// the "active" field set to "false" as described in Section 2.2."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7493#section-2">RFC 7493 Section 2</see>: "An I-JSON message is a
+    /// JSON text, as defined by RFC 7159."
+    /// </para>
+    /// </remarks>
+    /// <param name="response">The full HTTP response from the introspection endpoint.</param>
+    /// <param name="memoryPool">The pool the body's UTF-8 copy is rented from.</param>
+    /// <returns>The introspection result, or the parse error.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="memoryPool"/> is <see langword="null"/>.</exception>
+    public static Result<TokenIntrospectionResult, OAuthParseError> ParseTokenIntrospectionResponse(
+        HttpResponseData response,
+        BaseMemoryPool memoryPool)
+    {
+        ArgumentNullException.ThrowIfNull(memoryPool);
+
+        ReadOnlySpan<char> body = response.Body.AsSpan().Trim();
+        if(body.IsEmpty)
+        {
+            return Result.Failure<TokenIntrospectionResult, OAuthParseError>(
+                new OAuthMalformedResponse(
+                    response.Body,
+                    new DecisionSupport("The introspection endpoint returned an empty response body.")
+                    {
+                        LikelyCause = "The endpoint URL may be incorrect or the server returned a response with no body.",
+                        ActionableGuidance = "Verify the introspection_endpoint value in the authorization server metadata.",
+                        SpecificationReference = "RFC 7662 Section 2.2"
+                    }).WithTransportMetadata(response));
+        }
+
+        if(IsProblemJsonAnswer(response))
+        {
+            return ParseProblemJson<TokenIntrospectionResult>(body, response);
+        }
+
+        string diagnosticBody = IsHtmlOrXmlDocument(body) ? response.Body : string.Empty;
+
+        //RFC 8259 Section 9: a body over the document limit is refused before any buffer is rented. A char count is
+        //never more than its UTF-8 byte count, so the char count is tested first.
+        if(body.Length > JwkJsonReader.MaximumDocumentLength)
+        {
+            return RefuseOverLongIntrospectionResponse(diagnosticBody, response);
+        }
+
+        int byteCount = Encoding.UTF8.GetByteCount(body);
+        if(byteCount > JwkJsonReader.MaximumDocumentLength)
+        {
+            return RefuseOverLongIntrospectionResponse(diagnosticBody, response);
+        }
+
+        using IMemoryOwner<byte> copyOwner = memoryPool.Rent(Math.Max(byteCount, 1));
+        Span<byte> copy = copyOwner.Memory.Span;
+        try
+        {
+            int written = Encoding.UTF8.GetBytes(body, copy);
+
+            return ReadTokenIntrospectionDocument(copy[..written], diagnosticBody, response);
+        }
+        finally
+        {
+            copy.Clear();
+        }
+    }
+
+
+    /// <summary>
+    /// Whether an introspection endpoint's answer is an RFC 9457 problem: the <c>transport.content_type</c> metadata
+    /// names it (<see cref="HttpResponseData.IsProblemJson"/>), or the received <c>Content-Type</c> field does, compared
+    /// as <see cref="WellKnownMediaTypes.Application.IsProblemJson"/> compares, since a transport may carry the field
+    /// alone.
+    /// </summary>
+    /// <param name="response">The answer as received.</param>
+    /// <returns><see langword="true"/> when the answer is a problem.</returns>
+    private static bool IsProblemJsonAnswer(HttpResponseData response) =>
+        response.IsProblemJson
+        || (response.Headers.TryGetSingle(WellKnownHttpHeaderNames.ContentType) is string contentType
+            && WellKnownMediaTypes.Application.IsProblemJson(contentType));
+
+
+    /// <summary>
+    /// The refusal of an introspection endpoint's answer longer than <see cref="JwkJsonReader.MaximumDocumentLength"/>,
+    /// answered before any buffer is rented for it.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-9">RFC 8259 Section 9</see>: "An implementation may set
+    /// limits on the size of texts that it accepts."
+    /// </remarks>
+    /// <param name="diagnosticBody">The body the refusal carries: empty unless the body is an HTML or XML document.</param>
+    /// <param name="response">The HTTP response the body came from, for the error's transport metadata.</param>
+    /// <returns>The <see cref="OAuthMalformedResponse"/> failure.</returns>
+    private static Result<TokenIntrospectionResult, OAuthParseError> RefuseOverLongIntrospectionResponse(
+        string diagnosticBody,
+        HttpResponseData response)
+    {
+        return Result.Failure<TokenIntrospectionResult, OAuthParseError>(
+            new OAuthMalformedResponse(
+                diagnosticBody,
+                new DecisionSupport("The introspection response is longer than the document limit the client reads.")
+                {
+                    LikelyCause = "The server returned a body larger than any introspection response, or the body is not one.",
+                    SpecificationReference = "RFC 8259 Section 9"
+                }).WithTransportMetadata(response));
+    }
+
+
+    /// <summary>
+    /// Reads an introspection endpoint's answer from its UTF-8 copy: the document held to
+    /// <see cref="JwkJsonReader.IsWellFormedJsonDocument"/> and to being one object, then the authorization server's
+    /// error when the object carries an <c>error</c> member, a refusal for a status other than 200 without one, and
+    /// otherwise the object's members through <see cref="ReadTokenIntrospectionMembers"/>.
+    /// </summary>
+    /// <remarks>
+    /// The <c>error</c>, <c>error_description</c> and <c>error_uri</c> members are read as the token response's are,
+    /// at the top level of the object: an <c>error</c> that is empty or holds a char outside RFC 6749 Section 5.2's set
+    /// makes the answer an <see cref="OAuthMalformedResponse"/>, an <c>error_description</c> outside the set and an
+    /// <c>error_uri</c> outside its set or naming no <c>https</c> or <c>http</c> web page are read as absent.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 Section 5.2</see>: "Values for the
+    /// "error" parameter MUST NOT include characters outside the set %x20-21 / %x23-5B / %x5D-7E."
+    /// </remarks>
+    /// <param name="json">The answer's UTF-8 copy.</param>
+    /// <param name="diagnosticBody">The body a malformed-response refusal carries: empty unless the body is an HTML or XML document.</param>
+    /// <param name="response">The HTTP response the body came from, for the error's transport metadata.</param>
+    /// <returns>The introspection result, or the parse error.</returns>
+    private static Result<TokenIntrospectionResult, OAuthParseError> ReadTokenIntrospectionDocument(
+        ReadOnlySpan<byte> json,
+        string diagnosticBody,
+        HttpResponseData response)
+    {
+        if(!JwkJsonReader.IsWellFormedJsonDocument(json) || json.TrimStart(JsonWhitespaceUtf8) is not [(byte)'{', ..])
+        {
+            return Result.Failure<TokenIntrospectionResult, OAuthParseError>(
+                new OAuthMalformedResponse(
+                    diagnosticBody,
+                    new DecisionSupport("The introspection response is not a well-formed JSON object, repeats a member name, or holds a string the reader refuses.")
+                    {
+                        LikelyCause = "The server returned a body that is not a JSON object, one two JSON readers could read differently " +
+                                      "because it repeats a member name, or one with a string holding an unpaired surrogate, a noncharacter " +
+                                      "or an escaped U+0000.",
+                        SpecificationReference = "RFC 7662 Section 2.2, RFC 8259 Section 2 and Section 4, RFC 7493 Section 2.1, RFC 8259 Section 9"
+                    }).WithTransportMetadata(response));
+        }
+
+        string? errorCode = JwkJsonReader.ExtractStringValue(json, OAuthRequestParameterNames.ErrorUtf8);
+        if(errorCode is not null)
+        {
+            if(errorCode.Length == 0 || !IsErrorCharacterText(errorCode))
+            {
+                return Result.Failure<TokenIntrospectionResult, OAuthParseError>(
+                    new OAuthMalformedResponse(
+                        diagnosticBody,
+                        new DecisionSupport("The introspection endpoint's error response carries an empty error code or one outside the characters RFC 6749 Section 5.2 permits.")
+                        {
+                            SpecificationReference = "RFC 6749 Section 5.2"
+                        }).WithTransportMetadata(response));
+            }
+
+            string? errorDescription = JwkJsonReader.ExtractStringValue(json, OAuthRequestParameterNames.ErrorDescriptionUtf8);
+            string? errorUri = JwkJsonReader.ExtractStringValue(json, ErrorUriUtf8);
+
+            return BuildProtocolError<TokenIntrospectionResult>(
+                errorCode,
+                errorDescription is not null && IsErrorCharacterText(errorDescription) ? errorDescription : null,
+                errorUri is not null && IsErrorUriCharacterText(errorUri) && IsWebPageUri(errorUri) ? errorUri : null,
+                response,
+                endpoint: "introspection",
+                specReference: "RFC 7662 Section 2.3");
+        }
+
+        if(response.StatusCode != IntrospectionSuccessStatusCode)
+        {
+            return Result.Failure<TokenIntrospectionResult, OAuthParseError>(
+                new OAuthMalformedResponse(
+                    diagnosticBody,
+                    new DecisionSupport("The introspection endpoint answered a status other than 200 without an error object.")
+                    {
+                        SpecificationReference = "RFC 7662 Section 2.2 and Section 2.3"
+                    }).WithTransportMetadata(response));
+        }
+
+        return ReadTokenIntrospectionMembers(json, response);
+    }
+
+
+    /// <summary>The status of an introspection response, 200 (OK), the status RFC 7662 Section 2.2's examples answer with.</summary>
+    private static int IntrospectionSuccessStatusCode => 200;
+
+
+    /// <summary>The JSON insignificant white space bytes: space, horizontal tab, line feed and carriage return.</summary>
+    /// <remarks>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-2">RFC 8259 Section 2</see>: "ws = *( %x20 / %x09 /
+    /// %x0A / %x0D )".
+    /// </remarks>
+    private static ReadOnlySpan<byte> JsonWhitespaceUtf8 => " \t\n\r"u8;
+
+
+    /// <summary>
+    /// Reads the members of one introspection response object, the one member reader of the plain answer: its input is
+    /// one JSON object's text, braces included, already held to <see cref="JwkJsonReader.IsWellFormedJsonDocument"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>active</c> absent or not a JSON boolean makes the answer an <see cref="OAuthMalformedResponse"/>; <c>active</c>
+    /// <see langword="false"/> answers <see cref="TokenIntrospectionResult.Inactive"/> and no other member is read, so
+    /// nothing an authorization server writes beside it reaches the caller. With <c>active</c> <see langword="true"/>,
+    /// each member below is read at the top level of the object, and a member present with another JSON type than its
+    /// definition names is refused, never read as absent: <c>scope</c> a string held to RFC 6749 Appendix A.4
+    /// (<see cref="IsScopeValue"/>); <c>client_id</c>, <c>username</c>, <c>sub</c>, <c>iss</c> and <c>jti</c> strings;
+    /// <c>token_type</c> a string held to RFC 6749 Appendix A.13 (<see cref="IsTokenType"/>); <c>exp</c>, <c>iat</c> and
+    /// <c>nbf</c> integers naming an instant <see cref="DateTimeOffset.FromUnixTimeSeconds"/> represents; <c>aud</c> one
+    /// string, read as one entry, or an array of strings; <c>cnf</c> an object carrying a non-empty string <c>jkt</c>,
+    /// read as <see cref="TokenIntrospectionResult.Confirmation"/>, a <c>jkt</c> beside other members enforced by the
+    /// <c>jkt</c> alone. Each refusal is an <see cref="OAuthInvalidFieldValue"/> naming the member with an empty
+    /// <see cref="OAuthInvalidFieldValue.ReceivedValue"/>, so a value is never echoed.
+    /// </para>
+    /// <para>
+    /// A <c>cnf</c> carrying no <c>jkt</c> this resource enforces (one that is not an object, a certificate thumbprint
+    /// <c>x5t#S256</c> alone, a member the reader does not understand, an empty or non-string <c>jkt</c>) is refused rather
+    /// than read as a token bound to no key: the library's fail-closed reading, departing from
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7800#section-3.1">RFC 7800 Section 3.1</see>'s "However, in the
+    /// absence of such requirements, all confirmation members that are not understood by implementations MUST be
+    /// ignored.", since a resource that ignored such a member would serve a bound token as a bearer token. For the same
+    /// reason the two readings of <c>token_type</c> that contradict the <c>cnf</c> are refused: a <c>token_type</c> other
+    /// than <c>DPoP</c>, compared case-insensitively
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 Section 5.1</see>: "Value is case
+    /// insensitive."), beside a <c>cnf</c>, naming <c>token_type</c>; and <c>DPoP</c> with no <c>cnf</c>, naming
+    /// <c>cnf</c>.
+    /// </para>
+    /// <para>
+    /// Every other top-level member, <c>authorization_details</c> among them, is carried in
+    /// <see cref="TokenIntrospectionResult.AdditionalClaims"/> under its name: a string as its decoded text, a boolean as
+    /// a <see cref="bool"/>, an integer as a <see cref="long"/>, another number as a <see cref="double"/>, an object or
+    /// array as <see cref="JsonScalarText.DecodeValue"/> decodes it; a member whose value is <c>null</c> carries no value
+    /// and is not entered. <see cref="TokenIntrospectionResult.AuthorizationDetails"/> stays <see langword="null"/>.
+    /// </para>
+    /// <para>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7662#section-2.2">RFC 7662 Section 2.2</see>: "active REQUIRED.
+    /// Boolean indicator of whether or not the presented token is currently active.", "the authorization server SHOULD NOT
+    /// include any additional information about an inactive token, including why the token is inactive." and "Specific
+    /// implementations MAY extend this structure with their own service-specific response names as top-level members of
+    /// this JSON object."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-6">RFC 9449 Section 6</see>: "Resource servers MUST be
+    /// able to reliably identify whether an access token is DPoP-bound and ascertain sufficient information to verify the
+    /// binding to the public key of the DPoP proof (see Section 7.1)."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.2">Section 6.2</see>: "The hash is conveyed using the
+    /// same cnf content with jkt member structure as the JWK Thumbprint confirmation method, described in Section 6.1, as
+    /// a top-level member of the introspection response JSON." and "If the token_type member is included in the
+    /// introspection response, it MUST contain the value DPoP."
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">Section 7.2</see>: "such a protected resource MUST
+    /// reject a DPoP-bound access token received as a bearer token per [RFC6750]."
+    /// </para>
+    /// </remarks>
+    /// <param name="introspectionObject">The UTF-8 text of one JSON object, braces included.</param>
+    /// <param name="response">The HTTP response the object came from, for the error's transport metadata.</param>
+    /// <returns>The introspection result, or the parse error.</returns>
+    internal static Result<TokenIntrospectionResult, OAuthParseError> ReadTokenIntrospectionMembers(
+        ReadOnlySpan<byte> introspectionObject,
+        HttpResponseData response)
+    {
+        if(!JwkJsonReader.TryExtractBooleanValue(introspectionObject, ActiveUtf8, out bool isActive))
+        {
+            return Result.Failure<TokenIntrospectionResult, OAuthParseError>(
+                new OAuthMalformedResponse(
+                    string.Empty,
+                    new DecisionSupport("The introspection response carries no boolean active member.")
+                    {
+                        SpecificationReference = "RFC 7662 Section 2.2"
+                    }).WithTransportMetadata(response));
+        }
+
+        //RFC 7662 Section 2.2: an inactive token is read as inactive, and nothing the answer carries beside active is read.
+        if(!isActive)
+        {
+            return Result.Success<TokenIntrospectionResult, OAuthParseError>(TokenIntrospectionResult.Inactive);
+        }
+
+        if(ReadStringMember(introspectionObject, OAuthRequestParameterNames.ScopeUtf8, OAuthRequestParameterNames.Scope, out string? scope) is OAuthInvalidFieldValue scopeRefusal)
+        {
+            return RefuseIntrospectionMember(scopeRefusal, response);
+        }
+
+        if(scope is not null && !IsScopeValue(scope))
+        {
+            return RefuseIntrospectionMember(
+                IntrospectionMemberRefusal(OAuthRequestParameterNames.Scope, ScopeGrammarReason, "RFC 6749 Appendix A.4"), response);
+        }
+
+        if(ReadStringMember(introspectionObject, OAuthRequestParameterNames.ClientIdUtf8, OAuthRequestParameterNames.ClientId, out string? clientId) is OAuthInvalidFieldValue clientIdRefusal)
+        {
+            return RefuseIntrospectionMember(clientIdRefusal, response);
+        }
+
+        if(ReadStringMember(introspectionObject, UsernameUtf8, Username, out string? username) is OAuthInvalidFieldValue usernameRefusal)
+        {
+            return RefuseIntrospectionMember(usernameRefusal, response);
+        }
+
+        if(ReadStringMember(introspectionObject, WellKnownJwtClaimNames.SubUtf8, WellKnownJwtClaimNames.Sub, out string? subject) is OAuthInvalidFieldValue subjectRefusal)
+        {
+            return RefuseIntrospectionMember(subjectRefusal, response);
+        }
+
+        if(ReadStringMember(introspectionObject, WellKnownJwtClaimNames.IssUtf8, WellKnownJwtClaimNames.Iss, out string? issuer) is OAuthInvalidFieldValue issuerRefusal)
+        {
+            return RefuseIntrospectionMember(issuerRefusal, response);
+        }
+
+        if(ReadStringMember(introspectionObject, WellKnownJwtClaimNames.JtiUtf8, WellKnownJwtClaimNames.Jti, out string? jwtId) is OAuthInvalidFieldValue jwtIdRefusal)
+        {
+            return RefuseIntrospectionMember(jwtIdRefusal, response);
+        }
+
+        if(ReadStringMember(introspectionObject, OAuthRequestParameterNames.TokenTypeUtf8, OAuthRequestParameterNames.TokenType, out string? tokenType) is OAuthInvalidFieldValue tokenTypeRefusal)
+        {
+            return RefuseIntrospectionMember(tokenTypeRefusal, response);
+        }
+
+        if(tokenType is not null && !IsTokenType(tokenType))
+        {
+            return RefuseIntrospectionMember(
+                IntrospectionMemberRefusal(OAuthRequestParameterNames.TokenType, TokenTypeGrammarReason, "RFC 6749 Appendix A.13"), response);
+        }
+
+        if(ReadNumericDateMember(introspectionObject, WellKnownJwtClaimNames.ExpUtf8, WellKnownJwtClaimNames.Exp, out DateTimeOffset? expiresAt) is OAuthInvalidFieldValue expiresAtRefusal)
+        {
+            return RefuseIntrospectionMember(expiresAtRefusal, response);
+        }
+
+        if(ReadNumericDateMember(introspectionObject, WellKnownJwtClaimNames.IatUtf8, WellKnownJwtClaimNames.Iat, out DateTimeOffset? issuedAt) is OAuthInvalidFieldValue issuedAtRefusal)
+        {
+            return RefuseIntrospectionMember(issuedAtRefusal, response);
+        }
+
+        if(ReadNumericDateMember(introspectionObject, WellKnownJwtClaimNames.NbfUtf8, WellKnownJwtClaimNames.Nbf, out DateTimeOffset? notBefore) is OAuthInvalidFieldValue notBeforeRefusal)
+        {
+            return RefuseIntrospectionMember(notBeforeRefusal, response);
+        }
+
+        if(ReadAudienceMember(introspectionObject, out IReadOnlyList<string>? audience) is OAuthInvalidFieldValue audienceRefusal)
+        {
+            return RefuseIntrospectionMember(audienceRefusal, response);
+        }
+
+        if(ReadConfirmationMember(introspectionObject, out Server.ConfirmationMethod? confirmation) is OAuthInvalidFieldValue confirmationRefusal)
+        {
+            return RefuseIntrospectionMember(confirmationRefusal, response);
+        }
+
+        //RFC 9449 Section 6.2: a token_type beside a cnf is DPoP, and a DPoP token_type names a bound token whose cnf
+        //the answer conveys; an answer whose two members disagree does not reliably identify the binding.
+        bool isDpopTokenType = tokenType is not null && WellKnownAuthenticationSchemes.IsDPoP(tokenType);
+        if(tokenType is not null && confirmation is not null && !isDpopTokenType)
+        {
+            return RefuseIntrospectionMember(
+                IntrospectionMemberRefusal(OAuthRequestParameterNames.TokenType, TokenTypeBesideConfirmationReason, "RFC 9449 Section 6.2"), response);
+        }
+
+        if(isDpopTokenType && confirmation is null)
+        {
+            return RefuseIntrospectionMember(
+                IntrospectionMemberRefusal(WellKnownJwtClaimNames.Cnf, DpopTokenTypeWithoutConfirmationReason, "RFC 9449 Section 6.2"), response);
+        }
+
+        return Result.Success<TokenIntrospectionResult, OAuthParseError>(new TokenIntrospectionResult
+        {
+            IsActive = true,
+            Scope = scope,
+            ClientId = clientId,
+            Username = username,
+            TokenType = tokenType,
+            ExpiresAt = expiresAt,
+            IssuedAt = issuedAt,
+            NotBefore = notBefore,
+            Subject = subject,
+            Audience = audience,
+            Issuer = issuer,
+            JwtId = jwtId,
+            Confirmation = confirmation,
+            AdditionalClaims = ReadExtensionMembers(introspectionObject)
+        });
+    }
+
+
+    /// <summary>The UTF-8 name of RFC 7662 Section 2.2's REQUIRED <c>active</c> member.</summary>
+    private static ReadOnlySpan<byte> ActiveUtf8 => "active"u8;
+
+    /// <summary>The UTF-8 name of RFC 7662 Section 2.2's <c>username</c> member.</summary>
+    private static ReadOnlySpan<byte> UsernameUtf8 => "username"u8;
+
+    /// <summary>The name of RFC 7662 Section 2.2's <c>username</c> member.</summary>
+    private static string Username { get; } = "username";
+
+
+    /// <summary>
+    /// The top-level members <see cref="ReadTokenIntrospectionMembers"/> reads by name, compared ordinally; every other
+    /// member is an extension member carried in <see cref="TokenIntrospectionResult.AdditionalClaims"/>.
+    /// </summary>
+    private static FrozenSet<string> NamedIntrospectionMembers { get; } =
+        FrozenSet.ToFrozenSet(
+        [
+            "active",
+            OAuthRequestParameterNames.Scope,
+            OAuthRequestParameterNames.ClientId,
+            Username,
+            OAuthRequestParameterNames.TokenType,
+            WellKnownJwtClaimNames.Exp,
+            WellKnownJwtClaimNames.Iat,
+            WellKnownJwtClaimNames.Nbf,
+            WellKnownJwtClaimNames.Sub,
+            WellKnownJwtClaimNames.Aud,
+            WellKnownJwtClaimNames.Iss,
+            WellKnownJwtClaimNames.Jti,
+            WellKnownJwtClaimNames.Cnf
+        ], StringComparer.Ordinal);
+
+
+    /// <summary>
+    /// The <see cref="OAuthInvalidFieldValue.Reason"/> of a <c>scope</c> outside RFC 6749 Appendix A.4, the reason of the
+    /// token response's and the introspection response's refusal alike.
+    /// </summary>
+    private static string ScopeGrammarReason { get; } =
+        "scope must be one or more scope-tokens, each one or more chars in %x21 / %x23-5B / %x5D-7E, separated by single spaces.";
+
+    /// <summary>
+    /// The <see cref="OAuthInvalidFieldValue.Reason"/> of a <c>token_type</c> outside RFC 6749 Appendix A.13, the reason of
+    /// the token response's and the introspection response's refusal alike.
+    /// </summary>
+    private static string TokenTypeGrammarReason { get; } =
+        "token_type must be one or more of \"-\", \".\", \"_\", an ASCII digit or an ASCII letter, or an RFC 3986 URI-reference.";
+
+    /// <summary>The <see cref="OAuthInvalidFieldValue.Reason"/> of a <c>cnf</c> the resource cannot enforce.</summary>
+    private static string ConfirmationReason { get; } =
+        "cnf must be an object carrying a non-empty string jkt, the confirmation this resource enforces.";
+
+    /// <summary>The <see cref="OAuthInvalidFieldValue.Reason"/> of a <c>token_type</c> other than <c>DPoP</c> beside a <c>cnf</c>.</summary>
+    private static string TokenTypeBesideConfirmationReason { get; } =
+        "token_type must be DPoP for a token whose cnf carries a jkt.";
+
+    /// <summary>The <see cref="OAuthInvalidFieldValue.Reason"/> of a <c>token_type</c> of <c>DPoP</c> with no <c>cnf</c>.</summary>
+    private static string DpopTokenTypeWithoutConfirmationReason { get; } =
+        "A token_type of DPoP names a DPoP-bound token, and the response conveys no cnf jkt to check it against.";
+
+    /// <summary>The earliest instant <see cref="DateTimeOffset.FromUnixTimeSeconds"/> represents, in seconds since the epoch.</summary>
+    private static long MinimumRepresentableUnixSeconds { get; } = DateTimeOffset.MinValue.ToUnixTimeSeconds();
+
+    /// <summary>The latest instant <see cref="DateTimeOffset.FromUnixTimeSeconds"/> represents, in seconds since the epoch.</summary>
+    private static long MaximumRepresentableUnixSeconds { get; } = DateTimeOffset.MaxValue.ToUnixTimeSeconds();
+
+    /// <summary>The bytes that close a JSON number at the top level of a well-formed object: a comma, a closing bracket or brace, or white space.</summary>
+    private static SearchValues<byte> JsonNumberTerminators { get; } = SearchValues.Create(",}] \t\n\r"u8);
+
+
+    /// <summary>
+    /// The JSON kind of the value of the top-level member <paramref name="name"/>, read from the value's first byte, or
+    /// <see langword="null"/> when the object carries no such member.
+    /// </summary>
+    /// <param name="json">The object's UTF-8 text, already held to well-formedness.</param>
+    /// <param name="name">The member's UTF-8 name.</param>
+    /// <returns>The value's kind, or <see langword="null"/> when the member is absent.</returns>
+    private static JsonValueShape? ShapeOfMember(ReadOnlySpan<byte> json, ReadOnlySpan<byte> name)
+    {
+        int valueStart = JwkJsonReader.IndexOfValue(json, name);
+        if(valueStart < 0 || valueStart >= json.Length)
+        {
+            return null;
+        }
+
+        return json[valueStart] switch
+        {
+            (byte)'"' => JsonValueShape.String,
+            (byte)'{' => JsonValueShape.Object,
+            (byte)'[' => JsonValueShape.Array,
+            (byte)'t' or (byte)'f' => JsonValueShape.Boolean,
+            (byte)'n' => JsonValueShape.Null,
+            (byte)'-' or (>= (byte)'0' and <= (byte)'9') => JsonValueShape.Number,
+            _ => JsonValueShape.Malformed
+        };
+    }
+
+
+    /// <summary>
+    /// Reads the top-level member <paramref name="name"/> as a JSON string: absent reads as <see langword="null"/>, a
+    /// string as its decoded text, and a value of another kind is refused, never read as absent.
+    /// </summary>
+    /// <param name="json">The object's UTF-8 text.</param>
+    /// <param name="name">The member's UTF-8 name.</param>
+    /// <param name="fieldName">The member's name, which a refusal names.</param>
+    /// <param name="value">The decoded text, or <see langword="null"/> when the member is absent or refused.</param>
+    /// <returns>The refusal, or <see langword="null"/> when the member is absent or a string.</returns>
+    private static OAuthInvalidFieldValue? ReadStringMember(
+        ReadOnlySpan<byte> json, ReadOnlySpan<byte> name, string fieldName, out string? value)
+    {
+        value = null;
+        JsonValueShape? shape = ShapeOfMember(json, name);
+        if(shape is null)
+        {
+            return null;
+        }
+
+        value = shape == JsonValueShape.String ? JwkJsonReader.ExtractStringValue(json, name) : null;
+
+        return value is null
+            ? IntrospectionMemberRefusal(fieldName, $"{fieldName} must be a JSON string.", "RFC 7662 Section 2.2")
+            : null;
+    }
+
+
+    /// <summary>
+    /// Reads the top-level member <paramref name="name"/> as a JWT NumericDate: absent reads as <see langword="null"/>, an
+    /// integer naming an instant <see cref="DateTimeOffset.FromUnixTimeSeconds"/> represents as that instant, and any other
+    /// value (a string, a fraction, an exponent, an integer outside the range) is refused.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7662#section-2.2">RFC 7662 Section 2.2</see>: "exp OPTIONAL. Integer
+    /// timestamp, measured in the number of seconds since January 1 1970 UTC, indicating when this token will expire, as
+    /// defined in JWT [RFC7519]."
+    /// </remarks>
+    /// <param name="json">The object's UTF-8 text.</param>
+    /// <param name="name">The member's UTF-8 name.</param>
+    /// <param name="fieldName">The member's name, which a refusal names.</param>
+    /// <param name="value">The instant, or <see langword="null"/> when the member is absent or refused.</param>
+    /// <returns>The refusal, or <see langword="null"/> when the member is absent or an integer NumericDate.</returns>
+    private static OAuthInvalidFieldValue? ReadNumericDateMember(
+        ReadOnlySpan<byte> json, ReadOnlySpan<byte> name, string fieldName, out DateTimeOffset? value)
+    {
+        value = null;
+        JsonValueShape? shape = ShapeOfMember(json, name);
+        if(shape is null)
+        {
+            return null;
+        }
+
+        long seconds = 0;
+        bool isRepresentable = shape == JsonValueShape.Number
+            && JwkJsonReader.TryExtractLongValue(json, name, out seconds)
+            && seconds >= MinimumRepresentableUnixSeconds
+            && seconds <= MaximumRepresentableUnixSeconds;
+        if(!isRepresentable)
+        {
+            return IntrospectionMemberRefusal(
+                fieldName, $"{fieldName} must be an integer NumericDate naming a representable instant.", "RFC 7662 Section 2.2");
+        }
+
+        value = DateTimeOffset.FromUnixTimeSeconds(seconds);
+
+        return null;
+    }
+
+
+    /// <summary>
+    /// Reads the top-level <c>aud</c> member: absent reads as <see langword="null"/>, one string as a one-entry list, an
+    /// array of strings as its entries in order, and any other value (an array holding a non-string entry among them) is
+    /// refused.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7662#section-2.2">RFC 7662 Section 2.2</see>: "aud OPTIONAL.
+    /// Service-specific string identifier or list of string identifiers representing the intended audience for this
+    /// token, as defined in JWT [RFC7519]."
+    /// </remarks>
+    /// <param name="json">The object's UTF-8 text.</param>
+    /// <param name="audience">The audience, or <see langword="null"/> when the member is absent or refused.</param>
+    /// <returns>The refusal, or <see langword="null"/> when the member is absent, a string or an array of strings.</returns>
+    private static OAuthInvalidFieldValue? ReadAudienceMember(ReadOnlySpan<byte> json, out IReadOnlyList<string>? audience)
+    {
+        audience = null;
+        JsonValueShape? shape = ShapeOfMember(json, WellKnownJwtClaimNames.AudUtf8);
+        if(shape is null)
+        {
+            return null;
+        }
+
+        audience = shape switch
+        {
+            JsonValueShape.String => JwkJsonReader.ExtractStringValue(json, WellKnownJwtClaimNames.AudUtf8) is string single ? [single] : null,
+            JsonValueShape.Array => JwkJsonReader.ExtractStringArrayProperty(json, WellKnownJwtClaimNames.AudUtf8),
+            _ => null
+        };
+
+        return audience is null
+            ? IntrospectionMemberRefusal(WellKnownJwtClaimNames.Aud, "aud must be a string or an array of strings.", "RFC 7662 Section 2.2")
+            : null;
+    }
+
+
+    /// <summary>
+    /// Reads the top-level <c>cnf</c> member: absent reads as <see langword="null"/>, an object carrying a non-empty string
+    /// <c>jkt</c> as the JWK Thumbprint confirmation, and any other value is refused with <see cref="ConfirmationReason"/>.
+    /// </summary>
+    /// <remarks>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.2">RFC 9449 Section 6.2</see>: "The hash is conveyed
+    /// using the same cnf content with jkt member structure as the JWK Thumbprint confirmation method, described in
+    /// Section 6.1, as a top-level member of the introspection response JSON."
+    /// </remarks>
+    /// <param name="json">The object's UTF-8 text.</param>
+    /// <param name="confirmation">The confirmation, or <see langword="null"/> when the member is absent or refused.</param>
+    /// <returns>The refusal, or <see langword="null"/> when the member is absent or carries a readable <c>jkt</c>.</returns>
+    private static OAuthInvalidFieldValue? ReadConfirmationMember(ReadOnlySpan<byte> json, out Server.ConfirmationMethod? confirmation)
+    {
+        confirmation = null;
+        JsonValueShape? shape = ShapeOfMember(json, WellKnownJwtClaimNames.CnfUtf8);
+        if(shape is null)
+        {
+            return null;
+        }
+
+        string? thumbprint = shape == JsonValueShape.Object
+            ? JwkJsonReader.ExtractStringValue(JwkJsonReader.ExtractObjectContent(json, WellKnownJwtClaimNames.CnfUtf8), WellKnownJwtClaimNames.JwkThumbprintUtf8)
+            : null;
+        if(string.IsNullOrEmpty(thumbprint))
+        {
+            return IntrospectionMemberRefusal(WellKnownJwtClaimNames.Cnf, ConfirmationReason, "RFC 9449 Section 6.2");
+        }
+
+        confirmation = new Server.ConfirmationMethod { JwkThumbprint = thumbprint };
+
+        return null;
+    }
+
+
+    /// <summary>
+    /// Reads every top-level member <see cref="NamedIntrospectionMembers"/> does not name, keyed by its decoded name, each
+    /// value decoded by its kind (<see cref="ReadExtensionValue"/>); a member whose value is <c>null</c> is not entered.
+    /// </summary>
+    /// <param name="json">The object's UTF-8 text.</param>
+    /// <returns>The extension members, or <see langword="null"/> when the object carries none.</returns>
+    private static Dictionary<string, object>? ReadExtensionMembers(ReadOnlySpan<byte> json)
+    {
+        Dictionary<string, object>? members = null;
+        foreach(string name in JwkJsonReader.GetTopLevelKeyNames(json))
+        {
+            if(NamedIntrospectionMembers.Contains(name))
+            {
+                continue;
+            }
+
+            if(ReadExtensionValue(json, Encoding.UTF8.GetBytes(name)) is object value)
+            {
+                members ??= new Dictionary<string, object>(StringComparer.Ordinal);
+                members[name] = value;
+            }
+        }
+
+        return members;
+    }
+
+
+    /// <summary>
+    /// The value of the top-level member <paramref name="name"/> decoded by its kind: a string as its decoded text, a
+    /// boolean as a <see cref="bool"/>, an integer as a <see cref="long"/>, another number as a <see cref="double"/>, and an
+    /// object or array as <see cref="JsonScalarText.DecodeValue"/> decodes its text.
+    /// </summary>
+    /// <param name="json">The object's UTF-8 text.</param>
+    /// <param name="name">The member's UTF-8 name.</param>
+    /// <returns>The decoded value, or <see langword="null"/> for <c>null</c>.</returns>
+    private static object? ReadExtensionValue(ReadOnlySpan<byte> json, ReadOnlySpan<byte> name) => ShapeOfMember(json, name) switch
+    {
+        JsonValueShape.String => JwkJsonReader.ExtractStringValue(json, name),
+        JsonValueShape.Boolean => JwkJsonReader.TryExtractBooleanValue(json, name, out bool isTrue) ? isTrue : null,
+        JsonValueShape.Number => ReadNumberValue(json, name),
+        JsonValueShape.Object => JwkJsonReader.ExtractObjectAsString(json, name) is string objectText ? JsonScalarText.DecodeValue(objectText) : null,
+        JsonValueShape.Array => JwkJsonReader.ExtractArrayAsString(json, name) is string arrayText ? JsonScalarText.DecodeValue(arrayText) : null,
+        _ => null
+    };
+
+
+    /// <summary>
+    /// The value of the top-level number member <paramref name="name"/>: a <see cref="long"/> for an integer in its range,
+    /// otherwise the number's text decoded by <see cref="JsonScalarText.DecodeValue"/>.
+    /// </summary>
+    /// <param name="json">The object's UTF-8 text.</param>
+    /// <param name="name">The member's UTF-8 name.</param>
+    /// <returns>The number.</returns>
+    private static object? ReadNumberValue(ReadOnlySpan<byte> json, ReadOnlySpan<byte> name)
+    {
+        if(JwkJsonReader.TryExtractLongValue(json, name, out long integer))
+        {
+            return integer;
+        }
+
+        ReadOnlySpan<byte> rest = json[JwkJsonReader.IndexOfValue(json, name)..];
+        int numberEnd = rest.IndexOfAny(JsonNumberTerminators);
+
+        return JsonScalarText.DecodeValue(Encoding.UTF8.GetString(numberEnd < 0 ? rest : rest[..numberEnd]));
+    }
+
+
+    /// <summary>
+    /// The refusal of an introspection response member outside its definition: an <see cref="OAuthInvalidFieldValue"/>
+    /// naming the member with <paramref name="reason"/> and an empty <see cref="OAuthInvalidFieldValue.ReceivedValue"/>,
+    /// so the value, which may describe a credential, is never echoed.
+    /// </summary>
+    /// <param name="fieldName">The member refused.</param>
+    /// <param name="reason">The fixed reason naming the member's definition.</param>
+    /// <param name="specificationReference">The clause that defines the member.</param>
+    /// <returns>The refusal.</returns>
+    private static OAuthInvalidFieldValue IntrospectionMemberRefusal(string fieldName, string reason, string specificationReference) =>
+        new(
+            fieldName,
+            string.Empty,
+            reason,
+            new DecisionSupport($"The introspection response contained a {fieldName} value outside its definition.")
+            {
+                SpecificationReference = specificationReference
+            });
+
+
+    /// <summary>The failure carrying <paramref name="refusal"/> with <paramref name="response"/>'s transport metadata.</summary>
+    /// <param name="refusal">The refusal.</param>
+    /// <param name="response">The HTTP response the object came from.</param>
+    /// <returns>The failure.</returns>
+    private static Result<TokenIntrospectionResult, OAuthParseError> RefuseIntrospectionMember(
+        OAuthInvalidFieldValue refusal, HttpResponseData response) =>
+        Result.Failure<TokenIntrospectionResult, OAuthParseError>(refusal.WithTransportMetadata(response));
+
+
+    /// <summary>
     /// The UTF-8 name of the RFC 6749 Section 5.2 <c>error_uri</c> member of a token endpoint's error
     /// response, which <see cref="ReadTokenResponse"/> reads at the top level.
     /// </summary>
@@ -469,8 +1223,7 @@ public static class OAuthResponseParsers
         {
             return RefuseMemberOutsideItsGrammar(
                 OAuthRequestParameterNames.TokenType,
-                "token_type must be one or more of \"-\", \".\", \"_\", an ASCII digit or an ASCII letter, "
-                + "or an RFC 3986 URI-reference.",
+                TokenTypeGrammarReason,
                 "RFC 6749 Appendix A.13",
                 response);
         }
@@ -531,8 +1284,7 @@ public static class OAuthResponseParsers
         {
             return RefuseMemberOutsideItsGrammar(
                 OAuthRequestParameterNames.Scope,
-                "scope must be one or more scope-tokens, each one or more chars in %x21 / %x23-5B / %x5D-7E, "
-                + "separated by single spaces.",
+                ScopeGrammarReason,
                 "RFC 6749 Appendix A.4",
                 response);
         }

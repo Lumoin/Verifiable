@@ -152,6 +152,16 @@ public sealed record TokenIntrospectionResult
     /// application's wiring (<see cref="Server.IntrospectTokenDelegate"/>); the binding is
     /// <see cref="Confirmation"/> and the token type <see cref="TokenType"/>.
     /// </summary>
+    /// <remarks>
+    /// A result <see cref="OAuthResponseParsers.ParseTokenIntrospectionResponse"/> reads carries here every extension
+    /// member the authorization server wrote, <c>authorization_details</c> among them since the reader does not type it
+    /// (<see cref="AuthorizationDetails"/> stays <see langword="null"/>), each value decoded by its JSON shape: a string as
+    /// its text, a boolean as a <see cref="bool"/>, an integer as a <see cref="long"/>, another number as a
+    /// <see cref="double"/>, an object or an array as its decoded value; a member whose value is <c>null</c> is omitted. A
+    /// parsed result is not thereby valid for the server's own writing: an active result answered back through
+    /// <see cref="Server.IntrospectTokenDelegate"/> with <c>authorization_details</c> here is a fault of the application's
+    /// wiring by the rule above.
+    /// </remarks>
     public IReadOnlyDictionary<string, object>? AdditionalClaims { get; init; }
 
     /// <summary>

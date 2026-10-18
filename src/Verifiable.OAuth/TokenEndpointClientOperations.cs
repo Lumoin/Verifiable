@@ -227,7 +227,7 @@ internal static class TokenEndpointClientOperations
                 form, registration, tokenEndpoint, clientAssertionOptions, infrastructure, now, context, cancellationToken),
             _ => throw new NotSupportedException(
                 $"Client authentication method '{ClientAuthenticationMethodNames.GetName(registration.AuthenticationMethod)}' " +
-                "is not supported at the token endpoint.")
+                "is not supported for client authentication at this endpoint.")
         };
     }
 

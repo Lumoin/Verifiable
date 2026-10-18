@@ -1,15 +1,20 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Collections.Concurrent;
+using System.Collections.Immutable;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Sockets;
 using System.Text.Json;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
+using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
+using Verifiable.OAuth.Introspection;
 using Verifiable.OAuth.Server;
+using Verifiable.Server.Routing;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -1950,6 +1955,588 @@ internal sealed class ResourceServerEndToEndTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.2">RFC 9449 Section 6.2</see>: "Rather, the resource
+    /// server uses the data of the introspection response to validate the access token binding itself locally.";
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-6">Section 6</see>: "Resource servers supporting DPoP
+    /// MUST ensure that the public key from the DPoP proof matches the one bound to the access token." Over two
+    /// listeners, a resource validating presented tokens by introspection at the authorization server serves an opaque
+    /// token the authorization server answers as active and bound to a key: presented under the <c>DPoP</c> scheme with a
+    /// proof by that key and no nonce it is answered with the resource's nonce challenge, presented again with the nonce
+    /// it is served, 200 with the answer's <c>sub</c>; the authorization server saw one introspection per request to the
+    /// resource, neither carrying a <c>DPoP</c> field line.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task IntrospectingResourceServesABoundTokenWithAProofByTheBoundKeyAsync()
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyMaterial = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            DpopKey dpopKey = new(keyMaterial, WellKnownJwaValues.Es256);
+            await using IntrospectingResourceServer server = await StartIntrospectingResourceServerAsync(
+                _ => BoundAnswer(ThumbprintOf(dpopKey))).ConfigureAwait(false);
+
+            string nonce = await ObtainResourceNonceWithANonceLessProofAsync(server.Rs, dpopKey, OpaqueToken).ConfigureAwait(false);
+            Assert.IsEmpty(server.Host.Host("default").ConsumeHttpFaults(), "The first introspection is answered without a server fault.");
+            string proof = await BuildResourceProofAsync(server.Rs, dpopKey, OpaqueToken, nonce).ConfigureAwait(false);
+            HttpResponseData response = await SendProtectedOverARawConnectionAsync(server.Rs, $"DPoP {OpaqueToken}", [proof]).ConfigureAwait(false);
+            Assert.IsEmpty(server.Host.Host("default").ConsumeHttpFaults(), "The second introspection is answered without a server fault.");
+
+            Assert.AreEqual(200, response.StatusCode, response.Body);
+            using JsonDocument document = JsonDocument.Parse(response.Body);
+            Assert.AreEqual(Subject, document.RootElement.GetProperty("sub").GetString());
+            Assert.HasCount(2, server.Introspected, "Each request to the resource is one introspection.");
+            Assert.IsTrue(server.Introspected.All(static seen => seen.DpopFieldLineCount == 0), "No introspection request carries a DPoP field line.");
+            Assert.IsTrue(server.Rs.IntrospectionExchanges.All(static exchange => exchange.RequestHeaderValues("DPoP").Count == 0), "The resource sends no DPoP field line.");
+        }
+        finally
+        {
+            keyMaterial.PublicKey.Dispose();
+            keyMaterial.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-6">RFC 9449 Section 6</see>: "Resource servers
+    /// supporting DPoP MUST ensure that the public key from the DPoP proof matches the one bound to the access token.";
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">Section 4.3</see>, check 12: "confirm that the
+    /// public key to which the access token is bound matches the public key from the DPoP proof". Over two listeners, an
+    /// opaque token the authorization server answers by introspection as bound to one key, presented at the
+    /// introspecting resource under the <c>DPoP</c> scheme with a proof by another key carrying the resource's nonce, is
+    /// refused: 401, the one challenge
+    /// <c>DPoP realm="protected", error="invalid_token", algs="...", resource_metadata="..."</c> and the description
+    /// "The DPoP proof key does not match the Access Token's cnf.jkt binding.".
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task IntrospectingResourceRefusesAProofByAnotherKeyAsync()
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> boundKeyMaterial = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> otherKeyMaterial = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            DpopKey boundKey = new(boundKeyMaterial, WellKnownJwaValues.Es256);
+            DpopKey otherKey = new(otherKeyMaterial, WellKnownJwaValues.Es256);
+            await using IntrospectingResourceServer server = await StartIntrospectingResourceServerAsync(
+                _ => BoundAnswer(ThumbprintOf(boundKey))).ConfigureAwait(false);
+
+            string nonce = await ObtainResourceNonceAsync(server.Rs, OpaqueToken).ConfigureAwait(false);
+            string proof = await BuildResourceProofAsync(server.Rs, otherKey, OpaqueToken, nonce).ConfigureAwait(false);
+            HttpResponseData response = await SendProtectedOverARawConnectionAsync(server.Rs, $"DPoP {OpaqueToken}", [proof]).ConfigureAwait(false);
+            Assert.IsEmpty(server.Host.Host("default").ConsumeHttpFaults(), "The introspections are answered without a server fault.");
+
+            AssertResourceRefusal(server.Rs, response, "invalid_token");
+            AssertRefusalDescription(response, "The DPoP proof key does not match the Access Token's cnf.jkt binding.");
+        }
+        finally
+        {
+            boundKeyMaterial.PublicKey.Dispose();
+            boundKeyMaterial.PrivateKey.Dispose();
+            otherKeyMaterial.PublicKey.Dispose();
+            otherKeyMaterial.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.2">RFC 9449 Section 7.2</see>: "Protected resources
+    /// simultaneously supporting both the DPoP and Bearer schemes need to update how the evaluation process is performed
+    /// for bearer tokens to prevent downgraded usage of a DPoP-bound access token. Specifically, such a protected
+    /// resource MUST reject a DPoP-bound access token received as a bearer token per [RFC6750]." Over two listeners, an
+    /// opaque token the authorization server answers by introspection as bound to a key, presented at the introspecting
+    /// resource under the <c>Bearer</c> scheme, is refused: 401, the one challenge
+    /// <c>Bearer realm="protected", error="invalid_token", resource_metadata="..."</c> and the description "The Access
+    /// Token is sender-constrained and must be presented under the DPoP scheme.".
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task IntrospectingResourceRefusesABoundTokenUnderBearerAsync()
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyMaterial = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            DpopKey dpopKey = new(keyMaterial, WellKnownJwaValues.Es256);
+            await using IntrospectingResourceServer server = await StartIntrospectingResourceServerAsync(
+                _ => BoundAnswer(ThumbprintOf(dpopKey))).ConfigureAwait(false);
+
+            HttpResponseData response = await SendProtectedOverARawConnectionAsync(server.Rs, $"Bearer {OpaqueToken}", []).ConfigureAwait(false);
+            Assert.IsEmpty(server.Host.Host("default").ConsumeHttpFaults(), "The introspection is answered without a server fault.");
+
+            Assert.AreEqual(401, response.StatusCode, response.Body);
+            Assert.AreEqual(
+                $"Bearer realm=\"protected\", error=\"invalid_token\", resource_metadata=\"{server.Rs.MetadataUrl!.OriginalString}\"",
+                Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
+            AssertRefusalDescription(response, "The Access Token is sender-constrained and must be presented under the DPoP scheme.");
+        }
+        finally
+        {
+            keyMaterial.PublicKey.Dispose();
+            keyMaterial.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7662#section-2.2">RFC 7662 Section 2.2</see>: "token_type OPTIONAL.
+    /// Type of the token as defined in Section 5.1 of OAuth 2.0 [RFC6749]."; RFC 9449
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-7.1">Section 7.1</see>: "A DPoP-bound access token is
+    /// sent using the Authorization request header field per Section 11.6.2 of [RFC9110] with an authentication scheme
+    /// of DPoP." Over two listeners, an opaque token the authorization server answers by introspection as active, of the
+    /// type <c>Bearer</c> and bound to no key, is a bearer token at the introspecting resource: presented under the
+    /// <c>Bearer</c> scheme it is served, 200 with the answer's <c>sub</c>; presented under the <c>DPoP</c> scheme with a
+    /// proof it is refused, 401, the one challenge
+    /// <c>DPoP realm="protected", error="invalid_token", algs="...", resource_metadata="..."</c> and the description
+    /// "The Access Token is not bound to a DPoP key and cannot be presented under the DPoP scheme.".
+    /// </summary>
+    /// <param name="row">The scheme the token is presented under: <see cref="BearerSchemeRow"/> or <see cref="DpopSchemeRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(BearerSchemeRow)]
+    [DataRow(DpopSchemeRow)]
+    public async Task IntrospectingResourceServesAnUnboundTokenUnderBearerAloneAsync(string row)
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keyMaterial = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            DpopKey dpopKey = new(keyMaterial, WellKnownJwaValues.Es256);
+            await using IntrospectingResourceServer server = await StartIntrospectingResourceServerAsync(
+                static _ => new TokenIntrospectionResult { IsActive = true, Subject = Subject, Scope = Scope, TokenType = "Bearer" }).ConfigureAwait(false);
+
+            HttpResponseData response = row == BearerSchemeRow
+                ? await SendProtectedOverARawConnectionAsync(server.Rs, $"Bearer {OpaqueToken}", []).ConfigureAwait(false)
+                : await SendProtectedOverARawConnectionAsync(
+                    server.Rs, $"DPoP {OpaqueToken}",
+                    [await BuildResourceProofAsync(server.Rs, dpopKey, OpaqueToken, nonce: null).ConfigureAwait(false)]).ConfigureAwait(false);
+            Assert.IsEmpty(server.Host.Host("default").ConsumeHttpFaults(), "The introspection is answered without a server fault.");
+
+            if(row == BearerSchemeRow)
+            {
+                Assert.AreEqual(200, response.StatusCode, response.Body);
+                using JsonDocument document = JsonDocument.Parse(response.Body);
+                Assert.AreEqual(Subject, document.RootElement.GetProperty("sub").GetString());
+
+                return;
+            }
+
+            AssertResourceRefusal(server.Rs, response, "invalid_token");
+            AssertRefusalDescription(response, "The Access Token is not bound to a DPoP key and cannot be presented under the DPoP scheme.");
+        }
+        finally
+        {
+            keyMaterial.PublicKey.Dispose();
+            keyMaterial.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7662#section-2.2">RFC 7662 Section 2.2</see>: "If the introspection
+    /// call is properly authorized but the token is not active, does not exist on this server, or the protected resource
+    /// is not allowed to introspect this particular token, then the authorization server MUST return an introspection
+    /// response with the "active" field set to "false"."; RFC 6750 Section 3.1: "invalid_token The access token provided
+    /// is expired, revoked, malformed, or invalid for other reasons." Over two listeners, an opaque token the
+    /// authorization server answers by introspection as not active is refused at the introspecting resource with 401
+    /// <c>invalid_token</c> under the presented scheme's challenge and no <c>DPoP-Nonce</c> field line: under
+    /// <c>Bearer</c> the one challenge
+    /// <c>Bearer realm="protected", error="invalid_token", error_description="The access token is not active.", resource_metadata="..."</c>;
+    /// under <c>DPoP</c> the one challenge
+    /// <c>DPoP realm="protected", error="invalid_token", algs="...", resource_metadata="..."</c> and the body's
+    /// <c>error_description</c> "The access token is not active.". The inactive description is carried under both
+    /// schemes, in the <c>Bearer</c> challenge and in the <c>DPoP</c> refusal's body; under <c>DPoP</c> the challenge alone
+    /// would not tell an inactive token from an active token bound to no key, which the resource refuses with the same
+    /// challenge.
+    /// </summary>
+    /// <param name="row">The scheme the token is presented under: <see cref="BearerSchemeRow"/> or <see cref="DpopSchemeRow"/>.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(BearerSchemeRow)]
+    [DataRow(DpopSchemeRow)]
+    public async Task IntrospectingResourceRefusesAnInactiveTokenAsync(string row)
+    {
+        await using IntrospectingResourceServer server = await StartIntrospectingResourceServerAsync(
+            static _ => TokenIntrospectionResult.Inactive).ConfigureAwait(false);
+
+        HttpResponseData response = await SendProtectedOverARawConnectionAsync(
+            server.Rs, row == BearerSchemeRow ? $"Bearer {OpaqueToken}" : $"DPoP {OpaqueToken}", []).ConfigureAwait(false);
+        Assert.IsEmpty(server.Host.Host("default").ConsumeHttpFaults(), "The introspection is answered without a server fault.");
+
+        Assert.IsEmpty(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.DPoPNonce), "An inactive token is refused with no DPoP nonce.");
+        if(row == BearerSchemeRow)
+        {
+            Assert.AreEqual(401, response.StatusCode, response.Body);
+            Assert.AreEqual(
+                $"Bearer realm=\"protected\", error=\"invalid_token\", error_description=\"The access token is not active.\", resource_metadata=\"{server.Rs.MetadataUrl!.OriginalString}\"",
+                Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate)));
+
+            return;
+        }
+
+        AssertResourceRefusal(server.Rs, response, "invalid_token");
+        AssertRefusalDescription(response, "The access token is not active.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2.1">RFC 6749 Section 4.1.2.1</see>: "server_error
+    /// The authorization server encountered an unexpected condition that prevented it from fulfilling the request." The
+    /// introspecting resource reuses the code as its own policy for an authorization server it cannot reach or read; the
+    /// library holds no failure policy (no retry, no cache, no fallback) and passes the transport's exception to the
+    /// application. Over two listeners, a resource whose authorization server metadata names the introspection endpoint
+    /// <c>https://127.0.0.1:&lt;port&gt;/introspect</c> on a loopback port no listener holds is presented a token under the
+    /// <c>Bearer</c> scheme: the refused connection is answered 500 with <c>Content-Type: application/json</c>, the body's
+    /// <c>error</c> <c>server_error</c> and <c>error_description</c> "The access token could not be introspected.", no
+    /// <c>WWW-Authenticate</c> field line, and no exception text in the body.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task IntrospectingResourceAnswersAnUnreachableAuthorizationServerWithServerErrorAsync()
+    {
+        using TcpListener portProbe = new(IPAddress.Loopback, 0);
+        portProbe.Start();
+        Uri unreachableEndpoint = new($"https://127.0.0.1:{((IPEndPoint)portProbe.LocalEndpoint).Port}/introspect");
+        portProbe.Stop();
+        await using IntrospectingResourceServer server = await StartIntrospectingResourceServerAsync(
+            static _ => new TokenIntrospectionResult { IsActive = true, Subject = Subject, Scope = Scope },
+            metadata => metadata with { IntrospectionEndpoint = unreachableEndpoint }).ConfigureAwait(false);
+
+        HttpResponseData response = await SendProtectedOverARawConnectionAsync(server.Rs, $"Bearer {OpaqueToken}", []).ConfigureAwait(false);
+        Assert.IsEmpty(server.Host.Host("default").ConsumeHttpFaults(), "The authorization server's listener captured no fault.");
+
+        Assert.AreEqual(500, response.StatusCode, response.Body);
+        Assert.DoesNotContain("Handler threw", response.Body, StringComparison.Ordinal, "The answer carries no exception text.");
+        Assert.DoesNotContain("Exception", response.Body, StringComparison.Ordinal, "The answer carries no exception text.");
+        Assert.AreEqual("application/json", Assert.ContainsSingle(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.ContentType)));
+        using JsonDocument document = JsonDocument.Parse(response.Body);
+        Assert.AreEqual("server_error", document.RootElement.GetProperty("error").GetString(), response.Body);
+        Assert.AreEqual("The access token could not be introspected.", document.RootElement.GetProperty("error_description").GetString(), response.Body);
+        Assert.IsEmpty(response.Headers.Headers.GetValues(WellKnownHttpHeaderNames.WwwAuthenticate), "No challenge is written.");
+        Assert.IsEmpty(server.Introspected, "No introspection request reached the authorization server.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-6.2">RFC 9449 Section 6.2</see>: "For a DPoP-bound
+    /// access token, the hash of the public key to which the token is bound is conveyed to the protected resource as
+    /// metainformation in a token introspection response." and "Rather, the resource server uses the data of the
+    /// introspection response to validate the access token binding itself locally." A machine client is issued an access
+    /// token at the authorization server's token endpoint over the wire for a DPoP proof carrying the supplied nonce; the
+    /// authorization server's introspection seam answers it active with the binding the token itself carries; presented
+    /// at the introspecting resource over its own listener under the <c>DPoP</c> scheme with proofs by the client's key,
+    /// it is answered with the resource's nonce challenge and then served, 200 with the <c>cnf.jkt</c> the resource read
+    /// from the introspection response equal to the JWK SHA-256 Thumbprint of the client's DPoP key. The row proves the
+    /// binding's propagation: the binding the authorization server issued reaches the resource through the introspection
+    /// answer and equals the client's proof key thumbprint. The authorization server's application reads the binding of
+    /// the token it issued without validating the token, so the authorization server's refusal of a forged token is not
+    /// this row's.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task IntrospectedBindingOfAnIssuedTokenIsTheProofKeysThumbprintAsync()
+    {
+        const string MachineClientId = "https://machine.example.com";
+        const string MachineSecret = "s3cret-of-the-machine";
+        const string MachineScope = "telemetry.read";
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> dpopKeyMaterial = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        FakeTimeProvider time = new(NowInstant);
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> secret = ClientAuthenticationFixtures.BuildSecretKeyMaterial(MachineSecret, BaseMemoryPool.Shared);
+        try
+        {
+            DpopKey dpopKey = new(dpopKeyMaterial, WellKnownJwaValues.Es256);
+            await using TestHostShell host = new(time);
+            using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+                MachineClientId, new Uri(MachineClientId), profile: PolicyProfile.Rfc6749WithPkce,
+                capabilities: ImmutableHashSet.Create(
+                    WellKnownCapabilityIdentifiers.OAuthClientCredentials,
+                    WellKnownCapabilityIdentifiers.OAuthTokenIntrospection,
+                    WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
+                    WellKnownCapabilityIdentifiers.OAuthJwksEndpoint)).ConfigureAwait(false);
+            _ = await host.AddScopeWithAudienceAsync(material, MachineScope, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            _ = await host.EnableDpopAsync().ConfigureAwait(false);
+            await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+            material.Registration = host.AlignRegistrationToHostHttpBase("default", material.Registration);
+            await TestHostShell.AlterAsync(host.Server, static candidateIntegration =>
+            {
+                candidateIntegration.ValidateClientCredentialsAsync = static (reading, _, _, _) =>
+                    ValueTask.FromResult(string.Equals(reading.ClientSecret, MachineSecret, StringComparison.Ordinal));
+                candidateIntegration.IntrospectTokenAsync = static (token, _, _, _, _) =>
+                    ValueTask.FromResult(JwtPayloadReader.ReadCnfJkt(token) switch
+                    {
+                        string issuedThumbprint => new TokenIntrospectionResult
+                        {
+                            IsActive = true,
+                            Confirmation = new ConfirmationMethod { JwkThumbprint = issuedThumbprint }
+                        },
+                        null => TokenIntrospectionResult.Inactive
+                    });
+            }).ConfigureAwait(false);
+            HostedAuthorizationServer hosted = host.Host("default");
+            Uri tokenUrl = new(hosted.HttpBaseAddress!, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeToken, material.Registration.TenantId.Value));
+            Dictionary<string, string> tokenFields = new(StringComparer.Ordinal)
+            {
+                [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.ClientCredentials,
+                [OAuthRequestParameterNames.ClientId] = MachineClientId,
+                [OAuthRequestParameterNames.ClientSecret] = MachineSecret,
+                [OAuthRequestParameterNames.Scope] = MachineScope
+            };
+
+            string nonceLessProof = await ResourceDpopProofs.BuildAsync(
+                dpopKey, WellKnownHttpMethods.Post, tokenUrl.OriginalString, accessToken: null, nonce: null, NowInstant,
+                TestContext.CancellationToken).ConfigureAwait(false);
+            using HttpResponseMessage challenge = await OAuthTestTransport.PostFormAsync(
+                hosted.SharedHttpClient!, tokenUrl, tokenFields, OutgoingHeaders.Empty.WithDpop(nonceLessProof),
+                TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.AreEqual(HttpStatusCode.BadRequest, challenge.StatusCode, "The nonce-less token request is challenged.");
+            string tokenNonce = challenge.Headers.GetValues(WellKnownHttpHeaderNames.DPoPNonce).Single();
+            string tokenProof = await ResourceDpopProofs.BuildAsync(
+                dpopKey, WellKnownHttpMethods.Post, tokenUrl.OriginalString, accessToken: null, tokenNonce, NowInstant,
+                TestContext.CancellationToken).ConfigureAwait(false);
+            using HttpResponseMessage issued = await OAuthTestTransport.PostFormAsync(
+                hosted.SharedHttpClient!, tokenUrl, tokenFields, OutgoingHeaders.Empty.WithDpop(tokenProof),
+                TestContext.CancellationToken).ConfigureAwait(false);
+            string issuedBody = await issued.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.IsEmpty(hosted.ConsumeHttpFaults(), "The token is issued without a server fault.");
+            Assert.AreEqual(HttpStatusCode.OK, issued.StatusCode, issuedBody);
+            using JsonDocument issuedDocument = JsonDocument.Parse(issuedBody);
+            string accessToken = issuedDocument.RootElement.GetProperty(OAuthRequestParameterNames.AccessToken).GetString()!;
+
+            using IntrospectingResourceClient resourceClient = await IntrospectingResourceClient.CreateAsync(
+                host, material, ClientAuthenticationMethod.ClientSecretPost, secret, [host.ServerCertificate], alterMetadata: null,
+                TestContext.CancellationToken).ConfigureAwait(false);
+            await using TestResourceServerShell rs = new(
+                trustedIssuer: resourceClient.Registration.AuthorizationServerIssuer,
+                expectedAudience: Audience,
+                resolveVerificationKey: NoAccessTokenKey,
+                verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
+                timeProvider: time,
+                introspection: resourceClient.ToResourceServerIntrospection(clientAssertionOptions: null));
+            await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+            string resourceNonce = await ObtainResourceNonceWithANonceLessProofAsync(rs, dpopKey, accessToken).ConfigureAwait(false);
+            string resourceProof = await BuildResourceProofAsync(rs, dpopKey, accessToken, resourceNonce).ConfigureAwait(false);
+            HttpResponseData response = await SendProtectedOverARawConnectionAsync(rs, $"DPoP {accessToken}", [resourceProof]).ConfigureAwait(false);
+            Assert.IsEmpty(hosted.ConsumeHttpFaults(), "The introspections are answered without a server fault.");
+
+            Assert.AreEqual(200, response.StatusCode, response.Body);
+            using JsonDocument served = JsonDocument.Parse(response.Body);
+            Assert.AreEqual(ThumbprintOf(dpopKey), served.RootElement.GetProperty("cnf").GetProperty("jkt").GetString());
+        }
+        finally
+        {
+            secret.PublicKey.Dispose();
+            secret.PrivateKey.Dispose();
+            dpopKeyMaterial.PublicKey.Dispose();
+            dpopKeyMaterial.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9701#section-8.1">RFC 9701 Section 8.1</see>: "An attacker could try
+    /// to exploit this and pass a JWT token introspection response as an access token to the resource server." and
+    /// "Resource servers MUST therefore check the typ JWT header value of received JWT-encoded access tokens and ensure
+    /// all minimally required claims for a valid access token are present." A JWT whose header <c>typ</c> is
+    /// <c>token-introspection+jwt</c>, signed by the trusted issuer's key and carrying valid <c>iss</c>, <c>aud</c>,
+    /// <c>iat</c>, <c>exp</c> and <c>sub</c>, presented at the resource over the wire under the <c>Bearer</c> scheme, is
+    /// refused: 401 and the one challenge
+    /// <c>Bearer realm="protected", error="invalid_token", error_description="JWS header typ must be 'at+jwt' or 'application/at+jwt' per RFC 9068  4.", resource_metadata="..."</c>,
+    /// the validator's description with its section sign written as a space by the resource, which holds a challenge's
+    /// description to the RFC 6750 Section 3 character set.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ResourceServerRefusesAnIntrospectionResponseJwtPresentedAsAnAccessTokenAsync()
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            await using TestResourceServerShell rs = await StartResourceServerAsync(keys.PublicKey).ConfigureAwait(false);
+            JwtPayload payload = OAuthAccessTokenFixtures.BuildAccessTokenPayload(
+                subject: Subject,
+                scope: Scope,
+                clientId: ClientId,
+                issuedAt: NowInstant - TimeSpan.FromMinutes(1),
+                expiresAt: NowInstant + TimeSpan.FromHours(1),
+                issuer: Issuer,
+                audience: [Audience]);
+            string token = await BuildAccessTokenAsync(keys.PrivateKey, payload, typ: "token-introspection+jwt").ConfigureAwait(false);
+
+            using HttpResponseMessage response = await SendProtectedRequestAsync(rs, token).ConfigureAwait(false);
+
+            await AssertInvalidTokenChallengeAsync(
+                rs, response, "JWS header typ must be 'at+jwt' or 'application/at+jwt' per RFC 9068  4.").ConfigureAwait(false);
+        }
+        finally
+        {
+            keys.PublicKey.Dispose();
+            keys.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>The opaque access token the introspecting resource's rows present.</summary>
+    private const string OpaqueToken = "opaque-access-token-of-the-client";
+
+    /// <summary>The introspecting resource's client identifier at the authorization server.</summary>
+    private const string IntrospectingResourceClientId = "https://introspecting.resource.test";
+
+    /// <summary>The introspecting resource's shared secret.</summary>
+    private const string IntrospectingResourceSecret = "s3cret-of-the-introspecting-resource";
+
+
+    /// <summary>A verification-key resolver answering no key: the introspecting resource verifies no JWT access token itself.</summary>
+    private static ServerVerificationKeyResolverDelegate NoAccessTokenKey { get; } =
+        static (_, _, _, _, _) => ValueTask.FromResult<PublicKeyMemory?>(null);
+
+
+    /// <summary>
+    /// The authorization server's introspection answer for a token bound to <paramref name="thumbprint"/>: active,
+    /// <see cref="Subject"/>, <see cref="Scope"/>, <see cref="ClientId"/> and the confirmation by that thumbprint.
+    /// </summary>
+    /// <param name="thumbprint">The bound key's JWK SHA-256 Thumbprint.</param>
+    /// <returns>The answer.</returns>
+    private static TokenIntrospectionResult BoundAnswer(string thumbprint) => new()
+    {
+        IsActive = true,
+        Subject = Subject,
+        Scope = Scope,
+        ClientId = ClientId,
+        Confirmation = new ConfirmationMethod { JwkThumbprint = thumbprint }
+    };
+
+
+    /// <summary>
+    /// One introspection request the authorization server's seam received: the token and the number of <c>DPoP</c>
+    /// field lines the request carried.
+    /// </summary>
+    /// <param name="Token">The introspected token.</param>
+    /// <param name="DpopFieldLineCount">The number of <c>DPoP</c> field lines of the request.</param>
+    private sealed record IntrospectionAtTheServer(string Token, int DpopFieldLineCount);
+
+
+    /// <summary>
+    /// The two listeners of an introspection row: the authorization server's <see cref="TestHostShell"/> with token
+    /// introspection wired and the resource's <see cref="TestResourceServerShell"/> in its introspection mode, the
+    /// resource authenticating by <c>client_secret_basic</c>.
+    /// </summary>
+    private sealed class IntrospectingResourceServer: IAsyncDisposable
+    {
+        /// <summary>The authorization server's fixture.</summary>
+        public required TestHostShell Host { get; init; }
+
+        /// <summary>The resource's registration at the authorization server.</summary>
+        public required VerifierKeyMaterial Material { get; init; }
+
+        /// <summary>The resource's shared secret.</summary>
+        public required PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> Secret { get; init; }
+
+        /// <summary>The resource's OAuth client.</summary>
+        public required IntrospectingResourceClient ResourceClient { get; init; }
+
+        /// <summary>The resource server in its introspection mode.</summary>
+        public required TestResourceServerShell Rs { get; init; }
+
+        /// <summary>Every introspection request the authorization server's seam received, in order.</summary>
+        public required ConcurrentQueue<IntrospectionAtTheServer> Introspected { get; init; }
+
+
+        /// <summary>Stops both listeners and releases the resource's client and secret.</summary>
+        /// <returns>A task that completes when everything is released.</returns>
+        public async ValueTask DisposeAsync()
+        {
+            await Rs.DisposeAsync().ConfigureAwait(false);
+            ResourceClient.Dispose();
+            Material.Dispose();
+            await Host.DisposeAsync().ConfigureAwait(false);
+            Secret.PublicKey.Dispose();
+            Secret.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// Starts the two listeners of an introspection row on one clock at <see cref="NowInstant"/>: the authorization
+    /// server registers the resource with token introspection allowed, authenticates it by <c>client_secret_basic</c>,
+    /// and answers each introspection by <paramref name="answer"/> of the token, recording the token and its request's
+    /// <c>DPoP</c> field lines; the resource server introspects every presented token there. A step that throws releases
+    /// what the earlier steps created before the exception passes on.
+    /// </summary>
+    /// <param name="answer">The authorization server's introspection answer for a token.</param>
+    /// <param name="alterMetadata">
+    /// Rewrites the authorization server metadata the resource resolves, or <see langword="null"/> to keep it.
+    /// </param>
+    /// <returns>The two listeners; the caller disposes them.</returns>
+    private async Task<IntrospectingResourceServer> StartIntrospectingResourceServerAsync(
+        Func<string, TokenIntrospectionResult> answer,
+        Func<AuthorizationServerMetadata, AuthorizationServerMetadata>? alterMetadata = null)
+    {
+        FakeTimeProvider time = new(NowInstant);
+        TestHostShell host = new(time);
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> secret = ClientAuthenticationFixtures.BuildSecretKeyMaterial(IntrospectingResourceSecret, BaseMemoryPool.Shared);
+        VerifierKeyMaterial? material = null;
+        IntrospectingResourceClient? resourceClient = null;
+        TestResourceServerShell? rs = null;
+        try
+        {
+            material = await host.RegisterClientAsync(
+                IntrospectingResourceClientId, new Uri(IntrospectingResourceClientId),
+                ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.OAuthTokenIntrospection)).ConfigureAwait(false);
+            ConcurrentQueue<IntrospectionAtTheServer> introspected = new();
+            await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+            {
+                candidateIntegration.ValidateClientCredentialsAsync = static (reading, registration, _, _) =>
+                    ValueTask.FromResult(AuthCodeFlowDriver.DecodeAndMatchBasicHeader(reading, registration.ClientId, IntrospectingResourceSecret));
+                candidateIntegration.IntrospectTokenAsync = (token, _, _, context, _) =>
+                {
+                    int dpopFieldLineCount = context.IncomingRequest!.Headers.TryGetAll(WellKnownHttpHeaderNames.DPoP, out IReadOnlyList<string>? lines)
+                        ? lines!.Count
+                        : 0;
+                    introspected.Enqueue(new IntrospectionAtTheServer(token, dpopFieldLineCount));
+
+                    return ValueTask.FromResult(answer(token));
+                };
+            }).ConfigureAwait(false);
+            await ClientAuthenticationFixtures.DeclareServerSideAuthMethodAsync(host, material, ClientAuthenticationMethod.ClientSecretBasic).ConfigureAwait(false);
+            resourceClient = await IntrospectingResourceClient.CreateAsync(
+                host, material, ClientAuthenticationMethod.ClientSecretBasic, secret, [host.ServerCertificate], alterMetadata,
+                TestContext.CancellationToken).ConfigureAwait(false);
+            rs = new(
+                trustedIssuer: resourceClient.Registration.AuthorizationServerIssuer,
+                expectedAudience: Audience,
+                resolveVerificationKey: NoAccessTokenKey,
+                verifySignature: MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
+                timeProvider: time,
+                introspection: resourceClient.ToResourceServerIntrospection(clientAssertionOptions: null));
+            await rs.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+            return new IntrospectingResourceServer
+            {
+                Host = host,
+                Material = material,
+                Secret = secret,
+                ResourceClient = resourceClient,
+                Rs = rs,
+                Introspected = introspected
+            };
+        }
+        catch
+        {
+            if(rs is not null)
+            {
+                await rs.DisposeAsync().ConfigureAwait(false);
+            }
+
+            resourceClient?.Dispose();
+            material?.Dispose();
+            await host.DisposeAsync().ConfigureAwait(false);
+            secret.PublicKey.Dispose();
+            secret.PrivateKey.Dispose();
+            throw;
+        }
+    }
+
+
+    /// <summary>
     /// Starts a resource server on <paramref name="time"/>, signs an access token from the trusted issuer
     /// whose claims are issued a minute before that clock and expire five minutes after it, rewritten by
     /// <paramref name="alterPayload"/>, and presents it under the <c>Bearer</c> scheme over the wire,
@@ -2322,13 +2909,19 @@ internal sealed class ResourceServerEndToEndTests
     /// <param name="privateKey">The signing key.</param>
     /// <param name="payload">The token's claims.</param>
     /// <param name="kid">The header <c>kid</c>, or <see langword="null"/> for the resolver's key id.</param>
+    /// <param name="typ">The header <c>typ</c>, or <see langword="null"/> for the access token's <c>at+jwt</c>.</param>
     /// <returns>The compact JWS.</returns>
-    private async Task<string> BuildAccessTokenAsync(PrivateKeyMemory privateKey, JwtPayload payload, string? kid = null)
+    private async Task<string> BuildAccessTokenAsync(PrivateKeyMemory privateKey, JwtPayload payload, string? kid = null, string? typ = null)
     {
         JwtHeader header = JwtHeaderExtensions.ForAccessToken(WellKnownJwaValues.Es256, Kid);
         if(kid is not null)
         {
             header[WellKnownJwkMemberNames.Kid] = kid;
+        }
+
+        if(typ is not null)
+        {
+            header["typ"] = typ;
         }
 
         UnsignedJwt unsignedJwt = new(header, payload);

@@ -1472,6 +1472,21 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// <param name="profile">The client's policy profile, or <see langword="null"/> for HAIP 1.0.</param>
     /// <param name="rewriteFormPostResponse">The rewrite of each form-post response, or <see langword="null"/> to deliver each as received.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <param name="transportHttpClient">
+    /// The <see cref="System.Net.Http.HttpClient"/> the form-post transport sends through, or <see langword="null"/> for
+    /// <see cref="HostedAuthorizationServer.SharedHttpClient"/>: a protected resource's own outbound client, such as one
+    /// whose outermost handler records each exchange or one pinned to a further listener.
+    /// </param>
+    /// <param name="alterMetadata">
+    /// Rewrites the authorization server metadata the client resolves, or <see langword="null"/> to keep the metadata
+    /// composed from the listener, so a row can point an endpoint at another listener, name another issuer or omit an
+    /// endpoint.
+    /// </param>
+    /// <param name="dpopKey">
+    /// The DPoP key the client's infrastructure wires with an ES256 proof construction over
+    /// <see cref="MicrosoftCryptographicFunctionsAdapter.SignP256Async"/> and a fresh
+    /// <see cref="InMemoryDpopNonceCache"/>, or <see langword="null"/> to wire no DPoP.
+    /// </param>
     /// <returns>The client, its registration and the client's flow store.</returns>
     public async ValueTask<(OAuthClient Client, ClientRegistration Registration, Dictionary<string, FlowState> ClientFlowStore)>
         CreateRewritingOAuthClientAndRegistrationAsync(
@@ -1479,7 +1494,10 @@ internal sealed class TestHostShell: IAsyncDisposable
             string redirectUri,
             PolicyProfile? profile,
             Func<Uri, HttpResponseData, HttpResponseData>? rewriteFormPostResponse,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            System.Net.Http.HttpClient? transportHttpClient = null,
+            Func<AuthorizationServerMetadata, AuthorizationServerMetadata>? alterMetadata = null,
+            DpopKey? dpopKey = null)
     {
         ArgumentNullException.ThrowIfNull(record);
         ArgumentException.ThrowIfNullOrWhiteSpace(redirectUri);
@@ -1496,18 +1514,22 @@ internal sealed class TestHostShell: IAsyncDisposable
         Uri authEndpoint = new(baseUri, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, segment));
         Uri tokenEndpoint = new(baseUri, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeToken, segment));
         Uri revocationEndpoint = new(baseUri, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeRevoke, segment));
+        Uri introspectionEndpoint = new(baseUri, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeIntrospect, segment));
         Uri issuerUriValue = alignedRecord.IssuerUri!;
 
-        AuthorizationServerMetadata metadata = new()
+        AuthorizationServerMetadata composedMetadata = new()
         {
             Issuer = issuerUriValue,
             PushedAuthorizationRequestEndpoint = parEndpoint,
             AuthorizationEndpoint = authEndpoint,
             TokenEndpoint = tokenEndpoint,
-            RevocationEndpoint = revocationEndpoint
+            RevocationEndpoint = revocationEndpoint,
+            IntrospectionEndpoint = introspectionEndpoint
         };
+        AuthorizationServerMetadata metadata = alterMetadata is null ? composedMetadata : alterMetadata(composedMetadata);
 
-        System.Net.Http.HttpClient httpClient = SharedHttpClient!;
+        System.Net.Http.HttpClient httpClient = transportHttpClient ?? SharedHttpClient!;
+        InMemoryDpopNonceCache? dpopNonceCache = dpopKey is null ? null : new();
 
         OAuthClientInfrastructure infrastructure = OAuthClientInfrastructure.Create(
             sendFormPostAsync: async (endpoint, fields, headers, _, ct) =>
@@ -1554,7 +1576,15 @@ internal sealed class TestHostShell: IAsyncDisposable
             timeProvider: Time,
             fillEntropy: ClientEntropy,
             generateIdentifierAsync: DefaultIdentifierGenerator.For(Time, ClientEntropy, BaseMemoryPool.Shared),
-            outboundFetchPolicy: LoopbackOutboundFetchPolicy);
+            outboundFetchPolicy: LoopbackOutboundFetchPolicy,
+            constructDpopProofAsync: dpopKey is null
+                ? null
+                : (claims, key, ct) => DpopProofConstruction.BuildAsync(
+                    claims, key, TestSetup.Base64UrlEncoder, DpopTestSupport.Serializer,
+                    MicrosoftCryptographicFunctionsAdapter.SignP256Async, BaseMemoryPool.Shared, ct),
+            dpopKey: dpopKey,
+            lookupDpopNonce: dpopNonceCache is null ? null : dpopNonceCache.Lookup,
+            storeDpopNonce: dpopNonceCache is null ? null : dpopNonceCache.Store);
 
         ClientRegistration registration = new()
         {

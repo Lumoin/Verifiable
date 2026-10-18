@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Primitives;
 using Microsoft.Extensions.DependencyInjection;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography.X509Certificates;
@@ -24,6 +25,19 @@ internal sealed record MinimalHttpRequest
 
     /// <summary>The buffered UTF-8 request body; empty when there was none.</summary>
     public required string Body { get; init; }
+
+    /// <summary>
+    /// The request's header field lines as the listener received them, one entry per value, in the order the server's
+    /// header collection holds them, so a row asserts from the listener's side what a client sent.
+    /// </summary>
+    public IReadOnlyList<KeyValuePair<string, string>> Headers { get; init; } = [];
+
+
+    /// <summary>The values of every header field line named <paramref name="name"/>, compared case-insensitively.</summary>
+    /// <param name="name">The field name.</param>
+    /// <returns>The values; empty when no such line was received.</returns>
+    public IReadOnlyList<string> HeaderValues(string name) =>
+        [.. Headers.Where(line => string.Equals(line.Key, name, StringComparison.OrdinalIgnoreCase)).Select(static line => line.Value)];
 }
 
 
@@ -148,13 +162,23 @@ internal sealed class MinimalHttpHost: IAsyncDisposable
                 body = Encoding.UTF8.GetString(buffer.ToArray());
             }
 
+            List<KeyValuePair<string, string>> headerLines = [];
+            foreach(KeyValuePair<string, StringValues> header in context.Request.Headers)
+            {
+                foreach(string? value in header.Value)
+                {
+                    headerLines.Add(new(header.Key, value ?? string.Empty));
+                }
+            }
+
             MinimalHttpResponse response = await Handler(
                 new MinimalHttpRequest
                 {
                     Path = context.Request.Path.HasValue ? context.Request.Path.Value : string.Empty,
                     Method = context.Request.Method,
                     ContentType = context.Request.ContentType,
-                    Body = body
+                    Body = body,
+                    Headers = headerLines
                 },
                 context.RequestAborted).ConfigureAwait(false);
 

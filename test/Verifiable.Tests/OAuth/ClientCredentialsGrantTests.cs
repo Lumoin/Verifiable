@@ -3,7 +3,6 @@ using System.Buffers;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -279,7 +278,7 @@ internal sealed class ClientCredentialsGrantTests
     [TestMethod]
     public async Task ClientComposedRequestIssuesTokenUnderClientSecretBasicOverRealWire()
     {
-        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> secretMaterial = BuildSecretKeyMaterial(ClientSecret);
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> secretMaterial = ClientAuthenticationFixtures.BuildSecretKeyMaterial(ClientSecret, Pool);
         try
         {
             await using TestHostShell host = new(TimeProvider);
@@ -294,7 +293,7 @@ internal sealed class ClientCredentialsGrantTests
                     ValueTask.FromResult(AuthCodeFlowDriver.DecodeAndMatchBasicHeader(reading, registration.ClientId, ClientSecret));
             }).ConfigureAwait(false);
 
-            await DeclareServerSideAuthMethodAsync(host, material, ClientAuthenticationMethod.ClientSecretBasic)
+            await ClientAuthenticationFixtures.DeclareServerSideAuthMethodAsync(host, material, ClientAuthenticationMethod.ClientSecretBasic)
                 .ConfigureAwait(false);
 
             (OAuthClient client, ClientRegistration registration, _) = await host.CreateOAuthClientAndRegistrationAsync(
@@ -357,7 +356,7 @@ internal sealed class ClientCredentialsGrantTests
             const string SigningKeyId = "client-credentials-key-1";
             IReadOnlyDictionary<string, string> jwk = DpopJwkUtilities.ToJwk(
                 clientKeys.PublicKey, alg, TestSetup.Base64UrlEncoder);
-            string jwksJson = BuildJwksJson(jwk, SigningKeyId);
+            string jwksJson = ClientAuthenticationFixtures.BuildJwksJson(jwk, SigningKeyId);
 
             await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
             {
@@ -366,7 +365,7 @@ internal sealed class ClientCredentialsGrantTests
                         additionalAcceptedAudiences: [tokenEndpoint.OriginalString]);
             }).ConfigureAwait(false);
 
-            await DeclareServerSideAuthMethodAsync(
+            await ClientAuthenticationFixtures.DeclareServerSideAuthMethodAsync(
                 host, material, ClientAuthenticationMethod.PrivateKeyJwt,
                 clientJwks: jwksJson, assertionSigningAlgorithm: alg).ConfigureAwait(false);
 
@@ -439,7 +438,7 @@ internal sealed class ClientCredentialsGrantTests
             const string SigningKeyId = "issuer-by-default-key-1";
             IReadOnlyDictionary<string, string> jwk = DpopJwkUtilities.ToJwk(
                 clientKeys.PublicKey, alg, TestSetup.Base64UrlEncoder);
-            string jwksJson = BuildJwksJson(jwk, SigningKeyId);
+            string jwksJson = ClientAuthenticationFixtures.BuildJwksJson(jwk, SigningKeyId);
 
             List<string> recordedAssertions = [];
             await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
@@ -447,7 +446,7 @@ internal sealed class ClientCredentialsGrantTests
                 candidateIntegration.ValidateClientCredentialsAsync = ClientAssertionRecorder.Wrap(recordedAssertions);
             }).ConfigureAwait(false);
 
-            await DeclareServerSideAuthMethodAsync(
+            await ClientAuthenticationFixtures.DeclareServerSideAuthMethodAsync(
                 host, material, ClientAuthenticationMethod.PrivateKeyJwt,
                 clientJwks: jwksJson, assertionSigningAlgorithm: alg).ConfigureAwait(false);
 
@@ -531,7 +530,7 @@ internal sealed class ClientCredentialsGrantTests
             const string SigningKeyId = "issuer-only-token-endpoint-key-1";
             IReadOnlyDictionary<string, string> jwk = DpopJwkUtilities.ToJwk(
                 clientKeys.PublicKey, alg, TestSetup.Base64UrlEncoder);
-            string jwksJson = BuildJwksJson(jwk, SigningKeyId);
+            string jwksJson = ClientAuthenticationFixtures.BuildJwksJson(jwk, SigningKeyId);
 
             await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
             {
@@ -540,7 +539,7 @@ internal sealed class ClientCredentialsGrantTests
                         audiencePolicy: ClientAssertionAudiencePolicy.IssuerIdentifierOnly);
             }).ConfigureAwait(false);
 
-            await DeclareServerSideAuthMethodAsync(
+            await ClientAuthenticationFixtures.DeclareServerSideAuthMethodAsync(
                 host, material, ClientAuthenticationMethod.PrivateKeyJwt,
                 clientJwks: jwksJson, assertionSigningAlgorithm: alg).ConfigureAwait(false);
 
@@ -590,7 +589,7 @@ internal sealed class ClientCredentialsGrantTests
     public async Task WrongSecretAnswersTypedInvalidClientFailureNeverAnException()
     {
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> wrongSecretMaterial =
-            BuildSecretKeyMaterial("guessed-wrong-secret");
+            ClientAuthenticationFixtures.BuildSecretKeyMaterial("guessed-wrong-secret", Pool);
         try
         {
             await using TestHostShell host = new(TimeProvider);
@@ -604,7 +603,7 @@ internal sealed class ClientCredentialsGrantTests
                     ValueTask.FromResult(AuthCodeFlowDriver.DecodeAndMatchBasicHeader(reading, registration.ClientId, ClientSecret));
             }).ConfigureAwait(false);
 
-            await DeclareServerSideAuthMethodAsync(host, material, ClientAuthenticationMethod.ClientSecretBasic)
+            await ClientAuthenticationFixtures.DeclareServerSideAuthMethodAsync(host, material, ClientAuthenticationMethod.ClientSecretBasic)
                 .ConfigureAwait(false);
 
             (OAuthClient client, ClientRegistration registration, _) = await host.CreateOAuthClientAndRegistrationAsync(
@@ -656,7 +655,7 @@ internal sealed class ClientCredentialsGrantTests
                 ValueTask.FromResult(AuthCodeFlowDriver.DecodeAndMatchBasicHeader(reading, registration.ClientId, ClientSecret));
         }).ConfigureAwait(false);
 
-        await DeclareServerSideAuthMethodAsync(host, material, ClientAuthenticationMethod.ClientSecretBasic)
+        await ClientAuthenticationFixtures.DeclareServerSideAuthMethodAsync(host, material, ClientAuthenticationMethod.ClientSecretBasic)
             .ConfigureAwait(false);
 
         await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -740,7 +739,7 @@ internal sealed class ClientCredentialsGrantTests
                 ValueTask.FromResult(AuthCodeFlowDriver.DecodeAndMatchBasicHeader(reading, registration.ClientId, ClientSecret));
         }).ConfigureAwait(false);
 
-        await DeclareServerSideAuthMethodAsync(host, material, ClientAuthenticationMethod.ClientSecretBasic)
+        await ClientAuthenticationFixtures.DeclareServerSideAuthMethodAsync(host, material, ClientAuthenticationMethod.ClientSecretBasic)
             .ConfigureAwait(false);
 
         HttpResponseData response = await PostTokenRequestOverARawConnectionAsync(
@@ -881,7 +880,7 @@ internal sealed class ClientCredentialsGrantTests
                 ValueTask.FromResult(AuthCodeFlowDriver.DecodeAndMatchBasicHeader(reading, registration.ClientId, ClientSecret));
         }).ConfigureAwait(false);
 
-        await DeclareServerSideAuthMethodAsync(host, material, ClientAuthenticationMethod.ClientSecretBasic)
+        await ClientAuthenticationFixtures.DeclareServerSideAuthMethodAsync(host, material, ClientAuthenticationMethod.ClientSecretBasic)
             .ConfigureAwait(false);
 
         await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
@@ -1426,7 +1425,7 @@ internal sealed class ClientCredentialsGrantTests
             string alg = CryptoFormatConversions.DefaultTagToJwaConverter(clientKeys.PublicKey.Tag);
             const string SigningKeyId = "client-credentials-replay-key-1";
             IReadOnlyDictionary<string, string> jwk = DpopJwkUtilities.ToJwk(clientKeys.PublicKey, alg, TestSetup.Base64UrlEncoder);
-            string jwksJson = BuildJwksJson(jwk, SigningKeyId);
+            string jwksJson = ClientAuthenticationFixtures.BuildJwksJson(jwk, SigningKeyId);
 
             //RFC 7523 §3 rule 7: the client-assertion replay delegate is the same JtiReplayGuard
             //store the ID-JAG/JWT-bearer assertion's own jti replay defense uses, so a SECOND
@@ -1439,7 +1438,7 @@ internal sealed class ClientCredentialsGrantTests
                         checkJtiReplayAsync: JtiReplayGuard.ConsultClientAssertionAsync);
             }).ConfigureAwait(false);
 
-            await DeclareServerSideAuthMethodAsync(
+            await ClientAuthenticationFixtures.DeclareServerSideAuthMethodAsync(
                 app, material, ClientAuthenticationMethod.PrivateKeyJwt,
                 clientJwks: jwksJson, assertionSigningAlgorithm: alg).ConfigureAwait(false);
 
@@ -3304,9 +3303,9 @@ internal sealed class ClientCredentialsGrantTests
                 _ => PrivateKeyJwtClientAuthentication.BuildValidator(boundVerification, additionalAcceptedAudiences: [tokenEndpoint.OriginalString])
             };
         }).ConfigureAwait(false);
-        await DeclareServerSideAuthMethodAsync(
+        await ClientAuthenticationFixtures.DeclareServerSideAuthMethodAsync(
             host, material, ClientAuthenticationMethod.PrivateKeyJwt,
-            clientJwks: BuildJwksJson(jwk, SigningKeyId), assertionSigningAlgorithm: declaredAlgorithm ?? algorithm).ConfigureAwait(false);
+            clientJwks: ClientAuthenticationFixtures.BuildJwksJson(jwk, SigningKeyId), assertionSigningAlgorithm: declaredAlgorithm ?? algorithm).ConfigureAwait(false);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
         JwtHeader header = new(capacity: 3)
@@ -5260,77 +5259,5 @@ internal sealed class ClientCredentialsGrantTests
         };
 
         material.Registration = await host0.UpdateClientAsync(previous, updated, []).ConfigureAwait(false);
-    }
-
-
-    /// <summary>
-    /// Builds a <see cref="PublicPrivateKeyMaterial{TPublicKeyMemory, TPrivateKeyMemory}"/> carrying
-    /// <paramref name="secret"/> as the private-key bytes <c>client_secret_post</c>/
-    /// <c>client_secret_basic</c> attach as the shared secret. The public half is never read by
-    /// either method but the pair type requires one regardless.
-    /// </summary>
-    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-        Justification = "Ownership transfers to the caller, which disposes both halves via the returned pair's PublicKey/PrivateKey.")]
-    private static PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> BuildSecretKeyMaterial(string secret)
-    {
-        byte[] secretBytes = Encoding.UTF8.GetBytes(secret);
-        IMemoryOwner<byte> secretOwner = Pool.Rent(secretBytes.Length);
-        secretBytes.CopyTo(secretOwner.Memory.Span);
-        PrivateKeyMemory privateKey = new(secretOwner, Tag.Empty);
-
-        IMemoryOwner<byte> unusedPublicOwner = Pool.Rent(1);
-        PublicKeyMemory publicKey = new(unusedPublicOwner, Tag.Empty);
-
-        return new PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory>(publicKey, privateKey);
-    }
-
-
-
-
-    /// <summary>
-    /// Declares <paramref name="method"/> as the client's registered token-endpoint authentication
-    /// method (and, for <c>private_key_jwt</c>, publishes <paramref name="clientJwks"/>) and adds it
-    /// to the server's advertised <c>ClientAuthenticationMethodsSupported</c> set so the declared-
-    /// method-coherence gate admits the exchange.
-    /// </summary>
-    private static async Task DeclareServerSideAuthMethodAsync(
-        TestHostShell host,
-        VerifierKeyMaterial material,
-        ClientAuthenticationMethod method,
-        string? clientJwks = null,
-        string? assertionSigningAlgorithm = null)
-    {
-        HostedAuthorizationServer hosted = host.Host("default");
-        _ = await host.SetTokenEndpointAuthMethodAsync(material, method, clientJwks).ConfigureAwait(false);
-
-        await TestHostShell.AlterAsync(hosted.Server, candidateIntegration =>
-        {
-            candidateIntegration.ClientAuthenticationMethodsSupported =
-                [ClientAuthenticationMethod.None, method];
-            if(assertionSigningAlgorithm is not null)
-            {
-                candidateIntegration.ClientAssertionSigningAlgorithmsSupported = [assertionSigningAlgorithm];
-            }
-        }).ConfigureAwait(false);
-    }
-
-
-    /// <summary>
-    /// Builds a JWKS JSON document publishing one key under <paramref name="kid"/>, the shape
-    /// <see cref="PrivateKeyJwtClientAuthentication.BuildValidator(System.Collections.Generic.IReadOnlyCollection{string}?,CheckClientAssertionJtiReplayDelegate?,Verifiable.OAuth.Server.Pipeline.ResolveJwksUriDelegate?,ClientAssertionAudiencePolicy?)"/>
-    /// resolves the client's signing key from.
-    /// </summary>
-    private static string BuildJwksJson(IReadOnlyDictionary<string, string> jwk, string kid)
-    {
-        StringBuilder sb = new();
-        _ = sb.Append('{').Append('"').Append(WellKnownJwkMemberNames.Keys).Append("\":[{");
-        foreach(KeyValuePair<string, string> member in jwk)
-        {
-            _ = sb.Append('"').Append(member.Key).Append("\":\"").Append(member.Value).Append("\",");
-        }
-
-        _ = sb.Append('"').Append(WellKnownJwkMemberNames.Kid).Append("\":\"").Append(kid).Append("\"}]}");
-
-        return sb.ToString();
     }
 }

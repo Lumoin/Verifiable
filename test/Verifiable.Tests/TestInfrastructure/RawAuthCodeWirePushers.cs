@@ -112,13 +112,33 @@ internal static class RawAuthCodeWirePushers
         TestHostShell host, string segment, IReadOnlyCollection<KeyValuePair<string, string>> fields,
         CancellationToken cancellationToken)
     {
+        HttpResponseData response = await PushRawIntrospectionFieldsAsync(
+            host, segment, fields, OutgoingHeaders.Empty, cancellationToken).ConfigureAwait(false);
+
+        return (response.StatusCode, response.Body);
+    }
+
+
+    /// <summary>
+    /// POSTs raw RFC 7662 introspection-endpoint form fields over the real wire, carrying <paramref name="headers"/>,
+    /// and returns the whole answer as received, its field lines included: the entry point for a request shape a
+    /// protected resource built on the library never sends, such as one carrying a <c>DPoP</c> field.
+    /// </summary>
+    /// <param name="host">The fixture owning the listener.</param>
+    /// <param name="segment">The tenant route segment.</param>
+    /// <param name="fields">The form fields, sent exactly as given.</param>
+    /// <param name="headers">The request's further header fields.</param>
+    /// <param name="cancellationToken">Cancellation of the wire exchange.</param>
+    /// <returns>The answer as received.</returns>
+    public static async Task<HttpResponseData> PushRawIntrospectionFieldsAsync(
+        TestHostShell host, string segment, IReadOnlyCollection<KeyValuePair<string, string>> fields,
+        OutgoingHeaders headers, CancellationToken cancellationToken)
+    {
         HostedAuthorizationServer hosted = host.Host("default");
         Uri endpoint = new(hosted.HttpBaseAddress!, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeIntrospect, segment));
 
-        HttpResponseData response = await HttpClientTransport.SendFormPostAsync(
-            hosted.SharedHttpClient!, endpoint, fields, OutgoingHeaders.Empty, cancellationToken).ConfigureAwait(false);
-
-        return (response.StatusCode, response.Body);
+        return await HttpClientTransport.SendFormPostAsync(
+            hosted.SharedHttpClient!, endpoint, fields, headers, cancellationToken).ConfigureAwait(false);
     }
 
 
