@@ -438,6 +438,41 @@ internal sealed class DiscoveryClientAuthenticationAdvertisementTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8414#section-3.2">RFC 8414 Section 3.2</see>: "A successful
+    /// response MUST use the 200 OK HTTP status code and return a JSON object using the "application/json" content type
+    /// that contains a set of claims as its members". The contribution delegate answers
+    /// <see cref="DiscoveryDocumentContribution.Empty"/> when it has nothing to contribute; a delegate answering no
+    /// contribution at all leaves the fields the application meant to add unknown, so the document request is refused
+    /// with an <see cref="InvalidOperationException"/> naming <c>ContributeDiscoveryFieldsAsync</c> and no document is
+    /// produced.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task ContributionAnsweringNoContributionFailsTheDocumentRequest()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeDiscoveryFieldsAsync = static (_, _, _) =>
+                ValueTask.FromResult<DiscoveryDocumentContribution>(null!);
+        }).ConfigureAwait(false);
+
+        InvalidOperationException ex = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
+            async () => await DispatchDiscoveryAsync(host, material).ConfigureAwait(false))
+            .ConfigureAwait(false);
+
+        Assert.Contains(
+            nameof(AuthorizationServerIntegration.ContributeDiscoveryFieldsAsync),
+            ex.Message,
+            StringComparison.Ordinal,
+            "The refusal names the delegate whose answer is missing.");
+    }
+
+
+    /// <summary>
     /// RFC 8414 §2 permits an authorization server to publish additional metadata
     /// members; the contribution seam merges a field whose name the base emission
     /// did not write. A fresh-named contributed field appears in the emitted

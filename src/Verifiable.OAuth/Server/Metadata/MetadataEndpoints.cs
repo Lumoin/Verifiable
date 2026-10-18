@@ -2,6 +2,7 @@ using System.Text;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.OAuth.Client;
+using Verifiable.OAuth.ProtectedResource;
 using Verifiable.OAuth.Server.Pipeline;
 namespace Verifiable.OAuth.Server.Metadata;
 
@@ -225,6 +226,23 @@ public static class MetadataEndpoints
     /// advertised URL is the same URL the matcher will match against.
     /// </para>
     /// <para>
+    /// <c>protected_resources</c>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-4">RFC 9728 Section 4</see>) is written once
+    /// (<see cref="ProtectedResourcesOf"/>): the identifiers of the library's own resources whose document locations the
+    /// request's chain derives, in the chain's order, then the values of the <c>protected_resources</c> string arrays
+    /// the application's contribution names, a value already listed omitted, and the member omitted when it holds none
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc8414#section-3.2">RFC 8414 Section 3.2</see>: "Claims with zero
+    /// elements MUST be omitted from the response."). A library resource whose document request is refused, for a
+    /// contribution stating a member the library composes or for a location another document shares, is still a
+    /// resource of this server and stays listed. Both sides hold facts about the set Section 4 describes: the
+    /// library knows the resources it serves and the application the ones only it knows, and Section 4's
+    /// "Authorization servers MAY choose not to advertise some supported protected resources even when this parameter
+    /// is used." makes a shorter list conformant but never one that drops what the application knows. The contribution
+    /// is therefore read once per document request, before that member is written; its other fields are appended after
+    /// the base set, and a wired delegate answering <see langword="null"/> in place of
+    /// <see cref="DiscoveryDocumentContribution.Empty"/> is refused with <see cref="InvalidOperationException"/>.
+    /// </para>
+    /// <para>
     /// The JSON body is assembled by hand using <see cref="StringBuilder"/>
     /// via the helpers <see cref="AppendField"/> and
     /// <see cref="AppendContributedField"/>. See the serialization-firewall
@@ -332,8 +350,8 @@ public static class MetadataEndpoints
                     //Endpoints share a DiscoveryMetadataKey when they share a URL
                     //(JAR variants of PAR/Authorize advertise under their non-JAR
                     //sibling's key; refresh-token shares the token endpoint URL).
-                    //The JAR variants and refresh-token carry
-                    //DiscoveryMetadataKey=null specifically to avoid double-
+                    //The JAR variants, refresh-token and UserInfo's POST candidate
+                    //carry DiscoveryMetadataKey=null specifically to avoid double-
                     //emission, so the skip-null guard below is the only
                     //deduplication this loop needs.
                     EndpointChain? chain = context.EndpointChain;
@@ -533,13 +551,11 @@ public static class MetadataEndpoints
                             emittedFieldNames);
                     }
 
-                    //authorization_details_types_supported (RFC 9396 §10). Advertised when a
-                    //token grant that can process authorization_details is on the chain AND the
-                    //decision seam that mints the OID4VCI §6.2 credential_identifiers is wired —
-                    //an advertisement without the seam would invite requests the server refuses
-                    //with invalid_authorization_details.
-                    if((authorizationCodeOnChain || preAuthorizedCodeOnChain)
-                        && oauth.ResolveCredentialAuthorizationAsync is not null)
+                    //authorization_details_types_supported (RFC 9396 Section 10), under the one rule
+                    //the documents of the OID4VCI resources read too: a token grant that can process
+                    //authorization_details on the chain AND the decision seam that mints the OID4VCI
+                    //Section 6.2 credential_identifiers wired.
+                    if(IsAuthorizationDetailsProcessingAdvertised(chain, oauth))
                     {
                         AppendStringArrayField(
                             sb,
@@ -547,6 +563,29 @@ public static class MetadataEndpoints
                             oauth.AuthorizationDetailTypes.RegisteredTypes,
                             emittedFieldNames);
                     }
+
+                    //The application's fields, read before protected_resources is written: a
+                    //protected_resources string array it names joins the one member below, and the
+                    //rest are appended after the base set. The null local stands for the unwired
+                    //delegate alone; a wired delegate answers DiscoveryDocumentContribution.Empty
+                    //when it has nothing to contribute, so a null answer is refused.
+                    DiscoveryDocumentContribution? contributed = oauth.ContributeDiscoveryFieldsAsync is null
+                        ? null
+                        : await oauth.ContributeDiscoveryFieldsAsync(registration, context, ct).ConfigureAwait(false)
+                            ?? throw new InvalidOperationException(
+                                "The discovery document contribution delegate ContributeDiscoveryFieldsAsync answered "
+                                + "null. A contribution delegate with nothing to contribute must answer "
+                                + "DiscoveryDocumentContribution.Empty.");
+
+                    //protected_resources (RFC 9728 Section 4): the identifiers of the library's own
+                    //resources whose document locations this chain derives, in the chain's order, then the
+                    //resources the application names; each value once, and the member omitted when
+                    //it holds none (RFC 8414 Section 3.2).
+                    AppendStringArrayField(
+                        sb,
+                        AuthorizationServerMetadataParameterNames.ProtectedResources,
+                        ProtectedResourcesOf(chain, contributed),
+                        emittedFieldNames);
 
                     //JARM §4: advertise the JWT-secured response modes and signing algorithms
                     //when the authorize endpoint is on the chain AND the input declares
@@ -735,10 +774,10 @@ public static class MetadataEndpoints
                     //the spec-required sub. The list is aspirational per OIDC
                     //Discovery §3 — the OP is not guaranteed to populate every
                     //advertised claim for every request; scope / authentication-
-                    //context drives actual emission. Deployments that install
-                    //custom contributors extend the list via
-                    //ContributeDiscoveryFieldsAsync; the library default reflects
-                    //what the standard rules emit. Gated on authorization_code
+                    //context drives actual emission. The list reflects what the
+                    //standard rules emit; a claims_supported field contributed
+                    //through ContributeDiscoveryFieldsAsync is refused while the
+                    //library writes the member here. Gated on authorization_code
                     //chain presence because the field is OIDC-specific.
                     if(authorizationCodeOnChain)
                     {
@@ -761,15 +800,17 @@ public static class MetadataEndpoints
                             emittedFieldNames);
                     }
 
-                    //Application-supplied additional fields merged after the base set.
-                    if(oauth.ContributeDiscoveryFieldsAsync is not null)
+                    //Application-supplied additional fields merged after the base set, but for the
+                    //protected_resources lists already merged into that member.
+                    if(contributed is not null)
                     {
-                        DiscoveryDocumentContribution contributed =
-                            await oauth.ContributeDiscoveryFieldsAsync(
-                                registration, context, ct).ConfigureAwait(false);
-
                         foreach(DiscoveryField field in contributed.Fields)
                         {
+                            if(IsContributedProtectedResourcesList(field))
+                            {
+                                continue;
+                            }
+
                             AppendContributedField(sb, field, emittedFieldNames);
                         }
                     }
@@ -874,6 +915,120 @@ public static class MetadataEndpoints
     }
 
 
+    /// <summary>
+    /// Whether the server advertises the authorization details types it processes: a token grant that processes
+    /// <c>authorization_details</c> is on the request's <paramref name="chain"/> (the authorization code grant, by its
+    /// capability, or the OID4VCI pre-authorized code token endpoint, by its name) and the decision seam that mints the
+    /// OID4VCI credential identifiers, <see cref="AuthorizationServerIntegration.ResolveCredentialAuthorizationAsync"/>,
+    /// is wired, so an advertisement never invites a request the server refuses with
+    /// <c>invalid_authorization_details</c>. The one rule for the authorization server document, which names the whole
+    /// registry, <see cref="AuthorizationDetailTypeRegistry.RegisteredTypes"/>
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9396#section-10">RFC 9396 Section 10</see>: "To advertise its
+    /// support for this feature, the supported list of authorization details types is included in the AS metadata
+    /// response [RFC8414] using the metadata parameter authorization_details_types_supported, which is a JSON array."),
+    /// and for the documents of the credential issuer's resources, each of which names the types that resource
+    /// processes and the registry holds
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-2">RFC 9728 Section 2</see>:
+    /// "authorization_details_types_supported OPTIONAL. JSON array containing a list of the authorization details type
+    /// values supported by the resource server when the authorization_details request parameter [RFC9396] is used.").
+    /// </summary>
+    /// <param name="chain">The request's endpoint chain.</param>
+    /// <param name="oauth">The authorization server's integration.</param>
+    /// <returns><see langword="true"/> when the types are advertised.</returns>
+    internal static bool IsAuthorizationDetailsProcessingAdvertised(EndpointChain chain, AuthorizationServerIntegration oauth)
+    {
+        if(oauth.ResolveCredentialAuthorizationAsync is null)
+        {
+            return false;
+        }
+
+        foreach(ServerEndpoint endpoint in chain)
+        {
+            if(endpoint.Capability == WellKnownCapabilityIdentifiers.OAuthAuthorizationCode
+                || string.Equals(endpoint.Name, WellKnownEndpointNames.Oid4VciPreAuthorizedToken, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+
+    /// <summary>
+    /// The values of the discovery document's one <c>protected_resources</c> member
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-4">RFC 9728 Section 4</see>: "JSON array containing a
+    /// list of resource identifiers for OAuth protected resources that can be used with this authorization server."):
+    /// first the identifier of each of the library's own resources whose document location the request's
+    /// <paramref name="chain"/> derives, in the chain's order
+    /// (<see cref="ProtectedResourceMetadataEndpoints.TryDeriveLibraryResourceDocument"/>, the
+    /// derivation the documents and the challenges read; a resource whose document request is refused, for a
+    /// contribution stating a member the library composes or for a location another document shares, is still a
+    /// resource of this server, so the list reads neither refusal), then the values of
+    /// each <c>protected_resources</c> string array the application's <paramref name="contributed"/> fields name, in
+    /// their order, for the resources only the application knows; a value already listed is omitted (ordinal equality).
+    /// </summary>
+    /// <param name="chain">The request's endpoint chain.</param>
+    /// <param name="contributed">The application's discovery contribution, or <see langword="null"/>.</param>
+    /// <returns>The identifiers; empty when the server lists none.</returns>
+    private static List<string> ProtectedResourcesOf(EndpointChain chain, DiscoveryDocumentContribution? contributed)
+    {
+        List<string> resources = [];
+        foreach(ServerEndpoint endpoint in chain)
+        {
+            if(ProtectedResourceMetadataEndpoints.LibraryResourceEndpointNames.Contains(endpoint.Name, StringComparer.Ordinal)
+                && ProtectedResourceMetadataEndpoints.TryDeriveLibraryResourceDocument(
+                    chain, endpoint.Name, out string? identifier, out _))
+            {
+                AddOnce(resources, identifier);
+            }
+        }
+
+        if(contributed is not null)
+        {
+            foreach(DiscoveryField field in contributed.Fields)
+            {
+                if(field is DiscoveryStringArrayField list && IsContributedProtectedResourcesList(list))
+                {
+                    foreach(string value in list.Values)
+                    {
+                        AddOnce(resources, value);
+                    }
+                }
+            }
+        }
+
+        return resources;
+    }
+
+
+    /// <summary>
+    /// Adds <paramref name="value"/> to <paramref name="values"/> unless an ordinally equal value is already there, so a
+    /// list member names each value once.
+    /// </summary>
+    /// <param name="values">The list being composed.</param>
+    /// <param name="value">The value.</param>
+    private static void AddOnce(List<string> values, string value)
+    {
+        if(!values.Contains(value, StringComparer.Ordinal))
+        {
+            values.Add(value);
+        }
+    }
+
+
+    /// <summary>
+    /// Whether the contributed <paramref name="field"/> is a <c>protected_resources</c> string array, which joins the
+    /// one member the library writes (<see cref="ProtectedResourcesOf"/>) rather than being appended as a field of its
+    /// own; a <c>protected_resources</c> field of another record type is appended as any other contributed field is.
+    /// </summary>
+    /// <param name="field">The contributed field.</param>
+    /// <returns><see langword="true"/> when the field is such a list.</returns>
+    private static bool IsContributedProtectedResourcesList(DiscoveryField field) =>
+        field is DiscoveryStringArrayField
+        && string.Equals(field.Name, AuthorizationServerMetadataParameterNames.ProtectedResources, StringComparison.Ordinal);
+
+
     /// <summary>The public subject-identifier type advertised by discovery.</summary>
     private static IReadOnlyList<string> SubjectTypePublic { get; } = ["public"];
 
@@ -965,7 +1120,13 @@ public static class MetadataEndpoints
     /// earlier contributed field of the same name — is a composition defect
     /// (RFC 8259 §4: "The names within an object SHOULD be unique") and is
     /// refused rather than written, so the document never carries a duplicate
-    /// name.
+    /// name. A <c>protected_resources</c> string array never reaches this method:
+    /// its values join the one <c>protected_resources</c> member the library
+    /// writes (<see cref="ProtectedResourcesOf"/>), since the library's own
+    /// resources and the application's are facts about the one set RFC 9728
+    /// Section 4 lists. A <c>protected_resources</c> field of another record type
+    /// is refused here when the library wrote the member and written as given
+    /// when it wrote none.
     /// </remarks>
     /// <param name="sb">The <see cref="StringBuilder"/> the field is written to.</param>
     /// <param name="field">The contributed field, dispatched on its record subtype.</param>

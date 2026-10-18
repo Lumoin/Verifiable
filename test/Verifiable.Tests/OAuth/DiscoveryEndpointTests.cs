@@ -932,6 +932,46 @@ internal sealed class DiscoveryEndpointTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-4">RFC 8259 Section 4</see>: "The names within an
+    /// object SHOULD be unique." UserInfo answers GET and POST at one URL. Under a registration allowing UserInfo and the
+    /// discovery endpoint, a GET of the discovery document over a raw TLS connection is answered 200 with
+    /// <c>userinfo_endpoint</c> written exactly once, so a reader refusing a repeated member name
+    /// (<see cref="JsonDocumentOptions.AllowDuplicateProperties"/> off) reads the document and finds the member.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task DiscoveryWritesTheUserInfoEndpointOnceAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        HostedAuthorizationServer hosted = host.Host("default");
+        Uri discoveryUrl = new(hosted.HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.MetadataDiscovery, material.Registration.TenantId.Value));
+
+        HttpResponseData response = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Get, discoveryUrl, [], ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(hosted.ConsumeHttpFaults(), "The discovery document is served without a server fault.");
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            1,
+            response.Body.Split($"\"{OpenIdProviderMetadataParameterNames.UserinfoEndpoint}\":").Length - 1,
+            response.Body);
+        using JsonDocument strict = JsonDocument.Parse(response.Body, StrictDocumentOptions);
+        Assert.IsTrue(strict.RootElement.TryGetProperty(OpenIdProviderMetadataParameterNames.UserinfoEndpoint, out _), response.Body);
+    }
+
+
+    /// <summary>
+    /// The reading options that refuse an object carrying a member name twice, the reading a strict consumer of the
+    /// discovery document applies.
+    /// </summary>
+    private static JsonDocumentOptions StrictDocumentOptions { get; } = new() { AllowDuplicateProperties = false };
+
+
+    /// <summary>
     /// RFC 9470 §7 / RFC 8414 §2 — the AS advertises <c>acr_values_supported</c> so clients
     /// and resource servers know which <c>acr</c> values they may demand at step-up. The
     /// supported assurance levels are deployment authentication knowledge the transport-agnostic

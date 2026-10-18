@@ -110,12 +110,21 @@ public static class UserInfoEndpoints
         }
 
         return ValueTask.FromResult<IReadOnlyList<EndpointCandidate>>(
-            [BuildUserInfo(WellKnownHttpMethods.Get), BuildUserInfo(WellKnownHttpMethods.Post)]);
+            [
+                BuildUserInfo(WellKnownHttpMethods.Get, OpenIdProviderMetadataParameterNames.UserinfoEndpoint),
+                BuildUserInfo(WellKnownHttpMethods.Post, null)
+            ]);
     };
 
 
     /// <summary>Builds the UserInfo endpoint using the admitted token validation and claim operations.</summary>
-    private static EndpointCandidate BuildUserInfo(string httpMethod) =>
+    /// <param name="httpMethod">The HTTP method the candidate answers.</param>
+    /// <param name="discoveryMetadataKey">
+    /// The discovery document member advertising the candidate's URL, or <see langword="null"/> for a candidate whose URL
+    /// another candidate advertises.
+    /// </param>
+    /// <returns>The candidate.</returns>
+    private static EndpointCandidate BuildUserInfo(string httpMethod, string? discoveryMetadataKey) =>
         new()
         {
             //Both candidates share the same role identifier — the application's
@@ -127,7 +136,13 @@ public static class UserInfoEndpoints
             Capability = WellKnownCapabilityIdentifiers.OidcUserInfo,
             StartsNewFlow = true,
             Kind = FlowKind.Stateless,
-            DiscoveryMetadataKey = OpenIdProviderMetadataParameterNames.UserinfoEndpoint,
+
+            //The two candidates share one URL and the GET candidate advertises it as
+            //userinfo_endpoint; the POST candidate carries no key, the shape the JAR
+            //variants and the refresh-token candidate have for a second candidate at
+            //one URL, so the discovery document names the member once (RFC 8259
+            //Section 4: "The names within an object SHOULD be unique.").
+            DiscoveryMetadataKey = discoveryMetadataKey,
 
             //Acceptance test: HTTP method matches AND path matches. The chain
             //build guarantees registration is loaded and the UserInfo capability

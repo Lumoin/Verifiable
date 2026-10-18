@@ -213,22 +213,33 @@ public delegate ValueTask<PrivateKeyMemory?> ServerDecryptionKeyResolverDelegate
 /// OAuth 2.0 and OIDC fields it can compute from the registration's capability set
 /// — <c>issuer</c>, <c>jwks_uri</c>, <c>token_endpoint</c>, and the like. Applications
 /// supply this delegate to advertise additional OIDC, FAPI, OID4VP, OID4VCI, OpenID
-/// Federation, or deployment-specific fields the library does not own — for example
-/// <c>id_token_signing_alg_values_supported</c>, <c>subject_types_supported</c>,
-/// <c>userinfo_endpoint</c>, <c>end_session_endpoint</c>,
-/// <c>backchannel_authentication_endpoint</c>.
+/// Federation, or deployment-specific fields the library never writes, for example
+/// <c>acr_values_supported</c>, <c>service_documentation</c>, <c>op_policy_uri</c>,
+/// <c>backchannel_authentication_endpoint</c>. The library writes
+/// <c>subject_types_supported</c> always, <c>id_token_signing_alg_values_supported</c>
+/// when it resolves an ID token signing algorithm, and <c>userinfo_endpoint</c> and
+/// <c>end_session_endpoint</c> when UserInfo or the end-session endpoint is on the
+/// request's chain, so a contribution naming one of them where the library wrote it
+/// is refused.
 /// </para>
 /// <para>
-/// The library writes its base fields first; contributed fields are merged
-/// afterwards in the order returned. A contributed field naming a member the
-/// base emission already wrote — or that an earlier contributed field already
-/// named — is a composition defect: <c>MetadataEndpoints</c> refuses the
-/// document request with <see cref="InvalidOperationException"/> naming the
-/// duplicate member, rather than writing a document with the name twice.
+/// The library calls the delegate once per document request, before it writes
+/// <c>protected_resources</c>. The contributed fields are appended after the base
+/// set in the order returned. A contributed field naming a member the base
+/// emission wrote, or one an earlier contributed field named, is a
+/// composition defect: <c>MetadataEndpoints</c> refuses the document request with
+/// <see cref="InvalidOperationException"/> naming the duplicate member, rather
+/// than writing a document with the name twice. The one exception is a
+/// <see cref="DiscoveryStringArrayField"/> named <c>protected_resources</c>
+/// (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-4">RFC 9728 Section 4</see>):
+/// its values join the one <c>protected_resources</c> member the library writes,
+/// at that member's position, after the identifiers of the library's own
+/// resources, each value once.
 /// </para>
 /// <para>
 /// Return <see cref="DiscoveryDocumentContribution.Empty"/> when there is
-/// nothing to contribute for a given request. Each contributed field is a
+/// nothing to contribute for a given request; a <see langword="null"/> answer is
+/// refused with <see cref="InvalidOperationException"/>. Each contributed field is a
 /// concrete subtype of <see cref="DiscoveryField"/> typed to the JSON value
 /// shape the library knows how to serialize.
 /// </para>

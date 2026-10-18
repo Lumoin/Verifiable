@@ -4287,6 +4287,48 @@ internal sealed class UserInfoEndpointTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-2">RFC 9728 Section 2</see>:
+    /// "authorization_details_types_supported OPTIONAL. JSON array containing a list of the authorization details type
+    /// values supported by the resource server when the authorization_details request parameter [RFC9396] is used."
+    /// UserInfo reads no authorization details of the access token it serves, so under a registration allowing the
+    /// authorization code grant and <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>, with the
+    /// authorization details parsing and the credential authorization seam wired, a GET of UserInfo's document over a raw
+    /// TLS connection is answered 200 with exactly the document
+    /// <c>{"resource":"&lt;UserInfo&gt;","authorization_servers":["&lt;issuer&gt;"],"jwks_uri":"&lt;JWK Set&gt;","scopes_supported":["openid"],"bearer_methods_supported":["header"],"dpop_signing_alg_values_supported":[...]}</c>,
+    /// without <c>authorization_details_types_supported</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task UserInfoProtectedResourceMetadataDocumentNamesNoAuthorizationDetailsTypeAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, capabilities: DocumentServingCapabilities).ConfigureAwait(false);
+        _ = await UserInfoUrlAsync(host, material).ConfigureAwait(false);
+        _ = await host.EnableDpopAsync().ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
+            candidateIntegration.ResolveCredentialAuthorizationAsync = static (_, _, _, _, _) =>
+                throw new NotImplementedException("A document request never asks for a credential authorization decision.");
+        }).ConfigureAwait(false);
+
+        string issuer = IssuerOf(host, material);
+        string identifier = AdvertisedUrlOf(host, material, WellKnownEndpointNames.UserInfo);
+
+        HttpResponseData document = await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Get, new Uri(host.Host("default").HttpBaseAddress!, new Uri(InsertedDocumentUrl(identifier)).AbsolutePath), [],
+            ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The document is served without a server fault.");
+        Assert.AreEqual(200, document.StatusCode, document.Body);
+        Assert.AreEqual(
+            ExpectedLibraryResourceDocument(identifier, issuer, JwksUrlOf(host, material), "[\"openid\"]", ResourceDpopProofs.AcceptedProofAlgorithms, false),
+            document.Body);
+    }
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc6750#section-3">RFC 6750 Section 3</see>: "A "realm" attribute MAY be
     /// included to indicate the scope of protection in the manner described in HTTP/1.1 [RFC2617]. The "realm" attribute
     /// MUST NOT appear more than once." and "Other auth-param attributes MAY be used as well.", with

@@ -393,7 +393,12 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// <remarks>
     /// <para>
     /// The library's discovery endpoint emits its base OAuth 2.0 and OIDC fields
-    /// first, then merges the contributed fields over the top. Applications use
+    /// first and appends the contributed fields after the base set; a contributed
+    /// field naming a member already written is refused with
+    /// <see cref="InvalidOperationException"/>, and a <c>protected_resources</c>
+    /// string array is merged into the one <c>protected_resources</c> member the
+    /// library writes (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-4">RFC 9728
+    /// Section 4</see>). Applications use
     /// this delegate to advertise OIDC, FAPI, OID4VP, OID4VCI, OpenID Federation
     /// or deployment-specific capability fields without replacing the discovery
     /// endpoint.

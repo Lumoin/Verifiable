@@ -22,7 +22,11 @@ namespace Verifiable.OAuth.Server.Metadata;
 /// base emission already wrote — or that an earlier contributed field already
 /// named — is a composition defect: the document request is refused with
 /// <see cref="InvalidOperationException"/> naming the duplicate member,
-/// rather than serialized with the name twice.
+/// rather than serialized with the name twice. The one exception is a
+/// <see cref="DiscoveryStringArrayField"/> named <c>protected_resources</c>
+/// (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-4">RFC 9728 Section 4</see>):
+/// its values join the one <c>protected_resources</c> member after the
+/// identifiers of the library's own resources, each value once.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("DiscoveryDocumentContribution Fields={Fields.Count}")]

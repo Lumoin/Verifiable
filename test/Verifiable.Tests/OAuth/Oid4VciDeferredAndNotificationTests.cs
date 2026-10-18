@@ -10,6 +10,7 @@ using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.ProtectedResource;
 using Verifiable.OAuth.Server;
+using Verifiable.OAuth.Server.Metadata;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tests.WebFinger;
 
@@ -1286,6 +1287,553 @@ internal sealed class Oid4VciDeferredAndNotificationTests
             $"{{\"resource\":\"{endpointUrl}\",\"authorization_servers\":[\"{IssuerOf(host, material)}\"],"
             + $"\"bearer_methods_supported\":[\"header\"],\"dpop_signing_alg_values_supported\":{algorithms}}}",
             response.Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-4">RFC 9728 Section 4</see>: "protected_resources
+    /// OPTIONAL. JSON array containing a list of resource identifiers for OAuth protected resources that can be used with
+    /// this authorization server." Under a registration allowing UserInfo, the Credential, Deferred Credential and
+    /// Notification endpoints, the discovery endpoint and
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>, a GET of the discovery document over a
+    /// raw TLS connection is answered 200 with <c>protected_resources</c> exactly the four resources' identifiers, the
+    /// URLs the host advertises for them, in the order the server's endpoint chain holds them:
+    /// <c>["&lt;UserInfo&gt;","&lt;Credential&gt;","&lt;Deferred Credential&gt;","&lt;Notification&gt;"]</c>. The
+    /// server's two lists agree: for each listed identifier, a GET over a raw TLS connection of the document at the
+    /// location formed from it is answered 200 with <c>resource</c> the listed entry, code point for code point, and
+    /// <c>authorization_servers</c> naming the discovery document's <c>issuer</c>, the cross-check Section 4 leaves to
+    /// the application profile ("Note that if the set of legitimate authorization servers to use with a protected
+    /// resource is also enumerable, lists in the authorization server metadata and protected resource metadata should
+    /// be cross-checked against one another for consistency when these lists are used by the application profile.").
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task DiscoveryListsTheResourcesWhoseDocumentsAreServedAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, DiscoveryCapabilities).ConfigureAwait(false);
+        await WireProtectedEndpointSeamsAsync(host).ConfigureAwait(false);
+
+        HttpResponseData response = await GetDiscoveryOverWireAsync(host, material).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The discovery document is served without a server fault.");
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+        using JsonDocument document = JsonDocument.Parse(response.Body);
+        Assert.IsTrue(document.RootElement.TryGetProperty(
+            AuthorizationServerMetadataParameterNames.ProtectedResources, out JsonElement protectedResources), response.Body);
+        Assert.AreEqual(JsonStringArrayOf(LibraryResourceIdentifiersOf(host, material)), protectedResources.GetRawText());
+        string discoveryIssuer = document.RootElement.GetProperty(AuthorizationServerMetadataParameterNames.Issuer).GetString()!;
+        foreach(JsonElement entry in protectedResources.EnumerateArray())
+        {
+            //Each listed resource's own document, fetched at the location formed from the listed identifier.
+            string listedIdentifier = entry.GetString()!;
+            HttpResponseData resourceDocument = await RawHttpsRequest.SendAsync(
+                host, WellKnownHttpMethods.Get,
+                new Uri(host.Host("default").HttpBaseAddress!, new Uri(DocumentUrlOf(new Uri(listedIdentifier))).AbsolutePath), [],
+                ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.AreEqual(200, resourceDocument.StatusCode, resourceDocument.Body);
+            using JsonDocument resourceMetadata = JsonDocument.Parse(resourceDocument.Body);
+            string servedResource = resourceMetadata.RootElement.GetProperty("resource").GetString()!;
+            Assert.IsTrue(string.Equals(listedIdentifier, servedResource, StringComparison.Ordinal),
+                $"The listed entry {listedIdentifier} is the resource its document states, {servedResource}.");
+            Assert.AreEqual(
+                JsonStringArrayOf([discoveryIssuer]),
+                resourceMetadata.RootElement.GetProperty("authorization_servers").GetRawText(),
+                "The listed resource's document names the authorization server that lists it.");
+        }
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "Every listed resource's document is served without a server fault.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8414#section-3.2">RFC 8414 Section 3.2</see>: "Claims that return
+    /// multiple values are represented as JSON arrays. Claims with zero elements MUST be omitted from the response." Under
+    /// a registration allowing UserInfo, the Credential, Deferred Credential and Notification endpoints and the discovery
+    /// endpoint but not <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>, none of the four
+    /// resources has a document, so a GET of the discovery document over a raw TLS connection is answered 200 without
+    /// <c>protected_resources</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task DiscoveryOmitsProtectedResourcesWhenNoDocumentIsServedAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce,
+            DiscoveryCapabilities.Remove(WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata)).ConfigureAwait(false);
+        await WireProtectedEndpointSeamsAsync(host).ConfigureAwait(false);
+
+        HttpResponseData response = await GetDiscoveryOverWireAsync(host, material).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The discovery document is served without a server fault.");
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+        using JsonDocument document = JsonDocument.Parse(response.Body);
+        Assert.IsTrue(document.RootElement.TryGetProperty(
+            OpenIdProviderMetadataParameterNames.UserinfoEndpoint, out _), "UserInfo is on the chain.");
+        Assert.IsFalse(document.RootElement.TryGetProperty(
+            AuthorizationServerMetadataParameterNames.ProtectedResources, out _), response.Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-4">RFC 9728 Section 4</see>: "protected_resources
+    /// OPTIONAL. JSON array containing a list of resource identifiers for OAuth protected resources that can be used with
+    /// this authorization server.", one member (<see href="https://www.rfc-editor.org/rfc/rfc8259#section-4">RFC 8259
+    /// Section 4</see>: "The names within an object SHOULD be unique."). Under the registration of
+    /// <see cref="DiscoveryListsTheResourcesWhoseDocumentsAreServedAsync"/> with a discovery contribution naming
+    /// <c>protected_resources</c> as <c>["&lt;UserInfo&gt;","https://rs.example/own"]</c>, a GET of the discovery document
+    /// over a raw TLS connection is answered 200 with one <c>protected_resources</c>, exactly the four resources'
+    /// identifiers in the chain's order and then <c>https://rs.example/own</c>, UserInfo's identifier once.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task DiscoveryListsTheContributedResourcesAfterTheServedOnesAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, DiscoveryCapabilities).ConfigureAwait(false);
+        await WireProtectedEndpointSeamsAsync(host).ConfigureAwait(false);
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        string userInfo = EndpointUrlOf(host, material, UserInfoEndpointRow).ToString();
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeDiscoveryFieldsAsync = (_, _, _) =>
+                ValueTask.FromResult(new DiscoveryDocumentContribution(
+                    [new DiscoveryStringArrayField(AuthorizationServerMetadataParameterNames.ProtectedResources, [userInfo, OwnResource])]));
+        }).ConfigureAwait(false);
+
+        HttpResponseData response = await GetDiscoveryOverWireAsync(host, material).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The discovery document is served without a server fault.");
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+        string expected = JsonStringArrayOf([.. LibraryResourceIdentifiersOf(host, material), OwnResource]);
+        Assert.Contains($"\"{AuthorizationServerMetadataParameterNames.ProtectedResources}\":{expected}", response.Body);
+        Assert.AreEqual(
+            1,
+            response.Body.Split($"\"{AuthorizationServerMetadataParameterNames.ProtectedResources}\":").Length - 1,
+            "The member is written once.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8414#section-3.2">RFC 8414 Section 3.2</see>: "Claims that return
+    /// multiple values are represented as JSON arrays. Claims with zero elements MUST be omitted from the response." Under
+    /// the registration of <see cref="DiscoveryOmitsProtectedResourcesWhenNoDocumentIsServedAsync"/>, where none of the
+    /// four resources has a document, with a discovery contribution naming <c>protected_resources</c> as <c>[]</c>, a GET
+    /// of the discovery document over a raw TLS connection is answered 200 without <c>protected_resources</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task DiscoveryOmitsAnEmptyContributedResourceListAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce,
+            DiscoveryCapabilities.Remove(WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata)).ConfigureAwait(false);
+        await WireProtectedEndpointSeamsAsync(host).ConfigureAwait(false);
+        await ContributeProtectedResourceListsAsync(host, [[]]).ConfigureAwait(false);
+
+        HttpResponseData response = await GetDiscoveryOverWireAsync(host, material).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The discovery document is served without a server fault.");
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+        using JsonDocument document = JsonDocument.Parse(response.Body);
+        Assert.IsFalse(document.RootElement.TryGetProperty(
+            AuthorizationServerMetadataParameterNames.ProtectedResources, out _), response.Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-4">RFC 9728 Section 4</see>: "protected_resources
+    /// OPTIONAL. JSON array containing a list of resource identifiers for OAuth protected resources that can be used with
+    /// this authorization server.", one member (<see href="https://www.rfc-editor.org/rfc/rfc8259#section-4">RFC 8259
+    /// Section 4</see>: "The names within an object SHOULD be unique."). Under the registration of
+    /// <see cref="DiscoveryListsTheResourcesWhoseDocumentsAreServedAsync"/> with a discovery contribution naming
+    /// <c>protected_resources</c> twice, as <c>["https://rs.example/a"]</c> and then as
+    /// <c>["&lt;UserInfo&gt;","https://rs.example/b"]</c>, a GET of the discovery document over a raw TLS connection is
+    /// answered 200 with one <c>protected_resources</c>, exactly the four resources' identifiers in the chain's order,
+    /// then <c>https://rs.example/a</c>, then <c>https://rs.example/b</c>, UserInfo's identifier once.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task DiscoveryMergesEveryContributedResourceListInOrderAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, DiscoveryCapabilities).ConfigureAwait(false);
+        await WireProtectedEndpointSeamsAsync(host).ConfigureAwait(false);
+        string userInfo = EndpointUrlOf(host, material, UserInfoEndpointRow).ToString();
+        await ContributeProtectedResourceListsAsync(host, [[FirstOwnResource], [userInfo, SecondOwnResource]]).ConfigureAwait(false);
+
+        HttpResponseData response = await GetDiscoveryOverWireAsync(host, material).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The discovery document is served without a server fault.");
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+        string expected = JsonStringArrayOf([.. LibraryResourceIdentifiersOf(host, material), FirstOwnResource, SecondOwnResource]);
+        Assert.Contains($"\"{AuthorizationServerMetadataParameterNames.ProtectedResources}\":{expected}", response.Body);
+        Assert.AreEqual(
+            1,
+            response.Body.Split($"\"{AuthorizationServerMetadataParameterNames.ProtectedResources}\":").Length - 1,
+            "The member is written once.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-4">RFC 9728 Section 4</see>: "protected_resources
+    /// OPTIONAL. JSON array containing a list of resource identifiers for OAuth protected resources that can be used with
+    /// this authorization server." Under the registration of
+    /// <see cref="DiscoveryOmitsProtectedResourcesWhenNoDocumentIsServedAsync"/>, where none of the four resources has a
+    /// document, with a discovery contribution naming <c>protected_resources</c> as <c>["https://rs.example/own"]</c>, a
+    /// GET of the discovery document over a raw TLS connection is answered 200 with <c>protected_resources</c> exactly
+    /// <c>["https://rs.example/own"]</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    public async Task DiscoveryListsTheContributedResourcesAloneWhenNoDocumentIsServedAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce,
+            DiscoveryCapabilities.Remove(WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata)).ConfigureAwait(false);
+        await WireProtectedEndpointSeamsAsync(host).ConfigureAwait(false);
+        await ContributeProtectedResourceListsAsync(host, [[OwnResource]]).ConfigureAwait(false);
+
+        HttpResponseData response = await GetDiscoveryOverWireAsync(host, material).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The discovery document is served without a server fault.");
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+        using JsonDocument document = JsonDocument.Parse(response.Body);
+        Assert.IsTrue(document.RootElement.TryGetProperty(
+            AuthorizationServerMetadataParameterNames.ProtectedResources, out JsonElement protectedResources), response.Body);
+        Assert.AreEqual(JsonStringArrayOf([OwnResource]), protectedResources.GetRawText());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-2">RFC 9728 Section 2</see>:
+    /// "authorization_details_types_supported OPTIONAL. JSON array containing a list of the authorization details type
+    /// values supported by the resource server when the authorization_details request parameter [RFC9396] is used."
+    /// Under a registration allowing the authorization code and pre-authorized code grants and
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/>, with the authorization details
+    /// parsing and the credential authorization seam wired, a GET of the document of the endpoint a row addresses over a
+    /// raw TLS connection is answered 200 with exactly the document
+    /// <c>{"resource":"&lt;endpoint&gt;","authorization_servers":["&lt;issuer&gt;"],"bearer_methods_supported":["header"],"authorization_details_types_supported":["openid_credential"],"dpop_signing_alg_values_supported":[...]}</c>.
+    /// The rows: the Credential Endpoint; the Deferred Credential Endpoint; the Notification Endpoint.
+    /// </summary>
+    /// <param name="endpointName">The protected endpoint addressed.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(CredentialEndpointRow)]
+    [DataRow(DeferredEndpointRow)]
+    [DataRow(NotificationEndpointRow)]
+    public async Task ProtectedEndpointDocumentNamesTheAuthorizationDetailsTypesItsGrantsProcessAsync(string endpointName)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, DocumentServingCapabilities).ConfigureAwait(false);
+        await WireProtectedEndpointSeamsAsync(host).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
+            candidateIntegration.ResolveCredentialAuthorizationAsync = static (_, _, _, _, _) =>
+                throw new NotImplementedException("A document request never asks for a credential authorization decision.");
+        }).ConfigureAwait(false);
+
+        HttpResponseData response = await GetDocumentOverWireAsync(host, material, endpointName).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The document is served without a server fault.");
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            DocumentOf(EndpointUrlOf(host, material, endpointName), IssuerOf(host, material), "[\"openid_credential\"]"),
+            response.Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.2">RFC 9728 Section 3.2</see>: "Parameters with
+    /// multiple values are represented as JSON arrays. Parameters with zero values MUST be omitted from the response."
+    /// Under the registration of <see cref="ProtectedEndpointDocumentNamesTheAuthorizationDetailsTypesItsGrantsProcessAsync"/>
+    /// with the authorization details parsing wired and the credential authorization seam not, a token request carrying
+    /// <c>authorization_details</c> is refused, so the resource supports no type and a GET of the document of the endpoint
+    /// a row addresses over a raw TLS connection is answered 200 with exactly the document
+    /// <c>{"resource":"&lt;endpoint&gt;","authorization_servers":["&lt;issuer&gt;"],"bearer_methods_supported":["header"],"dpop_signing_alg_values_supported":[...]}</c>,
+    /// without <c>authorization_details_types_supported</c>. The rows: the Credential Endpoint; the Deferred Credential
+    /// Endpoint; the Notification Endpoint.
+    /// </summary>
+    /// <param name="endpointName">The protected endpoint addressed.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(CredentialEndpointRow)]
+    [DataRow(DeferredEndpointRow)]
+    [DataRow(NotificationEndpointRow)]
+    public async Task ProtectedEndpointDocumentOmitsTheAuthorizationDetailsTypesWithoutTheDecisionSeamAsync(string endpointName)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, DocumentServingCapabilities).ConfigureAwait(false);
+        await WireProtectedEndpointSeamsAsync(host).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.AuthorizationDetailTypes.Register(new AuthorizationDetailHandler
+            {
+                Type = SecondAuthorizationDetailsType,
+                ValidateShape = static (_, _) => null
+            });
+
+            _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
+        }).ConfigureAwait(false);
+
+        HttpResponseData response = await GetDocumentOverWireAsync(host, material, endpointName).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The document is served without a server fault.");
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+        Assert.AreEqual(DocumentOf(EndpointUrlOf(host, material, endpointName), IssuerOf(host, material), null), response.Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-2">RFC 9728 Section 2</see>:
+    /// "authorization_details_types_supported OPTIONAL. JSON array containing a list of the authorization details type
+    /// values supported by the resource server when the authorization_details request parameter [RFC9396] is used." The
+    /// credential issuer's resources process the authorization details of type <c>openid_credential</c>, the type whose
+    /// details a token grant turns into <c>credential_identifiers</c>
+    /// (<see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.2">OpenID for
+    /// Verifiable Credential Issuance 1.0 Section 6.2</see>), and no other. Under the registration of
+    /// <see cref="ProtectedEndpointDocumentNamesTheAuthorizationDetailsTypesItsGrantsProcessAsync"/>, with a second type,
+    /// <c>payment_initiation</c>, registered beside <c>openid_credential</c> and the authorization details parsing and the
+    /// credential authorization seam wired, a GET of the document of the endpoint a row addresses over a raw TLS
+    /// connection is answered 200 with exactly the document
+    /// <c>{"resource":"&lt;endpoint&gt;","authorization_servers":["&lt;issuer&gt;"],"bearer_methods_supported":["header"],"authorization_details_types_supported":["openid_credential"],"dpop_signing_alg_values_supported":[...]}</c>,
+    /// the second type not named. The rows: the Credential Endpoint; the Deferred Credential Endpoint; the Notification
+    /// Endpoint.
+    /// </summary>
+    /// <param name="endpointName">The protected endpoint addressed.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(CredentialEndpointRow)]
+    [DataRow(DeferredEndpointRow)]
+    [DataRow(NotificationEndpointRow)]
+    public async Task ProtectedEndpointDocumentNamesOnlyTheAuthorizationDetailsTypeTheResourceProcessesAsync(string endpointName)
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, DocumentServingCapabilities).ConfigureAwait(false);
+        await WireProtectedEndpointSeamsAsync(host).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.AuthorizationDetailTypes.Register(new AuthorizationDetailHandler
+            {
+                Type = SecondAuthorizationDetailsType,
+                ValidateShape = static (_, _) => null
+            });
+
+            _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
+            candidateIntegration.ResolveCredentialAuthorizationAsync = static (_, _, _, _, _) =>
+                throw new NotImplementedException("A document request never asks for a credential authorization decision.");
+        }).ConfigureAwait(false);
+
+        HttpResponseData response = await GetDocumentOverWireAsync(host, material, endpointName).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The document is served without a server fault.");
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            DocumentOf(EndpointUrlOf(host, material, endpointName), IssuerOf(host, material), "[\"openid_credential\"]"),
+            response.Body);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-2">RFC 9728 Section 2</see>:
+    /// "authorization_details_types_supported OPTIONAL. JSON array containing a list of the authorization details type
+    /// values supported by the resource server when the authorization_details request parameter [RFC9396] is used." The
+    /// parameter is used through either token grant that processes it, the authorization code grant or the OID4VCI
+    /// pre-authorized code grant, so under a registration allowing the Credential Endpoint,
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthProtectedResourceMetadata"/> and one of the two grants alone, with
+    /// the pre-authorized code validation, the authorization details parsing and the credential authorization seam
+    /// wired, a GET of the Credential Endpoint's document over a raw TLS connection is answered 200 with exactly the
+    /// document
+    /// <c>{"resource":"&lt;endpoint&gt;","authorization_servers":["&lt;issuer&gt;"],"bearer_methods_supported":["header"],"authorization_details_types_supported":["openid_credential"],"dpop_signing_alg_values_supported":[...]}</c>.
+    /// The rows: the authorization code grant without the pre-authorized code grant; the pre-authorized code grant without
+    /// the authorization code grant.
+    /// </summary>
+    /// <param name="grantRow">The grant the registration allows alone.</param>
+    /// <returns>A task that completes when the assertions have run.</returns>
+    [TestMethod]
+    [DataRow(AuthorizationCodeGrantAloneRow)]
+    [DataRow(PreAuthorizedCodeGrantAloneRow)]
+    public async Task CredentialEndpointDocumentNamesTheAuthorizationDetailsTypeUnderEitherGrantAloneAsync(string grantRow)
+    {
+        ImmutableHashSet<CapabilityIdentifier> capabilities = grantRow switch
+        {
+            AuthorizationCodeGrantAloneRow => DocumentServingCapabilities.Remove(WellKnownCapabilityIdentifiers.Oid4VciPreAuthorizedCodeGrant),
+            PreAuthorizedCodeGrantAloneRow => DocumentServingCapabilities.Remove(WellKnownCapabilityIdentifiers.OAuthAuthorizationCode),
+            _ => throw new ArgumentOutOfRangeException(nameof(grantRow), grantRow, "Unknown grant row.")
+        };
+
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, capabilities).ConfigureAwait(false);
+        await WireProtectedEndpointSeamsAsync(host).ConfigureAwait(false);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ValidatePreAuthorizedCodeAsync = static (_, _, _, _, _, _) =>
+                throw new NotImplementedException("A document request never asks for a pre-authorized code decision.");
+            _ = candidateIntegration.UseDefaultAuthorizationDetailsJsonParsing();
+            candidateIntegration.ResolveCredentialAuthorizationAsync = static (_, _, _, _, _) =>
+                throw new NotImplementedException("A document request never asks for a credential authorization decision.");
+        }).ConfigureAwait(false);
+
+        HttpResponseData response = await GetDocumentOverWireAsync(host, material, CredentialEndpointRow).ConfigureAwait(false);
+
+        Assert.IsEmpty(host.Host("default").ConsumeHttpFaults(), "The document is served without a server fault.");
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+        Assert.AreEqual(
+            DocumentOf(EndpointUrlOf(host, material, CredentialEndpointRow), IssuerOf(host, material), "[\"openid_credential\"]"),
+            response.Body);
+    }
+
+
+    /// <summary>
+    /// Wires a discovery contribution naming <c>protected_resources</c> once for each of <paramref name="lists"/>, each as
+    /// a string array of its values, in the order given.
+    /// </summary>
+    /// <param name="host">The host whose integration is altered.</param>
+    /// <param name="lists">The contributed lists.</param>
+    /// <returns>A task that completes when the contribution is wired.</returns>
+    private static async Task ContributeProtectedResourceListsAsync(TestHostShell host, IReadOnlyList<IReadOnlyList<string>> lists)
+    {
+        DiscoveryDocumentContribution contribution = new(
+            [.. lists.Select(static list => new DiscoveryStringArrayField(AuthorizationServerMetadataParameterNames.ProtectedResources, list))]);
+        await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
+        {
+            candidateIntegration.ContributeDiscoveryFieldsAsync = (_, _, _) => ValueTask.FromResult(contribution);
+        }).ConfigureAwait(false);
+    }
+
+
+    /// <summary>A first protected resource the application alone knows of.</summary>
+    private static string FirstOwnResource { get; } = "https://rs.example/a";
+
+
+    /// <summary>A second protected resource the application alone knows of.</summary>
+    private static string SecondOwnResource { get; } = "https://rs.example/b";
+
+
+    /// <summary>
+    /// The row whose registration allows the authorization code grant and not the pre-authorized code grant. A constant,
+    /// not a property, because a DataRow attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string AuthorizationCodeGrantAloneRow = "authorization-code-grant-alone";
+
+
+    /// <summary>
+    /// The row whose registration allows the pre-authorized code grant and not the authorization code grant. A constant,
+    /// not a property, because a DataRow attribute argument must be a compile-time constant.
+    /// </summary>
+    private const string PreAuthorizedCodeGrantAloneRow = "pre-authorized-code-grant-alone";
+
+
+    /// <summary>
+    /// The capabilities of <see cref="LibraryResourceCapabilities"/> and
+    /// <see cref="WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint"/>, under which the discovery document lists the
+    /// four resources of the library. Computed on each read, so it never reads <see cref="LibraryResourceCapabilities"/>
+    /// before that property is initialized.
+    /// </summary>
+    private static ImmutableHashSet<CapabilityIdentifier> DiscoveryCapabilities =>
+        LibraryResourceCapabilities.Add(WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint);
+
+
+    /// <summary>A protected resource the application alone knows of, named by its discovery contribution.</summary>
+    private static string OwnResource { get; } = "https://rs.example/own";
+
+
+    /// <summary>An authorization details type registered beside <c>openid_credential</c>.</summary>
+    private static string SecondAuthorizationDetailsType { get; } = "payment_initiation";
+
+
+    /// <summary>
+    /// The identifiers of the four resources of the library, the URLs the host advertises for them, in the order the
+    /// server's endpoint chain holds them: UserInfo, then the Credential, Deferred Credential and Notification endpoints.
+    /// </summary>
+    /// <param name="host">The host holding the registration.</param>
+    /// <param name="material">The registration.</param>
+    /// <returns>The identifiers.</returns>
+    private static IReadOnlyList<string> LibraryResourceIdentifiersOf(TestHostShell host, VerifierKeyMaterial material) =>
+    [
+        EndpointUrlOf(host, material, UserInfoEndpointRow).ToString(),
+        EndpointUrlOf(host, material, CredentialEndpointRow).ToString(),
+        EndpointUrlOf(host, material, DeferredEndpointRow).ToString(),
+        EndpointUrlOf(host, material, NotificationEndpointRow).ToString()
+    ];
+
+
+    /// <summary>The JSON array of <paramref name="values"/>, each a JSON string, written without whitespace.</summary>
+    /// <param name="values">The values.</param>
+    /// <returns>The array text.</returns>
+    private static string JsonStringArrayOf(IReadOnlyList<string> values) =>
+        "[" + string.Join(",", values.Select(static value => $"\"{value}\"")) + "]";
+
+
+    /// <summary>
+    /// The protected resource metadata document of the endpoint a row addresses, written out member by member in the
+    /// order the document is written: <c>resource</c>, <c>authorization_servers</c>, <c>bearer_methods_supported</c>
+    /// <c>["header"]</c>, <c>authorization_details_types_supported</c> when given, then
+    /// <c>dpop_signing_alg_values_supported</c>.
+    /// </summary>
+    /// <param name="endpointUrl">The endpoint's URL, the document's resource.</param>
+    /// <param name="issuer">The issuer, the one authorization server named.</param>
+    /// <param name="authorizationDetailsTypes">The <c>authorization_details_types_supported</c> JSON array, or <see langword="null"/> for none.</param>
+    /// <returns>The document text.</returns>
+    private static string DocumentOf(Uri endpointUrl, string issuer, string? authorizationDetailsTypes)
+    {
+        string algorithms = JsonStringArrayOf(ResourceDpopProofs.AcceptedProofAlgorithms.Split(' '));
+        string detailTypesMember = authorizationDetailsTypes is null
+            ? string.Empty
+            : $",\"authorization_details_types_supported\":{authorizationDetailsTypes}";
+
+        return $"{{\"resource\":\"{endpointUrl}\",\"authorization_servers\":[\"{issuer}\"],\"bearer_methods_supported\":[\"header\"]"
+            + $"{detailTypesMember},\"dpop_signing_alg_values_supported\":{algorithms}}}";
+    }
+
+
+    /// <summary>
+    /// Starts the host's listener and GETs the discovery document of the registration over a raw TLS connection, at the
+    /// URL the host advertises for <see cref="WellKnownEndpointNames.MetadataDiscovery"/>.
+    /// </summary>
+    /// <param name="host">The host whose listener serves the request.</param>
+    /// <param name="material">The registration.</param>
+    /// <returns>The wire response.</returns>
+    private async Task<HttpResponseData> GetDiscoveryOverWireAsync(TestHostShell host, VerifierKeyMaterial material)
+    {
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        return await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Get,
+            new Uri(host.Host("default").HttpBaseAddress!,
+                TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.MetadataDiscovery, material.Registration.TenantId.Value)),
+            [], ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Starts the host's listener and GETs the protected resource metadata document of the endpoint a row addresses over a
+    /// raw TLS connection, at the endpoint's path with <c>/.well-known/oauth-protected-resource</c> inserted before it.
+    /// </summary>
+    /// <param name="host">The host whose listener serves the request.</param>
+    /// <param name="material">The registration.</param>
+    /// <param name="row">The endpoint row.</param>
+    /// <returns>The wire response.</returns>
+    private async Task<HttpResponseData> GetDocumentOverWireAsync(TestHostShell host, VerifierKeyMaterial material, string row)
+    {
+        await host.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        Uri endpointUrl = EndpointUrlOf(host, material, row);
+
+        return await RawHttpsRequest.SendAsync(
+            host, WellKnownHttpMethods.Get, new Uri(host.Host("default").HttpBaseAddress!, new Uri(DocumentUrlOf(endpointUrl)).AbsolutePath), [],
+            ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
     }
 
 

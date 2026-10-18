@@ -200,6 +200,7 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
             "claims_supported",
             "claim_types_supported",
             "client_id_metadata_document_supported",
+            "protected_resources",
         ];
         foreach(string field in expectedPresent)
         {
@@ -244,6 +245,7 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
             "claims_supported",
             "claim_types_supported",
             "client_id_metadata_document_supported",
+            "protected_resources",
         };
         foreach(JsonProperty prop in root.EnumerateObject())
         {
@@ -307,6 +309,13 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
     /// <summary>
     /// Checks that the resource metadata matches its resource identifier and the authorization server advertises that resource.
     /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.3">RFC 9728 §3.3</see>.
+    /// The discovery document's <c>protected_resources</c> (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-4">RFC 9728 Section 4</see>:
+    /// "JSON array containing a list of resource identifiers for OAuth protected resources that can be used with this
+    /// authorization server.") is exactly <c>["&lt;UserInfo&gt;","&lt;issuer&gt;"]</c>: UserInfo, the library's
+    /// resource whose document location the request's chain derives, then the issuer the application's discovery
+    /// contribution names. The application's protected resource metadata contribution states the scopes and bearer
+    /// methods of the issuer's document alone, so UserInfo's document, dispatched at its location, is served 200 with
+    /// <c>resource</c> the listed UserInfo entry, code point for code point.
     /// </summary>
     [TestMethod]
     public async Task ProtectedResourceMetadataIsServedAndConformant()
@@ -317,11 +326,18 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
 
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ContributeProtectedResourceMetadataAsync = static (_, _, _, _) =>
-                ValueTask.FromResult(new Verifiable.OAuth.ProtectedResource.ProtectedResourceMetadataContribution
+            //The scopes and bearer methods describe the issuer's document; a library resource's document composes its
+            //own and refuses a contribution stating them, so every other document is asked for nothing.
+            candidateIntegration.ContributeProtectedResourceMetadataAsync = static (_, endpointName, _, _) =>
+                ValueTask.FromResult(endpointName switch
                 {
-                    ScopesSupported = [WellKnownScopes.SsfRead, WellKnownScopes.SsfManage],
-                    BearerMethodsSupported = [Verifiable.OAuth.ProtectedResource.BearerMethodValues.Header]
+                    string name when string.Equals(name, WellKnownEndpointNames.ProtectedResourceMetadata, StringComparison.Ordinal) =>
+                        new Verifiable.OAuth.ProtectedResource.ProtectedResourceMetadataContribution
+                        {
+                            ScopesSupported = [WellKnownScopes.SsfRead, WellKnownScopes.SsfManage],
+                            BearerMethodsSupported = [Verifiable.OAuth.ProtectedResource.BearerMethodValues.Header]
+                        },
+                    _ => Verifiable.OAuth.ProtectedResource.ProtectedResourceMetadataContribution.Empty
                 });
 
 
@@ -369,11 +385,43 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, discovery.StatusCode, discovery.Body);
 
+        //RFC 9728 Section 4: the one protected_resources member lists the library's resource whose document location
+        //the chain derives, UserInfo, then the resource the contribution names, the issuer, the identifier its own
+        //document states.
+        string userInfo = new Uri(material.Registration.IssuerUri!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.UserInfo, material.Registration.TenantId.Value)).ToString();
         using JsonDocument discoveryDoc = JsonDocument.Parse(discovery.Body!);
         JsonElement protectedResources = discoveryDoc.RootElement.GetProperty(
             AuthorizationServerMetadataParameterNames.ProtectedResources);
-        Assert.AreEqual(metadata.Resource, protectedResources[0].GetString(),
-            "§4: the AS-listed resource identifier and the resource's own document agree.");
+        string[] listedResources = [.. EnumerateStrings(protectedResources)];
+        Assert.AreSequenceEqual(
+            new[] { userInfo, metadata.Resource },
+            listedResources,
+            "Section 4: the server's resource first, then the contributed one, whose own document states the same identifier.");
+
+        //UserInfo's own document, dispatched at its location: /.well-known/oauth-protected-resource inserted between the
+        //host and the path of the listed identifier (RFC 9728 Section 3), its resource the listed entry.
+        string userInfoDocumentPath = "/.well-known/oauth-protected-resource" + new Uri(listedResources[0]).AbsolutePath;
+        ServerHttpResponse userInfoDocument = await host.DispatchBySegmentAsync(
+            material.Registration.TenantId.Value,
+            new IncomingRequest(
+                Path: userInfoDocumentPath,
+                Method: WellKnownHttpMethods.Get,
+                Fields: new RequestFields(),
+                Headers: RequestHeaders.Empty,
+                RouteValues: RouteValues.Empty)
+            {
+                RequestTarget = userInfoDocumentPath
+            },
+            [],
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(200, userInfoDocument.StatusCode, userInfoDocument.Body);
+        Verifiable.OAuth.ProtectedResource.ProtectedResourceMetadata? userInfoMetadata =
+            ProtectedResourceMetadataJsonParsing.ParseProtectedResourceMetadata(userInfoDocument.Body!);
+        Assert.IsNotNull(userInfoMetadata, $"UserInfo's document must parse strictly. Body: {userInfoDocument.Body}");
+        Assert.IsTrue(string.Equals(listedResources[0], userInfoMetadata.Resource, StringComparison.Ordinal),
+            $"Section 4: the listed entry {listedResources[0]} is the resource UserInfo's document states, {userInfoMetadata.Resource}.");
     }
 
 

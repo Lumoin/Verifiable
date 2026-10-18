@@ -4,6 +4,7 @@ using Verifiable.Core;
 using Verifiable.JCose;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Server;
+using Verifiable.OAuth.Server.Metadata;
 
 namespace Verifiable.OAuth.ProtectedResource;
 
@@ -209,14 +210,17 @@ public static class ProtectedResourceMetadataEndpoints
     /// <see cref="WellKnownEndpointNames.ProtectedResourceMetadata"/>) and holds the endpoint at a resource identifier
     /// (<see cref="TryResolveLibraryResourceIdentifier"/>), and the location is that identifier with the well-known
     /// suffix inserted (<see cref="WellKnownPaths.OAuthProtectedResource"/>,
-    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3">RFC 9728 Section 3</see>).
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-3">RFC 9728 Section 3</see>). The one derivation the
+    /// matcher, the documents, the challenges' pointer and the authorization server document's
+    /// <c>protected_resources</c> (<see cref="MetadataEndpoints"/>,
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9728#section-4">RFC 9728 Section 4</see>) read.
     /// </summary>
     /// <param name="chain">The request's endpoint chain, or <see langword="null"/> when the context carries none.</param>
     /// <param name="endpointName">The resource's endpoint name.</param>
     /// <param name="resourceIdentifier">The identifier's text, or <see langword="null"/>.</param>
     /// <param name="documentUri">The document's location, or <see langword="null"/>.</param>
     /// <returns><see langword="true"/> when a location is derived.</returns>
-    private static bool TryDeriveLibraryResourceDocument(
+    internal static bool TryDeriveLibraryResourceDocument(
         EndpointChain? chain,
         string endpointName,
         [NotNullWhen(true)] out string? resourceIdentifier,
@@ -517,7 +521,17 @@ public static class ProtectedResourceMetadataEndpoints
     /// always requires the use of DPoP-bound access tokens"), <c>dpop_signing_alg_values_supported</c> exactly the
     /// algorithms the resource's challenges name as <c>algs</c>
     /// (<see cref="CredentialEndpointDpopValidation.ResolveChallengeAlgorithmsAsync"/>,
-    /// <see cref="CredentialEndpointDpopValidation.AcceptableChallengeAlgorithms"/>), and the https <c>jwks_uri</c>. The
+    /// <see cref="CredentialEndpointDpopValidation.AcceptableChallengeAlgorithms"/>), the https <c>jwks_uri</c>, and, for
+    /// the credential issuer's resources (<see cref="IsCredentialIssuanceResource"/>),
+    /// <c>authorization_details_types_supported</c> the types those resources process
+    /// (<see cref="CredentialIssuanceAuthorizationDetailsTypes"/>) that the server's registry holds, under the one rule the
+    /// authorization server document advertises its types by
+    /// (<see cref="MetadataEndpoints.IsAuthorizationDetailsProcessingAdvertised"/>; Section 2:
+    /// "authorization_details_types_supported OPTIONAL. JSON array containing a list of the authorization details type
+    /// values supported by the resource server when the authorization_details request parameter [RFC9396] is used."): a
+    /// further type the registry holds is no type these resources process, so it is named by the authorization server
+    /// document alone. The member is absent otherwise (Section 3.2: "Parameters with zero values MUST be omitted from the
+    /// response."). The
     /// application's contribution, asked with <paramref name="endpointName"/>, supplies the human-readable and
     /// documentation members alone; one stating any other member is answered 500 <c>server_error</c> with no document
     /// (<see href="https://www.rfc-editor.org/rfc/rfc9728#section-3.2">Section 3.2</see>: "An error response uses the
@@ -559,6 +573,11 @@ public static class ProtectedResourceMetadataEndpoints
             AuthorizationServers = [issuer],
             ScopesSupported = requiredScope is null ? null : [requiredScope],
             BearerMethodsSupported = isDpopBoundAccessTokenRequired ? [] : [BearerMethodValues.Header],
+            AuthorizationDetailsTypesSupported = IsCredentialIssuanceResource(endpointName)
+                && MetadataEndpoints.IsAuthorizationDetailsProcessingAdvertised(chain, oauth)
+                && oauth.AuthorizationDetailTypes.IsRegistered(AuthorizationDetailsTypeValues.OpenIdCredential)
+                    ? CredentialIssuanceAuthorizationDetailsTypes
+                    : null,
             DpopSigningAlgValuesSupported = CredentialEndpointDpopValidation.AcceptableChallengeAlgorithms(challengeAlgorithms),
             DpopBoundAccessTokensRequired = isDpopBoundAccessTokenRequired ? true : null,
             ResourceName = contributed.ResourceName,
@@ -571,6 +590,34 @@ public static class ProtectedResourceMetadataEndpoints
         return await WriteDocumentAsync(
             server, registration, context, resourceIdentifier!, HttpsJwksUriOf(chain), composed, cancellationToken).ConfigureAwait(false);
     }
+
+
+    /// <summary>
+    /// The authorization details types the credential issuer's resources process: <c>openid_credential</c>, the type whose
+    /// details a token grant turns into the <c>credential_identifiers</c> the access token carries to those resources
+    /// (<see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.2">OpenID for
+    /// Verifiable Credential Issuance 1.0 Section 6.2</see>).
+    /// </summary>
+    private static IReadOnlyList<string> CredentialIssuanceAuthorizationDetailsTypes { get; } =
+        [AuthorizationDetailsTypeValues.OpenIdCredential];
+
+
+    /// <summary>
+    /// Whether the library's resource <paramref name="endpointName"/> is one of the credential issuer's resources, the
+    /// OID4VCI Credential, Deferred Credential and Notification endpoints, whose access tokens a token grant carrying
+    /// authorization details of type <c>openid_credential</c> issues
+    /// (<see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-6.2">OpenID for
+    /// Verifiable Credential Issuance 1.0 Section 6.2</see>). UserInfo is not one of them.
+    /// </summary>
+    /// <param name="endpointName">The resource's endpoint name.</param>
+    /// <returns><see langword="true"/> for the three OID4VCI resources.</returns>
+    private static bool IsCredentialIssuanceResource(string endpointName) => endpointName switch
+    {
+        string name when string.Equals(name, WellKnownEndpointNames.Oid4VciCredential, StringComparison.Ordinal) => true,
+        string name when string.Equals(name, WellKnownEndpointNames.Oid4VciDeferredCredential, StringComparison.Ordinal) => true,
+        string name when string.Equals(name, WellKnownEndpointNames.Oid4VciNotification, StringComparison.Ordinal) => true,
+        _ => false
+    };
 
 
     /// <summary>
