@@ -214,8 +214,7 @@ public static class PrivateKeyJwtClientAuthentication
         //library's one judgement of them.
         var judged = ClientAssertionClaimRules.Judge(payload, clientId, acceptedAudiences, now, clockSkew);
 
-        if(judged.Refusal is not null
-            || NumericDate.Of(payload[WellKnownJwtClaimNames.Exp]) is not NumericDate expiry)
+        if(judged.Refusal is not null || judged.Expiry is not NumericDate expiry)
         {
             return PrivateKeyJwtClientAuthenticationResult.Rejected(
                 $"The client assertion breaks the RFC 7523 Section 3 rule {judged.Refusal}.");
@@ -643,10 +642,11 @@ public static class PrivateKeyJwtClientAuthentication
                         //RFC 7523 §3 rule 7: the recorded jti is retained "for the length of time for
                         //which the JWT would be considered valid based on the applicable exp instant" —
                         //here that is exp plus the clock-skew tolerance Validate just accepted the
-                        //assertion's timing under, not the bare exp.
+                        //assertion's timing under, not the bare exp, and the clock's last instant where
+                        //that window reaches the clock's end.
                         JtiReplayOutcome outcome = await checkJtiReplayAsync(
                             server, context, registration.TenantId, result.ClientId!, result.Jti!,
-                            ClientAssertionClaimRules.AcceptedUntil(result.Expiration!, context.ClockSkewTolerance), cancellationToken).ConfigureAwait(false);
+                            ClientAssertionClaimRules.ReplayRecordKeptUntil(result.Expiration!, context.ClockSkewTolerance), cancellationToken).ConfigureAwait(false);
 
                         //Any outcome other than FirstUse refuses the assertion: Replayed is the
                         //defense doing its job, StoreUnavailable is a policy that cannot prove

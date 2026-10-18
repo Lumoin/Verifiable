@@ -3,6 +3,7 @@ using System.Text;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
+using Verifiable.OAuth.Validation;
 
 namespace Verifiable.OAuth.Oid4Vci;
 
@@ -293,8 +294,10 @@ public static class KeyAttestationVerifier
         //Appendix D.1: a present exp bounds the attestation (and its attested keys); an exp at or before
         //the present, with the caller's skew leniency, expires it (RFC 7519 Section 4.1.4: the present
         //must lie before exp), compared without forming the extended instant, so no exp overflows it.
+        //The parser refused an exp that is no NumericDate, so an attestation without one omitted it: exp
+        //is OPTIONAL in Appendix D.1, and such an attestation carries no expiry of its own.
         if(attestation.ExpiresAt is NumericDate expiresAt
-            && expiresAt.CompareToEarlierBy(timeProvider.GetUtcNow(), clockSkew) <= 0)
+            && !JwtTemporalChecks.IsBeforeExpiry(timeProvider.GetUtcNow(), expiresAt, clockSkew))
         {
             return KeyAttestationVerificationResult.Failure(KeyAttestationVerificationFailureReason.Expired);
         }

@@ -465,6 +465,12 @@ internal enum DidCommRotationError
 /// </remarks>
 internal readonly struct FromPriorVerificationOutcome
 {
+    /// <summary>Creates an outcome from its fields; <see cref="Verified"/> and <see cref="Failed"/> are the two shapes it takes.</summary>
+    /// <param name="isVerified">Whether the rotation JWT verified.</param>
+    /// <param name="priorDid">The verified prior DID, or <see langword="null"/> for a failed outcome.</param>
+    /// <param name="issuerKid">The verified issuer key id, or <see langword="null"/> for a failed outcome.</param>
+    /// <param name="iat">The rotation JWT's <c>iat</c> as written, or <see langword="null"/> when it carries none or failed.</param>
+    /// <param name="error">The reason verification failed, or <see cref="DidCommRotationError.None"/>.</param>
     private FromPriorVerificationOutcome(bool isVerified, string? priorDid, string? issuerKid, NumericDate? iat, DidCommRotationError error)
     {
         IsVerified = isVerified;
@@ -491,14 +497,20 @@ internal readonly struct FromPriorVerificationOutcome
     public DidCommRotationError Error { get; }
 
 
-    //Mints a verified outcome carrying the prior DID, issuer kid, and the rotation iat (when present).
+    /// <summary>Mints a verified outcome carrying the prior DID, the issuer kid and the rotation's <c>iat</c> as written, when present.</summary>
+    /// <param name="priorDid">The verified prior DID (the JWT <c>iss</c>).</param>
+    /// <param name="issuerKid">The verified issuer key id (the JWT <c>kid</c>).</param>
+    /// <param name="iat">The rotation JWT's <c>iat</c> as written, or <see langword="null"/> when it carries none.</param>
+    /// <returns>The verified outcome.</returns>
     internal static FromPriorVerificationOutcome Verified(string priorDid, string issuerKid, NumericDate? iat)
     {
         return new FromPriorVerificationOutcome(true, priorDid, issuerKid, iat, DidCommRotationError.None);
     }
 
 
-    //Mints a failed outcome carrying the rejection reason.
+    /// <summary>Mints a failed outcome carrying the rejection reason.</summary>
+    /// <param name="error">The reason verification failed.</param>
+    /// <returns>The failed outcome.</returns>
     internal static FromPriorVerificationOutcome Failed(DidCommRotationError error)
     {
         return new FromPriorVerificationOutcome(false, priorDid: null, issuerKid: null, iat: null, error);

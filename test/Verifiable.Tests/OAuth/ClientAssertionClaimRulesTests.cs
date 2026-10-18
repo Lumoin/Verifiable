@@ -53,7 +53,10 @@ internal sealed class ClientAssertionClaimRulesTests
     };
 
 
-    /// <summary>Claims every rule accepts are accepted, naming the jti and the instant the assertion stops being accepted: exp plus the tolerance.</summary>
+    /// <summary>
+    /// Claims every rule accepts are accepted, naming the jti, the exp as written, a window ending within the clock and the
+    /// instant the record of the first use is kept until: exp plus the tolerance.
+    /// </summary>
     [TestMethod]
     public void ClaimsEveryRuleAcceptsAreAccepted()
     {
@@ -61,7 +64,9 @@ internal sealed class ClientAssertionClaimRulesTests
 
         Assert.IsTrue(judged.IsAccepted, judged.Refusal?.ToString());
         Assert.AreEqual("assertion-jti", judged.Jti);
-        Assert.AreEqual(Now.AddMinutes(1) + Skew, judged.AcceptedUntil);
+        Assert.AreEqual(0, judged.Expiry!.CompareTo(Now.AddMinutes(1)), "The exp is carried as written.");
+        Assert.IsFalse(judged.AcceptedToTheClocksEnd, "A minute's window ends within the clock.");
+        Assert.AreEqual(Now.AddMinutes(1) + Skew, judged.ReplayRecordKeptUntil);
     }
 
 
@@ -165,8 +170,8 @@ internal sealed class ClientAssertionClaimRulesTests
 
 
     /// <summary>
-    /// The assertion is accepted until exp plus the tolerance and refused from that instant on; an exp the tolerance would carry
-    /// past the last instant a clock represents is accepted until that instant, never thrown on.
+    /// The assertion is accepted until exp plus the tolerance and refused from that instant on; the record of an exp the tolerance
+    /// would carry past the last instant a clock represents is kept until that instant, never thrown on.
     /// </summary>
     [TestMethod]
     public void TheAssertionIsAcceptedUntilExpPlusTheTolerance()
@@ -176,7 +181,93 @@ internal sealed class ClientAssertionClaimRulesTests
 
         Assert.IsTrue(ClientAssertionClaimRules.Judge(claims, ClientId, Audiences, expiry + Skew - TimeSpan.FromTicks(1), Skew).IsAccepted);
         Assert.AreEqual(ClientAssertionClaimRefusal.Expired, ClientAssertionClaimRules.Judge(claims, ClientId, Audiences, expiry + Skew, Skew).Refusal);
-        Assert.AreEqual(DateTimeOffset.MaxValue, ClientAssertionClaimRules.AcceptedUntil(DateTimeOffset.MaxValue.AddSeconds(-1), Skew));
+        Assert.AreEqual(DateTimeOffset.MaxValue, ClientAssertionClaimRules.ReplayRecordKeptUntil(DateTimeOffset.MaxValue.AddSeconds(-1), Skew));
+    }
+
+
+    /// <summary>
+    /// RFC 7519 Section 4.1.4 at the clock's end: the present must lie before exp extended by the tolerance, judged against the
+    /// exp as written, never against an instant the clock's end clips. An assertion whose exp is the clock's last tick is accepted
+    /// at that tick and at the tick before it, as is one whose exp a tick earlier or whose window ends a tick past the clock; one
+    /// whose window ends exactly at the clock's last tick is refused at that tick and accepted at the tick before it.
+    /// </summary>
+    /// <param name="expiryTicksBeforeTheEnd">How many ticks the exp lies before the clock's last tick.</param>
+    /// <param name="nowTicksBeforeTheEnd">How many ticks the present lies before the clock's last tick.</param>
+    /// <param name="accepted">Whether the assertion is accepted.</param>
+    [TestMethod]
+    [DataRow(0L, 0L, true)]
+    [DataRow(0L, 1L, true)]
+    [DataRow(1L, 0L, true)]
+    [DataRow(599_999_999L, 0L, true)]
+    [DataRow(600_000_000L, 0L, false)]
+    [DataRow(600_000_000L, 1L, true)]
+    public void AnExpiryAtTheClocksEndIsJudgedExactlyUnderTheTolerance(long expiryTicksBeforeTheEnd, long nowTicksBeforeTheEnd, bool accepted)
+    {
+        var claims = ValidClaims();
+        claims[WellKnownJwtClaimNames.Exp] = NumericDate.FromInstant(DateTimeOffset.MaxValue.AddTicks(-expiryTicksBeforeTheEnd));
+
+        var expected = accepted ? (ClientAssertionClaimRefusal?)null : ClientAssertionClaimRefusal.Expired;
+        var judged = ClientAssertionClaimRules.Judge(claims, ClientId, Audiences, DateTimeOffset.MaxValue.AddTicks(-nowTicksBeforeTheEnd), Skew);
+
+        Assert.AreEqual(expected, judged.Refusal, $"exp {expiryTicksBeforeTheEnd} ticks and now {nowTicksBeforeTheEnd} ticks before the clock's end.");
+    }
+
+
+    /// <summary>
+    /// RFC 7523 Section 3 item 7 at the clock's end: an assertion whose exp is the clock's last tick, first used at that tick, is
+    /// accepted and its first use recorded until the clock's last instant, and the same assertion presented again at that tick is
+    /// refused as a replay, the guard holding the record it kept.
+    /// </summary>
+    /// <returns>A task completing once both presentations are judged.</returns>
+    [TestMethod]
+    public async Task AFirstUseAtTheClocksLastTickIsAcceptedAndItsReplayRefused()
+    {
+        var claims = ValidClaims();
+        claims[WellKnownJwtClaimNames.Exp] = NumericDate.FromInstant(DateTimeOffset.MaxValue);
+
+        var recorded = new Dictionary<string, DateTimeOffset>(StringComparer.Ordinal);
+
+        ValueTask<JtiReplayOutcome> consultFirstUse(string jti, DateTimeOffset recordKeptUntil, CancellationToken cancellationToken) =>
+            ValueTask.FromResult(recorded.TryAdd(jti, recordKeptUntil) ? JtiReplayOutcome.FirstUse : JtiReplayOutcome.Replayed);
+
+        var firstUse = await ClientAssertionClaimRules.JudgeAsync(
+            claims, ClientId, Audiences, DateTimeOffset.MaxValue, Skew, consultFirstUse, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(firstUse.IsAccepted, $"A first use at the clock's last tick is accepted; got {firstUse.Refusal}.");
+        Assert.AreEqual(DateTimeOffset.MaxValue, recorded["assertion-jti"], "The first use is recorded until the clock's last instant.");
+
+        var replay = await ClientAssertionClaimRules.JudgeAsync(
+            claims, ClientId, Audiences, DateTimeOffset.MaxValue, Skew, consultFirstUse, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(ClientAssertionClaimRefusal.IdentifierReplayed, replay.Refusal, "The replay at the clock's last tick is refused.");
+    }
+
+
+    /// <summary>
+    /// The judgement states whether the window reaches the clock's end, never an instant clipped to the clock standing for it: an
+    /// exp at the clock's last tick, or whose window ends a tick past the clock, reaches it, its record kept until the clock's last
+    /// instant; one whose window ends exactly at the clock's last tick, or a tick before it, does not, its record kept until that
+    /// instant.
+    /// </summary>
+    /// <param name="expiryTicksBeforeTheEnd">How many ticks the exp lies before the clock's last tick.</param>
+    /// <param name="reachesTheEnd">Whether the window reaches the clock's end.</param>
+    /// <param name="recordTicksBeforeTheEnd">How many ticks before the clock's last tick the record is kept until.</param>
+    [TestMethod]
+    [DataRow(0L, true, 0L)]
+    [DataRow(599_999_999L, true, 0L)]
+    [DataRow(600_000_000L, false, 0L)]
+    [DataRow(600_000_001L, false, 1L)]
+    public void TheJudgementStatesWhetherTheWindowReachesTheClocksEnd(long expiryTicksBeforeTheEnd, bool reachesTheEnd, long recordTicksBeforeTheEnd)
+    {
+        var expiry = DateTimeOffset.MaxValue.AddTicks(-expiryTicksBeforeTheEnd);
+        var claims = ValidClaims();
+        claims[WellKnownJwtClaimNames.Exp] = NumericDate.FromInstant(expiry);
+
+        var judged = ClientAssertionClaimRules.Judge(claims, ClientId, Audiences, expiry, Skew);
+
+        Assert.IsTrue(judged.IsAccepted, judged.Refusal?.ToString());
+        Assert.AreEqual(reachesTheEnd, judged.AcceptedToTheClocksEnd, $"exp {expiryTicksBeforeTheEnd} ticks before the clock's end.");
+        Assert.AreEqual(DateTimeOffset.MaxValue.AddTicks(-recordTicksBeforeTheEnd), judged.ReplayRecordKeptUntil);
     }
 
 
@@ -219,7 +310,7 @@ internal sealed class ClientAssertionClaimRulesTests
         var judged = ClientAssertionClaimRules.Judge(claims, ClientId, Audiences, Now, Skew);
 
         Assert.IsTrue(judged.IsAccepted, judged.Refusal?.ToString());
-        Assert.AreEqual(Now.AddMilliseconds(250), judged.AcceptedUntil);
+        Assert.AreEqual(Now.AddMilliseconds(250), judged.ReplayRecordKeptUntil);
         Assert.AreEqual(ClientAssertionClaimRefusal.Expired, ClientAssertionClaimRules.Judge(claims, ClientId, Audiences, Now.AddMilliseconds(250), Skew).Refusal);
     }
 
@@ -270,9 +361,9 @@ internal sealed class ClientAssertionClaimRulesTests
 
             var judged = await ClientAssertionClaimRules.JudgeAsync(
                 ValidClaims(), ClientId, Audiences, Now, Skew,
-                (jti, acceptedUntil, cancellationToken) =>
+                (jti, recordKeptUntil, cancellationToken) =>
                 {
-                    consulted.Add($"{jti}|{acceptedUntil:O}");
+                    consulted.Add($"{jti}|{recordKeptUntil:O}");
 
                     return ValueTask.FromResult(outcome);
                 },
@@ -290,7 +381,7 @@ internal sealed class ClientAssertionClaimRulesTests
 
         var refused = await ClientAssertionClaimRules.JudgeAsync(
             foreign, ClientId, Audiences, Now, Skew,
-            (jti, acceptedUntil, cancellationToken) => throw new AssertFailedException("Claims another rule refuses never reach the guard."),
+            (jti, recordKeptUntil, cancellationToken) => throw new AssertFailedException("Claims another rule refuses never reach the guard."),
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(ClientAssertionClaimRefusal.AudienceNotThisServer, refused.Refusal);

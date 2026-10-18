@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace Verifiable.JCose;
 
 /// <summary>
@@ -19,7 +21,17 @@ public sealed record JsonMemberString(string Text) : JsonMemberLookup;
 /// a reader converts it to the range it needs and refuses one outside it.
 /// </summary>
 /// <param name="Spelling">The number as the document writes it.</param>
-public sealed record JsonMemberNumber(string Spelling) : JsonMemberLookup;
+public sealed record JsonMemberNumber(string Spelling) : JsonMemberLookup
+{
+    /// <summary>
+    /// The NumericDate the number names (RFC 7519 section 2), every digit of its spelling kept
+    /// (<see cref="NumericDate.FromJsonNumber"/>), or <see langword="null"/> when it names an instant no
+    /// <see cref="DateTimeOffset"/> represents: the one reading of a date member every reader of the members shares, so a
+    /// reader tells a member it found apart from one it did not, and refuses a number naming no date as present and malformed.
+    /// </summary>
+    /// <returns>The date, or <see langword="null"/>.</returns>
+    public NumericDate? ToNumericDate() => NumericDate.FromJsonNumber(Encoding.UTF8.GetBytes(Spelling));
+}
 
 
 /// <summary>The member is carried as a value that is neither a string nor a number: a literal, an object or an array.</summary>

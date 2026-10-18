@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Time.Testing;
+using System.Text;
+using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth.Dpop;
@@ -696,6 +698,88 @@ internal sealed class DpopProofValidatorTests
             DpopJwkUtilities.ComputeThumbprint(keys.PublicKey, WellKnownJwaValues.EdDsa,
                 TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared),
             result.JwkThumbprint);
+    }
+
+
+    /// <summary>
+    /// RFC 9449 §4.3 check 2: "The DPoP HTTP request header field value is a single and well-formed JWT", read through the
+    /// library's one reading of a proof's claims. A signed proof whose claims set is no JSON object read one way - a claim named
+    /// twice, the first naming another target and the second the request's, or a string naming no Unicode text - or whose claims
+    /// are of another kind than RFC 9449 §4.2 names - an <c>iat</c> of digits in a string, a <c>jti</c> that is a number, a
+    /// <c>nonce</c> or an <c>ath</c> that is no string - is refused as <see cref="DpopProofValidationFailureReason.Malformed"/>,
+    /// its signature valid; the same proof with its claims as §4.2 names them validates.
+    /// </summary>
+    /// <param name="claimsCase">The name of the claims set the row signs.</param>
+    /// <param name="expectedMalformed">Whether the proof is refused as malformed.</param>
+    /// <returns>A task completing once the proof is judged.</returns>
+    [TestMethod]
+    [DataRow("well-formed", false)]
+    [DataRow("repeated-htu", true)]
+    [DataRow("undecodable-member", true)]
+    [DataRow("iat-digits-string", true)]
+    [DataRow("jti-number", true)]
+    [DataRow("nonce-null", true)]
+    [DataRow("ath-number", true)]
+    public async Task ValidateAsyncReadsTheClaimsOfASignedProofOneWay(string claimsCase, bool expectedMalformed)
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        var key = new DpopKey(keys, WellKnownJwaValues.Es256);
+        var headerSegment = (await BuildProofAsync(key, BuildClaims()).ConfigureAwait(false)).Split('.')[0];
+
+        var jti = $"\"jti\":\"{Guid.NewGuid():N}\"";
+        var iat = $"\"iat\":{NowInstant.ToUnixTimeSeconds()}";
+        var htm = $"\"htm\":\"{DefaultMethod}\"";
+        var htu = $"\"htu\":\"{DefaultUrl}\"";
+
+        var members = claimsCase switch
+        {
+            "well-formed" => $"{jti},{htm},{htu},{iat}",
+            "repeated-htu" => $"{jti},{htm},\"htu\":\"https://attacker.example.com/token\",{htu},{iat}",
+            "undecodable-member" => $"{jti},{htm},{htu},{iat},\"note\":\"\\uD800\"",
+            "iat-digits-string" => $"{jti},{htm},{htu},\"iat\":\"{NowInstant.ToUnixTimeSeconds()}\"",
+            "jti-number" => $"\"jti\":7,{htm},{htu},{iat}",
+            "nonce-null" => $"{jti},{htm},{htu},{iat},\"nonce\":null",
+            "ath-number" => $"{jti},{htm},{htu},{iat},\"ath\":7",
+            _ => throw new ArgumentOutOfRangeException(nameof(claimsCase), claimsCase, "No claims set is named so.")
+        };
+
+        var proof = await SignClaimsUnderHeaderAsync(keys.PrivateKey, headerSegment, $"{{{members}}}").ConfigureAwait(false);
+
+        var result = await ValidateAsync(
+            proof,
+            expectedNonce: null,
+            nonceRequired: false,
+            accessToken: null,
+            verifier: DpopTestSupport.Es256Verification,
+            httpUrl: DefaultUrl).ConfigureAwait(false);
+
+        if(expectedMalformed)
+        {
+            Assert.AreEqual(DpopProofValidationFailureReason.Malformed, result.FailureReason, claimsCase);
+        }
+        else
+        {
+            Assert.IsTrue(result.IsSuccess, $"{claimsCase}: got {result.FailureReason}.");
+        }
+    }
+
+
+    /// <summary>
+    /// Signs a claims set given as JSON text, over its exact bytes, under the protected header segment of a proof the library
+    /// composed, so the proof's signature verifies whatever the claims set holds.
+    /// </summary>
+    /// <param name="privateKey">The key the proof's header embeds the public half of.</param>
+    /// <param name="headerSegment">The protected header segment.</param>
+    /// <param name="claimsJson">The claims set's JSON text.</param>
+    /// <returns>The compact proof.</returns>
+    private async Task<string> SignClaimsUnderHeaderAsync(PrivateKeyMemory privateKey, string headerSegment, string claimsJson)
+    {
+        var payloadSegment = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(claimsJson));
+        var signingInput = Encoding.ASCII.GetBytes($"{headerSegment}.{payloadSegment}");
+
+        using var signature = await privateKey.SignAsync(signingInput, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+
+        return $"{headerSegment}.{payloadSegment}.{TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan())}";
     }
 
 

@@ -53,4 +53,90 @@ public sealed record DpopProofClaims
     /// not presented).
     /// </summary>
     public string? Ath { get; init; }
+
+
+    /// <summary>
+    /// Reads the decoded claims set of a DPoP proof (RFC 9449 section 4.2), once, through the library's one reading of a JSON
+    /// object's members (<see cref="JwkJsonReader.ReadTopLevelMembers"/>): <c>jti</c>, <c>htm</c> and <c>htu</c>, REQUIRED
+    /// strings; <c>iat</c>, a REQUIRED NumericDate read as written (<see cref="JsonMemberNumber.ToNumericDate"/>, RFC 7519
+    /// section 2); and <c>nonce</c> and <c>ath</c>, strings where carried. A claims set the reader refuses, a required claim
+    /// absent, a claim of another kind and an <c>iat</c> naming no instant a clock represents are refused, each a typed reason
+    /// (<see cref="DpopProofPartReading{TPart}"/>), in the order <c>jti</c>, <c>htm</c>, <c>htu</c>, <c>iat</c>, <c>nonce</c>,
+    /// <c>ath</c>; the claims are judged by <see cref="DpopProofValidator"/>, never here. Never throws.
+    /// </summary>
+    /// <param name="json">The claims set's UTF-8 JSON bytes, the payload segment base64url-decoded.</param>
+    /// <returns>The claims, or their refusal.</returns>
+    public static DpopProofPartReading<DpopProofClaims> Read(ReadOnlySpan<byte> json)
+    {
+        var reading = JwkJsonReader.ReadTopLevelMembers(json);
+
+        if(reading is not JsonTopLevelMembers members)
+        {
+            return new DpopProofPartDocumentRefused<DpopProofClaims>(DpopProofPartPlace.Claims, reading);
+        }
+
+        var jti = members.Find(WellKnownJwtClaimNames.Jti);
+
+        if(jti is not JsonMemberString jtiText)
+        {
+            return StringMemberRefused(WellKnownJwtClaimNames.Jti, jti);
+        }
+
+        var htm = members.Find(WellKnownJwtClaimNames.Htm);
+
+        if(htm is not JsonMemberString htmText)
+        {
+            return StringMemberRefused(WellKnownJwtClaimNames.Htm, htm);
+        }
+
+        var htu = members.Find(WellKnownJwtClaimNames.Htu);
+
+        if(htu is not JsonMemberString htuText)
+        {
+            return StringMemberRefused(WellKnownJwtClaimNames.Htu, htu);
+        }
+
+        var iat = members.Find(WellKnownJwtClaimNames.Iat);
+
+        if(iat is not JsonMemberNumber iatNumber || iatNumber.ToNumericDate() is not NumericDate issuedAt)
+        {
+            return new DpopProofPartMemberRefused<DpopProofClaims>(
+                DpopProofPartPlace.Claims,
+                WellKnownJwtClaimNames.Iat,
+                iat,
+                iat is JsonMemberAbsent ? DpopProofMemberDefect.Absent : DpopProofMemberDefect.NotANumericDate);
+        }
+
+        var nonce = members.Find(WellKnownJwtClaimNames.Nonce);
+
+        if(nonce is not (JsonMemberAbsent or JsonMemberString))
+        {
+            return StringMemberRefused(WellKnownJwtClaimNames.Nonce, nonce);
+        }
+
+        var ath = members.Find(WellKnownJwtClaimNames.Ath);
+
+        if(ath is not (JsonMemberAbsent or JsonMemberString))
+        {
+            return StringMemberRefused(WellKnownJwtClaimNames.Ath, ath);
+        }
+
+        return new DpopProofPartRead<DpopProofClaims>(new DpopProofClaims
+        {
+            Jti = jtiText.Text,
+            Htm = htmText.Text,
+            Htu = htuText.Text,
+            Iat = issuedAt,
+            Nonce = (nonce as JsonMemberString)?.Text,
+            Ath = (ath as JsonMemberString)?.Text
+        });
+    }
+
+
+    /// <summary>The refusal of a claims set for a claim read as a string that is absent or of another kind.</summary>
+    /// <param name="name">The claim's name.</param>
+    /// <param name="carried">The claim as the reader answered it.</param>
+    /// <returns>The refusal.</returns>
+    private static DpopProofPartMemberRefused<DpopProofClaims> StringMemberRefused(string name, JsonMemberLookup carried) =>
+        new(DpopProofPartPlace.Claims, name, carried, carried is JsonMemberAbsent ? DpopProofMemberDefect.Absent : DpopProofMemberDefect.NotAString);
 }

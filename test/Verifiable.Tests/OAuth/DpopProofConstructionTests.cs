@@ -145,18 +145,36 @@ internal sealed class DpopProofConstructionTests
     };
 
 
+    /// <summary>Reads a constructed proof's protected header back through the library's reading of it.</summary>
+    /// <param name="proof">The compact proof.</param>
+    /// <returns>The header.</returns>
     private static DpopProofHeader DecodeHeader(string proof)
     {
-        string[] parts = proof.Split('.');
-        using System.Buffers.IMemoryOwner<byte> bytes = TestSetup.Base64UrlDecoder(parts[0], BaseMemoryPool.Shared);
-        return DpopTestSupport.ParseHeaderJson(bytes.Memory);
+        var parts = proof.Split('.');
+        using var bytes = TestSetup.Base64UrlDecoder(parts[0], BaseMemoryPool.Shared);
+        var reading = DpopProofHeader.Read(bytes.Memory.Span);
+
+        var read = reading as DpopProofPartRead<DpopProofHeader>;
+
+        Assert.IsNotNull(read, $"A constructed proof's header reads; got {reading}.");
+
+        return read.Part;
     }
 
 
+    /// <summary>Reads a constructed proof's claims back through the library's reading of them.</summary>
+    /// <param name="proof">The compact proof.</param>
+    /// <returns>The claims.</returns>
     private static DpopProofClaims DecodeClaims(string proof)
     {
-        string[] parts = proof.Split('.');
-        using System.Buffers.IMemoryOwner<byte> bytes = TestSetup.Base64UrlDecoder(parts[1], BaseMemoryPool.Shared);
-        return DpopTestSupport.ParseClaimsJson(bytes.Memory);
+        var parts = proof.Split('.');
+        using var bytes = TestSetup.Base64UrlDecoder(parts[1], BaseMemoryPool.Shared);
+        var reading = DpopProofClaims.Read(bytes.Memory.Span);
+
+        var read = reading as DpopProofPartRead<DpopProofClaims>;
+
+        Assert.IsNotNull(read, $"A constructed proof's claims read; got {reading}.");
+
+        return read.Part;
     }
 }

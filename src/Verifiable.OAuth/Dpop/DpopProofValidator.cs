@@ -64,20 +64,34 @@ public static class DpopProofValidator
             return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.Malformed);
         }
 
-        DpopProofHeader header;
-        DpopProofClaims claims;
+        DpopProofPartReading<DpopProofHeader> headerReading;
+        DpopProofPartReading<DpopProofClaims> claimsReading;
         try
         {
             using IMemoryOwner<byte> headerBytes = base64UrlDecoder(parts[0], memoryPool);
             using IMemoryOwner<byte> payloadBytes = base64UrlDecoder(parts[1], memoryPool);
-            header = parser.ParseHeader(headerBytes.Memory);
-            claims = parser.ParseClaims(payloadBytes.Memory);
+            headerReading = parser.ParseHeader(headerBytes.Memory);
+            claimsReading = parser.ParseClaims(payloadBytes.Memory);
         }
         catch
         {
-            //The proof is client-supplied wire input, structurally unverified at this point; any
-            //decode/parse failure is a malformed proof rather than an internal fault.
+            //The proof is client-supplied wire input, structurally unverified at this point; a segment
+            //that does not decode is a malformed proof rather than an internal fault.
             return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.Malformed);
+        }
+
+        //A part the reading refused is a proof that is not well formed (RFC 9449 section 4.3 check 2), except a header that
+        //carries no typ: the typ check names that proof (check 4), as it names one whose typ is another type.
+        if(claimsReading is not DpopProofPartRead<DpopProofClaims> { Part: var claims })
+        {
+            return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.Malformed);
+        }
+
+        if(headerReading is not DpopProofPartRead<DpopProofHeader> { Part: var header })
+        {
+            return DpopProofValidationResult.Failure(IsTypAbsent(headerReading)
+                ? DpopProofValidationFailureReason.InvalidTyp
+                : DpopProofValidationFailureReason.Malformed);
         }
 
         //Header checks. The typ compares as the RFC 7515 §4.1.9 media type it is: case insensitive,
@@ -271,6 +285,18 @@ public static class DpopProofValidator
 
         return base64UrlEncoder(digest.AsReadOnlySpan());
     }
+
+
+    /// <summary>Whether a header's reading refused it for carrying no <c>typ</c> in its protected header.</summary>
+    /// <param name="headerReading">The header's reading.</param>
+    /// <returns><see langword="true"/> for that refusal.</returns>
+    private static bool IsTypAbsent(DpopProofPartReading<DpopProofHeader> headerReading) =>
+        headerReading is DpopProofPartMemberRefused<DpopProofHeader>
+        {
+            Place: DpopProofPartPlace.ProtectedHeader,
+            Defect: DpopProofMemberDefect.Absent
+        } refused
+        && string.Equals(refused.MemberName, WellKnownJoseHeaderNames.Typ, StringComparison.Ordinal);
 
 
     /// <summary>

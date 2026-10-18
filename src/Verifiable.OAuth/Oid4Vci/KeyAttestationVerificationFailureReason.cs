@@ -7,7 +7,11 @@ namespace Verifiable.OAuth.Oid4Vci;
 /// </summary>
 public enum KeyAttestationVerificationFailureReason
 {
-    /// <summary>The attestation is not parseable as a compact JWS, its <c>typ</c> is not <c>key-attestation+jwt</c>, or the REQUIRED <c>attested_keys</c> array is absent (Appendix D.1).</summary>
+    /// <summary>
+    /// The attestation is not parseable as a compact JWS, its <c>typ</c> is not <c>key-attestation+jwt</c>, the REQUIRED
+    /// <c>attested_keys</c> array is absent, or its body carries an <c>iat</c> or an <c>exp</c> that is no NumericDate
+    /// (Appendix D.1; RFC 7519 Section 2).
+    /// </summary>
     Malformed,
 
     /// <summary>The attestation has no signature segment — a verifiable attestation MUST be a signed three-part JWS, not the unsigned two-part form.</summary>

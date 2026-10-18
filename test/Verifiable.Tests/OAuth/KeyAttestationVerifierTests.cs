@@ -459,6 +459,118 @@ internal sealed class KeyAttestationVerifierTests
 
 
     /// <summary>
+    /// OID4VCI 1.0 Appendix D.1 has <c>exp</c> an Integer "for the time at which the key attestation and the key(s) it is
+    /// attesting expire", a NumericDate (RFC 7519 Section 2). A signed attestation whose <c>exp</c> is present and is no
+    /// NumericDate - a string of digits, a count no clock represents, a literal - is refused through verification as
+    /// <see cref="KeyAttestationVerificationFailureReason.Malformed"/>, never verified as one carrying no expiry.
+    /// </summary>
+    /// <param name="exp">The <c>exp</c> member's JSON value.</param>
+    /// <returns>A task completing once the attestation is judged.</returns>
+    [TestMethod]
+    [DataRow("\"1893456000\"")]
+    [DataRow("1e400")]
+    [DataRow("true")]
+    [DataRow("null")]
+    public async Task AnAttestationWhoseExpIsNoNumericDateIsRefused(string exp)
+    {
+        var result = await VerifyHandBuiltAttestationAsync($"\"iat\":{NowInstant.ToUnixTimeSeconds()},\"exp\":{exp},").ConfigureAwait(false);
+
+        Assert.AreEqual(KeyAttestationVerificationFailureReason.Malformed, result.FailureReason, $"exp {exp}");
+    }
+
+
+    /// <summary>
+    /// OID4VCI 1.0 Appendix D.1 has <c>iat</c> an Integer "for the time at which the key attestation was issued", a NumericDate
+    /// (RFC 7519 Section 2). A signed attestation whose <c>iat</c> is present and is no NumericDate - a string of digits, a count
+    /// no clock represents, an object - is refused through verification as
+    /// <see cref="KeyAttestationVerificationFailureReason.Malformed"/>.
+    /// </summary>
+    /// <param name="iat">The <c>iat</c> member's JSON value.</param>
+    /// <returns>A task completing once the attestation is judged.</returns>
+    [TestMethod]
+    [DataRow("\"1700000000\"")]
+    [DataRow("1e400")]
+    [DataRow("{}")]
+    public async Task AnAttestationWhoseIatIsNoNumericDateIsRefused(string iat)
+    {
+        var result = await VerifyHandBuiltAttestationAsync($"\"iat\":{iat},\"exp\":{NowInstant.AddHours(1).ToUnixTimeSeconds()},").ConfigureAwait(false);
+
+        Assert.AreEqual(KeyAttestationVerificationFailureReason.Malformed, result.FailureReason, $"iat {iat}");
+    }
+
+
+    /// <summary>
+    /// The control of the two refusals above, signed and verified the same way: an attestation whose <c>iat</c> and <c>exp</c>
+    /// are NumericDates, an <c>exp</c> with a fraction among them, verifies and carries both dates as written; one omitting
+    /// <c>exp</c>, which Appendix D.1 has OPTIONAL, verifies and carries no expiry of its own.
+    /// </summary>
+    /// <returns>A task completing once the attestations are judged.</returns>
+    [TestMethod]
+    public async Task AnAttestationWhoseDatesAreNumericDatesOrWhoseExpIsOmittedVerifies()
+    {
+        var issuedAt = NowInstant.ToUnixTimeSeconds();
+        var expiresAt = NowInstant.AddHours(1).ToUnixTimeSeconds();
+
+        var dated = await VerifyHandBuiltAttestationAsync($"\"iat\":{issuedAt},\"exp\":{expiresAt}.5,").ConfigureAwait(false);
+
+        Assert.IsTrue(dated.IsValid, $"An attestation with NumericDates verifies; got {dated.FailureReason}.");
+        Assert.AreEqual(0, dated.Attestation!.IssuedAt!.CompareTo(NumericDate.FromUnixTimeSeconds(issuedAt)), "The iat is carried as written.");
+        Assert.AreEqual(0, dated.Attestation.ExpiresAt!.CompareTo(NumericDate.FromUnixTimeSeconds(expiresAt).AtOrBefore.AddMilliseconds(500)), "The exp is carried as written, its fraction kept.");
+
+        var undated = await VerifyHandBuiltAttestationAsync($"\"iat\":{issuedAt},").ConfigureAwait(false);
+
+        Assert.IsTrue(undated.IsValid, $"An attestation omitting exp verifies; got {undated.FailureReason}.");
+        Assert.IsNull(undated.Attestation!.ExpiresAt);
+    }
+
+
+    /// <summary>
+    /// Signs, over their exact bytes, a header referencing the Wallet-Provider key by <c>kid</c> and a body carrying the attested
+    /// keys, the date members given and the nonce, and verifies it through the resolver that dereferences that <c>kid</c>.
+    /// </summary>
+    /// <param name="dateMembers">The body's date members as JSON text, each followed by a comma.</param>
+    /// <returns>The verification result.</returns>
+    private async Task<KeyAttestationVerificationResult> VerifyHandBuiltAttestationAsync(string dateMembers)
+    {
+        var wp = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using var wpPublic = wp.PublicKey;
+        using var wpPrivate = wp.PrivateKey;
+
+        const string Kid = "https://wallet-provider.example.com/keys#wp-1";
+        var algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(wpPrivate.Tag);
+
+        var payloadJson =
+            "{\"attested_keys\":[{\"kty\":\"EC\",\"crv\":\"P-256\"," +
+            "\"x\":\"f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU\"," +
+            "\"y\":\"x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0\"}]," +
+            dateMembers +
+            $"\"nonce\":\"{AttestationNonce}\"}}";
+
+        var headerJson = "{\"alg\":\"" + algorithm + "\",\"typ\":\"key-attestation+jwt\",\"kid\":\"" + Kid + "\"}";
+        var attestation = await SignRawAsync(wpPrivate, headerJson, payloadJson, TestContext.CancellationToken).ConfigureAwait(false);
+
+        ValueTask<PublicKeyMemory?> resolver(string kid, string algorithm, ExchangeContext context, CancellationToken ct) =>
+            string.Equals(kid, Kid, StringComparison.Ordinal)
+                ? ValueTask.FromResult<PublicKeyMemory?>(CopyPublicKey(wpPublic))
+                : ValueTask.FromResult<PublicKeyMemory?>(null);
+
+        return await KeyAttestationVerifier.VerifyAsync(
+            attestation,
+            AttestationNonce,
+            nonceRequired: true,
+            isAttestationSigningAlgAcceptable: static _ => true,
+            resolveWalletProviderKey: resolver,
+            x509Verification: null,
+            context: [],
+            TestSetup.Base64UrlDecoder,
+            TimeProvider,
+            Pool,
+            ClockSkew,
+            TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
     /// A constrained attestation whose <c>key_storage</c> and <c>user_authentication</c> arrays each
     /// carry a value the caller's accepted-value sets also carry validates:
     /// <see href="https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-12.2.4">OID4VCI

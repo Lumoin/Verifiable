@@ -31,9 +31,15 @@ public sealed record KeyAttestation
     /// <summary>The <c>certification</c> URL of the key storage component, or <see langword="null"/> when absent.</summary>
     public string? Certification { get; init; }
 
-    /// <summary>The <c>iat</c> the attestation was issued at, as written, or <see langword="null"/> when unreadable.</summary>
+    /// <summary>
+    /// The <c>iat</c> the attestation was issued at, as written, or <see langword="null"/> when the body omits it; a body
+    /// carrying an <c>iat</c> that is no NumericDate is no attestation <see cref="KeyAttestationParser"/> reads.
+    /// </summary>
     public NumericDate? IssuedAt { get; init; }
 
-    /// <summary>The <c>exp</c> the attestation (and its keys) expire at, as written, or <see langword="null"/> when absent.</summary>
+    /// <summary>
+    /// The <c>exp</c> the attestation (and its keys) expire at, as written, or <see langword="null"/> when the body omits it;
+    /// a body carrying an <c>exp</c> that is no NumericDate is no attestation <see cref="KeyAttestationParser"/> reads.
+    /// </summary>
     public NumericDate? ExpiresAt { get; init; }
 }

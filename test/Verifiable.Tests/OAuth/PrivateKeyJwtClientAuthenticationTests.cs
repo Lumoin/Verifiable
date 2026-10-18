@@ -246,7 +246,8 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
         try
         {
             ClientRecord registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
-            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+
+            var validator = PrivateKeyJwtClientAuthentication.BuildValidator(
                 additionalAcceptedAudiences: null,
                 checkJtiReplayAsync: null,
                 resolveJwksUriAsync: null,
@@ -299,7 +300,8 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
                     (JwkOf(firstKeys.PublicKey), DuplicateKeyId),
                     (JwkOf(secondKeys.PublicKey), DuplicateKeyId))
             };
-            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+
+            var validator = PrivateKeyJwtClientAuthentication.BuildValidator(
                 additionalAcceptedAudiences: null,
                 checkJtiReplayAsync: null,
                 resolveJwksUriAsync: null,
@@ -352,7 +354,8 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
                     (JwkOf(firstKeys.PublicKey), "key-a"),
                     (JwkOf(secondKeys.PublicKey), "key-b"))
             };
-            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+
+            var validator = PrivateKeyJwtClientAuthentication.BuildValidator(
                 additionalAcceptedAudiences: null,
                 checkJtiReplayAsync: null,
                 resolveJwksUriAsync: null,
@@ -396,7 +399,8 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
         try
         {
             ClientRecord registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
-            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+
+            var validator = PrivateKeyJwtClientAuthentication.BuildValidator(
                 additionalAcceptedAudiences: null,
                 checkJtiReplayAsync: null,
                 resolveJwksUriAsync: null,
@@ -449,7 +453,8 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
                     (JwkOf(oldKeys.PublicKey), OldKeyId),
                     (JwkOf(newKeys.PublicKey), NewKeyId))
             };
-            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+
+            var validator = PrivateKeyJwtClientAuthentication.BuildValidator(
                 additionalAcceptedAudiences: null,
                 checkJtiReplayAsync: null,
                 resolveJwksUriAsync: null,
@@ -489,7 +494,8 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
         try
         {
             ClientRecord registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
-            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+
+            var validator = PrivateKeyJwtClientAuthentication.BuildValidator(
                 additionalAcceptedAudiences: null,
                 checkJtiReplayAsync: null,
                 resolveJwksUriAsync: null,
@@ -540,7 +546,8 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             //The published JWKS carries the REGISTERED public key; the assertion is signed with the
             //ATTACKER's distinct private key.
             ClientRecord registration = BuildConfidentialRegistration(material.Registration, registeredKeys.PublicKey);
-            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+
+            var validator = PrivateKeyJwtClientAuthentication.BuildValidator(
                 additionalAcceptedAudiences: null,
                 checkJtiReplayAsync: null,
                 resolveJwksUriAsync: null,
@@ -586,7 +593,8 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
         try
         {
             ClientRecord registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
-            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+
+            var validator = PrivateKeyJwtClientAuthentication.BuildValidator(
                 additionalAcceptedAudiences: null,
                 checkJtiReplayAsync: null,
                 resolveJwksUriAsync: null,
@@ -908,7 +916,8 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
         try
         {
             ClientRecord registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
-            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+
+            var validator = PrivateKeyJwtClientAuthentication.BuildValidator(
                 additionalAcceptedAudiences: null,
                 checkJtiReplayAsync: null,
                 resolveJwksUriAsync: null,
@@ -968,7 +977,8 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
         try
         {
             ClientRecord registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
-            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+
+            var validator = PrivateKeyJwtClientAuthentication.BuildValidator(
                 additionalAcceptedAudiences: null,
                 checkJtiReplayAsync: null,
                 resolveJwksUriAsync: null,
@@ -1021,7 +1031,8 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
         try
         {
             ClientRecord registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
-            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+
+            var validator = PrivateKeyJwtClientAuthentication.BuildValidator(
                 additionalAcceptedAudiences: null,
                 checkJtiReplayAsync: null,
                 resolveJwksUriAsync: null,
@@ -1060,7 +1071,8 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
         try
         {
             ClientRecord registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
-            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+
+            var validator = PrivateKeyJwtClientAuthentication.BuildValidator(
                 additionalAcceptedAudiences: null,
                 checkJtiReplayAsync: null,
                 resolveJwksUriAsync: null,
@@ -1103,7 +1115,8 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             {
                 TokenEndpointAuthMethod = ClientAuthenticationMethod.PrivateKeyJwt
             };
-            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+
+            var validator = PrivateKeyJwtClientAuthentication.BuildValidator(
                 additionalAcceptedAudiences: null,
                 checkJtiReplayAsync: null,
                 resolveJwksUriAsync: null,
@@ -1210,7 +1223,8 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
                 TokenEndpointAuthMethod = ClientAuthenticationMethod.PrivateKeyJwt,
                 ClientJwksUri = new Uri("https://client.example/jwks.json")
             };
-            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+
+            var validator = PrivateKeyJwtClientAuthentication.BuildValidator(
                 additionalAcceptedAudiences: null,
                 checkJtiReplayAsync: null,
                 resolveJwksUriAsync: null,
@@ -1303,7 +1317,8 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
         try
         {
             ClientRecord registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
-            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+
+            var validator = PrivateKeyJwtClientAuthentication.BuildValidator(
                 additionalAcceptedAudiences: null,
                 checkJtiReplayAsync: null,
                 resolveJwksUriAsync: null,
@@ -1467,7 +1482,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
                     ReadClaimsKeepingOneRepeatedMember(bytes, isLastMemberKept);
             }).ConfigureAwait(false);
 
-            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+            var validator = PrivateKeyJwtClientAuthentication.BuildValidator(
                 additionalAcceptedAudiences: null,
                 checkJtiReplayAsync: null,
                 resolveJwksUriAsync: null,
