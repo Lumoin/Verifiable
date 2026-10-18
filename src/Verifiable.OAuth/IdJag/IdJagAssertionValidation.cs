@@ -263,7 +263,7 @@ public static class IdJagAssertionValidation
         //§3 items 4–6 (RFC 7521 §5.2 / RFC 7523 §3): exp REQUIRED and not expired; nbf/iat OPTIONAL but,
         //when present, numeric and temporally consistent.
         Rfc7523TemporalOutcome temporalOutcome = Rfc7523AssertionValidation.ValidateTemporalClaims(
-            payload, now, clockSkew, out DateTimeOffset exp, out DateTimeOffset? iat, out string? temporalFailureDescription);
+            payload, now, clockSkew, out var exp, out var iat, out var temporalFailureDescription);
         if(temporalOutcome != Rfc7523TemporalOutcome.Valid)
         {
             return IdJagAssertionValidationResult.Failure(MapTemporalFailure(temporalOutcome), temporalFailureDescription);

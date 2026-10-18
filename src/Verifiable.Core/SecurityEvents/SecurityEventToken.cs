@@ -1,3 +1,5 @@
+using Verifiable.JCose;
+
 namespace Verifiable.Core.SecurityEvents;
 
 /// <summary>
@@ -18,8 +20,8 @@ public sealed record SecurityEventToken
     /// <summary>The <c>iss</c> claim — the SET issuer (Transmitter). <see langword="null"/> if absent.</summary>
     public string? Issuer { get; init; }
 
-    /// <summary>The <c>iat</c> claim as a timestamp. <see langword="null"/> if absent or unparseable.</summary>
-    public DateTimeOffset? IssuedAt { get; init; }
+    /// <summary>The <c>iat</c> claim, the NumericDate as written. <see langword="null"/> if absent or no NumericDate.</summary>
+    public NumericDate? IssuedAt { get; init; }
 
     /// <summary>The <c>jti</c> claim — the per-token unique identifier. <see langword="null"/> if absent.</summary>
     public string? JwtId { get; init; }
@@ -27,8 +29,8 @@ public sealed record SecurityEventToken
     /// <summary>The <c>aud</c> claim values (a SET may carry one or many). Never null; may be empty.</summary>
     public IReadOnlyList<string> Audiences { get; init; } = [];
 
-    /// <summary>The <c>toe</c> (time of event) claim as a timestamp. <see langword="null"/> if absent.</summary>
-    public DateTimeOffset? TimeOfEvent { get; init; }
+    /// <summary>The <c>toe</c> (time of event) claim, the NumericDate as written. <see langword="null"/> if absent or no NumericDate.</summary>
+    public NumericDate? TimeOfEvent { get; init; }
 
     /// <summary>The <c>txn</c> (transaction) claim. <see langword="null"/> if absent.</summary>
     public string? Transaction { get; init; }

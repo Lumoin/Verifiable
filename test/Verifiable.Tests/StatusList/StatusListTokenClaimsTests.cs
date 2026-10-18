@@ -258,13 +258,13 @@ internal sealed class StatusListTokenClaimsTests
 
 
     /// <summary>
-    /// <c>ttl</c> "MUST be a positive number" of seconds a cache holds the token, read as the whole
-    /// number this library caches by, so a fractional one is refused rather than truncated, with the
-    /// reported reason naming the claim.
+    /// <c>ttl</c> "MUST be a positive number encoded in JSON as a number" of seconds a cache may hold the token: a positive
+    /// fraction is such a number, read exactly as written, written back as written, and cached for exactly that long - a
+    /// resolution 10.5 s old is not yet due for refresh and one a tick older is.
     /// See <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-21#section-5.1">Token Status List, Section 5.1</see>.
     /// </summary>
     [TestMethod]
-    public void TryFromPayloadRefusesAFractionalTimeToLive()
+    public void TryFromPayloadReadsAFractionalTimeToLiveExactly()
     {
         var payload = HandBuiltClaimsSet();
         payload["exp"] = SmallExpirationSeconds;
@@ -272,10 +272,17 @@ internal sealed class StatusListTokenClaimsTests
 
         var isRead = StatusListTokenClaims.TryFromPayload(payload, TestSetup.Base64UrlDecoder, Pool, out var decoded, out var reason, out _);
 
-        Assert.IsFalse(isRead, "A fractional 'ttl' is not the whole number of seconds this library caches by.");
-        Assert.IsNull(decoded, "A refused claims set yields no token.");
-        Assert.IsNotNull(reason);
-        Assert.Contains("ttl", reason, StringComparison.Ordinal, "The reported reason must name the claim that was malformed.");
+        Assert.IsTrue(isRead, $"A positive fractional 'ttl' is a positive number: {reason}");
+        Assert.IsNotNull(decoded);
+        using var decodedList = decoded.StatusList;
+
+        Assert.AreEqual("10.5", FormattableString.Invariant($"{decoded.TimeToLive}"), "The 'ttl' is the number written.");
+        Assert.AreEqual(10.5m, StatusListTokenClaims.ToPayload(decoded, TestSetup.Base64UrlEncoder)["ttl"], "The 'ttl' is written back as written.");
+
+        var resolvedAt = DateTimeOffset.FromUnixTimeSeconds(SmallIssuedAtSeconds);
+
+        Assert.IsFalse(StatusListValidation.ShouldRefresh(decoded, resolvedAt, resolvedAt.AddSeconds(10.5), null), "A resolution exactly 10.5 s old is within the cache lifetime.");
+        Assert.IsTrue(StatusListValidation.ShouldRefresh(decoded, resolvedAt, resolvedAt.AddSeconds(10.5).AddTicks(1), null), "A tick older, it is due.");
     }
 
 

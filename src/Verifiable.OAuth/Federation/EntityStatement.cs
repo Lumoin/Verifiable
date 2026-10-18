@@ -39,11 +39,11 @@ public abstract record EntityStatement
     /// <summary>The Entity Identifier the statement is about.</summary>
     public required EntityIdentifier Subject { get; init; }
 
-    /// <summary>The instant at which this statement was issued.</summary>
-    public required DateTimeOffset IssuedAt { get; init; }
+    /// <summary>The date at which this statement was issued, as written.</summary>
+    public required NumericDate IssuedAt { get; init; }
 
-    /// <summary>The instant after which this statement is no longer valid.</summary>
-    public required DateTimeOffset ExpiresAt { get; init; }
+    /// <summary>The date at and after which this statement is no longer valid, as written.</summary>
+    public required NumericDate ExpiresAt { get; init; }
 
     /// <summary>
     /// The underlying JWT payload carrying the full claim set. Downstream

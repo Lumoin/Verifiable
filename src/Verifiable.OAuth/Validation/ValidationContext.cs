@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Verifiable.Core;
+using Verifiable.JCose;
 
 namespace Verifiable.OAuth.Validation;
 
@@ -104,8 +105,8 @@ public sealed record ValidationContext
     /// <summary>The KB-JWT <c>aud</c> claim.</summary>
     public string? KbJwtAud { get; init; }
 
-    /// <summary>The KB-JWT <c>iat</c> claim.</summary>
-    public DateTimeOffset? KbJwtIat { get; init; }
+    /// <summary>The KB-JWT <c>iat</c> claim, as written.</summary>
+    public NumericDate? KbJwtIat { get; init; }
 
     /// <summary>Whether the KB-JWT signature verification succeeded.</summary>
     public bool KbJwtSignatureValid { get; init; }

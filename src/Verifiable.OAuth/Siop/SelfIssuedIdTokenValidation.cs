@@ -90,8 +90,8 @@ public static class SelfIssuedIdTokenValidation
         string? audString = null;
         List<string>? audArray = null;
         string? nonce = null;
-        DateTimeOffset? expiresAt = null;
-        DateTimeOffset? issuedAt = null;
+        var expiresAt = default(NumericDate);
+        var issuedAt = default(NumericDate);
         Dictionary<string, object>? subJwk = null;
         bool isStructurallyValid = false;
 
@@ -126,13 +126,9 @@ public static class SelfIssuedIdTokenValidation
                 audArray = JwkJsonReader.ExtractStringArrayProperty(payload, WellKnownJwtClaimNames.AudUtf8);
                 nonce = JwkJsonReader.ExtractStringValue(payload, WellKnownJwtClaimNames.NonceUtf8);
 
-                //RFC 7519 Section 2: exp and iat are NumericDates, a fraction read to the tick.
-                expiresAt = JwkJsonReader.TryExtractNumericDate(payload, WellKnownJwtClaimNames.ExpUtf8, WellKnownJwtClaimNames.Exp, out var expiry)
-                    ? expiry
-                    : null;
-                issuedAt = JwkJsonReader.TryExtractNumericDate(payload, WellKnownJwtClaimNames.IatUtf8, WellKnownJwtClaimNames.Iat, out var issued)
-                    ? issued
-                    : null;
+                //RFC 7519 Section 2: exp and iat are NumericDates, read as written.
+                expiresAt = JwkJsonReader.ExtractNumericDate(payload, WellKnownJwtClaimNames.ExpUtf8);
+                issuedAt = JwkJsonReader.ExtractNumericDate(payload, WellKnownJwtClaimNames.IatUtf8);
 
                 subJwk = JwkJsonReader.ExtractObjectProperties(payload, WellKnownJwtClaimNames.SubJwkUtf8);
 
@@ -260,7 +256,7 @@ public static class SelfIssuedIdTokenValidation
             && string.Equals(nonce, expectedNonce, StringComparison.Ordinal);
 
         //§11.1: the current time MUST be before exp, possibly allowing small leeway.
-        bool isUnexpired = expiresAt is DateTimeOffset exp
+        var isUnexpired = expiresAt is NumericDate exp
             && JwtTemporalChecks.IsBeforeExpiry(validationTime, exp, expirationLeeway ?? TimeSpan.Zero);
 
         return new SelfIssuedIdTokenValidationResult

@@ -60,18 +60,19 @@ public static class TrustMarkDelegationParser
             return TrustMarkDelegationParseResult.Invalid("Delegation payload is missing the required 'id' claim.");
         }
 
-        if(!EntityStatementParser.TryReadUnixTime(payload, WellKnownJwtClaimNames.Iat, out DateTimeOffset iat))
+        if(!EntityStatementParser.TryReadNumericDate(payload, WellKnownJwtClaimNames.Iat, out var iat))
         {
             return TrustMarkDelegationParseResult.Invalid("Delegation 'iat' claim missing or malformed.");
         }
 
-        DateTimeOffset? exp = null;
+        var exp = default(NumericDate);
         if(payload.ContainsKey(WellKnownJwtClaimNames.Exp))
         {
-            if(!EntityStatementParser.TryReadUnixTime(payload, WellKnownJwtClaimNames.Exp, out DateTimeOffset expValue))
+            if(!EntityStatementParser.TryReadNumericDate(payload, WellKnownJwtClaimNames.Exp, out var expValue))
             {
                 return TrustMarkDelegationParseResult.Invalid("Delegation 'exp' claim malformed.");
             }
+
             exp = expValue;
         }
 

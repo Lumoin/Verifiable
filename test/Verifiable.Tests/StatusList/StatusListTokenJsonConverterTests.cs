@@ -308,8 +308,8 @@ internal sealed class StatusListTokenJsonConverterTests
 
     /// <summary>
     /// "The value of the claim MUST be a positive number encoded in JSON as a number." A zero, a
-    /// negative value, a fractional value and a numeric string all violate that sentence, so each must
-    /// be refused rather than silently cached against.
+    /// negative value and a numeric string all violate that sentence, so each must be refused rather
+    /// than silently cached against.
     /// See <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-21#section-5.1">Token Status List, Section 5.1</see>.
     /// </summary>
     /// <param name="timeToLiveLiteral">The JSON literal written as the value of the <c>ttl</c> claim.</param>
@@ -317,7 +317,6 @@ internal sealed class StatusListTokenJsonConverterTests
     [DataRow("0")]
     [DataRow("-1")]
     [DataRow("-43200")]
-    [DataRow("43200.5")]
     [DataRow("\"43200\"")]
     public void ATimeToLiveThatIsNotAPositiveJsonNumberIsRefused(string timeToLiveLiteral)
     {
@@ -326,6 +325,64 @@ internal sealed class StatusListTokenJsonConverterTests
         JsonException refusal = Assert.ThrowsExactly<JsonException>(() => ReadToken(claimsSet));
 
         Assert.Contains("positive number", refusal.Message, StringComparison.Ordinal, "The refusal must state that 'ttl' MUST be a positive number encoded in JSON as a number.");
+    }
+
+
+    /// <summary>
+    /// A positive fraction is a positive number: a <c>ttl</c> of 43200.5 is read exactly as written and written back as written.
+    /// See <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-21#section-5.1">Token Status List, Section 5.1</see>.
+    /// </summary>
+    [TestMethod]
+    public void AFractionalTimeToLiveIsReadExactly()
+    {
+        var claimsSet = $$"""{"sub":"{{ExampleTokenSubject}}","iat":1686920170,"ttl":43200.5,"status_list":{{OneBitStatusListJson}}}""";
+
+        var decoded = ReadToken(claimsSet);
+        using var decodedList = decoded.StatusList;
+
+        Assert.AreEqual("43200.5", FormattableString.Invariant($"{decoded.TimeToLive}"), "The 'ttl' is the number written.");
+        Assert.Contains("\"ttl\":43200.5", Encoding.UTF8.GetString(WriteToken(decoded)), StringComparison.Ordinal, "The 'ttl' is written back as written.");
+    }
+
+
+    /// <summary>
+    /// The <c>iat</c> and <c>exp</c> are NumericDates (RFC 7519 Section 2: "non-integer values can be represented"): each written
+    /// with a fraction is read as the date written and written back as written, where reading them as whole integers refused the
+    /// token.
+    /// </summary>
+    [TestMethod]
+    public void FractionalNumericDatesAreReadAsWritten()
+    {
+        var claimsSet = $$"""{"sub":"{{ExampleTokenSubject}}","iat":1686920170.25,"exp":2291720170.00000000000000000001,"status_list":{{OneBitStatusListJson}}}""";
+
+        var decoded = ReadToken(claimsSet);
+        using var decodedList = decoded.StatusList;
+
+        Assert.AreEqual("1686920170.25", FormattableString.Invariant($"{decoded.IssuedAt}"), "The 'iat' is the date written.");
+        Assert.AreEqual("2291720170.00000000000000000001", FormattableString.Invariant($"{decoded.ExpirationTime}"), "The 'exp' is the date written, every digit kept.");
+
+        var written = Encoding.UTF8.GetString(WriteToken(decoded));
+
+        Assert.Contains("\"iat\":1686920170.25", written, StringComparison.Ordinal);
+        Assert.Contains("\"exp\":2291720170.00000000000000000001", written, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// A date that is no NumericDate naming an instant a clock represents - a count past the clock's last second, or a string of
+    /// digits - is a read failure of the token, refused as JSON, never an exception of the date's construction.
+    /// </summary>
+    /// <param name="issuedAtLiteral">The JSON literal written as the value of the <c>iat</c> claim.</param>
+    [TestMethod]
+    [DataRow("300000000000")]
+    [DataRow("\"1686920170\"")]
+    public void ADateNoClockRepresentsIsRefusedAsJson(string issuedAtLiteral)
+    {
+        var claimsSet = $$"""{"sub":"{{ExampleTokenSubject}}","iat":{{issuedAtLiteral}},"status_list":{{OneBitStatusListJson}}}""";
+
+        var refusal = Assert.ThrowsExactly<JsonException>(() => ReadToken(claimsSet));
+
+        Assert.Contains("iat", refusal.Message, StringComparison.Ordinal, "The refusal names the claim.");
     }
 
 

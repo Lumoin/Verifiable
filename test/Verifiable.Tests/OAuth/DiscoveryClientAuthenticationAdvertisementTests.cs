@@ -676,11 +676,11 @@ internal sealed class DiscoveryClientAuthenticationAdvertisementTests
         using var material = await host.RegisterDpopClientAsync(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
 
-        IReadOnlyList<string> resolved = claimNames.Length == 0 ? [] : claimNames.Split(',');
+        var resolved = claimNames.Length == 0 ? [] : claimNames.Split(',');
 
         await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
         {
-            candidateIntegration.ResolveClaimsSupportedAsync = (registration, context, ct) => ValueTask.FromResult(resolved);
+            candidateIntegration.ResolveClaimsSupportedAsync = (registration, context, ct) => ValueTask.FromResult<IReadOnlyList<string>>(resolved);
         }).ConfigureAwait(false);
 
         var response = await DispatchDiscoveryAsync(host, material).ConfigureAwait(false);

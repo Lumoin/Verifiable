@@ -215,6 +215,40 @@ internal sealed class JarVerificationFapiConstraintTests
     }
 
 
+    /// <summary>
+    /// The lifetime ceiling is judged against the dates written exactly (FAPI 2.0 Section 5.2.2 clause 13 with RFC 7519
+    /// Section 2): a request object whose iat and nbf lie ten nanoseconds into their second and whose exp lies twenty nanoseconds
+    /// into its, sixty seconds on, declares a lifetime of 60.00000001 s and exceeds a 60 s ceiling, where taking its start up to
+    /// the next tick and its end down to its tick read it as within; one whose exp lies ten nanoseconds into its second declares
+    /// exactly 60 s and is admitted.
+    /// </summary>
+    [TestMethod]
+    public async Task ARequestObjectsLifetimeIsJudgedExactlyAgainstItsCeiling()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using var verificationKey = keys.PublicKey;
+        using var signingKey = keys.PrivateKey;
+
+        var second = TimeProvider.GetUtcNow().ToUnixTimeSeconds();
+        var start = second + 0.00000001m;
+
+        var aPartTooLong = await SignWithDatesAsync(
+            signingKey, iat: start, nbf: start, exp: second + 60.00000002m).ConfigureAwait(false);
+        var refused = Assert.IsInstanceOfType<JarRejected>(
+            await VerifyAsync(aPartTooLong, verificationKey).ConfigureAwait(false));
+
+        Assert.AreEqual(OAuthErrors.InvalidRequestObject, refused.ErrorCode);
+        Assert.Contains("exceeds maximum", refused.Reason, StringComparison.Ordinal,
+            "A lifetime of 60.00000001 s exceeds the 60 s ceiling.");
+
+        var exactlyTheCeiling = await SignWithDatesAsync(
+            signingKey, iat: start, nbf: start, exp: second + 60.00000001m).ConfigureAwait(false);
+
+        _ = Assert.IsInstanceOfType<JarVerified>(
+            await VerifyAsync(exactlyTheCeiling, verificationKey).ConfigureAwait(false));
+    }
+
+
     /// <summary>Signs a request object whose dates are the counts of seconds given, a fraction written as it is.</summary>
     /// <param name="signingKey">The key the request object is signed with.</param>
     /// <param name="iat">The <c>iat</c>, in seconds since the epoch.</param>

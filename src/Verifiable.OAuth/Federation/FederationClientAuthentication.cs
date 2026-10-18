@@ -116,26 +116,28 @@ public static class FederationClientAuthentication
 
         //exp is REQUIRED; a present-but-malformed temporal claim is rejected
         //rather than silently ignored, which would suppress the expiry check.
-        if(!TryReadEpochSeconds(payload, WellKnownJwtClaimNames.Exp, out bool expPresent, out DateTimeOffset exp)
+        if(!TryReadEpochSeconds(payload, WellKnownJwtClaimNames.Exp, out var expPresent, out var expiry)
             || !expPresent)
         {
             return FederationClientAuthenticationResult.Rejected(
                 "The client authentication JWT is missing or has a malformed exp claim.");
         }
 
-        if(!TryReadEpochSeconds(payload, WellKnownJwtClaimNames.Iat, out bool iatPresent, out DateTimeOffset iat))
+        if(!TryReadEpochSeconds(payload, WellKnownJwtClaimNames.Iat, out var iatPresent, out var iat))
         {
             return FederationClientAuthenticationResult.Rejected(
                 "The client authentication JWT iat claim is malformed.");
         }
 
-        if(iatPresent && exp <= iat)
+        var exp = expiry!;
+
+        if(iatPresent && exp.CompareTo(iat!) <= 0)
         {
             return FederationClientAuthenticationResult.Rejected(
                 "The client authentication JWT exp is at or before iat (non-positive lifetime).");
         }
 
-        if(!TryReadEpochSeconds(payload, WellKnownJwtClaimNames.Nbf, out bool nbfPresent, out DateTimeOffset nbf))
+        if(!TryReadEpochSeconds(payload, WellKnownJwtClaimNames.Nbf, out var nbfPresent, out var nbf))
         {
             return FederationClientAuthenticationResult.Rejected(
                 "The client authentication JWT nbf claim is malformed.");
@@ -143,20 +145,22 @@ public static class FederationClientAuthentication
 
         if(nbfPresent)
         {
-            if(exp <= nbf)
+            if(exp.CompareTo(nbf!) <= 0)
             {
                 return FederationClientAuthenticationResult.Rejected(
                     "The client authentication JWT exp is at or before nbf (the validity window never opens).");
             }
 
-            if(nbf > now + clockSkew)
+            if(nbf!.CompareToLaterBy(now, clockSkew) > 0)
             {
                 return FederationClientAuthenticationResult.Rejected(
                     "The client authentication JWT is not yet valid (nbf is in the future beyond the skew tolerance).");
             }
         }
 
-        if(exp + clockSkew <= now)
+        //RFC 7519 Section 4.1.4: the present must lie before exp extended by the tolerance, compared without forming that
+        //instant, so an exp at the clock's last instant never overflows the comparison.
+        if(exp.CompareToEarlierBy(now, clockSkew) <= 0)
         {
             return FederationClientAuthenticationResult.Rejected(
                 "The client authentication JWT has expired.");
@@ -222,20 +226,21 @@ public static class FederationClientAuthentication
 
 
     /// <summary>
-    /// Reads a NumericDate temporal claim as the instant it names, a fraction of a second kept to the tick (RFC 7519 Section 2;
-    /// <see cref="JwtNumericDates.InstantOf"/>). Returns <see langword="false"/> when the claim is present but is no NumericDate
-    /// naming an instant a clock represents - a string of digits among them; sets <paramref name="present"/> to whether the
-    /// claim was there at all.
+    /// Reads a NumericDate temporal claim as the date it names, every digit kept (RFC 7519 Section 2;
+    /// <see cref="NumericDate.Of"/>). Returns <see langword="false"/> when the claim is present but is no NumericDate naming an
+    /// instant a clock represents - a string of digits among them; sets <paramref name="present"/> to whether the claim was
+    /// there at all.
     /// </summary>
     /// <param name="payload">The client authentication JWT's claims.</param>
     /// <param name="claimName">The NumericDate claim to read.</param>
     /// <param name="present">Whether the claim is present.</param>
-    /// <param name="value">The instant the claim names, when present and readable.</param>
+    /// <param name="value">The date the claim names, when present and readable.</param>
     /// <returns><see langword="false"/> when the claim is present and unreadable.</returns>
     private static bool TryReadEpochSeconds(
-        JwtPayload payload, string claimName, out bool present, out DateTimeOffset value)
+        JwtPayload payload, string claimName, out bool present, out NumericDate? value)
     {
-        value = default;
+        value = null;
+
         if(!payload.TryGetValue(claimName, out object? raw))
         {
             present = false;
@@ -243,13 +248,8 @@ public static class FederationClientAuthentication
         }
 
         present = true;
+        value = NumericDate.Of(raw);
 
-        if(JwtNumericDates.InstantOf(claimName, raw) is not DateTimeOffset instant)
-        {
-            return false;
-        }
-
-        value = instant;
-        return true;
+        return value is not null;
     }
 }

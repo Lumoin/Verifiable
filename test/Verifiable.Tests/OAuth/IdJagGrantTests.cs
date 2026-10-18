@@ -934,7 +934,9 @@ internal sealed class IdJagGrantTests
                 candidateIntegration.ValidateClientCredentialsAsync =
                     PrivateKeyJwtClientAuthentication.BuildValidator(
                         additionalAcceptedAudiences: [tokenEndpoint.OriginalString],
-                        checkJtiReplayAsync: JtiReplayGuard.ConsultClientAssertionAsync);
+                        checkJtiReplayAsync: JtiReplayGuard.ConsultClientAssertionAsync,
+                        resolveJwksUriAsync: null,
+                        audiencePolicy: null);
             }).ConfigureAwait(false);
 
             PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> dpopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
@@ -6767,7 +6769,11 @@ internal sealed class IdJagGrantTests
         string jwksJson = BuildClientAssertionJwksJson(jwk, MintRedeemSigningKeyId);
 
         ValidateClientCredentialsDelegate privateKeyJwtValidator =
-            PrivateKeyJwtClientAuthentication.BuildValidator(additionalAcceptedAudiences: [tokenEndpoint.OriginalString]);
+            PrivateKeyJwtClientAuthentication.BuildValidator(
+                additionalAcceptedAudiences: [tokenEndpoint.OriginalString],
+                checkJtiReplayAsync: null,
+                resolveJwksUriAsync: null,
+                audiencePolicy: null);
 
         await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
         {
@@ -7082,7 +7088,7 @@ internal sealed class IdJagGrantTests
             RequiredKeyThumbprint = result.ConfirmationKeyThumbprint,
             Issuer = result.Issuer,
             Jti = result.Jti,
-            Expiration = result.Expiration,
+            Expiration = result.Expiration?.AtOrBefore,
             Act = result.Act,
             MayAct = result.MayAct
         };

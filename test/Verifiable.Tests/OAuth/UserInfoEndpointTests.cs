@@ -1809,6 +1809,48 @@ internal sealed class UserInfoEndpointTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.4">RFC 7519 §4.1.4</see>: "the current date/time MUST be
+    /// before the expiration date/time listed in the "exp" claim". An access token whose <c>exp</c> is the present instant
+    /// itself is refused at UserInfo over the wire with 401 <c>invalid_token</c>, where the expiry instant was once accepted, and
+    /// one whose <c>exp</c> lies a tick after the present is served.
+    /// </summary>
+    [TestMethod]
+    public async Task UserInfoRefusesAnAccessTokenAtItsExpiryInstantAsync()
+    {
+        await using var host = new TestHostShell(TimeProvider);
+        _ = host.SeedTestSubject(subject: SubjectId);
+
+        using var material = await host.RegisterDpopClientAsync(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce).ConfigureAwait(false);
+
+        var accessToken = await IssueAccessTokenAsync(host, material, WellKnownScopes.OpenId).ConfigureAwait(false);
+        var now = TimeProvider.GetUtcNow();
+        var atTheExpiry = await ResignAccessTokenPayloadAsync(
+            host, accessToken, material.SigningKeyId, payload => payload["exp"] = SecondsSinceTheEpoch(now), TestContext.CancellationToken).ConfigureAwait(false);
+
+        using var refused = await SendUserInfoOverWireAsync(host, material, atTheExpiry).ConfigureAwait(false);
+        var refusedBody = await refused.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        AssertRefused(refused, refusedBody, HttpStatusCode.Unauthorized, "Bearer error=\"invalid_token\"", "invalid_token");
+
+        var aTickBeforeTheExpiry = await ResignAccessTokenPayloadAsync(
+            host, accessToken, material.SigningKeyId, payload => payload["exp"] = SecondsSinceTheEpoch(now.AddTicks(1)), TestContext.CancellationToken).ConfigureAwait(false);
+
+        using var served = await SendUserInfoOverWireAsync(host, material, aTickBeforeTheExpiry).ConfigureAwait(false);
+        var servedBody = await served.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.OK, served.StatusCode, servedBody);
+    }
+
+
+    /// <summary>The count of seconds since the epoch an instant names, to its tick.</summary>
+    /// <param name="instant">The instant.</param>
+    /// <returns>The count.</returns>
+    private static decimal SecondsSinceTheEpoch(DateTimeOffset instant) =>
+        (instant.UtcTicks - DateTimeOffset.UnixEpoch.UtcTicks) / (decimal)TimeSpan.TicksPerSecond;
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc8725#section-3.12">RFC 8725 §3.12</see>: "Use
     /// different keys for different kinds of JWTs. Then the keys used to validate one kind of JWT will
     /// fail to validate other kinds of JWTs." A registration whose access tokens and ID Tokens are

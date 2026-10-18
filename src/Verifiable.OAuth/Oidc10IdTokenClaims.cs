@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Verifiable.JCose;
 using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth;
@@ -34,14 +35,14 @@ public sealed record Oidc10IdTokenClaims
     /// </summary>
     public required IReadOnlyList<string> Audience { get; init; }
 
-    /// <summary>RFC 7519 §4.1.6 <c>iat</c> — issuance instant.</summary>
-    public required DateTimeOffset IssuedAt { get; init; }
+    /// <summary>RFC 7519 §4.1.6 <c>iat</c> — issuance date, as written.</summary>
+    public required NumericDate IssuedAt { get; init; }
 
-    /// <summary>RFC 7519 §4.1.4 <c>exp</c> — expiry instant.</summary>
-    public required DateTimeOffset Expiration { get; init; }
+    /// <summary>RFC 7519 §4.1.4 <c>exp</c> — expiry date, as written.</summary>
+    public required NumericDate Expiration { get; init; }
 
-    /// <summary>RFC 7519 §4.1.5 <c>nbf</c> — not-before instant. <see langword="null"/> when absent.</summary>
-    public DateTimeOffset? NotBefore { get; init; }
+    /// <summary>RFC 7519 §4.1.5 <c>nbf</c> — not-before date, as written. <see langword="null"/> when absent.</summary>
+    public NumericDate? NotBefore { get; init; }
 
     /// <summary>
     /// OIDC Core §2 <c>azp</c> — the authorized party the ID Token was issued to.
@@ -60,10 +61,10 @@ public sealed record Oidc10IdTokenClaims
     public string? Nonce { get; init; }
 
     /// <summary>
-    /// OIDC Core §2 <c>auth_time</c> — the instant the End-User authentication occurred.
+    /// OIDC Core §2 <c>auth_time</c> — the time the End-User authentication occurred, as written.
     /// <see langword="null"/> when absent.
     /// </summary>
-    public DateTimeOffset? AuthTime { get; init; }
+    public NumericDate? AuthTime { get; init; }
 
     /// <summary>
     /// OIDC Core §2 <c>acr</c> — the Authentication Context Class Reference. <see langword="null"/>

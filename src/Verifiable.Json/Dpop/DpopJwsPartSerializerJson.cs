@@ -80,7 +80,7 @@ public static class DpopJwsPartSerializerJson
         {
             [WellKnownJwtClaimNames.Htm] = claims.Htm,
             [WellKnownJwtClaimNames.Htu] = claims.Htu,
-            [WellKnownJwtClaimNames.Iat] = claims.Iat.ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Iat] = claims.Iat.ToClaimValue(),
             [WellKnownJwtClaimNames.Jti] = claims.Jti
         };
 

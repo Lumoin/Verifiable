@@ -357,7 +357,10 @@ internal sealed class ClientCredentialsGrantTests
             {
                 candidateIntegration.ValidateClientCredentialsAsync =
                     PrivateKeyJwtClientAuthentication.BuildValidator(
-                        additionalAcceptedAudiences: [tokenEndpoint.OriginalString]);
+                        additionalAcceptedAudiences: [tokenEndpoint.OriginalString],
+                        checkJtiReplayAsync: null,
+                        resolveJwksUriAsync: null,
+                        audiencePolicy: null);
             }).ConfigureAwait(false);
 
             await DeclareServerSideAuthMethodAsync(
@@ -531,7 +534,10 @@ internal sealed class ClientCredentialsGrantTests
             {
                 candidateIntegration.ValidateClientCredentialsAsync =
                     PrivateKeyJwtClientAuthentication.BuildValidator(
-                        audiencePolicy: ClientAssertionAudiencePolicy.IssuerIdentifierOnly);
+                        audiencePolicy: ClientAssertionAudiencePolicy.IssuerIdentifierOnly,
+                        additionalAcceptedAudiences: null,
+                        checkJtiReplayAsync: null,
+                        resolveJwksUriAsync: null);
             }).ConfigureAwait(false);
 
             await DeclareServerSideAuthMethodAsync(
@@ -1125,7 +1131,9 @@ internal sealed class ClientCredentialsGrantTests
                 candidateIntegration.ValidateClientCredentialsAsync =
                     PrivateKeyJwtClientAuthentication.BuildValidator(
                         additionalAcceptedAudiences: [tokenEndpoint.OriginalString],
-                        checkJtiReplayAsync: JtiReplayGuard.ConsultClientAssertionAsync);
+                        checkJtiReplayAsync: JtiReplayGuard.ConsultClientAssertionAsync,
+                        resolveJwksUriAsync: null,
+                        audiencePolicy: null);
 
                 //HAIP 1.0's AccessTokenAudPolicy.Required needs a resolved audience; MachineScope
                 //carries no ScopeToAudience mapping, so a fixed resource-server audience stands in.

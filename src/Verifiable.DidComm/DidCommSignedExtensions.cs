@@ -442,7 +442,7 @@ public static class DidCommSignedExtensions
                 return DidCommSignedVerificationResult.Success(message, kid, resolvedMethodId, isToHeaderPresent, isRotation: true, priorDid: rotation.PriorDid, rotationIat: rotation.Iat);
             }
 
-            return DidCommSignedVerificationResult.Success(message, kid, resolvedMethodId, isToHeaderPresent);
+            return DidCommSignedVerificationResult.Success(message, kid, resolvedMethodId, isToHeaderPresent, isRotation: false, priorDid: null, rotationIat: null);
         }
     }
 

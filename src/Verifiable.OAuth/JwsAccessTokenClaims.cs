@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Verifiable.JCose;
 using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth;
@@ -51,14 +52,14 @@ public sealed record JwsAccessTokenClaims
     /// </summary>
     public required IReadOnlyList<string> Audience { get; init; }
 
-    /// <summary>RFC 7519 §4.1.6 <c>iat</c> — issuance instant.</summary>
-    public required DateTimeOffset IssuedAt { get; init; }
+    /// <summary>RFC 7519 §4.1.6 <c>iat</c> — issuance date, as written.</summary>
+    public required NumericDate IssuedAt { get; init; }
 
-    /// <summary>RFC 7519 §4.1.4 <c>exp</c> — expiry instant.</summary>
-    public required DateTimeOffset Expiration { get; init; }
+    /// <summary>RFC 7519 §4.1.4 <c>exp</c> — expiry date, as written.</summary>
+    public required NumericDate Expiration { get; init; }
 
-    /// <summary>RFC 7519 §4.1.5 <c>nbf</c> — not-before instant. <see langword="null"/> when absent.</summary>
-    public DateTimeOffset? NotBefore { get; init; }
+    /// <summary>RFC 7519 §4.1.5 <c>nbf</c> — not-before date, as written. <see langword="null"/> when absent.</summary>
+    public NumericDate? NotBefore { get; init; }
 
     /// <summary>RFC 9068 §2.2 <c>client_id</c> — the client identifier.</summary>
     public string? ClientId { get; init; }

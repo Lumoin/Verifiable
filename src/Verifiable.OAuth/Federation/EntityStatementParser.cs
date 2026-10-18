@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.JCose;
 
 namespace Verifiable.OAuth.Federation;
@@ -72,13 +73,13 @@ public static class EntityStatementParser
                 "Payload is missing the required 'sub' claim.");
         }
 
-        if(!TryReadUnixTime(payload, WellKnownJwtClaimNames.Iat, out DateTimeOffset iat))
+        if(!TryReadNumericDate(payload, WellKnownJwtClaimNames.Iat, out var iat))
         {
             return EntityStatementParseResult.Invalid(
                 "Payload is missing or malformed for the required 'iat' claim.");
         }
 
-        if(!TryReadUnixTime(payload, WellKnownJwtClaimNames.Exp, out DateTimeOffset exp))
+        if(!TryReadNumericDate(payload, WellKnownJwtClaimNames.Exp, out var exp))
         {
             return EntityStatementParseResult.Invalid(
                 "Payload is missing or malformed for the required 'exp' claim.");
@@ -121,25 +122,20 @@ public static class EntityStatementParser
 
     /// <summary>
     /// Reads a NumericDate claim of a federation statement (RFC 7519 Section 2: a JSON number of seconds since the epoch, which
-    /// may carry a fraction) as the instant it names, the fraction kept to the tick by the library's one reading of the type
-    /// (<see cref="JwtNumericDates.InstantOf"/>), so the statement's window is judged as its issuer wrote it. A value that is
-    /// no NumericDate, or one naming an instant no clock represents, is unreadable. The trust mark and trust mark delegation
+    /// may carry a fraction) as the date it names, every digit kept by the library's one reading of the type
+    /// (<see cref="NumericDate.Of"/>), so the statement's window is judged as its issuer wrote it. A value that is no
+    /// NumericDate, or one naming an instant no clock represents, is unreadable. The trust mark and trust mark delegation
     /// parsers read their dates by it too.
     /// </summary>
     /// <param name="payload">The statement's claims.</param>
     /// <param name="claimName">The NumericDate claim to read.</param>
-    /// <param name="value">The instant the claim names, when present and readable.</param>
-    /// <returns><see langword="true"/> when the claim is present and names an instant.</returns>
-    internal static bool TryReadUnixTime(
-        UnverifiedJwtPayload payload, string claimName, out DateTimeOffset value)
+    /// <param name="value">The date the claim names, when present and readable.</param>
+    /// <returns><see langword="true"/> when the claim is present and names a date.</returns>
+    internal static bool TryReadNumericDate(
+        UnverifiedJwtPayload payload, string claimName, [NotNullWhen(true)] out NumericDate? value)
     {
-        value = default;
-        if(!payload.TryGetValue(claimName, out object? raw) || JwtNumericDates.InstantOf(claimName, raw) is not DateTimeOffset instant)
-        {
-            return false;
-        }
+        value = payload.TryGetValue(claimName, out var raw) ? NumericDate.Of(raw) : null;
 
-        value = instant;
-        return true;
+        return value is not null;
     }
 }

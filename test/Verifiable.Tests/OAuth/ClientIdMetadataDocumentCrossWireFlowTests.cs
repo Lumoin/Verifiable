@@ -191,7 +191,11 @@ internal sealed class ClientIdMetadataDocumentCrossWireFlowTests
             await app.WireCimdMaterializationAsync("default", documentHost.Certificate).ConfigureAwait(false);
             await TestHostShell.AlterAsync(app.Server, candidateIntegration =>
             {
-                candidateIntegration.ValidateClientCredentialsAsync = PrivateKeyJwtClientAuthentication.BuildValidator();
+                candidateIntegration.ValidateClientCredentialsAsync = PrivateKeyJwtClientAuthentication.BuildValidator(
+                    additionalAcceptedAudiences: null,
+                    checkJtiReplayAsync: null,
+                    resolveJwksUriAsync: null,
+                    audiencePolicy: null);
 
                 //The fetched document declares private_key_jwt (CIMD-047/048); the token endpoint now
                 //refuses a declared method it does not advertise before any validator runs (RFC 8414,
@@ -385,7 +389,11 @@ internal sealed class ClientIdMetadataDocumentCrossWireFlowTests
                 };
 
 
-                candidateIntegration.ValidateClientCredentialsAsync = PrivateKeyJwtClientAuthentication.BuildValidator();
+                candidateIntegration.ValidateClientCredentialsAsync = PrivateKeyJwtClientAuthentication.BuildValidator(
+                    additionalAcceptedAudiences: null,
+                    checkJtiReplayAsync: null,
+                    resolveJwksUriAsync: null,
+                    audiencePolicy: null);
 
                 //The fetched document declares private_key_jwt (CIMD-047/048); the token endpoint now
                 //refuses a declared method it does not advertise before any validator runs (RFC 8414,

@@ -1,3 +1,7 @@
+using System.Globalization;
+using System.Numerics;
+using Verifiable.JCose;
+
 namespace Verifiable.Core.StatusLists;
 
 /// <summary>
@@ -55,18 +59,19 @@ public static class StatusListValidation
         //MaximumAge, so it is never rejected here.
         if(freshnessPolicy is not null)
         {
-            TimeSpan age = currentTime - token.IssuedAt;
-            if(age > freshnessPolicy.MaximumAge)
+            //Older than the maximum age is an iat before the present reduced by it, judged against the date as written.
+            if(token.IssuedAt.CompareToEarlierBy(currentTime, freshnessPolicy.MaximumAge) < 0)
             {
                 throw new StatusListValidationException(
                     $"Status List Token issued at {token.IssuedAt} is older than the configured freshness policy's maximum age of {freshnessPolicy.MaximumAge}.");
             }
         }
 
-        //Step 4.c: Check expiration if defined.
-        if(token.ExpirationTime.HasValue && currentTime > token.ExpirationTime.Value)
+        //Step 4.c: Check expiration if defined. The token is considered expired at its exp (Section 5.1: "the time at which
+        //the Status List Token is considered expired"), so the present must lie before it.
+        if(token.ExpirationTime is not null && token.ExpirationTime.CompareTo(currentTime) <= 0)
         {
-            throw new StatusListValidationException($"Status List Token has expired at {token.ExpirationTime.Value}.");
+            throw new StatusListValidationException($"Status List Token has expired at {token.ExpirationTime}.");
         }
 
         //Step 6: Retrieve the status value; reject if index is out of bounds.
@@ -108,46 +113,53 @@ public static class StatusListValidation
     {
         ArgumentNullException.ThrowIfNull(token);
 
-        if(!token.TimeToLive.HasValue)
+        if(token.TimeToLive is null)
         {
             return false;
         }
 
-        double intervalSeconds = token.TimeToLive.Value;
+        var interval = CacheIntervalOf(token.TimeToLive);
         if(cachingBounds is not null)
         {
-            intervalSeconds = Math.Clamp(
-                intervalSeconds, cachingBounds.MinimumRefreshInterval.TotalSeconds, cachingBounds.MaximumRefreshInterval.TotalSeconds);
+            interval = TimeSpan.FromTicks(Math.Clamp(
+                interval.Ticks, cachingBounds.MinimumRefreshInterval.Ticks, cachingBounds.MaximumRefreshInterval.Ticks));
         }
 
-        //A ttl (or a caching-bounds ceiling) near long.MaxValue seconds does not fit the range
-        //DateTimeOffset.AddSeconds can add without overflowing; clamped first so the computation below
-        //never throws for any ttl value the model accepts.
-        intervalSeconds = Math.Min(intervalSeconds, TimeSpan.MaxValue.TotalSeconds);
-
-        DateTimeOffset? refreshAt = TryAddSeconds(resolvedAt, intervalSeconds);
-
-        return refreshAt.HasValue && refreshAt.Value < currentTime;
+        //The token is due once more than the interval has passed since it was resolved. The present is a whole tick, so more than
+        //a ttl exactly as written has passed exactly when more than its whole ticks have.
+        return currentTime - resolvedAt > interval;
     }
 
 
     /// <summary>
-    /// Adds <paramref name="seconds"/> to <paramref name="instant"/>, reporting <see langword="null"/>
-    /// instead of throwing when the result would fall outside the representable
-    /// <see cref="DateTimeOffset"/> range.
+    /// The longest interval a positive <c>ttl</c> lets a token be cached for, to the whole tick at or below it: no part of a tick
+    /// past a whole one lengthens a cache, and a <c>ttl</c> longer than any <see cref="TimeSpan"/> is the longest there is, which
+    /// no present reaches past a resolution.
     /// </summary>
-    /// <param name="instant">The instant to add to.</param>
-    /// <param name="seconds">The number of seconds to add.</param>
-    /// <returns>The resulting instant, or <see langword="null"/> when it is not representable.</returns>
-    private static DateTimeOffset? TryAddSeconds(DateTimeOffset instant, double seconds)
+    /// <param name="timeToLive">The <c>ttl</c> in seconds, positive.</param>
+    /// <returns>The interval.</returns>
+    private static TimeSpan CacheIntervalOf(DecimalNumber timeToLive)
     {
-        try
+        const int TickDigits = 7;
+        const int MostTimeSpanTickDigits = 19;
+
+        var tickPosition = timeToLive.PointPosition + TickDigits;
+
+        if(tickPosition > MostTimeSpanTickDigits)
         {
-            return instant.AddSeconds(seconds);
+            return TimeSpan.MaxValue;
         }
-        catch(ArgumentOutOfRangeException)
+
+        if(tickPosition <= 0)
         {
-            return null;
+            return TimeSpan.Zero;
         }
+
+        var digits = timeToLive.SignificantDigits;
+        var position = (int)tickPosition;
+        var wholeDigits = position >= digits.Length ? string.Concat(digits, new string('0', position - digits.Length)) : digits[..position];
+        var ticks = BigInteger.Parse(wholeDigits, NumberStyles.None, CultureInfo.InvariantCulture);
+
+        return ticks > TimeSpan.MaxValue.Ticks ? TimeSpan.MaxValue : TimeSpan.FromTicks((long)ticks);
     }
 }

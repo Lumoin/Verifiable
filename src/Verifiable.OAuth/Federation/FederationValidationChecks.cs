@@ -158,9 +158,9 @@ public static class FederationValidationChecks
         ArgumentNullException.ThrowIfNull(context);
         cancellationToken.ThrowIfCancellationRequested();
 
-        DateTimeOffset iat = context.Statement.IssuedAt;
-        ClaimOutcome outcome =
-            iat >= context.Now - context.ClockSkew && iat <= context.Now + context.ClockSkew
+        var iat = context.Statement.IssuedAt;
+        var outcome =
+            iat.CompareToEarlierBy(context.Now, context.ClockSkew) >= 0 && iat.CompareToLaterBy(context.Now, context.ClockSkew) <= 0
                 ? ClaimOutcome.Success
                 : ClaimOutcome.Failure;
 
@@ -181,7 +181,7 @@ public static class FederationValidationChecks
         ArgumentNullException.ThrowIfNull(context);
         cancellationToken.ThrowIfCancellationRequested();
 
-        ClaimOutcome outcome = context.Statement.ExpiresAt > context.Now - context.ClockSkew
+        var outcome = context.Statement.ExpiresAt.CompareToEarlierBy(context.Now, context.ClockSkew) > 0
             ? ClaimOutcome.Success
             : ClaimOutcome.Failure;
 
@@ -202,7 +202,7 @@ public static class FederationValidationChecks
         ArgumentNullException.ThrowIfNull(context);
         cancellationToken.ThrowIfCancellationRequested();
 
-        ClaimOutcome outcome = context.Statement.ExpiresAt > context.Statement.IssuedAt
+        var outcome = context.Statement.ExpiresAt.CompareTo(context.Statement.IssuedAt) > 0
             ? ClaimOutcome.Success
             : ClaimOutcome.Failure;
 
@@ -1093,17 +1093,17 @@ public static class FederationValidationChecks
         ClaimOutcome outcome = ClaimOutcome.Failure;
         if(context.Chain.Statements.Count > 0)
         {
-            DateTimeOffset effectiveExp = context.Chain.Statements[0].ExpiresAt;
+            var effectiveExp = context.Chain.Statements[0].ExpiresAt;
             for(int i = 1; i < context.Chain.Statements.Count; i++)
             {
-                DateTimeOffset linkExp = context.Chain.Statements[i].ExpiresAt;
-                if(linkExp < effectiveExp)
+                var linkExp = context.Chain.Statements[i].ExpiresAt;
+                if(linkExp.CompareTo(effectiveExp) < 0)
                 {
                     effectiveExp = linkExp;
                 }
             }
 
-            outcome = effectiveExp > context.Now - context.ClockSkew
+            outcome = effectiveExp.CompareToEarlierBy(context.Now, context.ClockSkew) > 0
                 ? ClaimOutcome.Success
                 : ClaimOutcome.Failure;
         }
@@ -1227,7 +1227,7 @@ public static class FederationValidationChecks
                 [new Claim(WellKnownFederationClaimIds.TrustMarkExpInFuture, ClaimOutcome.NotApplicable)]);
         }
 
-        ClaimOutcome outcome = context.Mark.ExpiresAt.Value > context.Now - context.ClockSkew
+        var outcome = context.Mark.ExpiresAt.CompareToEarlierBy(context.Now, context.ClockSkew) > 0
             ? ClaimOutcome.Success
             : ClaimOutcome.Failure;
 
@@ -1255,7 +1255,7 @@ public static class FederationValidationChecks
                 [new Claim(WellKnownFederationClaimIds.TrustMarkExpAfterIat, ClaimOutcome.NotApplicable)]);
         }
 
-        ClaimOutcome outcome = exp > context.Mark.IssuedAt
+        var outcome = exp.CompareTo(context.Mark.IssuedAt) > 0
             ? ClaimOutcome.Success
             : ClaimOutcome.Failure;
 
@@ -1330,9 +1330,9 @@ public static class FederationValidationChecks
         ArgumentNullException.ThrowIfNull(context);
         cancellationToken.ThrowIfCancellationRequested();
 
-        DateTimeOffset iat = context.Mark.IssuedAt;
-        ClaimOutcome outcome =
-            iat >= context.Now - context.ClockSkew && iat <= context.Now + context.ClockSkew
+        var iat = context.Mark.IssuedAt;
+        var outcome =
+            iat.CompareToEarlierBy(context.Now, context.ClockSkew) >= 0 && iat.CompareToLaterBy(context.Now, context.ClockSkew) <= 0
                 ? ClaimOutcome.Success
                 : ClaimOutcome.Failure;
 

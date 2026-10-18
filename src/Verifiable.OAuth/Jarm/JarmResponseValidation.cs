@@ -147,10 +147,12 @@ public static class JarmResponseValidation
         bool isAudienceValid = claims.TryGetValue(WellKnownJwtClaimNames.Aud, out object? audValue)
             && AudienceContains(audValue, expectedClientId);
 
-        //§2.4 step 4: exp must be in the future, within leeway. RFC 7519 Section 2: the NumericDate is read to the tick.
+        //§2.4 step 4: exp must be in the future, within leeway. RFC 7519 Section 2: the NumericDate is read as written, and the
+        //validation time is compared with exp extended by the leeway without forming that instant, so an exp at the clock's
+        //last instant never overflows the comparison.
         bool isUnexpired = claims.TryGetValue(WellKnownJwtClaimNames.Exp, out object? expValue)
-            && JwtNumericDates.InstantOf(WellKnownJwtClaimNames.Exp, expValue) is DateTimeOffset expiry
-            && validationTime < expiry + (expirationLeeway ?? TimeSpan.Zero);
+            && NumericDate.Of(expValue) is NumericDate expiry
+            && expiry.CompareToEarlierBy(validationTime, expirationLeeway ?? TimeSpan.Zero) > 0;
 
         //§2.4 step 5: alg=none is never accepted; the signature is only evaluated
         //under an allowed algorithm.

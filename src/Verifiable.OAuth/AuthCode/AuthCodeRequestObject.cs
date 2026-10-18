@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Verifiable.JCose;
 
 namespace Verifiable.OAuth.AuthCode;
 
@@ -85,22 +86,22 @@ public sealed class AuthCodeRequestObject : IEquatable<AuthCodeRequestObject>
     public string? CodeChallengeMethod { get; init; }
 
     /// <summary>
-    /// The instant the JAR was issued. REQUIRED — the JAR verification
+    /// The date the JAR was issued, as written. REQUIRED — the JAR verification
     /// primitive parses and validates the <c>iat</c> claim before the
     /// projection is built.
     /// </summary>
-    public required DateTimeOffset Iat { get; init; }
+    public required NumericDate Iat { get; init; }
 
     /// <summary>
-    /// The earliest instant the JAR is valid. REQUIRED.
+    /// The earliest date the JAR is valid, as written. REQUIRED.
     /// </summary>
-    public required DateTimeOffset Nbf { get; init; }
+    public required NumericDate Nbf { get; init; }
 
     /// <summary>
-    /// The instant after which the JAR MUST NOT be accepted. REQUIRED per
+    /// The date at and after which the JAR MUST NOT be accepted, as written. REQUIRED per
     /// FAPI 2.0 §5.2.2 Clause 13.
     /// </summary>
-    public required DateTimeOffset Exp { get; init; }
+    public required NumericDate Exp { get; init; }
 
     /// <summary>
     /// The issuer of the JAR. OPTIONAL in the projection — the matcher

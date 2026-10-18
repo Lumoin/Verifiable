@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Verifiable.Core.Dcql;
 using Verifiable.Cryptography;
+using Verifiable.JCose;
 
 namespace Verifiable.OAuth.Oid4Vp.Server;
 
@@ -52,8 +53,8 @@ public sealed record VpTokenParsed
     /// <summary>The <c>aud</c> claim extracted from the KB-JWT.</summary>
     public string? KbJwtAud { get; init; }
 
-    /// <summary>The <c>iat</c> claim extracted from the KB-JWT.</summary>
-    public DateTimeOffset? KbJwtIat { get; init; }
+    /// <summary>The <c>iat</c> claim extracted from the KB-JWT, as written.</summary>
+    public NumericDate? KbJwtIat { get; init; }
 
     /// <summary>Whether the KB-JWT signature was cryptographically valid.</summary>
     public bool KbJwtSignatureValid { get; init; }

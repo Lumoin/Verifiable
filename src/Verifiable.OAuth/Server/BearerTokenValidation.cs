@@ -466,8 +466,8 @@ public static class BearerTokenValidation
             }
 
             //7. exp claim must be in the future. RFC 7519 Section 2: a NumericDate may carry a
-            //   fraction, read to the tick (JwtNumericDates), so the expiry its issuer wrote is the
-            //   one judged.
+            //   fraction, read as written (NumericDate), so the expiry its issuer wrote is the one
+            //   judged; Section 4.1.4: the present must lie before it, so a present at exp has expired.
             if(!payload.TryGetValue(WellKnownJwtClaimNames.Exp, out object? expObj))
             {
                 return (null, RefuseToken(
@@ -476,14 +476,15 @@ public static class BearerTokenValidation
 
             //A value that is no NumericDate, or one beyond the instants a DateTimeOffset holds, is
             //malformed input: it is refused, never raised as a server fault.
-            if(JwtNumericDates.InstantOf(WellKnownJwtClaimNames.Exp, expObj) is not DateTimeOffset expiry)
+            if(NumericDate.Of(expObj) is not NumericDate expiry)
             {
                 return (null, RefuseToken(
                     "Access token exp claim is not a representable NumericDate."));
             }
 
-            DateTimeOffset now = server.TimeProvider.GetUtcNow();
-            if(expiry < now)
+            var now = server.TimeProvider.GetUtcNow();
+
+            if(expiry.CompareTo(now) <= 0)
             {
                 return (null, RefuseToken(
                     "Access token has expired."));

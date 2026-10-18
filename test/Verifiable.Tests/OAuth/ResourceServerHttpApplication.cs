@@ -521,10 +521,10 @@ internal sealed class ResourceServerHttpApplication : IHttpApplication<HttpConte
             ["sub"] = claims.Subject,
             ["iss"] = claims.Issuer,
             ["aud"] = claims.Audience,
-            ["iat"] = claims.IssuedAt.ToUnixTimeSeconds(),
-            ["exp"] = claims.Expiration.ToUnixTimeSeconds(),
+            ["iat"] = claims.IssuedAt.ToClaimValue(),
+            ["exp"] = claims.Expiration.ToClaimValue(),
         };
-        if(claims.NotBefore is not null) { body["nbf"] = claims.NotBefore.Value.ToUnixTimeSeconds(); }
+        if(claims.NotBefore is not null) { body["nbf"] = claims.NotBefore.ToClaimValue(); }
         if(claims.Scope is not null) { body["scope"] = claims.Scope; }
         if(claims.ClientId is not null) { body["client_id"] = claims.ClientId; }
         if(claims.JwtId is not null) { body["jti"] = claims.JwtId; }

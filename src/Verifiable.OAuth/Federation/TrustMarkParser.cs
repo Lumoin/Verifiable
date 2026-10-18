@@ -66,18 +66,19 @@ public static class TrustMarkParser
             return TrustMarkParseResult.Invalid("Trust mark payload is missing the required 'trust_mark_type' claim.");
         }
 
-        if(!EntityStatementParser.TryReadUnixTime(payload, WellKnownJwtClaimNames.Iat, out DateTimeOffset iat))
+        if(!EntityStatementParser.TryReadNumericDate(payload, WellKnownJwtClaimNames.Iat, out var iat))
         {
             return TrustMarkParseResult.Invalid("Trust mark payload is missing or malformed for the required 'iat' claim.");
         }
 
-        DateTimeOffset? exp = null;
+        var exp = default(NumericDate);
         if(payload.ContainsKey(WellKnownJwtClaimNames.Exp))
         {
-            if(!EntityStatementParser.TryReadUnixTime(payload, WellKnownJwtClaimNames.Exp, out DateTimeOffset expValue))
+            if(!EntityStatementParser.TryReadNumericDate(payload, WellKnownJwtClaimNames.Exp, out var expValue))
             {
                 return TrustMarkParseResult.Invalid("Trust mark payload's 'exp' claim is malformed.");
             }
+
             exp = expValue;
         }
 

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Verifiable.JCose;
 
 namespace Verifiable.OAuth.Siop;
 
@@ -95,15 +96,15 @@ public sealed record SelfIssuedIdTokenValidationResult
     /// <summary>The <c>nonce</c> claim value, when present.</summary>
     public string? Nonce { get; init; }
 
-    /// <summary>The <c>exp</c> claim instant, when present.</summary>
-    public DateTimeOffset? ExpiresAt { get; init; }
+    /// <summary>The <c>exp</c> claim as written, when present.</summary>
+    public NumericDate? ExpiresAt { get; init; }
 
     /// <summary>
-    /// The <c>iat</c> claim instant, when present. §11.1 leaves the acceptable
+    /// The <c>iat</c> claim as written, when present. §11.1 leaves the acceptable
     /// issued-too-far-in-the-past range RP-specific, so the value is surfaced for the
     /// caller to police.
     /// </summary>
-    public DateTimeOffset? IssuedAt { get; init; }
+    public NumericDate? IssuedAt { get; init; }
 
     /// <summary>
     /// Whether every §11.1 check passed: structurally valid, self-issued, a supported

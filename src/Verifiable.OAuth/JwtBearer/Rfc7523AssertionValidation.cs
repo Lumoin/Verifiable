@@ -86,16 +86,16 @@ public sealed record Rfc7523AssertionValidationResult
     /// <summary>The <c>aud</c> value that matched the caller's own identity (§3 item 3). Present on success.</summary>
     public string? Audience { get; init; }
 
-    /// <summary>The <c>exp</c> claim (§3 item 4). Present on success.</summary>
-    public DateTimeOffset? Expiration { get; init; }
+    /// <summary>The <c>exp</c> claim as written (§3 item 4). Present on success.</summary>
+    public NumericDate? Expiration { get; init; }
 
-    /// <summary>The <c>iat</c> claim, when present (§3 item 6).</summary>
-    public DateTimeOffset? IssuedAt { get; init; }
+    /// <summary>The <c>iat</c> claim as written, when present (§3 item 6).</summary>
+    public NumericDate? IssuedAt { get; init; }
 
 
     /// <summary>Builds a successful result carrying the validated claims.</summary>
     public static Rfc7523AssertionValidationResult Success(
-        string issuer, string subject, string audience, DateTimeOffset expiration, DateTimeOffset? issuedAt) =>
+        string issuer, string subject, string audience, NumericDate expiration, NumericDate? issuedAt) =>
         new()
         {
             Issuer = issuer,
@@ -216,13 +216,13 @@ public static class Rfc7523AssertionValidation
         }
 
         Rfc7523TemporalOutcome temporalOutcome = ValidateTemporalClaims(
-            payload, now, clockSkew, out DateTimeOffset expiration, out DateTimeOffset? issuedAt, out string? temporalFailureDescription);
+            payload, now, clockSkew, out var expiration, out var issuedAt, out var temporalFailureDescription);
         if(temporalOutcome != Rfc7523TemporalOutcome.Valid)
         {
             return Rfc7523AssertionValidationResult.Failure(MapTemporalFailure(temporalOutcome), temporalFailureDescription);
         }
 
-        return Rfc7523AssertionValidationResult.Success(issuer!, subject!, matchedAudience!, expiration, issuedAt);
+        return Rfc7523AssertionValidationResult.Success(issuer!, subject!, matchedAudience!, expiration!, issuedAt);
     }
 
 
@@ -283,15 +283,15 @@ public static class Rfc7523AssertionValidation
         JwtPayload payload,
         DateTimeOffset now,
         TimeSpan clockSkew,
-        out DateTimeOffset expiration,
-        out DateTimeOffset? issuedAt,
+        out NumericDate? expiration,
+        out NumericDate? issuedAt,
         out string? failureDescription)
     {
-        expiration = default;
+        expiration = null;
         issuedAt = null;
         failureDescription = null;
 
-        EpochReadResult expRead = TryReadEpochSeconds(payload, WellKnownJwtClaimNames.Exp, out DateTimeOffset exp);
+        var expRead = TryReadEpochSeconds(payload, WellKnownJwtClaimNames.Exp, out var expiry);
         if(expRead != EpochReadResult.Value)
         {
             failureDescription = expRead == EpochReadResult.Absent
@@ -303,7 +303,8 @@ public static class Rfc7523AssertionValidation
                 : Rfc7523TemporalOutcome.InconsistentTemporalClaims;
         }
 
-        EpochReadResult iatRead = TryReadEpochSeconds(payload, WellKnownJwtClaimNames.Iat, out DateTimeOffset iat);
+        var exp = expiry!;
+        var iatRead = TryReadEpochSeconds(payload, WellKnownJwtClaimNames.Iat, out var iat);
         if(iatRead == EpochReadResult.Malformed)
         {
             failureDescription = "The assertion iat claim is not a numeric timestamp.";
@@ -313,14 +314,14 @@ public static class Rfc7523AssertionValidation
 
         //Structural temporal consistency, independent of the clock: an exp at or before iat has no
         //positive lifetime and is nonsensical regardless of when it is checked.
-        if(iatRead == EpochReadResult.Value && exp <= iat)
+        if(iatRead == EpochReadResult.Value && exp.CompareTo(iat!) <= 0)
         {
             failureDescription = "The assertion exp is at or before iat (non-positive lifetime).";
 
             return Rfc7523TemporalOutcome.InconsistentTemporalClaims;
         }
 
-        EpochReadResult nbfRead = TryReadEpochSeconds(payload, WellKnownJwtClaimNames.Nbf, out DateTimeOffset nbf);
+        var nbfRead = TryReadEpochSeconds(payload, WellKnownJwtClaimNames.Nbf, out var nbf);
         if(nbfRead == EpochReadResult.Malformed)
         {
             failureDescription = "The assertion nbf claim is not a numeric timestamp.";
@@ -330,14 +331,14 @@ public static class Rfc7523AssertionValidation
 
         if(nbfRead == EpochReadResult.Value)
         {
-            if(exp <= nbf)
+            if(exp.CompareTo(nbf!) <= 0)
             {
                 failureDescription = "The assertion exp is at or before nbf (the validity window never opens).";
 
                 return Rfc7523TemporalOutcome.InconsistentTemporalClaims;
             }
 
-            if(nbf > now + clockSkew)
+            if(nbf!.CompareToLaterBy(now, clockSkew) > 0)
             {
                 failureDescription = "The assertion nbf is in the future beyond the skew tolerance.";
 
@@ -345,7 +346,9 @@ public static class Rfc7523AssertionValidation
             }
         }
 
-        if(exp + clockSkew <= now)
+        //RFC 7519 Section 4.1.4: the present must lie before exp extended by the tolerance, compared without forming that
+        //instant, so an exp at the clock's last instant never overflows the comparison.
+        if(exp.CompareToEarlierBy(now, clockSkew) <= 0)
         {
             failureDescription = "The assertion has expired.";
 
@@ -401,7 +404,7 @@ public static class Rfc7523AssertionValidation
         /// <summary>The claim is not present.</summary>
         Absent,
 
-        /// <summary>The claim names an instant.</summary>
+        /// <summary>The claim names a date.</summary>
         Value,
 
         /// <summary>The claim is present but is no NumericDate naming an instant a clock represents.</summary>
@@ -410,29 +413,25 @@ public static class Rfc7523AssertionValidation
 
 
     /// <summary>
-    /// Reads a NumericDate claim of the assertion as the instant it names, a fraction of a second kept to the tick
-    /// (RFC 7519 Section 2; <see cref="JwtNumericDates.InstantOf"/>), so no bound is judged against a value moved to a whole
-    /// second: an <c>nbf</c> written a fraction of a second ahead is never read as reached earlier than its issuer wrote.
+    /// Reads a NumericDate claim of the assertion as the date it names, every digit kept (RFC 7519 Section 2;
+    /// <see cref="NumericDate.Of"/>), so each bound is judged against the date written: an <c>nbf</c> written a fraction of a
+    /// second ahead is never read as reached earlier than its issuer wrote.
     /// </summary>
     /// <param name="payload">The assertion's claims.</param>
     /// <param name="claimName">The NumericDate claim to read.</param>
-    /// <param name="value">The instant when the result is <see cref="EpochReadResult.Value"/>.</param>
-    /// <returns>Whether the claim is absent, names an instant, or is malformed.</returns>
-    private static EpochReadResult TryReadEpochSeconds(JwtPayload payload, string claimName, out DateTimeOffset value)
+    /// <param name="value">The date when the result is <see cref="EpochReadResult.Value"/>.</param>
+    /// <returns>Whether the claim is absent, names a date, or is malformed.</returns>
+    private static EpochReadResult TryReadEpochSeconds(JwtPayload payload, string claimName, out NumericDate? value)
     {
-        value = default;
+        value = null;
+
         if(!payload.TryGetValue(claimName, out object? raw))
         {
             return EpochReadResult.Absent;
         }
 
-        if(JwtNumericDates.InstantOf(claimName, raw) is not DateTimeOffset instant)
-        {
-            return EpochReadResult.Malformed;
-        }
+        value = NumericDate.Of(raw);
 
-        value = instant;
-
-        return EpochReadResult.Value;
+        return value is null ? EpochReadResult.Malformed : EpochReadResult.Value;
     }
 }

@@ -170,8 +170,8 @@ public sealed record ClientAssertionClaimsJudgement
 /// The rules are judged in that order and the first broken is named.
 /// </summary>
 /// <remarks>
-/// A NumericDate is read by the library's one reading of the type (<see cref="JwtNumericDates.InstantOf"/>): a fraction names its
-/// own instant to the tick, so a date a fraction past a bound is past it, and a string of digits is none.
+/// A NumericDate is read by the library's one reading of the type (<see cref="NumericDate.Of"/>), every digit kept, and each bound
+/// is judged against the date written exactly: a date any part of a tick past a bound is past it, and a string of digits is none.
 /// </remarks>
 public static class ClientAssertionClaimRules
 {
@@ -257,7 +257,7 @@ public static class ClientAssertionClaimRules
             return ClientAssertionClaimsJudgement.Refused(ClientAssertionClaimRefusal.ExpiryNotPresented);
         }
 
-        if(JwtNumericDates.InstantOf(WellKnownJwtClaimNames.Exp, expiryValue) is not DateTimeOffset expiry)
+        if(NumericDate.Of(expiryValue) is not NumericDate expiry)
         {
             return ClientAssertionClaimsJudgement.Refused(ClientAssertionClaimRefusal.ExpiryNotANumericDate);
         }
@@ -266,17 +266,17 @@ public static class ClientAssertionClaimRules
         //clock, no further ahead than the tolerance.
         if(claims.TryGetValue(WellKnownJwtClaimNames.Iat, out var issuedAtValue))
         {
-            if(JwtNumericDates.InstantOf(WellKnownJwtClaimNames.Iat, issuedAtValue) is not DateTimeOffset issuedAt)
+            if(NumericDate.Of(issuedAtValue) is not NumericDate issuedAt)
             {
                 return ClientAssertionClaimsJudgement.Refused(ClientAssertionClaimRefusal.IssuedAtNotANumericDate);
             }
 
-            if(expiry <= issuedAt)
+            if(expiry.CompareTo(issuedAt) <= 0)
             {
                 return ClientAssertionClaimsJudgement.Refused(ClientAssertionClaimRefusal.ExpiryNotAfterIssuedAt);
             }
 
-            if(issuedAt > now + clockSkewTolerance)
+            if(issuedAt.CompareToLaterBy(now, clockSkewTolerance) > 0)
             {
                 return ClientAssertionClaimsJudgement.Refused(ClientAssertionClaimRefusal.IssuedInTheFuture);
             }
@@ -286,17 +286,17 @@ public static class ClientAssertionClaimRules
         //lies before exp and, by this server's clock, is reached within the tolerance.
         if(claims.TryGetValue(WellKnownJwtClaimNames.Nbf, out var notBeforeValue))
         {
-            if(JwtNumericDates.InstantOf(WellKnownJwtClaimNames.Nbf, notBeforeValue) is not DateTimeOffset notBefore)
+            if(NumericDate.Of(notBeforeValue) is not NumericDate notBefore)
             {
                 return ClientAssertionClaimsJudgement.Refused(ClientAssertionClaimRefusal.NotBeforeNotANumericDate);
             }
 
-            if(expiry <= notBefore)
+            if(expiry.CompareTo(notBefore) <= 0)
             {
                 return ClientAssertionClaimsJudgement.Refused(ClientAssertionClaimRefusal.ExpiryNotAfterNotBefore);
             }
 
-            if(notBefore > now + clockSkewTolerance)
+            if(notBefore.CompareToLaterBy(now, clockSkewTolerance) > 0)
             {
                 return ClientAssertionClaimsJudgement.Refused(ClientAssertionClaimRefusal.NotYetValid);
             }
@@ -371,16 +371,22 @@ public static class ClientAssertionClaimRules
 
 
     /// <summary>
-    /// The instant a client assertion stops being accepted: its <c>exp</c> plus the clock-skew tolerance (RFC 7519 Section 4.1.4
-    /// lets a reader "provide for some small leeway, usually no more than a few minutes, to account for clock skew"), or the latest
-    /// instant a <see cref="DateTimeOffset"/> represents where the tolerance would carry it past that. The expiry rule and the
-    /// replay record read this one instant, so an assertion is never accepted past the record of its first use.
+    /// The instant a client assertion stops being accepted: the first instant a <see cref="DateTimeOffset"/> holds at or after its
+    /// <c>exp</c> plus the clock-skew tolerance (RFC 7519 Section 4.1.4: the present must be before <c>exp</c>, and a reader "may
+    /// provide for some small leeway, usually no more than a few minutes, to account for clock skew"), or the latest instant a
+    /// <see cref="DateTimeOffset"/> represents where the tolerance would carry it past that (<see cref="NumericDate.AtOrAfterLaterBy"/>).
+    /// The present is a whole tick, so it lies before the extended <c>exp</c> exactly when it lies before this instant. The expiry
+    /// rule and the replay record read this one instant, so an assertion is never accepted past the record of its first use.
     /// </summary>
-    /// <param name="expiry">The assertion's <c>exp</c>.</param>
+    /// <param name="expiry">The assertion's <c>exp</c>, as written.</param>
     /// <param name="clockSkewTolerance">The tolerance.</param>
     /// <returns>The instant from which the assertion is refused as expired.</returns>
-    public static DateTimeOffset AcceptedUntil(DateTimeOffset expiry, TimeSpan clockSkewTolerance) =>
-        expiry <= DateTimeOffset.MaxValue - clockSkewTolerance ? expiry + clockSkewTolerance : DateTimeOffset.MaxValue;
+    public static DateTimeOffset AcceptedUntil(NumericDate expiry, TimeSpan clockSkewTolerance)
+    {
+        ArgumentNullException.ThrowIfNull(expiry);
+
+        return expiry.AtOrAfterLaterBy(clockSkewTolerance);
+    }
 
 
     /// <summary>

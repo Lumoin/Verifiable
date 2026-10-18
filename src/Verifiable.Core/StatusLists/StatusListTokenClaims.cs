@@ -88,18 +88,18 @@ public static class StatusListTokenClaims
         JwtPayload payload = new(5)
         {
             [WellKnownJwtClaimNames.Sub] = token.Subject,
-            [WellKnownJwtClaimNames.Iat] = token.IssuedAt.ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Iat] = token.IssuedAt.ToClaimValue(),
             [WellKnownJwtClaimNames.StatusList] = statusListClaim
         };
 
-        if(token.ExpirationTime.HasValue)
+        if(token.ExpirationTime is not null)
         {
-            payload[WellKnownJwtClaimNames.Exp] = token.ExpirationTime.Value.ToUnixTimeSeconds();
+            payload[WellKnownJwtClaimNames.Exp] = token.ExpirationTime.ToClaimValue();
         }
 
-        if(token.TimeToLive.HasValue)
+        if(token.TimeToLive is not null)
         {
-            payload[WellKnownJwtClaimNames.TimeToLive] = token.TimeToLive.Value;
+            payload[WellKnownJwtClaimNames.TimeToLive] = token.TimeToLive.ToClaimValue();
         }
 
         return payload;
@@ -128,12 +128,13 @@ public static class StatusListTokenClaims
     /// required within it) — a missing or wrongly-typed value for any of these is a read failure naming
     /// the claim, per Section 8.3 step 3.b ("Check for the existence of the required claims"). "ttl: …
     /// The value of the claim MUST be a positive number encoded in JSON as a number." — a present but
-    /// non-positive or non-integer <c>ttl</c> is likewise a read failure. "The JWT MAY contain other
-    /// claims." — every claim not read here is tolerated. Integer-valued claims arrive boxed by the
-    /// leaf deserializer as one of the .NET integer families or <see cref="decimal"/> (a too-large or
-    /// fractional JSON number); a fractional <c>bits</c> or <c>ttl</c> is refused as non-conforming. The
+    /// non-positive or non-numeric <c>ttl</c> is likewise a read failure, and a positive fraction is
+    /// a <c>ttl</c> like any other, kept exactly (<see cref="DecimalNumber.Of"/>). "The JWT MAY contain
+    /// other claims." — every claim not read here is tolerated. A number arrives boxed by the leaf
+    /// deserializer as one of the .NET integer families, a <see cref="decimal"/> or a
+    /// <see cref="DecimalNumber"/>; a fractional <c>bits</c> is refused as non-conforming. The
     /// <c>iat</c> and <c>exp</c> are NumericDates (RFC 7519 Section 2), which may carry a fraction: each is
-    /// read to the tick by the library's one reading of the type (<see cref="JwtNumericDates.InstantOf"/>).
+    /// read exactly by the library's one reading of the type (<see cref="NumericDate.Of"/>).
     /// See <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-21#section-5.1">Token Status List, Section 5.1</see>.
     /// </remarks>
     /// <exception cref="ArgumentNullException">
@@ -168,7 +169,7 @@ public static class StatusListTokenClaims
         }
 
         if(!payload.TryGetValue(WellKnownJwtClaimNames.Iat, out object? iatValue)
-            || JwtNumericDates.InstantOf(WellKnownJwtClaimNames.Iat, iatValue) is not DateTimeOffset issuedAt)
+            || NumericDate.Of(iatValue) is not NumericDate issuedAt)
         {
             defect = $"Missing required claim '{WellKnownJwtClaimNames.Iat}'.";
             defectKind = StatusListTokenClaimsDefect.RequiredClaimMissing;
@@ -216,10 +217,10 @@ public static class StatusListTokenClaims
             return false;
         }
 
-        DateTimeOffset? expirationTime = null;
+        var expirationTime = default(NumericDate);
         if(payload.TryGetValue(WellKnownJwtClaimNames.Exp, out object? expValue))
         {
-            if(JwtNumericDates.InstantOf(WellKnownJwtClaimNames.Exp, expValue) is not DateTimeOffset expiry)
+            if(NumericDate.Of(expValue) is not NumericDate expiry)
             {
                 defect = $"Claim '{WellKnownJwtClaimNames.Exp}' is not a JWT NumericDate value.";
                 defectKind = StatusListTokenClaimsDefect.ClaimValueInvalid;
@@ -230,10 +231,10 @@ public static class StatusListTokenClaims
             expirationTime = expiry;
         }
 
-        long? timeToLive = null;
+        var timeToLive = default(DecimalNumber);
         if(payload.TryGetValue(WellKnownJwtClaimNames.TimeToLive, out object? ttlValue))
         {
-            if(!TryToInt64(ttlValue, out long ttlSeconds) || ttlSeconds <= 0)
+            if(DecimalNumber.Of(ttlValue) is not DecimalNumber ttlSeconds || ttlSeconds.IsZero || ttlSeconds.IsNegative)
             {
                 defect = $"Claim '{WellKnownJwtClaimNames.TimeToLive}' MUST be a positive number.";
                 defectKind = StatusListTokenClaimsDefect.ClaimValueInvalid;
@@ -291,8 +292,8 @@ public static class StatusListTokenClaims
     /// <summary>
     /// Accepts the integer families a JWT payload deserializer boxes a JSON number claim as, plus the
     /// decimal fallback for a value too large or fractional to fit a long; refuses a genuinely
-    /// fractional decimal rather than truncating it, since a truncated NumericDate or ttl would
-    /// silently corrupt a temporal check.
+    /// fractional decimal rather than truncating it, since a truncated <c>bits</c> would silently
+    /// name another Status List encoding.
     /// </summary>
     /// <param name="value">The boxed claim value.</param>
     /// <param name="result">On success, the value as a <see cref="long"/>.</param>

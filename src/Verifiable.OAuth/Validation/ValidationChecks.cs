@@ -278,8 +278,8 @@ public static class ValidationChecks
 
         TimeSpan clockSkew = context.Context?.ClockSkewToleranceOverride ?? context.ClockSkew;
 
-        ClaimOutcome outcome = context.KbJwtIat.HasValue
-            && context.KbJwtIat.Value <= context.Now.Add(clockSkew)
+        var outcome = context.KbJwtIat is not null
+            && JwtTemporalChecks.IsNotInFuture(context.KbJwtIat, context.Now, clockSkew)
             ? ClaimOutcome.Success
             : ClaimOutcome.Failure;
 
@@ -308,8 +308,8 @@ public static class ValidationChecks
 
         TimeSpan maxAge = context.Context?.KbJwtMaxAgeWindow ?? context.KbJwtMaxAge;
 
-        ClaimOutcome outcome = context.KbJwtIat.HasValue
-            && context.KbJwtIat.Value >= context.Now.Subtract(maxAge)
+        var outcome = context.KbJwtIat is not null
+            && JwtTemporalChecks.IsNotStale(context.KbJwtIat, context.Now, maxAge)
             ? ClaimOutcome.Success
             : ClaimOutcome.Failure;
 

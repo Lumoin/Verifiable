@@ -1,5 +1,6 @@
 using Verifiable.Core.Resolvers;
 using Verifiable.DidComm;
+using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -48,7 +49,7 @@ internal sealed class DidCommFromPriorTests
         Assert.AreEqual(DidCommDecryptionError.None, result.Error);
         Assert.IsTrue(result.IsRotation, "A verified from_prior MUST be surfaced as a rotation.");
         Assert.AreEqual(rotation.PriorDid, result.PriorDid, "PriorDid MUST be the from_prior iss.");
-        Assert.AreEqual(1516239022L, result.RotationIat, "The from_prior iat (RotationFixture.RotationTime in epoch seconds) MUST be surfaced for app-side pre-rotation ordering.");
+        Assert.AreEqual(NumericDate.FromUnixTimeSeconds(1516239022), result.RotationIat, "The from_prior iat (RotationFixture.RotationTime in epoch seconds) MUST be surfaced for app-side pre-rotation ordering.");
         Assert.AreEqual(newDid, result.Message!.From, "The new DID (the message from / the JWT sub) is carried by the recovered plaintext.");
         Assert.IsTrue(rotation.IsPriorKidAuthorizedForAuthentication(), "The prior-DID kid MUST be authorized for authentication.");
     }
@@ -68,7 +69,7 @@ internal sealed class DidCommFromPriorTests
         Assert.IsTrue(result.IsVerified, $"The signed rotation message MUST verify. Error: {result.Error}.");
         Assert.IsTrue(result.IsRotation, "A verified from_prior MUST be surfaced as a rotation on the signed path too.");
         Assert.AreEqual(rotation.PriorDid, result.PriorDid);
-        Assert.AreEqual(1516239022L, result.RotationIat, "The from_prior iat MUST be surfaced on the signed path too.");
+        Assert.AreEqual(NumericDate.FromUnixTimeSeconds(1516239022), result.RotationIat, "The from_prior iat MUST be surfaced on the signed path too.");
         Assert.AreEqual(rotation.NewDid, result.Message!.From);
     }
 
@@ -94,7 +95,7 @@ internal sealed class DidCommFromPriorTests
         Assert.IsTrue(result.IsSenderAuthenticated, "The verified inner signature authenticates the new DID.");
         Assert.IsTrue(result.IsRotation, "The inner from_prior rotation MUST be verified and surfaced (C1/C2).");
         Assert.AreEqual(rotation.PriorDid, result.PriorDid);
-        Assert.AreEqual(1516239022L, result.RotationIat);
+        Assert.AreEqual(NumericDate.FromUnixTimeSeconds(1516239022), result.RotationIat);
         Assert.AreEqual(rotation.NewDid, result.Message!.From);
     }
 
@@ -138,6 +139,34 @@ internal sealed class DidCommFromPriorTests
         DidCommEncryptedUnpackResult result = await rotation.PackAndUnpackAnoncryptAsync(message, TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertRotationRejected(result, DidCommDecryptionError.RotationSignatureInvalid);
+    }
+
+
+    /// <summary>
+    /// The rotation date is surfaced exactly as written (RFC 7519 Section 2: a NumericDate may carry a fraction), for the
+    /// application to order messages by: an <c>iat</c> half a second into its second is surfaced with its fraction, where it was
+    /// truncated to the whole second; and an <c>iat</c> naming a count no clock represents is a malformed rotation JWT, where
+    /// converting it to a whole count threw.
+    /// </summary>
+    [TestMethod]
+    public async Task ARotationDateIsSurfacedExactlyAndAnUnrepresentableOneIsRefused()
+    {
+        await using var rotation = await RotationFixture.CreateAsync(Pool, TestContext.CancellationToken).ConfigureAwait(false);
+
+        var fractional = NewMessage(rotation.NewDid);
+        fractional.FromPrior = await rotation.MintFromPriorIssuedAtAsync(1516239022.5m, TestContext.CancellationToken).ConfigureAwait(false);
+
+        var surfaced = await rotation.PackAndUnpackAnoncryptAsync(fractional, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(surfaced.IsUnpacked, $"A rotation with a fractional iat MUST unpack. Error: {surfaced.Error}.");
+        Assert.AreEqual("1516239022.5", FormattableString.Invariant($"{surfaced.RotationIat}"), "The rotation date is the iat written, its fraction kept.");
+
+        var unrepresentable = NewMessage(rotation.NewDid);
+        unrepresentable.FromPrior = await rotation.MintFromPriorIssuedAtAsync(1e25m, TestContext.CancellationToken).ConfigureAwait(false);
+
+        var refused = await rotation.PackAndUnpackAnoncryptAsync(unrepresentable, TestContext.CancellationToken).ConfigureAwait(false);
+
+        AssertRotationRejected(refused, DidCommDecryptionError.RotationJwtMalformed);
     }
 
 

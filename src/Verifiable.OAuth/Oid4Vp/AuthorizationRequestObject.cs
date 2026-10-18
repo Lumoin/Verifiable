@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Verifiable.Core.Model.Dcql;
+using Verifiable.JCose;
 
 namespace Verifiable.OAuth.Oid4Vp;
 
@@ -103,27 +104,27 @@ public sealed class AuthorizationRequestObject : IEquatable<AuthorizationRequest
     public string? State { get; init; }
 
     /// <summary>
-    /// The instant the Authorization Request Object was issued. REQUIRED.
+    /// The date the Authorization Request Object was issued, as written. REQUIRED.
     /// Serialized as the <c>iat</c> JWT claim per
     /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.6">RFC 7519 §4.1.6</see>.
     /// </summary>
-    public required DateTimeOffset Iat { get; init; }
+    public required NumericDate Iat { get; init; }
 
     /// <summary>
-    /// The earliest instant the Authorization Request Object is valid. REQUIRED.
+    /// The earliest date the Authorization Request Object is valid, as written. REQUIRED.
     /// Serialized as the <c>nbf</c> JWT claim per
     /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.5">RFC 7519 §4.1.5</see>.
     /// </summary>
-    public required DateTimeOffset Nbf { get; init; }
+    public required NumericDate Nbf { get; init; }
 
     /// <summary>
-    /// The instant after which the Authorization Request Object MUST NOT be
+    /// The date at and after which the Authorization Request Object MUST NOT be
     /// accepted. REQUIRED per
     /// <see href="https://openid.net/specs/fapi-2_0-security-profile.html">FAPI 2.0 §5.2.2</see>
     /// Clause 13. Serialized as the <c>exp</c> JWT claim per
     /// <see href="https://www.rfc-editor.org/rfc/rfc7519#section-4.1.4">RFC 7519 §4.1.4</see>.
     /// </summary>
-    public required DateTimeOffset Exp { get; init; }
+    public required NumericDate Exp { get; init; }
 
     /// <summary>
     /// The DCQL query specifying the requested credentials. REQUIRED when neither

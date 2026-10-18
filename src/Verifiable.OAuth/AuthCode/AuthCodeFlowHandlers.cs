@@ -5,6 +5,7 @@ using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.Assessment;
 using Verifiable.Cryptography;
+using Verifiable.JCose;
 using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Pkce;
@@ -1291,9 +1292,10 @@ public static class AuthCodeFlowHandlers
             Nonce = nonce,
             CodeChallenge = pkce.EncodedChallenge,
             CodeChallengeMethod = pkce.Method.ToString().ToUpperInvariant(),
-            Iat = now,
-            Nbf = now,
-            Exp = now.Add(jarOptions.JarLifetime),
+            //The request object's dates are written to the whole second, the integers most authorization servers read.
+            Iat = NumericDate.WholeSecondAtOrBefore(now),
+            Nbf = NumericDate.WholeSecondAtOrBefore(now),
+            Exp = NumericDate.WholeSecondAtOrBefore(now.Add(jarOptions.JarLifetime)),
             Iss = registration.ClientId.Value,
             Aud = registration.AuthorizationServerIssuer.OriginalString,
             Resource = JoinRequestObjectResource(requestedResource)
@@ -1367,9 +1369,10 @@ public static class AuthCodeFlowHandlers
             Nonce = nonce,
             CodeChallenge = pkce.EncodedChallenge,
             CodeChallengeMethod = pkce.Method.ToString().ToUpperInvariant(),
-            Iat = now,
-            Nbf = now,
-            Exp = now.Add(jarOptions.JarLifetime),
+            //The request object's dates are written to the whole second, the integers most authorization servers read.
+            Iat = NumericDate.WholeSecondAtOrBefore(now),
+            Nbf = NumericDate.WholeSecondAtOrBefore(now),
+            Exp = NumericDate.WholeSecondAtOrBefore(now.Add(jarOptions.JarLifetime)),
             Iss = registration.ClientId.Value,
             Aud = registration.AuthorizationServerIssuer.OriginalString,
             Resource = JoinRequestObjectResource(resource)

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Verifiable.JCose;
 
 namespace Verifiable.OAuth.Oid4Vci;
 
@@ -22,8 +23,8 @@ public sealed record CredentialProofValidationResult
     /// <summary>The validated <c>aud</c> claim (the Credential Issuer Identifier) on success; otherwise <see langword="null"/>.</summary>
     public string? Audience { get; init; }
 
-    /// <summary>The validated <c>iat</c> claim on success; otherwise <see langword="null"/>.</summary>
-    public DateTimeOffset? IssuedAt { get; init; }
+    /// <summary>The validated <c>iat</c> claim as written on success; otherwise <see langword="null"/>.</summary>
+    public NumericDate? IssuedAt { get; init; }
 
     /// <summary>The validated <c>nonce</c> (the echoed <c>c_nonce</c>) on success when one was required; otherwise <see langword="null"/>.</summary>
     public string? Nonce { get; init; }
@@ -36,7 +37,7 @@ public sealed record CredentialProofValidationResult
 
     /// <summary>Builds a success result.</summary>
     public static CredentialProofValidationResult Success(
-        string boundKeyThumbprint, string audience, DateTimeOffset issuedAt, string? nonce) =>
+        string boundKeyThumbprint, string audience, NumericDate issuedAt, string? nonce) =>
         new()
         {
             BoundKeyThumbprint = boundKeyThumbprint,

@@ -150,6 +150,44 @@ internal sealed class RotationFixture : IAsyncDisposable
     }
 
 
+    /// <summary>
+    /// Mints the from_prior compact JWT of a normal rotation to the new DID whose <c>iat</c> is the claim value given as the
+    /// claims set holds it - a fraction, or a count no clock represents - signed by the prior DID's authentication key, so the
+    /// recipient's reading of the rotation date is proven on what the issuer wrote.
+    /// </summary>
+    /// <param name="issuedAt">The <c>iat</c> claim's value.</param>
+    /// <param name="cancellationToken">Cancels the signing.</param>
+    /// <returns>The compact JWT.</returns>
+    public async ValueTask<string> MintFromPriorIssuedAtAsync(object issuedAt, CancellationToken cancellationToken)
+    {
+        var header = new JwtHeader
+        {
+            [WellKnownJoseHeaderNames.Typ] = WellKnownJwkValues.TypeJwt,
+            [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.EdDsa,
+            [WellKnownJwkMemberNames.Kid] = PriorKid
+        };
+
+        var payload = new JwtPayload
+        {
+            [WellKnownJwtClaimNames.Iss] = PriorDid,
+            [WellKnownJwtClaimNames.Sub] = NewDid,
+            [WellKnownJwtClaimNames.Iat] = issuedAt
+        };
+
+        var unsigned = new UnsignedJwt(header, payload);
+
+        using var jws = await unsigned.SignAsync(
+            PriorSigningKey,
+            JwtClaimsJson.HeaderSerializer,
+            JwtClaimsJson.PayloadSerializer,
+            TestSetup.Base64UrlEncoder,
+            Pool,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        return JwsSerialization.SerializeCompact(jws, TestSetup.Base64UrlEncoder);
+    }
+
+
     //Packs the message anoncrypt to a fresh X25519 recipient and unpacks it, threading the from_prior
     //verifiers. Anoncrypt authenticates no sender, so the from_prior verify against the PRIOR DID is the
     //only DID resolution — the rotation semantics are exercised in isolation. The `from` is left as the

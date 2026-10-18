@@ -314,8 +314,8 @@ public static class SiopVerifierExecutor
                 TenantId? tenantId = context.TenantId;
                 if(server is not null && tenantId is not null)
                 {
-                    DateTimeOffset replayExpiresAt = result.ExpiresAt is DateTimeOffset exp
-                        ? exp + context.ClockSkewTolerance
+                    var replayExpiresAt = result.ExpiresAt is NumericDate exp
+                        ? exp.AtOrAfterLaterBy(context.ClockSkewTolerance)
                         : now + WellKnownDpopValues.DefaultReplayWindow;
 
                     JtiReplayOutcome nonceReplayOutcome = await JtiReplayGuard.ConsultAsync(

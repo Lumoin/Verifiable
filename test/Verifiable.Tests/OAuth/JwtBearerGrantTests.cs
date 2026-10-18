@@ -1851,7 +1851,7 @@ internal sealed class JwtBearerGrantTests
                         Scope = GrantedScope,
                         Issuer = result.Issuer,
                         Jti = payload.TryGetValue(WellKnownJwtClaimNames.Jti, out object? jti) ? jti as string : null,
-                        Expiration = result.Expiration
+                        Expiration = result.Expiration?.AtOrBefore
                     };
                 };
         }).ConfigureAwait(false);

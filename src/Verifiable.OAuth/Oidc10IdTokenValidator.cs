@@ -163,8 +163,8 @@ public static class Oidc10IdTokenValidator
         //OIDC Core §2: auth_time's "value is a JSON number representing the number of seconds from
         //1970-01-01T00:00:00Z as measured in UTC until the date/time". A present auth_time no instant
         //can be read from is refused, never surfaced as an absent one a max_age check would misread.
-        NumericDateReadResult authTimeRead = JwsAccessTokenValidator.TryReadEpochSeconds(
-            payload, WellKnownJwtClaimNames.AuthTime, out DateTimeOffset authTimeValue);
+        var authTimeRead = JwsAccessTokenValidator.TryReadEpochSeconds(
+            payload, WellKnownJwtClaimNames.AuthTime, out var authTimeValue);
         if(authTimeRead == NumericDateReadResult.Malformed)
         {
             return Oidc10IdTokenValidationResult.Failure(
@@ -172,7 +172,7 @@ public static class Oidc10IdTokenValidator
                 "ID Token auth_time claim is not a NumericDate naming a representable instant.");
         }
 
-        DateTimeOffset? authTime = authTimeRead == NumericDateReadResult.Value ? authTimeValue : null;
+        var authTime = authTimeRead == NumericDateReadResult.Value ? authTimeValue : null;
         _ = JwsAccessTokenValidator.TryReadString(payload, WellKnownJwtClaimNames.Acr, out string? acr);
         IReadOnlyList<string>? amr = JwsAccessTokenValidator.TryReadStringList(
             payload, WellKnownJwtClaimNames.Amr, out IReadOnlyList<string> amrValues)
@@ -186,8 +186,8 @@ public static class Oidc10IdTokenValidator
             Subject = outcome.Subject!,
             Issuer = outcome.Issuer!,
             Audience = outcome.Audience!,
-            IssuedAt = outcome.IssuedAt!.Value,
-            Expiration = outcome.Expiration!.Value,
+            IssuedAt = outcome.IssuedAt!,
+            Expiration = outcome.Expiration!,
             NotBefore = outcome.NotBefore,
             AuthorizedParty = outcome.AuthorizedParty,
             Nonce = nonce,

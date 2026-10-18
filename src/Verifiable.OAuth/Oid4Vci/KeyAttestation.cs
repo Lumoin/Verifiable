@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Verifiable.JCose;
 
 namespace Verifiable.OAuth.Oid4Vci;
 
@@ -30,9 +31,9 @@ public sealed record KeyAttestation
     /// <summary>The <c>certification</c> URL of the key storage component, or <see langword="null"/> when absent.</summary>
     public string? Certification { get; init; }
 
-    /// <summary>The <c>iat</c> the attestation was issued at, or <see langword="null"/> when unreadable.</summary>
-    public DateTimeOffset? IssuedAt { get; init; }
+    /// <summary>The <c>iat</c> the attestation was issued at, as written, or <see langword="null"/> when unreadable.</summary>
+    public NumericDate? IssuedAt { get; init; }
 
-    /// <summary>The <c>exp</c> the attestation (and its keys) expire at, or <see langword="null"/> when absent.</summary>
-    public DateTimeOffset? ExpiresAt { get; init; }
+    /// <summary>The <c>exp</c> the attestation (and its keys) expire at, as written, or <see langword="null"/> when absent.</summary>
+    public NumericDate? ExpiresAt { get; init; }
 }

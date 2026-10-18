@@ -37,8 +37,6 @@ namespace Verifiable.DidComm;
     Justification = "The JwsMessage minted for the from_prior JWT is disposed via 'using' once serialized to compact form; the UnverifiedJwsMessage parsed on verify is disposed via 'using'.")]
 public static class DidCommFromPriorExtensions
 {
-    //The Unix epoch, used to convert the injected rotation DateTimeOffset to the iat claim's seconds.
-    private static DateTimeOffset UnixEpoch { get; } = DateTimeOffset.UnixEpoch;
 
     //An upper bound on the from_prior compact JWS length. A rotation JWT carries a handful of claims, so this
     //is generous; it bounds the compact-JWS parse + base64url decode on the signed path, where (unlike the
@@ -160,7 +158,8 @@ public static class DidCommFromPriorExtensions
         var payload = new JwtPayload
         {
             [WellKnownJwtClaimNames.Iss] = priorDid,
-            [WellKnownJwtClaimNames.Iat] = (rotationTimestamp - UnixEpoch).Ticks / TimeSpan.TicksPerSecond
+            //The rotation is stated to the whole second at or before it, the precision the reference implementations exchange.
+            [WellKnownJwtClaimNames.Iat] = rotationTimestamp.ToUnixTimeSeconds()
         };
 
         //sub is the new DID for a normal rotation; it is omitted for rotate-to-nothing.
@@ -299,20 +298,23 @@ public static class DidCommFromPriorExtensions
 
             string? sub = payload.TryGetValue(WellKnownJwtClaimNames.Sub, out object? subValue) ? subValue as string : null;
 
-            //The rotation iat (issued-at, Unix epoch seconds) is surfaced, not gated: the library cannot
-            //enforce the "ignore pre-rotation messages" ordering statelessly, so it hands the rotation instant
-            //to the application (DIDComm v2.1 §DID Rotation). The JSON deserializer may box a numeric claim as
-            //any CLR numeric type, so all are accepted; a non-numeric iat is ignored.
-            long? iat = payload.TryGetValue(WellKnownJwtClaimNames.Iat, out object? iatValue)
-                ? iatValue switch
+            //The rotation iat is surfaced, not gated: the library cannot enforce the "ignore pre-rotation
+            //messages" ordering statelessly, so it hands the rotation date to the application exactly as
+            //written (DIDComm v2.1 §DID Rotation; RFC 7519 Section 2: a NumericDate, which may carry a
+            //fraction), read by the library's one reading of the type whatever numeric type the JSON layer
+            //boxed it as. A present iat that is no NumericDate - a string of digits, or a count no clock
+            //represents - is a malformed rotation JWT, never a rotation surfaced without its date.
+            var iat = default(NumericDate);
+
+            if(payload.TryGetValue(WellKnownJwtClaimNames.Iat, out object? iatValue))
+            {
+                iat = NumericDate.Of(iatValue);
+
+                if(iat is null)
                 {
-                    long l => l,
-                    int i => i,
-                    decimal m => (long)m,
-                    double d => (long)d,
-                    _ => null
+                    return FromPriorVerificationOutcome.Failed(DidCommRotationError.RotationJwtMalformed);
                 }
-                : null;
+            }
 
             //kid's base DID MUST equal iss, and a rotation MUST move to a different DID (iss != sub).
             if(!string.Equals(kidDid, iss, StringComparison.Ordinal))
@@ -431,7 +433,7 @@ internal enum DidCommRotationError
     /// <summary>The rotation JWT verified; the new DID may be trusted for further communication.</summary>
     None = 0,
 
-    /// <summary>The <c>from_prior</c> is not a parseable compact JWS, or its <c>typ</c> is not <c>JWT</c>, or its <c>kid</c> is not a DID URL with a fragment, or its payload is malformed.</summary>
+    /// <summary>The <c>from_prior</c> is not a parseable compact JWS, or its <c>typ</c> is not <c>JWT</c>, or its <c>kid</c> is not a DID URL with a fragment, or its payload is malformed, a present <c>iat</c> that is no NumericDate among it.</summary>
     RotationJwtMalformed,
 
     /// <summary>The JWT <c>sub</c> does not match the message <c>from</c> (the new DID), or the rotate-to-nothing presence rule is violated.</summary>
@@ -463,7 +465,7 @@ internal enum DidCommRotationError
 /// </remarks>
 internal readonly struct FromPriorVerificationOutcome
 {
-    private FromPriorVerificationOutcome(bool isVerified, string? priorDid, string? issuerKid, long? iat, DidCommRotationError error)
+    private FromPriorVerificationOutcome(bool isVerified, string? priorDid, string? issuerKid, NumericDate? iat, DidCommRotationError error)
     {
         IsVerified = isVerified;
         PriorDid = priorDid;
@@ -482,15 +484,15 @@ internal readonly struct FromPriorVerificationOutcome
     /// <summary>The verified issuer key id (the JWT <c>kid</c>), or <see langword="null"/> when verification failed.</summary>
     public string? IssuerKid { get; }
 
-    /// <summary>The rotation JWT's <c>iat</c> (issued-at, Unix epoch seconds) when present, else <see langword="null"/>.</summary>
-    public long? Iat { get; }
+    /// <summary>The rotation JWT's <c>iat</c>, the NumericDate as written, when present, else <see langword="null"/>.</summary>
+    public NumericDate? Iat { get; }
 
     /// <summary>The reason verification failed, or <see cref="DidCommRotationError.None"/> when it succeeded.</summary>
     public DidCommRotationError Error { get; }
 
 
     //Mints a verified outcome carrying the prior DID, issuer kid, and the rotation iat (when present).
-    internal static FromPriorVerificationOutcome Verified(string priorDid, string issuerKid, long? iat)
+    internal static FromPriorVerificationOutcome Verified(string priorDid, string issuerKid, NumericDate? iat)
     {
         return new FromPriorVerificationOutcome(true, priorDid, issuerKid, iat, DidCommRotationError.None);
     }

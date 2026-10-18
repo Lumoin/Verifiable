@@ -40,14 +40,14 @@ internal sealed record SignedJwtValidationOutcome
     /// </summary>
     public string? AuthorizedParty { get; init; }
 
-    /// <summary>The <c>iat</c> claim when validation succeeded; otherwise <see langword="null"/>.</summary>
-    public DateTimeOffset? IssuedAt { get; init; }
+    /// <summary>The <c>iat</c> claim as written when validation succeeded; otherwise <see langword="null"/>.</summary>
+    public NumericDate? IssuedAt { get; init; }
 
-    /// <summary>The <c>exp</c> claim when validation succeeded; otherwise <see langword="null"/>.</summary>
-    public DateTimeOffset? Expiration { get; init; }
+    /// <summary>The <c>exp</c> claim as written when validation succeeded; otherwise <see langword="null"/>.</summary>
+    public NumericDate? Expiration { get; init; }
 
-    /// <summary>The <c>nbf</c> claim when validation succeeded and present; otherwise <see langword="null"/>.</summary>
-    public DateTimeOffset? NotBefore { get; init; }
+    /// <summary>The <c>nbf</c> claim as written when validation succeeded and present; otherwise <see langword="null"/>.</summary>
+    public NumericDate? NotBefore { get; init; }
 
     /// <summary>The failure reason when validation failed; otherwise <see langword="null"/>.</summary>
     public JwsAccessTokenValidationFailureReason? FailureReason { get; init; }
@@ -66,9 +66,9 @@ internal sealed record SignedJwtValidationOutcome
         string issuer,
         IReadOnlyList<string> audience,
         string? authorizedParty,
-        DateTimeOffset issuedAt,
-        DateTimeOffset expiration,
-        DateTimeOffset? notBefore)
+        NumericDate issuedAt,
+        NumericDate expiration,
+        NumericDate? notBefore)
     {
         ArgumentNullException.ThrowIfNull(payload);
         ArgumentNullException.ThrowIfNull(subject);

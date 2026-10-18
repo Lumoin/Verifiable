@@ -290,10 +290,11 @@ public static class KeyAttestationVerifier
             return KeyAttestationVerificationResult.Failure(KeyAttestationVerificationFailureReason.SignatureFailed);
         }
 
-        //Appendix D.1: a present exp bounds the attestation (and its attested keys); a past exp, with
-        //the caller's skew leniency, expires it.
-        if(attestation.ExpiresAt is DateTimeOffset expiresAt
-            && expiresAt + clockSkew < timeProvider.GetUtcNow())
+        //Appendix D.1: a present exp bounds the attestation (and its attested keys); an exp at or before
+        //the present, with the caller's skew leniency, expires it (RFC 7519 Section 4.1.4: the present
+        //must lie before exp), compared without forming the extended instant, so no exp overflows it.
+        if(attestation.ExpiresAt is NumericDate expiresAt
+            && expiresAt.CompareToEarlierBy(timeProvider.GetUtcNow(), clockSkew) <= 0)
         {
             return KeyAttestationVerificationResult.Failure(KeyAttestationVerificationFailureReason.Expired);
         }

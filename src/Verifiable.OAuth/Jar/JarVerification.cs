@@ -169,14 +169,14 @@ public static class JarVerification
             // Step 5 — read iat/nbf/exp. All three are required so the
             // lifetime ceiling check (exp - iat) and the not-yet-valid
             // check (nbf vs now+skew) are unambiguous.
-            DateTimeOffset iat;
-            DateTimeOffset nbf;
-            DateTimeOffset exp;
+            var iat = default(NumericDate);
+            var nbf = default(NumericDate);
+            var exp = default(NumericDate);
             try
             {
-                iat = JwtClaimReaders.RequireInstant(claims, WellKnownJwtClaimNames.Iat);
-                nbf = JwtClaimReaders.RequireInstant(claims, WellKnownJwtClaimNames.Nbf);
-                exp = JwtClaimReaders.RequireInstant(claims, WellKnownJwtClaimNames.Exp);
+                iat = JwtClaimReaders.RequireNumericDate(claims, WellKnownJwtClaimNames.Iat);
+                nbf = JwtClaimReaders.RequireNumericDate(claims, WellKnownJwtClaimNames.Nbf);
+                exp = JwtClaimReaders.RequireNumericDate(claims, WellKnownJwtClaimNames.Exp);
             }
             catch(FormatException ex)
             {
@@ -193,14 +193,14 @@ public static class JarVerification
             {
                 return new JarRejected(
                     OAuthErrors.InvalidRequestObject,
-                    $"JAR exp {exp:O} is at or before iat {iat:O} (non-positive lifetime).");
+                    $"JAR exp {exp} is at or before iat {iat} (non-positive lifetime).");
             }
 
             if(!JwtTemporalChecks.IsPositiveInterval(nbf, exp))
             {
                 return new JarRejected(
                     OAuthErrors.InvalidRequestObject,
-                    $"JAR exp {exp:O} is at or before nbf {nbf:O} (validity window never opens).");
+                    $"JAR exp {exp} is at or before nbf {nbf} (validity window never opens).");
             }
 
             // Step 6 — validate the timing claims against the supplied now
@@ -212,21 +212,21 @@ public static class JarVerification
             {
                 return new JarRejected(
                     OAuthErrors.InvalidRequestObject,
-                    $"JAR is not yet valid (nbf {nbf:O} is after now {now:O} plus clock skew).");
+                    $"JAR is not yet valid (nbf {nbf} is after now {now:O} plus clock skew).");
             }
 
             if(!JwtTemporalChecks.IsBeforeExpiry(now, exp, clockSkew))
             {
                 return new JarRejected(
                     OAuthErrors.InvalidRequestObject,
-                    $"JAR has expired (exp {exp:O} is before now {now:O} minus clock skew).");
+                    $"JAR has expired (exp {exp} is not after now {now:O} minus clock skew).");
             }
 
             if(!JwtTemporalChecks.IsNotInFuture(iat, now, clockSkew))
             {
                 return new JarRejected(
                     OAuthErrors.InvalidRequestObject,
-                    $"JAR iat {iat:O} is in the future beyond clock skew.");
+                    $"JAR iat {iat} is in the future beyond clock skew.");
             }
 
             // Step 6b — nbf age ceiling. FAPI 2.0 Message Signing §5.3.1
@@ -239,7 +239,7 @@ public static class JarVerification
             {
                 return new JarRejected(
                     OAuthErrors.InvalidRequestObject,
-                    $"JAR nbf {nbf:O} is more than the maximum lifetime ({maximumLifetime}) in the past.");
+                    $"JAR nbf {nbf} is more than the maximum lifetime ({maximumLifetime}) in the past.");
             }
 
             // Step 7 — validate the lifetime ceilings. exp - iat must not
@@ -247,20 +247,18 @@ public static class JarVerification
             // exp - nbf must not either (FAPI 2.0 Message Signing §5.3.1
             // phrases the window from nbf). Both run so neither anchor claim
             // can stretch the validity window past the ceiling.
-            TimeSpan declaredLifetime = exp - iat;
             if(!JwtTemporalChecks.IsWithinLifetimeCeiling(iat, exp, maximumLifetime))
             {
                 return new JarRejected(
                     OAuthErrors.InvalidRequestObject,
-                    $"JAR lifetime ({declaredLifetime}) exceeds maximum ({maximumLifetime}).");
+                    $"JAR lifetime from iat {iat} to exp {exp} exceeds maximum ({maximumLifetime}).");
             }
 
-            TimeSpan windowFromNbf = exp - nbf;
             if(!JwtTemporalChecks.IsWithinLifetimeCeiling(nbf, exp, maximumLifetime))
             {
                 return new JarRejected(
                     OAuthErrors.InvalidRequestObject,
-                    $"JAR exp is {windowFromNbf} after nbf, exceeding the maximum lifetime ({maximumLifetime}).");
+                    $"JAR exp {exp} is more than the maximum lifetime ({maximumLifetime}) after nbf {nbf}.");
             }
 
             return new JarVerified(

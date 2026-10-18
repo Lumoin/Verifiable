@@ -133,27 +133,30 @@ public static class FederationTrustAdapter
             return Verdict(TrustAssessorVerdict.Affirm(FreshnessAssessorId));
         }
 
-        DateTimeOffset minExp = chain.Statements[0].ExpiresAt;
+        var minExp = chain.Statements[0].ExpiresAt;
         foreach(EntityStatement statement in chain.Statements)
         {
-            if(statement.ExpiresAt < minExp)
+            if(statement.ExpiresAt.CompareTo(minExp) < 0)
             {
                 minExp = statement.ExpiresAt;
             }
         }
 
+        //The chain is valid while the present lies before its earliest exp; the present is a whole tick, so that is while it
+        //lies before the first tick at or after that exp.
+        var expiresAt = minExp.AtOrAfter;
         ReevaluationTrigger expiry = new()
         {
             Kind = TrustSignalKind.Expiry,
             Subject = context.Evidence.PartyIdentifier,
-            Detail = minExp.ToString("O", CultureInfo.InvariantCulture)
+            Detail = expiresAt.ToString("O", CultureInfo.InvariantCulture)
         };
 
         return Verdict(new TrustAssessorVerdict
         {
             Outcome = TrustVerdictOutcome.Constrain,
             AssessorId = FreshnessAssessorId,
-            ValidUntil = minExp,
+            ValidUntil = expiresAt,
             ReevaluationTriggers = [expiry]
         });
     }

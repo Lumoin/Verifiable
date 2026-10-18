@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using Verifiable.JCose;
 using Verifiable.Json;
@@ -71,7 +72,9 @@ internal static class DpopTestSupport
             ?? throw new FormatException("DPoP claims are missing 'htm'.");
         string htu = root.GetProperty(WellKnownJwtClaimNames.Htu).GetString()
             ?? throw new FormatException("DPoP claims are missing 'htu'.");
-        long iatSeconds = root.GetProperty(WellKnownJwtClaimNames.Iat).GetInt64();
+        var issuedAtElement = root.GetProperty(WellKnownJwtClaimNames.Iat);
+        var issuedAt = (issuedAtElement.ValueKind == JsonValueKind.Number ? NumericDate.FromJsonNumber(JsonMarshal.GetRawUtf8Value(issuedAtElement)) : null)
+            ?? throw new FormatException("DPoP claims carry no NumericDate 'iat'.");
         string jti = root.GetProperty(WellKnownJwtClaimNames.Jti).GetString()
             ?? throw new FormatException("DPoP claims are missing 'jti'.");
 
@@ -86,7 +89,7 @@ internal static class DpopTestSupport
         {
             Htm = htm,
             Htu = htu,
-            Iat = DateTimeOffset.FromUnixTimeSeconds(iatSeconds),
+            Iat = issuedAt,
             Jti = jti,
             Nonce = nonce,
             Ath = ath

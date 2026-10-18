@@ -137,9 +137,10 @@ public static class AuthorizationRequestObjectFormFields
             ResponseUri = responseUri,
             Nonce = nonce,
             State = state,
-            Iat = now,
-            Nbf = now,
-            Exp = now + requestObjectLifetime,
+            //The request object's dates are written to the whole second, the integers most wallets read.
+            Iat = NumericDate.WholeSecondAtOrBefore(now),
+            Nbf = NumericDate.WholeSecondAtOrBefore(now),
+            Exp = NumericDate.WholeSecondAtOrBefore(now + requestObjectLifetime),
             DcqlQuery = dcqlQuery,
             ClientMetadata = clientMetadata,
             TransactionData = transactionDataEntries

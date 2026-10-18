@@ -42,10 +42,11 @@ namespace Verifiable.JCose;
 /// </para>
 /// <para>
 /// A NumericDate claim is read by the library's one reading of the type
-/// (<see cref="JwtNumericDates.InstantOf"/>), a fraction of a second kept to the
-/// tick. An absent claim sets no bound; a claim present as no NumericDate - a
-/// string of digits among them - is a bound that cannot be kept, so the time-bound
-/// check it would answer reports the failure.
+/// (<see cref="NumericDate"/>), every digit kept, and each bound is judged against
+/// the date written exactly. An absent claim sets no bound; a claim present as no
+/// NumericDate - a string of digits among them - is a bound that cannot be kept, so
+/// the time-bound check it would answer reports the failure. Expiry is exclusive
+/// (RFC 7519 Section 4.1.4: the present must be before <c>exp</c>).
 /// </para>
 /// </remarks>
 [SuppressMessage("Design", "CA1034:Nested types should not be visible",
@@ -361,125 +362,152 @@ public static class JwtChecks
             or Rsa4096ModulusBase64UrlLength;
     }
 
+    /// <summary>
+    /// Whether a claims set has expired: RFC 7519 Section 4.1.4 has the present before <c>exp</c>, so a present at or after
+    /// <c>exp</c> extended by the tolerance is expired, the expiry instant itself among them.
+    /// </summary>
+    /// <param name="claims">The claims set.</param>
+    /// <param name="now">The present.</param>
+    /// <param name="clockSkew">The tolerance the expiry is extended by.</param>
+    /// <returns><see langword="true"/> when the claims set has expired or its <c>exp</c> is present as no NumericDate.</returns>
     private static bool IsExpiredCore(
         IReadOnlyDictionary<string, object> claims,
         DateTimeOffset now,
         TimeSpan clockSkew)
     {
-        return ReadInstant(claims, WellKnownJwtClaimNames.Exp, out DateTimeOffset expiry) switch
+        return ReadDate(claims, WellKnownJwtClaimNames.Exp, out var expiry) switch
         {
-            ClaimInstantReading.Absent => false,
-            ClaimInstantReading.Read => now > expiry + clockSkew,
+            ClaimDateReading.Absent => false,
+            ClaimDateReading.Read => expiry!.CompareToEarlierBy(now, clockSkew) <= 0,
             _ => true
         };
     }
 
+    /// <summary>
+    /// Whether a claims set is not yet valid: RFC 7519 Section 4.1.5 has it accepted at or after <c>nbf</c>, so a present before
+    /// <c>nbf</c> reduced by the tolerance is too early.
+    /// </summary>
+    /// <param name="claims">The claims set.</param>
+    /// <param name="now">The present.</param>
+    /// <param name="clockSkew">The tolerance the not-before date is reduced by.</param>
+    /// <returns><see langword="true"/> when the claims set is not yet valid or its <c>nbf</c> is present as no NumericDate.</returns>
     private static bool IsNotYetValidCore(
         IReadOnlyDictionary<string, object> claims,
         DateTimeOffset now,
         TimeSpan clockSkew)
     {
-        return ReadInstant(claims, WellKnownJwtClaimNames.Nbf, out DateTimeOffset notBefore) switch
+        return ReadDate(claims, WellKnownJwtClaimNames.Nbf, out var notBefore) switch
         {
-            ClaimInstantReading.Absent => false,
-            ClaimInstantReading.Read => now < notBefore - clockSkew,
+            ClaimDateReading.Absent => false,
+            ClaimDateReading.Read => notBefore!.CompareToLaterBy(now, clockSkew) > 0,
             _ => true
         };
     }
 
+    /// <summary>Whether a claims set's <c>iat</c> lies after the present extended by the tolerance.</summary>
+    /// <param name="claims">The claims set.</param>
+    /// <param name="now">The present.</param>
+    /// <param name="clockSkew">The tolerance the present is extended by.</param>
+    /// <returns><see langword="true"/> when the claims set was issued in the future or its <c>iat</c> is present as no NumericDate.</returns>
     private static bool IsIssuedInFutureCore(
         IReadOnlyDictionary<string, object> claims,
         DateTimeOffset now,
         TimeSpan clockSkew)
     {
-        return ReadInstant(claims, WellKnownJwtClaimNames.Iat, out DateTimeOffset issuedAt) switch
+        return ReadDate(claims, WellKnownJwtClaimNames.Iat, out var issuedAt) switch
         {
-            ClaimInstantReading.Absent => false,
-            ClaimInstantReading.Read => issuedAt > now + clockSkew,
+            ClaimDateReading.Absent => false,
+            ClaimDateReading.Read => issuedAt!.CompareToLaterBy(now, clockSkew) > 0,
             _ => true
         };
     }
 
+    /// <summary>
+    /// Whether the window from <c>nbf</c>, or <c>iat</c> where no <c>nbf</c> is present, to <c>exp</c> is longer than the maximum,
+    /// judged exactly: a window longer by any part of a tick exceeds it.
+    /// </summary>
+    /// <param name="claims">The claims set.</param>
+    /// <param name="maximum">The longest window admitted.</param>
+    /// <returns><see langword="true"/> when the window exceeds the maximum or a date bounding it is present as no NumericDate.</returns>
     private static bool LifetimeExceedsCore(
         IReadOnlyDictionary<string, object> claims,
         TimeSpan maximum)
     {
-        var expiryReading = ReadInstant(claims, WellKnownJwtClaimNames.Exp, out DateTimeOffset expiry);
+        var expiryReading = ReadDate(claims, WellKnownJwtClaimNames.Exp, out var expiry);
 
-        if(expiryReading == ClaimInstantReading.Absent)
+        if(expiryReading == ClaimDateReading.Absent)
         {
             return false;
         }
 
         //Prefer nbf over iat as the validity window start.
-        var startReading = ReadInstant(claims, WellKnownJwtClaimNames.Nbf, out DateTimeOffset start);
+        var startReading = ReadDate(claims, WellKnownJwtClaimNames.Nbf, out var start);
 
-        if(startReading == ClaimInstantReading.Absent)
+        if(startReading == ClaimDateReading.Absent)
         {
-            startReading = ReadInstant(claims, WellKnownJwtClaimNames.Iat, out start);
+            startReading = ReadDate(claims, WellKnownJwtClaimNames.Iat, out start);
         }
 
-        if(startReading == ClaimInstantReading.Absent)
+        if(startReading == ClaimDateReading.Absent)
         {
             return false;
         }
 
-        return expiryReading != ClaimInstantReading.Read
-            || startReading != ClaimInstantReading.Read
-            || expiry - start > maximum;
+        return expiryReading != ClaimDateReading.Read
+            || startReading != ClaimDateReading.Read
+            || expiry!.IsMoreThanAfter(start!, maximum);
     }
 
+    /// <summary>Whether <c>exp</c> lies at or before <c>nbf</c>, a window that never opens, judged exactly.</summary>
+    /// <param name="claims">The claims set.</param>
+    /// <returns><see langword="true"/> when the window never opens or either date is present as no NumericDate.</returns>
     private static bool IsExpBeforeNbfCore(IReadOnlyDictionary<string, object> claims)
     {
-        var expiryReading = ReadInstant(claims, WellKnownJwtClaimNames.Exp, out DateTimeOffset expiry);
-        var notBeforeReading = ReadInstant(claims, WellKnownJwtClaimNames.Nbf, out DateTimeOffset notBefore);
+        var expiryReading = ReadDate(claims, WellKnownJwtClaimNames.Exp, out var expiry);
+        var notBeforeReading = ReadDate(claims, WellKnownJwtClaimNames.Nbf, out var notBefore);
 
-        if(expiryReading == ClaimInstantReading.Absent || notBeforeReading == ClaimInstantReading.Absent)
+        if(expiryReading == ClaimDateReading.Absent || notBeforeReading == ClaimDateReading.Absent)
         {
             return false;
         }
 
-        return expiryReading != ClaimInstantReading.Read
-            || notBeforeReading != ClaimInstantReading.Read
-            || expiry <= notBefore;
+        return expiryReading != ClaimDateReading.Read
+            || notBeforeReading != ClaimDateReading.Read
+            || expiry!.CompareTo(notBefore!) <= 0;
     }
 
     /// <summary>
-    /// Reads a NumericDate claim as the instant it names, a fraction of a second kept to the tick (RFC 7519 Section 2;
-    /// <see cref="JwtNumericDates.InstantOf"/>), so no bound is judged against a value moved to a whole second.
+    /// Reads a NumericDate claim as the date it names, every digit kept (RFC 7519 Section 2; <see cref="NumericDate.Of"/>), so
+    /// each bound is judged against the date written.
     /// </summary>
     /// <param name="claims">The claims set.</param>
     /// <param name="key">The NumericDate claim to read.</param>
-    /// <param name="instant">The instant the claim names when it is <see cref="ClaimInstantReading.Read"/>.</param>
-    /// <returns>Whether the claim is absent, names an instant, or is present as no NumericDate.</returns>
-    private static ClaimInstantReading ReadInstant(
+    /// <param name="date">The date the claim names when it is <see cref="ClaimDateReading.Read"/>.</param>
+    /// <returns>Whether the claim is absent, names a date, or is present as no NumericDate.</returns>
+    private static ClaimDateReading ReadDate(
         IReadOnlyDictionary<string, object> claims,
         string key,
-        out DateTimeOffset instant)
+        out NumericDate? date)
     {
-        instant = default;
-        if(!claims.TryGetValue(key, out object? value))
+        date = null;
+
+        if(!claims.TryGetValue(key, out var value))
         {
-            return ClaimInstantReading.Absent;
+            return ClaimDateReading.Absent;
         }
 
-        if(JwtNumericDates.InstantOf(key, value) is not DateTimeOffset read)
-        {
-            return ClaimInstantReading.Unreadable;
-        }
+        date = NumericDate.Of(value);
 
-        instant = read;
-
-        return ClaimInstantReading.Read;
+        return date is null ? ClaimDateReading.Unreadable : ClaimDateReading.Read;
     }
 
     /// <summary>What reading a NumericDate claim found.</summary>
-    private enum ClaimInstantReading
+    private enum ClaimDateReading
     {
         /// <summary>The claim is not present: it sets no bound, and the check it would bound does not fail.</summary>
         Absent,
 
-        /// <summary>The claim names an instant, which the check judges.</summary>
+        /// <summary>The claim names a date, which the check judges.</summary>
         Read,
 
         /// <summary>The claim is present as no NumericDate - a string of digits among them - so it is a bound that cannot be kept, and the check it bounds fails.</summary>

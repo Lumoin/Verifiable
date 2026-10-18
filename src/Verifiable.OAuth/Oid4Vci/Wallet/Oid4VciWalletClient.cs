@@ -766,7 +766,9 @@ public sealed class Oid4VciWalletClient
         {
             Htm = HttpPostMethod,
             Htu = tokenEndpoint.GetLeftPart(UriPartial.Path),
-            Iat = Configuration.TimeProvider.GetUtcNow(),
+
+            //A proof's iat is written to the whole second, the integer most servers read (RFC 9449 section 4.2).
+            Iat = NumericDate.WholeSecondAtOrBefore(Configuration.TimeProvider.GetUtcNow()),
             Jti = jti,
             Nonce = nonce
         };
@@ -1435,7 +1437,9 @@ public sealed class Oid4VciWalletClient
         {
             Htm = HttpPostMethod,
             Htu = endpoint.GetLeftPart(UriPartial.Path),
-            Iat = Configuration.TimeProvider.GetUtcNow(),
+
+            //A proof's iat is written to the whole second, the integer most servers read (RFC 9449 section 4.2).
+            Iat = NumericDate.WholeSecondAtOrBefore(Configuration.TimeProvider.GetUtcNow()),
             Jti = jti,
             Nonce = nonce,
             Ath = ath

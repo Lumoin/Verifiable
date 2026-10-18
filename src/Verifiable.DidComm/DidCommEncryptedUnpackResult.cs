@@ -1,4 +1,5 @@
 using Verifiable.Cryptography;
+using Verifiable.JCose;
 
 namespace Verifiable.DidComm;
 
@@ -157,7 +158,7 @@ public sealed class DidCommEncryptedUnpackResult
         bool isRecipientAddressedInTo,
         bool isRotation,
         string? priorDid,
-        long? rotationIat,
+        NumericDate? rotationIat,
         DidCommDecryptionError error)
     {
         IsUnpacked = isUnpacked;
@@ -244,12 +245,13 @@ public sealed class DidCommEncryptedUnpackResult
     public string? PriorDid { get; }
 
     /// <summary>
-    /// The rotation's <c>from_prior</c> <c>iat</c> (issued-at, Unix epoch seconds) when <see cref="IsRotation"/>
-    /// is <see langword="true"/> and the JWT carried one, otherwise <see langword="null"/>. DIDComm v2.1 §DID
-    /// Rotation requires a recipient to ignore messages predating a rotation it has accepted; the library
-    /// cannot enforce that ordering statelessly, so it surfaces the rotation instant for the application.
+    /// The rotation's <c>from_prior</c> <c>iat</c>, the NumericDate exactly as written (RFC 7519 Section 2), when
+    /// <see cref="IsRotation"/> is <see langword="true"/> and the JWT carried one, otherwise <see langword="null"/>.
+    /// DIDComm v2.1 §DID Rotation requires a recipient to ignore messages predating a rotation it has accepted; the
+    /// library cannot enforce that ordering statelessly, so it surfaces the rotation date, every digit kept, for the
+    /// application to order messages by.
     /// </summary>
-    public long? RotationIat { get; }
+    public NumericDate? RotationIat { get; }
 
     /// <summary>The reason unpack failed, or <see cref="DidCommDecryptionError.None"/> when it succeeded.</summary>
     public DidCommDecryptionError Error { get; }
@@ -269,9 +271,9 @@ public sealed class DidCommEncryptedUnpackResult
         bool isSenderAuthenticated,
         bool isSignedInner,
         bool isRecipientAddressedInTo,
-        bool isRotation = false,
-        string? priorDid = null,
-        long? rotationIat = null)
+        bool isRotation,
+        string? priorDid,
+        NumericDate? rotationIat)
     {
         return new DidCommEncryptedUnpackResult(true, message, verified, mode, senderKeyId, isSenderAuthenticated, isSignedInner, isRecipientAddressedInTo, isRotation, priorDid, rotationIat, DidCommDecryptionError.None);
     }

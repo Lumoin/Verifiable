@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Verifiable.JCose;
 
 namespace Verifiable.OAuth.Federation;
 
@@ -30,8 +31,8 @@ public sealed record FederationClientAuthenticationResult
     /// </summary>
     public string? Jti { get; init; }
 
-    /// <summary>The assertion's expiry; <see langword="null"/> on failure.</summary>
-    public DateTimeOffset? Expiration { get; init; }
+    /// <summary>The assertion's expiry as written; <see langword="null"/> on failure.</summary>
+    public NumericDate? Expiration { get; init; }
 
     /// <summary>The reason validation failed; <see langword="null"/> on success.</summary>
     public string? FailureReason { get; init; }
@@ -42,10 +43,11 @@ public sealed record FederationClientAuthenticationResult
 
     /// <summary>Builds a success result.</summary>
     public static FederationClientAuthenticationResult Authenticated(
-        string clientId, string jti, DateTimeOffset expiration)
+        string clientId, string jti, NumericDate expiration)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(clientId);
         ArgumentException.ThrowIfNullOrWhiteSpace(jti);
+        ArgumentNullException.ThrowIfNull(expiration);
         return new FederationClientAuthenticationResult
         {
             ClientId = clientId,

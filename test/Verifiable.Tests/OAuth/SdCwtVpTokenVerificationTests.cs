@@ -99,8 +99,8 @@ internal sealed class SdCwtVpTokenVerificationTests
         Assert.AreEqual(VerifierAud, parsed.KbJwtAud, "The KBT aud must surface as the key-binding aud.");
         Assert.AreEqual(Cnonce, parsed.KbJwtNonce, "The KBT cnonce must surface as the key-binding nonce.");
         Assert.AreEqual(
-            TimeProvider.GetUtcNow().ToUnixTimeSeconds(),
-            parsed.KbJwtIat?.ToUnixTimeSeconds(),
+            NumericDate.WholeSecondAtOrBefore(TimeProvider.GetUtcNow()),
+            parsed.KbJwtIat,
             "The KBT iat must surface as the key-binding iat.");
 
         //SD-CWT carries no sd_hash and no SessionTranscript; those N/A axes are not-a-failure.

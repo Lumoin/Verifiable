@@ -34,15 +34,15 @@ public sealed record TrustMark
     /// <summary>The subject the mark is about (JWT <c>sub</c>).</summary>
     public required EntityIdentifier Subject { get; init; }
 
-    /// <summary>The instant at which this mark was issued (JWT <c>iat</c>).</summary>
-    public required DateTimeOffset IssuedAt { get; init; }
+    /// <summary>The date at which this mark was issued (JWT <c>iat</c>), as written.</summary>
+    public required NumericDate IssuedAt { get; init; }
 
     /// <summary>
-    /// The instant after which this mark is no longer valid (JWT
-    /// <c>exp</c>). Optional per §7.1.1: marks without <c>exp</c> have
+    /// The date at and after which this mark is no longer valid (JWT
+    /// <c>exp</c>), as written. Optional per §7.1.1: marks without <c>exp</c> have
     /// indefinite validity.
     /// </summary>
-    public DateTimeOffset? ExpiresAt { get; init; }
+    public NumericDate? ExpiresAt { get; init; }
 
     /// <summary>
     /// The Trust Mark type identifier (JWT <c>trust_mark_type</c>; the draft-era claim name was

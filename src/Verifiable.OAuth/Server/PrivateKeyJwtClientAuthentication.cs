@@ -63,8 +63,8 @@ public sealed record PrivateKeyJwtClientAuthenticationResult
     public string? Jti { get; init; }
 
 
-    /// <summary>The assertion's expiry; <see langword="null"/> on failure.</summary>
-    public DateTimeOffset? Expiration { get; init; }
+    /// <summary>The assertion's expiry as written; <see langword="null"/> on failure.</summary>
+    public NumericDate? Expiration { get; init; }
 
 
     /// <summary>The reason validation failed; <see langword="null"/> on success.</summary>
@@ -77,10 +77,11 @@ public sealed record PrivateKeyJwtClientAuthenticationResult
 
     /// <summary>Builds a success result.</summary>
     public static PrivateKeyJwtClientAuthenticationResult Authenticated(
-        string clientId, string jti, DateTimeOffset expiration)
+        string clientId, string jti, NumericDate expiration)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(clientId);
         ArgumentNullException.ThrowIfNull(jti);
+        ArgumentNullException.ThrowIfNull(expiration);
 
         //The one identifier contract the judgement of the claims refuses by, so no claims it accepts reach this throw.
         if(!ClientAssertionClaimRules.IsIdentifier(jti))
@@ -214,7 +215,7 @@ public static class PrivateKeyJwtClientAuthentication
         var judged = ClientAssertionClaimRules.Judge(payload, clientId, acceptedAudiences, now, clockSkew);
 
         if(judged.Refusal is not null
-            || JwtNumericDates.InstantOf(WellKnownJwtClaimNames.Exp, payload[WellKnownJwtClaimNames.Exp]) is not DateTimeOffset expiry)
+            || NumericDate.Of(payload[WellKnownJwtClaimNames.Exp]) is not NumericDate expiry)
         {
             return PrivateKeyJwtClientAuthenticationResult.Rejected(
                 $"The client assertion breaks the RFC 7523 Section 3 rule {judged.Refusal}.");
@@ -254,7 +255,7 @@ public static class PrivateKeyJwtClientAuthentication
     /// The OPTIONAL key-set resolution seam for a registration that carries a
     /// <see cref="ClientRecord.ClientJwksUri"/> but no inline <see cref="ClientRecord.ClientJwks"/> —
     /// the RFC 7591 §2 <c>jwks_uri</c> registration a caller never dereferenced. <see langword="null"/>
-    /// (the default) fails closed exactly as an unwired seam always has: the application owns what
+    /// fails closed exactly as an unwired seam always has: the application owns what
     /// reaches the wire, so nothing here dereferences <see cref="ClientRecord.ClientJwksUri"/> on its
     /// own. Wire a delegate whose implementation calls
     /// <see cref="Verifiable.OAuth.Server.Pipeline.JwksUriResolver.ResolveAsync"/> here to resolve
@@ -264,14 +265,15 @@ public static class PrivateKeyJwtClientAuthentication
     /// </param>
     /// <param name="audiencePolicy">
     /// The <c>aud</c> claim rule this validator applies,
-    /// <see cref="ClientAssertionAudiencePolicy.AuthorizationServerIdentities"/> (the default, also
-    /// read from <see langword="null"/>) or <see cref="ClientAssertionAudiencePolicy.IssuerIdentifierOnly"/>.
+    /// <see cref="ClientAssertionAudiencePolicy.AuthorizationServerIdentities"/> (also read from
+    /// <see langword="null"/>) or <see cref="ClientAssertionAudiencePolicy.IssuerIdentifierOnly"/>. Every
+    /// argument is required: a caller names what it passes, none of them defaulted.
     /// </param>
     public static ValidateClientCredentialsDelegate BuildValidator(
-        IReadOnlyCollection<string>? additionalAcceptedAudiences = null,
-        CheckClientAssertionJtiReplayDelegate? checkJtiReplayAsync = null,
-        ResolveJwksUriDelegate? resolveJwksUriAsync = null,
-        ClientAssertionAudiencePolicy? audiencePolicy = null)
+        IReadOnlyCollection<string>? additionalAcceptedAudiences,
+        CheckClientAssertionJtiReplayDelegate? checkJtiReplayAsync,
+        ResolveJwksUriDelegate? resolveJwksUriAsync,
+        ClientAssertionAudiencePolicy? audiencePolicy)
     {
         ThrowIfAudiencePolicyCompositionIsContradictory(additionalAcceptedAudiences, audiencePolicy);
 
@@ -644,7 +646,7 @@ public static class PrivateKeyJwtClientAuthentication
                         //assertion's timing under, not the bare exp.
                         JtiReplayOutcome outcome = await checkJtiReplayAsync(
                             server, context, registration.TenantId, result.ClientId!, result.Jti!,
-                            ClientAssertionClaimRules.AcceptedUntil(result.Expiration!.Value, context.ClockSkewTolerance), cancellationToken).ConfigureAwait(false);
+                            ClientAssertionClaimRules.AcceptedUntil(result.Expiration!, context.ClockSkewTolerance), cancellationToken).ConfigureAwait(false);
 
                         //Any outcome other than FirstUse refuses the assertion: Replayed is the
                         //defense doing its job, StoreUnavailable is a policy that cannot prove

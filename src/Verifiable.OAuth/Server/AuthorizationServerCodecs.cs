@@ -217,11 +217,13 @@ public sealed class AuthorizationServerCodecs : WiringComponent
 
     /// <summary>
     /// Deserializes the payload bytes of a compact JWS into a claim dictionary, every member as written. Required when the AS
-    /// consumes JWTs from the wire. A NumericDate keeps its fraction (RFC 7519 Section 2: "non-integer values can be
+    /// consumes JWTs from the wire. A NumericDate keeps every digit (RFC 7519 Section 2: "non-integer values can be
     /// represented"): every reader of the claims sets parsed here - a client assertion's, a request object's, a bearer access
-    /// token's and an end-session <c>id_token_hint</c>'s - reads it to the tick (<see cref="JwtNumericDates.InstantOf"/>) and
-    /// judges it under its own tolerance, so a codec that moved a fraction to a whole second first would distort the window the
-    /// claim bounds, an <c>iat</c> taken down to the tolerance from a fraction past it among them.
+    /// token's and an end-session <c>id_token_hint</c>'s - reads it as written (<see cref="NumericDate.Of"/>) and judges it
+    /// against each bound exactly, so a codec boxes a number as an integer type, as a <see cref="decimal"/> only where a decimal
+    /// holds it exactly, and otherwise as the <see cref="DecimalNumber"/> it is (<see cref="DecimalNumber.ToClaimValue"/>): a
+    /// codec that moved a fraction to a whole second, or rounded it to a decimal's digits, would distort the window the claim
+    /// bounds, an <c>iat</c> taken onto the tolerance from a fraction past it among them.
     /// </summary>
     /// <remarks>
     /// <para>

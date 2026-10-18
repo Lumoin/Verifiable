@@ -313,7 +313,10 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
 
             int validatorInvocations = 0;
             var realValidator = PrivateKeyJwtClientAuthentication.BuildValidator(
-                additionalAcceptedAudiences: [tokenEndpoint.OriginalString]);
+                additionalAcceptedAudiences: [tokenEndpoint.OriginalString],
+                checkJtiReplayAsync: null,
+                resolveJwksUriAsync: null,
+                audiencePolicy: null);
             await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
             {
                 candidateIntegration.ValidateClientCredentialsAsync = async (request, fields, registration, context, ct) =>
@@ -402,7 +405,10 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
 
             int validatorInvocations = 0;
             var realValidator = PrivateKeyJwtClientAuthentication.BuildValidator(
-                additionalAcceptedAudiences: [tokenEndpoint.OriginalString]);
+                additionalAcceptedAudiences: [tokenEndpoint.OriginalString],
+                checkJtiReplayAsync: null,
+                resolveJwksUriAsync: null,
+                audiencePolicy: null);
             await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
             {
                 candidateIntegration.ValidateClientCredentialsAsync = async (request, fields, registration, context, ct) =>
@@ -487,7 +493,10 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
 
             int validatorInvocations = 0;
             var realValidator = PrivateKeyJwtClientAuthentication.BuildValidator(
-                additionalAcceptedAudiences: [tokenEndpoint.OriginalString]);
+                additionalAcceptedAudiences: [tokenEndpoint.OriginalString],
+                checkJtiReplayAsync: null,
+                resolveJwksUriAsync: null,
+                audiencePolicy: null);
             await TestHostShell.AlterAsync(host.Server, candidateIntegration =>
             {
                 candidateIntegration.ValidateClientCredentialsAsync = async (request, fields, registration, context, ct) =>

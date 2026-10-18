@@ -279,7 +279,7 @@ public static class SdJwtVpTokenVerification
         bool kbJwtSignatureValid = false;
         string? kbNonce = null;
         string? kbAud = null;
-        DateTimeOffset? kbIat = null;
+        var kbIat = default(NumericDate);
         bool sdHashValid = false;
         IReadOnlyList<string>? kbTransactionDataHashes = null;
         string? kbTransactionDataHashesAlg = null;
@@ -298,11 +298,8 @@ public static class SdJwtVpTokenVerification
                 kbAud = JwkJsonReader.ExtractStringValue(kbPayload, "aud"u8);
                 claimedSdHash = JwkJsonReader.ExtractStringValue(kbPayload, "sd_hash"u8);
 
-                //RFC 7519 Section 2: the KB-JWT's iat is a NumericDate, a fraction read to the tick.
-                if(JwkJsonReader.TryExtractNumericDate(kbPayload, WellKnownJwtClaimNames.IatUtf8, WellKnownJwtClaimNames.Iat, out var issuedAt))
-                {
-                    kbIat = issuedAt;
-                }
+                //RFC 7519 Section 2: the KB-JWT's iat is a NumericDate, read as written.
+                kbIat = JwkJsonReader.ExtractNumericDate(kbPayload, WellKnownJwtClaimNames.IatUtf8);
 
                 //OID4VP 1.0 §8.4: optional transaction_data_hashes array bound
                 //into the KB-JWT when the Authorization Request carried a

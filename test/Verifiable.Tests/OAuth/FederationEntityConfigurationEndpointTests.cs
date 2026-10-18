@@ -132,7 +132,7 @@ internal sealed class FederationEntityConfigurationEndpointTests
             "EC iss must equal the registration's FederationEntityId.");
         Assert.AreEqual(federationEntityId.ToString(), statement.Subject.Value,
             "EC sub must equal iss for a self-signed Entity Configuration per Federation §3.1.");
-        Assert.IsGreaterThan(statement.IssuedAt, statement.ExpiresAt,
+        Assert.IsGreaterThan(0, statement.ExpiresAt.CompareTo(statement.IssuedAt),
             "EC exp must be strictly after iat.");
         IReadOnlyDictionary<string, object> metadataClaim = ExtractMetadataClaim(statement);
         Assert.IsTrue(metadataClaim.ContainsKey(WellKnownEntityTypeIdentifiers.OpenIdRelyingParty.Value),

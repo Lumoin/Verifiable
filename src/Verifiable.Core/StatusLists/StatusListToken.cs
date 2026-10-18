@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Verifiable.JCose;
 
 namespace Verifiable.Core.StatusLists;
 
@@ -37,44 +38,37 @@ public sealed class StatusListToken
     public string Subject { get; }
 
     /// <summary>
-    /// Gets the time at which this Status List Token was issued.
+    /// Gets the time at which this Status List Token was issued, the NumericDate as written (RFC 7519 Section 2: a fraction
+    /// of a second among what it may carry).
     /// </summary>
-    public DateTimeOffset IssuedAt { get; }
+    public NumericDate IssuedAt { get; }
 
     /// <summary>
-    /// Gets the expiration time after which this token should be considered invalid.
+    /// Gets the expiration time at and after which this token is considered expired, the NumericDate as written.
     /// </summary>
-    public DateTimeOffset? ExpirationTime { get; init; }
+    public NumericDate? ExpirationTime { get; init; }
 
     /// <summary>
-    /// Gets the maximum time in seconds that this token may be cached before
-    /// a fresh copy should be retrieved.
+    /// Gets the maximum time in seconds that this token may be cached before a fresh copy should be retrieved, exactly as
+    /// written: "ttl: … The value of the claim MUST be a positive number encoded in JSON as a number." (Section 5.1), a
+    /// fraction of a second among what it may carry.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">
-    /// Thrown by the property setter when assigned a value that is not positive — "ttl: … The value of
-    /// the claim MUST be a positive number encoded in JSON as a number." (Section 5.1).
+    /// Thrown by the property setter when assigned a value that is not positive (Section 5.1).
     /// </exception>
-    public long? TimeToLive
+    public DecimalNumber? TimeToLive
     {
-        get => timeToLive;
+        get;
         init
         {
-            if(value.HasValue)
+            if(value is not null && (value.IsZero || value.IsNegative))
             {
-                ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value.Value);
+                throw new ArgumentOutOfRangeException(nameof(value), value, "A Status List Token's ttl MUST be a positive number.");
             }
 
-            timeToLive = value;
+            field = value;
         }
     }
-
-    /// <summary>
-    /// The backing store <see cref="TimeToLive"/>'s validating <c>init</c> accessor assigns. A field
-    /// because an <c>init</c> accessor may assign a sibling field of its own declaring type outside a
-    /// constructor, but never a get-only auto-property's compiler-generated backing field, which only a
-    /// constructor of the declaring type may assign.
-    /// </summary>
-    private readonly long? timeToLive;
 
     /// <summary>
     /// Gets the embedded Status List containing the actual status data.
@@ -91,13 +85,14 @@ public sealed class StatusListToken
     /// <param name="issuedAt">The time at which this token was issued.</param>
     /// <param name="statusList">The Status List to embed in this token.</param>
     /// <exception cref="ArgumentNullException">
-    /// Thrown when <paramref name="subject"/> or <paramref name="statusList"/> is <see langword="null"/>.
+    /// Thrown when <paramref name="subject"/>, <paramref name="issuedAt"/> or <paramref name="statusList"/> is <see langword="null"/>.
     /// </exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="subject"/> is empty or whitespace.</exception>
-    public StatusListToken(string subject, DateTimeOffset issuedAt, StatusList statusList)
+    public StatusListToken(string subject, NumericDate issuedAt, StatusList statusList)
     {
         ArgumentNullException.ThrowIfNull(subject);
         ArgumentException.ThrowIfNullOrWhiteSpace(subject);
+        ArgumentNullException.ThrowIfNull(issuedAt);
         ArgumentNullException.ThrowIfNull(statusList);
 
         Subject = subject;

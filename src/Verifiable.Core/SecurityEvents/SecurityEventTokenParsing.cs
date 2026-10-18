@@ -29,10 +29,10 @@ public static class SecurityEventTokenParsing
         return new SecurityEventToken
         {
             Issuer = ReadString(payload, WellKnownJwtClaimNames.Iss),
-            IssuedAt = ReadUnixSeconds(payload, WellKnownJwtClaimNames.Iat),
+            IssuedAt = ReadNumericDate(payload, WellKnownJwtClaimNames.Iat),
             JwtId = ReadString(payload, WellKnownJwtClaimNames.Jti),
             Audiences = ReadAudiences(payload),
-            TimeOfEvent = ReadUnixSeconds(payload, SecurityEventTokenClaimNames.Toe),
+            TimeOfEvent = ReadNumericDate(payload, SecurityEventTokenClaimNames.Toe),
             Transaction = ReadString(payload, SecurityEventTokenClaimNames.Txn),
             SubjectId = ReadSubjectId(payload),
             Events = ReadEvents(payload)
@@ -45,15 +45,15 @@ public static class SecurityEventTokenParsing
 
 
     /// <summary>
-    /// Reads a NumericDate claim (RFC 7519 Section 2) as the instant it names, a fraction of a second kept to the tick by the
-    /// library's one reading of the type (<see cref="JwtNumericDates.InstantOf"/>), or <see langword="null"/> when it is absent,
-    /// no NumericDate, or names an instant no clock represents.
+    /// Reads a NumericDate claim (RFC 7519 Section 2) as the date it names, every digit kept by the library's one reading of the
+    /// type (<see cref="NumericDate.Of"/>), or <see langword="null"/> when it is absent, no NumericDate, or names an instant no
+    /// clock represents.
     /// </summary>
     /// <param name="obj">The claims.</param>
     /// <param name="name">The NumericDate claim to read.</param>
-    /// <returns>The instant, or <see langword="null"/>.</returns>
-    private static DateTimeOffset? ReadUnixSeconds(IReadOnlyDictionary<string, object> obj, string name) =>
-        obj.TryGetValue(name, out object? value) ? JwtNumericDates.InstantOf(name, value) : null;
+    /// <returns>The date, or <see langword="null"/>.</returns>
+    private static NumericDate? ReadNumericDate(IReadOnlyDictionary<string, object> obj, string name) =>
+        obj.TryGetValue(name, out var value) ? NumericDate.Of(value) : null;
 
 
     private static List<string> ReadAudiences(IReadOnlyDictionary<string, object> obj)

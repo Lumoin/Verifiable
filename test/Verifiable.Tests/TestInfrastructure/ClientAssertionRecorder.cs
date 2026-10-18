@@ -32,7 +32,11 @@ internal static class ClientAssertionRecorder
     {
         ArgumentNullException.ThrowIfNull(recordedAssertions);
 
-        ValidateClientCredentialsDelegate inner = PrivateKeyJwtClientAuthentication.BuildValidator();
+        ValidateClientCredentialsDelegate inner = PrivateKeyJwtClientAuthentication.BuildValidator(
+            additionalAcceptedAudiences: null,
+            checkJtiReplayAsync: null,
+            resolveJwksUriAsync: null,
+            audiencePolicy: null);
 
         return async (request, fields, registration, context, cancellationToken) =>
         {

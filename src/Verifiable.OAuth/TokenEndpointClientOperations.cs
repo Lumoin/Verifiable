@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Verifiable.Core;
 using Verifiable.Core.Outbound;
 using Verifiable.Cryptography;
+using Verifiable.JCose;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
@@ -461,7 +462,9 @@ internal static class TokenEndpointClientOperations
         {
             Htm = WellKnownHttpMethods.Post,
             Htu = tokenEndpoint.GetLeftPart(UriPartial.Path),
-            Iat = now,
+
+            //A proof's iat is written to the whole second, the integer most servers read (RFC 9449 section 4.2).
+            Iat = NumericDate.WholeSecondAtOrBefore(now),
             Jti = jti,
             Nonce = nonce
         };

@@ -2137,7 +2137,8 @@ public static class DidCommEncryptedExtensions
         if(string.IsNullOrEmpty(plaintextMessage.FromPrior))
         {
             return DidCommEncryptedUnpackResult.Unpacked(
-                plaintextMessage, verified, mode, senderKeyId, isSenderAuthenticated, isSignedInner, isRecipientAddressedInTo);
+                plaintextMessage, verified, mode, senderKeyId, isSenderAuthenticated, isSignedInner, isRecipientAddressedInTo,
+                isRotation: false, priorDid: null, rotationIat: null);
         }
 
         if(fromPriorPayloadDeserializer is null || fromPriorHeaderDeserializer is null)

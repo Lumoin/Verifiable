@@ -1,5 +1,6 @@
 using Lumoin.Veritas.Cbor;
 using Verifiable.Core.StatusLists;
+using Verifiable.JCose;
 
 namespace Verifiable.Cbor.StatusList;
 
@@ -303,12 +304,28 @@ public sealed class StatusListTokenCborConverter : CborConverter<StatusListToken
                 $"Map key {StatusListCborConstants.TimeToLive} ('ttl') MUST be a positive number.");
         }
 
-        return new StatusListToken(subject, DateTimeOffset.FromUnixTimeSeconds(issuedAt.Value), statusList)
+        //A NumericDate naming an instant no clock represents is no date of the token: refused as content, never raised as an
+        //argument fault of the date's construction.
+        var issued = NumericDate.Of(issuedAt.Value);
+
+        if(issued is null)
         {
-            TimeToLive = timeToLive,
-            ExpirationTime = expirationTime.HasValue
-                ? DateTimeOffset.FromUnixTimeSeconds(expirationTime.Value)
-                : null
+            CborThrowHelper.ThrowCborContentException(
+                $"Map key {StatusListCborConstants.IssuedAt} ('iat') MUST name an instant a clock represents.");
+        }
+
+        var expiry = expirationTime.HasValue ? NumericDate.Of(expirationTime.Value) : null;
+
+        if(expirationTime.HasValue && expiry is null)
+        {
+            CborThrowHelper.ThrowCborContentException(
+                $"Map key {StatusListCborConstants.ExpirationTime} ('exp') MUST name an instant a clock represents.");
+        }
+
+        return new StatusListToken(subject, issued, statusList)
+        {
+            TimeToLive = timeToLive.HasValue ? DecimalNumber.FromInteger(timeToLive.Value) : null,
+            ExpirationTime = expiry
         };
     }
 
@@ -319,8 +336,8 @@ public sealed class StatusListTokenCborConverter : CborConverter<StatusListToken
         ArgumentNullException.ThrowIfNull(value);
 
         int mapSize = 3;
-        if(value.ExpirationTime.HasValue) { mapSize++; }
-        if(value.TimeToLive.HasValue) { mapSize++; }
+        if(value.ExpirationTime is not null) { mapSize++; }
+        if(value.TimeToLive is not null) { mapSize++; }
 
         writer.WriteStartMap(mapSize);
 
@@ -328,18 +345,18 @@ public sealed class StatusListTokenCborConverter : CborConverter<StatusListToken
         writer.WriteTextString(value.Subject);
 
         writer.WriteInt32(StatusListCborConstants.IssuedAt);
-        writer.WriteInt64(value.IssuedAt.ToUnixTimeSeconds());
+        writer.WriteInt64(WholeSecondsOf(value.IssuedAt.Seconds, "iat"));
 
-        if(value.ExpirationTime.HasValue)
+        if(value.ExpirationTime is not null)
         {
             writer.WriteInt32(StatusListCborConstants.ExpirationTime);
-            writer.WriteInt64(value.ExpirationTime.Value.ToUnixTimeSeconds());
+            writer.WriteInt64(WholeSecondsOf(value.ExpirationTime.Seconds, "exp"));
         }
 
-        if(value.TimeToLive.HasValue)
+        if(value.TimeToLive is not null)
         {
             writer.WriteInt32(StatusListCborConstants.TimeToLive);
-            writer.WriteInt64(value.TimeToLive.Value);
+            writer.WriteInt64(WholeSecondsOf(value.TimeToLive, "ttl"));
         }
 
         writer.WriteInt32(StatusListCborConstants.StatusList);
@@ -347,4 +364,19 @@ public sealed class StatusListTokenCborConverter : CborConverter<StatusListToken
 
         writer.WriteEndMap();
     }
+
+
+    /// <summary>
+    /// The whole count of seconds a claim of the token writes as a CBOR integer, the encoding this converter writes a CWT
+    /// NumericDate and <c>ttl</c> in. A value carrying a fraction is no whole count, and writing it as one would state another
+    /// date or duration than the token's, so it is refused.
+    /// </summary>
+    /// <param name="seconds">The claim's exact count of seconds.</param>
+    /// <param name="claimName">The claim's name, for the refusal.</param>
+    /// <returns>The whole count of seconds.</returns>
+    /// <exception cref="ArgumentException">The count carries a fraction or lies beyond a <see cref="long"/>.</exception>
+    private static long WholeSecondsOf(DecimalNumber seconds, string claimName) =>
+        seconds.ToClaimValue() is long whole
+            ? whole
+            : throw new ArgumentException($"The Status List Token's '{claimName}' is {seconds}, which a CWT encodes as no whole count of seconds.", nameof(seconds));
 }

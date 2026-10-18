@@ -188,7 +188,11 @@ internal sealed class AuthCodeClientAuthenticationTests
         //No additionalAcceptedAudiences: only the resolved issuer is accepted unless the
         //library itself widens the set per RFC 9126 Section 2.
         (int StatusCode, string Body)[] pushes = await PushSignedAssertionsAtParAsync(
-            PrivateKeyJwtClientAuthentication.BuildValidator(),
+            PrivateKeyJwtClientAuthentication.BuildValidator(
+                additionalAcceptedAudiences: null,
+                checkJtiReplayAsync: null,
+                resolveJwksUriAsync: null,
+                audiencePolicy: null),
             "rfc9126-audience-key-1",
             static (issuer, _, _) => issuer,
             static (_, tokenEndpoint, _) => tokenEndpoint.OriginalString,
@@ -257,7 +261,10 @@ internal sealed class AuthCodeClientAuthenticationTests
         //cardinality of the issuer is accepted.
         (int StatusCode, string Body)[] pushes = await PushSignedAssertionsAtParAsync(
             PrivateKeyJwtClientAuthentication.BuildValidator(
-                audiencePolicy: ClientAssertionAudiencePolicy.IssuerIdentifierOnly),
+                audiencePolicy: ClientAssertionAudiencePolicy.IssuerIdentifierOnly,
+                additionalAcceptedAudiences: null,
+                checkJtiReplayAsync: null,
+                resolveJwksUriAsync: null),
             "rfc7523bis-issuer-only-key-1",
             (issuer, tokenEndpoint, parEndpoint) => audienceShape switch
             {
@@ -373,8 +380,16 @@ internal sealed class AuthCodeClientAuthenticationTests
         string claimShape, bool isIssuerOnlyPolicy)
     {
         ValidateClientCredentialsDelegate validator = isIssuerOnlyPolicy
-            ? PrivateKeyJwtClientAuthentication.BuildValidator(audiencePolicy: ClientAssertionAudiencePolicy.IssuerIdentifierOnly)
-            : PrivateKeyJwtClientAuthentication.BuildValidator();
+            ? PrivateKeyJwtClientAuthentication.BuildValidator(
+                audiencePolicy: ClientAssertionAudiencePolicy.IssuerIdentifierOnly,
+                additionalAcceptedAudiences: null,
+                checkJtiReplayAsync: null,
+                resolveJwksUriAsync: null)
+            : PrivateKeyJwtClientAuthentication.BuildValidator(
+                additionalAcceptedAudiences: null,
+                checkJtiReplayAsync: null,
+                resolveJwksUriAsync: null,
+                audiencePolicy: null);
 
         (int StatusCode, string Body)[] pushes = await PushShapedAssertionsAtParAsync(
             validator,
@@ -420,7 +435,11 @@ internal sealed class AuthCodeClientAuthenticationTests
     public async Task FutureNotBeforeIsRefusedAtThePushedRequestAsync()
     {
         (int StatusCode, string Body)[] pushes = await PushShapedAssertionsAtParAsync(
-            PrivateKeyJwtClientAuthentication.BuildValidator(),
+            PrivateKeyJwtClientAuthentication.BuildValidator(
+                additionalAcceptedAudiences: null,
+                checkJtiReplayAsync: null,
+                resolveJwksUriAsync: null,
+                audiencePolicy: null),
             "rfc7523-future-nbf-key-1",
             observe: null,
             static claims => SerializeClaims(
@@ -479,7 +498,11 @@ internal sealed class AuthCodeClientAuthenticationTests
     public async Task ClaimRuleViolationsAreRefusedAtThePushedRequestAsync(string claimShape)
     {
         (int StatusCode, string Body)[] pushes = await PushShapedAssertionsAtParAsync(
-            PrivateKeyJwtClientAuthentication.BuildValidator(),
+            PrivateKeyJwtClientAuthentication.BuildValidator(
+                additionalAcceptedAudiences: null,
+                checkJtiReplayAsync: null,
+                resolveJwksUriAsync: null,
+                audiencePolicy: null),
             "rfc7523-claim-rules-key-1",
             observe: null,
             claims => claimShape switch
@@ -520,7 +543,11 @@ internal sealed class AuthCodeClientAuthenticationTests
     public async Task PushedRequestStoresNoClientAuthenticationParametersAsync()
     {
         (int StatusCode, string Body)[] pushes = await PushShapedAssertionsAtParAsync(
-            PrivateKeyJwtClientAuthentication.BuildValidator(),
+            PrivateKeyJwtClientAuthentication.BuildValidator(
+                additionalAcceptedAudiences: null,
+                checkJtiReplayAsync: null,
+                resolveJwksUriAsync: null,
+                audiencePolicy: null),
             "rfc9126-stored-request-key-1",
             (host, assertions) =>
             {
@@ -907,7 +934,10 @@ internal sealed class AuthCodeClientAuthenticationTests
             {
                 candidateIntegration.ValidateClientCredentialsAsync =
                     PrivateKeyJwtClientAuthentication.BuildValidator(
-                        additionalAcceptedAudiences: [tokenEndpoint.OriginalString]);
+                        additionalAcceptedAudiences: [tokenEndpoint.OriginalString],
+                        checkJtiReplayAsync: null,
+                        resolveJwksUriAsync: null,
+                        audiencePolicy: null);
             }).ConfigureAwait(false);
 
             await DeclareServerSideAuthMethodAsync(
@@ -1324,7 +1354,10 @@ internal sealed class AuthCodeClientAuthenticationTests
             {
                 candidateIntegration.ValidateClientCredentialsAsync =
                     PrivateKeyJwtClientAuthentication.BuildValidator(
-                        additionalAcceptedAudiences: [tokenEndpoint.OriginalString]);
+                        additionalAcceptedAudiences: [tokenEndpoint.OriginalString],
+                        checkJtiReplayAsync: null,
+                        resolveJwksUriAsync: null,
+                        audiencePolicy: null);
             }).ConfigureAwait(false);
 
             await DeclareServerSideAuthMethodAsync(
@@ -1752,7 +1785,10 @@ internal sealed class AuthCodeClientAuthenticationTests
         {
             candidateIntegration.ValidateClientCredentialsAsync =
                 PrivateKeyJwtClientAuthentication.BuildValidator(
-                    additionalAcceptedAudiences: [tokenEndpoint.OriginalString]);
+                    additionalAcceptedAudiences: [tokenEndpoint.OriginalString],
+                    checkJtiReplayAsync: null,
+                    resolveJwksUriAsync: null,
+                    audiencePolicy: null);
         }).ConfigureAwait(false);
 
         await DeclareServerSideAuthMethodAsync(
@@ -1833,7 +1869,10 @@ internal sealed class AuthCodeClientAuthenticationTests
         {
             candidateIntegration.ValidateClientCredentialsAsync =
                 PrivateKeyJwtClientAuthentication.BuildValidator(
-                    additionalAcceptedAudiences: [tokenEndpoint.OriginalString]);
+                    additionalAcceptedAudiences: [tokenEndpoint.OriginalString],
+                    checkJtiReplayAsync: null,
+                    resolveJwksUriAsync: null,
+                    audiencePolicy: null);
         }).ConfigureAwait(false);
 
         await DeclareServerSideAuthMethodAsync(
@@ -2026,7 +2065,9 @@ internal sealed class AuthCodeClientAuthenticationTests
                 candidateIntegration.ValidateClientCredentialsAsync =
                     PrivateKeyJwtClientAuthentication.BuildValidator(
                         additionalAcceptedAudiences: [tokenEndpoint.OriginalString],
-                        checkJtiReplayAsync: JtiReplayGuard.ConsultClientAssertionAsync);
+                        checkJtiReplayAsync: JtiReplayGuard.ConsultClientAssertionAsync,
+                        resolveJwksUriAsync: null,
+                        audiencePolicy: null);
             }).ConfigureAwait(false);
 
             await DeclareServerSideAuthMethodAsync(
@@ -2404,7 +2445,10 @@ internal sealed class AuthCodeClientAuthenticationTests
             {
                 candidateIntegration.ValidateClientCredentialsAsync =
                     PrivateKeyJwtClientAuthentication.BuildValidator(
-                        additionalAcceptedAudiences: [tokenEndpoint.OriginalString]);
+                        additionalAcceptedAudiences: [tokenEndpoint.OriginalString],
+                        checkJtiReplayAsync: null,
+                        resolveJwksUriAsync: null,
+                        audiencePolicy: null);
             }).ConfigureAwait(false);
 
             await DeclareServerSideAuthMethodAsync(
@@ -2723,7 +2767,9 @@ internal sealed class AuthCodeClientAuthenticationTests
                 candidateIntegration.ValidateClientCredentialsAsync =
                     PrivateKeyJwtClientAuthentication.BuildValidator(
                         additionalAcceptedAudiences: [tokenEndpoint.OriginalString],
-                        checkJtiReplayAsync: JtiReplayGuard.ConsultClientAssertionAsync);
+                        checkJtiReplayAsync: JtiReplayGuard.ConsultClientAssertionAsync,
+                        resolveJwksUriAsync: null,
+                        audiencePolicy: null);
             }).ConfigureAwait(false);
 
             await DeclareServerSideAuthMethodAsync(
@@ -3105,7 +3151,9 @@ internal sealed class AuthCodeClientAuthenticationTests
                 candidateIntegration.ValidateClientCredentialsAsync =
                     PrivateKeyJwtClientAuthentication.BuildValidator(
                         additionalAcceptedAudiences: [tokenEndpoint.OriginalString],
-                        checkJtiReplayAsync: JtiReplayGuard.ConsultClientAssertionAsync);
+                        checkJtiReplayAsync: JtiReplayGuard.ConsultClientAssertionAsync,
+                        resolveJwksUriAsync: null,
+                        audiencePolicy: null);
             }).ConfigureAwait(false);
 
             await DeclareServerSideAuthMethodAsync(

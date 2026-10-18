@@ -2352,7 +2352,7 @@ public static class AuthCodeEndpoints
             JtiReplayOutcome jtiOutcome = await JtiReplayGuard.ConsultAsync(
                 server, context, registration.TenantId, JtiReplayPurpose.RequestObject,
                 requestObject.Iss, requestObject.Jti,
-                requestObject.Exp + context.ClockSkewTolerance,
+                requestObject.Exp.AtOrAfterLaterBy(context.ClockSkewTolerance),
                 cancellationToken).ConfigureAwait(false);
 
             ServerHttpResponse? jtiFailure = jtiOutcome switch

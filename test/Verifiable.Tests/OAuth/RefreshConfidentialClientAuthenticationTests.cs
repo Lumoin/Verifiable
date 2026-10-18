@@ -189,7 +189,10 @@ internal sealed class RefreshConfidentialClientAuthenticationTests
             {
                 candidateIntegration.ValidateClientCredentialsAsync =
                     PrivateKeyJwtClientAuthentication.BuildValidator(
-                        additionalAcceptedAudiences: [tokenEndpoint.OriginalString]);
+                        additionalAcceptedAudiences: [tokenEndpoint.OriginalString],
+                        checkJtiReplayAsync: null,
+                        resolveJwksUriAsync: null,
+                        audiencePolicy: null);
             }).ConfigureAwait(false);
 
             await DeclareServerSideAuthMethodAsync(

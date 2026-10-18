@@ -78,13 +78,13 @@ public static class TrustMarkDelegationEvaluator
         }
 
         //(5) delegation.exp (if present) MUST be in the future (with skew tolerance).
-        if(delegation.ExpiresAt is { } exp && exp <= now - clockSkew)
+        if(delegation.ExpiresAt is { } exp && exp.CompareToEarlierBy(now, clockSkew) <= 0)
         {
             return BuildFailure(mark, "DelegationExpired");
         }
 
         //(6) §7.2.2: the current time MUST be after the delegation's iat (with skew tolerance).
-        if(delegation.IssuedAt > now + clockSkew)
+        if(delegation.IssuedAt.CompareToLaterBy(now, clockSkew) > 0)
         {
             return BuildFailure(mark, "DelegationIssuedInFuture");
         }

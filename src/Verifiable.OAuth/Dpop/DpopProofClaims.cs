@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Verifiable.JCose;
 
 namespace Verifiable.OAuth.Dpop;
 
@@ -25,8 +26,12 @@ public sealed record DpopProofClaims
     /// </summary>
     public required string Htu { get; init; }
 
-    /// <summary>The proof's issuance time.</summary>
-    public required DateTimeOffset Iat { get; init; }
+    /// <summary>
+    /// The proof's issuance time, the NumericDate as written (RFC 9449 section 4.2, RFC 7519 section 2): a received proof's
+    /// <c>iat</c> keeps every digit, so the section 4.3 window judges it against each bound exactly, and a constructed proof
+    /// writes the date it is given.
+    /// </summary>
+    public required NumericDate Iat { get; init; }
 
     /// <summary>
     /// A unique identifier for this proof, used by the receiver's replay

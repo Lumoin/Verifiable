@@ -163,9 +163,9 @@ public static class JarExtensions
                 [Oid4VpAuthorizationRequestParameterNames.ResponseUri] = request.ResponseUri.ToString(),
                 [WellKnownJwtClaimNames.Nonce] = request.Nonce,
                 [OAuthRequestParameterNames.State] = request.State,
-                [WellKnownJwtClaimNames.Iat] = request.Iat.ToUnixTimeSeconds(),
-                [WellKnownJwtClaimNames.Nbf] = request.Nbf.ToUnixTimeSeconds(),
-                [WellKnownJwtClaimNames.Exp] = request.Exp.ToUnixTimeSeconds()
+                [WellKnownJwtClaimNames.Iat] = request.Iat.ToClaimValue(),
+                [WellKnownJwtClaimNames.Nbf] = request.Nbf.ToClaimValue(),
+                [WellKnownJwtClaimNames.Exp] = request.Exp.ToClaimValue()
             };
 
             if(request.Iss is not null)
@@ -286,9 +286,9 @@ public static class JarExtensions
                 [Oid4VpAuthorizationRequestParameterNames.ResponseUri] = request.ResponseUri.ToString(),
                 [WellKnownJwtClaimNames.Nonce] = request.Nonce,
                 [OAuthRequestParameterNames.State] = request.State,
-                [WellKnownJwtClaimNames.Iat] = request.Iat.ToUnixTimeSeconds(),
-                [WellKnownJwtClaimNames.Nbf] = request.Nbf.ToUnixTimeSeconds(),
-                [WellKnownJwtClaimNames.Exp] = request.Exp.ToUnixTimeSeconds()
+                [WellKnownJwtClaimNames.Iat] = request.Iat.ToClaimValue(),
+                [WellKnownJwtClaimNames.Nbf] = request.Nbf.ToClaimValue(),
+                [WellKnownJwtClaimNames.Exp] = request.Exp.ToClaimValue()
             };
 
             if(request.Iss is not null)
@@ -680,9 +680,9 @@ public static class JarExtensions
                 $"claim is not a valid absolute URI: '{responseUriString}'.");
         }
 
-        DateTimeOffset iat = RequireInstant(claims, WellKnownJwtClaimNames.Iat);
-        DateTimeOffset nbf = RequireInstant(claims, WellKnownJwtClaimNames.Nbf);
-        DateTimeOffset exp = RequireInstant(claims, WellKnownJwtClaimNames.Exp);
+        var iat = RequireNumericDate(claims, WellKnownJwtClaimNames.Iat);
+        var nbf = RequireNumericDate(claims, WellKnownJwtClaimNames.Nbf);
+        var exp = RequireNumericDate(claims, WellKnownJwtClaimNames.Exp);
 
         string? iss = OptionalClaim(claims, WellKnownJwtClaimNames.Iss);
         string? aud = OptionalClaim(claims, WellKnownJwtClaimNames.Aud);
@@ -882,16 +882,15 @@ public static class JarExtensions
 
 
     /// <summary>
-    /// Reads a required JWT timing claim as the NumericDate it is (RFC 7519 Section 2), a fraction kept to the tick by the
-    /// library's one reading of the type (<see cref="JwtNumericDates.InstantOf"/>), or one a deserializer already resolved to a
-    /// <see cref="DateTimeOffset"/>. The library takes no compile-time dependency on a JSON library; the deserializer is
-    /// supplied as a delegate.
+    /// Reads a required JWT timing claim as the NumericDate it is (RFC 7519 Section 2), every digit kept by the library's one
+    /// reading of the type (<see cref="NumericDate.Of"/>). The library takes no compile-time dependency on a JSON library; the
+    /// deserializer is supplied as a delegate.
     /// </summary>
     /// <param name="claims">The claims set.</param>
     /// <param name="name">The NumericDate claim to read.</param>
-    /// <returns>The instant the claim names.</returns>
+    /// <returns>The date the claim names.</returns>
     /// <exception cref="FormatException">The claim is absent, or is no NumericDate naming an instant a clock represents.</exception>
-    private static DateTimeOffset RequireInstant(
+    private static NumericDate RequireNumericDate(
         IReadOnlyDictionary<string, object> claims,
         string name)
     {
@@ -901,14 +900,9 @@ public static class JarExtensions
                 $"JAR payload is missing required timing claim '{name}'.");
         }
 
-        if(value is DateTimeOffset dt)
+        if(NumericDate.Of(value) is NumericDate date)
         {
-            return dt;
-        }
-
-        if(JwtNumericDates.InstantOf(name, value) is DateTimeOffset instant)
-        {
-            return instant;
+            return date;
         }
 
         throw new FormatException(

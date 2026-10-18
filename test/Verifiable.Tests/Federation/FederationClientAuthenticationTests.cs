@@ -155,4 +155,32 @@ internal sealed class FederationClientAuthenticationTests
 
         Assert.IsFalse(Validate(spelled).IsValid, "A string of digits is no NumericDate.");
     }
+
+
+    /// <summary>
+    /// RFC 7519 Section 4.1.4 under the clock-skew tolerance: an <c>exp</c> at the clock's last tick is judged without the
+    /// tolerance carrying the instant past the clock, so the assertion is live, where adding the tolerance to the expiry threw;
+    /// and the instant at which the present lies exactly at <c>exp</c> extended by the tolerance has expired, the tick before it
+    /// live.
+    /// </summary>
+    [TestMethod]
+    public void AnExpiryAtTheClocksLastTickOverflowsNoComparisonAndTheBoundIsExclusive()
+    {
+        var atTheClocksEnd = ValidPayload();
+        atTheClocksEnd[WellKnownJwtClaimNames.Exp] = 253_402_300_799.9999999m;
+
+        var live = Validate(atTheClocksEnd);
+
+        Assert.IsTrue(live.IsValid, live.FailureReason);
+
+        var atTheBound = ValidPayload();
+        atTheBound[WellKnownJwtClaimNames.Exp] = Now.AddSeconds(-Skew.TotalSeconds).ToUnixTimeSeconds();
+
+        Assert.IsFalse(Validate(atTheBound).IsValid, "An exp the tolerance before the present has expired.");
+
+        var aTickInside = ValidPayload();
+        aTickInside[WellKnownJwtClaimNames.Exp] = Now.AddSeconds(-Skew.TotalSeconds).ToUnixTimeSeconds() + 0.0000001m;
+
+        Assert.IsTrue(Validate(aTickInside).IsValid, "An exp a tick after that is live.");
+    }
 }

@@ -119,9 +119,9 @@ public static class AuthCodeJarSigning
         payload[OAuthRequestParameterNames.State] = requestObject.State;
         payload[WellKnownJwtClaimNames.Nonce] = requestObject.Nonce;
         payload[OAuthRequestParameterNames.CodeChallenge] = requestObject.CodeChallenge;
-        payload[WellKnownJwtClaimNames.Iat] = requestObject.Iat.ToUnixTimeSeconds();
-        payload[WellKnownJwtClaimNames.Nbf] = requestObject.Nbf.ToUnixTimeSeconds();
-        payload[WellKnownJwtClaimNames.Exp] = requestObject.Exp.ToUnixTimeSeconds();
+        payload[WellKnownJwtClaimNames.Iat] = requestObject.Iat.ToClaimValue();
+        payload[WellKnownJwtClaimNames.Nbf] = requestObject.Nbf.ToClaimValue();
+        payload[WellKnownJwtClaimNames.Exp] = requestObject.Exp.ToClaimValue();
 
         if(requestObject.CodeChallengeMethod is string method)
         {

@@ -135,9 +135,10 @@ public static class HaipProfile
             DcqlQuery = dcqlQuery,
             ClientMetadata = clientMetadata,
             State = state,
-            Iat = iat,
-            Nbf = nbf,
-            Exp = exp,
+            //The request object's dates are written to the whole second, the integers most wallets read.
+            Iat = NumericDate.WholeSecondAtOrBefore(iat),
+            Nbf = NumericDate.WholeSecondAtOrBefore(nbf),
+            Exp = NumericDate.WholeSecondAtOrBefore(exp),
             TransactionData = transactionData,
             WalletNonce = walletNonce
         };

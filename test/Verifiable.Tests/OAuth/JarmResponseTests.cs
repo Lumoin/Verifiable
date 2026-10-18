@@ -520,6 +520,31 @@ resolver, PayloadDeserializer, TestSetup.Base64UrlDecoder, Pool,
     }
 
 
+    /// <summary>
+    /// JARM Section 2.4 step 4 under a leeway: an <c>exp</c> at the clock's last tick extended by the leeway is judged without the
+    /// leeway carrying the instant past the clock, so the response is live, where adding the leeway to the expiry threw.
+    /// </summary>
+    [TestMethod]
+    public async Task AnExpiryAtTheClocksLastTickOverflowsNoComparison()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using var serverPublic = keys.PublicKey;
+        using var serverPrivate = keys.PrivateKey;
+
+        var response = await SignResponseExpiringAtAsync(serverPrivate, "253402300799.9999999").ConfigureAwait(false);
+
+        ValueTask<PublicKeyMemory?> resolver(string issuer, string? keyId, CancellationToken cancellationToken) =>
+            ValueTask.FromResult<PublicKeyMemory?>(serverPublic);
+
+        var result = await JarmResponseValidation.ValidateAsync(
+            response, Issuer, ClientId, AllowedAlgorithms, TimeProvider.GetUtcNow(), resolver, PayloadDeserializer,
+            TestSetup.Base64UrlDecoder, Pool, isKnownAuthorizationServerIssuer: null, expirationLeeway: TimeSpan.FromMinutes(1),
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(result.IsValid, "An exp at the clock's last tick is live under a leeway.");
+    }
+
+
     /// <summary>Signs a code response whose <c>exp</c> is the JSON number text given, a fraction written as it is.</summary>
     /// <param name="signingKey">The authorization server's response signing key.</param>
     /// <param name="expiryNumber">The <c>exp</c> as JSON number text.</param>

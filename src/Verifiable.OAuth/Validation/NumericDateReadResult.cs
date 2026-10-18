@@ -12,12 +12,12 @@ internal enum NumericDateReadResult
     /// <summary>The claim is not present.</summary>
     Absent,
 
-    /// <summary>The claim is present and names an instant a <see cref="DateTimeOffset"/> holds.</summary>
+    /// <summary>The claim is present and names a date within the range a <see cref="DateTimeOffset"/> holds.</summary>
     Value,
 
     /// <summary>
     /// The claim is present but is not a number, or names no instant a <see cref="DateTimeOffset"/>
-    /// holds (<see cref="Verifiable.JCose.JwtNumericDates.InstantOf"/>).
+    /// holds (<see cref="Verifiable.JCose.NumericDate.Of"/>).
     /// </summary>
     Malformed
 }

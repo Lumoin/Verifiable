@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Verifiable.JCose;
 
 namespace Verifiable.OAuth.IdJag;
 
@@ -196,11 +197,11 @@ public sealed record IdJagAssertionValidationResult
     /// <summary>The <c>scope</c> claim, when present.</summary>
     public string? Scope { get; init; }
 
-    /// <summary>The <c>iat</c> claim, when present.</summary>
-    public DateTimeOffset? IssuedAt { get; init; }
+    /// <summary>The <c>iat</c> claim as written, when present.</summary>
+    public NumericDate? IssuedAt { get; init; }
 
-    /// <summary>The <c>exp</c> claim.</summary>
-    public DateTimeOffset? Expiration { get; init; }
+    /// <summary>The <c>exp</c> claim as written.</summary>
+    public NumericDate? Expiration { get; init; }
 
     /// <summary>
     /// The <c>jti</c> claim, the grant's unique identifier (REQUIRED on the ID-JAG by

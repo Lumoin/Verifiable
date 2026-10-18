@@ -25,11 +25,11 @@ public sealed record TrustMarkDelegation
     /// <summary>The Trust Mark Issuer being authorized (JWT <c>sub</c>).</summary>
     public required EntityIdentifier Issuer { get; init; }
 
-    /// <summary>When the delegation was issued (JWT <c>iat</c>).</summary>
-    public required DateTimeOffset IssuedAt { get; init; }
+    /// <summary>When the delegation was issued (JWT <c>iat</c>), as written.</summary>
+    public required NumericDate IssuedAt { get; init; }
 
-    /// <summary>Optional delegation expiry (JWT <c>exp</c>).</summary>
-    public DateTimeOffset? ExpiresAt { get; init; }
+    /// <summary>Optional delegation expiry (JWT <c>exp</c>), as written.</summary>
+    public NumericDate? ExpiresAt { get; init; }
 
     /// <summary>The Trust Mark identifier being delegated (JWT <c>id</c>).</summary>
     public required string MarkId { get; init; }

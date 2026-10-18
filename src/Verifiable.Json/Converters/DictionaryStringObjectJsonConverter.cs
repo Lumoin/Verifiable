@@ -1,8 +1,10 @@
+using System.Buffers;
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
+using Verifiable.JCose;
 
 namespace Verifiable.Json.Converters
 {
@@ -148,6 +150,8 @@ namespace Verifiable.Json.Converters
                 float f => WriteFloat(writer, f),
                 double d => WriteDouble(writer, d),
                 decimal m => WriteDecimal(writer, m),
+                DecimalNumber exact => WriteExactNumber(writer, exact),
+                NumericDate date => WriteExactNumber(writer, date.Seconds),
                 DateTime dt => WriteDateTime(writer, dt),
                 Dictionary<string, string> dict => WriteStringDictionary(writer, dict),
                 Dictionary<string, object> dict => WriteNestedDictionary(this, writer, dict, options),
@@ -209,6 +213,13 @@ namespace Verifiable.Json.Converters
             static object? WriteDecimal(Utf8JsonWriter writer, decimal m)
             {
                 writer.WriteNumberValue(m);
+
+                return null;
+            }
+
+            static object? WriteExactNumber(Utf8JsonWriter writer, DecimalNumber number)
+            {
+                writer.WriteRawValue(number.ToString());
 
                 return null;
             }
@@ -302,12 +313,30 @@ namespace Verifiable.Json.Converters
                 JsonTokenType.PropertyName => throw new JsonException($"Token '{reader.TokenType}' is not supported."),
                 JsonTokenType.Comment => throw new JsonException($"Token '{reader.TokenType}' is not supported."),
                 JsonTokenType.String => reader.TryGetDateTime(out DateTime date) ? date : reader.GetString(),
-                JsonTokenType.Number => reader.TryGetInt64(out long result) ? (object)result : reader.GetDecimal(),
+                JsonTokenType.Number => reader.TryGetInt64(out long result) ? result : ExactNumberOf(ref reader),
                 JsonTokenType.True => true,
                 JsonTokenType.False => false,
                 JsonTokenType.Null => null,
                 _ => throw new JsonException($"Token '{reader.TokenType}' is not supported.")
             };
+        }
+
+
+        /// <summary>
+        /// The value a number token no <see cref="long"/> holds is boxed as, every digit kept: a <see cref="decimal"/> where a
+        /// decimal holds the number exactly, and otherwise the <see cref="DecimalNumber"/> it is
+        /// (<see cref="DecimalNumber.ToClaimValue"/>), so a fraction with more digits than a decimal keeps, or a magnitude past
+        /// its range, reaches a reader as written instead of rounded or refused.
+        /// </summary>
+        /// <param name="reader">The reader, positioned on the number token.</param>
+        /// <returns>The boxed number.</returns>
+        private static object ExactNumberOf(ref Utf8JsonReader reader)
+        {
+            var number = reader.HasValueSequence
+                ? DecimalNumber.FromJsonNumber(reader.ValueSequence.ToArray())
+                : DecimalNumber.FromJsonNumber(reader.ValueSpan);
+
+            return number?.ToClaimValue() ?? throw new JsonException("The number token is not one JSON number.");
         }
 
 

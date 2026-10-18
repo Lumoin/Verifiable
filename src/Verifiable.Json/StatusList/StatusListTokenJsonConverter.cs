@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core.StatusLists;
@@ -31,8 +32,12 @@ namespace Verifiable.Json.StatusList;
 /// "sub: REQUIRED." / "iat: REQUIRED." / "status_list: REQUIRED." — a missing value for any of these
 /// is a read failure naming the claim. "exp: RECOMMENDED." / "ttl: RECOMMENDED. … The value of the
 /// claim MUST be a positive number encoded in JSON as a number." — both optional, and a present but
-/// non-positive or non-numeric <c>ttl</c> is a read failure. "The JWT MAY contain other claims." —
-/// every other member is skipped.
+/// non-positive or non-numeric <c>ttl</c> is a read failure, while a positive fraction is a
+/// <c>ttl</c> like any other. "The JWT MAY contain other claims." — every other member is skipped.
+/// The <c>iat</c> and <c>exp</c> are NumericDates (RFC 7519 Section 2), read from the number token
+/// exactly as written by the library's one reading of the type (<see cref="NumericDate.FromJsonNumber"/>):
+/// a fraction is a date like any other, and a value that is no JSON number or names an instant no
+/// clock represents is a read failure, never an exception of the date's construction.
 /// See <see href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-21#section-5.1">Token Status List, Section 5.1</see>.
 /// </para>
 /// </remarks>
@@ -60,9 +65,9 @@ public sealed class StatusListTokenJsonConverter : JsonConverter<StatusListToken
         }
 
         string? subject = null;
-        long? issuedAt = null;
-        long? expirationTime = null;
-        long? timeToLive = null;
+        var issuedAt = default(NumericDate);
+        var expirationTime = default(NumericDate);
+        var timeToLive = default(DecimalNumber);
         Core.StatusLists.StatusList? statusList = null;
 
         //status_list can precede a later member that turns out missing or malformed (member order in
@@ -92,18 +97,19 @@ public sealed class StatusListTokenJsonConverter : JsonConverter<StatusListToken
                         subject = reader.GetString();
                         break;
                     case string name when name == WellKnownJwtClaimNames.Iat:
-                        issuedAt = reader.GetInt64();
+                        issuedAt = NumericDateOf(ref reader, WellKnownJwtClaimNames.Iat);
                         break;
                     case string name when name == WellKnownJwtClaimNames.Exp:
-                        expirationTime = reader.GetInt64();
+                        expirationTime = NumericDateOf(ref reader, WellKnownJwtClaimNames.Exp);
                         break;
                     case string name when name == WellKnownJwtClaimNames.TimeToLive:
-                        if(reader.TokenType != JsonTokenType.Number || !reader.TryGetInt64(out long ttl) || ttl <= 0)
+                        timeToLive = NumberOf(ref reader);
+
+                        if(timeToLive is null || timeToLive.IsZero || timeToLive.IsNegative)
                         {
                             throw new JsonException($"Claim '{WellKnownJwtClaimNames.TimeToLive}' MUST be a positive number.");
                         }
 
-                        timeToLive = ttl;
                         break;
                     case string name when name == StatusListJsonConstants.StatusList:
                         statusList = StatusListConverter.Read(ref reader, typeof(Core.StatusLists.StatusList), options);
@@ -119,7 +125,7 @@ public sealed class StatusListTokenJsonConverter : JsonConverter<StatusListToken
                 throw new JsonException($"Missing required property '{WellKnownJwtClaimNames.Sub}'.");
             }
 
-            if(!issuedAt.HasValue)
+            if(issuedAt is null)
             {
                 throw new JsonException($"Missing required property '{WellKnownJwtClaimNames.Iat}'.");
             }
@@ -129,9 +135,9 @@ public sealed class StatusListTokenJsonConverter : JsonConverter<StatusListToken
                 throw new JsonException($"Missing required property '{StatusListJsonConstants.StatusList}'.");
             }
 
-            return new StatusListToken(subject, DateTimeOffset.FromUnixTimeSeconds(issuedAt.Value), statusList)
+            return new StatusListToken(subject, issuedAt, statusList)
             {
-                ExpirationTime = expirationTime.HasValue ? DateTimeOffset.FromUnixTimeSeconds(expirationTime.Value) : null,
+                ExpirationTime = expirationTime,
                 TimeToLive = timeToLive
             };
         }
@@ -151,21 +157,56 @@ public sealed class StatusListTokenJsonConverter : JsonConverter<StatusListToken
 
         writer.WriteStartObject();
         writer.WriteString(WellKnownJwtClaimNames.Sub, value.Subject);
-        writer.WriteNumber(WellKnownJwtClaimNames.Iat, value.IssuedAt.ToUnixTimeSeconds());
+        writer.WritePropertyName(WellKnownJwtClaimNames.Iat);
+        writer.WriteRawValue(value.IssuedAt.ToString());
 
-        if(value.ExpirationTime.HasValue)
+        if(value.ExpirationTime is not null)
         {
-            writer.WriteNumber(WellKnownJwtClaimNames.Exp, value.ExpirationTime.Value.ToUnixTimeSeconds());
+            writer.WritePropertyName(WellKnownJwtClaimNames.Exp);
+            writer.WriteRawValue(value.ExpirationTime.ToString());
         }
 
-        if(value.TimeToLive.HasValue)
+        if(value.TimeToLive is not null)
         {
-            writer.WriteNumber(WellKnownJwtClaimNames.TimeToLive, value.TimeToLive.Value);
+            writer.WritePropertyName(WellKnownJwtClaimNames.TimeToLive);
+            writer.WriteRawValue(value.TimeToLive.ToString());
         }
 
         writer.WritePropertyName(StatusListJsonConstants.StatusList);
         StatusListConverter.Write(writer, value.StatusList, options);
 
         writer.WriteEndObject();
+    }
+
+
+    /// <summary>
+    /// The NumericDate the current number token names, every digit kept (<see cref="NumericDate.FromJsonNumber"/>).
+    /// </summary>
+    /// <param name="reader">The reader, positioned on the claim's value.</param>
+    /// <param name="claimName">The claim's name, for the refusal.</param>
+    /// <returns>The date.</returns>
+    /// <exception cref="JsonException">The value is no JSON number, or names an instant no clock represents.</exception>
+    private static NumericDate NumericDateOf(ref Utf8JsonReader reader, string claimName) =>
+        NumberOf(ref reader) is DecimalNumber seconds && NumericDate.FromSeconds(seconds) is NumericDate date
+            ? date
+            : throw new JsonException($"Claim '{claimName}' MUST be a NumericDate naming an instant a clock represents.");
+
+
+    /// <summary>
+    /// The number the current token names, exactly as written (<see cref="DecimalNumber.FromJsonNumber"/>), or
+    /// <see langword="null"/> when the token is no number.
+    /// </summary>
+    /// <param name="reader">The reader, positioned on the value.</param>
+    /// <returns>The number, or <see langword="null"/>.</returns>
+    private static DecimalNumber? NumberOf(ref Utf8JsonReader reader)
+    {
+        if(reader.TokenType != JsonTokenType.Number)
+        {
+            return null;
+        }
+
+        return reader.HasValueSequence
+            ? DecimalNumber.FromJsonNumber(reader.ValueSequence.ToArray())
+            : DecimalNumber.FromJsonNumber(reader.ValueSpan);
     }
 }

@@ -580,109 +580,54 @@ public static class JwkJsonReader
     /// <summary>
     /// Extracts a NumericDate claim from a top-level JSON property by key (RFC 7519 Section 2: "A JSON numeric value
     /// representing the number of seconds from 1970-01-01T00:00:00Z UTC", in which "non-integer values can be represented")
-    /// as the instant it names, read by the library's one reading of the type (<see cref="JwtNumericDates.InstantOf"/>): a
-    /// fraction is kept to the tick, so the reader judges the instant its issuer wrote, never one moved to a whole second.
-    /// The value is one JSON number token (RFC 8259 Section 6: an optional minus, digits, an optional fraction and an
-    /// optional exponent) closed by a structural byte or white space; any other value - a string of digits among them - is
-    /// none.
+    /// as the date it names, every digit kept (<see cref="NumericDate.FromJsonNumber"/>), so the reader judges the date its
+    /// issuer wrote against each bound exactly. The value is one JSON number token (RFC 8259 Section 6: an optional minus, an
+    /// integer part without a leading zero before another digit, an optional fraction and an optional exponent) closed by a
+    /// structural byte or white space; any other value - a string of digits among them - is none.
     /// </summary>
     /// <param name="json">UTF-8 JSON bytes to search.</param>
     /// <param name="key">The property key as a UTF-8 literal.</param>
-    /// <param name="claimName">The claim the key names, which decides the side a remainder finer than a tick is taken on.</param>
-    /// <param name="instant">The instant the claim names, when found.</param>
     /// <returns>
-    /// <see langword="true"/> if the key was found and its value is a NumericDate naming an instant a clock represents;
-    /// otherwise, <see langword="false"/>.
+    /// The date, if the key was found and its value is a NumericDate naming an instant a clock represents; otherwise,
+    /// <see langword="null"/>.
     /// </returns>
-    public static bool TryExtractNumericDate(ReadOnlySpan<byte> json, ReadOnlySpan<byte> key, string claimName, out DateTimeOffset instant)
+    public static NumericDate? ExtractNumericDate(ReadOnlySpan<byte> json, ReadOnlySpan<byte> key)
     {
-        ArgumentNullException.ThrowIfNull(claimName);
-
-        instant = default;
-
         var keyStart = IndexOfKey(json, key);
+
         if(keyStart < 0)
         {
-            return false;
+            return null;
         }
 
         var start = SkipWhitespaceAndColon(json, keyStart + key.Length + 1);
+
         if(start < 0 || start >= json.Length)
         {
-            return false;
+            return null;
         }
 
         var end = start;
-        if(json[end] == (byte)'-')
+
+        while(end < json.Length && IsNumberTokenByte(json[end]))
         {
             end++;
         }
 
-        var integerEnd = SkipDigits(json, end);
-        if(integerEnd == end)
-        {
-            return false;
-        }
-
-        end = integerEnd;
-        if(end < json.Length && json[end] == (byte)'.')
-        {
-            var fractionEnd = SkipDigits(json, end + 1);
-            if(fractionEnd == end + 1)
-            {
-                return false;
-            }
-
-            end = fractionEnd;
-        }
-
-        if(end < json.Length && json[end] is (byte)'e' or (byte)'E')
-        {
-            var exponentStart = end + 1 < json.Length && json[end + 1] is (byte)'+' or (byte)'-' ? end + 2 : end + 1;
-            var exponentEnd = SkipDigits(json, exponentStart);
-            if(exponentEnd == exponentStart)
-            {
-                return false;
-            }
-
-            end = exponentEnd;
-        }
-
         if(end < json.Length && !IsNumberTerminator(json[end]))
         {
-            return false;
+            return null;
         }
 
-        if(!decimal.TryParse(
-            json[start..end],
-            System.Globalization.NumberStyles.AllowLeadingSign | System.Globalization.NumberStyles.AllowDecimalPoint | System.Globalization.NumberStyles.AllowExponent,
-            System.Globalization.CultureInfo.InvariantCulture,
-            out var seconds)
-            || JwtNumericDates.InstantOf(claimName, seconds) is not DateTimeOffset read)
-        {
-            return false;
-        }
-
-        instant = read;
-
-        return true;
+        return NumericDate.FromJsonNumber(json[start..end]);
     }
 
 
-    /// <summary>The position after the run of ASCII digits starting at <paramref name="index"/>.</summary>
-    /// <param name="json">UTF-8 JSON bytes.</param>
-    /// <param name="index">The position the run starts at.</param>
-    /// <returns>The position of the first byte that is no digit, or the length of the input.</returns>
-    private static int SkipDigits(ReadOnlySpan<byte> json, int index)
-    {
-        var position = index;
-        while(position < json.Length && json[position] is >= (byte)'0' and <= (byte)'9')
-        {
-            position++;
-        }
-
-        return position;
-    }
+    /// <summary>Whether a byte may appear in a JSON number token (RFC 8259 Section 6): a digit, a sign, a point or an exponent mark.</summary>
+    /// <param name="value">The byte.</param>
+    /// <returns><see langword="true"/> for a byte a number token may carry.</returns>
+    private static bool IsNumberTokenByte(byte value) =>
+        value is (>= (byte)'0' and <= (byte)'9') or (byte)'-' or (byte)'+' or (byte)'.' or (byte)'e' or (byte)'E';
 
 
     /// <summary>

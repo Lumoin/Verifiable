@@ -14,11 +14,9 @@ namespace Verifiable.OAuth.Jar;
 /// JWT payload claim values arrive in this library as
 /// <see cref="IReadOnlyDictionary{TKey, TValue}"/> of <see cref="string"/>
 /// to <see cref="object"/>, because the chosen JSON deserializer
-/// determines the runtime type of each value. <see cref="RequireInstant"/>
+/// determines the runtime type of each value. <see cref="RequireNumericDate"/>
 /// reads a NumericDate by the library's one reading of the type
-/// (<see cref="JwtNumericDates.InstantOf"/>), a fraction to the tick,
-/// plus <see cref="DateTimeOffset"/> for deserializers that pre-resolve
-/// NumericDate claims.
+/// (<see cref="NumericDate.Of"/>), every digit kept.
 /// </para>
 /// <para>
 /// All helpers throw <see cref="FormatException"/> on shape violations
@@ -53,14 +51,14 @@ internal static class JwtClaimReaders
 
 
     /// <summary>
-    /// Reads a required NumericDate claim as the instant it names, a fraction kept to the tick
-    /// (<see cref="JwtNumericDates.InstantOf"/>), or one a deserializer already resolved to a <see cref="DateTimeOffset"/>.
+    /// Reads a required NumericDate claim as the date it names, every digit kept (<see cref="NumericDate.Of"/>), so the caller
+    /// judges each bound against the date written.
     /// </summary>
     /// <param name="claims">The claims set.</param>
     /// <param name="name">The NumericDate claim to read.</param>
-    /// <returns>The instant the claim names.</returns>
+    /// <returns>The date the claim names.</returns>
     /// <exception cref="FormatException">The claim is absent, or is no NumericDate naming an instant a clock represents.</exception>
-    public static DateTimeOffset RequireInstant(
+    public static NumericDate RequireNumericDate(
         IReadOnlyDictionary<string, object> claims,
         string name)
     {
@@ -70,15 +68,9 @@ internal static class JwtClaimReaders
                 $"JWT payload is missing required timing claim '{name}'.");
         }
 
-        if(value is DateTimeOffset dt)
+        if(NumericDate.Of(value) is NumericDate date)
         {
-            return dt;
-        }
-
-        //RFC 7519 Section 2: a NumericDate may carry a fraction, read to the tick, so the caller judges the instant written.
-        if(JwtNumericDates.InstantOf(name, value) is DateTimeOffset instant)
-        {
-            return instant;
+            return date;
         }
 
         throw new FormatException(

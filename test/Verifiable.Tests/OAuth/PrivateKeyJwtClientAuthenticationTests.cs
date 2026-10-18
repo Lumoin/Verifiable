@@ -246,7 +246,11 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
         try
         {
             ClientRecord registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
-            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator();
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+                additionalAcceptedAudiences: null,
+                checkJtiReplayAsync: null,
+                resolveJwksUriAsync: null,
+                audiencePolicy: null);
 
             string assertion = await SignAssertionAsync(
                 app.Server, registration.ClientId, registration.IssuerUri!.OriginalString, clientKeys.PrivateKey)
@@ -295,7 +299,11 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
                     (JwkOf(firstKeys.PublicKey), DuplicateKeyId),
                     (JwkOf(secondKeys.PublicKey), DuplicateKeyId))
             };
-            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator();
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+                additionalAcceptedAudiences: null,
+                checkJtiReplayAsync: null,
+                resolveJwksUriAsync: null,
+                audiencePolicy: null);
 
             string assertion = await SignAssertionAsync(
                 app.Server, registration.ClientId, registration.IssuerUri!.OriginalString,
@@ -344,7 +352,11 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
                     (JwkOf(firstKeys.PublicKey), "key-a"),
                     (JwkOf(secondKeys.PublicKey), "key-b"))
             };
-            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator();
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+                additionalAcceptedAudiences: null,
+                checkJtiReplayAsync: null,
+                resolveJwksUriAsync: null,
+                audiencePolicy: null);
 
             string assertion = await SignAssertionWithoutKidAsync(
                 app.Server, registration.ClientId, registration.IssuerUri!.OriginalString, firstKeys.PrivateKey)
@@ -384,7 +396,11 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
         try
         {
             ClientRecord registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
-            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator();
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+                additionalAcceptedAudiences: null,
+                checkJtiReplayAsync: null,
+                resolveJwksUriAsync: null,
+                audiencePolicy: null);
 
             string assertion = await SignAssertionWithoutKidAsync(
                 app.Server, registration.ClientId, registration.IssuerUri!.OriginalString, clientKeys.PrivateKey)
@@ -433,7 +449,11 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
                     (JwkOf(oldKeys.PublicKey), OldKeyId),
                     (JwkOf(newKeys.PublicKey), NewKeyId))
             };
-            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator();
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+                additionalAcceptedAudiences: null,
+                checkJtiReplayAsync: null,
+                resolveJwksUriAsync: null,
+                audiencePolicy: null);
 
             string assertion = await SignAssertionAsync(
                 app.Server, registration.ClientId, registration.IssuerUri!.OriginalString,
@@ -469,7 +489,11 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
         try
         {
             ClientRecord registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
-            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator();
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+                additionalAcceptedAudiences: null,
+                checkJtiReplayAsync: null,
+                resolveJwksUriAsync: null,
+                audiencePolicy: null);
 
             string assertion = await SignAssertionAsync(
                 app.Server, registration.ClientId, registration.IssuerUri!.OriginalString, clientKeys.PrivateKey)
@@ -516,7 +540,11 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             //The published JWKS carries the REGISTERED public key; the assertion is signed with the
             //ATTACKER's distinct private key.
             ClientRecord registration = BuildConfidentialRegistration(material.Registration, registeredKeys.PublicKey);
-            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator();
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+                additionalAcceptedAudiences: null,
+                checkJtiReplayAsync: null,
+                resolveJwksUriAsync: null,
+                audiencePolicy: null);
 
             string assertion = await SignAssertionAsync(
                 app.Server, registration.ClientId, registration.IssuerUri!.OriginalString, attackerKeys.PrivateKey)
@@ -558,7 +586,11 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
         try
         {
             ClientRecord registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
-            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator();
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+                additionalAcceptedAudiences: null,
+                checkJtiReplayAsync: null,
+                resolveJwksUriAsync: null,
+                audiencePolicy: null);
             string assertion = await SignAssertionAsync(
                 app.Server, registration.ClientId, registration.IssuerUri!.OriginalString, clientKeys.PrivateKey)
                 .ConfigureAwait(false);
@@ -666,7 +698,11 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
         try
         {
             var registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
-            var validator = PrivateKeyJwtClientAuthentication.BuildValidator();
+            var validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+                additionalAcceptedAudiences: null,
+                checkJtiReplayAsync: null,
+                resolveJwksUriAsync: null,
+                audiencePolicy: null);
 
             var declared = await SignAssertionUnderHeaderAsync(
                 app.Server,
@@ -803,7 +839,11 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
                 });
             }
 
-            var validator = PrivateKeyJwtClientAuthentication.BuildValidator(resolveJwksUriAsync: ResolveJwksUriAsync);
+            var validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+                resolveJwksUriAsync: ResolveJwksUriAsync,
+                additionalAcceptedAudiences: null,
+                checkJtiReplayAsync: null,
+                audiencePolicy: null);
 
             var wellFormed = await SignAssertionAsync(
                 app.Server, registration.ClientId, registration.IssuerUri!.OriginalString, clientKeys.PrivateKey)
@@ -868,7 +908,11 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
         try
         {
             ClientRecord registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
-            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator();
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+                additionalAcceptedAudiences: null,
+                checkJtiReplayAsync: null,
+                resolveJwksUriAsync: null,
+                audiencePolicy: null);
             string assertion = await SignAssertionAsync(
                 app.Server, registration.ClientId, registration.IssuerUri!.OriginalString, clientKeys.PrivateKey)
                 .ConfigureAwait(false);
@@ -924,7 +968,11 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
         try
         {
             ClientRecord registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
-            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator();
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+                additionalAcceptedAudiences: null,
+                checkJtiReplayAsync: null,
+                resolveJwksUriAsync: null,
+                audiencePolicy: null);
 
             string assertion = await SignAssertionAsync(
                 app.Server, registration.ClientId, registration.IssuerUri!.OriginalString, clientKeys.PrivateKey)
@@ -973,7 +1021,11 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
         try
         {
             ClientRecord registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
-            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator();
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+                additionalAcceptedAudiences: null,
+                checkJtiReplayAsync: null,
+                resolveJwksUriAsync: null,
+                audiencePolicy: null);
 
             string assertion = await SignAssertionAsync(
                 app.Server, registration.ClientId, registration.IssuerUri!.OriginalString, clientKeys.PrivateKey)
@@ -1008,7 +1060,11 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
         try
         {
             ClientRecord registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
-            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator();
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+                additionalAcceptedAudiences: null,
+                checkJtiReplayAsync: null,
+                resolveJwksUriAsync: null,
+                audiencePolicy: null);
 
             string assertion = await SignAssertionAsync(
                 app.Server, registration.ClientId, registration.IssuerUri!.OriginalString, clientKeys.PrivateKey)
@@ -1047,7 +1103,11 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             {
                 TokenEndpointAuthMethod = ClientAuthenticationMethod.PrivateKeyJwt
             };
-            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator();
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+                additionalAcceptedAudiences: null,
+                checkJtiReplayAsync: null,
+                resolveJwksUriAsync: null,
+                audiencePolicy: null);
 
             string assertion = await SignAssertionAsync(
                 app.Server, registration.ClientId, registration.IssuerUri!.OriginalString, clientKeys.PrivateKey)
@@ -1103,7 +1163,10 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
                 });
 
             ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
-                resolveJwksUriAsync: ResolveJwksUriAsync);
+                resolveJwksUriAsync: ResolveJwksUriAsync,
+                additionalAcceptedAudiences: null,
+                checkJtiReplayAsync: null,
+                audiencePolicy: null);
 
             string assertion = await SignAssertionAsync(
                 app.Server, registration.ClientId, registration.IssuerUri!.OriginalString, clientKeys.PrivateKey)
@@ -1147,7 +1210,11 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
                 TokenEndpointAuthMethod = ClientAuthenticationMethod.PrivateKeyJwt,
                 ClientJwksUri = new Uri("https://client.example/jwks.json")
             };
-            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator();
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+                additionalAcceptedAudiences: null,
+                checkJtiReplayAsync: null,
+                resolveJwksUriAsync: null,
+                audiencePolicy: null);
 
             string assertion = await SignAssertionAsync(
                 app.Server, registration.ClientId, registration.IssuerUri!.OriginalString, clientKeys.PrivateKey)
@@ -1204,7 +1271,9 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
                     audiencePolicy: ClientAssertionAudiencePolicy.IssuerIdentifierOnly)
                 : PrivateKeyJwtClientAuthentication.BuildValidator(
                     additionalAcceptedAudiences: ["https://other.example"],
-                    audiencePolicy: ClientAssertionAudiencePolicy.IssuerIdentifierOnly));
+                    audiencePolicy: ClientAssertionAudiencePolicy.IssuerIdentifierOnly,
+                    checkJtiReplayAsync: null,
+                    resolveJwksUriAsync: null));
 
         Assert.Contains("additionalAcceptedAudiences", refusal.Message, StringComparison.Ordinal,
             "The refusal must name the additional-audience argument.");
@@ -1234,7 +1303,11 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
         try
         {
             ClientRecord registration = BuildConfidentialRegistration(material.Registration, clientKeys.PublicKey);
-            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator();
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+                additionalAcceptedAudiences: null,
+                checkJtiReplayAsync: null,
+                resolveJwksUriAsync: null,
+                audiencePolicy: null);
 
             string assertion = await SignAssertionAsync(
                 app.Server, registration.ClientId, registration.IssuerUri!.OriginalString, clientKeys.PrivateKey)
@@ -1315,7 +1388,10 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
             }).ConfigureAwait(false);
 
             ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
-                audiencePolicy: ClientAssertionAudiencePolicy.IssuerIdentifierOnly);
+                audiencePolicy: ClientAssertionAudiencePolicy.IssuerIdentifierOnly,
+                additionalAcceptedAudiences: null,
+                checkJtiReplayAsync: null,
+                resolveJwksUriAsync: null);
             string assertion = await SignAssertionAsync(
                 app.Server, registration.ClientId, issuerIdentifier, clientKeys.PrivateKey)
                 .ConfigureAwait(false);
@@ -1391,7 +1467,11 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
                     ReadClaimsKeepingOneRepeatedMember(bytes, isLastMemberKept);
             }).ConfigureAwait(false);
 
-            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator();
+            ValidateClientCredentialsDelegate validator = PrivateKeyJwtClientAuthentication.BuildValidator(
+                additionalAcceptedAudiences: null,
+                checkJtiReplayAsync: null,
+                resolveJwksUriAsync: null,
+                audiencePolicy: null);
             string assertion = await SignAssertionAsync(
                 app.Server, registration.ClientId, registration.IssuerUri!.OriginalString, clientKeys.PrivateKey)
                 .ConfigureAwait(false);

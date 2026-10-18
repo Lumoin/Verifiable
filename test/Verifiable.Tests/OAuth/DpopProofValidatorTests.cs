@@ -28,7 +28,7 @@ internal sealed class DpopProofValidatorTests
 
         string proof = await BuildProofAsync(key, BuildClaims()).ConfigureAwait(false);
 
-        DpopProofValidationResult result = await ValidateAsync(
+        var result = await ValidateAsync(
             proof,
             expectedNonce: null,
             nonceRequired: false,
@@ -70,7 +70,7 @@ internal sealed class DpopProofValidatorTests
             BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        DpopProofValidationResult result = await ValidateAsync(
+        var result = await ValidateAsync(
             proof,
             expectedNonce: null,
             nonceRequired: false,
@@ -120,7 +120,7 @@ internal sealed class DpopProofValidatorTests
     [TestMethod]
     public async Task ValidateAsyncRejectsMalformedProof()
     {
-        DpopProofValidationResult result = await ValidateAsync(
+        var result = await ValidateAsync(
             "not-a-jws",
             expectedNonce: null,
             nonceRequired: false,
@@ -144,7 +144,7 @@ internal sealed class DpopProofValidatorTests
                 [WellKnownJoseHeaderNames.Typ] = WellKnownJwkValues.TypeJwt
             }).ConfigureAwait(false);
 
-        DpopProofValidationResult result = await ValidateAsync(
+        var result = await ValidateAsync(
             proof,
             expectedNonce: null,
             nonceRequired: false,
@@ -170,7 +170,7 @@ internal sealed class DpopProofValidatorTests
                 [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Hs256
             }).ConfigureAwait(false);
 
-        DpopProofValidationResult result = await ValidateAsync(
+        var result = await ValidateAsync(
             proof,
             expectedNonce: null,
             nonceRequired: false,
@@ -195,7 +195,7 @@ internal sealed class DpopProofValidatorTests
                 return tampered;
             }).ConfigureAwait(false);
 
-        DpopProofValidationResult result = await ValidateAsync(
+        var result = await ValidateAsync(
             proof,
             expectedNonce: null,
             nonceRequired: false,
@@ -232,7 +232,7 @@ internal sealed class DpopProofValidatorTests
                 return tampered;
             }).ConfigureAwait(false);
 
-        DpopProofValidationResult result = await ValidateAsync(
+        var result = await ValidateAsync(
             proof,
             expectedNonce: null,
             nonceRequired: false,
@@ -266,7 +266,7 @@ internal sealed class DpopProofValidatorTests
         string tamperedProof = string.Concat(
             proof.AsSpan(0, tamperIndex), tampered.ToString(), proof.AsSpan(tamperIndex + 1));
 
-        DpopProofValidationResult result = await ValidateAsync(
+        var result = await ValidateAsync(
             tamperedProof,
             expectedNonce: null,
             nonceRequired: false,
@@ -285,7 +285,7 @@ internal sealed class DpopProofValidatorTests
 
         string proof = await BuildProofAsync(key, BuildClaims() with { Htm = "GET" }).ConfigureAwait(false);
 
-        DpopProofValidationResult result = await ValidateAsync(
+        var result = await ValidateAsync(
             proof,
             expectedNonce: null,
             nonceRequired: false,
@@ -304,7 +304,7 @@ internal sealed class DpopProofValidatorTests
 
         string proof = await BuildProofAsync(key, BuildClaims() with { Htu = "https://attacker.example.com/token" }).ConfigureAwait(false);
 
-        DpopProofValidationResult result = await ValidateAsync(
+        var result = await ValidateAsync(
             proof,
             expectedNonce: null,
             nonceRequired: false,
@@ -324,7 +324,7 @@ internal sealed class DpopProofValidatorTests
         DpopProofClaims claims = BuildClaims() with { Iat = NowInstant - TimeSpan.FromMinutes(5) };
         string proof = await BuildProofAsync(key, claims).ConfigureAwait(false);
 
-        DpopProofValidationResult result = await ValidateAsync(
+        var result = await ValidateAsync(
             proof,
             expectedNonce: null,
             nonceRequired: false,
@@ -344,7 +344,7 @@ internal sealed class DpopProofValidatorTests
         DpopProofClaims claims = BuildClaims() with { Iat = NowInstant + TimeSpan.FromMinutes(5) };
         string proof = await BuildProofAsync(key, claims).ConfigureAwait(false);
 
-        DpopProofValidationResult result = await ValidateAsync(
+        var result = await ValidateAsync(
             proof,
             expectedNonce: null,
             nonceRequired: false,
@@ -352,6 +352,43 @@ internal sealed class DpopProofValidatorTests
             verifier: DpopTestSupport.Es256Verification,
             httpUrl: DefaultUrl).ConfigureAwait(false);
         Assert.AreEqual(DpopProofValidationFailureReason.IatOutOfWindow, result.FailureReason);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9449#section-4.3">RFC 9449 §4.3</see> check 11: the creation time of the
+    /// proof is within an acceptable window, judged against the <c>iat</c> as written: one ten nanoseconds before the window's
+    /// lower bound lies outside it, where taking its remainder up to the next tick put it onto the bound and admitted it; one at
+    /// the bound lies inside it.
+    /// </summary>
+    [TestMethod]
+    public async Task ValidateAsyncJudgesTheFreshnessLowerBoundExactly()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        var key = new DpopKey(keys, WellKnownJwaValues.Es256);
+        var lowerBound = (NowInstant - IatSkew - DateTimeOffset.UnixEpoch).Ticks / (decimal)TimeSpan.TicksPerSecond;
+
+        var tenNanosecondsStale = await BuildProofAsync(key, BuildClaims() with { Iat = NumericDate.Of(lowerBound - 0.00000001m)! }).ConfigureAwait(false);
+        var refused = await ValidateAsync(
+            tenNanosecondsStale,
+            expectedNonce: null,
+            nonceRequired: false,
+            accessToken: null,
+            verifier: DpopTestSupport.Es256Verification,
+            httpUrl: DefaultUrl).ConfigureAwait(false);
+
+        Assert.AreEqual(DpopProofValidationFailureReason.IatOutOfWindow, refused.FailureReason, "An iat ten nanoseconds before the window is outside it.");
+
+        var atTheBound = await BuildProofAsync(key, BuildClaims() with { Iat = NumericDate.Of(lowerBound)! }).ConfigureAwait(false);
+        var admitted = await ValidateAsync(
+            atTheBound,
+            expectedNonce: null,
+            nonceRequired: false,
+            accessToken: null,
+            verifier: DpopTestSupport.Es256Verification,
+            httpUrl: DefaultUrl).ConfigureAwait(false);
+
+        Assert.IsTrue(admitted.IsSuccess, $"An iat at the window's lower bound is inside it; got {admitted.FailureReason}.");
     }
 
 
@@ -363,7 +400,7 @@ internal sealed class DpopProofValidatorTests
 
         string proof = await BuildProofAsync(key, BuildClaims()).ConfigureAwait(false);
 
-        DpopProofValidationResult result = await ValidateAsync(
+        var result = await ValidateAsync(
             proof,
             expectedNonce: "expected-nonce",
             nonceRequired: true,
@@ -382,7 +419,7 @@ internal sealed class DpopProofValidatorTests
 
         string proof = await BuildProofAsync(key, BuildClaims() with { Nonce = "wrong-nonce" }).ConfigureAwait(false);
 
-        DpopProofValidationResult result = await ValidateAsync(
+        var result = await ValidateAsync(
             proof,
             expectedNonce: "expected-nonce",
             nonceRequired: true,
@@ -401,7 +438,7 @@ internal sealed class DpopProofValidatorTests
 
         string proof = await BuildProofAsync(key, BuildClaims() with { Ath = "wrong-ath" }).ConfigureAwait(false);
 
-        DpopProofValidationResult result = await ValidateAsync(
+        var result = await ValidateAsync(
             proof,
             expectedNonce: null,
             nonceRequired: false,
@@ -433,7 +470,7 @@ internal sealed class DpopProofValidatorTests
         DpopKey key = new(keys, WellKnownJwaValues.Es256);
 
         string proof = await BuildProofAsync(key, BuildClaims() with { Htu = htu }).ConfigureAwait(false);
-        DpopProofValidationResult result = await ValidateAsync(
+        var result = await ValidateAsync(
             proof,
             expectedNonce: null,
             nonceRequired: false,
@@ -465,7 +502,7 @@ internal sealed class DpopProofValidatorTests
         DpopKey key = new(keys, WellKnownJwaValues.Es256);
 
         string proof = await BuildProofAsync(key, BuildClaims() with { Htu = htu }).ConfigureAwait(false);
-        DpopProofValidationResult result = await ValidateAsync(
+        var result = await ValidateAsync(
             proof,
             expectedNonce: null,
             nonceRequired: false,
@@ -495,7 +532,7 @@ internal sealed class DpopProofValidatorTests
         string proof = await BuildProofAsync(key, BuildClaims()).ConfigureAwait(false);
         string oversizedProof = proof + new string('A', Jws.DefaultMaxJwsLength);
 
-        DpopProofValidationResult result = await ValidateAsync(
+        var result = await ValidateAsync(
             oversizedProof,
             expectedNonce: null,
             nonceRequired: false,
@@ -528,7 +565,7 @@ internal sealed class DpopProofValidatorTests
             BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        DpopProofValidationResult result = await ValidateAsync(
+        var result = await ValidateAsync(
             proof,
             expectedNonce: null,
             nonceRequired: false,
@@ -559,7 +596,7 @@ internal sealed class DpopProofValidatorTests
             BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        DpopProofValidationResult result = await ValidateAsync(
+        var result = await ValidateAsync(
             proof,
             expectedNonce: null,
             nonceRequired: false,
@@ -646,7 +683,7 @@ internal sealed class DpopProofValidatorTests
             BaseMemoryPool.Shared,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        DpopProofValidationResult result = await ValidateAsync(
+        var result = await ValidateAsync(
             proof,
             expectedNonce: null,
             nonceRequired: false,
