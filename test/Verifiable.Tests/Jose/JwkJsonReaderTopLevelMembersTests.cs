@@ -251,7 +251,10 @@ internal sealed class JwkJsonReaderTopLevelMembersTests
     {
         var reading = JwkJsonReader.ReadTopLevelMembers(Encoding.UTF8.GetBytes(document));
 
-        Assert.AreEqual(new JsonUndecodableMember(expectedName, expectedDepth, expectedPart), reading, "The first defect in document order.");
+        var undecodable = Assert.IsInstanceOfType<JsonUndecodableMember>(reading, "The first defect in document order.");
+        Assert.AreEqual(expectedName, undecodable.Name, "The member's name as it can be written.");
+        Assert.AreEqual(expectedDepth, undecodable.ObjectDepth, "The depth of the object carrying it.");
+        Assert.AreEqual(expectedPart, undecodable.Part, "Which part names no Unicode text.");
     }
 
 
@@ -278,7 +281,9 @@ internal sealed class JwkJsonReaderTopLevelMembersTests
     {
         var reading = JwkJsonReader.ReadTopLevelMembers(Encoding.UTF8.GetBytes(document));
 
-        Assert.AreEqual(new JsonRepeatedMemberName(expectedName, expectedDepth), reading, "The first defect in document order.");
+        var repeated = Assert.IsInstanceOfType<JsonRepeatedMemberName>(reading, "The first defect in document order.");
+        Assert.AreEqual(expectedName, repeated.Name, "The repeated name, decoded.");
+        Assert.AreEqual(expectedDepth, repeated.ObjectDepth, "The depth of the object repeating it.");
     }
 
 
@@ -348,6 +353,88 @@ internal sealed class JwkJsonReaderTopLevelMembersTests
         var members = Assert.IsInstanceOfType<JsonTopLevelMembers>(reading, "The document is well formed.").Members;
         Assert.HasCount(1, members);
         Assert.AreEqual(new JsonTopLevelMember("v", JsonTopLevelValueKind.String, "\u007F\u07FF\uD7FF\uE000\uFFFF\U0010FFFF"), members[0]);
+    }
+
+
+    /// <summary>
+    /// A member asked for by name is answered as one typed case: a string with its decoded text, a number with its spelling as
+    /// written, a literal, an object or an array naming its kind, and a name the object does not carry at its top level - one only
+    /// a nested object carries among them - as absent. The name asked for is the decoded name, so an escaped spelling is found.
+    /// </summary>
+    [TestMethod]
+    public void AMemberAskedForByNameIsAnsweredAsOneTypedCase()
+    {
+        var document = /*lang=json,strict*/ """{"s":"café","n":-1.5e3,"t":true,"z":null,"o":{"nested":"x"},"a":[1],"escaped":"v"}""";
+        var reading = JwkJsonReader.ReadTopLevelMembers(Encoding.UTF8.GetBytes(document));
+        var members = Assert.IsInstanceOfType<JsonTopLevelMembers>(reading, "A well-formed object is read.");
+
+        Assert.AreEqual(new JsonMemberString("café"), members.Find("s"), "A string, decoded.");
+        Assert.AreEqual(new JsonMemberNumber("-1.5e3"), members.Find("n"), "A number, its spelling as written.");
+        Assert.AreEqual(new JsonMemberOfOtherKind(JsonTopLevelValueKind.True), members.Find("t"), "A literal names its kind.");
+        Assert.AreEqual(new JsonMemberOfOtherKind(JsonTopLevelValueKind.Null), members.Find("z"), "The null literal names its kind.");
+        Assert.AreEqual(new JsonMemberOfOtherKind(JsonTopLevelValueKind.Object), members.Find("o"), "An object names its kind.");
+        Assert.AreEqual(new JsonMemberOfOtherKind(JsonTopLevelValueKind.Array), members.Find("a"), "An array names its kind.");
+        Assert.AreEqual(new JsonMemberString("v"), members.Find("escaped"), "A name spelled through an escape is found by its decoded name.");
+        Assert.AreEqual(new JsonMemberAbsent(), members.Find("nested"), "A member only a nested object carries is absent from the top level.");
+        Assert.AreEqual(new JsonMemberAbsent(), members.Find("missing"), "A name the object does not carry is absent.");
+    }
+
+
+    /// <summary>
+    /// The members answered carry the account of the top-level members observed without their values: each string as the length
+    /// of its decoded text in UTF-16 code units - an escape decoded first, a surrogate pair two units - and each other value by
+    /// its kind.
+    /// </summary>
+    [TestMethod]
+    public void TheMembersAnsweredCarryTheirAccountWithoutTheirValues()
+    {
+        var document = /*lang=json,strict*/ """{"access_token":"a\/b","pair":"😀","n":7}""";
+        var reading = JwkJsonReader.ReadTopLevelMembers(Encoding.UTF8.GetBytes(document));
+        var account = Assert.IsInstanceOfType<JsonTopLevelMembers>(reading, "A well-formed object is read.").TopLevel;
+
+        var expected = new JsonTopLevelAccount(
+        [
+            new JsonTopLevelObservation("access_token", new JsonReadableString(3)),
+            new JsonTopLevelObservation("pair", new JsonReadableString(2)),
+            new JsonTopLevelObservation("n", new JsonNonStringValue(JsonTopLevelValueKind.Number))
+        ]);
+
+        Assert.AreEqual(expected, account, "Each member observed in document order, no value carried.");
+    }
+
+
+    /// <summary>
+    /// A refusal of a well-formed object carries the account of its top-level members from the same reading: beside an extension
+    /// member naming no Unicode text, a readable <c>access_token</c> is observed with the length of its text and the extension
+    /// member as naming none; a repeated <c>access_token</c> is observed at both occurrences; and a member whose own name names no
+    /// Unicode text is left out, as no reader can ask for it by name. No observation carries a value.
+    /// </summary>
+    [TestMethod]
+    public void TheRefusalsOfAWellFormedObjectCarryTheTopLevelMembersObserved()
+    {
+        var undecodable = JwkJsonReader.ReadTopLevelMembers(Encoding.UTF8.GetBytes(
+            /*lang=json*/ """{"access_token":"kx7Qz","token_type":"Bearer","ext":"\uD800","\uDC00":"v"}"""));
+
+        var repeated = JwkJsonReader.ReadTopLevelMembers(Encoding.UTF8.GetBytes(
+            /*lang=json*/ """{"access_token":"first-credential-text","access_token":"second","token_type":"Bearer"}"""));
+
+        var undecodableAccount = Assert.IsInstanceOfType<JsonUndecodableMember>(undecodable, "The extension member is the reason.").TopLevel;
+        var repeatedAccount = Assert.IsInstanceOfType<JsonRepeatedMemberName>(repeated, "The repetition is the reason.").TopLevel;
+
+        var expectedUndecodable = new JsonTopLevelAccount(
+        [
+            new JsonTopLevelObservation("access_token", new JsonReadableString(5)),
+            new JsonTopLevelObservation("token_type", new JsonReadableString(6)),
+            new JsonTopLevelObservation("ext", new JsonUndecodableString())
+        ]);
+
+        Assert.AreEqual(expectedUndecodable, undecodableAccount, "The readable credential, its length and no value; the member naming no text left out.");
+        Assert.AreSequenceEqual(
+            new JsonValueObservation[] { new JsonReadableString(21), new JsonReadableString(6) },
+            repeatedAccount.OccurrencesOf("access_token").ToArray(),
+            "Both occurrences of the repeated name, in document order.");
+        Assert.DoesNotContain("kx7Qz", undecodable.ToString(), "The refusal's text carries no value.");
+        Assert.DoesNotContain("credential-text", repeated.ToString(), "The refusal's text carries no value.");
     }
 
 

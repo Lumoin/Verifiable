@@ -1139,39 +1139,23 @@ public static class JwkJsonReader
     /// whose own value names no text, written before a later member repeating its name, is answered as undecodable, and one
     /// written after the repeating occurrence as the repetition; a name naming no text is always answered at its first
     /// occurrence, before any repetition of it. A member no reader reads therefore refuses the document as a member every
-    /// reader reads does, as no text such a document holds is one its readers agree on. This method never throws.
+    /// reader reads does: RFC 8259 section 8.2 leaves the behavior of software receiving such text unpredictable, so no text
+    /// such a document holds is one its readers agree on, and that is why this library's strict admission refuses it - its own
+    /// choice, which neither RFC 8259 nor a protocol leaving unrecognised members to be ignored requires. Both refusals of a
+    /// well-formed object carry its top-level members observed without their values (<see cref="JsonTopLevelAccount"/>), as the
+    /// members answered do (<see cref="JsonTopLevelMembers.TopLevel"/>). This method never throws.
     /// </summary>
     /// <param name="json">The UTF-8 bytes of the document.</param>
     /// <returns>The object's top-level members, or the refusal of the document with its reason.</returns>
     public static JsonTopLevelReading ReadTopLevelMembers(ReadOnlySpan<byte> json)
     {
-        if(!IsOneJsonValue(json, out var defects))
+        if(StrictRefusalOf(json) is { } refused)
         {
-            return new JsonNotOneObject();
+            return refused;
         }
 
         var pos = 0;
         SkipWhitespace(json, ref pos);
-
-        if(json[pos] != (byte)'{')
-        {
-            return new JsonNotOneObject();
-        }
-
-        if(defects.Undecodable is { } undecodable && (defects.RepeatedName is not { } repetition || undecodable.Position < repetition.Start))
-        {
-            return UndecodableMemberAt(json, undecodable);
-        }
-
-        //The document is one well-formed object, so the first name it repeats decodes and is answered by its decoded spelling;
-        //a spelling that decoded to none would be no well-formed document.
-        if(defects.RepeatedName is { } repeated)
-        {
-            return DecodeContentToString(json, repeated.Start, repeated.Length) is { } repeatedSpelling
-                ? new JsonRepeatedMemberName(repeatedSpelling, repeated.Depth)
-                : new JsonNotOneObject();
-        }
-
         pos++;
         var members = new List<JsonTopLevelMember>();
 
@@ -1212,9 +1196,53 @@ public static class JwkJsonReader
 
 
     /// <summary>
+    /// The one strict judgement of a document a protocol reads as one JSON object, which <see cref="ReadTopLevelMembers"/> and
+    /// the JWK Set selections (<see cref="SelectKeyByKeyId(ReadOnlySpan{byte}, string?)"/> and its siblings) both answer: a
+    /// document that is not exactly one well-formed JSON value within the reader's bounds, or one that is no object, is
+    /// <see cref="JsonNotOneObject"/>; otherwise the first defect in document order of a repeated member name
+    /// (<see cref="JsonRepeatedMemberName"/>) and a member whose name or string value names no Unicode text
+    /// (<see cref="JsonUndecodableMember"/>), at any depth, each with the document's top-level members observed without their
+    /// values; and none for a document admitted.
+    /// </summary>
+    /// <param name="json">The UTF-8 bytes of the document.</param>
+    /// <returns>The refusal, or <see langword="null"/> when the document is one well-formed object holding no such defect.</returns>
+    private static JsonTopLevelReading? StrictRefusalOf(ReadOnlySpan<byte> json)
+    {
+        if(!IsOneJsonValue(json, out var defects))
+        {
+            return new JsonNotOneObject();
+        }
+
+        var pos = 0;
+        SkipWhitespace(json, ref pos);
+
+        if(json[pos] != (byte)'{')
+        {
+            return new JsonNotOneObject();
+        }
+
+        if(defects.Undecodable is { } undecodable && (defects.RepeatedName is not { } repetition || undecodable.Position < repetition.Start))
+        {
+            return UndecodableMemberAt(json, undecodable);
+        }
+
+        //The document is one well-formed object, so the first name it repeats decodes and is answered by its decoded spelling;
+        //a spelling that decoded to none would be no well-formed document.
+        if(defects.RepeatedName is { } repeated)
+        {
+            return DecodeContentToString(json, repeated.Start, repeated.Length) is { } repeatedSpelling
+                ? new JsonRepeatedMemberName(repeatedSpelling, repeated.Depth, TopLevelAccountOf(json))
+                : new JsonNotOneObject();
+        }
+
+        return null;
+    }
+
+
+    /// <summary>
     /// The refusal of a well-formed object by its first member whose name, or a string its value is or holds, names no Unicode
     /// text: the name as it can be written - decoded when the value is the defect, as the document spells it when the name is -
-    /// the depth of the object carrying it and which part names no text.
+    /// the depth of the object carrying it, which part names no text, and the object's top-level members observed.
     /// </summary>
     /// <param name="json">The document, one well-formed object.</param>
     /// <param name="undecodable">Where the walk found the member.</param>
@@ -1226,15 +1254,93 @@ public static class JwkJsonReader
             //The validation admitted the name's bytes as well-formed UTF-8, so its spelling, escapes as written, is text.
             var spelling = Encoding.UTF8.GetString(json.Slice(undecodable.MemberNameStart, undecodable.MemberNameLength));
 
-            return new JsonUndecodableMember(spelling, undecodable.ObjectDepth, JsonUndecodableMemberPart.Name);
+            return new JsonUndecodableMember(spelling, undecodable.ObjectDepth, JsonUndecodableMemberPart.Name, TopLevelAccountOf(json));
         }
 
         //A name naming no text is met before its value, so the name of a member whose value is the first defect decodes to text;
         //a spelling that decoded to none would be no well-formed document.
         return DecodeContentToString(json, undecodable.MemberNameStart, undecodable.MemberNameLength) is { } name
-            ? new JsonUndecodableMember(name, undecodable.ObjectDepth, JsonUndecodableMemberPart.Value)
+            ? new JsonUndecodableMember(name, undecodable.ObjectDepth, JsonUndecodableMemberPart.Value, TopLevelAccountOf(json))
             : new JsonNotOneObject();
     }
+
+
+    /// <summary>
+    /// The top-level members of a well-formed object observed without their values: each member whose name names Unicode text,
+    /// in document order, its name decoded once, a string value as the length of its decoded text in UTF-16 code units or as
+    /// naming no Unicode text, and any other value by its kind. A member whose name names no Unicode text is left out, as no
+    /// reader can ask for it by its name.
+    /// </summary>
+    /// <param name="json">The document, one well-formed object.</param>
+    /// <returns>The account.</returns>
+    private static JsonTopLevelAccount TopLevelAccountOf(ReadOnlySpan<byte> json)
+    {
+        var observed = new List<JsonTopLevelObservation>();
+        var pos = 0;
+        SkipWhitespace(json, ref pos);
+        pos++;
+
+        //The document is well formed, so every step below lands on the next member's name, a separator or the closing brace.
+        while(true)
+        {
+            SkipWhitespace(json, ref pos);
+
+            if(json[pos] == (byte)',')
+            {
+                pos++;
+                SkipWhitespace(json, ref pos);
+            }
+
+            if(json[pos] == (byte)'}')
+            {
+                return new JsonTopLevelAccount(observed);
+            }
+
+            var nameStart = pos + 1;
+            var afterName = SkipString(json, pos);
+            var nameLength = afterName - 1 - nameStart;
+            var valueStart = SkipWhitespaceAndColon(json, afterName);
+            var valueEnd = SkipValue(json, valueStart);
+
+            if(UnicodeTextLength(json, nameStart, nameLength) is not null
+                && DecodeContentToString(json, nameStart, nameLength) is { } name)
+            {
+                observed.Add(new JsonTopLevelObservation(name, ValueObservationAt(json, valueStart, valueEnd)));
+            }
+
+            pos = valueEnd;
+        }
+    }
+
+
+    /// <summary>One top-level value of an already-validated object, spanning <c>[valueStart, valueEnd)</c>, observed without its value.</summary>
+    /// <param name="json">The document.</param>
+    /// <param name="valueStart">The position of the value's first byte.</param>
+    /// <param name="valueEnd">The position one past the value's last byte.</param>
+    /// <returns>The observation.</returns>
+    private static JsonValueObservation ValueObservationAt(ReadOnlySpan<byte> json, int valueStart, int valueEnd) => KindAt(json, valueStart) switch
+    {
+        JsonTopLevelValueKind.String => UnicodeTextLength(json, valueStart + 1, valueEnd - valueStart - 2) is { } length
+            ? new JsonReadableString(length)
+            : new JsonUndecodableString(),
+        var kind => new JsonNonStringValue(kind)
+    };
+
+
+    /// <summary>The kind of an already-validated value, read from its first byte.</summary>
+    /// <param name="json">The document.</param>
+    /// <param name="valueStart">The position of the value's first byte.</param>
+    /// <returns>The kind.</returns>
+    private static JsonTopLevelValueKind KindAt(ReadOnlySpan<byte> json, int valueStart) => json[valueStart] switch
+    {
+        (byte)'"' => JsonTopLevelValueKind.String,
+        (byte)'{' => JsonTopLevelValueKind.Object,
+        (byte)'[' => JsonTopLevelValueKind.Array,
+        (byte)'t' => JsonTopLevelValueKind.True,
+        (byte)'f' => JsonTopLevelValueKind.False,
+        (byte)'n' => JsonTopLevelValueKind.Null,
+        _ => JsonTopLevelValueKind.Number
+    };
 
 
     /// <summary>One top-level member of an already-validated object, its value spanning <c>[valueStart, valueEnd)</c>.</summary>
@@ -1245,22 +1351,14 @@ public static class JwkJsonReader
     /// <returns>The member, or <see langword="null"/> when its string value decodes to no text.</returns>
     private static JsonTopLevelMember? TopLevelMemberAt(ReadOnlySpan<byte> json, string name, int valueStart, int valueEnd)
     {
-        if(json[valueStart] == (byte)'"')
+        var kind = KindAt(json, valueStart);
+
+        if(kind is JsonTopLevelValueKind.String)
         {
             return DecodeContentToString(json, valueStart + 1, valueEnd - valueStart - 2) is { } text
                 ? new JsonTopLevelMember(name, JsonTopLevelValueKind.String, text)
                 : null;
         }
-
-        var kind = json[valueStart] switch
-        {
-            (byte)'{' => JsonTopLevelValueKind.Object,
-            (byte)'[' => JsonTopLevelValueKind.Array,
-            (byte)'t' => JsonTopLevelValueKind.True,
-            (byte)'f' => JsonTopLevelValueKind.False,
-            (byte)'n' => JsonTopLevelValueKind.Null,
-            _ => JsonTopLevelValueKind.Number
-        };
 
         return new JsonTopLevelMember(name, kind, Encoding.UTF8.GetString(json[valueStart..valueEnd]));
     }
@@ -1268,23 +1366,37 @@ public static class JwkJsonReader
 
     /// <summary>
     /// Whether an already-validated string's raw content span names Unicode text: every surrogate its escapes name is completed
-    /// by its pair into a code point, so none is an unpaired surrogate (RFC 8259 section 8.2). Decodes one UTF-16 code unit at a
-    /// time with <see cref="NameCursor"/>, allocating nothing.
+    /// by its pair into a code point, so none is an unpaired surrogate (RFC 8259 section 8.2). A span holding no escape is text
+    /// without being decoded; one holding an escape is judged by <see cref="UnicodeTextLength"/>.
     /// </summary>
     /// <param name="json">The document the span was taken from.</param>
     /// <param name="start">The start of the span, immediately after its opening quote.</param>
     /// <param name="length">The length of the span, up to (not including) its closing quote.</param>
     /// <returns><see langword="true"/> when the span names Unicode text.</returns>
-    private static bool SpellsUnicodeText(ReadOnlySpan<byte> json, int start, int length)
+    private static bool SpellsUnicodeText(ReadOnlySpan<byte> json, int start, int length) =>
+        json.Slice(start, length).IndexOf((byte)'\\') < 0 || UnicodeTextLength(json, start, length) is not null;
+
+
+    /// <summary>
+    /// The length in UTF-16 code units of the text an already-validated string's raw content span names once decoded (RFC 8259
+    /// section 7), or none when it names no Unicode text: an escape naming a surrogate its pair does not complete into a code
+    /// point (RFC 8259 section 8.2). Decodes one UTF-16 code unit at a time with <see cref="NameCursor"/>, allocating nothing.
+    /// </summary>
+    /// <param name="json">The document the span was taken from.</param>
+    /// <param name="start">The start of the span, immediately after its opening quote.</param>
+    /// <param name="length">The length of the span, up to (not including) its closing quote.</param>
+    /// <returns>The length, or <see langword="null"/> when the span names no Unicode text.</returns>
+    private static int? UnicodeTextLength(ReadOnlySpan<byte> json, int start, int length)
     {
         //Only an escape names a surrogate: bytes outside one are well-formed UTF-8, which the validation judged, and so text.
         if(json.Slice(start, length).IndexOf((byte)'\\') < 0)
         {
-            return true;
+            return Encoding.UTF8.GetCharCount(json.Slice(start, length));
         }
 
         var cursor = new NameCursor(start, start + length, decodeEscapes: true);
         var awaitsLowSurrogate = false;
+        var units = 0;
 
         while(true)
         {
@@ -1294,10 +1406,11 @@ public static class JwkJsonReader
                 {
                     if(!char.IsLowSurrogate(unit))
                     {
-                        return false;
+                        return null;
                     }
 
                     awaitsLowSurrogate = false;
+                    units++;
 
                     break;
                 }
@@ -1305,21 +1418,22 @@ public static class JwkJsonReader
                 {
                     if(char.IsLowSurrogate(unit))
                     {
-                        return false;
+                        return null;
                     }
 
                     awaitsLowSurrogate = char.IsHighSurrogate(unit);
+                    units++;
 
                     break;
                 }
                 case NameCursorStep.End:
                 {
-                    return !awaitsLowSurrogate;
+                    return awaitsLowSurrogate ? null : units;
                 }
                 case NameCursorStep.Undecodable:
                 {
                     //A sequence that decodes to no text spells none.
-                    return false;
+                    return null;
                 }
             }
         }
@@ -2787,9 +2901,9 @@ public static class JwkJsonReader
     /// trusting whichever element a first-match scan happens to reach first — the array's order is
     /// attacker-controlled input, not a tiebreaker. An absent or empty <paramref name="keyId"/> is
     /// never a match (<see cref="JwkSelectionOutcome.KeyIdRequired"/>); a caller with no key
-    /// identifier to present calls <see cref="SelectSoleKey(ReadOnlySpan{byte})"/> instead. Runs
-    /// <see cref="IsWellFormedJsonDocument"/> over <paramref name="jwksJson"/> before any scan, per
-    /// the class remarks.
+    /// identifier to present calls <see cref="SelectSoleKey(ReadOnlySpan{byte})"/> instead. The set is
+    /// admitted first by the one strict judgement of a protocol document (<see cref="AdmissionRefusalOf"/>),
+    /// before any scan and before the identifier is required.
     /// </summary>
     /// <param name="jwksJson">The JWK Set document as UTF-8 JSON bytes.</param>
     /// <param name="keyId">The requested <c>kid</c>, or <see langword="null"/>/empty when none was presented.</param>
@@ -2799,9 +2913,9 @@ public static class JwkJsonReader
     /// </returns>
     public static JwkSelectionResult SelectKeyByKeyId(ReadOnlySpan<byte> jwksJson, string? keyId)
     {
-        if(!IsWellFormedJsonDocument(jwksJson))
+        if(AdmissionRefusalOf(jwksJson) is { } refused)
         {
-            return JwkSelectionResult.MalformedDocument();
+            return refused;
         }
 
         if(string.IsNullOrEmpty(keyId))
@@ -2823,7 +2937,7 @@ public static class JwkJsonReader
     /// value, a number, an array, an object, or JSON <see langword="null"/>). A <paramref name="publicKeyUse"/>
     /// whose bytes are no well-formed UTF-8 (<see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.1">RFC
     /// 8259 §8.1</see>) spells no use, so no element is eligible for it, one carrying no <c>use</c> included;
-    /// a malformed document and the set-wide refusals below are answered before that. The duplicate-<c>kid</c>
+    /// a refusal of the document and the set-wide refusals below are answered before that. The duplicate-<c>kid</c>
     /// refusal is computed over every element whose <c>kid</c> matches WHATEVER its <c>use</c> — a member
     /// of the same attacker-influenced document never narrows it, and
     /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-3.1.1">OpenID Federation
@@ -2834,8 +2948,10 @@ public static class JwkJsonReader
     /// matched by its DECODED spelling, so a JSON escape in a member's name never hides it, and per
     /// <see href="https://www.rfc-editor.org/rfc/rfc7517#section-6">RFC 7517 §6</see> (adopting
     /// <see href="https://www.rfc-editor.org/rfc/rfc7515#section-5.3">RFC 7515 §5.3</see>) the <c>use</c>
-    /// VALUE is compared decoded the same way. Runs <see cref="IsWellFormedJsonDocument"/> over
-    /// <paramref name="jwksJson"/> before any scan; a non-object element anywhere in <c>keys</c>
+    /// VALUE is compared decoded the same way. The set is admitted first by the one strict judgement of a
+    /// protocol document (<see cref="AdmissionRefusalOf"/>), before any scan, so a set holding an undecodable
+    /// member name or string value, or repeating a name, at any depth - in an extension member no scan reads
+    /// included - is refused for it whatever key it would select; a non-object element anywhere in <c>keys</c>
     /// (<see href="https://www.rfc-editor.org/rfc/rfc7517#section-5.1">RFC 7517 §5.1</see>: <c>keys</c> is
     /// an array of JWK VALUES, and a JWK is an object) also answers <see cref="JwkSelectionOutcome.MalformedDocument"/>.
     /// A refusal result's <see cref="JwkSelectionResult.Members"/> is always <see langword="null"/>. A
@@ -2860,9 +2976,9 @@ public static class JwkJsonReader
             throw new ArgumentException("The public key use to filter by must not be empty.", nameof(publicKeyUse));
         }
 
-        if(!IsWellFormedJsonDocument(jwksJson))
+        if(AdmissionRefusalOf(jwksJson) is { } refused)
         {
-            return JwkSelectionResult.MalformedDocument();
+            return refused;
         }
 
         if(string.IsNullOrEmpty(keyId))
@@ -2879,21 +2995,22 @@ public static class JwkJsonReader
     /// other than exactly one key. This is the selection a legitimate single-key set with no
     /// <c>kid</c> needs — <see href="https://www.rfc-editor.org/rfc/rfc7517#section-4.5">RFC 7517
     /// §4.5</see> makes <c>kid</c> optional — without ever falling back to "the first key" when the
-    /// set in fact carries more than one. Runs <see cref="IsWellFormedJsonDocument"/> over
-    /// <paramref name="jwksJson"/> before any scan, per the class remarks.
+    /// set in fact carries more than one. The set is admitted first by the one strict judgement of a
+    /// protocol document (<see cref="AdmissionRefusalOf"/>), before any scan.
     /// </summary>
     /// <param name="jwksJson">The JWK Set document as UTF-8 JSON bytes.</param>
     /// <returns>
     /// A <see cref="JwkSelectionResult"/> carrying <see cref="JwkSelectionOutcome.Selected"/> and the
     /// sole key's string-valued members, <see cref="JwkSelectionOutcome.NoMatch"/> for an empty set,
-    /// <see cref="JwkSelectionOutcome.MultipleKeysMatched"/> for two or more keys, or
-    /// <see cref="JwkSelectionOutcome.MalformedDocument"/>.
+    /// <see cref="JwkSelectionOutcome.MultipleKeysMatched"/> for two or more keys, or the refusal of the
+    /// document: <see cref="JwkSelectionOutcome.MalformedDocument"/>,
+    /// <see cref="JwkSelectionOutcome.RepeatedMemberName"/> or <see cref="JwkSelectionOutcome.UndecodableMember"/>.
     /// </returns>
     public static JwkSelectionResult SelectSoleKey(ReadOnlySpan<byte> jwksJson)
     {
-        if(!IsWellFormedJsonDocument(jwksJson))
+        if(AdmissionRefusalOf(jwksJson) is { } refused)
         {
-            return JwkSelectionResult.MalformedDocument();
+            return refused;
         }
 
         return ScanKeysArray(jwksJson, keyId: null);
@@ -2913,7 +3030,7 @@ public static class JwkJsonReader
     /// value ordinally equals <paramref name="publicKeyUse"/>; never present in any other form. A
     /// <paramref name="publicKeyUse"/> whose bytes are no well-formed UTF-8 spells no use, so no element is
     /// eligible for it, one carrying no <c>use</c> included, and the set answers
-    /// <see cref="JwkSelectionOutcome.NoMatch"/> unless a malformed document or the private-or-symmetric-material
+    /// <see cref="JwkSelectionOutcome.NoMatch"/> unless a refusal of the document or the private-or-symmetric-material
     /// refusal answers it first. The
     /// private-or-symmetric-material refusal is this library's own policy for a JWK Set of
     /// verification keys, not a requirement of any RFC; <c>key_ops</c> and <c>alg</c> are not
@@ -2921,9 +3038,9 @@ public static class JwkJsonReader
     /// documented on
     /// <see cref="SelectKeyByKeyId(ReadOnlySpan{byte}, string?, ReadOnlySpan{byte})"/>, whose
     /// <c>Members</c>-decoding guarantee for a <see cref="JwkSelectionOutcome.Selected"/> result
-    /// applies here too. Runs <see cref="IsWellFormedJsonDocument"/> over <paramref name="jwksJson"/>
-    /// before any scan. A refusal result's <see cref="JwkSelectionResult.Members"/> is always
-    /// <see langword="null"/>.
+    /// applies here too. The set is admitted first by the one strict judgement of a protocol document
+    /// (<see cref="AdmissionRefusalOf"/>), before any scan, as for that overload. A refusal result's
+    /// <see cref="JwkSelectionResult.Members"/> is always <see langword="null"/>.
     /// </summary>
     /// <param name="jwksJson">The JWK Set document as UTF-8 JSON bytes.</param>
     /// <param name="publicKeyUse">The eligible <c>use</c> value, as UTF-8 bytes; never empty.</param>
@@ -2931,8 +3048,9 @@ public static class JwkJsonReader
     /// A <see cref="JwkSelectionResult"/> carrying <see cref="JwkSelectionOutcome.Selected"/> and the
     /// eligible key's string-valued members, <see cref="JwkSelectionOutcome.NoMatch"/> when no element
     /// is eligible, <see cref="JwkSelectionOutcome.MultipleKeysMatched"/> for two or more eligible
-    /// keys, <see cref="JwkSelectionOutcome.PrivateOrSymmetricMemberPresent"/>, or
-    /// <see cref="JwkSelectionOutcome.MalformedDocument"/>.
+    /// keys, <see cref="JwkSelectionOutcome.PrivateOrSymmetricMemberPresent"/>, or the refusal of the
+    /// document: <see cref="JwkSelectionOutcome.MalformedDocument"/>,
+    /// <see cref="JwkSelectionOutcome.RepeatedMemberName"/> or <see cref="JwkSelectionOutcome.UndecodableMember"/>.
     /// </returns>
     /// <exception cref="ArgumentException"><paramref name="publicKeyUse"/> is empty.</exception>
     public static JwkSelectionResult SelectSoleKey(ReadOnlySpan<byte> jwksJson, ReadOnlySpan<byte> publicKeyUse)
@@ -2942,13 +3060,35 @@ public static class JwkJsonReader
             throw new ArgumentException("The public key use to filter by must not be empty.", nameof(publicKeyUse));
         }
 
-        if(!IsWellFormedJsonDocument(jwksJson))
+        if(AdmissionRefusalOf(jwksJson) is { } refused)
         {
-            return JwkSelectionResult.MalformedDocument();
+            return refused;
         }
 
         return ScanKeysArrayFiltered(jwksJson, keyId: null, publicKeyUse);
     }
+
+
+    /// <summary>
+    /// The admission of a JWK Set by the one strict judgement of a protocol document (<see cref="StrictRefusalOf"/>), the
+    /// judgement <see cref="ReadTopLevelMembers"/> answers a token answer's body by: a set that is not one well-formed JSON
+    /// object (RFC 7517 section 5) is <see cref="JwkSelectionOutcome.MalformedDocument"/>; otherwise the first in document order
+    /// of a member name one of its objects repeats (RFC 8259 section 4) and a member whose name or string value names no Unicode
+    /// text (RFC 8259 section 8.2), at any depth, in a key, in an extension member no scan reads, or at the set's own level, is
+    /// <see cref="JwkSelectionOutcome.RepeatedMemberName"/> or <see cref="JwkSelectionOutcome.UndecodableMember"/>, carrying the
+    /// member's name as it can be written, the depth of the object carrying it and, for an undecodable member, the part, and none
+    /// of its value. RFC 8259 section 8.2 leaves the behavior of software receiving such text unpredictable, which is why the
+    /// library's strict admission refuses the whole set for it rather than selecting a key beside it, its own choice.
+    /// </summary>
+    /// <param name="jwksJson">The JWK Set document as UTF-8 JSON bytes.</param>
+    /// <returns>The refusal, or <see langword="null"/> when the set is admitted.</returns>
+    private static JwkSelectionResult? AdmissionRefusalOf(ReadOnlySpan<byte> jwksJson) => StrictRefusalOf(jwksJson) switch
+    {
+        null => null,
+        JsonRepeatedMemberName repeated => JwkSelectionResult.RepeatedMemberName(repeated),
+        JsonUndecodableMember undecodable => JwkSelectionResult.UndecodableMember(undecodable),
+        _ => JwkSelectionResult.MalformedDocument()
+    };
 
 
     /// <summary>

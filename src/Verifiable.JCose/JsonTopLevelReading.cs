@@ -6,6 +6,8 @@ namespace Verifiable.JCose;
 /// refusal of a document that is not one well-formed JSON object (<see cref="JsonNotOneObject"/>), of a well-formed object one
 /// of whose objects repeats a member name (<see cref="JsonRepeatedMemberName"/>), or of a well-formed object one of whose
 /// members has a name or a string value naming no Unicode text (<see cref="JsonUndecodableMember"/>), each a reason of its own.
+/// The members and both refusals of a well-formed object carry the account of its top-level members observed without their
+/// values (<see cref="JsonTopLevelAccount"/>), from the same reading.
 /// </summary>
 public abstract record JsonTopLevelReading;
 
@@ -15,7 +17,47 @@ public abstract record JsonTopLevelReading;
 /// decoded once (RFC 8259 section 7), every one of them Unicode text.
 /// </summary>
 /// <param name="Members">The object's top-level members.</param>
-public sealed record JsonTopLevelMembers(IReadOnlyList<JsonTopLevelMember> Members) : JsonTopLevelReading;
+public sealed record JsonTopLevelMembers(IReadOnlyList<JsonTopLevelMember> Members) : JsonTopLevelReading
+{
+    /// <summary>
+    /// The members observed without their values (<see cref="JsonTopLevelAccount"/>), as the refusals of a well-formed object
+    /// carry them: each string's length in UTF-16 code units, each other value's kind.
+    /// </summary>
+    public JsonTopLevelAccount TopLevel => new([.. Members.Select(static member => new JsonTopLevelObservation(
+        member.Name,
+        member.Kind is JsonTopLevelValueKind.String
+            ? new JsonReadableString(member.Text.Length)
+            : new JsonNonStringValue(member.Kind)))]);
+
+
+    /// <summary>
+    /// The member of a name, as one typed answer (<see cref="JsonMemberLookup"/>): carried as a string with its decoded text, as
+    /// a number with its spelling, as a value of another kind naming which, or not carried. The reader answers members only for
+    /// a document repeating no name, so the member found is the one the object carries; of members a caller composed repeating a
+    /// name, the first is answered.
+    /// </summary>
+    /// <param name="name">The member's name, decoded.</param>
+    /// <returns>The answer.</returns>
+    public JsonMemberLookup Find(string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+
+        foreach(var member in Members)
+        {
+            if(string.Equals(member.Name, name, StringComparison.Ordinal))
+            {
+                return member.Kind switch
+                {
+                    JsonTopLevelValueKind.String => new JsonMemberString(member.Text),
+                    JsonTopLevelValueKind.Number => new JsonMemberNumber(member.Text),
+                    _ => new JsonMemberOfOtherKind(member.Kind)
+                };
+            }
+        }
+
+        return new JsonMemberAbsent();
+    }
+}
 
 
 /// <summary>
@@ -40,15 +82,20 @@ public sealed record JsonNotOneObject : JsonTopLevelReading;
 /// The nesting depth of the object that repeats it: one for the document's own object, one more for each object or array it
 /// is nested within beneath that.
 /// </param>
-public sealed record JsonRepeatedMemberName(string Name, int ObjectDepth) : JsonTopLevelReading;
+/// <param name="TopLevel">
+/// The document's top-level members observed without their values, every occurrence of the repeated name among them when the
+/// document's own object repeats it.
+/// </param>
+public sealed record JsonRepeatedMemberName(string Name, int ObjectDepth, JsonTopLevelAccount TopLevel) : JsonTopLevelReading;
 
 
 /// <summary>
 /// The document is one well-formed JSON object, but a member of one of its objects, its own or one nested within it, has a
-/// name or a string value whose escapes name an unpaired surrogate: the grammar admits it, but it names no Unicode text, and
-/// RFC 8259 section 8.2 says the behavior of software receiving it is unpredictable, so no reader agrees on its text. The first
-/// such member in document order is the one answered, whether or not any reader of the document reads that member. No value
-/// the document carries is answered.
+/// name or a string value whose escapes name an unpaired surrogate: the grammar admits it, but it names no Unicode text. RFC
+/// 8259 section 8.2 says the behavior of software receiving it is unpredictable, so no reader agrees on its text, and that is
+/// why the library's strict admission refuses the whole document for it - a choice of this library, which neither RFC 8259
+/// nor a protocol leaving unrecognised members to be ignored requires. The first such member in document order is the one
+/// answered, whether or not any reader of the document reads that member. No value the document carries is answered.
 /// </summary>
 /// <param name="Name">
 /// When <paramref name="Part"/> is <see cref="JsonUndecodableMemberPart.Value"/>, the member's name decoded once (RFC 8259
@@ -61,4 +108,9 @@ public sealed record JsonRepeatedMemberName(string Name, int ObjectDepth) : Json
 /// it is nested within beneath that.
 /// </param>
 /// <param name="Part">Whether the member's name or its value names no Unicode text.</param>
-public sealed record JsonUndecodableMember(string Name, int ObjectDepth, JsonUndecodableMemberPart Part) : JsonTopLevelReading;
+/// <param name="TopLevel">
+/// The document's top-level members observed without their values, a top-level string naming no Unicode text among them as
+/// <see cref="JsonUndecodableString"/>.
+/// </param>
+public sealed record JsonUndecodableMember(string Name, int ObjectDepth, JsonUndecodableMemberPart Part, JsonTopLevelAccount TopLevel)
+    : JsonTopLevelReading;

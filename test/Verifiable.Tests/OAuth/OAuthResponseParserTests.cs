@@ -668,13 +668,13 @@ internal sealed class OAuthResponseParsersTests
     {
         var body = /*lang=json*/ """{"access_token":"access-credential-text","token_type":"Bearer","request_uri":"urn:ietf:params:oauth:request_uri:credential-text","expires_in":60,"type":"invalid_grant","ext":{"note":"\uDC00"}}""";
 
-        OAuthParseError?[] refusals =
-        [
+        var refusals = new OAuthParseError?[]
+        {
             OAuthResponseParsers.ParseTokenResponse(Respond(body), DateTimeOffset.UnixEpoch).Error,
             OAuthResponseParsers.ParseParResponse(Respond(body)).Error,
             OAuthResponseParsers.ParseTokenResponse(Problem(body), DateTimeOffset.UnixEpoch).Error,
             OAuthResponseParsers.ParseParResponse(Problem(body)).Error
-        ];
+        };
 
         foreach(var refusal in refusals)
         {
@@ -839,6 +839,98 @@ internal sealed class OAuthResponseParsersTests
             WellKnownProblemDetailsMemberNames.Detail,
             Assert.IsInstanceOfType<OAuthUndecodableMemberValue>(pushedUndecodable.Error).MemberName,
             "The pushed authorization endpoint's answer carries a detail naming no Unicode text.");
+    }
+
+
+    /// <summary>
+    /// A success answer holding a readable credential shorter than any floor beside an extension member naming no Unicode text is
+    /// refused by that member, and the same reading carries the credential it observed: one <c>access_token</c>, readable, the
+    /// length of its text, and nothing of its text in the refusal, its summary or the reading's text.
+    /// </summary>
+    [TestMethod]
+    public void ARefusedAnswerCarriesTheReadableCredentialItObservedWithoutItsText()
+    {
+        var reading = OAuthResponseParsers.ReadTokenResponse(Respond(
+            /*lang=json*/ """{"access_token":"kx7Qz","token_type":"Bearer","ext":"\uD800"}"""));
+
+        Assert.IsFalse(reading.Outcome.IsSuccess, "The answer is refused.");
+
+        var refused = Assert.IsInstanceOfType<OAuthUndecodableMemberValue>(reading.Outcome.Error, "The extension member is the reason.");
+        Assert.AreEqual("ext", refused.MemberName, "The member naming no Unicode text.");
+        Assert.AreSequenceEqual(
+            new JsonValueObservation[] { new JsonReadableString(5) },
+            reading.Credentials.AccessToken.ToArray(),
+            "The readable access token, its length in UTF-16 code units.");
+        Assert.IsEmpty(reading.Credentials.RefreshToken, "No refresh token is carried.");
+        Assert.IsEmpty(reading.Credentials.IdToken, "No ID Token is carried.");
+        Assert.DoesNotContain("kx7Qz", refused.Support.Summary, "The summary carries no credential.");
+        Assert.DoesNotContain("kx7Qz", refused.ToString(), "The refusal's text carries no credential.");
+        Assert.DoesNotContain("kx7Qz", reading.ToString(), "The reading's text carries no credential.");
+    }
+
+
+    /// <summary>
+    /// An answer repeating <c>access_token</c>, both occurrences readable, is refused for the repetition, and the same reading
+    /// observes both occurrences in document order, each with the length of its text and none of its text.
+    /// </summary>
+    [TestMethod]
+    public void ARepeatedAccessTokenIsRefusedWithBothOccurrencesObserved()
+    {
+        var reading = OAuthResponseParsers.ReadTokenResponse(Respond(
+            /*lang=json*/ """{"access_token":"first-credential-text","access_token":"second","token_type":"Bearer"}"""));
+
+        Assert.AreEqual(
+            OAuthRequestParameterNames.AccessToken,
+            Assert.IsInstanceOfType<OAuthRepeatedMemberName>(reading.Outcome.Error, "The repetition is the reason.").MemberName);
+
+        Assert.AreSequenceEqual(
+            new JsonValueObservation[] { new JsonReadableString(21), new JsonReadableString(6) },
+            reading.Credentials.AccessToken.ToArray(),
+            "Both occurrences, in document order.");
+
+        Assert.DoesNotContain("credential-text", reading.ToString(), "The reading's text carries no credential.");
+    }
+
+
+    /// <summary>
+    /// A success carries its one observation of each credential member it holds, read decoded once - an escape decoded, a
+    /// surrogate pair two code units - from the reading its token was read from; a member it does not carry is observed at no
+    /// occurrence.
+    /// </summary>
+    [TestMethod]
+    public void ASuccessCarriesItsOneObservationOfEachCredential()
+    {
+        var reading = OAuthResponseParsers.ReadTokenResponse(Respond(
+            /*lang=json,strict*/ """{"access_token":"tok\/123","token_type":"Bearer","refresh_token":"r😀"}"""));
+
+        Assert.IsTrue(reading.Outcome.IsSuccess, "The answer is a success.");
+        Assert.AreEqual("tok/123", reading.Outcome.Value.AccessToken);
+        Assert.AreSequenceEqual(new JsonValueObservation[] { new JsonReadableString(7) }, reading.Credentials.AccessToken.ToArray(), "The access token, decoded.");
+        Assert.AreSequenceEqual(new JsonValueObservation[] { new JsonReadableString(3) }, reading.Credentials.RefreshToken.ToArray(), "The refresh token, a pair two units.");
+        Assert.IsEmpty(reading.Credentials.IdToken, "No ID Token is carried.");
+
+        Assert.AreEqual(
+            new TokenAnswerCredentialObservations([new JsonReadableString(7)], [new JsonReadableString(3)], []),
+            reading.Credentials,
+            "The observations compare as the occurrences they hold.");
+    }
+
+
+    /// <summary>
+    /// The observation says what each occurrence holds: an access token naming no Unicode text as such, one carried as a number
+    /// by its kind, and an answer that is no one well-formed JSON object observes no occurrence at all.
+    /// </summary>
+    [TestMethod]
+    public void TheObservationSaysWhatEachOccurrenceHolds()
+    {
+        var undecodable = OAuthResponseParsers.ReadTokenResponse(Respond(/*lang=json*/ """{"access_token":"\uD800","token_type":"Bearer"}"""));
+        var number = OAuthResponseParsers.ReadTokenResponse(Respond(/*lang=json,strict*/ """{"access_token":12,"token_type":"Bearer"}"""));
+        var noObject = OAuthResponseParsers.ReadTokenResponse(Respond("{\"access_token\":\"at\",\"token_type\":\"Bearer\""));
+
+        Assert.AreSequenceEqual(new JsonValueObservation[] { new JsonUndecodableString() }, undecodable.Credentials.AccessToken.ToArray());
+        Assert.AreSequenceEqual(new JsonValueObservation[] { new JsonNonStringValue(JsonTopLevelValueKind.Number) }, number.Credentials.AccessToken.ToArray());
+        Assert.IsEmpty(noObject.Credentials.AccessToken, "A body that is no one well-formed object observes nothing.");
+        _ = Assert.IsInstanceOfType<OAuthMalformedResponse>(noObject.Outcome.Error);
     }
 
 

@@ -192,17 +192,22 @@ internal sealed class JwkJsonReaderKeySelectionTests
 
 
     /// <summary>
-    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-4">RFC 8259 §4</see>: a document is
-    /// refused before any key is scanned when it is not well formed, here on a repeated member name.
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-4">RFC 8259 §4</see>: a set one of whose
+    /// keys repeats a member name is refused before any key is scanned, for the repetition itself: the
+    /// name and the depth of the key object repeating it, the set's own object one, its <c>keys</c> array
+    /// two, the key three.
     /// </summary>
     [TestMethod]
-    public void SelectKeyByKeyIdReportsMalformedDocumentOnARepeatedMemberName()
+    public void SelectKeyByKeyIdReportsARepeatedMemberNameByTheName()
     {
-        string json = """{"keys":[{"kty":"EC","kty":"RSA","kid":"a"}]}""";
+        var json = /*lang=json*/ """{"keys":[{"kty":"EC","kty":"RSA","kid":"a"}]}""";
 
-        JwkSelectionResult result = JwkJsonReader.SelectKeyByKeyId(Utf8(json), "a");
+        var result = JwkJsonReader.SelectKeyByKeyId(Utf8(json), "a");
 
-        Assert.AreEqual(JwkSelectionOutcome.MalformedDocument, result.Outcome);
+        Assert.AreEqual(JwkSelectionOutcome.RepeatedMemberName, result.Outcome);
+        Assert.AreEqual("kty", result.Repetition?.Name, "The repeated name.");
+        Assert.AreEqual(3, result.Repetition?.ObjectDepth, "The key object repeating it.");
+        Assert.IsNull(result.Members);
     }
 
 
@@ -354,17 +359,18 @@ internal sealed class JwkJsonReaderKeySelectionTests
 
 
     /// <summary>
-    /// <see cref="JwkJsonReader.IsWellFormedJsonDocument"/> refuses a decoded-duplicate member name —
-    /// a plain and an escaped spelling of <c>use</c> in the same object — so this document is
-    /// <see cref="JwkSelectionOutcome.MalformedDocument"/> under
-    /// <see cref="JwkJsonReader.SelectKeyByKeyId(ReadOnlySpan{byte}, string?)"/> too.
+    /// A decoded-duplicate member name — a plain and an escaped spelling of <c>use</c> in the same
+    /// object — is a repetition (RFC 8259 §4) under
+    /// <see cref="JwkJsonReader.SelectKeyByKeyId(ReadOnlySpan{byte}, string?)"/> too, refused by the
+    /// decoded name, though that overload reads no <c>use</c>.
     /// </summary>
     [TestMethod]
-    public void PinSelectKeyByKeyIdReportsMalformedDocumentOnADecodedDuplicateUseMember()
+    public void PinSelectKeyByKeyIdReportsARepeatedMemberNameOnADecodedDuplicateUseMember()
     {
-        JwkSelectionResult result = JwkJsonReader.SelectKeyByKeyId(Utf8(DocDuplicateDecodedUseMember), "k");
+        var result = JwkJsonReader.SelectKeyByKeyId(Utf8(DocDuplicateDecodedUseMember), "k");
 
-        Assert.AreEqual(JwkSelectionOutcome.MalformedDocument, result.Outcome);
+        Assert.AreEqual(JwkSelectionOutcome.RepeatedMemberName, result.Outcome);
+        Assert.AreEqual("use", result.Repetition?.Name, "The decoded repeated name.");
     }
 
 
@@ -747,24 +753,27 @@ internal sealed class JwkJsonReaderKeySelectionTests
     /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-4">RFC 8259 §4</see>: a decoded
     /// duplicate member name — a plain and an escaped spelling of <c>use</c> in one object — is
-    /// refused before any element is scanned for eligibility, from both filtered overloads.
+    /// refused as a repetition before any element is scanned for eligibility, from both filtered overloads.
     /// </summary>
     [TestMethod]
-    public void SelectSoleKeyWithUseFilterReportsMalformedDocumentOnADecodedDuplicateUseMember()
+    public void SelectSoleKeyWithUseFilterReportsARepeatedMemberNameOnADecodedDuplicateUseMember()
     {
-        JwkSelectionResult result = JwkJsonReader.SelectSoleKey(Utf8(DocDuplicateDecodedUseMember), WellKnownJwkValues.UseSigUtf8);
+        var result = JwkJsonReader.SelectSoleKey(Utf8(DocDuplicateDecodedUseMember), WellKnownJwkValues.UseSigUtf8);
 
-        Assert.AreEqual(JwkSelectionOutcome.MalformedDocument, result.Outcome);
+        Assert.AreEqual(JwkSelectionOutcome.RepeatedMemberName, result.Outcome);
+        Assert.AreEqual("use", result.Repetition?.Name, "The decoded repeated name.");
+        Assert.AreEqual(3, result.Repetition?.ObjectDepth, "The key object repeating it.");
     }
 
 
-    /// <summary>The same decoded-duplicate document is refused in <c>kid</c> mode.</summary>
+    /// <summary>The same decoded-duplicate document is refused as a repetition in <c>kid</c> mode.</summary>
     [TestMethod]
-    public void SelectKeyByKeyIdWithUseFilterReportsMalformedDocumentOnADecodedDuplicateUseMember()
+    public void SelectKeyByKeyIdWithUseFilterReportsARepeatedMemberNameOnADecodedDuplicateUseMember()
     {
-        JwkSelectionResult result = JwkJsonReader.SelectKeyByKeyId(Utf8(DocDuplicateDecodedUseMember), "k", WellKnownJwkValues.UseSigUtf8);
+        var result = JwkJsonReader.SelectKeyByKeyId(Utf8(DocDuplicateDecodedUseMember), "k", WellKnownJwkValues.UseSigUtf8);
 
-        Assert.AreEqual(JwkSelectionOutcome.MalformedDocument, result.Outcome);
+        Assert.AreEqual(JwkSelectionOutcome.RepeatedMemberName, result.Outcome);
+        Assert.AreEqual("use", result.Repetition?.Name, "The decoded repeated name.");
     }
 
 
@@ -1033,5 +1042,117 @@ internal sealed class JwkJsonReaderKeySelectionTests
             Assert.AreEqual(JwkSelectionOutcome.PrivateOrSymmetricMemberPresent, byKeyId.Outcome, $"kid mode, member '{memberName}'");
             Assert.AreEqual(JwkSelectionOutcome.PrivateOrSymmetricMemberPresent, soleKey.Outcome, $"sole-key mode, member '{memberName}'");
         }
+    }
+
+
+    /// <summary>
+    /// RFC 8259 section 8.2: an escape naming an unpaired surrogate is grammatical but names no Unicode text. A set otherwise
+    /// eligible to select its one key - by its identifier or as the sole key, filtered by <c>use</c> or not - is refused by the
+    /// library's strict admission when a member of it has a name or a string value so spelled, in an extension member at the
+    /// set's own level, in an extension member of the key itself, or as a member name of the key: the member's name as it can be
+    /// written, the depth of the object carrying it and which part names no text, never a value and never a key.
+    /// </summary>
+    /// <param name="document">The JWK Set.</param>
+    /// <param name="expectedName">The member's name as the refusal carries it.</param>
+    /// <param name="expectedDepth">The depth of the object carrying it.</param>
+    /// <param name="expectedPart">Which part of the member names no Unicode text.</param>
+    [TestMethod]
+    [DataRow(
+        /*lang=json*/ """{"keys":[{"kty":"EC","kid":"k","use":"sig","crv":"P-256","x":"AA","y":"AA"}],"ext":"\uD800"}""",
+        "ext",
+        1,
+        JsonUndecodableMemberPart.Value,
+        DisplayName = "An extension member at the set's own level")]
+    [DataRow(
+        /*lang=json*/ """{"keys":[{"kty":"EC","kid":"k","use":"sig","crv":"P-256","x":"AA","y":"AA","note":"x\uDC00"}]}""",
+        "note",
+        3,
+        JsonUndecodableMemberPart.Value,
+        DisplayName = "An extension member of the key")]
+    [DataRow(
+        /*lang=json*/ """{"keys":[{"kty":"EC","kid":"k","use":"sig","crv":"P-256","x":"AA","y":"AA","\uD800":"x"}]}""",
+        "\\uD800",
+        3,
+        JsonUndecodableMemberPart.Name,
+        DisplayName = "A member name of the key, spelled as the set escapes it")]
+    public void AnUndecodableMemberRefusesAnOtherwiseEligibleSet(
+        string document,
+        string expectedName,
+        int expectedDepth,
+        JsonUndecodableMemberPart expectedPart)
+    {
+        var json = Utf8(document);
+
+        var selections = new[]
+        {
+            JwkJsonReader.SelectKeyByKeyId(json, "k"),
+            JwkJsonReader.SelectKeyByKeyId(json, "k", WellKnownJwkValues.UseSigUtf8),
+            JwkJsonReader.SelectSoleKey(json),
+            JwkJsonReader.SelectSoleKey(json, WellKnownJwkValues.UseSigUtf8)
+        };
+
+        foreach(var selection in selections)
+        {
+            Assert.AreEqual(JwkSelectionOutcome.UndecodableMember, selection.Outcome, "The member naming no Unicode text refuses the set.");
+            Assert.IsNull(selection.Members, "No key is handed out.");
+            Assert.AreEqual(expectedName, selection.Undecodable?.Name, "The member's name as it can be written.");
+            Assert.AreEqual(expectedDepth, selection.Undecodable?.ObjectDepth, "The depth of the object carrying it.");
+            Assert.AreEqual(expectedPart, selection.Undecodable?.Part, "Which part names no Unicode text.");
+        }
+    }
+
+
+    /// <summary>
+    /// The control: the same set with every member readable, an extension member at its own level and in its key included,
+    /// selects its key by its identifier and as the sole key, filtered or not, the extension members ignored.
+    /// </summary>
+    [TestMethod]
+    public void AReadableSetWithExtensionMembersStillSelectsItsKey()
+    {
+        var json = Utf8(/*lang=json,strict*/ """{"keys":[{"kty":"EC","kid":"k","use":"sig","crv":"P-256","x":"AA","y":"AA","note":"x"}],"ext":"y"}""");
+
+        var selections = new[]
+        {
+            JwkJsonReader.SelectKeyByKeyId(json, "k"),
+            JwkJsonReader.SelectKeyByKeyId(json, "k", WellKnownJwkValues.UseSigUtf8),
+            JwkJsonReader.SelectSoleKey(json),
+            JwkJsonReader.SelectSoleKey(json, WellKnownJwkValues.UseSigUtf8)
+        };
+
+        foreach(var selection in selections)
+        {
+            Assert.AreEqual(JwkSelectionOutcome.Selected, selection.Outcome, "The readable set selects its key.");
+            Assert.AreEqual("k", selection.Members?["kid"], "The key selected.");
+        }
+    }
+
+
+    /// <summary>
+    /// The refusals of the document keep their order: a set that is also no well-formed JSON is malformed whatever member it
+    /// holds naming no Unicode text, and so is a JWK Set that is no JSON object at all (RFC 7517 section 5); the first defect in
+    /// document order is answered when a set both repeats a name and holds a member naming no text; and the defect of the
+    /// document is answered before a missing key identifier and before the private-material refusal of the set, as the document
+    /// is admitted before any key is judged.
+    /// </summary>
+    [TestMethod]
+    public void TheRefusalsOfTheDocumentKeepTheirOrder()
+    {
+        var malformed = Utf8("""{"keys":[{"kty":"EC","kid":"k","note":"\uD800"}]""");
+        var noObject = Utf8(/*lang=json,strict*/ """[{"keys":[{"kty":"EC","kid":"k"}]}]""");
+        var undecodableThenRepeated = Utf8(/*lang=json*/ """{"keys":[{"kty":"EC","kid":"k","note":"\uD800","kid":"k"}]}""");
+        var repeatedThenUndecodable = Utf8(/*lang=json*/ """{"keys":[{"kty":"EC","kty":"EC","kid":"k","note":"\uD800"}]}""");
+        var undecodableBesidePrivateMaterial = Utf8(/*lang=json*/ """{"keys":[{"kty":"EC","kid":"k","use":"sig","d":"secret","note":"\uD800"}]}""");
+
+        Assert.AreEqual(JwkSelectionOutcome.MalformedDocument, JwkJsonReader.SelectSoleKey(malformed, WellKnownJwkValues.UseSigUtf8).Outcome);
+        Assert.AreEqual(JwkSelectionOutcome.MalformedDocument, JwkJsonReader.SelectKeyByKeyId(malformed, "k").Outcome);
+        Assert.AreEqual(JwkSelectionOutcome.MalformedDocument, JwkJsonReader.SelectSoleKey(noObject).Outcome);
+        Assert.AreEqual(JwkSelectionOutcome.MalformedDocument, JwkJsonReader.SelectKeyByKeyId(noObject, "k", WellKnownJwkValues.UseSigUtf8).Outcome);
+        Assert.AreEqual(JwkSelectionOutcome.UndecodableMember, JwkJsonReader.SelectSoleKey(undecodableThenRepeated).Outcome);
+        Assert.AreEqual(JwkSelectionOutcome.RepeatedMemberName, JwkJsonReader.SelectSoleKey(repeatedThenUndecodable).Outcome);
+        Assert.AreEqual(JwkSelectionOutcome.UndecodableMember, JwkJsonReader.SelectKeyByKeyId(undecodableThenRepeated, null).Outcome);
+
+        Assert.AreEqual(
+            JwkSelectionOutcome.UndecodableMember,
+            JwkJsonReader.SelectSoleKey(undecodableBesidePrivateMaterial, WellKnownJwkValues.UseSigUtf8).Outcome);
     }
 }

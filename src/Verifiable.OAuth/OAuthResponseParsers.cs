@@ -27,9 +27,15 @@ namespace Verifiable.OAuth;
 /// is refused as <see cref="OAuthRepeatedMemberName"/>, and one a member of whose objects has a name or a string value naming
 /// no Unicode text (RFC 8259 §8.2) as <see cref="OAuthUndecodableMemberValue"/>, the first of either in document order, each
 /// naming the member and none of its value, never answered as a body that is no object or as a parameter not carried. Such a
-/// member refuses the body whether or not it is a parameter these parsers read, an extension member included, as no text the
-/// body holds is then one its readers agree on. A reader of the same body as the JSON it is - a client's check of the
-/// credentials it carries - therefore reads the very values these parsers answer.
+/// member refuses the body whether or not it is a parameter these parsers read, an extension member included: that is the
+/// library's chosen strict admission, not a requirement of either RFC - RFC 6749 §5.1 and §5.2 have a client ignore a parameter
+/// it does not recognise, and RFC 8259 §8.2 describes the interoperability problem without requiring a receiver to refuse such a
+/// document - chosen because RFC 8259 §8.2 leaves what software receiving such text does unpredictable, so no text the body
+/// holds is then one its readers agree on. An admitted body's unrecognised readable members stay ignored. Each parameter is
+/// read through the reader's one typed answer for a member asked for by name (<see cref="JsonTopLevelMembers.Find"/>), never by
+/// the kind of a member's value. A reader of the same body as the JSON it is - a client's check of the credentials it carries -
+/// therefore reads the very values these parsers answer, and a token answer's reading carries the credential members it
+/// observed beside its outcome (<see cref="ReadTokenResponse"/>), so the client reads the body no second time.
 /// </para>
 /// <para>
 /// Both parsers handle two response shapes:
@@ -93,7 +99,7 @@ public static class OAuthResponseParsers
 
         var reading = ReadingOf(response.Body);
 
-        if(reading is not JsonTopLevelMembers { Members: var members })
+        if(reading is not JsonTopLevelMembers members)
         {
             return Result.Failure<ParResponse, OAuthParseError>(
                 RefusalOf(reading, response, "PAR", "RFC 9126 §2.2").WithTransportMetadata(response));
@@ -187,31 +193,65 @@ public static class OAuthResponseParsers
     /// Parses a token endpoint response per
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 §5.1</see>.
     /// </summary>
+    /// <remarks>
+    /// The form of <see cref="ParseTokenResponseDelegate"/>: the outcome of <see cref="ReadTokenResponse"/>, whose reading also
+    /// carries the credential members the body holds.
+    /// </remarks>
     /// <param name="response">The response.</param>
     /// <param name="receivedAt">The instant the response was received.</param>
     /// <returns>The token response, the error the response names, or the refusal of a malformed response.</returns>
     public static Result<TokenResponse, OAuthParseError> ParseTokenResponse(
         HttpResponseData response,
-        DateTimeOffset receivedAt)
+        DateTimeOffset receivedAt) => ReadTokenResponse(response).Outcome;
+
+
+    /// <summary>
+    /// Reads a token endpoint response per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 §5.1</see> in one reading of its body: the token
+    /// response, the error it names or the refusal of the response, and beside it the occurrences of the credential members
+    /// <c>access_token</c>, <c>refresh_token</c> and <c>id_token</c> that reading observed, each without its value
+    /// (<see cref="TokenAnswerCredentialObservations"/>), the refusal of a body repeating a name or holding a member naming no
+    /// Unicode text included. A client decides from them what it withholds and what a receipt of the answer records, and reads
+    /// the body no second time; no credential text is carried in any refusal or in the observations.
+    /// </summary>
+    /// <param name="response">The response.</param>
+    /// <returns>The outcome and the credential members observed.</returns>
+    public static TokenResponseReading ReadTokenResponse(HttpResponseData response)
     {
         if(response.Body.AsSpan().Trim().IsEmpty)
         {
-            return Result.Failure<TokenResponse, OAuthParseError>(
-                new OAuthMalformedResponse(
-                    response.Body,
-                    new DecisionSupport("The token endpoint returned an empty response body.")
-                    {
-                        LikelyCause = "The endpoint URL may be incorrect or the server " +
-                                      "returned a response with no body.",
-                        ActionableGuidance = "Verify the token_endpoint value in the " +
-                                             "authorization server metadata.",
-                        SpecificationReference = "RFC 6749 §5.1"
-                    }).WithTransportMetadata(response));
+            return new TokenResponseReading(
+                Result.Failure<TokenResponse, OAuthParseError>(
+                    new OAuthMalformedResponse(
+                        response.Body,
+                        new DecisionSupport("The token endpoint returned an empty response body.")
+                        {
+                            LikelyCause = "The endpoint URL may be incorrect or the server " +
+                                          "returned a response with no body.",
+                            ActionableGuidance = "Verify the token_endpoint value in the " +
+                                                 "authorization server metadata.",
+                            SpecificationReference = "RFC 6749 §5.1"
+                        }).WithTransportMetadata(response)),
+                TokenAnswerCredentialObservations.None);
         }
 
         var reading = ReadingOf(response.Body);
 
-        if(reading is not JsonTopLevelMembers { Members: var members })
+        return new TokenResponseReading(TokenOutcomeOf(reading, response), TokenAnswerCredentialObservations.Of(reading));
+    }
+
+
+    /// <summary>
+    /// The outcome of a token endpoint response whose non-empty body the reader read: the refusal of a body that is no one
+    /// admitted JSON object, the RFC 9457 problem or the RFC 6749 §5.2 error it names, or the token response its top-level
+    /// parameters carry.
+    /// </summary>
+    /// <param name="reading">The reader's reading of the body.</param>
+    /// <param name="response">The response.</param>
+    /// <returns>The token response, the error the response names, or the refusal of a malformed response.</returns>
+    private static Result<TokenResponse, OAuthParseError> TokenOutcomeOf(JsonTopLevelReading reading, HttpResponseData response)
+    {
+        if(reading is not JsonTopLevelMembers members)
         {
             return Result.Failure<TokenResponse, OAuthParseError>(
                 RefusalOf(reading, response, "token", "RFC 6749 §5.1").WithTransportMetadata(response));
@@ -352,7 +392,8 @@ public static class OAuthResponseParsers
             undecodable.Part,
             new DecisionSupport(
                 $"The {endpoint} endpoint's response carries, in {where}, {named} an unpaired surrogate, which encodes no "
-                + "Unicode character (RFC 8259 §8.2), so the response holds text no reader agrees on and is refused.")
+                + "Unicode character (RFC 8259 §8.2), so the response holds text no reader agrees on, and the library's strict "
+                + "admission refuses it.")
             {
                 LikelyCause = "The server escaped one half of a surrogate pair alone, or cut a value between the two "
                               + "halves of a pair.",
@@ -389,42 +430,31 @@ public static class OAuthResponseParsers
 
 
     /// <summary>
-    /// The decoded string a top-level parameter carries, or <see langword="null"/> when the response carries no such parameter
-    /// or carries it as no string. A body whose objects repeat no name and none of whose members names no Unicode text is the
-    /// only one read, so the member found is the one the object carries and its text is Unicode text.
+    /// The decoded string a top-level parameter carries, read through the reader's typed answer for the member
+    /// (<see cref="JsonTopLevelMembers.Find"/>), or <see langword="null"/> when the response carries no such parameter or carries
+    /// it as no string. A body whose objects repeat no name and none of whose members names no Unicode text is the only one
+    /// read, so the member found is the one the object carries and its text is Unicode text.
     /// </summary>
     /// <param name="members">The response's top-level members.</param>
     /// <param name="name">The parameter's name.</param>
     /// <returns>The parameter's value, or <see langword="null"/>.</returns>
-    private static string? StringOf(IReadOnlyList<JsonTopLevelMember> members, string name)
-    {
-        foreach(var member in members)
-        {
-            if(member.Kind is JsonTopLevelValueKind.String && string.Equals(member.Name, name, StringComparison.Ordinal))
-            {
-                return member.Text;
-            }
-        }
-
-        return null;
-    }
+    private static string? StringOf(JsonTopLevelMembers members, string name) =>
+        members.Find(name) is JsonMemberString { Text: var text } ? text : null;
 
 
     /// <summary>
-    /// Reads a top-level parameter carried as a JSON number naming an integer within the range of <see cref="int"/>.
+    /// Reads a top-level parameter carried as a JSON number naming an integer within the range of <see cref="int"/>, through the
+    /// reader's typed answer for the member (<see cref="JsonTopLevelMembers.Find"/>).
     /// </summary>
     /// <param name="members">The response's top-level members.</param>
     /// <param name="name">The parameter's name.</param>
     /// <param name="value">The integer, or zero when none is read.</param>
     /// <returns><see langword="true"/> when the parameter is carried as such a number.</returns>
-    private static bool TryIntegerOf(IReadOnlyList<JsonTopLevelMember> members, string name, out int value)
+    private static bool TryIntegerOf(JsonTopLevelMembers members, string name, out int value)
     {
-        foreach(var member in members)
+        if(members.Find(name) is JsonMemberNumber { Spelling: var spelling })
         {
-            if(member.Kind is JsonTopLevelValueKind.Number && string.Equals(member.Name, name, StringComparison.Ordinal))
-            {
-                return int.TryParse(member.Text, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out value);
-            }
+            return int.TryParse(spelling, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out value);
         }
 
         value = 0;
@@ -465,7 +495,7 @@ public static class OAuthResponseParsers
     /// <returns>The protocol error.</returns>
     private static Result<T, OAuthParseError> BuildProtocolError<T>(
         string errorCode,
-        IReadOnlyList<JsonTopLevelMember> members,
+        JsonTopLevelMembers members,
         HttpResponseData response,
         string endpoint,
         string specReference)
@@ -499,7 +529,7 @@ public static class OAuthResponseParsers
     /// <param name="response">The response.</param>
     /// <returns>The protocol error.</returns>
     private static Result<T, OAuthParseError> ParseProblemJson<T>(
-        IReadOnlyList<JsonTopLevelMember> members,
+        JsonTopLevelMembers members,
         HttpResponseData response)
     {
         var errorCode = StringOf(members, WellKnownProblemDetailsMemberNames.Type) is { Length: > 0 } type ? type : "problem";

@@ -196,7 +196,9 @@ public sealed record OAuthRepeatedMemberName(
 /// The response body is one well-formed JSON object, but a member of one of its objects, its own or one nested within it, has
 /// a name or a string value whose escapes name an unpaired surrogate, which the grammar admits and which encodes no Unicode
 /// character (<see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.2">RFC 8259 §8.2</see>), so the body holds text no
-/// reader agrees on and is refused whether or not the member is a parameter the client reads.
+/// reader agrees on. The library's strict admission refuses it for that whether or not the member is a parameter the client
+/// reads: a choice of this library, which neither RFC 8259 §8.2, describing the interoperability problem, nor RFC 6749 §5.1
+/// and §5.2, having an unrecognised parameter ignored, requires.
 /// </summary>
 /// <remarks>
 /// Names the first such member in document order and carries the facts the JSON reader answered
