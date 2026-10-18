@@ -26,4 +26,14 @@ public static class OAuthClientErrors
     /// not an absolute URI. The client refuses the response on its own judgement; no specification defines this code.
     /// </summary>
     public static string InvalidResponse { get; } = Utf8Constants.ToInternedString(InvalidResponseUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="UnrecognisedRefusal"/>.</summary>
+    public static ReadOnlySpan<byte> UnrecognisedRefusalUtf8 => "unrecognised_refusal"u8;
+
+    /// <summary>
+    /// The client refused on a judgement of a kind the mapping it was answered through does not name: a refusal case added to
+    /// the library after the mapping was written. It is named so, never answered under a category established for another case,
+    /// so the application sees that the refusal is of no kind it was told of. No specification defines this code.
+    /// </summary>
+    public static string UnrecognisedRefusal { get; } = Utf8Constants.ToInternedString(UnrecognisedRefusalUtf8);
 }

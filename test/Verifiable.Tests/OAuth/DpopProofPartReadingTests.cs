@@ -11,7 +11,7 @@ namespace Verifiable.Tests.OAuth;
 /// <see cref="DpopProofHeader.Read"/> and <see cref="DpopProofClaims.Read"/>, read through the JSON reader's members, each
 /// answering the part or a typed refusal. The rows are the inputs a receiver's three readings of a proof meet: the header's
 /// <c>alg</c> and the <c>kty</c> and <c>crv</c> of its <c>jwk</c> a verification is chosen by, the header the validator judges,
-/// and the claims it judges.
+/// and the claims it judges; the embedded key's members are judged each by its own rule (RFC 7517 section 4).
 /// </summary>
 [TestClass]
 internal sealed class DpopProofPartReadingTests
@@ -22,8 +22,41 @@ internal sealed class DpopProofPartReadingTests
     /// <summary>The instant the proofs are issued at.</summary>
     private static DateTimeOffset IssuedAt { get; } = TestClock.CanonicalEpoch;
 
+    /// <summary>The x coordinate of the embedded key the rows carry.</summary>
+    private const string KeyX = "f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU";
+
+    /// <summary>The y coordinate of the embedded key the rows carry.</summary>
+    private const string KeyY = "x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0";
+
+    /// <summary>The target URI the claims sets name.</summary>
+    private const string Target = "https://as.example.com/token";
+
     /// <summary>An embedded key every refusal row of the header carries where its own defect is elsewhere.</summary>
-    private const string EmbeddedKey = "{\"kty\":\"EC\",\"crv\":\"P-256\",\"x\":\"f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU\",\"y\":\"x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0\"}";
+    private static string EmbeddedKey { get; } = Key();
+
+    /// <summary>
+    /// The header refusal rows: the header's JSON text, the member the refusal names, its name and the defect - RFC 9449 section
+    /// 4.2 for the header's members, RFC 7517 section 4 and RFC 7518 section 6 for the embedded key's.
+    /// </summary>
+    public static IEnumerable<object[]> HeaderRefusalRows { get; } =
+    [
+        [Header(TypMember(), JwkMember(EmbeddedKey)), DpopProofMember.Alg, WellKnownJoseHeaderNames.Alg, DpopProofMemberDefect.Absent],
+        [Header(Member(WellKnownJoseHeaderNames.Alg, "7"), TypMember(), JwkMember(EmbeddedKey)), DpopProofMember.Alg, WellKnownJoseHeaderNames.Alg, DpopProofMemberDefect.NotAString],
+        [Header(AlgMember(), JwkMember(EmbeddedKey)), DpopProofMember.Typ, WellKnownJoseHeaderNames.Typ, DpopProofMemberDefect.Absent],
+        [Header(AlgMember(), Member(WellKnownJoseHeaderNames.Typ, "true"), JwkMember(EmbeddedKey)), DpopProofMember.Typ, WellKnownJoseHeaderNames.Typ, DpopProofMemberDefect.NotAString],
+        [Header(AlgMember(), Member(WellKnownJoseHeaderNames.Typ, "null"), JwkMember(EmbeddedKey)), DpopProofMember.Typ, WellKnownJoseHeaderNames.Typ, DpopProofMemberDefect.NotAString],
+        [Header(AlgMember(), TypMember()), DpopProofMember.Jwk, WellKnownJoseHeaderNames.Jwk, DpopProofMemberDefect.Absent],
+        [Header(AlgMember(), TypMember(), Member(WellKnownJoseHeaderNames.Jwk, Quoted(WellKnownKeyTypeValues.Ec))), DpopProofMember.Jwk, WellKnownJoseHeaderNames.Jwk, DpopProofMemberDefect.NotAnObject],
+        [Header(AlgMember(), TypMember(), JwkMember(KeyWith(WellKnownJwkMemberNames.Kty, "true"))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.Kty, DpopProofMemberDefect.NotAString],
+        [Header(AlgMember(), TypMember(), JwkMember(KeyWith(WellKnownJwkMemberNames.Crv, "null"))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.Crv, DpopProofMemberDefect.NotAString],
+        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.D, "[\"cHJpdmF0ZQ\"]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.D, DpopProofMemberDefect.PrivateKeyMaterial],
+        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.D, "7")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.D, DpopProofMemberDefect.PrivateKeyMaterial],
+        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.KeyOps, "\"verify\"")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.KeyOps, DpopProofMemberDefect.NotAnArrayOfStrings],
+        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.KeyOps, "[\"verify\",7]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.KeyOps, DpopProofMemberDefect.NotAnArrayOfStrings],
+        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.X5c, "[]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.X5c, DpopProofMemberDefect.NotACertificateChain],
+        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.X5c, "[\"_-_-\"]")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.X5c, DpopProofMemberDefect.NotACertificateChain],
+        [Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.Ext, "\"true\"")))), DpopProofMember.JwkMember, WellKnownJwkMemberNames.Ext, DpopProofMemberDefect.NotABoolean]
+    ];
 
 
     /// <summary>
@@ -40,7 +73,7 @@ internal sealed class DpopProofPartReadingTests
         var claims = new DpopProofClaims
         {
             Htm = WellKnownHttpMethods.Post,
-            Htu = "https://as.example.com/token",
+            Htu = Target,
             Iat = IssuedAt,
             Jti = "proof-jti",
             Nonce = "server-nonce",
@@ -82,13 +115,39 @@ internal sealed class DpopProofPartReadingTests
 
 
     /// <summary>
+    /// RFC 7517 section 4 and the Web Cryptography API's <c>JsonWebKey</c> dictionary: a key carrying <c>key_ops</c> as an array
+    /// of strings, <c>x5c</c> as an array of base64-encoded certificates, <c>ext</c> as a Boolean and a member no rule names reads,
+    /// each judged by its own rule; the key's members defined as strings are the ones it is read as, and the member no rule names
+    /// is ignored.
+    /// </summary>
+    [TestMethod]
+    public void AKeyCarryingKeyOperationsACertificateChainAnExtractableFlagAndAnUnknownMemberReads()
+    {
+        var key = Key(
+            Member(WellKnownJwkMemberNames.KeyOps, $"[{Quoted("verify")}]"),
+            Member(WellKnownJwkMemberNames.X5c, $"[{Quoted("MIIBkTCB+wIJAOfv")}]"),
+            Member(WellKnownJwkMemberNames.Ext, "true"),
+            Member(WellKnownJwkMemberNames.Kid, Quoted("proof-key")),
+            Member("x-deployment", /*lang=json,strict*/ "{\"region\":[1,null]}"));
+
+        var read = DpopProofHeader.Read(Encoding.UTF8.GetBytes(Header(AlgMember(), TypMember(), JwkMember(key)))) as DpopProofPartRead<DpopProofHeader>;
+
+        Assert.IsNotNull(read, "A key whose members keep their rules reads.");
+        Assert.AreEqual(WellKnownKeyTypeValues.Ec, read.Part.Jwk[WellKnownJwkMemberNames.Kty]);
+        Assert.AreEqual("proof-key", read.Part.Jwk[WellKnownJwkMemberNames.Kid]);
+        Assert.HasCount(5, read.Part.Jwk, "The key holds its string members: kty, crv, x, y and kid.");
+        Assert.IsFalse(read.Part.Jwk.ContainsKey("x-deployment"), "A member no rule names is ignored.");
+    }
+
+
+    /// <summary>
     /// A claims set carrying an <c>iat</c> with a fraction a tick cannot hold reads it as written, every digit kept, and one
     /// omitting <c>nonce</c> and <c>ath</c> reads neither.
     /// </summary>
     [TestMethod]
     public void AClaimsSetReadsItsIatAsWrittenAndItsOptionalClaimsOnlyWhereCarried()
     {
-        var read = ReadClaims("{\"jti\":\"j\",\"htm\":\"POST\",\"htu\":\"https://as.example.com/token\",\"iat\":1700000000.00000000001}") as DpopProofPartRead<DpopProofClaims>;
+        var read = ReadClaims(Claims(JtiClaim(), HtmClaim(), HtuClaim(), Member(WellKnownJwtClaimNames.Iat, "1700000000.00000000001"))) as DpopProofPartRead<DpopProofClaims>;
 
         Assert.IsNotNull(read);
         Assert.AreEqual("1700000000.00000000001", read.Part.Iat.ToString(), "The iat keeps every digit written.");
@@ -99,32 +158,30 @@ internal sealed class DpopProofPartReadingTests
 
 
     /// <summary>
-    /// RFC 9449 section 4.2: the header MUST carry <c>typ</c>, <c>alg</c> and <c>jwk</c>. A header omitting one, carrying
-    /// <c>alg</c> or <c>typ</c> as no string, <c>jwk</c> as no object, or a <c>jwk</c> member that is no string is refused for that
-    /// member by name, the place it is in and the defect, the member carried as the reader answered it.
+    /// RFC 9449 section 4.2: the header MUST carry <c>typ</c>, <c>alg</c> and <c>jwk</c>, and RFC 7517 section 4 has each member
+    /// of the key a kind of its own. A header omitting one, carrying <c>alg</c> or <c>typ</c> as no string - <c>null</c> among
+    /// them - <c>jwk</c> as no object, or a key member of another kind than its rule names is refused for that member, identified
+    /// and named, the place it is in, the segment and the defect, the member carried as the reader answered it; a key carrying
+    /// private material is refused whatever the kind of its value.
     /// </summary>
     /// <param name="header">The header's JSON text.</param>
-    /// <param name="place">The object the refusal names.</param>
-    /// <param name="memberName">The member it names.</param>
+    /// <param name="member">The member the refusal identifies.</param>
+    /// <param name="memberName">The member's name.</param>
     /// <param name="defect">The defect.</param>
     [TestMethod]
-    [DataRow("{\"typ\":\"dpop+jwt\",\"jwk\":" + EmbeddedKey + "}", DpopProofPartPlace.ProtectedHeader, "alg", DpopProofMemberDefect.Absent)]
-    [DataRow("{\"alg\":7,\"typ\":\"dpop+jwt\",\"jwk\":" + EmbeddedKey + "}", DpopProofPartPlace.ProtectedHeader, "alg", DpopProofMemberDefect.NotAString)]
-    [DataRow("{\"alg\":\"ES256\",\"jwk\":" + EmbeddedKey + "}", DpopProofPartPlace.ProtectedHeader, "typ", DpopProofMemberDefect.Absent)]
-    [DataRow("{\"alg\":\"ES256\",\"typ\":true,\"jwk\":" + EmbeddedKey + "}", DpopProofPartPlace.ProtectedHeader, "typ", DpopProofMemberDefect.NotAString)]
-    [DataRow("{\"alg\":\"ES256\",\"typ\":\"dpop+jwt\"}", DpopProofPartPlace.ProtectedHeader, "jwk", DpopProofMemberDefect.Absent)]
-    [DataRow("{\"alg\":\"ES256\",\"typ\":\"dpop+jwt\",\"jwk\":\"EC\"}", DpopProofPartPlace.ProtectedHeader, "jwk", DpopProofMemberDefect.NotAnObject)]
-    [DataRow("{\"alg\":\"ES256\",\"typ\":\"dpop+jwt\",\"jwk\":{\"kty\":\"EC\",\"crv\":\"P-256\",\"ext\":true}}", DpopProofPartPlace.EmbeddedJwk, "ext", DpopProofMemberDefect.NotAString)]
-    [DataRow("{\"alg\":\"ES256\",\"typ\":\"dpop+jwt\",\"jwk\":{\"kty\":\"EC\",\"d\":7}}", DpopProofPartPlace.EmbeddedJwk, "d", DpopProofMemberDefect.NotAString)]
-    public void AHeaderIsRefusedForTheMemberItLacksOrCarriesAsAnotherKind(string header, DpopProofPartPlace place, string memberName, DpopProofMemberDefect defect)
+    [DynamicData(nameof(HeaderRefusalRows))]
+    public void AHeaderIsRefusedForTheMemberItLacksOrCarriesAsAnotherKind(string header, DpopProofMember member, string memberName, DpopProofMemberDefect defect)
     {
-        var refused = DpopProofHeader.Read(Encoding.UTF8.GetBytes(header)) as DpopProofPartMemberRefused<DpopProofHeader>;
+        var refused = DpopProofHeader.Read(Encoding.UTF8.GetBytes(header)) as DpopProofPartRefused<DpopProofHeader>;
+        var refusal = refused?.Refusal as DpopProofMemberRefusal;
 
-        Assert.IsNotNull(refused, header);
-        Assert.AreEqual(place, refused.Place, header);
-        Assert.AreEqual(memberName, refused.MemberName, header);
-        Assert.AreEqual(defect, refused.Defect, header);
-        Assert.AreEqual(defect is DpopProofMemberDefect.Absent, refused.Carried is JsonMemberAbsent, header);
+        Assert.IsNotNull(refusal, header);
+        Assert.AreEqual(member, refusal.Member, header);
+        Assert.AreEqual(memberName, refusal.MemberName, header);
+        Assert.AreEqual(defect, refusal.Defect, header);
+        Assert.AreEqual(JwsPart.ProtectedHeader, refusal.Part, header);
+        Assert.AreEqual(member is DpopProofMember.JwkMember ? DpopProofPartPlace.EmbeddedJwk : DpopProofPartPlace.ProtectedHeader, refusal.Place, header);
+        Assert.AreEqual(defect is DpopProofMemberDefect.Absent, refusal.Carried is JsonMemberAbsent, header);
     }
 
 
@@ -134,28 +191,45 @@ internal sealed class DpopProofPartReadingTests
     /// carrying one as another kind, or carrying an <c>iat</c> of digits in a string, past the clock or a literal is refused for
     /// that claim, the claim carried as the reader answered it.
     /// </summary>
-    /// <param name="claims">The claims set's JSON text.</param>
-    /// <param name="memberName">The claim the refusal names.</param>
+    /// <param name="claimsCase">The name of the claims set the row reads.</param>
+    /// <param name="member">The claim the refusal identifies.</param>
     /// <param name="defect">The defect.</param>
     [TestMethod]
-    [DataRow("{\"htm\":\"POST\",\"htu\":\"https://as.example.com/token\",\"iat\":1700000000}", "jti", DpopProofMemberDefect.Absent)]
-    [DataRow("{\"jti\":7,\"htm\":\"POST\",\"htu\":\"https://as.example.com/token\",\"iat\":1700000000}", "jti", DpopProofMemberDefect.NotAString)]
-    [DataRow("{\"jti\":\"j\",\"htu\":\"https://as.example.com/token\",\"iat\":1700000000}", "htm", DpopProofMemberDefect.Absent)]
-    [DataRow("{\"jti\":\"j\",\"htm\":\"POST\",\"htu\":[\"https://as.example.com/token\"],\"iat\":1700000000}", "htu", DpopProofMemberDefect.NotAString)]
-    [DataRow("{\"jti\":\"j\",\"htm\":\"POST\",\"htu\":\"https://as.example.com/token\"}", "iat", DpopProofMemberDefect.Absent)]
-    [DataRow("{\"jti\":\"j\",\"htm\":\"POST\",\"htu\":\"https://as.example.com/token\",\"iat\":\"1700000000\"}", "iat", DpopProofMemberDefect.NotANumericDate)]
-    [DataRow("{\"jti\":\"j\",\"htm\":\"POST\",\"htu\":\"https://as.example.com/token\",\"iat\":1e400}", "iat", DpopProofMemberDefect.NotANumericDate)]
-    [DataRow("{\"jti\":\"j\",\"htm\":\"POST\",\"htu\":\"https://as.example.com/token\",\"iat\":true}", "iat", DpopProofMemberDefect.NotANumericDate)]
-    [DataRow("{\"jti\":\"j\",\"htm\":\"POST\",\"htu\":\"https://as.example.com/token\",\"iat\":1700000000,\"nonce\":null}", "nonce", DpopProofMemberDefect.NotAString)]
-    [DataRow("{\"jti\":\"j\",\"htm\":\"POST\",\"htu\":\"https://as.example.com/token\",\"iat\":1700000000,\"ath\":7}", "ath", DpopProofMemberDefect.NotAString)]
-    public void AClaimsSetIsRefusedForTheClaimItLacksOrCarriesAsAnotherKind(string claims, string memberName, DpopProofMemberDefect defect)
+    [DataRow("jti-absent", DpopProofMember.Jti, DpopProofMemberDefect.Absent)]
+    [DataRow("jti-number", DpopProofMember.Jti, DpopProofMemberDefect.NotAString)]
+    [DataRow("htm-absent", DpopProofMember.Htm, DpopProofMemberDefect.Absent)]
+    [DataRow("htu-array", DpopProofMember.Htu, DpopProofMemberDefect.NotAString)]
+    [DataRow("iat-absent", DpopProofMember.Iat, DpopProofMemberDefect.Absent)]
+    [DataRow("iat-digits", DpopProofMember.Iat, DpopProofMemberDefect.NotANumericDate)]
+    [DataRow("iat-past-the-clock", DpopProofMember.Iat, DpopProofMemberDefect.NotANumericDate)]
+    [DataRow("iat-literal", DpopProofMember.Iat, DpopProofMemberDefect.NotANumericDate)]
+    [DataRow("nonce-null", DpopProofMember.Nonce, DpopProofMemberDefect.NotAString)]
+    [DataRow("ath-number", DpopProofMember.Ath, DpopProofMemberDefect.NotAString)]
+    public void AClaimsSetIsRefusedForTheClaimItLacksOrCarriesAsAnotherKind(string claimsCase, DpopProofMember member, DpopProofMemberDefect defect)
     {
-        var refused = ReadClaims(claims) as DpopProofPartMemberRefused<DpopProofClaims>;
+        var iat = Member(WellKnownJwtClaimNames.Iat, "1700000000");
+        var claims = claimsCase switch
+        {
+            "jti-absent" => Claims(HtmClaim(), HtuClaim(), iat),
+            "jti-number" => Claims(Member(WellKnownJwtClaimNames.Jti, "7"), HtmClaim(), HtuClaim(), iat),
+            "htm-absent" => Claims(JtiClaim(), HtuClaim(), iat),
+            "htu-array" => Claims(JtiClaim(), HtmClaim(), Member(WellKnownJwtClaimNames.Htu, $"[{Quoted(Target)}]"), iat),
+            "iat-absent" => Claims(JtiClaim(), HtmClaim(), HtuClaim()),
+            "iat-digits" => Claims(JtiClaim(), HtmClaim(), HtuClaim(), Member(WellKnownJwtClaimNames.Iat, Quoted("1700000000"))),
+            "iat-past-the-clock" => Claims(JtiClaim(), HtmClaim(), HtuClaim(), Member(WellKnownJwtClaimNames.Iat, "1e400")),
+            "iat-literal" => Claims(JtiClaim(), HtmClaim(), HtuClaim(), Member(WellKnownJwtClaimNames.Iat, "true")),
+            "nonce-null" => Claims(JtiClaim(), HtmClaim(), HtuClaim(), iat, Member(WellKnownJwtClaimNames.Nonce, "null")),
+            "ath-number" => Claims(JtiClaim(), HtmClaim(), HtuClaim(), iat, Member(WellKnownJwtClaimNames.Ath, "7")),
+            _ => throw new ArgumentOutOfRangeException(nameof(claimsCase), claimsCase, "No claims set is named so.")
+        };
 
-        Assert.IsNotNull(refused, claims);
-        Assert.AreEqual(DpopProofPartPlace.Claims, refused.Place, claims);
-        Assert.AreEqual(memberName, refused.MemberName, claims);
-        Assert.AreEqual(defect, refused.Defect, claims);
+        var refusal = (ReadClaims(claims) as DpopProofPartRefused<DpopProofClaims>)?.Refusal as DpopProofMemberRefusal;
+
+        Assert.IsNotNull(refusal, claims);
+        Assert.AreEqual(DpopProofPartPlace.Claims, refusal.Place, claims);
+        Assert.AreEqual(JwsPart.Payload, refusal.Part, claims);
+        Assert.AreEqual(member, refusal.Member, claims);
+        Assert.AreEqual(defect, refusal.Defect, claims);
     }
 
 
@@ -166,50 +240,145 @@ internal sealed class DpopProofPartReadingTests
     [TestMethod]
     public void AnIatRefusalCarriesTheMemberAsTheReaderAnsweredIt()
     {
-        var asString = ReadClaims("{\"jti\":\"j\",\"htm\":\"POST\",\"htu\":\"https://as.example.com/token\",\"iat\":\"1700000000\"}") as DpopProofPartMemberRefused<DpopProofClaims>;
-        var pastTheClock = ReadClaims("{\"jti\":\"j\",\"htm\":\"POST\",\"htu\":\"https://as.example.com/token\",\"iat\":1e400}") as DpopProofPartMemberRefused<DpopProofClaims>;
+        var asString = ReadClaims(Claims(JtiClaim(), HtmClaim(), HtuClaim(), Member(WellKnownJwtClaimNames.Iat, Quoted("1700000000")))) as DpopProofPartRefused<DpopProofClaims>;
+        var pastTheClock = ReadClaims(Claims(JtiClaim(), HtmClaim(), HtuClaim(), Member(WellKnownJwtClaimNames.Iat, "1e400"))) as DpopProofPartRefused<DpopProofClaims>;
 
-        Assert.AreEqual(new JsonMemberString("1700000000"), asString?.Carried);
-        Assert.AreEqual(new JsonMemberNumber("1e400"), pastTheClock?.Carried);
+        Assert.AreEqual(new JsonMemberString("1700000000"), (asString?.Refusal as DpopProofMemberRefusal)?.Carried);
+        Assert.AreEqual(new JsonMemberNumber("1e400"), (pastTheClock?.Refusal as DpopProofMemberRefusal)?.Carried);
     }
 
 
     /// <summary>
-    /// A part the JSON reader refuses is refused with the reader's own refusal and the object it concerns: a header naming
+    /// A part the JSON reader refuses is refused with the reader's own refusal and the segment it concerns: a header naming
     /// <c>alg</c> twice, a <c>jwk</c> naming <c>kty</c> twice (the header's object nested one level), a claims set naming
     /// <c>htu</c> twice, a member naming no Unicode text, an array and an object never closed.
     /// </summary>
     [TestMethod]
     public void APartTheReaderRefusesIsRefusedWithTheReadersRefusal()
     {
-        var repeatedAlg = DpopProofHeader.Read("{\"alg\":\"ES256\",\"alg\":\"none\",\"typ\":\"dpop+jwt\",\"jwk\":{\"kty\":\"EC\"}}"u8) as DpopProofPartDocumentRefused<DpopProofHeader>;
-        var repeatedKty = DpopProofHeader.Read("{\"alg\":\"ES256\",\"typ\":\"dpop+jwt\",\"jwk\":{\"kty\":\"EC\",\"kty\":\"RSA\"}}"u8) as DpopProofPartDocumentRefused<DpopProofHeader>;
-        var repeatedHtu = DpopProofClaims.Read("{\"jti\":\"j\",\"htm\":\"POST\",\"htu\":\"https://a.example\",\"htu\":\"https://b.example\",\"iat\":1}"u8) as DpopProofPartDocumentRefused<DpopProofClaims>;
-        var undecodable = DpopProofClaims.Read("{\"jti\":\"\\uD800\",\"htm\":\"POST\",\"htu\":\"https://a.example\",\"iat\":1}"u8) as DpopProofPartDocumentRefused<DpopProofClaims>;
-        var array = DpopProofHeader.Read("[1]"u8) as DpopProofPartDocumentRefused<DpopProofHeader>;
-        var unclosed = DpopProofClaims.Read("{\"jti\":"u8) as DpopProofPartDocumentRefused<DpopProofClaims>;
+        var repeatedAlg = HeaderDocumentRefusal(Header(AlgMember(), Member(WellKnownJoseHeaderNames.Alg, Quoted(WellKnownJwaValues.None)), TypMember(), JwkMember(EmbeddedKey)));
+        var repeatedKty = HeaderDocumentRefusal(Header(AlgMember(), TypMember(), JwkMember(Key(Member(WellKnownJwkMemberNames.Kty, Quoted(WellKnownKeyTypeValues.Rsa))))));
+        var repeatedHtu = ClaimsDocumentRefusal(Claims(JtiClaim(), HtmClaim(), HtuClaim(), Member(WellKnownJwtClaimNames.Htu, Quoted("https://b.example")), Member(WellKnownJwtClaimNames.Iat, "1")));
+        var undecodable = ClaimsDocumentRefusal(Claims(Member(WellKnownJwtClaimNames.Jti, "\"\\uD800\""), HtmClaim(), HtuClaim(), Member(WellKnownJwtClaimNames.Iat, "1")));
+        var array = HeaderDocumentRefusal("[1]");
+        var unclosed = ClaimsDocumentRefusal($"{{{Quoted(WellKnownJwtClaimNames.Jti)}:");
 
         var repeatedAlgName = repeatedAlg?.Refusal as JsonRepeatedMemberName;
         var repeatedKtyName = repeatedKty?.Refusal as JsonRepeatedMemberName;
         var undecodableMember = undecodable?.Refusal as JsonUndecodableMember;
 
         Assert.IsNotNull(repeatedAlgName, "A header naming alg twice is refused by the reader.");
-        Assert.AreEqual(DpopProofPartPlace.ProtectedHeader, repeatedAlg?.Place);
-        Assert.AreEqual("alg", repeatedAlgName.Name);
+        Assert.AreEqual(JwsPart.ProtectedHeader, repeatedAlg?.Part);
+        Assert.AreEqual(WellKnownJoseHeaderNames.Alg, repeatedAlgName.Name);
         Assert.AreEqual(1, repeatedAlgName.ObjectDepth);
         Assert.IsNotNull(repeatedKtyName, "A jwk naming kty twice is refused by the reader.");
-        Assert.AreEqual("kty", repeatedKtyName.Name);
+        Assert.AreEqual(WellKnownJwkMemberNames.Kty, repeatedKtyName.Name);
         Assert.AreEqual(2, repeatedKtyName.ObjectDepth);
-        Assert.IsTrue(repeatedHtu is { Place: DpopProofPartPlace.Claims, Refusal: JsonRepeatedMemberName { Name: "htu" } }, "A claims set naming htu twice is refused by the reader.");
+        Assert.AreEqual(JwsPart.Payload, repeatedHtu?.Part, "A claims set naming htu twice is refused by the reader.");
+        Assert.AreEqual(WellKnownJwtClaimNames.Htu, (repeatedHtu?.Refusal as JsonRepeatedMemberName)?.Name);
         Assert.IsNotNull(undecodableMember, "A claim naming no Unicode text is refused by the reader.");
-        Assert.AreEqual("jti", undecodableMember.Name);
+        Assert.AreEqual(WellKnownJwtClaimNames.Jti, undecodableMember.Name);
         Assert.IsTrue(array is { Refusal: JsonNotOneObject }, "An array is no header.");
         Assert.IsTrue(unclosed is { Refusal: JsonNotOneObject }, "An object never closed is no claims set.");
     }
+
+
+    /// <summary>The header refusal of the JSON reader for a header given as JSON text, or none.</summary>
+    /// <param name="header">The header's JSON text.</param>
+    /// <returns>The reader's refusal with its segment, or <see langword="null"/>.</returns>
+    private static JwsPartDocumentRefusal? HeaderDocumentRefusal(string header) =>
+        (DpopProofHeader.Read(Encoding.UTF8.GetBytes(header)) as DpopProofPartRefused<DpopProofHeader>)?.Refusal as JwsPartDocumentRefusal;
+
+
+    /// <summary>The claims refusal of the JSON reader for a claims set given as JSON text, or none.</summary>
+    /// <param name="claims">The claims set's JSON text.</param>
+    /// <returns>The reader's refusal with its segment, or <see langword="null"/>.</returns>
+    private static JwsPartDocumentRefusal? ClaimsDocumentRefusal(string claims) =>
+        (ReadClaims(claims) as DpopProofPartRefused<DpopProofClaims>)?.Refusal as JwsPartDocumentRefusal;
 
 
     /// <summary>Reads a claims set given as JSON text.</summary>
     /// <param name="claims">The claims set's JSON text.</param>
     /// <returns>The reading.</returns>
     private static DpopProofPartReading<DpopProofClaims> ReadClaims(string claims) => DpopProofClaims.Read(Encoding.UTF8.GetBytes(claims));
+
+
+    /// <summary>A JSON string of a text needing no escape.</summary>
+    /// <param name="text">The text.</param>
+    /// <returns>The JSON string.</returns>
+    private static string Quoted(string text) => $"\"{text}\"";
+
+
+    /// <summary>One member of a JSON object, its name and its value's JSON text.</summary>
+    /// <param name="name">The member's name.</param>
+    /// <param name="valueJson">The value's JSON text.</param>
+    /// <returns>The member's JSON text.</returns>
+    private static string Member(string name, string valueJson) => $"{Quoted(name)}:{valueJson}";
+
+
+    /// <summary>A header of the members given.</summary>
+    /// <param name="members">The members' JSON text.</param>
+    /// <returns>The header's JSON text.</returns>
+    private static string Header(params string[] members) => $"{{{string.Join(',', members)}}}";
+
+
+    /// <summary>A claims set of the members given.</summary>
+    /// <param name="members">The members' JSON text.</param>
+    /// <returns>The claims set's JSON text.</returns>
+    private static string Claims(params string[] members) => $"{{{string.Join(',', members)}}}";
+
+
+    /// <summary>The embedded EC key every row carries, its members followed by the members given.</summary>
+    /// <param name="members">The further members' JSON text.</param>
+    /// <returns>The key's JSON text.</returns>
+    private static string Key(params string[] members) => Header(
+        [
+            Member(WellKnownJwkMemberNames.Kty, Quoted(WellKnownKeyTypeValues.Ec)),
+            Member(WellKnownJwkMemberNames.Crv, Quoted(WellKnownCurveValues.P256)),
+            Member(WellKnownJwkMemberNames.X, Quoted(KeyX)),
+            Member(WellKnownJwkMemberNames.Y, Quoted(KeyY)),
+            .. members
+        ]);
+
+
+    /// <summary>The embedded EC key every row carries, the member of the name given carrying the value given in place of its own.</summary>
+    /// <param name="name">The member's name: <c>kty</c>, <c>crv</c>, <c>x</c> or <c>y</c>.</param>
+    /// <param name="valueJson">The value's JSON text.</param>
+    /// <returns>The key's JSON text.</returns>
+    private static string KeyWith(string name, string valueJson) => Header(
+        Member(WellKnownJwkMemberNames.Kty, WellKnownJwkMemberNames.IsKty(name) ? valueJson : Quoted(WellKnownKeyTypeValues.Ec)),
+        Member(WellKnownJwkMemberNames.Crv, WellKnownJwkMemberNames.IsCrv(name) ? valueJson : Quoted(WellKnownCurveValues.P256)),
+        Member(WellKnownJwkMemberNames.X, WellKnownJwkMemberNames.IsX(name) ? valueJson : Quoted(KeyX)),
+        Member(WellKnownJwkMemberNames.Y, WellKnownJwkMemberNames.IsY(name) ? valueJson : Quoted(KeyY)));
+
+
+    /// <summary>The header's <c>alg</c>, ES256.</summary>
+    /// <returns>The member's JSON text.</returns>
+    private static string AlgMember() => Member(WellKnownJoseHeaderNames.Alg, Quoted(WellKnownJwaValues.Es256));
+
+
+    /// <summary>The header's <c>typ</c>, the DPoP proof type.</summary>
+    /// <returns>The member's JSON text.</returns>
+    private static string TypMember() => Member(WellKnownJoseHeaderNames.Typ, Quoted(WellKnownDpopValues.ProofTypeHeader));
+
+
+    /// <summary>The header's <c>jwk</c>, the key given.</summary>
+    /// <param name="key">The key's JSON text.</param>
+    /// <returns>The member's JSON text.</returns>
+    private static string JwkMember(string key) => Member(WellKnownJoseHeaderNames.Jwk, key);
+
+
+    /// <summary>The claims set's <c>jti</c>.</summary>
+    /// <returns>The member's JSON text.</returns>
+    private static string JtiClaim() => Member(WellKnownJwtClaimNames.Jti, Quoted("j"));
+
+
+    /// <summary>The claims set's <c>htm</c>, POST.</summary>
+    /// <returns>The member's JSON text.</returns>
+    private static string HtmClaim() => Member(WellKnownJwtClaimNames.Htm, Quoted(WellKnownHttpMethods.Post));
+
+
+    /// <summary>The claims set's <c>htu</c>, the token endpoint.</summary>
+    /// <returns>The member's JSON text.</returns>
+    private static string HtuClaim() => Member(WellKnownJwtClaimNames.Htu, Quoted(Target));
 }

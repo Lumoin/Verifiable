@@ -80,21 +80,21 @@ public enum ClientAssertionClaimRefusal
 
 /// <summary>
 /// Consults the replay guard for the first use of a client assertion's <c>jti</c>, the record kept for as long as the assertion
-/// is accepted (RFC 7523 Section 3 item 7: kept "for the length of time for which the JWT would be considered valid"), until
-/// <see cref="ClientAssertionClaimRules.ReplayRecordKeptUntil"/>. The caller binds the guard, the tenant and the assertion's
-/// issuer; <see cref="JtiReplayGuard.ConsultClientAssertionAsync"/> is the library's own.
+/// is accepted (RFC 7523 Section 3 item 7: kept "for the length of time for which the JWT would be considered valid"), as the
+/// retention <see cref="ClientAssertionClaimRules.ReplayRecordRetentionOf"/> states. The caller binds the guard, the tenant and
+/// the assertion's issuer; <see cref="JtiReplayGuard.ConsultClientAssertionAsync"/> is the library's own.
 /// </summary>
 /// <param name="jti">The assertion's <c>jti</c>.</param>
-/// <param name="recordKeptUntil">The instant the record of its first use is kept until.</param>
+/// <param name="retention">How long the record of its first use is kept: until an instant, exclusive, or to the clock's end.</param>
 /// <param name="cancellationToken">Cancels the consultation.</param>
 /// <returns>The guard's outcome.</returns>
-public delegate ValueTask<JtiReplayOutcome> ConsultClientAssertionFirstUseDelegate(string jti, DateTimeOffset recordKeptUntil, CancellationToken cancellationToken);
+public delegate ValueTask<JtiReplayOutcome> ConsultClientAssertionFirstUseDelegate(string jti, ReplayRecordRetention retention, CancellationToken cancellationToken);
 
 
 /// <summary>
 /// The judgement of a client assertion's claims (<see cref="ClientAssertionClaimRules"/>): accepted, naming its <c>jti</c>, the
-/// <c>exp</c> it is accepted under, whether that window reaches the clock's end and the instant the record of its first use is
-/// kept until; or refused under the one rule it broke first.
+/// <c>exp</c> it is accepted under and how long the record of its first use is kept - until an instant, or to the clock's end
+/// where its window reaches past it; or refused under the one rule it broke first.
 /// </summary>
 public sealed record ClientAssertionClaimsJudgement
 {
@@ -102,16 +102,13 @@ public sealed record ClientAssertionClaimsJudgement
     /// <param name="refusal">The rule broken, or <see langword="null"/> for an accepted assertion.</param>
     /// <param name="jti">The accepted assertion's <c>jti</c>.</param>
     /// <param name="expiry">The accepted assertion's <c>exp</c>, as written.</param>
-    /// <param name="acceptedToTheClocksEnd">Whether the accepted assertion's window reaches the clock's end.</param>
-    /// <param name="replayRecordKeptUntil">The instant the record of the accepted assertion's first use is kept until.</param>
-    private ClientAssertionClaimsJudgement(
-        ClientAssertionClaimRefusal? refusal, string? jti, NumericDate? expiry, bool acceptedToTheClocksEnd, DateTimeOffset? replayRecordKeptUntil)
+    /// <param name="retention">How long the record of the accepted assertion's first use is kept.</param>
+    private ClientAssertionClaimsJudgement(ClientAssertionClaimRefusal? refusal, string? jti, NumericDate? expiry, ReplayRecordRetention? retention)
     {
         Refusal = refusal;
         Jti = jti;
         Expiry = expiry;
-        AcceptedToTheClocksEnd = acceptedToTheClocksEnd;
-        ReplayRecordKeptUntil = replayRecordKeptUntil;
+        Retention = retention;
     }
 
 
@@ -125,18 +122,12 @@ public sealed record ClientAssertionClaimsJudgement
     public NumericDate? Expiry { get; }
 
     /// <summary>
-    /// Whether the accepted assertion's window, its <c>exp</c> extended by the clock-skew tolerance, reaches past the clock's last
-    /// instant, so no instant the clock represents refuses it as expired
-    /// (<see cref="ClientAssertionClaimRules.IsAcceptedToTheClocksEnd"/>); <see langword="false"/> for a refused one.
+    /// How long the record of the accepted assertion's first use is kept (<see cref="ClientAssertionClaimRules.ReplayRecordRetentionOf"/>):
+    /// until the instant from which it is refused as expired, exclusive, or to the clock's end where its window, its <c>exp</c>
+    /// extended by the clock-skew tolerance, reaches past the clock's last instant, so no instant the clock represents refuses it
+    /// as expired (<see cref="ClientAssertionClaimRules.IsAcceptedToTheClocksEnd"/>); <see langword="null"/> for a refused one.
     /// </summary>
-    public bool AcceptedToTheClocksEnd { get; }
-
-    /// <summary>
-    /// The instant the record of the accepted assertion's first use is kept until
-    /// (<see cref="ClientAssertionClaimRules.ReplayRecordKeptUntil"/>): the instant from which it is refused as expired, or the
-    /// clock's last instant where <see cref="AcceptedToTheClocksEnd"/>; <see langword="null"/> for a refused one.
-    /// </summary>
-    public DateTimeOffset? ReplayRecordKeptUntil { get; }
+    public ReplayRecordRetention? Retention { get; }
 
     /// <summary>Whether every rule holds.</summary>
     public bool IsAccepted => Refusal is null;
@@ -158,12 +149,7 @@ public sealed record ClientAssertionClaimsJudgement
             throw new ArgumentException("An accepted client assertion's jti names an identifier: a string holding a character other than white space.", nameof(jti));
         }
 
-        return new ClientAssertionClaimsJudgement(
-            refusal: null,
-            jti,
-            expiry,
-            ClientAssertionClaimRules.IsAcceptedToTheClocksEnd(expiry, clockSkewTolerance),
-            ClientAssertionClaimRules.ReplayRecordKeptUntil(expiry, clockSkewTolerance));
+        return new ClientAssertionClaimsJudgement(refusal: null, jti, expiry, ClientAssertionClaimRules.ReplayRecordRetentionOf(expiry, clockSkewTolerance));
     }
 
 
@@ -171,7 +157,7 @@ public sealed record ClientAssertionClaimsJudgement
     /// <param name="refusal">The rule.</param>
     /// <returns>The judgement.</returns>
     public static ClientAssertionClaimsJudgement Refused(ClientAssertionClaimRefusal refusal) =>
-        new(refusal, jti: null, expiry: null, acceptedToTheClocksEnd: false, replayRecordKeptUntil: null);
+        new(refusal, jti: null, expiry: null, retention: null);
 }
 
 
@@ -369,12 +355,12 @@ public static class ClientAssertionClaimRules
 
         var judged = Judge(claims, clientId, acceptedAudiences, now, clockSkewTolerance);
 
-        if(judged is not { IsAccepted: true, Jti: { } jti, ReplayRecordKeptUntil: { } recordKeptUntil })
+        if(judged is not { IsAccepted: true, Jti: { } jti, Retention: { } retention })
         {
             return judged;
         }
 
-        var outcome = await consultFirstUse(jti, recordKeptUntil, cancellationToken).ConfigureAwait(false);
+        var outcome = await consultFirstUse(jti, retention, cancellationToken).ConfigureAwait(false);
 
         return RefusalOf(outcome) is ClientAssertionClaimRefusal refusal ? ClientAssertionClaimsJudgement.Refused(refusal) : judged;
     }
@@ -415,21 +401,24 @@ public static class ClientAssertionClaimRules
 
 
     /// <summary>
-    /// The instant the replay record of a client assertion's <c>jti</c> is kept until (RFC 7523 Section 3 item 7: "for the length
-    /// of time for which the JWT would be considered valid"): the first instant a <see cref="DateTimeOffset"/> holds at or after its
-    /// <c>exp</c> extended by the clock-skew tolerance, the instant from which the expiry rule refuses it, or the clock's last
-    /// instant where the window reaches the clock's end (<see cref="IsAcceptedToTheClocksEnd"/>), since a record holds an instant
-    /// and the window outlasts every instant the clock represents (<see cref="NumericDate.AtOrAfterLaterBy"/>). The record is so
-    /// kept for as long as the assertion is accepted, and the expiry rule judges the <c>exp</c> itself, never this instant.
+    /// How long the replay record of a client assertion's <c>jti</c> is kept (RFC 7523 Section 3 item 7: "for the length of time
+    /// for which the JWT would be considered valid"): to the clock's end where the window, its <c>exp</c> extended by the
+    /// clock-skew tolerance, reaches past the clock's last instant (<see cref="IsAcceptedToTheClocksEnd"/>), so a store never drops
+    /// the record at an instant the assertion is still accepted at, the clock's last included; otherwise until, exclusive, the
+    /// first instant a <see cref="DateTimeOffset"/> holds at or after that window's end (<see cref="NumericDate.AtOrAfterLaterBy"/>),
+    /// the instant from which the expiry rule refuses the assertion. The record is so kept for as long as the assertion is
+    /// accepted, and the expiry rule judges the <c>exp</c> itself, never this retention.
     /// </summary>
     /// <param name="expiry">The assertion's <c>exp</c>, as written.</param>
     /// <param name="clockSkewTolerance">The tolerance.</param>
-    /// <returns>The instant the record is kept until.</returns>
-    public static DateTimeOffset ReplayRecordKeptUntil(NumericDate expiry, TimeSpan clockSkewTolerance)
+    /// <returns>The retention.</returns>
+    public static ReplayRecordRetention ReplayRecordRetentionOf(NumericDate expiry, TimeSpan clockSkewTolerance)
     {
         ArgumentNullException.ThrowIfNull(expiry);
 
-        return expiry.AtOrAfterLaterBy(clockSkewTolerance);
+        return IsAcceptedToTheClocksEnd(expiry, clockSkewTolerance)
+            ? new ReplayRecordKeptToTheClocksEnd()
+            : new ReplayRecordKeptUntil(expiry.AtOrAfterLaterBy(clockSkewTolerance));
     }
 
 

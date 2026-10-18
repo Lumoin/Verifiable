@@ -274,11 +274,43 @@ internal sealed class JtiReplayGuardStoreProofTests
             Issuer = Issuer,
             Target = TokenEndpointTarget,
             Jti = Jti,
-            SeenAt = TimeProvider.GetUtcNow()
+            SeenAt = TimeProvider.GetUtcNow(),
+            Retention = new ReplayRecordKeptUntil(TimeProvider.GetUtcNow().AddMinutes(5))
         };
 
         Assert.AreEqual(guardKey, state.CorrelationKey,
             "The state's CorrelationKey must equal JtiReplayGuard.CorrelationKey(purpose, issuer, jti) — one composition, one home.");
+    }
+
+
+    /// <summary>
+    /// RFC 7523 §3 rule 7: the used <c>jti</c> is kept "for the length of time for which the JWT would be considered valid".
+    /// A client assertion's first use is stored with the retention the guard is handed, carried in the stored state: a record
+    /// kept to the clock's end is stored as that fact, with the clock's last instant as its expiry, and a record kept until an
+    /// instant is stored with that instant as its expiry, so a store dropping records by their expiry is told the two apart.
+    /// </summary>
+    /// <param name="keptToTheClocksEnd">Whether the assertion's record is kept to the clock's end.</param>
+    /// <returns>A task completing once the first use is recorded.</returns>
+    [TestMethod]
+    [DataRow(true)]
+    [DataRow(false)]
+    public async Task AClientAssertionsRetentionIsCarriedIntoTheStoredState(bool keptToTheClocksEnd)
+    {
+        InMemoryJtiStore store = new(JtiStoreBehavior.ResolvesWhatItSaved);
+        using EndpointServer server = BuildServer(store);
+        ExchangeContext context = BuildContext(JtiReplayPolicy.Required);
+        var keptUntil = TimeProvider.GetUtcNow().AddMinutes(5);
+        var retention = keptToTheClocksEnd ? (ReplayRecordRetention)new ReplayRecordKeptToTheClocksEnd() : new ReplayRecordKeptUntil(keptUntil);
+
+        var outcome = await JtiReplayGuard.ConsultClientAssertionAsync(
+            server, context, Tenant, Issuer, Jti, retention, TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(JtiReplayOutcome.FirstUse, outcome);
+        Assert.IsNotNull(store.LastSavedState, "The first use is saved.");
+        Assert.AreEqual(retention, store.LastSavedState.Retention, "The stored state carries the retention.");
+        Assert.AreEqual(keptToTheClocksEnd ? DateTimeOffset.MaxValue : keptUntil, store.LastSavedState.ExpiresAt);
+        Assert.AreEqual(!keptToTheClocksEnd, store.LastSavedState.Retention.IsDueAt(DateTimeOffset.MaxValue),
+            "A record kept to the clock's end is never due, its last instant included; one kept until an instant is due at the clock's end.");
     }
 
 
@@ -600,6 +632,9 @@ internal sealed class JtiReplayGuardStoreProofTests
         /// <summary>Runs before each save writes its record, so a test can order one save after another consultation.</summary>
         public Func<CancellationToken, Task>? BeforeSave { get; set; }
 
+        /// <summary>The last <c>jti</c> state saved, as the guard composed it.</summary>
+        public JtiSeenState? LastSavedState { get; private set; }
+
         /// <summary>The backing count of <see cref="SaveCallCount"/>, a field so it can be incremented atomically.</summary>
         private int saveCallCount;
 
@@ -646,6 +681,7 @@ internal sealed class JtiReplayGuardStoreProofTests
                 lock(Gate)
                 {
                     JtiIndex[jti.CorrelationKey] = saved;
+                    LastSavedState = jti;
                 }
             }
         }

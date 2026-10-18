@@ -65,6 +65,16 @@ public static class WellKnownJwkMemberNames
     /// <summary>The <c>e</c> (RSA Public Key) exponent parameter per RFC 7518 §6.3.1.2.</summary>
     public static string E { get; } = Utf8Constants.ToInternedString(EUtf8);
 
+    /// <summary>The UTF-8 source literal of <see cref="Ext"/>.</summary>
+    public static ReadOnlySpan<byte> ExtUtf8 => "ext"u8;
+
+    /// <summary>
+    /// The <c>ext</c> (Extractable) parameter of the JSON Web Key Parameters registry, a Boolean the Web Cryptography API's
+    /// <c>JsonWebKey</c> dictionary writes for whether the key may be exported; RFC 7517 section 4 lets a JWK carry it beside
+    /// the members it defines.
+    /// </summary>
+    public static string Ext { get; } = Utf8Constants.ToInternedString(ExtUtf8);
+
     /// <summary>The UTF-8 source literal of <see cref="K"/>.</summary>
     public static ReadOnlySpan<byte> KUtf8 => "k"u8;
 
@@ -224,6 +234,9 @@ public static class WellKnownJwkMemberNames
     /// <summary>Whether <paramref name="name"/> is <see cref="E"/>.</summary>
     public static bool IsE(string name) => Equals(name, E);
 
+    /// <summary>Whether <paramref name="name"/> is <see cref="Ext"/>.</summary>
+    public static bool IsExt(string name) => Equals(name, Ext);
+
     /// <summary>Whether <paramref name="name"/> is <see cref="K"/>.</summary>
     public static bool IsK(string name) => Equals(name, K);
 
@@ -285,6 +298,7 @@ public static class WellKnownJwkMemberNames
         _ when IsDp(name) => Dp,
         _ when IsDq(name) => Dq,
         _ when IsE(name) => E,
+        _ when IsExt(name) => Ext,
         _ when IsK(name) => K,
         _ when IsKeyOps(name) => KeyOps,
         _ when IsKeys(name) => Keys,

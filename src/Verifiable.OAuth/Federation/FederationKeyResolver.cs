@@ -61,32 +61,13 @@ public static class FederationKeyResolver
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            string? targetKid = ReadKid(headerOfStatementToVerify);
+            var targetKid = ReadKid(headerOfStatementToVerify);
 
-            Dictionary<string, object>? matchedJwk = TryMatchJwk(issuerStatement, targetKid, memoryPool);
-            if(matchedJwk is null)
-            {
-                return ValueTask.FromResult<PublicKeyMemory?>(null);
-            }
-
-            //A selected key still is not necessarily one the converter can build: a set of one
-            //eligible-but-malformed element (a missing kty, or missing coordinates for its kty)
-            //reaches here as a match. Refuses like every other resolution miss instead of letting
-            //the converter's exception escape into the verification pipeline.
-            try
-            {
-                (CryptoAlgorithm algorithm, Purpose purpose, EncodingScheme scheme, IMemoryOwner<byte> keyMaterial) =
-                    CryptoFormatConversions.DefaultJwkToAlgorithmConverter(matchedJwk, memoryPool, base64UrlDecoder);
-
-                Tag tag = Tag.Create(algorithm).With(purpose).With(scheme);
-
-                //The resolved key is owned by and returned to the caller, who disposes it after the verify call.
-                return ValueTask.FromResult<PublicKeyMemory?>(new PublicKeyMemory(keyMaterial, tag));
-            }
-            catch(Exception ex) when(ex is FormatException or InvalidOperationException or ArgumentException or NotSupportedException)
-            {
-                return ValueTask.FromResult<PublicKeyMemory?>(null);
-            }
+            //One issuer statement is the only source, so a miss and a refusal of its key set both resolve no key.
+            return ValueTask.FromResult(
+                SelectInChainKey(issuerStatement, targetKid, memoryPool) is InChainKeySelected { Jwk: var matchedJwk }
+                    ? KeyOf(matchedJwk, base64UrlDecoder, memoryPool)
+                    : null);
         };
     }
 
@@ -98,7 +79,9 @@ public static class FederationKeyResolver
     /// Entity Configuration) or a subordinate whose keys a superior attests — and in both shapes the entity's
     /// <c>jwks</c> rides on the statement whose <c>sub</c> is that entity. The first statement whose
     /// <see cref="EntityStatement.Subject"/> equals <paramref name="issuerEntityId"/> and that carries a key
-    /// matching <paramref name="kid"/> wins; an absent <paramref name="kid"/> is a resolution miss
+    /// matching <paramref name="kid"/> wins, a statement carrying no key of the kid passes the walk on to the next, and a statement
+    /// whose key set is refused, or whose selected key builds no key, ends it with none, so no later statement stands in for a key
+    /// set the chain refused; an absent <paramref name="kid"/> is a resolution miss
     /// (<see langword="null"/>), never a silent first-key selection —
     /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-7">Federation §7</see> (and §8.4.2
     /// for the Trust Mark Status Response) makes the <c>kid</c> header a MUST on Trust Mark JWTs.
@@ -142,34 +125,54 @@ public static class FederationKeyResolver
                 continue;
             }
 
-            Dictionary<string, object>? matchedJwk = TryMatchJwk(statement, kid, memoryPool);
-            if(matchedJwk is null)
+            //A statement whose key set carries no key of the kid is an ordinary miss, and the walk moves on to the next statement
+            //about the entity. A statement whose key set is refused - no key set where it carries one, a set that is no JWK Set,
+            //one naming the kid twice or publishing private material - or whose selected key builds no key, ends the walk with
+            //no key: a later statement never stands in for a key set of the entity the chain refused.
+            switch(SelectInChainKey(statement, kid, memoryPool))
             {
-                continue;
-            }
-
-            //A selected key still is not necessarily one the converter can build: a set of one
-            //eligible-but-malformed element (a missing kty, or missing coordinates for its kty)
-            //reaches here as a match. Refuses like every other resolution miss instead of letting
-            //the converter's exception escape into the verification pipeline; the loop continues
-            //to the next statement rather than treating this statement's malformed key as final.
-            try
-            {
-                (CryptoAlgorithm algorithm, Purpose purpose, EncodingScheme scheme, IMemoryOwner<byte> keyMaterial) =
-                    CryptoFormatConversions.DefaultJwkToAlgorithmConverter(matchedJwk, memoryPool, base64UrlDecoder);
-
-                Tag tag = Tag.Create(algorithm).With(purpose).With(scheme);
-
-                //The resolved key is owned by and returned to the caller, who disposes it after the verify call.
-                return ValueTask.FromResult<PublicKeyMemory?>(new PublicKeyMemory(keyMaterial, tag));
-            }
-            catch(Exception ex) when(ex is FormatException or InvalidOperationException or ArgumentException or NotSupportedException)
-            {
-                continue;
+                case InChainKeyMissed:
+                {
+                    continue;
+                }
+                case InChainKeySelected { Jwk: var matchedJwk }:
+                {
+                    //The resolved key is owned by and returned to the caller, who disposes it after the verify call.
+                    return ValueTask.FromResult(KeyOf(matchedJwk, base64UrlDecoder, memoryPool));
+                }
+                default:
+                {
+                    return ValueTask.FromResult<PublicKeyMemory?>(null);
+                }
             }
         }
 
         return ValueTask.FromResult<PublicKeyMemory?>(null);
+    }
+
+
+    /// <summary>
+    /// The key a selected JWK builds, which the caller owns, or <see langword="null"/> when it builds none: a set of one
+    /// eligible-but-malformed element (a missing kty, or missing coordinates for its kty) is selected and still is not one the
+    /// converter can build, refused as no key instead of letting the converter's exception escape into the verification pipeline.
+    /// </summary>
+    /// <param name="jwk">The selected JWK's members.</param>
+    /// <param name="base64UrlDecoder">The decoder of the key's coordinates.</param>
+    /// <param name="memoryPool">The pool the key material is rented from.</param>
+    /// <returns>The key, or <see langword="null"/>.</returns>
+    private static PublicKeyMemory? KeyOf(Dictionary<string, object> jwk, DecodeDelegate base64UrlDecoder, BaseMemoryPool memoryPool)
+    {
+        try
+        {
+            (CryptoAlgorithm algorithm, Purpose purpose, EncodingScheme scheme, IMemoryOwner<byte> keyMaterial) =
+                CryptoFormatConversions.DefaultJwkToAlgorithmConverter(jwk, memoryPool, base64UrlDecoder);
+
+            return new PublicKeyMemory(keyMaterial, Tag.Create(algorithm).With(purpose).With(scheme));
+        }
+        catch(Exception ex) when(ex is FormatException or InvalidOperationException or ArgumentException or NotSupportedException)
+        {
+            return null;
+        }
     }
 
 
@@ -204,27 +207,35 @@ public static class FederationKeyResolver
     /// parsed <c>jwks</c> claim, not the wire bytes of the Entity Statement: what the JWT payload
     /// deserializer did with a duplicated or escaped member name in the original claim, before it
     /// reached this dictionary, is outside what this selection sees.
-    /// <see langword="null"/> when <paramref name="targetKid"/> is
-    /// <see langword="null"/> (an absent <c>kid</c> header is malformed input per
-    /// <see href="https://openid.net/specs/openid-federation-1_0.html#section-3.1">Federation §3.1</see>, not a
-    /// wildcard), when the statement carries no <c>jwks</c>, when no eligible key matches, when
-    /// <paramref name="targetKid"/> appears on more than one key
-    /// (<see href="https://www.rfc-editor.org/rfc/rfc7517#section-4.5">RFC 7517 §4.5</see>), or when any
-    /// key in the set carries private or symmetric material.
+    /// A statement carrying no <c>jwks</c>, and a set carrying no eligible key of the kid, are ordinary misses; a <c>jwks</c>
+    /// that is no JSON object, a <paramref name="targetKid"/> that is <see langword="null"/> (an absent <c>kid</c> header is
+    /// malformed input per <see href="https://openid.net/specs/openid-federation-1_0.html#section-3.1">Federation §3.1</see>,
+    /// not a wildcard), a <paramref name="targetKid"/> on more than one key
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc7517#section-4.5">RFC 7517 §4.5</see>), a key carrying private or
+    /// symmetric material, and every other refusal of the set, are refusals of the key set, never misses.
     /// </summary>
     /// <param name="issuerStatement">The statement whose <c>jwks</c> claim supplies the candidate keys.</param>
-    /// <param name="targetKid">The <c>kid</c> to match. A <see langword="null"/> value never matches — it is a resolution miss.</param>
+    /// <param name="targetKid">The <c>kid</c> to match. A <see langword="null"/> value never matches: the set is refused for it.</param>
     /// <param name="memoryPool">
     /// Pool the UTF-8 rendering of the <c>jwks</c> claim rents from. The buffer is consumed by the selection
     /// scan and returned before this method exits, so no ownership leaves it.
     /// </param>
-    /// <returns>The matched JWK as a mutable dictionary, or <see langword="null"/> when no key was selected.</returns>
-    private static Dictionary<string, object>? TryMatchJwk(EntityStatement issuerStatement, string? targetKid, BaseMemoryPool memoryPool)
+    /// <returns>
+    /// The matched JWK as a mutable dictionary (<see cref="InChainKeySelected"/>); an ordinary miss, a statement carrying no
+    /// <c>jwks</c> or a set carrying no eligible key of the kid (<see cref="InChainKeyMissed"/>); or the refusal of a key set the
+    /// statement carries - a <c>jwks</c> that is no JSON object, a set the selection refuses, the kid required and absent among
+    /// them (<see cref="InChainKeySetRefused"/>).
+    /// </returns>
+    private static InChainKeySelection SelectInChainKey(EntityStatement issuerStatement, string? targetKid, BaseMemoryPool memoryPool)
     {
-        if(!issuerStatement.Payload.TryGetValue(WellKnownFederationClaimNames.Jwks, out object? jwksObj)
-            || jwksObj is not IReadOnlyDictionary<string, object> jwksDict)
+        if(!issuerStatement.Payload.TryGetValue(WellKnownFederationClaimNames.Jwks, out var jwksObj))
         {
-            return null;
+            return new InChainKeyMissed();
+        }
+
+        if(jwksObj is not IReadOnlyDictionary<string, object> jwksDict)
+        {
+            return new InChainKeySetRefused(JwkSelectionOutcome.MalformedDocument);
         }
 
         StringBuilder builder = JsonAppender.Rent();
@@ -247,15 +258,45 @@ public static class FederationKeyResolver
                 written += utf8.GetBytes(chunk.Span, destination[written..]);
             }
 
-            JwkSelectionResult result = JwkJsonReader.SelectKeyByKeyId(destination[..written], targetKid, WellKnownJwkValues.UseSigUtf8);
+            var result = JwkJsonReader.SelectKeyByKeyId(destination[..written], targetKid, WellKnownJwkValues.UseSigUtf8);
 
-            return result.IsSelected ? CopyJwk(result.Members!) : null;
+            return result.Outcome switch
+            {
+                JwkSelectionOutcome.Selected => new InChainKeySelected(CopyJwk(result.Members!)),
+                JwkSelectionOutcome.NoMatch => new InChainKeyMissed(),
+                var refused => new InChainKeySetRefused(refused)
+            };
         }
         finally
         {
             JsonAppender.Return(builder);
         }
     }
+
+
+    /// <summary>
+    /// What selecting a statement's key of a kid found: the key, an ordinary miss, or the refusal of the key set, which the walk
+    /// over a chain tells apart, moving on after a miss and ending after a refusal.
+    /// </summary>
+    private abstract record InChainKeySelection;
+
+
+    /// <summary>The statement's key set carries exactly one eligible key of the kid.</summary>
+    /// <param name="Jwk">The key's members, in the dictionary the key converter takes.</param>
+    private sealed record InChainKeySelected(Dictionary<string, object> Jwk) : InChainKeySelection;
+
+
+    /// <summary>The statement carries no key set, or its key set carries no eligible key of the kid: an ordinary miss.</summary>
+    private sealed record InChainKeyMissed : InChainKeySelection;
+
+
+    /// <summary>
+    /// The statement carries a key set that is refused: a <c>jwks</c> that is no JSON object, or a set the selection refuses
+    /// (<see cref="JwkSelectionOutcome"/>) - no one well-formed object, a repeated or undecodable member, private or symmetric
+    /// material, a kid on more than one key, or a kid required and absent.
+    /// </summary>
+    /// <param name="Outcome">The selection's refusal.</param>
+    private sealed record InChainKeySetRefused(JwkSelectionOutcome Outcome) : InChainKeySelection;
 
 
     /// <summary>

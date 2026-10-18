@@ -109,34 +109,30 @@ public static class SelfIssuedIdTokenValidation
                 //RFC 7515 §4 / RFC 7519 §4: gate both the header and the claims set for well-formedness —
                 //a repeated name at any nesting depth, including inside the nested "sub_jwk" object — before
                 //extracting a single field, so alg/kid/sub_jwk selection below never runs against a first
-                //occurrence while a duplicate second occurrence goes unnoticed.
-                if(!JwkJsonReader.IsWellFormedJsonDocument(header) || JwkJsonReader.ReadTopLevelMembers(payload) is not JsonTopLevelMembers claims)
+                //occurrence while a duplicate second occurrence goes unnoticed. A token failing the gate is answered as
+                //structurally invalid, the judgement this validator returns, never raised as an exception.
+                //
+                //RFC 7519 Section 2: exp and iat are NumericDates, read as written. SIOPv2 Section 11 has a Self-Issued ID Token
+                //carry the ID Token claims of OpenID Connect Core 1.0 Section 2, where iat is REQUIRED, so an omitted iat leaves the
+                //token structurally invalid, as one the payload carries that names no date does: an iat a relying party polices is
+                //never surfaced as absent. An omitted exp leaves the token expired below, and one that names no date is invalid.
+                if(JwkJsonReader.IsWellFormedJsonDocument(header)
+                    && JwkJsonReader.ReadTopLevelMembers(payload) is JsonTopLevelMembers claims
+                    && NumericDateClaims.Read(claims, WellKnownJwtClaimNames.Exp, out expiresAt) is not NumericDateReadResult.Malformed
+                    && NumericDateClaims.Read(claims, WellKnownJwtClaimNames.Iat, out issuedAt) is NumericDateReadResult.Value)
                 {
-                    throw new FormatException(
-                        "Self-issued ID Token header or payload is not well-formed JSON, or contains a "
-                        + "duplicate member name.");
+                    alg = JwkJsonReader.ExtractStringValue(header, WellKnownJwkMemberNames.AlgUtf8);
+                    kid = JwkJsonReader.ExtractStringValue(header, WellKnownJwkMemberNames.KidUtf8);
+
+                    iss = JwkJsonReader.ExtractStringValue(payload, WellKnownJwtClaimNames.IssUtf8);
+                    sub = JwkJsonReader.ExtractStringValue(payload, WellKnownJwtClaimNames.SubUtf8);
+                    audString = JwkJsonReader.ExtractStringValue(payload, WellKnownJwtClaimNames.AudUtf8);
+                    audArray = JwkJsonReader.ExtractStringArrayProperty(payload, WellKnownJwtClaimNames.AudUtf8);
+                    nonce = JwkJsonReader.ExtractStringValue(payload, WellKnownJwtClaimNames.NonceUtf8);
+                    subJwk = JwkJsonReader.ExtractObjectProperties(payload, WellKnownJwtClaimNames.SubJwkUtf8);
+
+                    isStructurallyValid = true;
                 }
-
-                //RFC 7519 Section 2: exp and iat are NumericDates, read as written. One the payload carries that names no date makes
-                //the token structurally invalid, never one read as carrying no date: an omitted exp leaves the token expired below,
-                //and an iat a relying party polices is never surfaced as absent when the token carries one it cannot read.
-                if(NumericDateClaims.Read(claims, WellKnownJwtClaimNames.Exp, out expiresAt) is NumericDateReadResult.Malformed
-                    || NumericDateClaims.Read(claims, WellKnownJwtClaimNames.Iat, out issuedAt) is NumericDateReadResult.Malformed)
-                {
-                    throw new FormatException("Self-issued ID Token exp or iat is not a NumericDate.");
-                }
-
-                alg = JwkJsonReader.ExtractStringValue(header, WellKnownJwkMemberNames.AlgUtf8);
-                kid = JwkJsonReader.ExtractStringValue(header, WellKnownJwkMemberNames.KidUtf8);
-
-                iss = JwkJsonReader.ExtractStringValue(payload, WellKnownJwtClaimNames.IssUtf8);
-                sub = JwkJsonReader.ExtractStringValue(payload, WellKnownJwtClaimNames.SubUtf8);
-                audString = JwkJsonReader.ExtractStringValue(payload, WellKnownJwtClaimNames.AudUtf8);
-                audArray = JwkJsonReader.ExtractStringArrayProperty(payload, WellKnownJwtClaimNames.AudUtf8);
-                nonce = JwkJsonReader.ExtractStringValue(payload, WellKnownJwtClaimNames.NonceUtf8);
-                subJwk = JwkJsonReader.ExtractObjectProperties(payload, WellKnownJwtClaimNames.SubJwkUtf8);
-
-                isStructurallyValid = true;
             }
             catch(Exception ex) when(ex is FormatException or InvalidOperationException)
             {

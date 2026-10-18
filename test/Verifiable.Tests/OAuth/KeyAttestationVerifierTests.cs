@@ -211,6 +211,7 @@ internal sealed class KeyAttestationVerifierTests
 
         KeyAttestationVerificationResult result = await KeyAttestationVerifier.VerifyAsync(
             attestation,
+            KeyAttestationProofUse.NotStated,
             AttestationNonce,
             nonceRequired: true,
             isAttestationSigningAlgAcceptable: static _ => false,
@@ -250,6 +251,7 @@ internal sealed class KeyAttestationVerifierTests
 
             KeyAttestationVerificationResult result = await KeyAttestationVerifier.VerifyAsync(
                 attestation,
+                KeyAttestationProofUse.NotStated,
                 AttestationNonce,
                 nonceRequired: true,
                 isAttestationSigningAlgAcceptable: static _ => true,
@@ -297,6 +299,7 @@ internal sealed class KeyAttestationVerifierTests
 
             KeyAttestationVerificationResult result = await KeyAttestationVerifier.VerifyAsync(
                 attestation,
+                KeyAttestationProofUse.NotStated,
                 AttestationNonce,
                 nonceRequired: true,
                 isAttestationSigningAlgAcceptable: static _ => true,
@@ -339,6 +342,7 @@ internal sealed class KeyAttestationVerifierTests
 
         KeyAttestationVerificationResult result = await KeyAttestationVerifier.VerifyAsync(
             attestation,
+            KeyAttestationProofUse.NotStated,
             AttestationNonce,
             nonceRequired: true,
             isAttestationSigningAlgAcceptable: static _ => true,
@@ -374,6 +378,7 @@ internal sealed class KeyAttestationVerifierTests
 
         KeyAttestationVerificationResult result = await KeyAttestationVerifier.VerifyAsync(
             attestation,
+            KeyAttestationProofUse.NotStated,
             AttestationNonce,
             nonceRequired: true,
             isAttestationSigningAlgAcceptable: static _ => true,
@@ -441,6 +446,7 @@ internal sealed class KeyAttestationVerifierTests
 
         KeyAttestationVerificationResult acceptedResult = await KeyAttestationVerifier.VerifyAsync(
             acceptedAttestation,
+            KeyAttestationProofUse.NotStated,
             AttestationNonce,
             nonceRequired: true,
             isAttestationSigningAlgAcceptable: static _ => true,
@@ -473,7 +479,7 @@ internal sealed class KeyAttestationVerifierTests
     [DataRow("null")]
     public async Task AnAttestationWhoseExpIsNoNumericDateIsRefused(string exp)
     {
-        var result = await VerifyHandBuiltAttestationAsync($"\"iat\":{NowInstant.ToUnixTimeSeconds()},\"exp\":{exp},").ConfigureAwait(false);
+        var result = await VerifyHandBuiltAttestationAsync($"\"iat\":{NowInstant.ToUnixTimeSeconds()},\"exp\":{exp},", KeyAttestationProofUse.NotStated).ConfigureAwait(false);
 
         Assert.AreEqual(KeyAttestationVerificationFailureReason.Malformed, result.FailureReason, $"exp {exp}");
     }
@@ -493,44 +499,90 @@ internal sealed class KeyAttestationVerifierTests
     [DataRow("{}")]
     public async Task AnAttestationWhoseIatIsNoNumericDateIsRefused(string iat)
     {
-        var result = await VerifyHandBuiltAttestationAsync($"\"iat\":{iat},\"exp\":{NowInstant.AddHours(1).ToUnixTimeSeconds()},").ConfigureAwait(false);
+        var result = await VerifyHandBuiltAttestationAsync($"\"iat\":{iat},\"exp\":{NowInstant.AddHours(1).ToUnixTimeSeconds()},", KeyAttestationProofUse.NotStated).ConfigureAwait(false);
 
         Assert.AreEqual(KeyAttestationVerificationFailureReason.Malformed, result.FailureReason, $"iat {iat}");
     }
 
 
     /// <summary>
-    /// The control of the two refusals above, signed and verified the same way: an attestation whose <c>iat</c> and <c>exp</c>
-    /// are NumericDates, an <c>exp</c> with a fraction among them, verifies and carries both dates as written; one omitting
-    /// <c>exp</c>, which Appendix D.1 has OPTIONAL, verifies and carries no expiry of its own.
+    /// OID4VCI 1.0 Appendix D.1 has each of <c>iat</c> and <c>exp</c> an "Integer for the time ...": a signed attestation whose
+    /// <c>exp</c> or <c>iat</c> carries a fraction is refused as <see cref="KeyAttestationVerificationFailureReason.Malformed"/>,
+    /// never truncated to the second before it; the integral control beside each, signed and verified the same way, verifies and
+    /// carries both dates as written.
     /// </summary>
     /// <returns>A task completing once the attestations are judged.</returns>
     [TestMethod]
-    public async Task AnAttestationWhoseDatesAreNumericDatesOrWhoseExpIsOmittedVerifies()
+    public async Task AnAttestationWhoseDatesCarryAFractionIsRefusedAndItsIntegralControlVerifies()
     {
         var issuedAt = NowInstant.ToUnixTimeSeconds();
         var expiresAt = NowInstant.AddHours(1).ToUnixTimeSeconds();
 
-        var dated = await VerifyHandBuiltAttestationAsync($"\"iat\":{issuedAt},\"exp\":{expiresAt}.5,").ConfigureAwait(false);
+        var fractionalExp = await VerifyHandBuiltAttestationAsync($"\"iat\":{issuedAt},\"exp\":{expiresAt}.5,", KeyAttestationProofUse.NotStated).ConfigureAwait(false);
+        var fractionalIat = await VerifyHandBuiltAttestationAsync($"\"iat\":{issuedAt}.5,\"exp\":{expiresAt},", KeyAttestationProofUse.NotStated).ConfigureAwait(false);
+        var integral = await VerifyHandBuiltAttestationAsync($"\"iat\":{issuedAt},\"exp\":{expiresAt},", KeyAttestationProofUse.NotStated).ConfigureAwait(false);
 
-        Assert.IsTrue(dated.IsValid, $"An attestation with NumericDates verifies; got {dated.FailureReason}.");
-        Assert.AreEqual(0, dated.Attestation!.IssuedAt!.CompareTo(NumericDate.FromUnixTimeSeconds(issuedAt)), "The iat is carried as written.");
-        Assert.AreEqual(0, dated.Attestation.ExpiresAt!.CompareTo(NumericDate.FromUnixTimeSeconds(expiresAt).AtOrBefore.AddMilliseconds(500)), "The exp is carried as written, its fraction kept.");
+        Assert.AreEqual(KeyAttestationVerificationFailureReason.Malformed, fractionalExp.FailureReason, "An exp with a fraction is no integer.");
+        Assert.AreEqual(KeyAttestationVerificationFailureReason.Malformed, fractionalIat.FailureReason, "An iat with a fraction is no integer.");
+        Assert.IsTrue(integral.IsValid, $"An attestation with integral dates verifies; got {integral.FailureReason}.");
+        Assert.AreEqual(0, integral.Attestation!.IssuedAt.CompareTo(NumericDate.FromUnixTimeSeconds(issuedAt)), "The iat is carried as written.");
+        Assert.AreEqual(0, integral.Attestation.ExpiresAt!.CompareTo(NumericDate.FromUnixTimeSeconds(expiresAt)), "The exp is carried as written.");
+    }
 
-        var undated = await VerifyHandBuiltAttestationAsync($"\"iat\":{issuedAt},").ConfigureAwait(false);
 
-        Assert.IsTrue(undated.IsValid, $"An attestation omitting exp verifies; got {undated.FailureReason}.");
-        Assert.IsNull(undated.Attestation!.ExpiresAt);
+    /// <summary>
+    /// OID4VCI 1.0 Appendix D.1 has <c>iat</c> REQUIRED: a signed attestation omitting it is refused as
+    /// <see cref="KeyAttestationVerificationFailureReason.Malformed"/>, whatever use it is verified for.
+    /// </summary>
+    /// <param name="proofUse">The use the attestation is verified for.</param>
+    /// <returns>A task completing once the attestation is judged.</returns>
+    [TestMethod]
+    [DataRow(KeyAttestationProofUse.NotStated)]
+    [DataRow(KeyAttestationProofUse.JwtProof)]
+    [DataRow(KeyAttestationProofUse.AttestationProof)]
+    public async Task AnAttestationOmittingIatIsRefused(KeyAttestationProofUse proofUse)
+    {
+        var result = await VerifyHandBuiltAttestationAsync($"\"exp\":{NowInstant.AddHours(1).ToUnixTimeSeconds()},", proofUse).ConfigureAwait(false);
+
+        Assert.AreEqual(KeyAttestationVerificationFailureReason.Malformed, result.FailureReason, proofUse.ToString());
+    }
+
+
+    /// <summary>
+    /// OID4VCI 1.0 Appendix D.1 has <c>exp</c> OPTIONAL and "MUST be present if the attestation is used with the JWT proof type":
+    /// a signed attestation omitting it is refused as <see cref="KeyAttestationVerificationFailureReason.ExpiryNotPresented"/>
+    /// when verified for that use, and verifies, carrying no expiry, when verified for the attestation proof type or for a use the
+    /// caller does not state; the same attestation carrying an <c>exp</c> verifies for the JWT proof type.
+    /// </summary>
+    /// <param name="proofUse">The use the attestation is verified for.</param>
+    /// <param name="omittedExpRefused">Whether the attestation omitting exp is refused.</param>
+    /// <returns>A task completing once the attestations are judged.</returns>
+    [TestMethod]
+    [DataRow(KeyAttestationProofUse.JwtProof, true)]
+    [DataRow(KeyAttestationProofUse.AttestationProof, false)]
+    [DataRow(KeyAttestationProofUse.NotStated, false)]
+    public async Task AnOmittedExpIsRefusedOnlyForTheJwtProofUse(KeyAttestationProofUse proofUse, bool omittedExpRefused)
+    {
+        var issuedAt = NowInstant.ToUnixTimeSeconds();
+
+        var undated = await VerifyHandBuiltAttestationAsync($"\"iat\":{issuedAt},", proofUse).ConfigureAwait(false);
+        var dated = await VerifyHandBuiltAttestationAsync($"\"iat\":{issuedAt},\"exp\":{NowInstant.AddHours(1).ToUnixTimeSeconds()},", proofUse).ConfigureAwait(false);
+
+        Assert.AreEqual(omittedExpRefused ? KeyAttestationVerificationFailureReason.ExpiryNotPresented : null, undated.FailureReason, proofUse.ToString());
+        Assert.IsTrue(omittedExpRefused || undated.Attestation!.ExpiresAt is null, "An attestation verified without exp carries no expiry of its own.");
+        Assert.IsTrue(dated.IsValid, $"The attestation carrying exp verifies for {proofUse}; got {dated.FailureReason}.");
     }
 
 
     /// <summary>
     /// Signs, over their exact bytes, a header referencing the Wallet-Provider key by <c>kid</c> and a body carrying the attested
-    /// keys, the date members given and the nonce, and verifies it through the resolver that dereferences that <c>kid</c>.
+    /// keys, the date members given and the nonce, and verifies it through the resolver that dereferences that <c>kid</c>, for the
+    /// use given.
     /// </summary>
     /// <param name="dateMembers">The body's date members as JSON text, each followed by a comma.</param>
+    /// <param name="proofUse">The use the attestation is verified for.</param>
     /// <returns>The verification result.</returns>
-    private async Task<KeyAttestationVerificationResult> VerifyHandBuiltAttestationAsync(string dateMembers)
+    private async Task<KeyAttestationVerificationResult> VerifyHandBuiltAttestationAsync(string dateMembers, KeyAttestationProofUse proofUse)
     {
         var wp = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         using var wpPublic = wp.PublicKey;
@@ -556,6 +608,7 @@ internal sealed class KeyAttestationVerifierTests
 
         return await KeyAttestationVerifier.VerifyAsync(
             attestation,
+            proofUse,
             AttestationNonce,
             nonceRequired: true,
             isAttestationSigningAlgAcceptable: static _ => true,
@@ -700,7 +753,8 @@ internal sealed class KeyAttestationVerifierTests
                 "\"x\":\"f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU\"," +
                 "\"y\":\"x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0\"}]",
             KeyStorageJson = keyStorageJson,
-            UserAuthenticationJson = userAuthenticationJson
+            UserAuthenticationJson = userAuthenticationJson,
+            IssuedAt = NowInstant
         };
 
 
@@ -827,6 +881,7 @@ internal sealed class KeyAttestationVerifierTests
     private async Task<KeyAttestationVerificationResult> VerifyAsync(string attestation) =>
         await KeyAttestationVerifier.VerifyAsync(
             attestation,
+            KeyAttestationProofUse.NotStated,
             AttestationNonce,
             nonceRequired: true,
             isAttestationSigningAlgAcceptable: static _ => true,

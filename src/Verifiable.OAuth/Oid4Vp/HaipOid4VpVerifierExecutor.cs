@@ -935,11 +935,22 @@ public static class HaipOid4VpVerifierExecutor
                                 $"vp_token does not contain a non-empty array of presentations " +
                                 $"under credential query identifier '{credentialQueryId}'.");
 
-                        parsed = await SdJwtVpTokenVerification.VerifyAsync(
+                        var sdJwtOutcome = await SdJwtVpTokenVerification.VerifyAsync(
                             compactPresentation, credentialQueryId, parseSdJwtToken, computeSdJwtHashInput,
                             resolveIssuerKey, computeDigest, decoder, encoder, pool, saltReuseSeam,
                             parseX5c, resolveTrustedAuthorityEvidence, context, ct)
                             .ConfigureAwait(false);
+
+                        //A presentation the verification refuses as malformed is the Wallet's, answered on the malformed route
+                        //with the refusal it names.
+                        if(sdJwtOutcome is SdJwtVpTokenRefused { Defect: var sdJwtDefect })
+                        {
+                            return MalformedSdJwtPresentation(sdJwtDefect, credentialQueryId, context);
+                        }
+
+                        parsed = sdJwtOutcome is SdJwtVpTokenVerified { Parsed: var sdJwtParsed }
+                            ? sdJwtParsed
+                            : throw new InvalidOperationException("The SD-JWT VP token verification answered neither its contents nor its refusal.");
                     }
                     else if(string.Equals(credentialQuery.Format, DcqlCredentialFormats.MsoMdoc, StringComparison.Ordinal))
                     {
@@ -1220,11 +1231,22 @@ public static class HaipOid4VpVerifierExecutor
 
                     if(string.Equals(credentialQuery.Format, DcqlCredentialFormats.SdJwt, StringComparison.Ordinal))
                     {
-                        parsed = await SdJwtVpTokenVerification.VerifyAsync(
+                        var sdJwtOutcome = await SdJwtVpTokenVerification.VerifyAsync(
                             compactPresentation, credentialQueryId, parseSdJwtToken, computeSdJwtHashInput,
                             resolveIssuerKey, computeDigest, decoder, encoder, pool, saltReuseSeam,
                             parseX5c, resolveTrustedAuthorityEvidence, context, ct)
                             .ConfigureAwait(false);
+
+                        //A presentation the verification refuses as malformed is the Wallet's, answered on the malformed route
+                        //with the refusal it names.
+                        if(sdJwtOutcome is SdJwtVpTokenRefused { Defect: var sdJwtDefect })
+                        {
+                            return MalformedSdJwtPresentation(sdJwtDefect, credentialQueryId, context);
+                        }
+
+                        parsed = sdJwtOutcome is SdJwtVpTokenVerified { Parsed: var sdJwtParsed }
+                            ? sdJwtParsed
+                            : throw new InvalidOperationException("The SD-JWT VP token verification answered neither its contents nor its refusal.");
                     }
                     else if(string.Equals(credentialQuery.Format, DcqlCredentialFormats.SdCwt, StringComparison.Ordinal))
                     {
@@ -1347,6 +1369,27 @@ public static class HaipOid4VpVerifierExecutor
         });
 
         return executor;
+    }
+
+
+    /// <summary>
+    /// The refusal of an SD-JWT presentation the verification refused as malformed (<see cref="SdJwtVpTokenRefused"/>), on the
+    /// executor's malformed route, naming the defect: a presentation no conformant Wallet produces, never a fault.
+    /// </summary>
+    /// <param name="defect">Why the presentation is malformed.</param>
+    /// <param name="credentialQueryId">The credential query the presentation answered.</param>
+    /// <param name="context">The request's context, carrying the instant it is verified at.</param>
+    /// <returns>The refusal.</returns>
+    private static VerifierPresentationRefused MalformedSdJwtPresentation(
+        SdJwtPresentationDefect defect, CredentialQueryId credentialQueryId, ExchangeContext context)
+    {
+        var refusedAt = context.VerifiedAt
+            ?? throw new InvalidOperationException("Request timestamp not found in context.");
+
+        return new VerifierPresentationRefused(
+            VerifierFlowRefusal.For(VerifierFlowRefusalKind.Malformed),
+            $"Malformed vp_token presentation for credential query '{credentialQueryId}': {defect}.",
+            refusedAt);
     }
 
 

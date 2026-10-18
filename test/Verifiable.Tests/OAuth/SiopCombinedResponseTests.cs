@@ -246,7 +246,7 @@ internal sealed class SiopCombinedResponseTests
         ValueTask<PublicKeyMemory?> IssuerLookup(string iss, string? keyId, IReadOnlyList<string>? x5c, ExchangeContext context, CancellationToken ct) =>
             ValueTask.FromResult(string.Equals(iss, IssuerId, StringComparison.Ordinal) ? issuerPublicKey : null);
 
-        return await SdJwtVpTokenVerification.VerifyAsync(
+        return (await SdJwtVpTokenVerification.VerifyAsync(
             vpToken,
             new CredentialQueryId("pid"),
             static s => SdJwtSerializer.ParseToken(
@@ -261,6 +261,6 @@ internal sealed class SiopCombinedResponseTests
             parseX5c: null,
             resolveTrustedAuthorityEvidence: null,
             context: new ExchangeContext(),
-            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ExpectVerified();
     }
 }

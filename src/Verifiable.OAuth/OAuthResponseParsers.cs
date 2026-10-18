@@ -292,32 +292,26 @@ public static class OAuthResponseParsers
                 specReference: "RFC 6749 §5.2");
         }
 
-        if(StringOf(members, OAuthRequestParameterNames.AccessToken) is not { Length: > 0 } accessToken)
+        //RFC 6749 §5.1: access_token and token_type are REQUIRED strings. Each is judged as it is carried: an omitted one is
+        //refused as absent, one of another kind as no string, and an empty string as a value naming no token; no refusal
+        //copies the response body, which carries credential text.
+        if(RequiredStringRefusal(
+            members,
+            OAuthRequestParameterNames.AccessToken,
+            "The server did not return a valid token response. The response may be an error without using the standard error "
+            + "field, or carry its parameters below the highest structure level.",
+            out var accessToken) is { } refusedAccessToken)
         {
-            return Result.Failure<TokenResponse, OAuthParseError>(
-                new OAuthMalformedResponse(
-                    response.Body,
-                    new DecisionSupport("The token response did not contain an access_token.")
-                    {
-                        LikelyCause = "The server did not return a valid token response. " +
-                                      "The response may be an error without using the " +
-                                      "standard error field, or carry its parameters below " +
-                                      "the highest structure level.",
-                        SpecificationReference = "RFC 6749 §5.1"
-                    }).WithTransportMetadata(response));
+            return Result.Failure<TokenResponse, OAuthParseError>(refusedAccessToken.WithTransportMetadata(response));
         }
 
-        if(StringOf(members, OAuthRequestParameterNames.TokenType) is not { Length: > 0 } tokenType)
+        if(RequiredStringRefusal(
+            members,
+            OAuthRequestParameterNames.TokenType,
+            "The server returned an access_token without a token_type, which is not permitted by RFC 6749 §5.1.",
+            out var tokenType) is { } refusedTokenType)
         {
-            return Result.Failure<TokenResponse, OAuthParseError>(
-                new OAuthMalformedResponse(
-                    response.Body,
-                    new DecisionSupport("The token response did not contain a token_type.")
-                    {
-                        LikelyCause = "The server returned an access_token without a " +
-                                      "token_type, which is not permitted by RFC 6749 §5.1.",
-                        SpecificationReference = "RFC 6749 §5.1"
-                    }).WithTransportMetadata(response));
+            return Result.Failure<TokenResponse, OAuthParseError>(refusedTokenType.WithTransportMetadata(response));
         }
 
         var lifetime = members.Find(OAuthRequestParameterNames.ExpiresIn);
@@ -373,6 +367,71 @@ public static class OAuthResponseParsers
 
 
     /// <summary>
+    /// The one reading of a required token response parameter defined as a string (RFC 6749 §5.1), through the reader's typed
+    /// answer for the member (<see cref="JsonTopLevelMembers.Find"/>): a non-empty string is the parameter's value; an absent
+    /// member is refused as absent (<see cref="OAuthRequiredMemberAbsent"/>); a member of another kind is refused as no string
+    /// (<see cref="OAuthMemberNotAString"/>), naming the kind; and an empty string, which names no token, is refused as an invalid
+    /// value. No refusal carries the response body or any value beside the empty one.
+    /// </summary>
+    /// <param name="members">The response's top-level members.</param>
+    /// <param name="name">The parameter's name.</param>
+    /// <param name="likelyCauseOfAbsence">The likely cause an absent parameter is answered with.</param>
+    /// <param name="value">The parameter's value, or the empty string when it is refused.</param>
+    /// <returns>The refusal, or <see langword="null"/> when the parameter is a non-empty string.</returns>
+    private static OAuthParseError? RequiredStringRefusal(
+        JsonTopLevelMembers members,
+        string name,
+        string likelyCauseOfAbsence,
+        out string value)
+    {
+        var carried = members.Find(name);
+        value = carried is JsonMemberString { Text: var text } ? text : string.Empty;
+
+        return carried switch
+        {
+            JsonMemberString { Text.Length: > 0 } => null,
+            JsonMemberAbsent => new OAuthRequiredMemberAbsent(
+                name,
+                new DecisionSupport($"The token response did not contain {name}.")
+                {
+                    LikelyCause = likelyCauseOfAbsence,
+                    SpecificationReference = "RFC 6749 §5.1"
+                }),
+            JsonMemberString => new OAuthInvalidFieldValue(
+                name,
+                string.Empty,
+                "The parameter is an empty string, which names no value.",
+                new DecisionSupport($"The token response carries {name} as an empty string.")
+                {
+                    SpecificationReference = "RFC 6749 §5.1"
+                }),
+            _ => NotAStringRefusal(name, KindOf(carried), "RFC 6749 §5.1")
+        };
+    }
+
+
+    /// <summary>
+    /// The refusal of a token response parameter defined as a string that the response carries as a value of another kind,
+    /// naming the parameter and the kind and none of the value: the one construction the required and the optional string
+    /// parameters share.
+    /// </summary>
+    /// <param name="name">The parameter's name.</param>
+    /// <param name="kind">The kind of value the response carries under it.</param>
+    /// <param name="specReference">The clause defining the parameter as a string.</param>
+    /// <returns>The refusal.</returns>
+    private static OAuthMemberNotAString NotAStringRefusal(string name, JsonTopLevelValueKind kind, string specReference) =>
+        new(
+            name,
+            kind,
+            new DecisionSupport($"The token endpoint's response carries {name} as a value of the kind {kind}, where it is a string.")
+            {
+                LikelyCause = "The authorization server wrote the parameter as another kind of JSON value than the string its "
+                              + "specification defines; a present parameter is never read as an omitted one.",
+                SpecificationReference = specReference
+            });
+
+
+    /// <summary>
     /// The one reading of an optional token response parameter defined as a string, through the reader's typed answer for the
     /// member (<see cref="JsonTopLevelMembers.Find"/>): a string is the parameter's value, an absent member is no value, and a
     /// member of any other kind is refused as present (<see cref="OAuthMemberNotAString"/>), naming the parameter and the kind
@@ -397,17 +456,7 @@ public static class OAuthResponseParsers
             return null;
         }
 
-        var kind = KindOf(carried);
-
-        return new OAuthMemberNotAString(
-            name,
-            kind,
-            new DecisionSupport($"The token endpoint's response carries {name} as a value of the kind {kind}, where it is a string.")
-            {
-                LikelyCause = "The authorization server wrote the parameter as another kind of JSON value than the string its "
-                              + "specification defines; a present parameter is never read as an omitted one.",
-                SpecificationReference = specReference
-            });
+        return NotAStringRefusal(name, KindOf(carried), specReference);
     }
 
 

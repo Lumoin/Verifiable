@@ -1,4 +1,3 @@
-using System.Buffers;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -125,14 +124,24 @@ public static class JwsAccessTokenValidator
 
         if(!outcome.IsSuccess)
         {
-            return JwsAccessTokenValidationResult.Failure(outcome.FailureReason!.Value, outcome.FailureDescription);
+            return outcome.PartRefusal is { } partRefusal
+                ? JwsAccessTokenValidationResult.PartRefused(outcome.FailureReason!.Value, outcome.FailureDescription, partRefusal)
+                : JwsAccessTokenValidationResult.Failure(outcome.FailureReason!.Value, outcome.FailureDescription);
         }
 
         //Optional access-token-specific claims, read from the shared core's verified payload.
         _ = TryReadString(outcome.Payload!, WellKnownJwtClaimNames.ClientId, out string? clientId);
         _ = TryReadString(outcome.Payload!, WellKnownJwtClaimNames.Scope, out string? scope);
         _ = TryReadString(outcome.Payload!, WellKnownJwtClaimNames.Jti, out string? jti);
-        ConfirmationMethod? confirmation = TryReadConfirmation(outcome.Payload!);
+
+        //RFC 7800 section 3: a cnf names the key the token is bound to. A cnf that is malformed, or that binds by a method this
+        //validator does not verify, refuses the token before success, never read as an unbound token.
+        var confirmationRead = ReadConfirmation(outcome.Payload!, out var confirmation);
+
+        if(ConfirmationRefusalOf(confirmationRead, "Access token") is { } confirmationRefusal)
+        {
+            return JwsAccessTokenValidationResult.Failure(confirmationRefusal.FailureReason!.Value, confirmationRefusal.FailureDescription);
+        }
 
         //RFC 8693 §4.1/§4.4: act and may_act are nested JSON objects whose members identify a party.
         //A present-but-unparseable claim is a rejection, not an omission — the token asserts a
@@ -272,30 +281,31 @@ public static class JwsAccessTokenValidator
                 "Access token is not a well-formed compact JWS.");
         }
 
-        //2. Decode and parse header to extract alg + kid before signature
-        //verify (alg=none is rejected without touching the signature path).
-        JwtPartReading<JwtHeader> headerReading;
-        try
+        //2. Decode and parse header to extract alg + kid before signature verify (alg=none is rejected without touching the
+        //signature path). The token is client-supplied wire input, structurally unverified at this point; a segment the decoder
+        //refuses as no base64url text is an invalid header rather than an internal fault, and only that refusal is answered so.
+        var headerReading = JwsSegmentDecoding.ReadOrNone(parts[0], parser.ParseHeader, base64UrlDecoder, memoryPool);
+
+        if(headerReading is null)
         {
-            using IMemoryOwner<byte> headerBytes = base64UrlDecoder(parts[0], memoryPool);
-            headerReading = parser.ParseHeader(headerBytes.Memory);
-        }
-        catch
-        {
-            //The token is client-supplied wire input, structurally unverified at this point; a segment
-            //that does not decode is an invalid header rather than an internal fault.
             return SignedJwtValidationOutcome.Failure(
                 JwsAccessTokenValidationFailureReason.InvalidHeader,
-                "Failed to parse JWS header.");
+                "JWS header segment is no base64url text.");
         }
 
         //A header the reading refuses - no one JSON object, a member name repeated, a member naming no Unicode text - names no
-        //alg, kid or typ one way, so it is an invalid header.
+        //alg, kid or typ one way, so it is an invalid header, carried with the reading's own refusal.
+        if(headerReading is JwtPartRefused<JwtHeader> { Refusal: var headerRefusal })
+        {
+            return SignedJwtValidationOutcome.PartRefused(
+                JwsAccessTokenValidationFailureReason.InvalidHeader,
+                "JWS header is not one JSON object naming each member once and naming Unicode text throughout.",
+                new JwsPartDocumentRefusal(JwsPart.ProtectedHeader, headerRefusal));
+        }
+
         if(headerReading is not JwtPartRead<JwtHeader> { Part: var header })
         {
-            return SignedJwtValidationOutcome.Failure(
-                JwsAccessTokenValidationFailureReason.InvalidHeader,
-                "JWS header is not one JSON object naming each member once and naming Unicode text throughout.");
+            throw new InvalidOperationException("A JWS header's reading answered neither the header nor its refusal.");
         }
 
         if(!header.TryGetValue(WellKnownJwkMemberNames.Alg, out object? algValue)
@@ -390,28 +400,29 @@ public static class JwsAccessTokenValidator
                 "JWS signature did not verify against the resolved key.");
         }
 
-        //5. Decode and parse payload.
-        JwtPartReading<JwtPayload> payloadReading;
-        try
+        //5. Decode and parse payload. Same rationale as the header decode above: the token is untrusted wire input, so a segment
+        //the decoder refuses is malformed rather than an internal fault.
+        var payloadReading = JwsSegmentDecoding.ReadOrNone(parts[1], parser.ParseClaims, base64UrlDecoder, memoryPool);
+
+        if(payloadReading is null)
         {
-            using IMemoryOwner<byte> payloadBytes = base64UrlDecoder(parts[1], memoryPool);
-            payloadReading = parser.ParseClaims(payloadBytes.Memory);
-        }
-        catch
-        {
-            //Same rationale as the header decode above: the token is untrusted wire input, so a
-            //segment that does not decode is malformed rather than an internal fault.
             return SignedJwtValidationOutcome.Failure(
                 JwsAccessTokenValidationFailureReason.Malformed,
-                "Failed to parse JWS payload.");
+                "JWS payload segment is no base64url text.");
         }
 
-        //A claims set the reading refuses names no claim one way, so the token is malformed.
+        //A claims set the reading refuses names no claim one way, so the token is malformed, carried with the reading's own refusal.
+        if(payloadReading is JwtPartRefused<JwtPayload> { Refusal: var payloadRefusal })
+        {
+            return SignedJwtValidationOutcome.PartRefused(
+                JwsAccessTokenValidationFailureReason.Malformed,
+                "JWS payload is not one JSON object naming each claim once and naming Unicode text throughout.",
+                new JwsPartDocumentRefusal(JwsPart.Payload, payloadRefusal));
+        }
+
         if(payloadReading is not JwtPartRead<JwtPayload> { Part: var payload })
         {
-            return SignedJwtValidationOutcome.Failure(
-                JwsAccessTokenValidationFailureReason.Malformed,
-                "JWS payload is not one JSON object naming each claim once and naming Unicode text throughout.");
+            throw new InvalidOperationException("A JWS payload's reading answered neither the claims set nor its refusal.");
         }
 
         //6. Standard claim checks.
@@ -429,11 +440,18 @@ public static class JwsAccessTokenValidator
                 "Access token iss does not match the expected issuer.");
         }
 
-        if(!TryReadAudience(payload, out IReadOnlyList<string> audience))
+        //RFC 7519 section 4.1.3: aud is one StringOrURI or an array of them. A present aud of another shape - an array holding
+        //an element that is no non-empty string among them - is refused whole, never filtered into the audiences it does name.
+        var audienceRead = ReadStringList(payload, WellKnownJwtClaimNames.Aud, out var audience);
+        if(audienceRead != ClaimReadResult.Value)
         {
-            return SignedJwtValidationOutcome.Failure(
-                JwsAccessTokenValidationFailureReason.MissingRequiredClaim,
-                "Access token is missing the aud claim.");
+            return audienceRead == ClaimReadResult.Absent
+                ? SignedJwtValidationOutcome.Failure(
+                    JwsAccessTokenValidationFailureReason.MissingRequiredClaim,
+                    "Access token is missing the aud claim.")
+                : SignedJwtValidationOutcome.Failure(
+                    JwsAccessTokenValidationFailureReason.Malformed,
+                    "Access token aud claim is neither a non-empty string nor a non-empty array of non-empty strings.");
         }
 
         if(!ContainsAudience(audience, expectedAudience))
@@ -576,63 +594,65 @@ public static class JwsAccessTokenValidator
     }
 
 
-    private static bool TryReadAudience(JwtPayload payload, out IReadOnlyList<string> audience) =>
-        TryReadStringList(payload, WellKnownJwtClaimNames.Aud, out audience);
-
-
     /// <summary>
-    /// Reads a claim whose JSON value is either a single string or an array of strings — the
-    /// RFC 7519 §4.1.3 <c>aud</c> shape, also used by the OIDC Core §2 <c>amr</c> claim and (in the
-    /// AuthCode JAR projection) the RFC 8707 §2.1 <c>resource</c> claim. Normalises both wire
-    /// shapes into a list; a single string becomes a one-element list. Returns
-    /// <see langword="false"/> (with <paramref name="list"/> empty) when the claim is absent,
-    /// carries a value of neither shape, or resolves to an empty list — the caller decides whether
-    /// "absent" and "present but unparseable" need distinguishing (<see cref="JwtPayload"/>
-    /// satisfies <see cref="IReadOnlyDictionary{TKey, TValue}"/> via <c>Dictionary&lt;string,
-    /// object&gt;</c>, so any verified claim dictionary reads through the same call).
+    /// Reads a claim whose JSON value is either a single string or an array of strings — the RFC 7519 §4.1.3 <c>aud</c> shape,
+    /// also the OIDC Core §2 <c>amr</c> claim's — normalising both wire shapes into a list; a single string becomes a one-element
+    /// list. An absent claim is <see cref="ClaimReadResult.Absent"/>; a present one that is neither a non-empty string nor a
+    /// non-empty array every element of which is a non-empty string - an array holding a number, a <c>null</c>, a nested value
+    /// or an empty string among them - is <see cref="ClaimReadResult.Malformed"/> as a whole, never filtered into the strings it
+    /// does hold (<see cref="JwtPayload"/> satisfies <see cref="IReadOnlyDictionary{TKey, TValue}"/>, so any verified claim
+    /// dictionary reads through the same call).
     /// </summary>
-    internal static bool TryReadStringList(
-        IReadOnlyDictionary<string, object> payload, string claimName, out IReadOnlyList<string> list)
+    /// <param name="claims">The verified claims.</param>
+    /// <param name="claimName">The claim.</param>
+    /// <param name="list">The values when the result is <see cref="ClaimReadResult.Value"/>; otherwise empty.</param>
+    /// <returns>Whether the claim is absent, a list of strings, or malformed.</returns>
+    internal static ClaimReadResult ReadStringList(
+        IReadOnlyDictionary<string, object> claims, string claimName, out IReadOnlyList<string> list)
     {
-        if(payload.TryGetValue(claimName, out object? raw))
+        list = [];
+
+        if(!claims.TryGetValue(claimName, out var raw))
         {
-            if(raw is string single && !string.IsNullOrEmpty(single))
-            {
-                list = [single];
-                return true;
-            }
-
-            if(raw is IEnumerable<string> typed)
-            {
-                List<string> typedList = [.. typed];
-                if(typedList.Count > 0)
-                {
-                    list = typedList;
-                    return true;
-                }
-            }
-
-            if(raw is IEnumerable<object> mixed)
-            {
-                List<string> mixedList = [];
-                foreach(object item in mixed)
-                {
-                    if(item is string s && !string.IsNullOrEmpty(s))
-                    {
-                        mixedList.Add(s);
-                    }
-                }
-
-                if(mixedList.Count > 0)
-                {
-                    list = mixedList;
-                    return true;
-                }
-            }
+            return ClaimReadResult.Absent;
         }
 
-        list = [];
-        return false;
+        var values = raw switch
+        {
+            string { Length: > 0 } single => new List<string> { single },
+            IEnumerable<object?> elements => NonEmptyStringsOf(elements),
+            _ => null
+        };
+
+        if(values is null)
+        {
+            return ClaimReadResult.Malformed;
+        }
+
+        list = values;
+
+        return ClaimReadResult.Value;
+    }
+
+
+    /// <summary>The elements of an array as strings when it holds at least one and every one is a non-empty string; otherwise none.</summary>
+    /// <param name="elements">The array's elements as the claims set holds them.</param>
+    /// <returns>The strings, or <see langword="null"/>.</returns>
+    private static List<string>? NonEmptyStringsOf(IEnumerable<object?> elements)
+    {
+        var strings = new List<string>();
+
+        foreach(var element in elements)
+        {
+            if(element is not string { Length: > 0 } text)
+            {
+                return null;
+            }
+
+            strings.Add(text);
+        }
+
+        return strings.Count > 0 ? strings : null;
     }
 
 
@@ -680,29 +700,78 @@ public static class JwsAccessTokenValidator
     }
 
 
-    internal static ConfirmationMethod? TryReadConfirmation(JwtPayload payload)
+    /// <summary>
+    /// Reads the <c>cnf</c> (confirmation) claim of a verified token (RFC 7800 section 3), the claim's members read through either
+    /// dictionary shape a JSON object materialises as. An absent claim binds the token to no key; an object carrying only the
+    /// <c>jkt</c> of RFC 9449 section 6.1, a non-empty string, binds it to that thumbprint; a claim that is no object, an object
+    /// carrying no member, or a <c>jkt</c> that is no non-empty string is malformed; and an object carrying any other confirmation
+    /// method - one this library does not verify possession under - is answered as that, so no reading invents a binding a token
+    /// does not carry or the absence of one it does.
+    /// </summary>
+    /// <param name="payload">The verified payload.</param>
+    /// <param name="confirmation">The binding when the result is <see cref="ConfirmationReadResult.Bound"/>; otherwise <see langword="null"/>.</param>
+    /// <returns>What the claim was found to be.</returns>
+    internal static ConfirmationReadResult ReadConfirmation(JwtPayload payload, out ConfirmationMethod? confirmation)
     {
-        if(!payload.TryGetValue(WellKnownJwtClaimNames.Cnf, out object? raw))
+        confirmation = null;
+
+        if(!payload.TryGetValue(WellKnownJwtClaimNames.Cnf, out var raw))
         {
-            return null;
+            return ConfirmationReadResult.Absent;
+        }
+
+        if(raw is not IEnumerable<KeyValuePair<string, object>> members)
+        {
+            return ConfirmationReadResult.Malformed;
         }
 
         string? jkt = null;
-        if(raw is IReadOnlyDictionary<string, object> ro
-            && ro.TryGetValue(WellKnownJwtClaimNames.JwkThumbprint, out object? jktValue)
-            && jktValue is string jktStr)
+
+        foreach(var member in members)
         {
-            jkt = jktStr;
-        }
-        else if(raw is IDictionary<string, object> writable
-            && writable.TryGetValue(WellKnownJwtClaimNames.JwkThumbprint, out object? jktValue2)
-            && jktValue2 is string jktStr2)
-        {
-            jkt = jktStr2;
+            if(!WellKnownJwtClaimNames.IsJwkThumbprint(member.Key))
+            {
+                return ConfirmationReadResult.UnsupportedMethod;
+            }
+
+            if(member.Value is not string { Length: > 0 } thumbprint)
+            {
+                return ConfirmationReadResult.Malformed;
+            }
+
+            jkt = thumbprint;
         }
 
-        return jkt is null ? null : new ConfirmationMethod { JwkThumbprint = jkt };
+        if(jkt is null)
+        {
+            return ConfirmationReadResult.Malformed;
+        }
+
+        confirmation = new ConfirmationMethod { JwkThumbprint = jkt };
+
+        return ConfirmationReadResult.Bound;
     }
+
+
+    /// <summary>
+    /// The failure a token's <c>cnf</c> reading refuses it with, or <see langword="null"/> for an absent claim and a binding this
+    /// library verifies: a malformed claim as <see cref="JwsAccessTokenValidationFailureReason.Malformed"/>, a confirmation method
+    /// it does not verify as <see cref="JwsAccessTokenValidationFailureReason.UnsupportedConfirmationMethod"/>.
+    /// </summary>
+    /// <param name="read">What the reading found.</param>
+    /// <param name="tokenKind">The kind of token, as its failure descriptions name it.</param>
+    /// <returns>The failure, or <see langword="null"/>.</returns>
+    internal static SignedJwtValidationOutcome? ConfirmationRefusalOf(ConfirmationReadResult read, string tokenKind) => read switch
+    {
+        ConfirmationReadResult.Absent or ConfirmationReadResult.Bound => null,
+        ConfirmationReadResult.Malformed => SignedJwtValidationOutcome.Failure(
+            JwsAccessTokenValidationFailureReason.Malformed,
+            $"{tokenKind} cnf claim is not a JSON object carrying its confirmation method in the registered shape (RFC 7800 §3.1, RFC 9449 §6.1)."),
+        ConfirmationReadResult.UnsupportedMethod => SignedJwtValidationOutcome.Failure(
+            JwsAccessTokenValidationFailureReason.UnsupportedConfirmationMethod,
+            $"{tokenKind} cnf claim binds the token by a confirmation method this validator does not verify possession under (RFC 7800 §3)."),
+        _ => throw new InvalidOperationException($"The confirmation reading {read} is none this validator answers.")
+    };
 
 
     /// <summary>
@@ -713,7 +782,7 @@ public static class JwsAccessTokenValidator
     /// claim represents the current actor while nested 'act' claims represent prior actors. The least
     /// recent actor is the most deeply nested", so the first history element is the actor nested
     /// immediately within the current one and the last is the least recent. Structural sibling of
-    /// <see cref="TryReadConfirmation"/>: the nested claim object is read through either dictionary
+    /// <see cref="ReadConfirmation"/>: the nested claim object is read through either dictionary
     /// shape a JSON parser materialises a JSON object as.
     /// </summary>
     /// <param name="payload">The signature-verified access token payload.</param>
@@ -845,7 +914,7 @@ public static class JwsAccessTokenValidator
 
     /// <summary>
     /// Reads one member of a nested claim object, accepting either dictionary shape a JSON parser may
-    /// materialise a JSON object as — the same dual read <see cref="TryReadConfirmation"/> performs for
+    /// materialise a JSON object as — the same dual read <see cref="ReadConfirmation"/> performs for
     /// <c>cnf</c>, factored out here because an actor chain looks up several members per level.
     /// </summary>
     /// <param name="claimObject">The claim value to read a member from.</param>

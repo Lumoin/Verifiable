@@ -202,6 +202,31 @@ internal sealed class IdJagMintClientAuthenticationTests
 
         var refused = Assert.IsInstanceOfType<OAuthInvalidFieldValue>(minted.Error);
         Assert.AreEqual(OAuthRequestParameterNames.IssuedTokenType, refused.FieldName);
+        Assert.AreEqual(WellKnownTokenTypeIdentifiers.AccessToken, refused.ReceivedValue, "The value received is the one carried.");
+    }
+
+
+    /// <summary>
+    /// RFC 8693 §2.2.1 has <c>issued_token_type</c> REQUIRED: an answer omitting it is refused as the absent parameter it is,
+    /// naming it and carrying no value it never received.
+    /// </summary>
+    [TestMethod]
+    public async Task AnAnswerOmittingItsIssuedTokenTypeIsRefusedAsAbsent()
+    {
+        using var secret = new HeldSecret(ProviderSecret);
+        var wire = new SentRequests();
+        var answer = /*lang=json,strict*/ """{"access_token":"eyJhbGciOiJFUzI1NiJ9.eyJpc3MiOiJodHRwczovL2lkcC5leGFtcGxlLmNvbSJ9.c2lnbmF0dXJl","token_type":"N_A","expires_in":300}""";
+        var infrastructure = CreateInfrastructure(wire, answer);
+
+        var minted = await IdJagFlowHandlers.MintAsync(
+            MintOptions("https://resource-as.example.com"),
+            infrastructure,
+            Registration(ClientAuthenticationMethod.ClientSecretPost, secret.Material),
+            [],
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        var refused = Assert.IsInstanceOfType<OAuthRequiredMemberAbsent>(minted.Error);
+        Assert.AreEqual(OAuthRequestParameterNames.IssuedTokenType, refused.MemberName);
     }
 
 

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
+using System.Globalization;
 using System.Text;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -648,16 +649,15 @@ unresolvable,
     [DataRow("iat", "[1700000000]", DisplayName = "iat as an array")]
     public async Task ATokenWhoseExpOrIatIsNoNumericDateIsStructurallyInvalid(string claim, string value)
     {
-        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys =
-            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
-        using PublicKeyMemory subjectPublic = keys.PublicKey;
-        using PrivateKeyMemory subjectPrivate = keys.PrivateKey;
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using var subjectPublic = keys.PublicKey;
+        using var subjectPrivate = keys.PrivateKey;
 
-        (string sub, Dictionary<string, object> subJwk) = ComposeThumbprintSubject(subjectPublic);
-        DateTimeOffset? expiresAt = WellKnownJwtClaimNames.IsExp(claim) ? null : TimeProvider.GetUtcNow().AddMinutes(5);
-        DateTimeOffset? issuedAt = WellKnownJwtClaimNames.IsIat(claim) ? null : TimeProvider.GetUtcNow();
-        var payload = ComposePayload(sub, sub, ClientId, RequestNonce, expiresAt, issuedAt, subJwk);
-        var idToken = await SignRawAsync(subjectPrivate, WithRawMember(payload, claim, value)).ConfigureAwait(false);
+        var (sub, subJwk) = ComposeThumbprintSubject(subjectPublic);
+        var now = TimeProvider.GetUtcNow();
+        var expJson = WellKnownJwtClaimNames.IsExp(claim) ? value : NumericJson(now.AddMinutes(5).ToUnixTimeSeconds());
+        var iatJson = WellKnownJwtClaimNames.IsIat(claim) ? value : NumericJson(now.ToUnixTimeSeconds());
+        var idToken = await SignRawAsync(subjectPrivate, ComposeRawPayload(sub, subJwk, expJson, iatJson)).ConfigureAwait(false);
 
         var result = await SelfIssuedIdTokenValidation.ValidateAsync(
             idToken, ClientId, RequestNonce, AllowedAlgorithms, TimeProvider.GetUtcNow(),
@@ -673,32 +673,30 @@ unresolvable,
     /// <summary>
     /// The answers a malformed date is told from, on tokens signed over their exact bytes as the malformed ones are: a token
     /// carrying both dates as NumericDates validates, a fraction kept as written (RFC 7519 Section 2: "non-integer values can be
-    /// represented"); one omitting <c>iat</c> validates with no <c>iat</c> surfaced; and one omitting the <c>exp</c> §11.1 judges
-    /// is structurally valid but not unexpired.
+    /// represented"); one omitting <c>iat</c>, which SIOPv2 Section 11 carries over from OpenID Connect Core 1.0 Section 2 as
+    /// REQUIRED, is structurally invalid and does not validate; and one omitting the <c>exp</c> §11.1 judges is structurally
+    /// valid but not unexpired.
     /// </summary>
     [TestMethod]
-    public async Task NumericDatesValidateAnOmittedIatIsNoneAndAnOmittedExpIsNotUnexpired()
+    public async Task NumericDatesValidateAnOmittedIatIsRefusedAndAnOmittedExpIsNotUnexpired()
     {
-        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> keys =
-            TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
-        using PublicKeyMemory subjectPublic = keys.PublicKey;
-        using PrivateKeyMemory subjectPrivate = keys.PrivateKey;
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        using var subjectPublic = keys.PublicKey;
+        using var subjectPrivate = keys.PrivateKey;
 
-        (string sub, Dictionary<string, object> subJwk) = ComposeThumbprintSubject(subjectPublic);
+        var (sub, subJwk) = ComposeThumbprintSubject(subjectPublic);
         var now = TimeProvider.GetUtcNow();
-        var writtenExp = now.AddMinutes(5).ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture) + ".5";
-        var bothDates = WithRawMember(ComposePayload(sub, sub, ClientId, RequestNonce, null, now, subJwk), WellKnownJwtClaimNames.Exp, writtenExp);
-        var noIat = WithRawMember(ComposePayload(sub, sub, ClientId, RequestNonce, null, null, subJwk), WellKnownJwtClaimNames.Exp, writtenExp);
-        var noExp = Encoding.UTF8.GetString(PayloadSerializer(ComposePayload(sub, sub, ClientId, RequestNonce, null, now, subJwk)));
+        var writtenExp = NumericJson(now.AddMinutes(5).ToUnixTimeSeconds()) + ".5";
+        var writtenIat = NumericJson(now.ToUnixTimeSeconds());
 
-        var bothResult = await ValidateRawAsync(await SignRawAsync(subjectPrivate, bothDates).ConfigureAwait(false)).ConfigureAwait(false);
-        var noIatResult = await ValidateRawAsync(await SignRawAsync(subjectPrivate, noIat).ConfigureAwait(false)).ConfigureAwait(false);
-        var noExpResult = await ValidateRawAsync(await SignRawAsync(subjectPrivate, noExp).ConfigureAwait(false)).ConfigureAwait(false);
+        var bothResult = await ValidateRawAsync(await SignRawAsync(subjectPrivate, ComposeRawPayload(sub, subJwk, writtenExp, writtenIat)).ConfigureAwait(false)).ConfigureAwait(false);
+        var noIatResult = await ValidateRawAsync(await SignRawAsync(subjectPrivate, ComposeRawPayload(sub, subJwk, writtenExp, iatJson: null)).ConfigureAwait(false)).ConfigureAwait(false);
+        var noExpResult = await ValidateRawAsync(await SignRawAsync(subjectPrivate, ComposeRawPayload(sub, subJwk, expJson: null, writtenIat)).ConfigureAwait(false)).ConfigureAwait(false);
 
         Assert.IsTrue(bothResult.IsValid);
         Assert.AreEqual(writtenExp, bothResult.ExpiresAt!.ToString());
-        Assert.IsTrue(noIatResult.IsValid, "SIOPv2 section 11.1 judges no iat, so a token omitting it validates.");
-        Assert.IsNull(noIatResult.IssuedAt, "An omitted iat is none.");
+        Assert.IsFalse(noIatResult.IsStructurallyValid, "SIOPv2 section 11 with OpenID Connect Core 1.0 section 2: an omitted iat is a missing required claim.");
+        Assert.IsFalse(noIatResult.IsValid, "A token omitting iat does not validate.");
         Assert.IsTrue(noExpResult.IsStructurallyValid, "An omitted exp is no malformed one.");
         Assert.IsFalse(noExpResult.IsUnexpired, "SIOPv2 section 11.1: a token with no exp is not before its expiry.");
         Assert.IsFalse(noExpResult.IsValid);
@@ -717,19 +715,59 @@ unresolvable,
 
 
     /// <summary>
-    /// The payload's JSON text with one member appended whose value is written as given, raw, so a value no serializer of a
-    /// claims set writes - a string of digits for a date, a number no double holds - reaches the validator as written.
+    /// The JSON text of a self-issued ID Token's claims set, written directly as the row asks: the subject as issuer and subject,
+    /// this class's relying party as audience, its nonce, the subject's <c>sub_jwk</c>, and each date as the JSON text given or
+    /// omitted, so a value no serializer of a claims set writes - a string of digits for a date, a number no double holds, a
+    /// fraction - is the very text the token is signed over and the validator reads.
     /// </summary>
-    /// <param name="payload">The claims serialized first, none named <paramref name="name"/>.</param>
-    /// <param name="name">The appended member's name.</param>
-    /// <param name="rawValue">The appended member's value as JSON text.</param>
-    /// <returns>The payload's JSON text.</returns>
-    private static string WithRawMember(JwtPayload payload, string name, string rawValue)
+    /// <param name="sub">The subject, its RFC 9278 thumbprint URI.</param>
+    /// <param name="subJwk">The subject's public key members, each a string.</param>
+    /// <param name="expJson">The <c>exp</c>'s JSON text, or <see langword="null"/> to omit it.</param>
+    /// <param name="iatJson">The <c>iat</c>'s JSON text, or <see langword="null"/> to omit it.</param>
+    /// <returns>The claims set's JSON text.</returns>
+    private static string ComposeRawPayload(string sub, Dictionary<string, object> subJwk, string? expJson, string? iatJson)
     {
-        var json = Encoding.UTF8.GetString(PayloadSerializer(payload));
+        var key = string.Join(',', subJwk.Select(static member => RawMember(member.Key, Quoted((string)member.Value))));
+        var members = new List<string>
+        {
+            RawMember(WellKnownJwtClaimNames.Iss, Quoted(sub)),
+            RawMember(WellKnownJwtClaimNames.Sub, Quoted(sub)),
+            RawMember(WellKnownJwtClaimNames.Aud, Quoted(ClientId)),
+            RawMember(WellKnownJwtClaimNames.Nonce, Quoted(RequestNonce)),
+            RawMember(WellKnownJwtClaimNames.SubJwk, $"{{{key}}}")
+        };
 
-        return json[..^1] + ",\"" + name + "\":" + rawValue + "}";
+        if(expJson is not null)
+        {
+            members.Add(RawMember(WellKnownJwtClaimNames.Exp, expJson));
+        }
+
+        if(iatJson is not null)
+        {
+            members.Add(RawMember(WellKnownJwtClaimNames.Iat, iatJson));
+        }
+
+        return $"{{{string.Join(',', members)}}}";
     }
+
+
+    /// <summary>One member of a JSON object, its name and its value's JSON text.</summary>
+    /// <param name="name">The member's name.</param>
+    /// <param name="valueJson">The value's JSON text.</param>
+    /// <returns>The member's JSON text.</returns>
+    private static string RawMember(string name, string valueJson) => $"{Quoted(name)}:{valueJson}";
+
+
+    /// <summary>A JSON string of a text needing no escape.</summary>
+    /// <param name="text">The text.</param>
+    /// <returns>The JSON string.</returns>
+    private static string Quoted(string text) => $"\"{text}\"";
+
+
+    /// <summary>A whole count of seconds as the JSON number naming it.</summary>
+    /// <param name="seconds">The count.</param>
+    /// <returns>The JSON number's text.</returns>
+    private static string NumericJson(long seconds) => seconds.ToString(CultureInfo.InvariantCulture);
 
 
     /// <summary>

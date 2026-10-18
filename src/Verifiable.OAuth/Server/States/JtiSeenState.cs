@@ -37,6 +37,15 @@ public sealed record JtiSeenState : FlowState
     public required DateTimeOffset SeenAt { get; init; }
 
     /// <summary>
+    /// How long the record is kept (RFC 7523 Section 3 item 7): until an instant, exclusive, which is the state's
+    /// <see cref="FlowState.ExpiresAt"/>, or to the clock's end, which no instant represents and for which
+    /// <see cref="FlowState.ExpiresAt"/> is <see cref="DateTimeOffset.MaxValue"/>. A store that drops records by their expiry drops
+    /// this one when <see cref="ReplayRecordRetention.IsDueAt"/> holds, never at the clock's last instant for a record kept to
+    /// the clock's end.
+    /// </summary>
+    public required ReplayRecordRetention Retention { get; init; }
+
+    /// <summary>
     /// The one <c>(purpose, issuer, jti)</c> correlation key this state is indexed under, composed
     /// through <see cref="JtiReplayGuard.CorrelationKey(JtiReplayPurpose, string, string?, string)"/> so a host's save switch never
     /// re-derives the shape by hand.

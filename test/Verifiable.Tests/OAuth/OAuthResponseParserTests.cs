@@ -312,7 +312,7 @@ internal sealed class OAuthResponseParsersTests
     [TestMethod]
     [DataRow("5", JsonTopLevelValueKind.Number, DisplayName = "A number")]
     [DataRow("""["openid"]""", JsonTopLevelValueKind.Array, DisplayName = "An array")]
-    [DataRow("""{"openid":"openid"}""", JsonTopLevelValueKind.Object, DisplayName = "An object")]
+    [DataRow(/*lang=json,strict*/ """{"openid":"openid"}""", JsonTopLevelValueKind.Object, DisplayName = "An object")]
     [DataRow("true", JsonTopLevelValueKind.True, DisplayName = "The true literal")]
     [DataRow("null", JsonTopLevelValueKind.Null, DisplayName = "The null literal")]
     public void ATokenAnswerCarryingAScopeOfAnotherKindIsRefusedNamingTheScope(string scope, JsonTopLevelValueKind expectedKind)
@@ -482,7 +482,7 @@ internal sealed class OAuthResponseParsersTests
     }
 
     [TestMethod]
-    public void ParseTokenResponseReturnsMalformedWhenAccessTokenMissing()
+    public void ParseTokenResponseRefusesAnAbsentAccessTokenAsAbsent()
     {
         HttpResponseData response = Respond(
             /*lang=json,strict*/ """{"token_type":"Bearer","expires_in":3600}""");
@@ -491,8 +491,83 @@ internal sealed class OAuthResponseParsersTests
             OAuthResponseParsers.ParseTokenResponse(response, DateTimeOffset.UnixEpoch);
 
         Assert.IsFalse(result.IsSuccess);
-        _ = Assert.IsInstanceOfType<OAuthMalformedResponse>(result.Error);
+        var absent = Assert.IsInstanceOfType<OAuthRequiredMemberAbsent>(result.Error);
+        Assert.AreEqual(OAuthRequestParameterNames.AccessToken, absent.MemberName);
     }
+
+
+    /// <summary>
+    /// RFC 6749 §5.1: <c>access_token</c> and <c>token_type</c> are REQUIRED strings. A response carrying either as a value of
+    /// another kind is refused as no string, naming the parameter and the kind; one omitting either is refused as absent; and one
+    /// carrying either as an empty string is refused as a value naming no token. No refusal carries the response body or a value
+    /// the response sent beside the empty one.
+    /// </summary>
+    /// <param name="body">The response body.</param>
+    /// <param name="memberName">The parameter the refusal names.</param>
+    /// <param name="refusal">The refusal's case.</param>
+    [TestMethod]
+    [DataRow(/*lang=json,strict*/ """{"access_token":7,"token_type":"Bearer"}""", "access_token", "not-a-string")]
+    [DataRow(/*lang=json,strict*/ """{"access_token":{"value":"secret-text"},"token_type":"Bearer"}""", "access_token", "not-a-string")]
+    [DataRow(/*lang=json,strict*/ """{"access_token":"","token_type":"Bearer"}""", "access_token", "empty")]
+    [DataRow(/*lang=json,strict*/ """{"access_token":"at-secret-text"}""", "token_type", "absent")]
+    [DataRow(/*lang=json,strict*/ """{"access_token":"at-secret-text","token_type":["Bearer"]}""", "token_type", "not-a-string")]
+    [DataRow(/*lang=json,strict*/ """{"access_token":"at-secret-text","token_type":null}""", "token_type", "not-a-string")]
+    public void ParseTokenResponseJudgesTheRequiredStringParametersByPresenceAndKind(string body, string memberName, string refusal)
+    {
+        var result = OAuthResponseParsers.ParseTokenResponse(Respond(body), DateTimeOffset.UnixEpoch);
+
+        Assert.IsFalse(result.IsSuccess, body);
+
+        var named = refusal switch
+        {
+            "not-a-string" => Assert.IsInstanceOfType<OAuthMemberNotAString>(result.Error, body).MemberName,
+            "absent" => Assert.IsInstanceOfType<OAuthRequiredMemberAbsent>(result.Error, body).MemberName,
+            "empty" => Assert.IsInstanceOfType<OAuthInvalidFieldValue>(result.Error, body).FieldName,
+            _ => throw new ArgumentOutOfRangeException(nameof(refusal), refusal, "No refusal is named so.")
+        };
+
+        Assert.AreEqual(memberName, named, body);
+        Assert.DoesNotContain("secret-text", result.Error.ToString(), "No refusal copies a value the response carries.");
+    }
+
+
+    /// <summary>
+    /// The refusals a client reads an answer with are each named in the endpoint mapping: a repeated member name, a member naming
+    /// no Unicode text, a member of another kind and an absent required member are the client's judgement that the answer is
+    /// <c>invalid_response</c>; a refusal of a kind the mapping does not name is answered as
+    /// <see cref="OAuthClientErrors.UnrecognisedRefusal"/>, never under the <c>server_error</c> category established for another.
+    /// </summary>
+    [TestMethod]
+    public void EveryParseRefusalIsNamedInTheEndpointMapping()
+    {
+        var support = new DecisionSupport("A refusal.");
+        var named = new OAuthParseError[]
+        {
+            new OAuthRepeatedMemberName(OAuthRequestParameterNames.AccessToken, 1, support),
+            new OAuthUndecodableMemberValue(OAuthRequestParameterNames.AccessToken, 1, JsonUndecodableMemberPart.Value, support),
+            new OAuthMemberNotAString(OAuthRequestParameterNames.TokenType, JsonTopLevelValueKind.Number, support),
+            new OAuthRequiredMemberAbsent(OAuthRequestParameterNames.TokenType, support)
+        };
+
+        foreach(var error in named)
+        {
+            var answered = TokenEndpointClientOperations.BuildEndpointResultFromParseError(error);
+
+            Assert.AreEqual(AuthCodeFlowEndpointOutcome.BadRequest, answered.Outcome, error.GetType().Name);
+            Assert.AreEqual(AuthCodeFlowRefusalOrigin.ClientJudgement, answered.RefusalOrigin, error.GetType().Name);
+            Assert.AreEqual(OAuthClientErrors.InvalidResponse, answered.ErrorCode, error.GetType().Name);
+        }
+
+        var unrecognised = TokenEndpointClientOperations.BuildEndpointResultFromParseError(new RefusalOfAKindNotYetNamed(support));
+
+        Assert.AreEqual(OAuthClientErrors.UnrecognisedRefusal, unrecognised.ErrorCode, "A refusal of a kind the mapping does not name is named as such.");
+        Assert.AreEqual(AuthCodeFlowRefusalOrigin.ClientJudgement, unrecognised.RefusalOrigin);
+    }
+
+
+    /// <summary>A refusal case of a kind the endpoint mapping was written without, as a later version of the library adds one.</summary>
+    /// <param name="Support">Guidance for the calling application.</param>
+    private sealed record RefusalOfAKindNotYetNamed(DecisionSupport Support) : OAuthParseError(Support);
 
     [TestMethod]
     public void ParseTokenResponseHandlesProblemJsonResponse()
@@ -518,7 +593,7 @@ internal sealed class OAuthResponseParsersTests
     /// RFC 6749 §5.1 has a token response's parameters serialized "into a JSON structure by adding each parameter at the
     /// highest structure level": an otherwise valid token response carried inside an extension object, with no parameter at the
     /// top level, is no token response, and an <c>error</c> an extension object carries is no error response either. Each is
-    /// refused as malformed, nothing read from the nested object.
+    /// refused for the <c>access_token</c> its top level omits, nothing read from the nested object.
     /// </summary>
     /// <param name="body">The response body.</param>
     [TestMethod]
@@ -536,7 +611,8 @@ internal sealed class OAuthResponseParsersTests
         var result = OAuthResponseParsers.ParseTokenResponse(Respond(body), DateTimeOffset.UnixEpoch);
 
         Assert.IsFalse(result.IsSuccess, "A response carrying its parameters below the top level is refused.");
-        _ = Assert.IsInstanceOfType<OAuthMalformedResponse>(result.Error, "Nothing nested is read as the response's parameter.");
+        Assert.AreEqual(OAuthRequestParameterNames.AccessToken, Assert.IsInstanceOfType<OAuthRequiredMemberAbsent>(result.Error,
+            "Nothing nested is read as the response's parameter.").MemberName);
     }
 
 

@@ -147,9 +147,9 @@ public static class AuthCodeRequestObjectExtensions
     /// <see href="https://www.rfc-editor.org/rfc/rfc8707#section-2.1">RFC 8707 section 2.1</see>:
     /// "a single &quot;resource&quot; parameter value is represented as a JSON string while multiple values are
     /// represented as an array of strings." Reads the claim's own runtime value directly, admitting
-    /// every shape <see cref="JwsAccessTokenValidator.TryReadStringList"/> admits for the identical
-    /// RFC 7519 section 4.1.3-family <c>aud</c>/<c>amr</c> wire ambiguity, but without that reader's
-    /// filtering: a JSON string is the single value; a JSON array is the multiple-value form only
+    /// every shape <see cref="JwsAccessTokenValidator.ReadStringList"/> admits for the identical
+    /// RFC 7519 section 4.1.3-family <c>aud</c>/<c>amr</c> wire ambiguity, and like it filtering no
+    /// element away: a JSON string is the single value; a JSON array is the multiple-value form only
     /// when it is non-empty and every element is itself a non-empty, whitespace-free JSON string
     /// (RFC 8707 section 2.1: "multiple values are represented as an array of strings"); any other
     /// shape, and any array element that is not such a string (a blank string, a number, a nested

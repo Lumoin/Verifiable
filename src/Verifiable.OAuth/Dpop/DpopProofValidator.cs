@@ -1,5 +1,3 @@
-using System.Buffers;
-using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text;
 using Verifiable.Cryptography;
@@ -24,9 +22,13 @@ public static class DpopProofValidator
     /// <summary>
     /// Validates a DPoP proof against the receiver's expectations, verifying its signature under the verification the receiver
     /// selected, bound to the one algorithm it performs: a proof whose header names another algorithm is refused as
-    /// <see cref="DpopProofValidationFailureReason.InvalidAlg"/> before the function runs.
+    /// <see cref="DpopProofValidationFailureReason.InvalidAlg"/> before the function runs. A part the reading refuses is answered
+    /// with the reading's refusal carried whole (<see cref="DpopProofValidationResult.PartRefusal"/>) beside its coarse category:
+    /// <see cref="DpopProofValidationFailureReason.InvalidTyp"/> for a header carrying no <c>typ</c> (RFC 9449 section 4.3 check
+    /// 4), <see cref="DpopProofValidationFailureReason.JwkContainsPrivateKey"/> for an embedded key carrying private or symmetric
+    /// material whatever its kind, and <see cref="DpopProofValidationFailureReason.Malformed"/> for every other refusal, a
+    /// <c>typ</c> carried as <c>null</c> or as another kind of value among them (check 2).
     /// </summary>
-    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "PublicKeyMemory created via PublicKeyFromJwk is disposed in the finally block of the verification try; the analyzer does not trace the catch-then-finally path correctly here.")]
     public static async ValueTask<DpopProofValidationResult> ValidateAsync(
         DpopProofValidationRequest request,
         JwsAlgorithmVerification verification,
@@ -64,34 +66,32 @@ public static class DpopProofValidator
             return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.Malformed);
         }
 
-        DpopProofPartReading<DpopProofHeader> headerReading;
-        DpopProofPartReading<DpopProofClaims> claimsReading;
-        try
-        {
-            using IMemoryOwner<byte> headerBytes = base64UrlDecoder(parts[0], memoryPool);
-            using IMemoryOwner<byte> payloadBytes = base64UrlDecoder(parts[1], memoryPool);
-            headerReading = parser.ParseHeader(headerBytes.Memory);
-            claimsReading = parser.ParseClaims(payloadBytes.Memory);
-        }
-        catch
-        {
-            //The proof is client-supplied wire input, structurally unverified at this point; a segment
-            //that does not decode is a malformed proof rather than an internal fault.
-            return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.Malformed);
-        }
+        //The proof is client-supplied wire input, structurally unverified at this point; a segment that does not decode is a
+        //malformed proof rather than an internal fault. Only the decoder's own refusal is answered so: a reading never throws on
+        //the bytes it is handed, so any other exception is a fault and is left to surface.
+        var headerReading = JwsSegmentDecoding.ReadOrNone(parts[0], parser.ParseHeader, base64UrlDecoder, memoryPool);
+        var claimsReading = JwsSegmentDecoding.ReadOrNone(parts[1], parser.ParseClaims, base64UrlDecoder, memoryPool);
 
-        //A part the reading refused is a proof that is not well formed (RFC 9449 section 4.3 check 2), except a header that
-        //carries no typ: the typ check names that proof (check 4), as it names one whose typ is another type.
-        if(claimsReading is not DpopProofPartRead<DpopProofClaims> { Part: var claims })
+        if(headerReading is null || claimsReading is null)
         {
             return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.Malformed);
         }
 
-        if(headerReading is not DpopProofPartRead<DpopProofHeader> { Part: var header })
+        //A part the reading refused is answered with the reading's refusal, whole, under the category its typed refusal names.
+        if(claimsReading is DpopProofPartRefused<DpopProofClaims> { Refusal: var claimsRefusal })
         {
-            return DpopProofValidationResult.Failure(IsTypAbsent(headerReading)
-                ? DpopProofValidationFailureReason.InvalidTyp
-                : DpopProofValidationFailureReason.Malformed);
+            return DpopProofValidationResult.PartRefused(CategoryOf(claimsRefusal), claimsRefusal);
+        }
+
+        if(headerReading is DpopProofPartRefused<DpopProofHeader> { Refusal: var headerRefusal })
+        {
+            return DpopProofValidationResult.PartRefused(CategoryOf(headerRefusal), headerRefusal);
+        }
+
+        if(claimsReading is not DpopProofPartRead<DpopProofClaims> { Part: var claims }
+            || headerReading is not DpopProofPartRead<DpopProofHeader> { Part: var header })
+        {
+            throw new InvalidOperationException("A DPoP proof part's reading answered neither the part nor its refusal.");
         }
 
         //Header checks. The typ compares as the RFC 7515 §4.1.9 media type it is: case insensitive,
@@ -140,21 +140,13 @@ public static class DpopProofValidator
             return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.JwkContainsPrivateKey);
         }
 
-        //Reconstruct the proving public key from the embedded JWK. The
-        //validator owns this material and disposes it after the verify call;
-        //distinct from the resolver-owned key path
-        //in [[jws-access-token-validator]] where the caller retains the
+        //Reconstruct the proving public key from the embedded JWK. The validator owns this material and disposes it as the
+        //validation ends; distinct from the resolver-owned key path of the access token validator, where the caller retains the
         //reference.
-        PublicKeyMemory publicKey;
-        try
+        using var publicKey = PublicKeyOf(header, base64UrlDecoder, memoryPool);
+
+        if(publicKey is null)
         {
-            publicKey = DpopJwkUtilities.PublicKeyFromJwk(
-                header.Jwk, header.Alg, base64UrlDecoder, memoryPool);
-        }
-        catch
-        {
-            //header.Jwk is client-supplied wire input; any failure to materialize a key from it is an
-            //invalid JWK rather than an internal fault.
             return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.InvalidJwk);
         }
 
@@ -167,8 +159,6 @@ public static class DpopProofValidator
         //does not accurately represent the operation and is refused before any verification.
         if(JwsKeyAlgorithmBinding.JudgeSuppliedVerification(header.Alg, publicKey, verification) is not null)
         {
-            publicKey.Dispose();
-
             return DpopProofValidationResult.Failure(DpopProofValidationFailureReason.InvalidAlg);
         }
 
@@ -176,17 +166,13 @@ public static class DpopProofValidator
         //library's existing JWS verification primitive (including the pooled
         //signing-input construction and RFC 8725 §3.11 length bound) instead
         //of duplicating those mechanics here.
-        bool signatureValid;
-        using(publicKey)
-        {
-            signatureValid = await Jws.VerifyAsync(
-                request.Proof,
-                base64UrlDecoder,
-                memoryPool,
-                publicKey,
-                verification.Verification,
-                cancellationToken).ConfigureAwait(false);
-        }
+        var signatureValid = await Jws.VerifyAsync(
+            request.Proof,
+            base64UrlDecoder,
+            memoryPool,
+            publicKey,
+            verification.Verification,
+            cancellationToken).ConfigureAwait(false);
 
         if(!signatureValid)
         {
@@ -287,16 +273,42 @@ public static class DpopProofValidator
     }
 
 
-    /// <summary>Whether a header's reading refused it for carrying no <c>typ</c> in its protected header.</summary>
-    /// <param name="headerReading">The header's reading.</param>
-    /// <returns><see langword="true"/> for that refusal.</returns>
-    private static bool IsTypAbsent(DpopProofPartReading<DpopProofHeader> headerReading) =>
-        headerReading is DpopProofPartMemberRefused<DpopProofHeader>
+    /// <summary>
+    /// The coarse category a part's refusal is answered under, decided from the reading's typed refusal: a header carrying no
+    /// <c>typ</c> is the proof the typ check names (RFC 9449 section 4.3 check 4), as it names one whose typ is another type; an
+    /// embedded key carrying private or symmetric material is no public key (section 4.2); every other refusal is a proof that is
+    /// not well formed (check 2).
+    /// </summary>
+    /// <param name="refusal">The reading's refusal.</param>
+    /// <returns>The category.</returns>
+    private static DpopProofValidationFailureReason CategoryOf(JwsPartRefusal refusal) => refusal switch
+    {
+        DpopProofMemberRefusal { Member: DpopProofMember.Typ, Defect: DpopProofMemberDefect.Absent } => DpopProofValidationFailureReason.InvalidTyp,
+        DpopProofMemberRefusal { Defect: DpopProofMemberDefect.PrivateKeyMaterial } => DpopProofValidationFailureReason.JwkContainsPrivateKey,
+        _ => DpopProofValidationFailureReason.Malformed
+    };
+
+
+    /// <summary>
+    /// The proving public key a header's embedded JWK reconstructs, which the caller owns and disposes, or <see langword="null"/>
+    /// when no key materializes from it: the JWK is client-supplied wire input, so any failure to materialize a key from it is
+    /// an invalid JWK rather than an internal fault.
+    /// </summary>
+    /// <param name="header">The header.</param>
+    /// <param name="base64UrlDecoder">The decoder of the key's coordinates.</param>
+    /// <param name="memoryPool">The pool the key material is rented from.</param>
+    /// <returns>The key, or <see langword="null"/>.</returns>
+    private static PublicKeyMemory? PublicKeyOf(DpopProofHeader header, DecodeDelegate base64UrlDecoder, BaseMemoryPool memoryPool)
+    {
+        try
         {
-            Place: DpopProofPartPlace.ProtectedHeader,
-            Defect: DpopProofMemberDefect.Absent
-        } refused
-        && string.Equals(refused.MemberName, WellKnownJoseHeaderNames.Typ, StringComparison.Ordinal);
+            return DpopJwkUtilities.PublicKeyFromJwk(header.Jwk, header.Alg, base64UrlDecoder, memoryPool);
+        }
+        catch
+        {
+            return null;
+        }
+    }
 
 
     /// <summary>

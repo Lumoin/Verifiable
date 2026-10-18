@@ -28,10 +28,12 @@ public sealed record SelfIssuedIdTokenValidationResult
     /// <summary>
     /// Whether the token parsed as a three-part compact JWS with well-formed
     /// base64url-encoded JSON header and payload, the payload one JSON object naming each
-    /// member once and naming Unicode text throughout, whose <c>exp</c> and <c>iat</c>, where
-    /// carried, are NumericDates (RFC 7519 Section 2). A carried <c>exp</c> or <c>iat</c> that
-    /// names no date makes the token structurally invalid, told from an omitted one, which
-    /// leaves <see cref="ExpiresAt"/> or <see cref="IssuedAt"/> <see langword="null"/>.
+    /// member once and naming Unicode text throughout, carrying the <c>iat</c> OpenID Connect
+    /// Core 1.0 Section 2 has REQUIRED of every ID Token (SIOPv2 Section 11), and whose
+    /// <c>iat</c> and, where carried, <c>exp</c> are NumericDates (RFC 7519 Section 2). An
+    /// omitted <c>iat</c>, and a carried <c>exp</c> or <c>iat</c> that names no date, make the
+    /// token structurally invalid; an omitted <c>exp</c> leaves <see cref="ExpiresAt"/>
+    /// <see langword="null"/> and the token expired (<see cref="IsUnexpired"/>).
     /// </summary>
     public bool IsStructurallyValid { get; init; }
 
@@ -104,9 +106,9 @@ public sealed record SelfIssuedIdTokenValidationResult
     public NumericDate? ExpiresAt { get; init; }
 
     /// <summary>
-    /// The <c>iat</c> claim as written, when present. §11.1 leaves the acceptable
-    /// issued-too-far-in-the-past range RP-specific, so the value is surfaced for the
-    /// caller to police.
+    /// The <c>iat</c> claim as written, present on every structurally valid token. §11.1 leaves
+    /// the acceptable issued-too-far-in-the-past range RP-specific, so the value is surfaced for
+    /// the caller to police.
     /// </summary>
     public NumericDate? IssuedAt { get; init; }
 

@@ -64,9 +64,9 @@ internal sealed class JwtPartReadingTests
     /// <param name="expectedName">The member the refusal names, or <see langword="null"/> for a document that is no object.</param>
     /// <param name="expectedDepth">The depth of the object the refusal names, or zero for a document that is no object.</param>
     [TestMethod]
-    [DataRow("""{"sub":"a","sub":"b"}""", "sub", 1, DisplayName = "A repeated claim")]
-    [DataRow("""{"cnf":{"jkt":"a","jkt":"b"}}""", "jkt", 2, DisplayName = "A member repeated in a nested object")]
-    [DataRow("""{"sub":"\uD800"}""", "sub", 1, DisplayName = "A claim naming no Unicode text")]
+    [DataRow(/*lang=json*/ """{"sub":"a","sub":"b"}""", "sub", 1, DisplayName = "A repeated claim")]
+    [DataRow(/*lang=json*/ """{"cnf":{"jkt":"a","jkt":"b"}}""", "jkt", 2, DisplayName = "A member repeated in a nested object")]
+    [DataRow(/*lang=json*/ """{"sub":"\uD800"}""", "sub", 1, DisplayName = "A claim naming no Unicode text")]
     [DataRow("""["sub"]""", null, 0, DisplayName = "An array")]
     [DataRow("""{"sub":"a"} {}""", null, 0, DisplayName = "A value followed by another")]
     public void APartTheJudgementRefusesIsAnsweredWithItsRefusal(string json, string? expectedName, int expectedDepth)

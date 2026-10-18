@@ -60,8 +60,15 @@ namespace Verifiable.OAuth;
 ///   <item>
 ///     <description>
 ///       <see cref="OAuthMemberNotAString"/> — the token response carries a parameter defined as a
-///       string, <c>refresh_token</c>, <c>scope</c>, <c>id_token</c> or <c>issued_token_type</c>, but as
-///       a value of another kind, naming the parameter and the kind and never the value.
+///       string, <c>access_token</c>, <c>token_type</c>, <c>refresh_token</c>, <c>scope</c>, <c>id_token</c>
+///       or <c>issued_token_type</c>, but as a value of another kind, naming the parameter and the kind and
+///       never the value.
+///     </description>
+///   </item>
+///   <item>
+///     <description>
+///       <see cref="OAuthRequiredMemberAbsent"/> — the response omits a parameter its specification
+///       requires, naming the parameter and carrying none of the response.
 ///     </description>
 ///   </item>
 ///   <item>
@@ -176,9 +183,9 @@ public sealed record OAuthProtocolError(
 /// returned an HTML error page, the connection was truncated, or the server
 /// has a bug. The raw <see cref="Body"/> is preserved for logging and diagnostic
 /// purposes. It is the whole body as received, so it can carry credential text: a token
-/// answer refused for carrying no <c>token_type</c> carries its access token there, and one
-/// that is no well-formed JSON object or carries no <c>access_token</c> carries whatever
-/// refresh token or ID Token it holds.
+/// answer refused as no JSON object at all carries whatever access token, refresh token or
+/// ID Token it holds. A token answer that is one JSON object and omits a required parameter
+/// is refused as <see cref="OAuthRequiredMemberAbsent"/>, which copies none of the body.
 /// </remarks>
 public sealed record OAuthMalformedResponse(
     string Body,
@@ -319,8 +326,8 @@ public sealed record OAuthInvalidLifetime(
 
 
 /// <summary>
-/// A token response carries a parameter its specification defines as a string - <c>refresh_token</c> and <c>scope</c> (RFC 6749
-/// section 5.1, appendices A.17 and A.4), <c>id_token</c> (OpenID Connect Core 1.0 section 3.1.3.3) or <c>issued_token_type</c>
+/// A token response carries a parameter its specification defines as a string - <c>access_token</c>, <c>token_type</c>,
+/// <c>refresh_token</c> and <c>scope</c> (RFC 6749 section 5.1, appendices A.12, A.13, A.17 and A.4), <c>id_token</c> (OpenID Connect Core 1.0 section 3.1.3.3) or <c>issued_token_type</c>
 /// (RFC 8693 section 2.2.1) - but as a value of another kind: a number, a literal, an object or an array. A present member is
 /// judged as present, never read as an omitted one: RFC 6749 section 5.1 lets a response omit <c>scope</c> only when the scope
 /// granted is the scope requested, so reading a present scope of another kind as an omitted one would record the scope requested
@@ -336,6 +343,22 @@ public sealed record OAuthInvalidLifetime(
 public sealed record OAuthMemberNotAString(
     string MemberName,
     JsonTopLevelValueKind Kind,
+    DecisionSupport Support) : OAuthParseError(Support);
+
+
+/// <summary>
+/// A response omits a parameter its specification requires - the <c>access_token</c> or <c>token_type</c> of a token response
+/// (RFC 6749 section 5.1), or the <c>issued_token_type</c> of a token exchange response (RFC 8693 section 2.2.1) - told from one
+/// it carries as a value of another kind (<see cref="OAuthMemberNotAString"/>).
+/// </summary>
+/// <remarks>
+/// Names the parameter and nothing else: no value is received, so none is carried, and no part of the response body, which can
+/// carry credential text, is copied.
+/// </remarks>
+/// <param name="MemberName">The parameter's name.</param>
+/// <param name="Support">Guidance for the calling application.</param>
+public sealed record OAuthRequiredMemberAbsent(
+    string MemberName,
     DecisionSupport Support) : OAuthParseError(Support);
 
 

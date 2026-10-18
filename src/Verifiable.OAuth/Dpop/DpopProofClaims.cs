@@ -72,53 +72,53 @@ public sealed record DpopProofClaims
 
         if(reading is not JsonTopLevelMembers members)
         {
-            return new DpopProofPartDocumentRefused<DpopProofClaims>(DpopProofPartPlace.Claims, reading);
+            return new DpopProofPartRefused<DpopProofClaims>(new JwsPartDocumentRefusal(JwsPart.Payload, reading));
         }
 
         var jti = members.Find(WellKnownJwtClaimNames.Jti);
 
         if(jti is not JsonMemberString jtiText)
         {
-            return StringMemberRefused(WellKnownJwtClaimNames.Jti, jti);
+            return StringMemberRefused(DpopProofMember.Jti, WellKnownJwtClaimNames.Jti, jti);
         }
 
         var htm = members.Find(WellKnownJwtClaimNames.Htm);
 
         if(htm is not JsonMemberString htmText)
         {
-            return StringMemberRefused(WellKnownJwtClaimNames.Htm, htm);
+            return StringMemberRefused(DpopProofMember.Htm, WellKnownJwtClaimNames.Htm, htm);
         }
 
         var htu = members.Find(WellKnownJwtClaimNames.Htu);
 
         if(htu is not JsonMemberString htuText)
         {
-            return StringMemberRefused(WellKnownJwtClaimNames.Htu, htu);
+            return StringMemberRefused(DpopProofMember.Htu, WellKnownJwtClaimNames.Htu, htu);
         }
 
         var iat = members.Find(WellKnownJwtClaimNames.Iat);
 
         if(iat is not JsonMemberNumber iatNumber || iatNumber.ToNumericDate() is not NumericDate issuedAt)
         {
-            return new DpopProofPartMemberRefused<DpopProofClaims>(
-                DpopProofPartPlace.Claims,
+            return new DpopProofPartRefused<DpopProofClaims>(new DpopProofMemberRefusal(
+                DpopProofMember.Iat,
                 WellKnownJwtClaimNames.Iat,
                 iat,
-                iat is JsonMemberAbsent ? DpopProofMemberDefect.Absent : DpopProofMemberDefect.NotANumericDate);
+                iat is JsonMemberAbsent ? DpopProofMemberDefect.Absent : DpopProofMemberDefect.NotANumericDate));
         }
 
         var nonce = members.Find(WellKnownJwtClaimNames.Nonce);
 
         if(nonce is not (JsonMemberAbsent or JsonMemberString))
         {
-            return StringMemberRefused(WellKnownJwtClaimNames.Nonce, nonce);
+            return StringMemberRefused(DpopProofMember.Nonce, WellKnownJwtClaimNames.Nonce, nonce);
         }
 
         var ath = members.Find(WellKnownJwtClaimNames.Ath);
 
         if(ath is not (JsonMemberAbsent or JsonMemberString))
         {
-            return StringMemberRefused(WellKnownJwtClaimNames.Ath, ath);
+            return StringMemberRefused(DpopProofMember.Ath, WellKnownJwtClaimNames.Ath, ath);
         }
 
         return new DpopProofPartRead<DpopProofClaims>(new DpopProofClaims
@@ -134,9 +134,10 @@ public sealed record DpopProofClaims
 
 
     /// <summary>The refusal of a claims set for a claim read as a string that is absent or of another kind.</summary>
+    /// <param name="member">Which claim it is.</param>
     /// <param name="name">The claim's name.</param>
     /// <param name="carried">The claim as the reader answered it.</param>
     /// <returns>The refusal.</returns>
-    private static DpopProofPartMemberRefused<DpopProofClaims> StringMemberRefused(string name, JsonMemberLookup carried) =>
-        new(DpopProofPartPlace.Claims, name, carried, carried is JsonMemberAbsent ? DpopProofMemberDefect.Absent : DpopProofMemberDefect.NotAString);
+    private static DpopProofPartRefused<DpopProofClaims> StringMemberRefused(DpopProofMember member, string name, JsonMemberLookup carried) =>
+        new(DpopProofMemberRefusal.ForStringMember(member, name, carried));
 }

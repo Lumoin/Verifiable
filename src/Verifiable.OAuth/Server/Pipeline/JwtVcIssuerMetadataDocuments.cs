@@ -192,6 +192,19 @@ public static class JwtVcIssuerMetadataDocuments
             //JWK Set object JwkJsonReader.SelectKeyByKeyId/SelectSoleKey can scan directly — unlike
             //ExtractObjectContent's brace-exclusive span, which is not itself well-formed JSON.
             jwks = JwkJsonReader.ExtractObjectAsString(body, ClientMetadataParameterNames.JwksUtf8);
+
+            //A present jwks is a JWK Set (RFC 7517 Section 5): a JSON object whose keys member is an array of JWK objects. One of
+            //another kind, or a set of another shape, is refused before the document is reported resolved, so no freshness is
+            //ever reported for a document whose key set no selection could read.
+            if(jwks is null || !IsJwkSet(jwks))
+            {
+                return new JwtVcIssuerMetadataResolution
+                {
+                    Outcome = JwtVcIssuerMetadataResolutionOutcome.InvalidDocument,
+                    Issuer = documentIssuer,
+                    Defect = "The document's 'jwks' is not a JWK Set: a JSON object whose 'keys' member is an array of JSON objects."
+                };
+            }
         }
         else
         {
@@ -320,6 +333,19 @@ public static class JwtVcIssuerMetadataDocuments
             return null;
         }
     }
+
+
+    /// <summary>
+    /// Whether an inline <c>jwks</c> is a JWK Set (RFC 7517 Section 5): one JSON object, read by the library's one reading of a
+    /// document's members, whose <c>keys</c> member (Section 5.1, REQUIRED) is an array every element of which is a JSON object.
+    /// </summary>
+    /// <param name="jwks">The <c>jwks</c> member's JSON text.</param>
+    /// <returns><see langword="true"/> for a JWK Set.</returns>
+    private static bool IsJwkSet(string jwks) =>
+        JwkJsonReader.ReadTopLevelMembers(Encoding.UTF8.GetBytes(jwks)) is JsonTopLevelMembers set
+        && set.Members.FirstOrDefault(static member => WellKnownJwkMemberNames.IsKeys(member.Name)) is { } keys
+        && keys.ArrayElements() is { } elements
+        && elements.All(static element => element is JsonMemberOfOtherKind { Kind: JsonTopLevelValueKind.Object });
 
 
     /// <summary>

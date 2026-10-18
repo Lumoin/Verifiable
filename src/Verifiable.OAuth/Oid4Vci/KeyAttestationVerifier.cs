@@ -62,6 +62,7 @@ public static class KeyAttestationVerifier
     /// cryptographic backends keyed on the resolved Wallet-Provider key's algorithm.
     /// </summary>
     /// <param name="compactAttestation">The compact <c>key-attestation+jwt</c>.</param>
+    /// <param name="proofUse">The use the attestation is verified for, which decides whether its <c>exp</c> is required (Appendix D.1).</param>
     /// <param name="expectedNonce">The <c>nonce</c> the Issuer provided that the attestation must echo, or <see langword="null"/> when none was issued.</param>
     /// <param name="nonceRequired">Whether a <c>nonce</c> is required (the Issuer supplied one).</param>
     /// <param name="isAttestationSigningAlgAcceptable">Predicate deciding whether the attestation's <c>alg</c> is acceptable per the application's policy.</param>
@@ -76,6 +77,7 @@ public static class KeyAttestationVerifier
     /// <returns>The verification result carrying the verified attestation on success.</returns>
     public static ValueTask<KeyAttestationVerificationResult> VerifyAsync(
         string compactAttestation,
+        KeyAttestationProofUse proofUse,
         string? expectedNonce,
         bool nonceRequired,
         Func<string, bool> isAttestationSigningAlgAcceptable,
@@ -89,6 +91,7 @@ public static class KeyAttestationVerifier
         CancellationToken cancellationToken) =>
         VerifyCoreAsync(
             compactAttestation,
+            proofUse,
             expectedNonce,
             nonceRequired,
             verificationDelegate: null,
@@ -108,6 +111,7 @@ public static class KeyAttestationVerifier
     /// signature step.
     /// </summary>
     /// <param name="compactAttestation">The compact <c>key-attestation+jwt</c>.</param>
+    /// <param name="proofUse">The use the attestation is verified for, which decides whether its <c>exp</c> is required (Appendix D.1).</param>
     /// <param name="expectedNonce">The <c>nonce</c> the Issuer provided that the attestation must echo, or <see langword="null"/> when none was issued.</param>
     /// <param name="nonceRequired">Whether a <c>nonce</c> is required (the Issuer supplied one).</param>
     /// <param name="verificationDelegate">The signature-verification function for the attestation's algorithm.</param>
@@ -123,6 +127,7 @@ public static class KeyAttestationVerifier
     /// <returns>The verification result carrying the verified attestation on success.</returns>
     public static ValueTask<KeyAttestationVerificationResult> VerifyAsync(
         string compactAttestation,
+        KeyAttestationProofUse proofUse,
         string? expectedNonce,
         bool nonceRequired,
         VerificationDelegate verificationDelegate,
@@ -140,6 +145,7 @@ public static class KeyAttestationVerifier
 
         return VerifyCoreAsync(
             compactAttestation,
+            proofUse,
             expectedNonce,
             nonceRequired,
             verificationDelegate,
@@ -155,8 +161,29 @@ public static class KeyAttestationVerifier
     }
 
 
+    /// <summary>
+    /// The one verification both public overloads share: the three-part shape, the structural parse, the header's key reference
+    /// and algorithm, the signature under the resolved Wallet-Provider key - by the given function, or by the registered backend
+    /// for the key's algorithm when none is given - the <c>exp</c> as the attestation's use requires it, and the <c>nonce</c>.
+    /// </summary>
+    /// <param name="compactAttestation">The compact <c>key-attestation+jwt</c>.</param>
+    /// <param name="proofUse">The use the attestation is verified for, which decides whether its <c>exp</c> is required (Appendix D.1).</param>
+    /// <param name="expectedNonce">The <c>nonce</c> the Issuer provided that the attestation must echo, or <see langword="null"/> when none was issued.</param>
+    /// <param name="nonceRequired">Whether a <c>nonce</c> is required (the Issuer supplied one).</param>
+    /// <param name="verificationDelegate">The signature-verification function, or <see langword="null"/> to resolve it from the registered backends.</param>
+    /// <param name="isAttestationSigningAlgAcceptable">Predicate deciding whether the attestation's <c>alg</c> is acceptable per the application's policy.</param>
+    /// <param name="resolveWalletProviderKey">Resolves the Wallet-Provider key for the <c>kid</c> reference mode, or <see langword="null"/> when that mode is unsupported.</param>
+    /// <param name="x509Verification">Resolves the Wallet-Provider key for the <c>x5c</c> reference mode, or <see langword="null"/> when that mode is unsupported.</param>
+    /// <param name="context">The per-request context carrying the <c>x5c</c> trust anchors / validity instant and the SSRF policy.</param>
+    /// <param name="base64UrlDecoder">Base64url decoder for the JWS segments and JWK coordinates.</param>
+    /// <param name="timeProvider">The clock the <c>exp</c> check is measured against.</param>
+    /// <param name="memoryPool">Memory pool for the transient decode/verify buffers.</param>
+    /// <param name="clockSkew">The leniency added to <c>exp</c> before treating the attestation as expired.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The verification result carrying the verified attestation on success.</returns>
     private static async ValueTask<KeyAttestationVerificationResult> VerifyCoreAsync(
         string compactAttestation,
+        KeyAttestationProofUse proofUse,
         string? expectedNonce,
         bool nonceRequired,
         VerificationDelegate? verificationDelegate,
@@ -291,11 +318,17 @@ public static class KeyAttestationVerifier
             return KeyAttestationVerificationResult.Failure(KeyAttestationVerificationFailureReason.SignatureFailed);
         }
 
-        //Appendix D.1: a present exp bounds the attestation (and its attested keys); an exp at or before
-        //the present, with the caller's skew leniency, expires it (RFC 7519 Section 4.1.4: the present
-        //must lie before exp), compared without forming the extended instant, so no exp overflows it.
-        //The parser refused an exp that is no NumericDate, so an attestation without one omitted it: exp
-        //is OPTIONAL in Appendix D.1, and such an attestation carries no expiry of its own.
+        //Appendix D.1: exp is OPTIONAL, but "MUST be present if the attestation is used with the JWT proof type". The parser
+        //refused an exp that is no integral NumericDate, so an attestation without one omitted it, which is refused where the
+        //caller states the JWT-proof use and valid otherwise.
+        if(attestation.ExpiresAt is null && proofUse is KeyAttestationProofUse.JwtProof)
+        {
+            return KeyAttestationVerificationResult.Failure(KeyAttestationVerificationFailureReason.ExpiryNotPresented);
+        }
+
+        //A present exp bounds the attestation (and its attested keys); an exp at or before the present, with the caller's skew
+        //leniency, expires it (RFC 7519 Section 4.1.4: the present must lie before exp), compared without forming the extended
+        //instant, so no exp overflows it.
         if(attestation.ExpiresAt is NumericDate expiresAt
             && !JwtTemporalChecks.IsBeforeExpiry(timeProvider.GetUtcNow(), expiresAt, clockSkew))
         {

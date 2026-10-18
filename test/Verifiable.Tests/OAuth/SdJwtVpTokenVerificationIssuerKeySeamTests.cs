@@ -163,7 +163,7 @@ internal sealed class SdJwtVpTokenVerificationIssuerKeySeamTests
                     Pool,
                     cancellationToken);
 
-        VpTokenParsed parsed = await SdJwtVpTokenVerification.VerifyAsync(
+        var parsed = (await SdJwtVpTokenVerification.VerifyAsync(
             serializedSdJwt,
             new CredentialQueryId(IdentityCredentialQueryId),
             parseSdJwtToken: static s => SdJwtSerializer.ParseToken(
@@ -178,7 +178,7 @@ internal sealed class SdJwtVpTokenVerificationIssuerKeySeamTests
             parseX5c: null,
             resolveTrustedAuthorityEvidence: null,
             context: new ExchangeContext(),
-            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ExpectVerified();
 
         Assert.IsTrue(parsed.CredentialSignatureValid, "A chain reaching a configured trust anchor must resolve the issuer key and verify the credential signature.");
     }
@@ -218,7 +218,7 @@ internal sealed class SdJwtVpTokenVerificationIssuerKeySeamTests
                     Pool,
                     cancellationToken);
 
-        VpTokenParsed parsed = await SdJwtVpTokenVerification.VerifyAsync(
+        var parsed = (await SdJwtVpTokenVerification.VerifyAsync(
             serializedSdJwt,
             new CredentialQueryId(IdentityCredentialQueryId),
             parseSdJwtToken: static s => SdJwtSerializer.ParseToken(
@@ -233,7 +233,7 @@ internal sealed class SdJwtVpTokenVerificationIssuerKeySeamTests
             parseX5c: null,
             resolveTrustedAuthorityEvidence: null,
             context: new ExchangeContext(),
-            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ExpectVerified();
 
         Assert.IsFalse(parsed.CredentialSignatureValid, "A chain reaching no configured trust anchor must leave the credential signature unverified.");
     }
@@ -310,7 +310,7 @@ internal sealed class SdJwtVpTokenVerificationIssuerKeySeamTests
         (System.Net.Http.HttpClient issuerHttpClient, ResolveIssuerKeyDelegate resolveIssuerKey) = PublishJwksAndBuildResolver(issuerHost, [issuerJwk]);
         using System.Net.Http.HttpClient _ = issuerHttpClient;
 
-        VpTokenParsed parsed = await SdJwtVpTokenVerification.VerifyAsync(
+        var parsed = (await SdJwtVpTokenVerification.VerifyAsync(
             serializedSdJwt,
             new CredentialQueryId(IdentityCredentialQueryId),
             parseSdJwtToken: static s => SdJwtSerializer.ParseToken(
@@ -325,7 +325,7 @@ internal sealed class SdJwtVpTokenVerificationIssuerKeySeamTests
             parseX5c: null,
             resolveTrustedAuthorityEvidence: null,
             context: new ExchangeContext(),
-            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ExpectVerified();
 
         Assert.IsFalse(parsed.CredentialSignatureValid,
             "A JWK Set that publishes private material alongside the matching key must resolve no verification key.");
@@ -357,7 +357,7 @@ internal sealed class SdJwtVpTokenVerificationIssuerKeySeamTests
         (System.Net.Http.HttpClient issuerHttpClient, ResolveIssuerKeyDelegate resolveIssuerKey) = PublishJwksAndBuildResolver(issuerHost, [issuerJwk]);
         using System.Net.Http.HttpClient _ = issuerHttpClient;
 
-        VpTokenParsed parsed = await SdJwtVpTokenVerification.VerifyAsync(
+        var parsed = (await SdJwtVpTokenVerification.VerifyAsync(
             serializedSdJwt,
             new CredentialQueryId(IdentityCredentialQueryId),
             parseSdJwtToken: static s => SdJwtSerializer.ParseToken(
@@ -372,7 +372,7 @@ internal sealed class SdJwtVpTokenVerificationIssuerKeySeamTests
             parseX5c: null,
             resolveTrustedAuthorityEvidence: null,
             context: new ExchangeContext(),
-            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ExpectVerified();
 
         Assert.IsTrue(parsed.CredentialSignatureValid,
             "A JWK Set carrying only the clean, matching key must resolve it and verify the credential's signature.");
@@ -410,7 +410,7 @@ internal sealed class SdJwtVpTokenVerificationIssuerKeySeamTests
         (System.Net.Http.HttpClient issuerHttpClient, ResolveIssuerKeyDelegate resolveIssuerKey) = PublishJwksAndBuildResolver(issuerHost, [issuerJwk, unrelatedJwk]);
         using System.Net.Http.HttpClient _ = issuerHttpClient;
 
-        VpTokenParsed parsed = await SdJwtVpTokenVerification.VerifyAsync(
+        var parsed = (await SdJwtVpTokenVerification.VerifyAsync(
             serializedSdJwt,
             new CredentialQueryId(IdentityCredentialQueryId),
             parseSdJwtToken: static s => SdJwtSerializer.ParseToken(
@@ -425,7 +425,7 @@ internal sealed class SdJwtVpTokenVerificationIssuerKeySeamTests
             parseX5c: null,
             resolveTrustedAuthorityEvidence: null,
             context: new ExchangeContext(),
-            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ExpectVerified();
 
         Assert.IsFalse(parsed.CredentialSignatureValid,
             "An unrelated element carrying private material must refuse the whole set, even though the requested kid matches only the clean key.");
@@ -685,7 +685,7 @@ internal sealed class SdJwtVpTokenVerificationIssuerKeySeamTests
         (System.Net.Http.HttpClient issuerHttpClient, ResolveIssuerKeyDelegate resolveIssuerKey) = PublishJwksAndBuildResolver(issuerHost, keys);
         using System.Net.Http.HttpClient _ = issuerHttpClient;
 
-        VpTokenParsed parsed = await SdJwtVpTokenVerification.VerifyAsync(
+        var parsed = (await SdJwtVpTokenVerification.VerifyAsync(
             serializedSdJwt,
             new CredentialQueryId(IdentityCredentialQueryId),
             parseSdJwtToken: static s => SdJwtSerializer.ParseToken(
@@ -700,7 +700,7 @@ internal sealed class SdJwtVpTokenVerificationIssuerKeySeamTests
             parseX5c: null,
             resolveTrustedAuthorityEvidence: null,
             context: new ExchangeContext(),
-            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ExpectVerified();
 
         Assert.AreEqual(expectAccepted, parsed.CredentialSignatureValid, context);
     }

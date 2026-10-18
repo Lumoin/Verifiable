@@ -900,6 +900,112 @@ internal sealed class JwsAccessTokenValidatorTests
     }
 
 
+    /// <summary>
+    /// The reading's refusal of a token's part is carried into the validation result whole, with the segment it concerns, beside
+    /// the coarse category: a header repeating <c>alg</c> as the JSON reader's refusal of the protected header, a claims set
+    /// repeating <c>scope</c> or holding a claim naming no Unicode text as its refusal of the payload; a failure no reading
+    /// refused - an <c>exp</c> of digits in a string - carries none.
+    /// </summary>
+    /// <returns>A task completing once the tokens are judged.</returns>
+    [TestMethod]
+    public async Task ValidatorCarriesTheReadingsRefusalWithTheSegmentItConcerns()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        var repeatedAlgHeader = string.Concat(RawHeaderJson.AsSpan(0, RawHeaderJson.Length - 1), ",\"alg\":\"ES256\"}");
+
+        var header = await ValidateAsync(await SignRawAsync(keys.PrivateKey, repeatedAlgHeader, RawPayloadJson(string.Empty, string.Empty)).ConfigureAwait(false), keys.PublicKey).ConfigureAwait(false);
+        var repeated = await ValidateAsync(await SignRawAsync(keys.PrivateKey, RawHeaderJson, RawPayloadJson(string.Empty, ",\"scope\":\"more\"")).ConfigureAwait(false), keys.PublicKey).ConfigureAwait(false);
+        var undecodable = await ValidateAsync(await SignRawAsync(keys.PrivateKey, RawHeaderJson, RawPayloadJson(string.Empty, ",\"note\":\"\\uD800\"")).ConfigureAwait(false), keys.PublicKey).ConfigureAwait(false);
+        var unread = await ValidateAsync(await SignRawAsync(keys.PrivateKey, RawHeaderJson, RawPayloadJson("exp", ",\"exp\":\"1900000000\"")).ConfigureAwait(false), keys.PublicKey).ConfigureAwait(false);
+
+        Assert.AreEqual(JwsAccessTokenValidationFailureReason.InvalidHeader, header.FailureReason);
+        Assert.AreEqual(JwsPart.ProtectedHeader, header.PartRefusal?.Part);
+        Assert.AreEqual(WellKnownJoseHeaderNames.Alg, ((header.PartRefusal as JwsPartDocumentRefusal)?.Refusal as JsonRepeatedMemberName)?.Name);
+
+        Assert.AreEqual(JwsAccessTokenValidationFailureReason.Malformed, repeated.FailureReason);
+        Assert.AreEqual(JwsPart.Payload, repeated.PartRefusal?.Part);
+        Assert.AreEqual(WellKnownJwtClaimNames.Scope, ((repeated.PartRefusal as JwsPartDocumentRefusal)?.Refusal as JsonRepeatedMemberName)?.Name);
+
+        Assert.AreEqual(JwsAccessTokenValidationFailureReason.Malformed, undecodable.FailureReason);
+        _ = Assert.IsInstanceOfType<JsonUndecodableMember>((undecodable.PartRefusal as JwsPartDocumentRefusal)?.Refusal);
+
+        Assert.AreEqual(JwsAccessTokenValidationFailureReason.Malformed, unread.FailureReason);
+        Assert.IsNull(unread.PartRefusal, "A failure no reading refused carries no reading's refusal.");
+    }
+
+
+    /// <summary>
+    /// RFC 7519 section 4.1.3: <c>aud</c> is one StringOrURI or an array of them. A token whose <c>aud</c> array holds the expected
+    /// audience beside an element that is no non-empty string - <c>null</c>, a number, an empty string - is refused as malformed
+    /// as a whole, never filtered into the audience it does name; an empty array, an empty string and a value of another kind are
+    /// malformed too, told from an omitted <c>aud</c>, which is a missing required claim; the expected audience alone, as a string
+    /// or a one-element array, validates.
+    /// </summary>
+    /// <param name="audienceJson">The <c>aud</c>'s JSON text, or empty to omit it.</param>
+    /// <param name="expected">The reason the token is refused with, or <see langword="null"/> for a valid token.</param>
+    /// <returns>A task completing once the token is judged.</returns>
+    [TestMethod]
+    [DataRow($"[\"{DefaultAudience}\",null]", JwsAccessTokenValidationFailureReason.Malformed, DisplayName = "An array holding null")]
+    [DataRow($"[\"{DefaultAudience}\",123]", JwsAccessTokenValidationFailureReason.Malformed, DisplayName = "An array holding a number")]
+    [DataRow($"[\"{DefaultAudience}\",\"\"]", JwsAccessTokenValidationFailureReason.Malformed, DisplayName = "An array holding an empty string")]
+    [DataRow("[]", JwsAccessTokenValidationFailureReason.Malformed, DisplayName = "An empty array")]
+    [DataRow("\"\"", JwsAccessTokenValidationFailureReason.Malformed, DisplayName = "An empty string")]
+    [DataRow("7", JwsAccessTokenValidationFailureReason.Malformed, DisplayName = "A number")]
+    [DataRow("", JwsAccessTokenValidationFailureReason.MissingRequiredClaim, DisplayName = "An omitted aud")]
+    [DataRow($"[\"{DefaultAudience}\"]", null, DisplayName = "The expected audience in an array")]
+    [DataRow($"\"{DefaultAudience}\"", null, DisplayName = "The expected audience as a string")]
+    public async Task AMalformedAudienceIsRefusedWholeAndToldFromAnOmittedOne(string audienceJson, JwsAccessTokenValidationFailureReason? expected)
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        var token = await SignRawAsync(keys.PrivateKey, RawHeaderJson, RawClaimsJson(audienceJson, DefaultConfirmationJson)).ConfigureAwait(false);
+
+        var result = await ValidateAsync(token, keys.PublicKey).ConfigureAwait(false);
+
+        Assert.AreEqual(expected, result.FailureReason, $"{audienceJson}: {result.FailureDescription}");
+    }
+
+
+    /// <summary>
+    /// RFC 7800 section 3: a <c>cnf</c> names the key a token is bound to. One that is no JSON object, <c>null</c> among them, one
+    /// carrying no member, and one carrying the <c>jkt</c> of RFC 9449 section 6.1 as no non-empty string are refused as malformed,
+    /// never read as an unbound token; one carrying a confirmation method this library does not verify possession under - the
+    /// <c>x5t#S256</c> of RFC 8705 section 3.1, alone or beside a <c>jkt</c> - is refused as such, never read as unbound nor as
+    /// bound by the <c>jkt</c> alone; an omitted <c>cnf</c> validates as unbound and a <c>jkt</c> as bound to it.
+    /// </summary>
+    /// <param name="confirmationJson">The <c>cnf</c>'s JSON text, or empty to omit it.</param>
+    /// <param name="expected">The reason the token is refused with, or <see langword="null"/> for a valid token.</param>
+    /// <param name="boundThumbprint">The thumbprint a valid token is bound to, or <see langword="null"/> for an unbound one.</param>
+    /// <returns>A task completing once the token is judged.</returns>
+    [TestMethod]
+    [DataRow("null", JwsAccessTokenValidationFailureReason.Malformed, null, DisplayName = "A null cnf")]
+    [DataRow("\"bound-key-thumbprint\"", JwsAccessTokenValidationFailureReason.Malformed, null, DisplayName = "A cnf that is a string")]
+    [DataRow("{}", JwsAccessTokenValidationFailureReason.Malformed, null, DisplayName = "A cnf carrying no method")]
+    [DataRow(/*lang=json,strict*/ "{\"jkt\":5}", JwsAccessTokenValidationFailureReason.Malformed, null, DisplayName = "A jkt that is a number")]
+    [DataRow(/*lang=json,strict*/ "{\"jkt\":\"\"}", JwsAccessTokenValidationFailureReason.Malformed, null, DisplayName = "A jkt that is empty")]
+    [DataRow(/*lang=json,strict*/ "{\"x5t#S256\":\"certificate-thumbprint\"}", JwsAccessTokenValidationFailureReason.UnsupportedConfirmationMethod, null, DisplayName = "A certificate-bound cnf")]
+    [DataRow(/*lang=json,strict*/ "{\"jkt\":\"bound-key-thumbprint\",\"x5t#S256\":\"certificate-thumbprint\"}", JwsAccessTokenValidationFailureReason.UnsupportedConfirmationMethod, null, DisplayName = "A jkt beside an unverified method")]
+    [DataRow("", null, null, DisplayName = "An omitted cnf")]
+    [DataRow(/*lang=json,strict*/ "{\"jkt\":\"bound-key-thumbprint\"}", null, "bound-key-thumbprint", DisplayName = "A jkt")]
+    public async Task AMalformedConfirmationIsNeverReadAsAnUnboundToken(
+        string confirmationJson, JwsAccessTokenValidationFailureReason? expected, string? boundThumbprint)
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        var token = await SignRawAsync(keys.PrivateKey, RawHeaderJson, RawClaimsJson(DefaultAudienceJson, confirmationJson)).ConfigureAwait(false);
+
+        var result = await ValidateAsync(token, keys.PublicKey).ConfigureAwait(false);
+
+        Assert.AreEqual(expected, result.FailureReason, $"{confirmationJson}: {result.FailureDescription}");
+        Assert.AreEqual(boundThumbprint, result.Claims?.Confirmation?.JwkThumbprint, confirmationJson);
+    }
+
+
+    /// <summary>The <c>aud</c> of a hand-written access token: this suite's audience beside another resource.</summary>
+    private const string DefaultAudienceJson = $"[\"{DefaultAudience}\",\"another-resource\"]";
+
+    /// <summary>The <c>cnf</c> of a hand-written access token: a DPoP key thumbprint (RFC 9449 section 6.1).</summary>
+    private const string DefaultConfirmationJson = /*lang=json,strict*/ "{\"jkt\":\"bound-key-thumbprint\"}";
+
+
     /// <summary>The header of a hand-written access token: ES256 under this suite's key identifier, typed <c>at+jwt</c> (RFC 9068 section 2.1).</summary>
     private static string RawHeaderJson => "{\"alg\":\"ES256\",\"kid\":\"" + DefaultKid + "\",\"typ\":\"at+jwt\"}";
 
@@ -920,11 +1026,26 @@ internal sealed class JwsAccessTokenValidatorTests
     private static string RawPayloadJson(string omitted, string appended) =>
         "{\"iss\":\"" + DefaultIssuer + "\","
         + (WellKnownJwtClaimNames.IsSub(omitted) ? string.Empty : "\"sub\":\"" + DefaultSubject + "\",")
-        + "\"aud\":[\"" + DefaultAudience + "\",\"another-resource\"],"
+        + "\"aud\":" + DefaultAudienceJson + ","
         + (WellKnownJwtClaimNames.IsExp(omitted) ? string.Empty : "\"exp\":" + RawExpiry + ",")
         + "\"iat\":" + RawIssuedAt + ",\"client_id\":\"" + DefaultClientId + "\",\"scope\":\"" + DefaultScope + "\","
-        + "\"jti\":\"token-1\",\"cnf\":{\"jkt\":\"bound-key-thumbprint\"},\"act\":{\"sub\":\"agent\",\"act\":{\"sub\":\"earlier-agent\"}}"
+        + "\"jti\":\"token-1\",\"cnf\":" + DefaultConfirmationJson + ",\"act\":{\"sub\":\"agent\",\"act\":{\"sub\":\"earlier-agent\"}}"
         + appended + "}";
+
+
+    /// <summary>
+    /// The claims set of a hand-written access token valid for this suite but for its <c>aud</c> and <c>cnf</c>, each written as
+    /// given and omitted where empty.
+    /// </summary>
+    /// <param name="audienceJson">The <c>aud</c>'s JSON text, or empty to omit it.</param>
+    /// <param name="confirmationJson">The <c>cnf</c>'s JSON text, or empty to omit it.</param>
+    /// <returns>The claims set's JSON text.</returns>
+    private static string RawClaimsJson(string audienceJson, string confirmationJson) =>
+        "{\"iss\":\"" + DefaultIssuer + "\",\"sub\":\"" + DefaultSubject + "\","
+        + (audienceJson.Length == 0 ? string.Empty : "\"aud\":" + audienceJson + ",")
+        + "\"exp\":" + RawExpiry + ",\"iat\":" + RawIssuedAt + ",\"jti\":\"token-1\""
+        + (confirmationJson.Length == 0 ? string.Empty : ",\"cnf\":" + confirmationJson)
+        + "}";
 
 
     /// <summary>Signs a hand-written header and claims set over their exact UTF-8 bytes, never through a serializer.</summary>

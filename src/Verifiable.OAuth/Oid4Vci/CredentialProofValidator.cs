@@ -499,8 +499,9 @@ public static class CredentialProofValidator
         List<string>? x5cValues;
         Dictionary<string, object>? jwkMembers;
         string? audience;
-        NumericDate? issuedAt;
+        var issuedAt = default(NumericDate);
         string? nonce;
+
         try
         {
             using IMemoryOwner<byte> headerOwner = base64UrlDecoder(parts[0], memoryPool);

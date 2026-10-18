@@ -5,33 +5,31 @@ using System.Text.Unicode;
 namespace Verifiable.JCose;
 
 /// <summary>
-/// Span-based, zero-allocation JSON reader for extracting string field values from
-/// JWK and JWE header JSON representations.
+/// The library's own reader of the JSON documents a protocol reads - JOSE headers and claims sets, JWKs and JWK Sets, metadata
+/// documents and endpoint responses - on UTF-8 byte spans, depending on no JSON serialisation library, so the
+/// <c>Verifiable.Cryptography</c> types and the protocol libraries above it stay free of one.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Operates directly on UTF-8 byte spans without allocating or depending on a JSON
-/// serialisation library. Suitable for use in <c>Verifiable.Cryptography</c> types
-/// that must remain serialisation-library-free.
+/// The reader holds one authority over a document, the strict judgement every reading of a document as one JSON object answers
+/// by: <see cref="ReadTopLevelMembers"/> reads the members of the one object a document is, judging the whole document first -
+/// one well-formed JSON value within the reader's bounds, an object, no member name repeated at any depth, every name and
+/// string naming Unicode text - and answering a refusal of its own for each defect; the JOSE part readings
+/// (<see cref="JwtHeader.Read"/>, <see cref="JwtPayload.Read"/>) and the JWK Set selections
+/// (<see cref="SelectKeyByKeyId(ReadOnlySpan{byte}, string?)"/> and its siblings) answer by the same judgement. A reading that
+/// reads a nested object or array of a document it admitted reads it with the same primitives, a second pass over bytes the
+/// judgement already admitted rather than one physical scan, and never a second authority. These readings allocate what they
+/// answer and never throw on the bytes they are handed; an internal result shape no producer answers is an invariant failure,
+/// thrown as such, never a refusal of the input.
 /// </para>
 /// <para>
-/// The scanner handles only the subset of JSON required for JWK and JOSE headers:
-/// string-valued properties and one level of object nesting (for the <c>epk</c>
-/// parameter). Array values, numbers, and booleans are not parsed but are skipped
-/// correctly during key search.
-/// </para>
-/// <para>
-/// <see cref="IndexOfKey"/> and every extraction method built on it (
-/// <see cref="ExtractStringValue"/> and its siblings) are FIRST-MATCH scans: on a
-/// member name repeated in the same object they return the first occurrence, while a
-/// typical deserializer keeps the last. That disagreement is a validate-one/act-on-another
-/// vector on a document a caller did not author (<see href="https://www.rfc-editor.org/rfc/rfc8259#section-4">RFC 8259 §4</see>).
-/// A caller reading a document that arrived from outside the process and whose content
-/// drives an authentication or key-selection decision therefore runs
-/// <see cref="IsWellFormedJsonDocument"/> once over the whole document before calling any
-/// extraction method here, and refuses the document when it returns
-/// <see langword="false"/>; every method below assumes that has already happened and does
-/// no well-formedness or uniqueness checking of its own.
+/// Beside them stand the older extraction methods, <see cref="IndexOfKey"/> and every method built on it
+/// (<see cref="ExtractStringValue"/> and its siblings): FIRST-MATCH scans of a limited shape that return the first occurrence of
+/// a repeated member name, while a typical deserializer keeps the last, a validate-one/act-on-another vector on a document a
+/// caller did not author (<see href="https://www.rfc-editor.org/rfc/rfc8259#section-4">RFC 8259 §4</see>). They judge nothing
+/// themselves: a caller of one runs <see cref="IsWellFormedJsonDocument"/> once over the whole document first and refuses the
+/// document when it answers <see langword="false"/>, and a reading that must tell a member's absence from a malformed one reads
+/// through <see cref="ReadTopLevelMembers"/> instead.
 /// </para>
 /// </remarks>
 public static class JwkJsonReader
@@ -1143,10 +1141,14 @@ public static class JwkJsonReader
     /// such a document holds is one its readers agree on, and that is why this library's strict admission refuses it - its own
     /// choice, which neither RFC 8259 nor a protocol leaving unrecognised members to be ignored requires. Both refusals of a
     /// well-formed object carry its top-level members observed without their values (<see cref="JsonTopLevelAccount"/>), as the
-    /// members answered do (<see cref="JsonTopLevelMembers.TopLevel"/>). This method never throws.
+    /// members answered do (<see cref="JsonTopLevelMembers.TopLevel"/>). This method never throws on the bytes it is handed.
     /// </summary>
     /// <param name="json">The UTF-8 bytes of the document.</param>
     /// <returns>The object's top-level members, or the refusal of the document with its reason.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// A member of a document the judgement admitted read to no text: an invariant failure of the reader, never a refusal of the
+    /// document.
+    /// </exception>
     public static JsonTopLevelReading ReadTopLevelMembers(ReadOnlySpan<byte> json)
     {
         if(StrictRefusalOf(json) is { } refused)
@@ -1157,19 +1159,11 @@ public static class JwkJsonReader
         var members = new List<JsonTopLevelMember>();
         var pos = TopLevelContentStart(json);
 
+        //Every name and string the judgement admits decodes to text, so a member that read to none would be an invariant failure
+        //of the reader, thrown by the reading of its text, never answered as a refusal of a document the judgement admitted.
         while(TryReadTopLevelMember(json, ref pos, out var place))
         {
-            var name = DecodeContentToString(json, place.NameStart, place.NameLength);
-            var member = name is null ? null : TopLevelMemberAt(json, name, place.ValueStart, place.ValueEnd);
-
-            //Every string the validation admits decodes to text, so a name or a value that decodes to none is no well-formed
-            //document and the document is answered as no object.
-            if(member is null)
-            {
-                return new JsonNotOneObject();
-            }
-
-            members.Add(member);
+            members.Add(TopLevelMemberAt(json, AdmittedTextAt(json, place.NameStart, place.NameLength), place.ValueStart, place.ValueEnd));
         }
 
         return new JsonTopLevelMembers(members);
@@ -1182,11 +1176,17 @@ public static class JwkJsonReader
     /// answers a document by: a string as its text decoded once (RFC 8259 section 7), a number as the claims set holds it
     /// (<see cref="DecimalNumber.ToClaimValue"/>, every digit kept), <c>true</c> and <c>false</c> as booleans, <c>null</c> as a
     /// member present with no value, an object as a dictionary of its members and an array as a list of its elements, each read
-    /// the same way, so a member is never dropped for its kind and a present <c>null</c> is never read as an absent member.
+    /// the same way and each declared to hold a value that may be none, so a member is never dropped for its kind and a present
+    /// <c>null</c> is never read as an absent member. Once the judgement admits the document every member reads, so no admitted
+    /// document is answered as refused.
     /// </summary>
     /// <param name="json">The UTF-8 bytes of the document.</param>
     /// <param name="values">The dictionary the members are read into, empty.</param>
     /// <returns>The refusal of the document with its reason, or <see langword="null"/> when every member was read.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// A member of a document the judgement admitted read to no value: an invariant failure of the reader, never a refusal of the
+    /// document.
+    /// </exception>
     internal static JsonTopLevelReading? ReadObjectValuesInto(ReadOnlySpan<byte> json, JoseDictionary values)
     {
         if(StrictRefusalOf(json) is { } refused)
@@ -1194,46 +1194,47 @@ public static class JwkJsonReader
             return refused;
         }
 
-        var objectStart = 0;
-        SkipWhitespace(json, ref objectStart);
+        var pos = TopLevelContentStart(json);
 
-        //Every string and number the validation admits reads to its value, so one that reads to none is no well-formed document.
-        return TryReadAdmittedObject(json, objectStart, values) ? null : new JsonNotOneObject();
+        while(TryReadTopLevelMember(json, ref pos, out var place))
+        {
+            //A JOSE part's dictionary is declared, as every part the library holds is, to map a name to a value; a present JSON
+            //null is held there as a member with no value, as the library's JSON layer holds it, never left out. The nested
+            //objects and arrays are declared to hold such a value.
+            values[AdmittedTextAt(json, place.NameStart, place.NameLength)] = AdmittedValueAt(json, place.ValueStart, place.ValueEnd)!;
+        }
+
+        return null;
     }
 
 
-    /// <summary>Reads the members of an object of an admitted document into a dictionary, each value as <see cref="TryReadAdmittedValue"/> reads it.</summary>
+    /// <summary>Reads the members of an object of an admitted document, each value as <see cref="AdmittedValueAt"/> reads it.</summary>
     /// <param name="json">The admitted document.</param>
     /// <param name="objectStart">The position of the object's opening brace.</param>
-    /// <param name="into">The dictionary the members are read into.</param>
-    /// <returns><see langword="true"/> when every member was read.</returns>
-    private static bool TryReadAdmittedObject(ReadOnlySpan<byte> json, int objectStart, Dictionary<string, object> into)
+    /// <returns>The members, a present JSON null held as a member with no value.</returns>
+    /// <exception cref="InvalidOperationException">A member read to no value: an invariant failure of the reader.</exception>
+    private static Dictionary<string, object?> AdmittedObjectAt(ReadOnlySpan<byte> json, int objectStart)
     {
+        var members = new Dictionary<string, object?>(StringComparer.Ordinal);
         var pos = objectStart + 1;
 
         while(TryReadTopLevelMember(json, ref pos, out var place))
         {
-            if(DecodeContentToString(json, place.NameStart, place.NameLength) is not { } name
-                || !TryReadAdmittedValue(json, place.ValueStart, place.ValueEnd, out var value))
-            {
-                return false;
-            }
-
-            //A JSON null is held as a member present with no value, as the library's JSON layer holds it, never left out.
-            into[name] = value!;
+            members[AdmittedTextAt(json, place.NameStart, place.NameLength)] = AdmittedValueAt(json, place.ValueStart, place.ValueEnd);
         }
 
-        return true;
+        return members;
     }
 
 
-    /// <summary>Reads the elements of an array of an admitted document into a list, each as <see cref="TryReadAdmittedValue"/> reads it.</summary>
+    /// <summary>Reads the elements of an array of an admitted document, in document order, each as <see cref="AdmittedValueAt"/> reads it.</summary>
     /// <param name="json">The admitted document.</param>
     /// <param name="arrayStart">The position of the array's opening bracket.</param>
-    /// <param name="into">The list the elements are read into, in document order.</param>
-    /// <returns><see langword="true"/> when every element was read.</returns>
-    private static bool TryReadAdmittedArray(ReadOnlySpan<byte> json, int arrayStart, List<object> into)
+    /// <returns>The elements, a JSON null held as an element with no value, never left out.</returns>
+    /// <exception cref="InvalidOperationException">An element read to no value: an invariant failure of the reader.</exception>
+    private static List<object?> AdmittedArrayAt(ReadOnlySpan<byte> json, int arrayStart)
     {
+        var elements = new List<object?>();
         var pos = arrayStart + 1;
         SkipWhitespace(json, ref pos);
 
@@ -1247,19 +1248,12 @@ public static class JwkJsonReader
             }
 
             var end = SkipValue(json, pos);
-
-            if(!TryReadAdmittedValue(json, pos, end, out var element))
-            {
-                return false;
-            }
-
-            //A JSON null element is held as an element with no value, never left out of the list.
-            into.Add(element!);
+            elements.Add(AdmittedValueAt(json, pos, end));
             pos = end;
             SkipWhitespace(json, ref pos);
         }
 
-        return true;
+        return elements;
     }
 
 
@@ -1271,46 +1265,95 @@ public static class JwkJsonReader
     /// <param name="json">The admitted document.</param>
     /// <param name="start">The position of the value's first byte.</param>
     /// <param name="end">The position one past the value's last byte.</param>
-    /// <param name="value">The value read, <see langword="null"/> for a JSON null or a value that reads to none.</param>
-    /// <returns><see langword="true"/> when the value was read.</returns>
-    /// <exception cref="InvalidOperationException">The value's kind is none the reader names.</exception>
-    private static bool TryReadAdmittedValue(ReadOnlySpan<byte> json, int start, int end, out object? value)
+    /// <returns>The value, <see langword="null"/> for a JSON null.</returns>
+    /// <exception cref="InvalidOperationException">The value read to none, or its kind is none the reader names: an invariant failure of the reader.</exception>
+    private static object? AdmittedValueAt(ReadOnlySpan<byte> json, int start, int end) => KindAt(json, start) switch
     {
-        value = null;
+        JsonTopLevelValueKind.String => AdmittedTextAt(json, start + 1, end - start - 2),
+        JsonTopLevelValueKind.Number => (DecimalNumber.FromJsonNumber(json[start..end])
+            ?? throw new InvalidOperationException("A number the strict judgement admitted read to no number.")).ToClaimValue(),
+        JsonTopLevelValueKind.True => true,
+        JsonTopLevelValueKind.False => false,
+        JsonTopLevelValueKind.Null => null,
+        JsonTopLevelValueKind.Object => AdmittedObjectAt(json, start),
+        JsonTopLevelValueKind.Array => AdmittedArrayAt(json, start),
+        var kind => throw new InvalidOperationException($"The value's kind {kind} is none the reader names.")
+    };
 
-        switch(KindAt(json, start))
+
+    /// <summary>
+    /// The text a name or a string of an admitted document names, its raw content between its quotes decoded once (RFC 8259
+    /// section 7): the strict judgement admits only names and strings naming Unicode text, so every one decodes.
+    /// </summary>
+    /// <param name="json">The admitted document.</param>
+    /// <param name="start">The start of the content, immediately after its opening quote.</param>
+    /// <param name="length">The length of the content, up to (not including) its closing quote.</param>
+    /// <returns>The decoded text.</returns>
+    /// <exception cref="InvalidOperationException">The content decoded to no text: an invariant failure of the reader.</exception>
+    private static string AdmittedTextAt(ReadOnlySpan<byte> json, int start, int length) =>
+        DecodeContentToString(json, start, length)
+            ?? throw new InvalidOperationException("A name or a string the strict judgement admitted decoded to no text.");
+
+
+    /// <summary>
+    /// The elements of an array a member's JSON text holds (<see cref="JsonTopLevelMember.ArrayElements"/>), in document order,
+    /// each as one typed answer (<see cref="JsonMemberLookup"/>): a string with its decoded text, a number with its spelling, or a
+    /// value of another kind naming which; or none when the text is not exactly one well-formed JSON array, or holds a string
+    /// naming no Unicode text. A reader of a member defined as an array of strings judges each element's kind from this answer,
+    /// by the same reader, never by a scan of its own.
+    /// </summary>
+    /// <param name="arrayText">The JSON text of the array.</param>
+    /// <returns>The elements, or <see langword="null"/>.</returns>
+    internal static IReadOnlyList<JsonMemberLookup>? ReadArrayElements(string arrayText)
+    {
+        ArgumentNullException.ThrowIfNull(arrayText);
+
+        var json = Encoding.UTF8.GetBytes(arrayText);
+        var pos = 0;
+        SkipWhitespace(json, ref pos);
+
+        if(pos >= json.Length || json[pos] != (byte)'[' || !IsWellFormedJsonDocument(json))
         {
-            case JsonTopLevelValueKind.String:
-                value = DecodeContentToString(json, start + 1, end - start - 2);
-
-                return value is not null;
-            case JsonTopLevelValueKind.Number:
-                value = DecimalNumber.FromJsonNumber(json[start..end])?.ToClaimValue();
-
-                return value is not null;
-            case JsonTopLevelValueKind.True:
-                value = true;
-
-                return true;
-            case JsonTopLevelValueKind.False:
-                value = false;
-
-                return true;
-            case JsonTopLevelValueKind.Null:
-                return true;
-            case JsonTopLevelValueKind.Object:
-                var members = new Dictionary<string, object>(StringComparer.Ordinal);
-                value = members;
-
-                return TryReadAdmittedObject(json, start, members);
-            case JsonTopLevelValueKind.Array:
-                var elements = new List<object>();
-                value = elements;
-
-                return TryReadAdmittedArray(json, start, elements);
-            default:
-                throw new InvalidOperationException($"The value's kind {KindAt(json, start)} is none the reader names.");
+            return null;
         }
+
+        var elements = new List<JsonMemberLookup>();
+        pos++;
+        SkipWhitespace(json, ref pos);
+
+        //The text is one well-formed array, so every step lands on an element, a separator or the closing bracket.
+        while(json[pos] != (byte)']')
+        {
+            if(json[pos] == (byte)',')
+            {
+                pos++;
+                SkipWhitespace(json, ref pos);
+            }
+
+            var end = SkipValue(json, pos);
+            var kind = KindAt(json, pos);
+
+            if(kind is JsonTopLevelValueKind.String)
+            {
+                if(!SpellsUnicodeText(json, pos + 1, end - pos - 2) || DecodeContentToString(json, pos + 1, end - pos - 2) is not { } text)
+                {
+                    return null;
+                }
+
+                elements.Add(new JsonMemberString(text));
+            }
+            else
+            {
+                elements.Add(kind is JsonTopLevelValueKind.Number
+                    ? new JsonMemberNumber(Encoding.UTF8.GetString(json, pos, end - pos))
+                    : new JsonMemberOfOtherKind(kind));
+            }
+
+            pos = end;
+            SkipWhitespace(json, ref pos);
+        }
+
+        return elements;
     }
 
 
@@ -1507,19 +1550,15 @@ public static class JwkJsonReader
     /// <param name="name">The member's name, decoded.</param>
     /// <param name="valueStart">The position of the value's first byte.</param>
     /// <param name="valueEnd">The position one past the value's last byte.</param>
-    /// <returns>The member, or <see langword="null"/> when its string value decodes to no text.</returns>
-    private static JsonTopLevelMember? TopLevelMemberAt(ReadOnlySpan<byte> json, string name, int valueStart, int valueEnd)
+    /// <returns>The member.</returns>
+    /// <exception cref="InvalidOperationException">The member's string value read to no text: an invariant failure of the reader.</exception>
+    private static JsonTopLevelMember TopLevelMemberAt(ReadOnlySpan<byte> json, string name, int valueStart, int valueEnd)
     {
         var kind = KindAt(json, valueStart);
 
-        if(kind is JsonTopLevelValueKind.String)
-        {
-            return DecodeContentToString(json, valueStart + 1, valueEnd - valueStart - 2) is { } text
-                ? new JsonTopLevelMember(name, JsonTopLevelValueKind.String, text)
-                : null;
-        }
-
-        return new JsonTopLevelMember(name, kind, Encoding.UTF8.GetString(json[valueStart..valueEnd]));
+        return kind is JsonTopLevelValueKind.String
+            ? new JsonTopLevelMember(name, JsonTopLevelValueKind.String, AdmittedTextAt(json, valueStart + 1, valueEnd - valueStart - 2))
+            : new JsonTopLevelMember(name, kind, Encoding.UTF8.GetString(json[valueStart..valueEnd]));
     }
 
 

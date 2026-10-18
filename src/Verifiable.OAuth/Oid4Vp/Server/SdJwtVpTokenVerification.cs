@@ -141,17 +141,16 @@ public static class SdJwtVpTokenVerification
     /// Metadata polices its outbound request through the caller's policy rather than a fresh one.
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The parsed and crypto-verified VP token contents.</returns>
-    /// <exception cref="FormatException">
-    /// Thrown when the issuer-signed payload repeats a top-level claim name, when it carries a
-    /// <c>status</c> claim whose value does not meet Token Status List Section 6.1/6.2, when the
-    /// KB-JWT's payload is not one JSON object naming each claim once and naming Unicode text
-    /// throughout, or when the KB-JWT carries an <c>iat</c> that is no NumericDate (RFC 7519 Section
-    /// 2), which is told from an omitted <c>iat</c>, answered as <see cref="VpTokenParsed.KbJwtIat"/>
-    /// <see langword="null"/>. Each is a Wallet-attributable malformed presentation on the executor's
-    /// own malformed route.
-    /// </exception>
-    public static async ValueTask<VpTokenParsed> VerifyAsync(
+    /// <returns>
+    /// The parsed and crypto-verified VP token contents (<see cref="SdJwtVpTokenVerified"/>), or the typed refusal of a
+    /// presentation no conformant Wallet produces (<see cref="SdJwtVpTokenRefused"/>): an issuer-signed payload that is not
+    /// well-formed or repeats a claim name, a <c>status</c> claim whose value does not meet Token Status List Section 6.1/6.2, a
+    /// KB-JWT payload that is not one JSON object naming each claim once and naming Unicode text throughout, or a KB-JWT <c>iat</c>
+    /// that is no NumericDate (RFC 7519 Section 2), which is told from an omitted <c>iat</c>, answered as
+    /// <see cref="VpTokenParsed.KbJwtIat"/> <see langword="null"/> for the key-binding checks to refuse. Each refusal is a
+    /// Wallet-attributable malformed presentation the executor routes as such.
+    /// </returns>
+    public static async ValueTask<SdJwtVpTokenVerificationOutcome> VerifyAsync(
         string vpToken,
         CredentialQueryId credentialQueryId,
         ParseSdJwtTokenDelegate parseSdJwtToken,
@@ -208,9 +207,7 @@ public static class SdJwtVpTokenVerification
             //the same reason. No conformant Issuer emits a duplicate claim, so the presentation is malformed.
             if(!JwkJsonReader.IsWellFormedJsonDocument(issuerPayload))
             {
-                throw new FormatException(
-                    "The credential's issuer-signed payload is not well-formed JSON, or carries a "
-                    + "duplicate claim name.");
+                return new SdJwtVpTokenRefused(SdJwtPresentationDefect.IssuerPayloadNotOneObject);
             }
 
             iss = JwkJsonReader.ExtractStringValue(issuerPayload, "iss"u8);
@@ -245,8 +242,7 @@ public static class SdJwtVpTokenVerification
 
                 if(!StatusClaimReader.TryRead(statusObject, out StatusClaim? statusClaim))
                 {
-                    throw new FormatException(
-                        "The credential's 'status' claim does not adhere to Section 6.1/6.2.");
+                    return new SdJwtVpTokenRefused(SdJwtPresentationDefect.StatusClaimMalformed);
                 }
 
                 credentialStatus = statusClaim;
@@ -303,8 +299,7 @@ public static class SdJwtVpTokenVerification
                 //claim name shows one verifier one value and another a different one, so the presentation is malformed.
                 if(JwkJsonReader.ReadTopLevelMembers(kbPayload) is not JsonTopLevelMembers kbClaims)
                 {
-                    throw new FormatException(
-                        "The KB-JWT's payload is not one well-formed JSON object naming each claim once and naming Unicode text throughout.");
+                    return new SdJwtVpTokenRefused(SdJwtPresentationDefect.KeyBindingPayloadNotOneObject);
                 }
 
                 kbNonce = JwkJsonReader.ExtractStringValue(kbPayload, "nonce"u8);
@@ -316,7 +311,7 @@ public static class SdJwtVpTokenVerification
                 //the key-binding checks answer as absent.
                 if(NumericDateClaims.Read(kbClaims, WellKnownJwtClaimNames.Iat, out kbIat) is NumericDateReadResult.Malformed)
                 {
-                    throw new FormatException("The KB-JWT's iat is not a NumericDate.");
+                    return new SdJwtVpTokenRefused(SdJwtPresentationDefect.KeyBindingIssuedAtNotANumericDate);
                 }
 
                 //OID4VP 1.0 §8.4: optional transaction_data_hashes array bound
@@ -461,7 +456,7 @@ public static class SdJwtVpTokenVerification
             }
         }
 
-        return new VpTokenParsed
+        return new SdJwtVpTokenVerified(new VpTokenParsed
         {
             CredentialQueryId = credentialQueryId,
             CredentialIssuerKey = credentialSignatureValid ? issuerPublicKey : null,
@@ -487,6 +482,6 @@ public static class SdJwtVpTokenVerification
             KbJwtTransactionDataHashesAlg = kbTransactionDataHashesAlg,
             MinimumDisclosureSaltLengthBytes = minimumSaltLength,
             SaltReused = saltReused
-        };
+        });
     }
 }

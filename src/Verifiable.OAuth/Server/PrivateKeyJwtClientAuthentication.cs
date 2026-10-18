@@ -24,7 +24,7 @@ namespace Verifiable.OAuth.Server;
 /// <param name="tenantId">The tenant the <c>jti</c> is scoped to.</param>
 /// <param name="issuer">The assertion's <c>iss</c> (the composite-key prefix).</param>
 /// <param name="jti">The presented <c>jti</c> value.</param>
-/// <param name="expiresAt">When the recorded entry should expire.</param>
+/// <param name="retention">How long the recorded entry is kept: until an instant, exclusive, or to the clock's end.</param>
 /// <param name="cancellationToken">Cancellation token.</param>
 public delegate ValueTask<JtiReplayOutcome> CheckClientAssertionJtiReplayDelegate(
     EndpointServer server,
@@ -32,7 +32,7 @@ public delegate ValueTask<JtiReplayOutcome> CheckClientAssertionJtiReplayDelegat
     TenantId tenantId,
     string issuer,
     string jti,
-    DateTimeOffset expiresAt,
+    ReplayRecordRetention retention,
     CancellationToken cancellationToken);
 
 
@@ -642,11 +642,11 @@ public static class PrivateKeyJwtClientAuthentication
                         //RFC 7523 §3 rule 7: the recorded jti is retained "for the length of time for
                         //which the JWT would be considered valid based on the applicable exp instant" —
                         //here that is exp plus the clock-skew tolerance Validate just accepted the
-                        //assertion's timing under, not the bare exp, and the clock's last instant where
-                        //that window reaches the clock's end.
+                        //assertion's timing under, not the bare exp, and to the clock's end where that
+                        //window reaches past it.
                         JtiReplayOutcome outcome = await checkJtiReplayAsync(
                             server, context, registration.TenantId, result.ClientId!, result.Jti!,
-                            ClientAssertionClaimRules.ReplayRecordKeptUntil(result.Expiration!, context.ClockSkewTolerance), cancellationToken).ConfigureAwait(false);
+                            ClientAssertionClaimRules.ReplayRecordRetentionOf(result.Expiration!, context.ClockSkewTolerance), cancellationToken).ConfigureAwait(false);
 
                         //Any outcome other than FirstUse refuses the assertion: Replayed is the
                         //defense doing its job, StoreUnavailable is a policy that cannot prove

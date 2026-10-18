@@ -123,12 +123,23 @@ public static class IdJagFlowHandlers
 
         //Draft-04 §4.3.2 and RFC 8693 §2.2.1: the answer names the type of the token issued, and a token of another type than
         //the ID-JAG asked for is no grant this flow presents.
-        if(minted.IsSuccess
-            && (minted.Value.IssuedTokenType is not { } issued || !WellKnownTokenTypeIdentifiers.IsIdJag(issued)))
+        //An answer omitting issued_token_type, which RFC 8693 §2.2.1 has REQUIRED, is refused as absent, carrying no value it
+        //never received.
+        if(minted.IsSuccess && minted.Value.IssuedTokenType is null)
+        {
+            return Result<TokenResponse, OAuthParseError>.Failure(new OAuthRequiredMemberAbsent(
+                OAuthRequestParameterNames.IssuedTokenType,
+                new DecisionSupport("The identity provider's token exchange answer did not contain issued_token_type.")
+                {
+                    SpecificationReference = "RFC 8693 §2.2.1"
+                }));
+        }
+
+        if(minted.IsSuccess && minted.Value.IssuedTokenType is { } issued && !WellKnownTokenTypeIdentifiers.IsIdJag(issued))
         {
             return Result<TokenResponse, OAuthParseError>.Failure(new OAuthInvalidFieldValue(
                 OAuthRequestParameterNames.IssuedTokenType,
-                minted.Value.IssuedTokenType ?? string.Empty,
+                issued,
                 "The token exchange answered a token of another type than the identity assertion grant it asked for.",
                 new DecisionSupport("The identity provider's answer names another issued_token_type than the ID-JAG's.")
                 {

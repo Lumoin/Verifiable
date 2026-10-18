@@ -24,9 +24,12 @@ public static class KeyAttestationParser
     /// spelling name that same media type per
     /// <see href="https://www.rfc-editor.org/rfc/rfc7515#section-4.1.9">RFC 7515 §4.1.9</see> — the
     /// REQUIRED <c>attested_keys</c> array is absent, the body is not one JSON object naming each
-    /// member once and naming Unicode text throughout, or the body carries an <c>iat</c> or an
-    /// <c>exp</c> that is no NumericDate (RFC 7519 Section 2): a present date that is malformed is a
-    /// malformed attestation, never one read as carrying no date.
+    /// member once and naming Unicode text throughout, the REQUIRED <c>iat</c> is absent, or the body
+    /// carries an <c>iat</c> or an <c>exp</c> that is no NumericDate (RFC 7519 Section 2) or is one
+    /// with a fraction, where Appendix D.1 has each an integer: a present date that is malformed is a
+    /// malformed attestation, never one read as carrying no date, and a fraction is refused as written,
+    /// never truncated. The <c>exp</c> Appendix D.1 requires where the attestation is used with a JWT
+    /// proof is judged by <see cref="KeyAttestationVerifier"/>, which is told the attestation's use.
     /// </summary>
     /// <param name="compactAttestation">The compact JWS key attestation.</param>
     /// <param name="base64UrlDecoder">Base64url decoder for the header and body segments.</param>
@@ -69,11 +72,14 @@ public static class KeyAttestationParser
             return false;
         }
 
-        //Appendix D.1: iat and exp are NumericDates (RFC 7519 Section 2). A date the body omits is absent; one it carries that
-        //is no NumericDate - a string of digits, another kind of value, a count no clock represents - makes the attestation
-        //malformed, never one read as carrying no date, so a present exp is always enforced.
-        if(NumericDateClaims.Read(bodyMembers, WellKnownJwtClaimNames.Iat, out var issuedAt) is NumericDateReadResult.Malformed
-            || NumericDateClaims.Read(bodyMembers, WellKnownJwtClaimNames.Exp, out var expiresAt) is NumericDateReadResult.Malformed)
+        //Appendix D.1: iat is REQUIRED and exp OPTIONAL, each an "Integer for the time ... using the syntax defined in [RFC7519]".
+        //An omitted iat, a date that is no NumericDate - a string of digits, another kind of value, a count no clock represents -
+        //and a NumericDate that is no integer make the attestation malformed: a fraction is refused as written, never truncated
+        //to the second before it, and a present date is never read as an omitted one, so a present exp is always enforced.
+        if(NumericDateClaims.Read(bodyMembers, WellKnownJwtClaimNames.Iat, out var issuedAt) is not NumericDateReadResult.Value
+            || issuedAt is not { Seconds.IsInteger: true } integralIssuedAt
+            || NumericDateClaims.Read(bodyMembers, WellKnownJwtClaimNames.Exp, out var expiresAt) is NumericDateReadResult.Malformed
+            || expiresAt is { Seconds.IsInteger: false })
         {
             return false;
         }
@@ -104,7 +110,7 @@ public static class KeyAttestationParser
             Nonce = JwkJsonReader.ExtractStringValue(body, WellKnownJwtClaimNames.NonceUtf8),
             Certification = JwkJsonReader.ExtractStringValue(
                 body, AttestationProofParameterNames.CertificationUtf8),
-            IssuedAt = issuedAt,
+            IssuedAt = integralIssuedAt,
             ExpiresAt = expiresAt
         };
 

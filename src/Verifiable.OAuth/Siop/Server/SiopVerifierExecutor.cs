@@ -438,13 +438,13 @@ public static class SiopVerifierExecutor
             //Wallet-attributable malformed-presentation detection mirrors the OID4VP seat's per-format
             //dispatch (HaipOid4VpVerifierExecutor): an unparseable SD-JWT/KB-JWT or a status.status_list
             //reference that fails Section 6.2's own rules is a shape no conformant Wallet would produce
-            //— Malformed, not a 500 fault. VerifyAsync throws many exception types for many reasons (a
-            //wrong issuer key, a bad signature); only FormatException — the library's own parse-exception
-            //type — is targeted here, so a non-format failure is left on the fault path.
-            VpTokenParsed parsed;
+            //— Malformed, not a 500 fault. VerifyAsync answers such a presentation with its typed refusal, and
+            //throws FormatException only from the wire format's own parse; a non-format failure is left on the
+            //fault path.
+            SdJwtVpTokenVerificationOutcome verification;
             try
             {
-                parsed = await SdJwtVpTokenVerification.VerifyAsync(
+                verification = await SdJwtVpTokenVerification.VerifyAsync(
                     action.VpToken,
                     resolvedVpTokenCredentialQueryId,
                     parseSdJwtToken,
@@ -471,6 +471,20 @@ public static class SiopVerifierExecutor
                     Refusal = VerifierFlowRefusal.For(VerifierFlowRefusalKind.Malformed)
                 };
             }
+
+            if(verification is SdJwtVpTokenRefused { Defect: var defect })
+            {
+                return new SiopFlowFailed
+                {
+                    Reason = $"Malformed vp_token presentation for credential query '{resolvedVpTokenCredentialQueryId}': {defect}.",
+                    FailedAt = now,
+                    Refusal = VerifierFlowRefusal.For(VerifierFlowRefusalKind.Malformed)
+                };
+            }
+
+            var parsed = verification is SdJwtVpTokenVerified { Parsed: var verified }
+                ? verified
+                : throw new InvalidOperationException("The SD-JWT VP token verification answered neither its contents nor its refusal.");
 
             //SIOPv2 §12 binding: the vp_token's KB-JWT MUST carry the same nonce the RP provided
             //(equal to the verified id_token nonce) and the RP's Client ID as aud. The id_token's

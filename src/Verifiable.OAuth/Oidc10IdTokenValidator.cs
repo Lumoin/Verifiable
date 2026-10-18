@@ -136,7 +136,9 @@ public static class Oidc10IdTokenValidator
 
         if(!outcome.IsSuccess)
         {
-            return Oidc10IdTokenValidationResult.Failure(outcome.FailureReason!.Value, outcome.FailureDescription);
+            return outcome.PartRefusal is { } partRefusal
+                ? Oidc10IdTokenValidationResult.PartRefused(outcome.FailureReason!.Value, outcome.FailureDescription, partRefusal)
+                : Oidc10IdTokenValidationResult.Failure(outcome.FailureReason!.Value, outcome.FailureDescription);
         }
 
         JwtPayload payload = outcome.Payload!;
@@ -174,12 +176,25 @@ public static class Oidc10IdTokenValidator
 
         var authTime = authTimeRead == NumericDateReadResult.Value ? authTimeValue : null;
         _ = JwsAccessTokenValidator.TryReadString(payload, WellKnownJwtClaimNames.Acr, out string? acr);
-        IReadOnlyList<string>? amr = JwsAccessTokenValidator.TryReadStringList(
-            payload, WellKnownJwtClaimNames.Amr, out IReadOnlyList<string> amrValues)
-            ? amrValues
-            : null;
+
+        //OIDC Core §2: amr is a JSON array of strings. A present amr of another shape is refused whole, never filtered into the
+        //methods it does name nor read as an absent one.
+        var amrRead = JwsAccessTokenValidator.ReadStringList(payload, WellKnownJwtClaimNames.Amr, out var amrValues);
+        if(amrRead == ClaimReadResult.Malformed)
+        {
+            return Oidc10IdTokenValidationResult.Failure(
+                JwsAccessTokenValidationFailureReason.Malformed,
+                "ID Token amr claim is neither a non-empty string nor a non-empty array of non-empty strings.");
+        }
+
+        var amr = amrRead == ClaimReadResult.Value ? amrValues : null;
         _ = JwsAccessTokenValidator.TryReadString(payload, WellKnownJwtClaimNames.Sid, out string? sid);
-        ConfirmationMethod? confirmation = JwsAccessTokenValidator.TryReadConfirmation(payload);
+        var confirmationRead = JwsAccessTokenValidator.ReadConfirmation(payload, out var confirmation);
+
+        if(JwsAccessTokenValidator.ConfirmationRefusalOf(confirmationRead, "ID Token") is { } confirmationRefusal)
+        {
+            return Oidc10IdTokenValidationResult.Failure(confirmationRefusal.FailureReason!.Value, confirmationRefusal.FailureDescription);
+        }
 
         Oidc10IdTokenClaims claims = new()
         {

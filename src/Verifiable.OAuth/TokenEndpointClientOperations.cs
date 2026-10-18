@@ -482,7 +482,12 @@ internal static class TokenEndpointClientOperations
     /// <summary>
     /// Maps an <see cref="OAuthParseError"/> to an <see cref="AuthCodeFlowEndpointResult"/>,
     /// surfacing the decision support summary as the error description so callers have actionable
-    /// information without needing to pattern-match the full error hierarchy.
+    /// information without needing to pattern-match the full error hierarchy. Every case the library answers is named: the
+    /// authorization server's own error as its answer; an answer the client read and refused - a field of no allowed value, a
+    /// lifetime it does not admit, a member of another kind or absent, a repeated member name or a member naming no Unicode
+    /// text - as <c>invalid_response</c> of the client's judgement; a body it could not read, and a request it refused before
+    /// sending, as <c>server_error</c>. A case none of these names is answered as
+    /// <see cref="OAuthClientErrors.UnrecognisedRefusal"/>, never under a category established for another.
     /// </summary>
     internal static AuthCodeFlowEndpointResult BuildEndpointResultFromParseError(
         OAuthParseError error)
@@ -509,15 +514,36 @@ internal static class TokenEndpointClientOperations
                 AuthCodeFlowRefusalOrigin.ClientJudgement,
                 OAuthClientErrors.InvalidResponse,
                 $"{notAString.MemberName}: {notAString.Support.Summary}"),
+            OAuthRequiredMemberAbsent absent => AuthCodeFlowEndpointResult.Refused(
+                AuthCodeFlowEndpointOutcome.BadRequest,
+                AuthCodeFlowRefusalOrigin.ClientJudgement,
+                OAuthClientErrors.InvalidResponse,
+                $"{absent.MemberName}: {absent.Support.Summary}"),
+            OAuthRepeatedMemberName repeated => AuthCodeFlowEndpointResult.Refused(
+                AuthCodeFlowEndpointOutcome.BadRequest,
+                AuthCodeFlowRefusalOrigin.ClientJudgement,
+                OAuthClientErrors.InvalidResponse,
+                $"{repeated.MemberName}: {repeated.Support.Summary}"),
+            OAuthUndecodableMemberValue undecodable => AuthCodeFlowEndpointResult.Refused(
+                AuthCodeFlowEndpointOutcome.BadRequest,
+                AuthCodeFlowRefusalOrigin.ClientJudgement,
+                OAuthClientErrors.InvalidResponse,
+                $"{undecodable.MemberName}: {undecodable.Support.Summary}"),
             OAuthMalformedResponse mr => AuthCodeFlowEndpointResult.Refused(
                 AuthCodeFlowEndpointOutcome.InternalError,
                 AuthCodeFlowRefusalOrigin.ClientJudgement,
                 OAuthErrors.ServerError,
                 mr.Support.Summary),
+            OAuthAuthorizationServerMetadataUnresolved or OAuthOutboundFetchPolicyDenied or OAuthClientAssertionRefused or OAuthClientAuthenticationRefused =>
+                AuthCodeFlowEndpointResult.Refused(
+                    AuthCodeFlowEndpointOutcome.InternalError,
+                    AuthCodeFlowRefusalOrigin.ClientJudgement,
+                    OAuthErrors.ServerError,
+                    error.Support.Summary),
             _ => AuthCodeFlowEndpointResult.Refused(
                 AuthCodeFlowEndpointOutcome.InternalError,
                 AuthCodeFlowRefusalOrigin.ClientJudgement,
-                OAuthErrors.ServerError,
+                OAuthClientErrors.UnrecognisedRefusal,
                 error.Support.Summary)
         };
     }

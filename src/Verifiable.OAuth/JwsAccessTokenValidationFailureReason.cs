@@ -95,4 +95,12 @@ public enum JwsAccessTokenValidationFailureReason
     /// audience set to <see cref="Oidc10IdTokenValidator.ValidateAsync"/>.
     /// </summary>
     UntrustedAudience,
+
+    /// <summary>
+    /// The token's <c>cnf</c> claim binds it by a confirmation method this library does not verify possession under (RFC 7800
+    /// section 3 registers others beside the <c>jkt</c> of RFC 9449 section 6.1, the <c>x5t#S256</c> of RFC 8705 section 3.1
+    /// among them): the token is bound to a key whose possession the receiver cannot check, so it is refused rather than read as
+    /// unbound or as bound by a method it is not.
+    /// </summary>
+    UnsupportedConfirmationMethod
 }

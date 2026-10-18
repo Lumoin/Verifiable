@@ -235,6 +235,36 @@ internal sealed class JwtVcIssuerMetadataDocumentsResolvingTests
     }
 
 
+    /// <summary>
+    /// RFC 7517 Section 5: an inline <c>jwks</c> is a JWK Set, a JSON object whose <c>keys</c> member is an array of JWK objects.
+    /// A document whose inline <c>jwks</c> is a string, an array, <c>null</c>, an object without <c>keys</c>, or an object whose
+    /// <c>keys</c> is no array or holds an element that is no object is refused as an invalid document before it is reported
+    /// resolved, so no freshness is reported for it; an empty key set is a JWK Set and resolves.
+    /// </summary>
+    /// <param name="jwksJson">The inline <c>jwks</c> member's JSON text.</param>
+    /// <param name="resolves">Whether the document resolves.</param>
+    /// <returns>A task completing once the document is judged.</returns>
+    [TestMethod]
+    [DataRow("\"keys\"", false, DisplayName = "A jwks that is a string")]
+    [DataRow("[]", false, DisplayName = "A jwks that is an array")]
+    [DataRow("null", false, DisplayName = "A null jwks")]
+    [DataRow("{}", false, DisplayName = "A jwks without keys")]
+    [DataRow(/*lang=json,strict*/ "{\"keys\":{}}", false, DisplayName = "A keys member that is an object")]
+    [DataRow(/*lang=json,strict*/ "{\"keys\":[7]}", false, DisplayName = "A keys member holding a number")]
+    [DataRow(/*lang=json,strict*/ "{\"keys\":[]}", true, DisplayName = "An empty key set")]
+    public async Task AnInlineKeySetOfAnotherShapeIsRefusedBeforeTheDocumentIsReportedResolved(string jwksJson, bool resolves)
+    {
+        var transport = new ScriptedTransport();
+        transport.Enqueue(MetadataUrl, 200, DocumentWithInlineJwks(Issuer, jwksJson), contentType: "application/json",
+            headers: Headers(("Cache-Control", "max-age=300")));
+
+        var resolution = await ResolveAsync(Issuer, transport).ConfigureAwait(false);
+
+        Assert.AreEqual(resolves, resolution.IsResolved, $"{jwksJson}: {resolution.Defect}");
+        Assert.AreEqual(resolves ? JwtVcIssuerMetadataResolutionOutcome.Resolved : JwtVcIssuerMetadataResolutionOutcome.InvalidDocument, resolution.Outcome, jwksJson);
+    }
+
+
     /// <summary>A <c>jwks_uri</c> document resolves with the URI carried on the resolution, unfetched by the attempt itself.</summary>
     [TestMethod]
     public async Task JwksUriDocumentResolvesWithJwksUri()

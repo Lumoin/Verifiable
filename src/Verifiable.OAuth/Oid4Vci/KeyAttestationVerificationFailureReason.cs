@@ -9,8 +9,8 @@ public enum KeyAttestationVerificationFailureReason
 {
     /// <summary>
     /// The attestation is not parseable as a compact JWS, its <c>typ</c> is not <c>key-attestation+jwt</c>, the REQUIRED
-    /// <c>attested_keys</c> array is absent, or its body carries an <c>iat</c> or an <c>exp</c> that is no NumericDate
-    /// (Appendix D.1; RFC 7519 Section 2).
+    /// <c>attested_keys</c> array or <c>iat</c> is absent, or its body carries an <c>iat</c> or an <c>exp</c> that is no
+    /// NumericDate (RFC 7519 Section 2) or is one with a fraction, where Appendix D.1 has each an integer.
     /// </summary>
     Malformed,
 
@@ -31,6 +31,13 @@ public enum KeyAttestationVerificationFailureReason
 
     /// <summary>The attestation's <c>exp</c> is in the past (the attestation and its attested keys have expired) (Appendix D.1).</summary>
     Expired,
+
+    /// <summary>
+    /// The attestation carries no <c>exp</c> and is verified for use with the JWT proof type
+    /// (<see cref="KeyAttestationProofUse.JwtProof"/>), where Appendix D.1 has it REQUIRED: "MUST be present if the attestation
+    /// is used with the JWT proof type".
+    /// </summary>
+    ExpiryNotPresented,
 
     /// <summary>A <c>nonce</c> was required (the Issuer supplied one) but the attestation carries none (Appendix D.1).</summary>
     NonceMissing,

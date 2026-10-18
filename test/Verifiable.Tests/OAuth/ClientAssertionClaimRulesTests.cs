@@ -36,8 +36,11 @@ internal sealed class ClientAssertionClaimRulesTests
     /// <summary>The instant every judgement is made at.</summary>
     private static DateTimeOffset Now { get; } = TestClock.CanonicalEpoch;
 
+    /// <summary>The clock-skew tolerance every judgement is made under, in ticks: a minute.</summary>
+    private const long ToleranceTicks = 60 * TimeSpan.TicksPerSecond;
+
     /// <summary>The clock-skew tolerance every judgement is made under.</summary>
-    private static TimeSpan Skew { get; } = TimeSpan.FromSeconds(60);
+    private static TimeSpan Skew { get; } = TimeSpan.FromTicks(ToleranceTicks);
 
 
     /// <summary>Claims every rule accepts: the client as issuer and subject, the issuer as audience, a minute's lifetime and a jti.</summary>
@@ -54,8 +57,8 @@ internal sealed class ClientAssertionClaimRulesTests
 
 
     /// <summary>
-    /// Claims every rule accepts are accepted, naming the jti, the exp as written, a window ending within the clock and the
-    /// instant the record of the first use is kept until: exp plus the tolerance.
+    /// Claims every rule accepts are accepted, naming the jti, the exp as written, and the record of the first use kept until an
+    /// instant within the clock, exclusive: exp plus the tolerance.
     /// </summary>
     [TestMethod]
     public void ClaimsEveryRuleAcceptsAreAccepted()
@@ -65,8 +68,7 @@ internal sealed class ClientAssertionClaimRulesTests
         Assert.IsTrue(judged.IsAccepted, judged.Refusal?.ToString());
         Assert.AreEqual("assertion-jti", judged.Jti);
         Assert.AreEqual(0, judged.Expiry!.CompareTo(Now.AddMinutes(1)), "The exp is carried as written.");
-        Assert.IsFalse(judged.AcceptedToTheClocksEnd, "A minute's window ends within the clock.");
-        Assert.AreEqual(Now.AddMinutes(1) + Skew, judged.ReplayRecordKeptUntil);
+        Assert.AreEqual(new ReplayRecordKeptUntil(Now.AddMinutes(1) + Skew), judged.Retention, "A minute's window ends within the clock.");
     }
 
 
@@ -171,7 +173,7 @@ internal sealed class ClientAssertionClaimRulesTests
 
     /// <summary>
     /// The assertion is accepted until exp plus the tolerance and refused from that instant on; the record of an exp the tolerance
-    /// would carry past the last instant a clock represents is kept until that instant, never thrown on.
+    /// would carry past the last instant a clock represents is kept to the clock's end, never thrown on.
     /// </summary>
     [TestMethod]
     public void TheAssertionIsAcceptedUntilExpPlusTheTolerance()
@@ -181,7 +183,7 @@ internal sealed class ClientAssertionClaimRulesTests
 
         Assert.IsTrue(ClientAssertionClaimRules.Judge(claims, ClientId, Audiences, expiry + Skew - TimeSpan.FromTicks(1), Skew).IsAccepted);
         Assert.AreEqual(ClientAssertionClaimRefusal.Expired, ClientAssertionClaimRules.Judge(claims, ClientId, Audiences, expiry + Skew, Skew).Refusal);
-        Assert.AreEqual(DateTimeOffset.MaxValue, ClientAssertionClaimRules.ReplayRecordKeptUntil(DateTimeOffset.MaxValue.AddSeconds(-1), Skew));
+        Assert.AreEqual(new ReplayRecordKeptToTheClocksEnd(), ClientAssertionClaimRules.ReplayRecordRetentionOf(DateTimeOffset.MaxValue.AddSeconds(-1), Skew));
     }
 
 
@@ -198,9 +200,9 @@ internal sealed class ClientAssertionClaimRulesTests
     [DataRow(0L, 0L, true)]
     [DataRow(0L, 1L, true)]
     [DataRow(1L, 0L, true)]
-    [DataRow(599_999_999L, 0L, true)]
-    [DataRow(600_000_000L, 0L, false)]
-    [DataRow(600_000_000L, 1L, true)]
+    [DataRow(ToleranceTicks - 1, 0L, true)]
+    [DataRow(ToleranceTicks, 0L, false)]
+    [DataRow(ToleranceTicks, 1L, true)]
     public void AnExpiryAtTheClocksEndIsJudgedExactlyUnderTheTolerance(long expiryTicksBeforeTheEnd, long nowTicksBeforeTheEnd, bool accepted)
     {
         var claims = ValidClaims();
@@ -214,49 +216,86 @@ internal sealed class ClientAssertionClaimRulesTests
 
 
     /// <summary>
-    /// RFC 7523 Section 3 item 7 at the clock's end: an assertion whose exp is the clock's last tick, first used at that tick, is
-    /// accepted and its first use recorded until the clock's last instant, and the same assertion presented again at that tick is
-    /// refused as a replay, the guard holding the record it kept.
+    /// RFC 7523 Section 3 item 7 at the clock's end, before a store that drops a record once the window it is kept for has ended:
+    /// an assertion whose exp is the clock's last tick, first used at that tick, is accepted and its first use recorded as kept to
+    /// the clock's end, and the same assertion presented again at that tick is refused as a replay, the store keeping the record
+    /// by the carried fact. A store handed only the clock's last instant as the record's end would drop it at that very tick, so
+    /// the replay would read as a first use; the contrast row shows that store answering so, which the carried fact prevents.
     /// </summary>
+    /// <param name="storeReadsTheRetention">Whether the store drops by the retention the guard is handed, or by its last instant alone.</param>
+    /// <param name="replayRefused">Whether the replay at the clock's last tick is refused.</param>
     /// <returns>A task completing once both presentations are judged.</returns>
     [TestMethod]
-    public async Task AFirstUseAtTheClocksLastTickIsAcceptedAndItsReplayRefused()
+    [DataRow(true, true)]
+    [DataRow(false, false)]
+    public async Task AFirstUseAtTheClocksLastTickIsKeptToTheClocksEndAndItsReplayRefused(bool storeReadsTheRetention, bool replayRefused)
     {
         var claims = ValidClaims();
         claims[WellKnownJwtClaimNames.Exp] = NumericDate.FromInstant(DateTimeOffset.MaxValue);
-
-        var recorded = new Dictionary<string, DateTimeOffset>(StringComparer.Ordinal);
-
-        ValueTask<JtiReplayOutcome> consultFirstUse(string jti, DateTimeOffset recordKeptUntil, CancellationToken cancellationToken) =>
-            ValueTask.FromResult(recorded.TryAdd(jti, recordKeptUntil) ? JtiReplayOutcome.FirstUse : JtiReplayOutcome.Replayed);
+        var store = new ExpiringReplayStore(storeReadsTheRetention);
 
         var firstUse = await ClientAssertionClaimRules.JudgeAsync(
-            claims, ClientId, Audiences, DateTimeOffset.MaxValue, Skew, consultFirstUse, TestContext.CancellationToken).ConfigureAwait(false);
+            claims, ClientId, Audiences, DateTimeOffset.MaxValue, Skew, store.ConsultAt(DateTimeOffset.MaxValue), TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(firstUse.IsAccepted, $"A first use at the clock's last tick is accepted; got {firstUse.Refusal}.");
-        Assert.AreEqual(DateTimeOffset.MaxValue, recorded["assertion-jti"], "The first use is recorded until the clock's last instant.");
+        Assert.AreEqual(new ReplayRecordKeptToTheClocksEnd(), store.RetentionOf("assertion-jti"), "The first use is recorded as kept to the clock's end.");
 
         var replay = await ClientAssertionClaimRules.JudgeAsync(
-            claims, ClientId, Audiences, DateTimeOffset.MaxValue, Skew, consultFirstUse, TestContext.CancellationToken).ConfigureAwait(false);
+            claims, ClientId, Audiences, DateTimeOffset.MaxValue, Skew, store.ConsultAt(DateTimeOffset.MaxValue), TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.AreEqual(ClientAssertionClaimRefusal.IdentifierReplayed, replay.Refusal, "The replay at the clock's last tick is refused.");
+        Assert.AreEqual(
+            replayRefused ? ClientAssertionClaimRefusal.IdentifierReplayed : null,
+            replay.Refusal,
+            storeReadsTheRetention
+                ? "The record kept to the clock's end is kept at its last tick, so the replay is refused."
+                : "A store dropping by the last instant alone drops the record at that tick, so the replay reads as a first use.");
+    }
+
+
+    /// <summary>
+    /// RFC 7523 Section 3 item 7 for a window that ends exactly at the clock's last tick, exclusive: the record is kept until that
+    /// instant, so the assertion first used a tick before it is refused as a replay at that tick before, before a store that drops
+    /// records when their exclusive end is reached; at the clock's last tick the assertion itself is refused as expired, and the
+    /// store may drop its record.
+    /// </summary>
+    /// <returns>A task completing once the presentations are judged.</returns>
+    [TestMethod]
+    public async Task AWindowEndingAtTheClocksLastTickKeepsItsRecordUntilThatTickExclusive()
+    {
+        var expiry = DateTimeOffset.MaxValue.AddTicks(-ToleranceTicks);
+        var claims = ValidClaims();
+        claims[WellKnownJwtClaimNames.Exp] = NumericDate.FromInstant(expiry);
+        var store = new ExpiringReplayStore(readsRetention: true);
+        var tickBefore = DateTimeOffset.MaxValue.AddTicks(-1);
+
+        var firstUse = await ClientAssertionClaimRules.JudgeAsync(
+            claims, ClientId, Audiences, tickBefore, Skew, store.ConsultAt(tickBefore), TestContext.CancellationToken).ConfigureAwait(false);
+        var replay = await ClientAssertionClaimRules.JudgeAsync(
+            claims, ClientId, Audiences, tickBefore, Skew, store.ConsultAt(tickBefore), TestContext.CancellationToken).ConfigureAwait(false);
+        var atTheEnd = await ClientAssertionClaimRules.JudgeAsync(
+            claims, ClientId, Audiences, DateTimeOffset.MaxValue, Skew, store.ConsultAt(DateTimeOffset.MaxValue), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.IsTrue(firstUse.IsAccepted, $"A first use a tick before the window's end is accepted; got {firstUse.Refusal}.");
+        Assert.AreEqual(new ReplayRecordKeptUntil(DateTimeOffset.MaxValue), store.RetentionOf("assertion-jti"), "The record is kept until the clock's last tick, exclusive.");
+        Assert.AreEqual(ClientAssertionClaimRefusal.IdentifierReplayed, replay.Refusal, "The replay before the window's end is refused.");
+        Assert.AreEqual(ClientAssertionClaimRefusal.Expired, atTheEnd.Refusal, "At the window's exclusive end the assertion is expired.");
     }
 
 
     /// <summary>
     /// The judgement states whether the window reaches the clock's end, never an instant clipped to the clock standing for it: an
-    /// exp at the clock's last tick, or whose window ends a tick past the clock, reaches it, its record kept until the clock's last
-    /// instant; one whose window ends exactly at the clock's last tick, or a tick before it, does not, its record kept until that
-    /// instant.
+    /// exp at the clock's last tick, or whose window ends a tick past the clock, reaches it, its record kept to the clock's end;
+    /// one whose window ends exactly at the clock's last tick, or a tick before it, does not, its record kept until that instant,
+    /// exclusive.
     /// </summary>
     /// <param name="expiryTicksBeforeTheEnd">How many ticks the exp lies before the clock's last tick.</param>
     /// <param name="reachesTheEnd">Whether the window reaches the clock's end.</param>
-    /// <param name="recordTicksBeforeTheEnd">How many ticks before the clock's last tick the record is kept until.</param>
+    /// <param name="recordTicksBeforeTheEnd">How many ticks before the clock's last tick the record is kept until, where it does not.</param>
     [TestMethod]
     [DataRow(0L, true, 0L)]
-    [DataRow(599_999_999L, true, 0L)]
-    [DataRow(600_000_000L, false, 0L)]
-    [DataRow(600_000_001L, false, 1L)]
+    [DataRow(ToleranceTicks - 1, true, 0L)]
+    [DataRow(ToleranceTicks, false, 0L)]
+    [DataRow(ToleranceTicks + 1, false, 1L)]
     public void TheJudgementStatesWhetherTheWindowReachesTheClocksEnd(long expiryTicksBeforeTheEnd, bool reachesTheEnd, long recordTicksBeforeTheEnd)
     {
         var expiry = DateTimeOffset.MaxValue.AddTicks(-expiryTicksBeforeTheEnd);
@@ -266,8 +305,11 @@ internal sealed class ClientAssertionClaimRulesTests
         var judged = ClientAssertionClaimRules.Judge(claims, ClientId, Audiences, expiry, Skew);
 
         Assert.IsTrue(judged.IsAccepted, judged.Refusal?.ToString());
-        Assert.AreEqual(reachesTheEnd, judged.AcceptedToTheClocksEnd, $"exp {expiryTicksBeforeTheEnd} ticks before the clock's end.");
-        Assert.AreEqual(DateTimeOffset.MaxValue.AddTicks(-recordTicksBeforeTheEnd), judged.ReplayRecordKeptUntil);
+        var expected = reachesTheEnd
+            ? (ReplayRecordRetention)new ReplayRecordKeptToTheClocksEnd()
+            : new ReplayRecordKeptUntil(DateTimeOffset.MaxValue.AddTicks(-recordTicksBeforeTheEnd));
+
+        Assert.AreEqual(expected, judged.Retention, $"exp {expiryTicksBeforeTheEnd} ticks before the clock's end.");
     }
 
 
@@ -310,7 +352,7 @@ internal sealed class ClientAssertionClaimRulesTests
         var judged = ClientAssertionClaimRules.Judge(claims, ClientId, Audiences, Now, Skew);
 
         Assert.IsTrue(judged.IsAccepted, judged.Refusal?.ToString());
-        Assert.AreEqual(Now.AddMilliseconds(250), judged.ReplayRecordKeptUntil);
+        Assert.AreEqual(new ReplayRecordKeptUntil(Now.AddMilliseconds(250)), judged.Retention);
         Assert.AreEqual(ClientAssertionClaimRefusal.Expired, ClientAssertionClaimRules.Judge(claims, ClientId, Audiences, Now.AddMilliseconds(250), Skew).Refusal);
     }
 
@@ -337,7 +379,7 @@ internal sealed class ClientAssertionClaimRulesTests
 
     /// <summary>
     /// RFC 7523 Section 3 item 7: claims every other rule accepts are accepted only on the first use of their jti, the guard handed
-    /// the jti and the instant the assertion stops being accepted; every other outcome is refused under its own name; and claims
+    /// the jti and the retention until the instant the assertion stops being accepted; every other outcome is refused under its own name; and claims
     /// another rule refuses never reach the guard.
     /// </summary>
     /// <returns>A task completing once every outcome is judged.</returns>
@@ -361,9 +403,9 @@ internal sealed class ClientAssertionClaimRulesTests
 
             var judged = await ClientAssertionClaimRules.JudgeAsync(
                 ValidClaims(), ClientId, Audiences, Now, Skew,
-                (jti, recordKeptUntil, cancellationToken) =>
+                (jti, retention, cancellationToken) =>
                 {
-                    consulted.Add($"{jti}|{recordKeptUntil:O}");
+                    consulted.Add($"{jti}|{retention}");
 
                     return ValueTask.FromResult(outcome);
                 },
@@ -373,7 +415,7 @@ internal sealed class ClientAssertionClaimRulesTests
         }
 
         Assert.HasCount(5, consulted);
-        Assert.IsTrue(consulted.All(entry => string.Equals(entry, $"assertion-jti|{Now.AddMinutes(1) + Skew:O}", StringComparison.Ordinal)),
+        Assert.IsTrue(consulted.All(entry => string.Equals(entry, $"assertion-jti|{new ReplayRecordKeptUntil(Now.AddMinutes(1) + Skew)}", StringComparison.Ordinal)),
             "The guard is handed the jti and the instant the assertion stops being accepted.");
 
         var foreign = ValidClaims();
@@ -381,7 +423,7 @@ internal sealed class ClientAssertionClaimRulesTests
 
         var refused = await ClientAssertionClaimRules.JudgeAsync(
             foreign, ClientId, Audiences, Now, Skew,
-            (jti, recordKeptUntil, cancellationToken) => throw new AssertFailedException("Claims another rule refuses never reach the guard."),
+            (jti, retention, cancellationToken) => throw new AssertFailedException("Claims another rule refuses never reach the guard."),
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(ClientAssertionClaimRefusal.AudienceNotThisServer, refused.Refusal);
@@ -441,6 +483,59 @@ internal sealed class ClientAssertionClaimRulesTests
         "future" => Now.AddMinutes(2).ToUnixTimeSeconds(),
         _ => throw new ArgumentOutOfRangeException(nameof(change), $"{claim}: no value is named {change}.")
     };
+
+
+    /// <summary>
+    /// A replay store that drops a record once the window it is kept for has ended by the instant it is consulted at: by the
+    /// retention it was handed (<see cref="ReplayRecordRetention.IsDueAt"/>), or, for the contrast, by the record's last instant
+    /// alone, the instant a store holding one expiry per record is left with, the clock's last instant for a record kept to the
+    /// clock's end.
+    /// </summary>
+    private sealed class ExpiringReplayStore
+    {
+        /// <summary>Creates a store.</summary>
+        /// <param name="readsRetention">Whether the store drops by the retention, or by the last instant alone.</param>
+        public ExpiringReplayStore(bool readsRetention)
+        {
+            ReadsRetention = readsRetention;
+        }
+
+
+        /// <summary>Whether the store drops by the retention, or by the last instant alone.</summary>
+        private bool ReadsRetention { get; }
+
+        /// <summary>The records kept, each under its jti with the retention it was handed.</summary>
+        private Dictionary<string, ReplayRecordRetention> Records { get; } = new(StringComparer.Ordinal);
+
+
+        /// <summary>The retention the record of a jti is kept under.</summary>
+        /// <param name="jti">The jti.</param>
+        /// <returns>The retention.</returns>
+        public ReplayRecordRetention RetentionOf(string jti) => Records[jti];
+
+
+        /// <summary>The consultation of the store at an instant, as the judgement's replay guard.</summary>
+        /// <param name="instant">The instant the store's clock reads.</param>
+        /// <returns>The consultation.</returns>
+        public ConsultClientAssertionFirstUseDelegate ConsultAt(DateTimeOffset instant) => (jti, retention, cancellationToken) =>
+        {
+            foreach(var ended in Records.Where(record => IsDueAt(record.Value, instant)).Select(static record => record.Key).ToList())
+            {
+                _ = Records.Remove(ended);
+            }
+
+            return ValueTask.FromResult(Records.TryAdd(jti, retention) ? JtiReplayOutcome.FirstUse : JtiReplayOutcome.Replayed);
+        };
+
+
+        /// <summary>Whether a record kept under a retention has ended by an instant, as this store judges it.</summary>
+        /// <param name="retention">The retention.</param>
+        /// <param name="instant">The instant.</param>
+        /// <returns><see langword="true"/> when the store drops the record.</returns>
+        private bool IsDueAt(ReplayRecordRetention retention, DateTimeOffset instant) => ReadsRetention
+            ? retention.IsDueAt(instant)
+            : instant >= (retention is ReplayRecordKeptUntil { End: var end } ? end : DateTimeOffset.MaxValue);
+    }
 
 
     /// <summary>A replay guard's outcome and the rule a judgement under it names, or none for a first use.</summary>

@@ -32,14 +32,16 @@ public sealed record KeyAttestation
     public string? Certification { get; init; }
 
     /// <summary>
-    /// The <c>iat</c> the attestation was issued at, as written, or <see langword="null"/> when the body omits it; a body
-    /// carrying an <c>iat</c> that is no NumericDate is no attestation <see cref="KeyAttestationParser"/> reads.
+    /// The <c>iat</c> the attestation was issued at, as written: REQUIRED and an integer (Appendix D.1), so a body omitting it,
+    /// or carrying one that is no NumericDate or carries a fraction, is no attestation <see cref="KeyAttestationParser"/> reads.
     /// </summary>
-    public NumericDate? IssuedAt { get; init; }
+    public required NumericDate IssuedAt { get; init; }
 
     /// <summary>
-    /// The <c>exp</c> the attestation (and its keys) expire at, as written, or <see langword="null"/> when the body omits it;
-    /// a body carrying an <c>exp</c> that is no NumericDate is no attestation <see cref="KeyAttestationParser"/> reads.
+    /// The <c>exp</c> the attestation (and its keys) expire at, as written, or <see langword="null"/> when the body omits it,
+    /// which Appendix D.1 permits except where the attestation is used with a JWT proof
+    /// (<see cref="KeyAttestationProofUse.JwtProof"/>); a body carrying an <c>exp</c> that is no NumericDate or carries a
+    /// fraction is no attestation <see cref="KeyAttestationParser"/> reads.
     /// </summary>
     public NumericDate? ExpiresAt { get; init; }
 }

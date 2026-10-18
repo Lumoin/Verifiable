@@ -1538,7 +1538,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             ValueTask<PublicKeyMemory?> IssuerLookup(string iss, string? keyId, IReadOnlyList<string>? x5c, ExchangeContext context, CancellationToken ct) =>
                 ValueTask.FromResult(string.Equals(iss, IssuerId, StringComparison.Ordinal) ? issuerPublicKey : null);
 
-            VpTokenParsed parsed = await SdJwtVpTokenVerification.VerifyAsync(
+            var parsed = (await SdJwtVpTokenVerification.VerifyAsync(
                 serializedSdJwt,
                 new CredentialQueryId("pid"),
                 static s => SdJwtSerializer.ParseToken(
@@ -1553,7 +1553,7 @@ internal sealed class Oid4VpFlowIntegrationTests
                 parseX5c: null,
                 resolveTrustedAuthorityEvidence: null,
                 context: new ExchangeContext(),
-                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ExpectVerified();
 
             Assert.IsTrue(parsed.CredentialSignatureValid, "The issued credential must verify.");
             Assert.IsNotNull(parsed.Credential.Status?.StatusList, "The verifier must surface the credential's status_list reference.");
@@ -2927,7 +2927,7 @@ internal sealed class Oid4VpFlowIntegrationTests
         ValueTask<PublicKeyMemory?> IssuerLookup(string iss, string? keyId, IReadOnlyList<string>? x5c, ExchangeContext context, CancellationToken ct) =>
             ValueTask.FromResult(string.Equals(iss, IssuerId, StringComparison.Ordinal) ? issuerKey : null);
 
-        VpTokenParsed parsed = await SdJwtVpTokenVerification.VerifyAsync(
+        var parsed = (await SdJwtVpTokenVerification.VerifyAsync(
             compactPresentation,
             new CredentialQueryId("pid"),
             static s => SdJwtSerializer.ParseToken(
@@ -2942,7 +2942,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             parseX5c: null,
             resolveTrustedAuthorityEvidence: null,
             context: new ExchangeContext(),
-            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ExpectVerified();
 
         Assert.IsNotNull(parsed.KbJwtTransactionDataHashes,
             "KB-JWT must carry transaction_data_hashes when the JAR carried transaction_data.");

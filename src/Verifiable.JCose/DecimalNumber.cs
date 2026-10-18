@@ -51,6 +51,12 @@ public sealed record DecimalNumber
     /// <summary>Whether the number is zero.</summary>
     public bool IsZero => SignificantDigits.Length == 0;
 
+    /// <summary>
+    /// Whether the number is an integer, whatever its spelling: no significant digit lies after the decimal point, so
+    /// <c>1700000000</c>, <c>1700000000.0</c> and <c>1.7e9</c> are integers and <c>1700000000.5</c> is none.
+    /// </summary>
+    public bool IsInteger => SignificantDigits.Length <= PointPosition;
+
 
     /// <summary>
     /// The number a JSON number token names (RFC 8259 section 6: <c>[ minus ] int [ frac ] [ exp ]</c>, where <c>int</c> is a zero

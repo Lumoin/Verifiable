@@ -1,7 +1,9 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
+using System.Text;
 using System.Text.Json;
 using Verifiable.Core.Dcql;
+using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Core.StatusLists;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -1027,6 +1029,108 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
             "RFC 8259 Section 4: a repeated top-level claim name makes the payload's reading unpredictable, which is malformed.");
         Assert.AreEqual(0, resolverInvocations(),
             "The refusal happens before any claim is read, so no Status List Token is resolved.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9901#section-4.3">RFC 9901, Section 4.3</see> has the Key Binding JWT's
+    /// <c>iat</c> REQUIRED. A Wallet presenting through the HAIP verifier, end to end over the in-process listener, a KB-JWT
+    /// that omits it - otherwise the holder's own, its <c>nonce</c>, <c>aud</c> and <c>sd_hash</c> those of the presentation,
+    /// signed over its exact bytes - is refused: the verification carries the omitted <c>iat</c> as absent and the key-binding
+    /// checks refuse it, answered as HTTP 400 <c>invalid_request</c> and the flow failing as unverifiable. The control, the same
+    /// presentation rebound the same way with its <c>iat</c> written, is accepted.
+    /// </summary>
+    /// <param name="writeIat">Whether the rebound KB-JWT carries its <c>iat</c>.</param>
+    /// <returns>A task completing once the presentation is judged.</returns>
+    [TestMethod]
+    [DataRow(false, DisplayName = "A KB-JWT omitting iat")]
+    [DataRow(true, DisplayName = "The control, a KB-JWT carrying iat")]
+    public async Task AKeyBindingJwtOmittingItsIatIsRefusedThroughTheVerifier(bool writeIat)
+    {
+        await using TestHostShell app = new(TimeProvider);
+        using VerifierKeyMaterial verifierKeys = await app.RegisterClientAsync(
+            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities).ConfigureAwait(false);
+
+        var (serializedSdJwt, holderPrivateKey, issuerPublicKey) = await IssuePidAsync("Alice", "Smith", status: null).ConfigureAwait(false);
+        using var holderKey = holderPrivateKey;
+        using var issuerKey = issuerPublicKey;
+        app.RegisterIssuerTrust(IssuerId, issuerKey);
+
+        var produce = TestHostShell.BuildSdJwtProduceDelegate(serializedSdJwt, holderKey);
+
+        async ValueTask<Oid4VpPresentationSet> rebound(Oid4VpPresentationContext context, CancellationToken cancellationToken)
+        {
+            var presented = await produce(context, cancellationToken).ConfigureAwait(false);
+            var presentations = new Dictionary<string, string>(StringComparer.Ordinal);
+
+            foreach(var presentation in presented.PresentationsByQueryId)
+            {
+                presentations[presentation.Key] = await RebindKeyBindingAsync(
+                    presentation.Value, holderKey, writeIat, cancellationToken).ConfigureAwait(false);
+            }
+
+            return new Oid4VpPresentationSet { PresentationsByQueryId = presentations };
+        }
+
+        var walletClient = await app.CreateHttpBackedOid4VpWalletClientAsync(
+            verifierKeys, rebound, TestHostShell.PinnedVerifierKeyResolver(verifierKeys.SigningPublicKey), TestContext.CancellationToken).ConfigureAwait(false);
+
+        var (parHandle, refusalDetail) = await PresentAsync(
+            app, verifierKeys, walletClient, DcqlFixtures.PidFamilyNamePrepared(), $"nonce-kb-iat-{writeIat}").ConfigureAwait(false);
+
+        if(writeIat)
+        {
+            Assert.IsNull(refusalDetail, "The presentation rebound with its iat written is accepted.");
+            _ = Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State);
+
+            return;
+        }
+
+        Assert.IsNotNull(refusalDetail, "RFC 9901 section 4.3: a KB-JWT omitting its iat is no presentation the verifier accepts.");
+        OAuthErrorAssertions.AssertWireStatusCode(400, refusalDetail!, "The refusal is the Wallet's, answered as HTTP 400.");
+        Assert.AreEqual(OAuthErrors.InvalidRequest, OAuthErrorAssertions.ReadOAuthErrorBody(refusalDetail!).Item1);
+
+        var failed = Assert.IsInstanceOfType<VerifierFlowFailedState>(app.GetFlowState(parHandle).State);
+        Assert.AreEqual(VerifierFlowRefusalKind.Unverifiable, failed.Refusal!.Value.Kind, "The key-binding checks refuse the omitted iat.");
+    }
+
+
+    /// <summary>
+    /// Rebinds a presentation's Key Binding JWT: its protected header kept as written, its claims set written by hand from the
+    /// original's <c>nonce</c>, <c>aud</c> and <c>sd_hash</c>, with or without the original's <c>iat</c>, and signed under the
+    /// holder's key over its exact bytes.
+    /// </summary>
+    /// <param name="presentation">The serialized presentation, its KB-JWT last.</param>
+    /// <param name="holderKey">The holder's private key.</param>
+    /// <param name="writeIat">Whether the rebound claims set carries the original's <c>iat</c>.</param>
+    /// <param name="cancellationToken">Cancels the signing.</param>
+    /// <returns>The presentation with the rebound KB-JWT.</returns>
+    private static async ValueTask<string> RebindKeyBindingAsync(
+        string presentation, PrivateKeyMemory holderKey, bool writeIat, CancellationToken cancellationToken)
+    {
+        var lastSeparator = presentation.LastIndexOf('~', StringComparison.Ordinal);
+        var segments = presentation[(lastSeparator + 1)..].Split('.');
+
+        using var payloadBytes = TestSetup.Base64UrlDecoder(segments[1], Pool);
+        var claims = (JwkJsonReader.ReadTopLevelMembers(payloadBytes.Memory.Span) as JsonTopLevelMembers)
+            ?? throw new AssertFailedException("The original KB-JWT's claims set is one JSON object.");
+
+        var nonce = claims.Find(WellKnownJwtClaimNames.Nonce) as JsonMemberString;
+        var audience = claims.Find(WellKnownJwtClaimNames.Aud) as JsonMemberString;
+        var sdHash = claims.Find(SdConstants.SdHashClaim) as JsonMemberString;
+        var issuedAt = claims.Find(WellKnownJwtClaimNames.Iat) as JsonMemberNumber;
+
+        var payloadJson = $"{{\"{WellKnownJwtClaimNames.Nonce}\":\"{nonce!.Text}\","
+            + $"\"{WellKnownJwtClaimNames.Aud}\":\"{audience!.Text}\","
+            + $"\"{SdConstants.SdHashClaim}\":\"{sdHash!.Text}\""
+            + (writeIat ? $",\"{WellKnownJwtClaimNames.Iat}\":{issuedAt!.Spelling}" : string.Empty)
+            + "}";
+        var payloadSegment = TestSetup.Base64UrlEncoder(Encoding.UTF8.GetBytes(payloadJson));
+
+        using var signature = await holderKey.SignAsync(
+            Encoding.ASCII.GetBytes($"{segments[0]}.{payloadSegment}"), Pool, cancellationToken).ConfigureAwait(false);
+
+        return $"{presentation[..(lastSeparator + 1)]}{segments[0]}.{payloadSegment}.{TestSetup.Base64UrlEncoder(signature.AsReadOnlySpan())}";
     }
 
 

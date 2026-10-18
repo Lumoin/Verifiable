@@ -180,22 +180,23 @@ public static class JtiReplayGuard
 
         return ConsultCoreAsync(
             server, context, tenantId, JtiReplayPurpose.DpopProof, issuer,
-            DpopProofValidator.NormalizeTargetUri(target), jti, expiresAt, cancellationToken);
+            DpopProofValidator.NormalizeTargetUri(target), jti, new ReplayRecordKeptUntil(expiresAt), cancellationToken);
     }
 
 
     /// <summary>
     /// Consults the replay store for a <c>private_key_jwt</c> client assertion's <c>jti</c> under
-    /// <see cref="JtiReplayPurpose.ClientAssertion"/>: <see cref="ConsultAsync"/> in the shape of
-    /// <see cref="CheckClientAssertionJtiReplayDelegate"/>, so a caller wires this method directly as
-    /// that delegate.
+    /// <see cref="JtiReplayPurpose.ClientAssertion"/>: the consultation <see cref="ConsultAsync"/> performs, in the shape of
+    /// <see cref="CheckClientAssertionJtiReplayDelegate"/>, so a caller wires this method directly as that delegate, the record
+    /// stored with the retention it is given (<see cref="JtiSeenState.Retention"/>): a record kept to the clock's end is stored
+    /// with <see cref="DateTimeOffset.MaxValue"/> as its expiry and that fact, so a store dropping records by their expiry keeps it.
     /// </summary>
     /// <param name="server">The authorization server (its integration store and clock).</param>
     /// <param name="context">The exchange context carrying the resolved policy and tenant.</param>
     /// <param name="tenantId">The tenant the <c>jti</c> is scoped to.</param>
     /// <param name="issuer">The assertion's <c>iss</c>.</param>
     /// <param name="jti">The presented <c>jti</c> value.</param>
-    /// <param name="expiresAt">When the recorded entry should expire.</param>
+    /// <param name="retention">How long the recorded entry is kept: until an instant, exclusive, or to the clock's end.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The replay outcome.</returns>
     public static ValueTask<JtiReplayOutcome> ConsultClientAssertionAsync(
@@ -204,9 +205,9 @@ public static class JtiReplayGuard
         TenantId tenantId,
         string issuer,
         string jti,
-        DateTimeOffset expiresAt,
+        ReplayRecordRetention retention,
         CancellationToken cancellationToken) =>
-        ConsultAsync(server, context, tenantId, JtiReplayPurpose.ClientAssertion, issuer, jti, expiresAt, cancellationToken);
+        ConsultCoreAsync(server, context, tenantId, JtiReplayPurpose.ClientAssertion, issuer, target: null, jti, retention, cancellationToken);
 
 
     /// <summary>
@@ -262,7 +263,7 @@ public static class JtiReplayGuard
         string jti,
         DateTimeOffset expiresAt,
         CancellationToken cancellationToken) =>
-        ConsultCoreAsync(server, context, tenantId, purpose, issuer, target: null, jti, expiresAt, cancellationToken);
+        ConsultCoreAsync(server, context, tenantId, purpose, issuer, target: null, jti, new ReplayRecordKeptUntil(expiresAt), cancellationToken);
 
 
     /// <summary>
@@ -278,7 +279,7 @@ public static class JtiReplayGuard
     /// <param name="issuer">The issuer the <c>jti</c> was presented under.</param>
     /// <param name="target">The normalized target URI of a DPoP proof, or <see langword="null"/> for every other purpose.</param>
     /// <param name="jti">The presented <c>jti</c> value.</param>
-    /// <param name="expiresAt">When the recorded entry should expire.</param>
+    /// <param name="retention">How long the recorded entry is kept, carried in the stored state.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The replay outcome.</returns>
     private static async ValueTask<JtiReplayOutcome> ConsultCoreAsync(
@@ -289,13 +290,14 @@ public static class JtiReplayGuard
         string issuer,
         string? target,
         string jti,
-        DateTimeOffset expiresAt,
+        ReplayRecordRetention retention,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(server);
         ArgumentNullException.ThrowIfNull(context);
         ArgumentException.ThrowIfNullOrEmpty(issuer);
         ArgumentException.ThrowIfNullOrEmpty(jti);
+        ArgumentNullException.ThrowIfNull(retention);
         RequireTargetShape(purpose, target);
 
         var oauth = server.OAuth();
@@ -351,7 +353,8 @@ public static class JtiReplayGuard
             FlowId = flowId,
             ExpectedIssuer = issuer,
             EnteredAt = now,
-            ExpiresAt = expiresAt,
+            ExpiresAt = retention is ReplayRecordKeptUntil { End: var end } ? end : DateTimeOffset.MaxValue,
+            Retention = retention,
             Kind = FlowKind.JtiReplay,
             Purpose = purpose,
             Issuer = issuer,

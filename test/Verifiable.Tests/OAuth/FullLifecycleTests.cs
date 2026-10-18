@@ -254,7 +254,7 @@ internal sealed class FullLifecycleTests
         ValueTask<PublicKeyMemory?> IssuerLookup(string iss, string? keyId, IReadOnlyList<string>? x5c, ExchangeContext context, CancellationToken ct) =>
             ValueTask.FromResult(string.Equals(iss, SdJwtIssuerId, StringComparison.Ordinal) ? sdJwtIssuerPublic : null);
 
-        VpTokenParsed parsed = await SdJwtVpTokenVerification.VerifyAsync(
+        var parsed = (await SdJwtVpTokenVerification.VerifyAsync(
             presentation, new CredentialQueryId("pid"),
             static s => SdJwtSerializer.ParseToken(
                 s, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared, TestSalts.TestSaltTag),
@@ -266,7 +266,7 @@ internal sealed class FullLifecycleTests
             parseX5c: null,
             resolveTrustedAuthorityEvidence: null,
             context: new ExchangeContext(),
-            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ExpectVerified();
 
         Assert.IsTrue(parsed.CredentialSignatureValid, "The issued credential must verify at the verifier.");
         Assert.IsTrue(parsed.KbJwtSignatureValid, "The KB-JWT must verify against the cnf key the ISSUER bound.");

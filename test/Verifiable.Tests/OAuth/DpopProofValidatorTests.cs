@@ -21,6 +21,18 @@ internal sealed class DpopProofValidatorTests
 
     private FakeTimeProvider TimeProvider { get; } = new(NowInstant);
 
+    /// <summary>A <c>key_ops</c> naming verification alone (RFC 7517 section 4.3).</summary>
+    private static string[] VerifyOnly { get; } = ["verify"];
+
+    /// <summary>An <c>x5c</c> of one base64-encoded certificate (RFC 7517 section 4.7).</summary>
+    private static string[] Base64CertificateChain { get; } = ["MIIBkTCB+wIJAOfv"];
+
+    /// <summary>An <c>x5c</c> whose one element is base64url text, which section 4.7 says it is not.</summary>
+    private static string[] Base64UrlCertificateChain { get; } = ["_-_-"];
+
+    /// <summary>A private scalar <c>d</c> carried as an array rather than the string RFC 7518 section 6.2.2.1 names.</summary>
+    private static string[] PrivateScalarInAnArray { get; } = ["cHJpdmF0ZQ"];
+
 
     [TestMethod]
     public async Task ValidateAsyncSucceedsOnFreshProof()
@@ -762,6 +774,175 @@ internal sealed class DpopProofValidatorTests
             Assert.IsTrue(result.IsSuccess, $"{claimsCase}: got {result.FailureReason}.");
         }
     }
+
+
+    /// <summary>
+    /// RFC 7517 section 4 and the Web Cryptography API's <c>JsonWebKey</c> dictionary, through a signed proof: a key carrying
+    /// <c>key_ops</c> as an array of strings, <c>x5c</c> as an array of base64-encoded certificates, <c>ext</c> as a Boolean, or a
+    /// member no rule names, validates, its signature verifying under the key; a key member of another kind than its rule names -
+    /// a Boolean <c>kty</c>, a <c>null</c> <c>crv</c>, a <c>key_ops</c> holding a number, an <c>x5c</c> of base64url text, an
+    /// <c>ext</c> in a string - is refused as <see cref="DpopProofValidationFailureReason.Malformed"/>, and a <c>d</c> carried as
+    /// an array as <see cref="DpopProofValidationFailureReason.JwkContainsPrivateKey"/>, each carrying the reading's refusal of the
+    /// member whole.
+    /// </summary>
+    /// <param name="keyCase">The name of the key members the row adds or changes.</param>
+    /// <param name="expected">The failure the proof is answered with, or <see langword="null"/> for a valid proof.</param>
+    /// <param name="defect">The member defect the refusal carries, where the proof is refused.</param>
+    /// <returns>A task completing once the proof is judged.</returns>
+    [TestMethod]
+    [DataRow("key-ops-x5c-ext", null, null)]
+    [DataRow("unknown-member", null, null)]
+    [DataRow("kty-boolean", DpopProofValidationFailureReason.Malformed, DpopProofMemberDefect.NotAString)]
+    [DataRow("crv-null", DpopProofValidationFailureReason.Malformed, DpopProofMemberDefect.NotAString)]
+    [DataRow("key-ops-number", DpopProofValidationFailureReason.Malformed, DpopProofMemberDefect.NotAnArrayOfStrings)]
+    [DataRow("x5c-base64url", DpopProofValidationFailureReason.Malformed, DpopProofMemberDefect.NotACertificateChain)]
+    [DataRow("ext-string", DpopProofValidationFailureReason.Malformed, DpopProofMemberDefect.NotABoolean)]
+    [DataRow("d-array", DpopProofValidationFailureReason.JwkContainsPrivateKey, DpopProofMemberDefect.PrivateKeyMaterial)]
+    public async Task ValidateAsyncJudgesEachMemberOfTheEmbeddedKeyByItsOwnRule(
+        string keyCase, DpopProofValidationFailureReason? expected, DpopProofMemberDefect? defect)
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        var key = new DpopKey(keys, WellKnownJwaValues.Es256);
+
+        var proof = await BuildProofWithCustomHeaderAsync(key, BuildClaims(),
+            header =>
+            {
+                var jwk = new Dictionary<string, object>((IReadOnlyDictionary<string, object>)header[WellKnownJoseHeaderNames.Jwk], StringComparer.Ordinal);
+
+                switch(keyCase)
+                {
+                    case "key-ops-x5c-ext":
+                    {
+                        jwk[WellKnownJwkMemberNames.KeyOps] = VerifyOnly;
+                        jwk[WellKnownJwkMemberNames.X5c] = Base64CertificateChain;
+                        jwk[WellKnownJwkMemberNames.Ext] = true;
+                        break;
+                    }
+                    case "unknown-member":
+                    {
+                        jwk["x-deployment"] = new Dictionary<string, object>(StringComparer.Ordinal) { ["region"] = 7L };
+                        break;
+                    }
+                    case "kty-boolean":
+                    {
+                        jwk[WellKnownJwkMemberNames.Kty] = true;
+                        break;
+                    }
+                    case "crv-null":
+                    {
+                        jwk[WellKnownJwkMemberNames.Crv] = null!;
+                        break;
+                    }
+                    case "key-ops-number":
+                    {
+                        jwk[WellKnownJwkMemberNames.KeyOps] = new object[] { "verify", 7L };
+                        break;
+                    }
+                    case "x5c-base64url":
+                    {
+                        jwk[WellKnownJwkMemberNames.X5c] = Base64UrlCertificateChain;
+                        break;
+                    }
+                    case "ext-string":
+                    {
+                        jwk[WellKnownJwkMemberNames.Ext] = "true";
+                        break;
+                    }
+                    case "d-array":
+                    {
+                        jwk[WellKnownJwkMemberNames.D] = PrivateScalarInAnArray;
+                        break;
+                    }
+                    default:
+                    {
+                        throw new ArgumentOutOfRangeException(nameof(keyCase), keyCase, "No key is named so.");
+                    }
+                }
+
+                return new Dictionary<string, object>(header) { [WellKnownJoseHeaderNames.Jwk] = jwk };
+            }).ConfigureAwait(false);
+
+        var result = await ValidateAsync(
+            proof,
+            expectedNonce: null,
+            nonceRequired: false,
+            accessToken: null,
+            verifier: DpopTestSupport.Es256Verification,
+            httpUrl: DefaultUrl).ConfigureAwait(false);
+
+        Assert.AreEqual(expected, result.FailureReason, keyCase);
+        Assert.AreEqual(defect, (result.PartRefusal as DpopProofMemberRefusal)?.Defect, keyCase);
+        Assert.IsTrue(expected is not null || result.JwkThumbprint == DpopJwkUtilities.ComputeThumbprint(keys.PublicKey, WellKnownJwaValues.Es256, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared),
+            $"{keyCase}: a valid proof's thumbprint is its key's, over the required members alone.");
+    }
+
+
+    /// <summary>
+    /// The reading's refusal of a proof's part is carried into the validation result whole, beside the coarse category its typed
+    /// refusal names: a claims set naming <c>htu</c> twice as the JSON reader's refusal of the payload, a <c>jti</c> carried as a
+    /// number as that member's refusal, a header carrying no <c>typ</c> as <see cref="DpopProofValidationFailureReason.InvalidTyp"/>
+    /// with the <c>typ</c>'s absence, and a header carrying <c>typ</c> as <c>null</c> as
+    /// <see cref="DpopProofValidationFailureReason.Malformed"/> with the <c>typ</c>'s refusal as no string, never read as an absent
+    /// or empty <c>typ</c>.
+    /// </summary>
+    /// <returns>A task completing once the proofs are judged.</returns>
+    [TestMethod]
+    public async Task ValidateAsyncCarriesTheReadingsRefusalWhole()
+    {
+        var keys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        var key = new DpopKey(keys, WellKnownJwaValues.Es256);
+        var headerSegment = (await BuildProofAsync(key, BuildClaims()).ConfigureAwait(false)).Split('.')[0];
+        var jti = $"\"{WellKnownJwtClaimNames.Jti}\":\"{Guid.NewGuid():N}\"";
+        var htm = $"\"{WellKnownJwtClaimNames.Htm}\":\"{DefaultMethod}\"";
+        var htu = $"\"{WellKnownJwtClaimNames.Htu}\":\"{DefaultUrl}\"";
+        var iat = $"\"{WellKnownJwtClaimNames.Iat}\":{NowInstant.ToUnixTimeSeconds()}";
+
+        var repeatedHtu = await ValidateSignedAsync(await SignClaimsUnderHeaderAsync(keys.PrivateKey, headerSegment, $"{{{jti},{htm},{htu},{htu},{iat}}}").ConfigureAwait(false)).ConfigureAwait(false);
+        var numberJti = await ValidateSignedAsync(await SignClaimsUnderHeaderAsync(keys.PrivateKey, headerSegment, $"{{\"{WellKnownJwtClaimNames.Jti}\":7,{htm},{htu},{iat}}}").ConfigureAwait(false)).ConfigureAwait(false);
+        var absentTyp = await ValidateSignedAsync(await BuildProofWithCustomHeaderAsync(key, BuildClaims(), static header =>
+        {
+            var changed = new Dictionary<string, object>(header);
+            _ = changed.Remove(WellKnownJoseHeaderNames.Typ);
+
+            return changed;
+        }).ConfigureAwait(false)).ConfigureAwait(false);
+        var nullTyp = await ValidateSignedAsync(await BuildProofWithCustomHeaderAsync(key, BuildClaims(),
+            static header => new Dictionary<string, object>(header) { [WellKnownJoseHeaderNames.Typ] = null! }).ConfigureAwait(false)).ConfigureAwait(false);
+
+        Assert.AreEqual(DpopProofValidationFailureReason.Malformed, repeatedHtu.FailureReason);
+        Assert.IsTrue(repeatedHtu.PartRefusal is JwsPartDocumentRefusal { Part: JwsPart.Payload, Refusal: JsonRepeatedMemberName }, "The reader's refusal of the payload is carried.");
+        Assert.AreEqual(WellKnownJwtClaimNames.Htu, ((repeatedHtu.PartRefusal as JwsPartDocumentRefusal)?.Refusal as JsonRepeatedMemberName)?.Name);
+
+        Assert.AreEqual(DpopProofValidationFailureReason.Malformed, numberJti.FailureReason);
+        Assert.AreEqual(
+            new DpopProofMemberRefusal(DpopProofMember.Jti, WellKnownJwtClaimNames.Jti, new JsonMemberNumber("7"), DpopProofMemberDefect.NotAString),
+            numberJti.PartRefusal,
+            "The jti's refusal is carried whole.");
+
+        Assert.AreEqual(DpopProofValidationFailureReason.InvalidTyp, absentTyp.FailureReason);
+        Assert.AreEqual(
+            new DpopProofMemberRefusal(DpopProofMember.Typ, WellKnownJoseHeaderNames.Typ, new JsonMemberAbsent(), DpopProofMemberDefect.Absent),
+            absentTyp.PartRefusal,
+            "The typ's absence is carried whole.");
+
+        Assert.AreEqual(DpopProofValidationFailureReason.Malformed, nullTyp.FailureReason, "A typ carried as null is a header not well formed.");
+        Assert.AreEqual(
+            new DpopProofMemberRefusal(DpopProofMember.Typ, WellKnownJoseHeaderNames.Typ, new JsonMemberOfOtherKind(JsonTopLevelValueKind.Null), DpopProofMemberDefect.NotAString),
+            nullTyp.PartRefusal,
+            "The typ's refusal as no string is carried whole.");
+    }
+
+
+    /// <summary>Validates a signed proof for a POST to the default target with no nonce or access token in flight.</summary>
+    /// <param name="proof">The compact proof.</param>
+    /// <returns>The validation result.</returns>
+    private Task<DpopProofValidationResult> ValidateSignedAsync(string proof) => ValidateAsync(
+        proof,
+        expectedNonce: null,
+        nonceRequired: false,
+        accessToken: null,
+        verifier: DpopTestSupport.Es256Verification,
+        httpUrl: DefaultUrl);
 
 
     /// <summary>

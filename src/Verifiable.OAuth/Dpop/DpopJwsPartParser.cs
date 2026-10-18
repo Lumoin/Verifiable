@@ -19,14 +19,17 @@ public sealed record DpopJwsPartParser
 
     /// <summary>
     /// Reads the JSON bytes of a header segment into a <see cref="DpopProofHeader"/> or its typed refusal, never throwing; the
-    /// validator answers a refusal as <see cref="DpopProofValidationFailureReason.Malformed"/>, and one for an absent
-    /// <c>typ</c> as <see cref="DpopProofValidationFailureReason.InvalidTyp"/>.
+    /// validator carries a refusal whole (<see cref="DpopProofValidationResult.PartRefusal"/>), answered as
+    /// <see cref="DpopProofValidationFailureReason.InvalidTyp"/> for an absent <c>typ</c>,
+    /// <see cref="DpopProofValidationFailureReason.JwkContainsPrivateKey"/> for a key carrying private or symmetric material, and
+    /// <see cref="DpopProofValidationFailureReason.Malformed"/> otherwise.
     /// </summary>
     public required Func<ReadOnlyMemory<byte>, DpopProofPartReading<DpopProofHeader>> ParseHeader { get; init; }
 
     /// <summary>
     /// Reads the JSON bytes of a payload segment into a <see cref="DpopProofClaims"/> or its typed refusal, never throwing; the
-    /// validator answers a refusal as <see cref="DpopProofValidationFailureReason.Malformed"/>.
+    /// validator carries a refusal whole (<see cref="DpopProofValidationResult.PartRefusal"/>), answered as
+    /// <see cref="DpopProofValidationFailureReason.Malformed"/>.
     /// </summary>
     public required Func<ReadOnlyMemory<byte>, DpopProofPartReading<DpopProofClaims>> ParseClaims { get; init; }
 }
