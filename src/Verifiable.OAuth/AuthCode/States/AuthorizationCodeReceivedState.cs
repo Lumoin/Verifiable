@@ -52,4 +52,11 @@ public sealed record AuthorizationCodeReceivedState : FlowState
     /// types".
     /// </summary>
     public ImmutableArray<string> Resource { get; init; } = [];
+
+    /// <summary>
+    /// The <c>nonce</c> the OpenID Connect authentication request of this flow sent, carried forward from
+    /// <see cref="ParCompletedState.Nonce"/>, which the ID Token the code is exchanged for must carry (OpenID Connect Core
+    /// 1.0 §3.1.3.7 item 11); <see langword="null"/> for a request that sent none.
+    /// </summary>
+    public string? Nonce { get; init; }
 }

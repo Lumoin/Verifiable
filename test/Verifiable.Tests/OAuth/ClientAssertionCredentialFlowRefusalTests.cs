@@ -187,9 +187,10 @@ internal sealed class ClientAssertionCredentialFlowRefusalTests
 
 
     /// <summary>
-    /// An ID-JAG mint under a registration naming a method that presents no client assertion is refused, typed
-    /// (<see cref="ClientAssertionCredentialRefusalReason.MethodPresentsNoAssertion"/>), before it resolves metadata or sends
-    /// anything, although the registration carries a key the assertion could be signed with.
+    /// An ID-JAG mint under a registration naming a method that presents neither a client assertion nor a client secret is
+    /// refused, typed (<see cref="ClientAssertionCredentialRefusalReason.MethodPresentsNoAssertion"/>), before it resolves
+    /// metadata or sends anything, although the registration carries a key the assertion could be signed with. A mint under
+    /// <c>client_secret_basic</c> or <c>client_secret_post</c> presents the secret instead (IdJagMintClientAuthenticationTests).
     /// </summary>
     [TestMethod]
     public async Task MintRefusesARegistrationWhoseMethodPresentsNoAssertion()
@@ -200,11 +201,11 @@ internal sealed class ClientAssertionCredentialFlowRefusalTests
         var observations = new FlowObservations();
 
         var result = await MintAsync(
-            RegistrationOf(ClientAuthenticationMethod.ClientSecretBasic, keyMaterial), OptionsNaming(SigningKeyId), observations)
+            RegistrationOf(ClientAuthenticationMethod.None, keyMaterial), OptionsNaming(SigningKeyId), observations)
             .ConfigureAwait(false);
 
         var refusal = AssertIdJagRefusedBeforeAnything(result, ClientAssertionCredentialRefusalReason.MethodPresentsNoAssertion, observations);
-        Assert.AreEqual<ClientAuthenticationMethod?>(ClientAuthenticationMethod.ClientSecretBasic, refusal.Method, "The refusal names the registration's method.");
+        Assert.AreEqual<ClientAuthenticationMethod?>(ClientAuthenticationMethod.None, refusal.Method, "The refusal names the registration's method.");
     }
 
 

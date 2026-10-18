@@ -34,6 +34,9 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
     /// <summary>The issuer's RFC 8414 well-known location.</summary>
     private const string MetadataUrl = "https://as.example.com/.well-known/oauth-authorization-server";
 
+    /// <summary>The issuer's OpenID Connect discovery location.</summary>
+    private const string DiscoveryUrl = "https://as.example.com/.well-known/openid-configuration";
+
 
     /// <summary>
     /// The full <see href="https://www.rfc-editor.org/rfc/rfc8414#section-3.2">RFC 8414 §3.2</see>
@@ -88,6 +91,31 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
         Assert.AreSequenceEqual(ExampleTokenEndpointAuthSigningAlgValuesSupported, metadata.TokenEndpointAuthSigningAlgValuesSupported);
         Assert.AreSequenceEqual(ExampleScopesSupported, metadata.ScopesSupported);
         Assert.AreSequenceEqual(ExampleResponseTypesSupported, metadata.ResponseTypesSupported);
+    }
+
+
+    /// <summary>
+    /// RFC 8414 §2: an omitted <c>token_endpoint_auth_methods_supported</c> reads as <c>client_secret_basic</c> alone, which a list
+    /// stated empty does not, so the reading keeps the omission as no list and a stated empty list as an empty one.
+    /// </summary>
+    /// <param name="member">The member as the document writes it, or the empty string for a document omitting it.</param>
+    /// <param name="stated">Whether the reading holds a list.</param>
+    [TestMethod]
+    [DataRow("", false, DisplayName = "The member omitted")]
+    [DataRow(",\"token_endpoint_auth_methods_supported\":[]", true, DisplayName = "The member stated as an empty list")]
+    public void TheAuthenticationMethodListKeepsItsOmissionApartFromAnEmptyList(string member, bool stated)
+    {
+        var body = $"{{\"issuer\":\"https://server.example.com\"{member}}}";
+
+        var result = AuthorizationServerMetadataJson.Parse(Encoding.UTF8.GetBytes(body));
+
+        Assert.IsTrue(result.IsSuccess, $"Defect: {result.Error}");
+        Assert.AreEqual(stated, result.Value.TokenEndpointAuthMethodsSupported is not null, "The reading keeps whether the member was stated.");
+
+        if(stated)
+        {
+            Assert.IsEmpty(result.Value.TokenEndpointAuthMethodsSupported!, "A list stated empty is read as empty, never as the omitted member's default.");
+        }
     }
 
 
@@ -766,6 +794,129 @@ internal sealed class AuthorizationServerMetadataDocumentsResolvingTests
         Assert.AreEqual(AuthorizationServerMetadataUnreadableReason.UnpairedSurrogate, unreadable.Error.Reason);
     }
 
+
+    /// <summary>
+    /// An OpenID Provider answering at its OpenID Connect discovery location is resolved there, and its RFC 8414 location is
+    /// never read.
+    /// </summary>
+    [TestMethod]
+    public async Task AnOpenIdProviderIsResolvedAtItsDiscoveryLocationFirst()
+    {
+        var transport = new ScriptedTransport();
+        transport.Enqueue(DiscoveryUrl, 200, ValidDocumentJson(Issuer), contentType: WellKnownMediaTypes.Application.Json);
+        transport.Enqueue(MetadataUrl, 200, ValidDocumentJson(Issuer), contentType: WellKnownMediaTypes.Application.Json);
+
+        var resolution = await AuthorizationServerMetadataDocuments.ResolveOpenIdProviderAsync(
+            new Uri(Issuer, UriKind.Absolute), NewContext(), transport.Delegate, AuthorizationServerMetadataJson.Parse,
+            new AuthorizationServerMetadataResolverOptions(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        var resolved = Assert.IsInstanceOfType<AuthorizationServerMetadataResolved>(resolution);
+        Assert.AreEqual(DiscoveryUrl, resolved.MetadataLocation.OriginalString);
+        Assert.HasCount(1, transport.Calls, "The RFC 8414 location is never read once the discovery location answers.");
+    }
+
+
+    /// <summary>
+    /// An OpenID Provider whose discovery location answers nothing is resolved at its RFC 8414 location, and one answering at
+    /// neither is the RFC 8414 attempt's outcome.
+    /// </summary>
+    [TestMethod]
+    public async Task AnOpenIdProviderAnsweringNoDiscoveryIsResolvedAtItsRfc8414Location()
+    {
+        var transport = new ScriptedTransport();
+        transport.Enqueue(MetadataUrl, 200, ValidDocumentJson(Issuer), contentType: WellKnownMediaTypes.Application.Json);
+
+        var resolution = await AuthorizationServerMetadataDocuments.ResolveOpenIdProviderAsync(
+            new Uri(Issuer, UriKind.Absolute), NewContext(), transport.Delegate, AuthorizationServerMetadataJson.Parse,
+            new AuthorizationServerMetadataResolverOptions(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        var resolved = Assert.IsInstanceOfType<AuthorizationServerMetadataResolved>(resolution);
+        Assert.AreEqual(MetadataUrl, resolved.MetadataLocation.OriginalString);
+
+        var neither = await AuthorizationServerMetadataDocuments.ResolveOpenIdProviderAsync(
+            new Uri("https://other.example.com", UriKind.Absolute), NewContext(), transport.Delegate, AuthorizationServerMetadataJson.Parse,
+            new AuthorizationServerMetadataResolverOptions(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(404, Assert.IsInstanceOfType<AuthorizationServerMetadataNotAnswered>(neither).StatusCode);
+    }
+
+
+    /// <summary>
+    /// RFC 8414 §3.3 at an OpenID Provider's discovery location: a document there naming another issuer "MUST NOT be used", and it
+    /// is answered as that issuer mismatch whatever the RFC 8414 location would serve - a document of the issuer asked for there
+    /// among it - and the RFC 8414 location is never read.
+    /// </summary>
+    [TestMethod]
+    public async Task AnOpenIdProviderWhoseDiscoveryNamesAnotherIssuerIsAnsweredAsThatMismatch()
+    {
+        const string AnotherIssuer = "https://another.example.com";
+
+        var transport = new ScriptedTransport();
+        transport.Enqueue(DiscoveryUrl, 200, ValidDocumentJson(AnotherIssuer), contentType: WellKnownMediaTypes.Application.Json);
+        transport.Enqueue(MetadataUrl, 200, ValidDocumentJson(Issuer), contentType: WellKnownMediaTypes.Application.Json);
+
+        var resolution = await AuthorizationServerMetadataDocuments.ResolveOpenIdProviderAsync(
+            new Uri(Issuer, UriKind.Absolute), NewContext(), transport.Delegate, AuthorizationServerMetadataJson.Parse,
+            new AuthorizationServerMetadataResolverOptions(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        var mismatch = Assert.IsInstanceOfType<AuthorizationServerMetadataIssuerMismatch>(resolution);
+        Assert.AreEqual(AnotherIssuer, mismatch.PublishedIssuer);
+        Assert.HasCount(1, transport.Calls, "The RFC 8414 location is never read once the discovery location named another issuer.");
+    }
+
+
+    /// <summary>
+    /// What an OpenID Provider's discovery location answered other than its absence is what the provider answered, and a valid
+    /// document of the issuer asked for at the RFC 8414 location never supersedes it: a status other than 404 or 410, a document
+    /// of another media type, one past the byte cap, and one no reader reads are each answered as that outcome, the RFC 8414
+    /// location never read; a 410 Gone, which states the location holds no document, is answered by the RFC 8414 location.
+    /// </summary>
+    /// <param name="status">The status the discovery location answers.</param>
+    /// <param name="body">The body it answers.</param>
+    /// <param name="contentType">The media type it names.</param>
+    /// <param name="answeredAs">The outcome's type name the resolution answers.</param>
+    [TestMethod]
+    [DataRow(500, "{}", "application/json", nameof(AuthorizationServerMetadataNotAnswered), DisplayName = "A 500 at the discovery location")]
+    [DataRow(403, "{}", "application/json", nameof(AuthorizationServerMetadataNotAnswered), DisplayName = "A 403 at the discovery location")]
+    [DataRow(200, "{}", "text/html", nameof(AuthorizationServerMetadataUnsupportedMediaType), DisplayName = "A document of another media type")]
+    [DataRow(200, "{\"issuer\":", "application/json", nameof(AuthorizationServerMetadataUnreadable), DisplayName = "A document no reader reads")]
+    [DataRow(410, "{}", "application/json", nameof(AuthorizationServerMetadataResolved), DisplayName = "A 410 Gone at the discovery location")]
+    public async Task AnOpenIdProviderWhoseDiscoveryAnswersOtherThanItsAbsenceIsAnsweredByThatAnswer(int status, string body, string contentType, string answeredAs)
+    {
+        var transport = new ScriptedTransport();
+        transport.Enqueue(DiscoveryUrl, status, body, contentType: contentType);
+        transport.Enqueue(MetadataUrl, 200, ValidDocumentJson(Issuer), contentType: WellKnownMediaTypes.Application.Json);
+
+        var resolution = await AuthorizationServerMetadataDocuments.ResolveOpenIdProviderAsync(
+            new Uri(Issuer, UriKind.Absolute), NewContext(), transport.Delegate, AuthorizationServerMetadataJson.Parse,
+            new AuthorizationServerMetadataResolverOptions(), TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(answeredAs, resolution.GetType().Name, "The resolution answers what the discovery location answered.");
+        Assert.HasCount(
+            resolution is AuthorizationServerMetadataResolved ? 2 : 1,
+            transport.Calls,
+            "The RFC 8414 location is read only after the discovery location stated it holds no document.");
+    }
+
+
+    /// <summary>
+    /// What an OpenID Provider's discovery location answered past its byte cap is answered as too large, the RFC 8414 location
+    /// never read.
+    /// </summary>
+    [TestMethod]
+    public async Task AnOpenIdProviderWhoseDiscoveryDocumentIsTooLargeIsAnsweredSo()
+    {
+        var transport = new ScriptedTransport();
+        transport.Enqueue(DiscoveryUrl, 200, ValidDocumentJson(Issuer), contentType: WellKnownMediaTypes.Application.Json);
+        transport.Enqueue(MetadataUrl, 200, "{}", contentType: WellKnownMediaTypes.Application.Json);
+
+        var resolution = await AuthorizationServerMetadataDocuments.ResolveOpenIdProviderAsync(
+            new Uri(Issuer, UriKind.Absolute), NewContext(), transport.Delegate, AuthorizationServerMetadataJson.Parse,
+            new AuthorizationServerMetadataResolverOptions { MaximumDocumentBytes = 8 }, TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = Assert.IsInstanceOfType<AuthorizationServerMetadataTooLarge>(resolution);
+        Assert.HasCount(1, transport.Calls, "The RFC 8414 location is never read once the discovery location answered a document.");
+    }
 
     /// <summary>Builds the reference application-layer cache under test, over the scripted transport and pinned clock.</summary>
     private static AuthorizationServerMetadataResolutionCache NewCache(ScriptedTransport transport, TimeProvider timeProvider) =>

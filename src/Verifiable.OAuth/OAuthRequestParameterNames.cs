@@ -232,6 +232,18 @@ public static class OAuthRequestParameterNames
     /// </summary>
     public static string ErrorDescription { get; } = Utf8Constants.ToInternedString(ErrorDescriptionUtf8);
 
+    /// <summary>The UTF-8 source literal of <see cref="ErrorInformationLocation"/>.</summary>
+    public static ReadOnlySpan<byte> ErrorInformationLocationUtf8 => "error_uri"u8;
+
+    /// <summary>
+    /// The name of the <c>error_uri</c> parameter, which locates a human-readable web page with information about the
+    /// error, used to provide the client developer with additional information about the error per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 §5.2</see>.
+    /// OPTIONAL. This member is the parameter's name, text compared and written as such; the location the parameter
+    /// carries is read as a <see cref="System.Uri"/> (<see cref="OAuthProtocolError.ErrorUri"/>).
+    /// </summary>
+    public static string ErrorInformationLocation { get; } = Utf8Constants.ToInternedString(ErrorInformationLocationUtf8);
+
     //Token request parameters — RFC 6749 §4.1.3.
 
     /// <summary>The UTF-8 source literal of <see cref="GrantType"/>.</summary>
@@ -255,6 +267,12 @@ public static class OAuthRequestParameterNames
     /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.1">RFC 6749 §5.1</see>.
     /// </summary>
     public static string AccessToken { get; } = Utf8Constants.ToInternedString(AccessTokenUtf8);
+
+    /// <summary>Returns <see langword="true"/> when <paramref name="value"/> is exactly <c>access_token</c>.</summary>
+    /// <param name="value">The parameter name to recognize.</param>
+    /// <returns><see langword="true"/> when <paramref name="value"/> names the <see cref="AccessToken"/> parameter.</returns>
+    public static bool IsAccessToken(string value) =>
+        string.Equals(value, AccessToken, StringComparison.Ordinal);
 
     /// <summary>The UTF-8 source literal of <see cref="TokenType"/>.</summary>
     public static ReadOnlySpan<byte> TokenTypeUtf8 => "token_type"u8;
@@ -625,4 +643,17 @@ public static class OAuthRequestParameterNames
     /// JWT profile (<c>private_key_jwt</c> / <c>client_secret_jwt</c>).
     /// </summary>
     public static string ClientAssertionType { get; } = Utf8Constants.ToInternedString(ClientAssertionTypeUtf8);
+
+    //OpenID Connect authentication request parameter — OpenID Connect Core 1.0 §3.1.2.1.
+
+    /// <summary>The UTF-8 source literal of <see cref="Nonce"/>.</summary>
+    public static ReadOnlySpan<byte> NonceUtf8 => "nonce"u8;
+
+    /// <summary>
+    /// The <c>nonce</c> authentication request parameter — "String value used to associate a Client session with an ID
+    /// Token, and to mitigate replay attacks. The value is passed through unmodified from the Authentication Request to
+    /// the ID Token." (<see href="https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest">OpenID Connect Core
+    /// 1.0 §3.1.2.1</see>).
+    /// </summary>
+    public static string Nonce { get; } = Utf8Constants.ToInternedString(NonceUtf8);
 }

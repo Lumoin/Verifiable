@@ -1,5 +1,6 @@
 using System.Globalization;
 using Verifiable.Core;
+using Verifiable.JCose;
 using Verifiable.OAuth.Client;
 
 namespace Verifiable.OAuth;
@@ -10,7 +11,7 @@ namespace Verifiable.OAuth;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Four distinct failure modes exist for a client flow driving a PAR or token
+/// Several distinct failure modes exist for a client flow driving a PAR or token
 /// endpoint call. Callers must distinguish between them to respond appropriately:
 /// </para>
 /// <list type="bullet">
@@ -31,8 +32,29 @@ namespace Verifiable.OAuth;
 ///   </item>
 ///   <item>
 ///     <description>
+///       <see cref="OAuthRepeatedMemberName"/> — the response body is one well-formed JSON
+///       object, but one of its objects names a member more than once (RFC 8259 §4), so it
+///       names no parameter one way.
+///     </description>
+///   </item>
+///   <item>
+///     <description>
+///       <see cref="OAuthUndecodableMemberValue"/> — the response body is one well-formed JSON
+///       object, but a member of one of its objects, read as a parameter or not, has a name or a
+///       string value naming no Unicode text (RFC 8259 §8.2), so the body holds text no reader
+///       agrees on.
+///     </description>
+///   </item>
+///   <item>
+///     <description>
 ///       <see cref="OAuthInvalidFieldValue"/> — a required field was present but
 ///       its value failed validation per the relevant specification.
+///     </description>
+///   </item>
+///   <item>
+///     <description>
+///       <see cref="OAuthInvalidLifetime"/> — the response carries <c>expires_in</c>, but as
+///       no positive integer within the library's range, naming why.
 ///     </description>
 ///   </item>
 ///   <item>
@@ -54,6 +76,13 @@ namespace Verifiable.OAuth;
 ///       <see cref="OAuthClientAssertionRefused"/> — the client authentication assertion the request was to
 ///       present was refused as its credential was formed from the registration, before anything was resolved,
 ///       composed or sent.
+///     </description>
+///   </item>
+///   <item>
+///     <description>
+///       <see cref="OAuthClientAuthenticationRefused"/> — the client authentication the exchange was to
+///       present was refused as the exchange was composed: a secret method whose registration carries no
+///       secret, or an assertion method handed no assertion inputs, before anything was resolved or sent.
 ///     </description>
 ///   </item>
 /// </list>
@@ -139,10 +168,68 @@ public sealed record OAuthProtocolError(
 /// Common causes: the wrong endpoint was called, a reverse proxy or firewall
 /// returned an HTML error page, the connection was truncated, or the server
 /// has a bug. The raw <see cref="Body"/> is preserved for logging and diagnostic
-/// purposes.
+/// purposes. It is the whole body as received, so it can carry credential text: a token
+/// answer refused for carrying no <c>token_type</c> carries its access token there, and one
+/// that is no well-formed JSON object or carries no <c>access_token</c> carries whatever
+/// refresh token or ID Token it holds.
 /// </remarks>
 public sealed record OAuthMalformedResponse(
     string Body,
+    DecisionSupport Support) : OAuthParseError(Support);
+
+
+/// <summary>
+/// The response body is one well-formed JSON object, but one of its objects names a member more than once, where
+/// <see href="https://www.rfc-editor.org/rfc/rfc8259#section-4">RFC 8259 §4</see> says the names within an object SHOULD be
+/// unique: readers of a repeated name differ in which value they take, so the value one reader checks and the value another
+/// uses could differ, and the response names no parameter one way.
+/// </summary>
+/// <remarks>
+/// Carries the repeated name and where it is repeated, the facts the JSON reader answered
+/// (<see cref="Verifiable.JCose.JsonRepeatedMemberName"/>), so the application reads the reason without parsing a sentence;
+/// <see cref="DecisionSupport.Summary"/> is composed from them. No value the response carries, under the repeated name or any
+/// other, is carried.
+/// </remarks>
+/// <param name="MemberName">The repeated name, decoded once (RFC 8259 §7).</param>
+/// <param name="ObjectDepth">
+/// The nesting depth of the object that repeats it: one for the response's own object, whose members are its parameters.
+/// </param>
+/// <param name="Support">Guidance for the calling application.</param>
+public sealed record OAuthRepeatedMemberName(
+    string MemberName,
+    int ObjectDepth,
+    DecisionSupport Support) : OAuthParseError(Support);
+
+
+/// <summary>
+/// The response body is one well-formed JSON object, but a member of one of its objects, its own or one nested within it, has
+/// a name or a string value whose escapes name an unpaired surrogate, which the grammar admits and which encodes no Unicode
+/// character (<see href="https://www.rfc-editor.org/rfc/rfc8259#section-8.2">RFC 8259 §8.2</see>), so the body holds text no
+/// reader agrees on. The library's strict admission refuses it for that whether or not the member is a parameter the client
+/// reads: a choice of this library, which neither RFC 8259 §8.2, describing the interoperability problem, nor RFC 6749 §5.1
+/// and §5.2, having an unrecognised parameter ignored, requires.
+/// </summary>
+/// <remarks>
+/// Names the first such member in document order and carries the facts the JSON reader answered
+/// (<see cref="Verifiable.JCose.JsonUndecodableMember"/>): its name as it can be written, the depth of the object carrying it,
+/// and whether its name or its value names no text, so the application reads the reason without parsing a sentence;
+/// <see cref="DecisionSupport.Summary"/> is composed from them. No value the response carries, the member's or any other, is
+/// carried.
+/// </remarks>
+/// <param name="MemberName">
+/// When <paramref name="Part"/> is <see cref="Verifiable.JCose.JsonUndecodableMemberPart.Value"/>, the member's name decoded
+/// once (RFC 8259 §7); when it is <see cref="Verifiable.JCose.JsonUndecodableMemberPart.Name"/>, the name as the response
+/// spells it, its escapes as written, which is text that can be written, as the decoded name is not.
+/// </param>
+/// <param name="ObjectDepth">
+/// The nesting depth of the object carrying the member: one for the response's own object, whose members are its parameters.
+/// </param>
+/// <param name="Part">Whether the member's name or its value names no Unicode text.</param>
+/// <param name="Support">Guidance for the calling application.</param>
+public sealed record OAuthUndecodableMemberValue(
+    string MemberName,
+    int ObjectDepth,
+    JsonUndecodableMemberPart Part,
     DecisionSupport Support) : OAuthParseError(Support);
 
 
@@ -151,14 +238,72 @@ public sealed record OAuthMalformedResponse(
 /// according to the specification.
 /// </summary>
 /// <remarks>
-/// Examples: <c>expires_in</c> was zero or negative (RFC 9126 §2.2 requires a
-/// positive integer), <c>request_uri</c> was a relative URI rather than an
-/// absolute one, or <c>access_token</c> was an empty string.
+/// Examples: <c>request_uri</c> was a relative URI rather than an absolute one, or the
+/// <c>issued_token_type</c> named another token type than the one asked for. A present
+/// <c>expires_in</c> that is no lifetime the library admits is refused as
+/// <see cref="OAuthInvalidLifetime"/>.
 /// </remarks>
 public sealed record OAuthInvalidFieldValue(
     string FieldName,
     string ReceivedValue,
     string Reason,
+    DecisionSupport Support) : OAuthParseError(Support);
+
+
+/// <summary>
+/// Why a present <c>expires_in</c> is no lifetime the library admits: the token and the pushed authorization parsers judge the
+/// member by one rule, a positive integer number of seconds within the range of <see cref="int"/>, and answer the same defect
+/// for the same spelling. A spelling holding more than one defect is answered by the first in this order: a fraction, an
+/// exponent, a sign or value naming no positive integer, then the range.
+/// </summary>
+public enum OAuthLifetimeDefect
+{
+    /// <summary>The member is carried as a value that is no JSON number: a string, a literal, an object or an array.</summary>
+    NoNumber,
+
+    /// <summary>The number is spelled with a fraction part (RFC 8259 section 6), <c>1.5</c> among them, so it names no integer.</summary>
+    Fractional,
+
+    /// <summary>
+    /// The number is spelled with an exponent part and no fraction part (RFC 8259 section 6), <c>1e3</c> among them: RFC 6749
+    /// appendix A.14 spells <c>expires_in</c> by digits alone, so the exponent form is no spelling of it.
+    /// </summary>
+    Exponent,
+
+    /// <summary>
+    /// The number is an integer that is zero or negative. RFC 9126 section 2.2 requires a positive integer at the pushed
+    /// authorization endpoint. At the token endpoint the refusal of zero is this library's policy, not a requirement: RFC 6749
+    /// section 5.1 and appendix A.14 define <c>expires_in</c> by digits, which zero fits, and permit its omission; the library
+    /// admits no access token whose lifetime has ended as it is received, so both endpoints judge the lifetime by the one rule.
+    /// </summary>
+    NotPositive,
+
+    /// <summary>
+    /// The number is a positive integer past the range of <see cref="int"/>, which the library's token and pushed authorization
+    /// responses carry a lifetime in; neither RFC bounds the value, so this bound is the library's.
+    /// </summary>
+    OutOfRange
+}
+
+
+/// <summary>
+/// A token or pushed authorization response carries <c>expires_in</c>, but as no lifetime the library admits
+/// (<see cref="OAuthLifetimeDefect"/>). A present member is judged as present, never read as an omitted one: RFC 6749 section
+/// 5.1 permits a token response to omit <c>expires_in</c>, which is answered as no lifetime, and RFC 9126 section 2.2 requires
+/// a pushed authorization response to carry it, so its omission is answered as a malformed response; neither permission makes
+/// a malformed present value valid.
+/// </summary>
+/// <param name="MemberName">The member's name, <c>expires_in</c>.</param>
+/// <param name="Carried">
+/// The member as the JSON reader answered it: a number with its spelling as the response writes it, a string with its decoded
+/// text, or a value of another kind naming which.
+/// </param>
+/// <param name="Defect">Why the member is no lifetime the library admits.</param>
+/// <param name="Support">Guidance for the calling application.</param>
+public sealed record OAuthInvalidLifetime(
+    string MemberName,
+    JsonMemberLookup Carried,
+    OAuthLifetimeDefect Defect,
     DecisionSupport Support) : OAuthParseError(Support);
 
 
@@ -209,4 +354,35 @@ public sealed record OAuthOutboundFetchPolicyDenied(
 /// <param name="Support">Guidance for the calling application.</param>
 public sealed record OAuthClientAssertionRefused(
     ClientAssertionCredentialRefusal Refusal,
+    DecisionSupport Support) : OAuthParseError(Support);
+
+
+/// <summary>The rule a client authentication its exchange was to present refuses, before anything is sent.</summary>
+public enum ClientAuthenticationRefusalReason
+{
+    /// <summary>
+    /// The registration names <c>client_secret_basic</c> or <c>client_secret_post</c> and carries no client secret in its
+    /// <see cref="ClientRegistration.AuthenticationKeyMaterial"/> (RFC 6749 §2.3.1).
+    /// </summary>
+    ClientSecretNotCarried,
+
+    /// <summary>
+    /// The registration names <c>private_key_jwt</c> or <c>client_secret_jwt</c> and the exchange was handed no client
+    /// assertion inputs to compose its assertion with (RFC 7523 §2.2).
+    /// </summary>
+    AssertionInputsNotGiven
+}
+
+
+/// <summary>
+/// The client authentication the exchange was to present was refused as the exchange was composed, before any metadata was
+/// resolved or any request sent: a secret method whose registration carries no secret, or an assertion method handed no
+/// assertion inputs.
+/// </summary>
+/// <param name="Method">The method the registration names.</param>
+/// <param name="Reason">The rule broken.</param>
+/// <param name="Support">Guidance for the calling application.</param>
+public sealed record OAuthClientAuthenticationRefused(
+    ClientAuthenticationMethod Method,
+    ClientAuthenticationRefusalReason Reason,
     DecisionSupport Support) : OAuthParseError(Support);

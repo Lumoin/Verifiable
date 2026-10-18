@@ -37,6 +37,15 @@ public sealed record ParCompletedState : FlowState
     public ImmutableArray<string> Resource { get; init; } = [];
 
     /// <summary>
+    /// The <c>nonce</c> an OpenID Connect authentication request sent, which the ID Token the code is exchanged for must
+    /// carry (<see href="https://openid.net/specs/openid-connect-core-1_0.html#IDTokenValidation">OpenID Connect Core 1.0
+    /// §3.1.3.7</see> item 11: "If a nonce value was sent in the Authentication Request, a nonce Claim MUST be present and
+    /// its value checked to verify that it is the same value as the one that was sent in the Authentication Request.");
+    /// <see langword="null"/> for a request that sent none.
+    /// </summary>
+    public string? Nonce { get; init; }
+
+    /// <summary>
     /// The PAR response. <see cref="ParResponse.RequestUri"/> is used as both the
     /// deep-link redirect parameter and the DB secondary lookup key.
     /// </summary>

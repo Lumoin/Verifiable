@@ -18,9 +18,14 @@ public static class IdJagFlowHandlers
 {
     /// <summary>
     /// Mints an ID-JAG: a Token Exchange (<c>requested_token_type</c> id-jag, §4.3) to the IdP's token
-    /// endpoint, authenticated with the client assertion the registration's method names. The returned token response
-    /// carries the ID-JAG in its <see cref="TokenResponse.AccessToken"/> (<c>token_type</c> N_A, §4.3.4); a credential
-    /// the registration cannot form is the <see cref="OAuthClientAssertionRefused"/> failure, before any send.
+    /// endpoint, authenticated by the method the registration names - the client assertion of <c>private_key_jwt</c> or
+    /// <c>client_secret_jwt</c>, or the client secret of <c>client_secret_basic</c> or <c>client_secret_post</c> the
+    /// registration carries for this call (RFC 6749 §2.3.1) - with no <c>audience</c> where
+    /// <see cref="IdJagMintOptions.Audience"/> names none. The returned token response carries the ID-JAG in its
+    /// <see cref="TokenResponse.AccessToken"/> (<c>token_type</c> N_A, §4.3.4) and is refused where its
+    /// <c>issued_token_type</c> is not the ID-JAG's (§4.3.2; RFC 8693 §2.2.1); a credential the registration cannot form is
+    /// the <see cref="OAuthClientAssertionRefused"/> or <see cref="OAuthClientAuthenticationRefused"/> failure, before any
+    /// send.
     /// </summary>
     public static async ValueTask<Result<TokenResponse, OAuthParseError>> MintAsync(
         IdJagMintOptions options,
@@ -34,7 +39,7 @@ public static class IdJagFlowHandlers
         ArgumentNullException.ThrowIfNull(registration);
         ArgumentNullException.ThrowIfNull(context);
 
-        var credential = ResolveCredential(registration, options.ClientAssertion);
+        var credential = ResolveAuthentication(registration, options.ClientAssertion);
 
         if(!credential.IsSuccess)
         {
@@ -58,11 +63,17 @@ public static class IdJagFlowHandlers
         OutgoingFormFields form = new(capacity: 9)
         {
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.TokenExchange,
-            [OAuthRequestParameterNames.RequestedTokenType] = TokenTypeNames.GetName(TokenType.IdJag),
-            [OAuthRequestParameterNames.Audience] = options.Audience,
-            [OAuthRequestParameterNames.SubjectToken] = options.SubjectToken,
-            [OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(options.SubjectTokenType)
+            [OAuthRequestParameterNames.RequestedTokenType] = TokenTypeNames.GetName(TokenType.IdJag)
         };
+
+        //RFC 8693 §2.1 makes audience OPTIONAL: a provider taking the audience from its own mapping of the resource is sent none.
+        if(options.Audience is { } audience)
+        {
+            form[OAuthRequestParameterNames.Audience] = audience;
+        }
+
+        form[OAuthRequestParameterNames.SubjectToken] = options.SubjectToken;
+        form[OAuthRequestParameterNames.SubjectTokenType] = TokenTypeNames.GetName(options.SubjectTokenType);
 
         //§4.3 / RFC 8707 section 2: each requested resource becomes its OWN repeated resource occurrence
         //on the wire (OutgoingFormFields.Add) — the genuine RFC 8707 multi-resource wire form the
@@ -85,6 +96,14 @@ public static class IdJagFlowHandlers
             form[OAuthRequestParameterNames.AuthorizationDetails] = options.AuthorizationDetails;
         }
 
+        //RFC 8693 §2.1: an actor_token is sent with its actor_token_type, which is "REQUIRED when the actor_token parameter is
+        //present".
+        if(options.Actor is { } actor)
+        {
+            form[OAuthRequestParameterNames.ActorToken] = actor.Token;
+            form[OAuthRequestParameterNames.ActorTokenType] = TokenTypeNames.GetName(actor.Type);
+        }
+
         if(EvaluateOutboundPolicy(tokenEndpoint, context, infrastructure) is OAuthOutboundFetchPolicyDenied mintPolicyDenial)
         {
             return Result<TokenResponse, OAuthParseError>.Failure(mintPolicyDenial);
@@ -96,11 +115,28 @@ public static class IdJagFlowHandlers
         //TokenEndpointClientOperations.SendWithDpopRetryAsync's remarks.
         HttpResponseData response = await TokenEndpointClientOperations.SendWithDpopRetryAsync(
             infrastructure, tokenEndpoint, form,
-            (attemptNow, ct) => AttachAssertionAsync(
+            (attemptNow, ct) => TokenEndpointClientOperations.AttachClientAuthenticationAsync(
                 form, registration, tokenEndpoint, credential.Value, options.ClientAssertion, infrastructure, attemptNow, context, ct),
             context, cancellationToken).ConfigureAwait(false);
 
-        return infrastructure.ParseTokenResponseAsync(response, now);
+        var minted = infrastructure.ParseTokenResponseAsync(response, now);
+
+        //Draft-04 §4.3.2 and RFC 8693 §2.2.1: the answer names the type of the token issued, and a token of another type than
+        //the ID-JAG asked for is no grant this flow presents.
+        if(minted.IsSuccess
+            && (minted.Value.IssuedTokenType is not { } issued || !WellKnownTokenTypeIdentifiers.IsIdJag(issued)))
+        {
+            return Result<TokenResponse, OAuthParseError>.Failure(new OAuthInvalidFieldValue(
+                OAuthRequestParameterNames.IssuedTokenType,
+                minted.Value.IssuedTokenType ?? string.Empty,
+                "The token exchange answered a token of another type than the identity assertion grant it asked for.",
+                new DecisionSupport("The identity provider's answer names another issued_token_type than the ID-JAG's.")
+                {
+                    SpecificationReference = "draft-ietf-oauth-identity-assertion-authz-grant-04 §4.3.2"
+                }));
+        }
+
+        return minted;
     }
 
 
@@ -165,6 +201,74 @@ public static class IdJagFlowHandlers
             context, cancellationToken).ConfigureAwait(false);
 
         return infrastructure.ParseTokenResponseAsync(response, now);
+    }
+
+
+    /// <summary>
+    /// Forms the client authentication a mint presents, before anything is resolved or sent, by the method the registration
+    /// names: for <c>client_secret_basic</c> and <c>client_secret_post</c> no assertion credential, the secret the registration
+    /// carries for this call being presented as it is (RFC 6749 §2.3.1), and a registration carrying none refused; for every
+    /// other method the assertion credential <see cref="ResolveCredential"/> forms, an assertion method handed no inputs
+    /// refused, and a method presenting neither a secret nor an assertion refused as the assertion's credential refuses it.
+    /// </summary>
+    /// <param name="registration">The registration naming the method and carrying the key or the secret.</param>
+    /// <param name="clientAssertion">The assertion's inputs, or <see langword="null"/> for a secret method.</param>
+    /// <returns>The assertion credential, <see langword="null"/> for a secret method, or the refusal.</returns>
+    private static Result<ClientAssertionCredential?, OAuthParseError> ResolveAuthentication(
+        ClientRegistration registration, ClientAssertionOptions? clientAssertion)
+    {
+        var method = registration.AuthenticationMethod;
+        var presentsSecret = method.Code == ClientAuthenticationMethod.ClientSecretBasic.Code
+            || method.Code == ClientAuthenticationMethod.ClientSecretPost.Code;
+
+        if(presentsSecret)
+        {
+            return registration.AuthenticationKeyMaterial?.PrivateKey is not null
+                ? Result<ClientAssertionCredential?, OAuthParseError>.Success(null)
+                : Result<ClientAssertionCredential?, OAuthParseError>.Failure(new OAuthClientAuthenticationRefused(
+                    method,
+                    ClientAuthenticationRefusalReason.ClientSecretNotCarried,
+                    new DecisionSupport("The registration names a client secret method and carries no client secret.")
+                    {
+                        SpecificationReference = "RFC 6749 §2.3.1"
+                    }));
+        }
+
+        if(clientAssertion is null)
+        {
+            var presentsAssertion = method.Code == ClientAuthenticationMethod.PrivateKeyJwt.Code
+                || method.Code == ClientAuthenticationMethod.ClientSecretJwt.Code;
+
+            if(presentsAssertion)
+            {
+                return Result<ClientAssertionCredential?, OAuthParseError>.Failure(new OAuthClientAuthenticationRefused(
+                    method,
+                    ClientAuthenticationRefusalReason.AssertionInputsNotGiven,
+                    new DecisionSupport("The registration names a client assertion method and the mint was handed no assertion inputs.")
+                    {
+                        SpecificationReference = "RFC 7523 §2.2"
+                    }));
+            }
+
+            var refusal = new ClientAssertionCredentialRefusal
+            {
+                Reason = ClientAssertionCredentialRefusalReason.MethodPresentsNoAssertion,
+                Method = method
+            };
+
+            return Result<ClientAssertionCredential?, OAuthParseError>.Failure(new OAuthClientAssertionRefused(
+                refusal,
+                new DecisionSupport(refusal.Describe())
+                {
+                    SpecificationReference = "RFC 7523 §2.2"
+                }));
+        }
+
+        var credential = ResolveCredential(registration, clientAssertion);
+
+        return credential.IsSuccess
+            ? Result<ClientAssertionCredential?, OAuthParseError>.Success(credential.Value)
+            : Result<ClientAssertionCredential?, OAuthParseError>.Failure(credential.Error);
     }
 
 

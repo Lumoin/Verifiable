@@ -375,7 +375,7 @@ public static class AuthCodeFlowHandlers
     /// <see cref="AuthorizationServerMetadata.RequirePushedAuthorizationRequests"/> is set
     /// (<see href="https://www.rfc-editor.org/rfc/rfc9126#section-5">RFC 9126 §5</see>).
     /// </returns>
-    internal static async ValueTask<AuthCodeFlowEndpointResult> HandleDirectAuthorizeStartAsync(
+    internal static ValueTask<AuthCodeFlowEndpointResult> HandleDirectAuthorizeStartAsync(
         IReadOnlyDictionary<string, string> fields,
         Uri redirectUri,
         OAuthClientInfrastructure infrastructure,
@@ -383,6 +383,69 @@ public static class AuthCodeFlowHandlers
         ExchangeContext context,
         IReadOnlyList<string>? resource,
         TimeSpan requestLifetime,
+        CancellationToken cancellationToken) =>
+        StartDirectAuthorizationAsync(
+            fields, redirectUri, infrastructure, registration, context, resource, requestLifetime, mintsNonce: false, cancellationToken);
+
+
+    /// <summary>
+    /// Starts an OpenID Connect authentication request of the authorization code flow
+    /// (<see href="https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest">OpenID Connect Core 1.0 §3.1.2.1</see>)
+    /// as <see cref="HandleDirectAuthorizeStartAsync"/> starts a plain one, and mints beside its <c>state</c> and PKCE pair a
+    /// fresh <c>nonce</c> from <see cref="OAuthClientInfrastructure.FillEntropy"/>, sent on the redirect's query and held in
+    /// the persisted <see cref="ParCompletedState.Nonce"/>, so the ID Token the code is exchanged for is held to it
+    /// (<see cref="OpenIdSignInHandlers.ExchangeOpenIdTokenAsync"/>; §3.1.3.7 item 11). A caller's additional field named <c>nonce</c> is dropped:
+    /// the flow mints its own.
+    /// </summary>
+    /// <param name="fields">
+    /// Inbound form fields. Its <c>scope</c> field names the requested scope values, <c>openid</c> among them (§3.1.2.1:
+    /// "OpenID Connect requests MUST contain the openid scope value."), sent as given.
+    /// </param>
+    /// <param name="redirectUri">The client's redirect URI to which the authorization response is returned.</param>
+    /// <param name="infrastructure">The long-lived infrastructure carrying transport, parsing, persistence, and time delegates.</param>
+    /// <param name="registration">The registration identifying the OpenID Provider this call targets.</param>
+    /// <param name="context">The per-operation exchange context threaded into the flow-state delegates.</param>
+    /// <param name="resource">The RFC 8707 §2 <c>resource</c> indicator(s) to request; <see langword="null"/> or empty omits the parameter.</param>
+    /// <param name="requestLifetime">How long this pending authentication request stays redeemable at the callback.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>As <see cref="HandleDirectAuthorizeStartAsync"/> returns.</returns>
+    internal static ValueTask<AuthCodeFlowEndpointResult> HandleOpenIdAuthorizeStartAsync(
+        IReadOnlyDictionary<string, string> fields,
+        Uri redirectUri,
+        OAuthClientInfrastructure infrastructure,
+        ClientRegistration registration,
+        ExchangeContext context,
+        IReadOnlyList<string>? resource,
+        TimeSpan requestLifetime,
+        CancellationToken cancellationToken) =>
+        StartDirectAuthorizationAsync(
+            fields, redirectUri, infrastructure, registration, context, resource, requestLifetime, mintsNonce: true, cancellationToken);
+
+
+    /// <summary>
+    /// The one start of a direct authorization request, plain or OpenID Connect: the metadata resolved and validated, a
+    /// pushed-only server refused, <c>state</c> and the PKCE pair minted, and the <c>nonce</c> where the request is an
+    /// OpenID Connect one, each held in the persisted <see cref="ParCompletedState"/>.
+    /// </summary>
+    /// <param name="fields">Inbound form fields.</param>
+    /// <param name="redirectUri">The client's redirect URI.</param>
+    /// <param name="infrastructure">The long-lived infrastructure.</param>
+    /// <param name="registration">The registration identifying the authorization server.</param>
+    /// <param name="context">The per-operation exchange context.</param>
+    /// <param name="resource">The RFC 8707 §2 <c>resource</c> indicator(s) to request.</param>
+    /// <param name="requestLifetime">How long the pending request stays redeemable.</param>
+    /// <param name="mintsNonce">Whether the request is an OpenID Connect one, minting and holding a <c>nonce</c>.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The redirect, or the refusal.</returns>
+    private static async ValueTask<AuthCodeFlowEndpointResult> StartDirectAuthorizationAsync(
+        IReadOnlyDictionary<string, string> fields,
+        Uri redirectUri,
+        OAuthClientInfrastructure infrastructure,
+        ClientRegistration registration,
+        ExchangeContext context,
+        IReadOnlyList<string>? resource,
+        TimeSpan requestLifetime,
+        bool mintsNonce,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(fields);
@@ -418,12 +481,13 @@ public static class AuthCodeFlowHandlers
         DateTimeOffset now = infrastructure.TimeProvider.GetUtcNow();
         string state = GenerateEntropyHexString(infrastructure);
         PkceParameters pkce = GeneratePkceParameters(infrastructure.Base64UrlEncoder, infrastructure.MemoryPool);
+        var nonce = mintsNonce ? GenerateEntropyHexString(infrastructure) : null;
 
         ImmutableArray<string> scopes = ReadRequestedScopes(fields);
         ImmutableArray<string> requestedResource = ReadNamedResource(resource);
 
         Uri authorizationUri = BuildDirectAuthorizeRedirectUri(
-            metadata.AuthorizationEndpoint!, registration.ClientId.Value, redirectUri, scopes, state, pkce, resource, fields);
+            metadata.AuthorizationEndpoint!, registration.ClientId.Value, redirectUri, scopes, state, nonce, pkce, resource, fields);
 
         ParCompletedState parCompleted = new()
         {
@@ -436,6 +500,7 @@ public static class AuthCodeFlowHandlers
             RedirectUri = redirectUri,
             Scopes = scopes,
             Resource = requestedResource,
+            Nonce = nonce,
             Par = new ParResponse(authorizationUri, (int)requestLifetime.TotalSeconds)
         };
 
@@ -458,6 +523,7 @@ public static class AuthCodeFlowHandlers
     /// <param name="redirectUri">The redirect URI sent as <c>redirect_uri</c>.</param>
     /// <param name="scopes">The scope values the caller named; empty sends no <c>scope</c> parameter.</param>
     /// <param name="state">The <c>state</c> value this start minted.</param>
+    /// <param name="nonce">The <c>nonce</c> an OpenID Connect start minted, or <see langword="null"/> for a plain request.</param>
     /// <param name="pkce">The PKCE pair whose challenge and method are sent.</param>
     /// <param name="resource">The RFC 8707 resource indicators, each sent as its own occurrence.</param>
     /// <param name="additionalFields">The caller's further fields, flow-owned names skipped.</param>
@@ -468,6 +534,7 @@ public static class AuthCodeFlowHandlers
         Uri redirectUri,
         ImmutableArray<string> scopes,
         string state,
+        string? nonce,
         PkceParameters pkce,
         IReadOnlyList<string>? resource,
         IReadOnlyDictionary<string, string> additionalFields)
@@ -481,11 +548,25 @@ public static class AuthCodeFlowHandlers
 
         AddScopeWhenNamed(query, scopes);
         query[OAuthRequestParameterNames.State] = state;
+
+        if(nonce is not null)
+        {
+            query[OAuthRequestParameterNames.Nonce] = nonce;
+        }
+
         query[OAuthRequestParameterNames.CodeChallenge] = pkce.EncodedChallenge;
         query[OAuthRequestParameterNames.CodeChallengeMethod] = pkce.Method.ToString().ToUpperInvariant();
 
         TokenEndpointClientOperations.AddResourceOccurrences(query, resource);
-        AddAdditionalAuthorizationFields(query, additionalFields);
+
+        //The nonce an OpenID Connect start minted is the flow's own, so a caller's field of that name is dropped as every other
+        //flow-owned name is.
+        AddAdditionalAuthorizationFields(
+            query,
+            nonce is null
+                ? additionalFields
+                : additionalFields.Where(static field => !string.Equals(field.Key, OAuthRequestParameterNames.Nonce, StringComparison.Ordinal))
+                    .ToDictionary(static field => field.Key, static field => field.Value, StringComparer.Ordinal));
 
         StringBuilder builder = new();
         _ = builder.Append(authorizationEndpoint);
@@ -539,8 +620,8 @@ public static class AuthCodeFlowHandlers
 
         //RFC 6749 §4.1.2.1 Authorization Error Response — error is present instead of code.
         //RFC 9207 §2.4/§4: "clients MUST NOT assume that the error originates from the
-        //intended authorization server," so a PRESENT iss on this branch is validated with
-        //the same mix-up-attack rule the success path applies before the error is trusted.
+        //intended authorization server," so the error response is judged by the callback rules the
+        //registration's profile holds a success response to before the error is trusted.
         if(fields.TryGetValue(OAuthRequestParameterNames.Error, out string? errorCode))
         {
             return await BuildCallbackErrorResultAsync(
@@ -640,7 +721,8 @@ public static class AuthCodeFlowHandlers
             IssuerId = iss,
             Pkce = parCompleted.Pkce,
             RedirectUri = parCompleted.RedirectUri,
-            Resource = parCompleted.Resource
+            Resource = parCompleted.Resource,
+            Nonce = parCompleted.Nonce
         };
 
         await infrastructure.SaveStateAsync(codeReceived, context, cancellationToken).ConfigureAwait(false);
@@ -1202,6 +1284,7 @@ public static class AuthCodeFlowHandlers
             RedirectUri = jarOptions.RedirectUri,
             Scopes = scopes,
             Resource = requestedResource,
+            Nonce = nonce,
             Par = parResponse
         };
 
@@ -1329,6 +1412,7 @@ public static class AuthCodeFlowHandlers
             RedirectUri = jarOptions.RedirectUri,
             Scopes = scopes,
             Resource = requestedResource,
+            Nonce = nonce,
             Par = new ParResponse(authorizationUri, (int)jarOptions.JarLifetime.TotalSeconds)
         };
 
@@ -1674,11 +1758,12 @@ public static class AuthCodeFlowHandlers
     /// (<paramref name="errorCode"/> present per RFC 6749 §4.1.2.1). RFC 9207 §2.4 says a client
     /// must not assume the error originates from the intended authorization server, so the error
     /// is attributed to that server only once the callback is tied to it: its <c>state</c> names a
-    /// pending <see cref="ParCompletedState"/> of this client, and the callback checks that flow
-    /// holds every response to accepted it — the state matches the flow, a PRESENT <c>iss</c>
-    /// matches the flow's recorded issuer
-    /// (<see cref="ValidationChecks.CheckCallbackIssuerMatchesWhenPresent"/>), the flow has not
-    /// expired, and a present <c>iss</c> resolves to a known authorization server when the
+    /// pending <see cref="ParCompletedState"/> of this client, and the callback validator the
+    /// registration's profile selects (<see cref="OAuthClientInfrastructure.ResolveCallbackValidator"/>)
+    /// accepted it by every rule it holds a success response to but the presence of a <c>code</c> —
+    /// the state matches the flow, the <c>iss</c> matches the flow's recorded issuer and is present
+    /// where the profile requires it (<see cref="ValidationChecks.CheckCallbackIssPresent"/>), the flow
+    /// has not expired — and a present <c>iss</c> resolves to a known authorization server when the
     /// application supplies that resolver. A callback with no <c>state</c>, with a <c>state</c>
     /// naming no flow, or with one naming a flow of another kind or step, establishes no
     /// authorization server as its author; it is refused as the library's own judgement, as is a
@@ -1738,15 +1823,17 @@ public static class AuthCodeFlowHandlers
             Now = infrastructure.TimeProvider.GetUtcNow()
         };
 
-        List<Claim> correlationClaims = [];
-        correlationClaims.AddRange(await ValidationChecks.CheckCallbackStateMatchesFlow(
-            correlationContext, cancellationToken).ConfigureAwait(false));
-        correlationClaims.AddRange(await ValidationChecks.CheckCallbackIssuerMatchesWhenPresent(
-            correlationContext, cancellationToken).ConfigureAwait(false));
-        correlationClaims.AddRange(await ValidationChecks.CheckCallbackFlowNotExpired(
-            correlationContext, cancellationToken).ConfigureAwait(false));
+        //The registration's profile judges an error response by the rules it judges a success response by (RFC 9207 §2.4: a
+        //client "MUST NOT assume that the error originates from the intended authorization server"), so a profile requiring iss
+        //refuses an error answering none; the code a success response carries is the one rule an error response has no part in.
+        var callbackValidator = infrastructure.ResolveCallbackValidator(registration, infrastructure.TimeProvider);
+        var validation = await callbackValidator.GenerateClaimsAsync(
+            correlationContext, errorParCompleted.FlowId, cancellationToken).ConfigureAwait(false);
+        var correlationClaims = validation.Claims
+            .Where(static claim => claim.Id.Code != ValidationClaimIds.CallbackCodePresent.Code)
+            .ToList();
 
-        if(correlationClaims.Exists(static c => c.Outcome != ClaimOutcome.Success))
+        if(!validation.IsComplete || correlationClaims.Exists(static c => c.Outcome != ClaimOutcome.Success))
         {
             return AuthCodeFlowEndpointResult.Refused(
                 AuthCodeFlowEndpointOutcome.BadRequest,

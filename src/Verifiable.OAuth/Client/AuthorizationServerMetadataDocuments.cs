@@ -169,6 +169,67 @@ public static class AuthorizationServerMetadataDocuments
 
 
     /// <summary>
+    /// Resolves an OpenID Provider's metadata: at its OpenID Connect discovery location first
+    /// (<see href="https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderConfig">OpenID Connect Discovery 1.0
+    /// §4</see>, <see cref="WellKnownPaths.OpenIdConfiguration"/>), then, only where that location states it holds no document
+    /// (<see cref="IsAbsence"/>), at its RFC 8414 location (<see cref="WellKnownPaths.OAuthAuthorizationServer"/>; RFC 8414 §5:
+    /// "an OAuth 2.0 authorization server ... may also publish its metadata" at the OpenID location, and a client "using this
+    /// specification ... MUST specify what well-known URI suffix it will use"), each attempt <see cref="ResolveAsync"/> with every
+    /// rule it holds. Every other outcome of the discovery location is answered as it stands and the RFC 8414 location is never
+    /// read: a document naming another issuer (<see cref="AuthorizationServerMetadataIssuerMismatch"/>; RFC 8414 §3.3: "the data
+    /// contained in the response MUST NOT be used"), a refusal of the outbound policy or a redirect, and a document of the wrong
+    /// media type, too large or unreadable are each what the provider's discovery location answered, which a document at another
+    /// location never supersedes. Where the discovery location holds none, the RFC 8414 attempt's outcome is answered.
+    /// </summary>
+    /// <param name="issuer">The provider's issuer identifier.</param>
+    /// <param name="context">The per-request context carrying the outbound-fetch policy.</param>
+    /// <param name="transport">The application-supplied single-hop transport.</param>
+    /// <param name="parseDocument">The complete-document parser supplied by the serialization adapter.</param>
+    /// <param name="options">The resolver's byte cap.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The resolution.</returns>
+    public static async ValueTask<AuthorizationServerMetadataResolution> ResolveOpenIdProviderAsync(
+        Uri issuer,
+        ExchangeContext context,
+        OutboundTransportDelegate transport,
+        ParseAuthorizationServerMetadataDelegate parseDocument,
+        AuthorizationServerMetadataResolverOptions options,
+        CancellationToken cancellationToken)
+    {
+        var discovered = await ResolveAsync(
+            issuer, WellKnownPaths.OpenIdConfiguration, context, transport, parseDocument, options, cancellationToken).ConfigureAwait(false);
+
+        if(!IsAbsence(discovered))
+        {
+            return discovered;
+        }
+
+        return await ResolveAsync(
+            issuer, WellKnownPaths.OAuthAuthorizationServer, context, transport, parseDocument, options, cancellationToken).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    /// Whether a location's outcome states that it holds no document at all: answered 404 Not Found or 410 Gone
+    /// (<see href="https://www.rfc-editor.org/rfc/rfc9110#section-15.5.5">RFC 9110 §15.5.5</see>: "the origin server did not
+    /// find a current representation for the target resource"; §15.5.11: "no longer available at the origin server"). Every
+    /// other status is an answer of the provider's that the client does not read past, and every other outcome a judgement of
+    /// what the location served or of where the request was sent.
+    /// </summary>
+    /// <param name="resolution">The location's outcome.</param>
+    /// <returns><see langword="true"/> when the location holds no document.</returns>
+    private static bool IsAbsence(AuthorizationServerMetadataResolution resolution) =>
+        resolution is AuthorizationServerMetadataNotAnswered { StatusCode: NotFoundStatus or GoneStatus };
+
+
+    /// <summary>The 404 Not Found status (RFC 9110 §15.5.5).</summary>
+    private const int NotFoundStatus = 404;
+
+    /// <summary>The 410 Gone status (RFC 9110 §15.5.11).</summary>
+    private const int GoneStatus = 410;
+
+
+    /// <summary>
     /// Whether <paramref name="contentType"/> is exactly <c>application/json</c> per RFC 8414 §3.2 —
     /// no <c>+json</c> structured-suffix allowance, unlike <c>ClientIdMetadataDocuments</c>'s and
     /// <c>JwksUriResolver</c>'s content-type gate. Parameters (e.g. <c>;charset=utf-8</c>) are

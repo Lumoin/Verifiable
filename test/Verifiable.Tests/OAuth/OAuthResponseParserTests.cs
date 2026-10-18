@@ -218,21 +218,88 @@ internal sealed class OAuthResponseParsersTests
         _ = Assert.IsInstanceOfType<OAuthMalformedResponse>(result.Error);
     }
 
+    /// <summary>
+    /// RFC 9126 §2.2 requires a pushed authorization response's <c>expires_in</c> to be a positive integer. A present one that is
+    /// a fraction, an exponent spelling, an integer past the range the lifetime is carried in, zero, a negative integer or no
+    /// number at all is refused by its defect, naming the member and the value as the reader answered it, never answered as a
+    /// malformed response, by the one rule the token parser judges its own lifetime by.
+    /// </summary>
+    /// <param name="lifetime">The <c>expires_in</c> value as the body writes it.</param>
+    /// <param name="expectedDefect">The defect the refusal names.</param>
     [TestMethod]
-    public void ParseParResponseReturnsInvalidFieldValueForNegativeExpiresIn()
+    [DataRow("1.5", OAuthLifetimeDefect.Fractional, DisplayName = "A fraction")]
+    [DataRow("1e3", OAuthLifetimeDefect.Exponent, DisplayName = "An exponent spelling")]
+    [DataRow("2147483648", OAuthLifetimeDefect.OutOfRange, DisplayName = "An integer past the range of int")]
+    [DataRow("0", OAuthLifetimeDefect.NotPositive, DisplayName = "Zero")]
+    [DataRow("-1", OAuthLifetimeDefect.NotPositive, DisplayName = "A negative integer")]
+    [DataRow(""" "60" """, OAuthLifetimeDefect.NoNumber, DisplayName = "A string")]
+    [DataRow("null", OAuthLifetimeDefect.NoNumber, DisplayName = "The null literal")]
+    public void APushedAuthorizationAnswerCarryingAnInadmissibleLifetimeIsRefusedByItsDefect(string lifetime, OAuthLifetimeDefect expectedDefect)
     {
-        HttpResponseData response = Respond(
-            /*lang=json,strict*/ """{"request_uri":"urn:ietf:params:oauth:request_uri:x","expires_in":-1}""");
+        var result = OAuthResponseParsers.ParseParResponse(Respond(
+            $$"""{"request_uri":"urn:ietf:params:oauth:request_uri:x","expires_in":{{lifetime}}}"""));
 
-        Result<ParResponse, OAuthParseError> result =
-            OAuthResponseParsers.ParseParResponse(response);
-
-        Assert.IsFalse(result.IsSuccess);
-        OAuthInvalidFieldValue ifv =
-            Assert.IsInstanceOfType<OAuthInvalidFieldValue>(result.Error);
-        Assert.AreEqual("expires_in", ifv.FieldName);
-        Assert.AreEqual("-1", ifv.ReceivedValue);
+        AssertRefusedLifetime(result.IsSuccess ? null : result.Error, lifetime, expectedDefect, "RFC 9126 §2.2");
     }
+
+
+    /// <summary>
+    /// A token response's <c>expires_in</c> present as no positive integer within the range the lifetime is carried in is refused
+    /// by its defect, never read as an omitted lifetime: RFC 6749 §5.1 permits omitting the member, which answers no lifetime, and
+    /// that permission makes no malformed present value valid. Zero is refused by the library's policy, as RFC 6749 appendix
+    /// A.14 spells the member by digits, which zero fits; the answer for each spelling is the pushed authorization parser's.
+    /// </summary>
+    /// <param name="lifetime">The <c>expires_in</c> value as the body writes it.</param>
+    /// <param name="expectedDefect">The defect the refusal names.</param>
+    [TestMethod]
+    [DataRow("1.5", OAuthLifetimeDefect.Fractional, DisplayName = "A fraction")]
+    [DataRow("1e3", OAuthLifetimeDefect.Exponent, DisplayName = "An exponent spelling")]
+    [DataRow("2147483648", OAuthLifetimeDefect.OutOfRange, DisplayName = "An integer past the range of int")]
+    [DataRow("0", OAuthLifetimeDefect.NotPositive, DisplayName = "Zero")]
+    [DataRow("-1", OAuthLifetimeDefect.NotPositive, DisplayName = "A negative integer")]
+    [DataRow(""" "3600" """, OAuthLifetimeDefect.NoNumber, DisplayName = "A string")]
+    [DataRow("null", OAuthLifetimeDefect.NoNumber, DisplayName = "The null literal")]
+    public void ATokenAnswerCarryingAnInadmissibleLifetimeIsRefusedByItsDefect(string lifetime, OAuthLifetimeDefect expectedDefect)
+    {
+        var result = OAuthResponseParsers.ParseTokenResponse(
+            Respond($$"""{"access_token":"access-credential-text","token_type":"Bearer","expires_in":{{lifetime}}}"""),
+            DateTimeOffset.UnixEpoch);
+
+        AssertRefusedLifetime(result.IsSuccess ? null : result.Error, lifetime, expectedDefect, "RFC 6749 §5.1");
+    }
+
+
+    /// <summary>
+    /// The lifetime absent and the lifetime valid are answered as such: a token response omitting <c>expires_in</c> is a success
+    /// carrying no lifetime (RFC 6749 §5.1), a pushed authorization response omitting it is malformed (RFC 9126 §2.2 requires it),
+    /// and a positive integer is the lifetime at both endpoints, the greatest the range carries included.
+    /// </summary>
+    [TestMethod]
+    public void AnAbsentLifetimeAndAValidOneAreAnsweredAsSuchAtBothEndpoints()
+    {
+        var tokenAbsent = OAuthResponseParsers.ParseTokenResponse(
+            Respond(/*lang=json,strict*/ """{"access_token":"at","token_type":"Bearer"}"""),
+            DateTimeOffset.UnixEpoch);
+
+        var tokenValid = OAuthResponseParsers.ParseTokenResponse(
+            Respond(/*lang=json,strict*/ """{"access_token":"at","token_type":"Bearer","expires_in":2147483647}"""),
+            DateTimeOffset.UnixEpoch);
+
+        var pushedAbsent = OAuthResponseParsers.ParseParResponse(
+            Respond(/*lang=json,strict*/ """{"request_uri":"urn:ietf:params:oauth:request_uri:x"}"""));
+
+        var pushedValid = OAuthResponseParsers.ParseParResponse(
+            Respond(/*lang=json,strict*/ """{"request_uri":"urn:ietf:params:oauth:request_uri:x","expires_in":60}"""));
+
+        Assert.IsTrue(tokenAbsent.IsSuccess, "A token response may omit its lifetime.");
+        Assert.IsNull(tokenAbsent.Value.ExpiresIn, "An omitted lifetime is no lifetime.");
+        Assert.IsTrue(tokenValid.IsSuccess, "A positive integer within the range is a lifetime.");
+        Assert.AreEqual(int.MaxValue, tokenValid.Value.ExpiresIn, "The greatest lifetime the range carries.");
+        _ = Assert.IsInstanceOfType<OAuthMalformedResponse>(pushedAbsent.Error, "A pushed authorization response must carry its lifetime.");
+        Assert.IsTrue(pushedValid.IsSuccess, "A positive integer is the request URI's lifetime.");
+        Assert.AreEqual(60, pushedValid.Value.ExpiresIn);
+    }
+
 
     [TestMethod]
     public void ParseParResponseReturnsInvalidFieldValueForRelativeRequestUri()
@@ -350,21 +417,6 @@ internal sealed class OAuthResponseParsersTests
     }
 
     [TestMethod]
-    public void ParseTokenResponseReturnsInvalidFieldValueForZeroExpiresIn()
-    {
-        HttpResponseData response = Respond(
-            /*lang=json,strict*/ """{"access_token":"at","token_type":"Bearer","expires_in":0}""");
-
-        Result<TokenResponse, OAuthParseError> result =
-            OAuthResponseParsers.ParseTokenResponse(response, DateTimeOffset.UnixEpoch);
-
-        Assert.IsFalse(result.IsSuccess);
-        OAuthInvalidFieldValue ifv =
-            Assert.IsInstanceOfType<OAuthInvalidFieldValue>(result.Error);
-        Assert.AreEqual("expires_in", ifv.FieldName);
-    }
-
-    [TestMethod]
     public void ParseTokenResponseHandlesProblemJsonResponse()
     {
         HttpResponseData response = Respond(
@@ -382,6 +434,556 @@ internal sealed class OAuthResponseParsersTests
         Assert.AreEqual("urn:uuid:xyz-789", pe.Support.CorrelationId);
     }
 
+
+
+    /// <summary>
+    /// RFC 6749 §5.1 has a token response's parameters serialized "into a JSON structure by adding each parameter at the
+    /// highest structure level": an otherwise valid token response carried inside an extension object, with no parameter at the
+    /// top level, is no token response, and an <c>error</c> an extension object carries is no error response either. Each is
+    /// refused as malformed, nothing read from the nested object.
+    /// </summary>
+    /// <param name="body">The response body.</param>
+    [TestMethod]
+    [DataRow(
+        /*lang=json,strict*/ """{"ext":{"access_token":"nested-access-token","token_type":"Bearer","expires_in":3600}}""",
+        DisplayName = "A token response inside an extension object")]
+    [DataRow(
+        /*lang=json,strict*/ """{"ext":{"error":"invalid_grant","error_description":"nested"}}""",
+        DisplayName = "An error inside an extension object")]
+    [DataRow(
+        /*lang=json,strict*/ """{"ext":[{"access_token":"nested-access-token","token_type":"Bearer"}]}""",
+        DisplayName = "A token response inside an extension array")]
+    public void ParseTokenResponseReadsNoParameterANestedValueCarries(string body)
+    {
+        var result = OAuthResponseParsers.ParseTokenResponse(Respond(body), DateTimeOffset.UnixEpoch);
+
+        Assert.IsFalse(result.IsSuccess, "A response carrying its parameters below the top level is refused.");
+        _ = Assert.IsInstanceOfType<OAuthMalformedResponse>(result.Error, "Nothing nested is read as the response's parameter.");
+    }
+
+
+    /// <summary>
+    /// A token response carrying an extension object whose members compete with its own, written before them: each parameter is
+    /// read from the top level alone, the object's <c>access_token</c>, <c>token_type</c>, <c>refresh_token</c>,
+    /// <c>id_token</c>, <c>issued_token_type</c> and <c>error</c> never in their place, so a reader of the same body as the
+    /// JSON it is reads the very values this parser answers.
+    /// </summary>
+    [TestMethod]
+    public void ParseTokenResponseReadsTheTopLevelParametersBesideACompetingExtensionObject()
+    {
+        var body = /*lang=json,strict*/ """
+            {"ext":{"access_token":"nested-access-token","token_type":"DPoP","refresh_token":"nested-refresh-token","id_token":"nested-id-token","issued_token_type":"urn:nested","error":"invalid_grant","expires_in":1},
+             "access_token":"top-access-token","token_type":"Bearer","refresh_token":"top-refresh-token","id_token":"top-id-token",
+             "issued_token_type":"urn:ietf:params:oauth:token-type:id-jag","expires_in":900}
+            """;
+
+        var result = OAuthResponseParsers.ParseTokenResponse(Respond(body), DateTimeOffset.UnixEpoch);
+
+        Assert.IsTrue(result.IsSuccess, $"The top-level response is read; refused by {(result.IsSuccess ? null : result.Error.Support.Summary)}.");
+        Assert.AreEqual("top-access-token", result.Value.AccessToken);
+        Assert.AreEqual(WellKnownAuthenticationSchemes.Bearer, result.Value.TokenType);
+        Assert.AreEqual("top-refresh-token", result.Value.RefreshToken);
+        Assert.AreEqual("top-id-token", result.Value.IdToken);
+        Assert.AreEqual(WellKnownTokenTypeIdentifiers.IdJag, result.Value.IssuedTokenType);
+        Assert.AreEqual(900, result.Value.ExpiresIn);
+    }
+
+
+    /// <summary>
+    /// RFC 8259 §7: a member name or a string value may be spelled with escapes, and the parameter is what the escapes decode
+    /// to, decoded once. A response naming <c>access_token</c> and <c>token_type</c> through escapes is read by those names,
+    /// and an access token, an ID Token and a refresh token spelled with <c>\/</c> and <c>\u002e</c> are answered decoded,
+    /// never as the backslashes the body spells.
+    /// </summary>
+    [TestMethod]
+    public void ParseTokenResponseReadsEscapedNamesAndValuesDecodedOnce()
+    {
+        var body = /*lang=json,strict*/ """{"acc\u0065ss_token":"access\/token\u002eone","token_\u0074ype":"Bearer","id_token":"head\u002ebody\u002esig","refresh_token":"refresh\\u002e"}""";
+
+        var result = OAuthResponseParsers.ParseTokenResponse(Respond(body), DateTimeOffset.UnixEpoch);
+
+        Assert.IsTrue(result.IsSuccess, $"The escaped names are the parameters' names; refused by {(result.IsSuccess ? null : result.Error.Support.Summary)}.");
+        Assert.AreEqual("access/token.one", result.Value.AccessToken, "The access token is its decoded text.");
+        Assert.AreEqual(WellKnownAuthenticationSchemes.Bearer, result.Value.TokenType);
+        Assert.AreEqual("head.body.sig", result.Value.IdToken, "The ID Token is its decoded text.");
+        Assert.AreEqual(@"refresh\u002e", result.Value.RefreshToken, "An escaped backslash is decoded once, so the escape it begins is never decoded again.");
+    }
+
+
+    /// <summary>
+    /// A body that is no JSON object or no well-formed JSON at all is refused as malformed, each also when it repeats a name:
+    /// the repetition of a body that is no well-formed object is never its reason.
+    /// </summary>
+    /// <param name="body">The response body.</param>
+    [TestMethod]
+    [DataRow(/*lang=json,strict*/ """["access_token","at","token_type","Bearer"]""", DisplayName = "An array")]
+    [DataRow("{\"access_token\":\"at\",\"token_type\":\"Bearer\"", DisplayName = "An object never closed")]
+    [DataRow(
+        """{"access_token":"at","token_type":"Bearer"}{"access_token":"again"}""",
+        DisplayName = "Two top-level values")]
+    [DataRow(
+        /*lang=json*/ """[{"access_token":"first","access_token":"second","token_type":"Bearer"}]""",
+        DisplayName = "An array holding an object that repeats access_token")]
+    [DataRow(
+        "{\"access_token\":\"first\",\"access_token\":\"second\",\"token_type\":\"Bearer\"",
+        DisplayName = "An object never closed that repeats access_token")]
+    public void ParseTokenResponseRefusesABodyThatIsNoOneObjectAsMalformed(string body)
+    {
+        var result = OAuthResponseParsers.ParseTokenResponse(Respond(body), DateTimeOffset.UnixEpoch);
+
+        Assert.IsFalse(result.IsSuccess, "No access token is read from the body.");
+        _ = Assert.IsInstanceOfType<OAuthMalformedResponse>(result.Error, "The body is no well-formed object.");
+    }
+
+
+    /// <summary>
+    /// RFC 8259 §4: the names within an object SHOULD be unique, and "the behavior of software that receives such an object is
+    /// unpredictable". A token response that is one well-formed object but repeats a name, at the top level or in an extension
+    /// object, is refused for the repetition itself, naming the name and the depth of the object repeating it, never as a body
+    /// that is not well-formed JSON; its summary is composed from those facts and carries none of the values the body holds.
+    /// </summary>
+    /// <param name="body">The response body.</param>
+    /// <param name="expectedName">The repeated name.</param>
+    /// <param name="expectedDepth">The depth of the object repeating it.</param>
+    [TestMethod]
+    [DataRow(
+        /*lang=json*/ """{"access_token":"first-credential-text","access_token":"second-credential-text","token_type":"Bearer"}""",
+        "access_token",
+        1,
+        DisplayName = "An access_token named twice")]
+    [DataRow(
+        /*lang=json*/ """{"access_token":"first-credential-text","token_type":"Bearer","ext":{"note":"one","note":"two"}}""",
+        "note",
+        2,
+        DisplayName = "A name repeated in an extension object")]
+    public void ParseTokenResponseRefusesARepeatedNameByTheName(string body, string expectedName, int expectedDepth)
+    {
+        var result = OAuthResponseParsers.ParseTokenResponse(Respond(body), DateTimeOffset.UnixEpoch);
+
+        Assert.IsFalse(result.IsSuccess, "No access token is read from the body.");
+
+        var refused = Assert.IsInstanceOfType<OAuthRepeatedMemberName>(result.Error, "The repetition is the reason.");
+        Assert.AreEqual(expectedName, refused.MemberName, "The repeated name.");
+        Assert.AreEqual(expectedDepth, refused.ObjectDepth, "The depth of the object repeating it.");
+        Assert.AreEqual("RFC 8259 §4", refused.Support.SpecificationReference, "The rule broken.");
+        Assert.Contains(expectedName, refused.Support.Summary, "The summary names the repeated name.");
+        Assert.DoesNotContain("credential-text", refused.Support.Summary, "No value the body carries is in the summary.");
+        Assert.DoesNotContain("credential-text", refused.Support.LikelyCause ?? string.Empty, "No value the body carries is in the cause.");
+    }
+
+
+    /// <summary>
+    /// RFC 8259 §8.2: an escape naming an unpaired surrogate is grammatical but names no Unicode text. A token response a member
+    /// of which has a name or a string value so spelled - a parameter its success is read from, its <c>error</c>, or an
+    /// extension member it reads nothing from, at the top level or nested - is refused by the first such member in document
+    /// order, its name, the depth of the object carrying it and which part names no text, never answered as a response carrying
+    /// no such parameter, and a parameter so spelled is never dropped from a success; the summary carries none of the values the
+    /// body holds.
+    /// </summary>
+    /// <param name="body">The response body.</param>
+    /// <param name="expectedName">The member's name as the refusal carries it.</param>
+    /// <param name="expectedDepth">The depth of the object carrying the member.</param>
+    /// <param name="expectedPart">Which part of the member names no Unicode text.</param>
+    [TestMethod]
+    [DataRow(
+        /*lang=json*/ """{"access_token":"\uD800","token_type":"Bearer","refresh_token":"refresh-credential-text"}""",
+        "access_token",
+        1,
+        JsonUndecodableMemberPart.Value,
+        DisplayName = "An access_token naming an unpaired surrogate")]
+    [DataRow(
+        /*lang=json*/ """{"access_token":"access-credential-text","token_type":"\uDC00"}""",
+        "token_type",
+        1,
+        JsonUndecodableMemberPart.Value,
+        DisplayName = "A token_type naming an unpaired surrogate")]
+    [DataRow(
+        /*lang=json*/ """{"access_token":"access-credential-text","token_type":"Bearer","refresh_token":"x\uD800"}""",
+        "refresh_token",
+        1,
+        JsonUndecodableMemberPart.Value,
+        DisplayName = "A refresh_token naming an unpaired surrogate")]
+    [DataRow(
+        /*lang=json*/ """{"refresh_token":"\uD800","access_token":"\uDBFF","token_type":"Bearer"}""",
+        "refresh_token",
+        1,
+        JsonUndecodableMemberPart.Value,
+        DisplayName = "The first in document order, a refresh_token written ahead of the access_token")]
+    [DataRow(
+        /*lang=json*/ """{"error":"\uD800","access_token":"access-credential-text","token_type":"Bearer"}""",
+        "error",
+        1,
+        JsonUndecodableMemberPart.Value,
+        DisplayName = "An error naming an unpaired surrogate beside a success")]
+    [DataRow(
+        /*lang=json*/ """{"access_token":"access-credential-text","token_type":"Bearer","ext":"\uD800"}""",
+        "ext",
+        1,
+        JsonUndecodableMemberPart.Value,
+        DisplayName = "An extension member the parser reads nothing from")]
+    [DataRow(
+        /*lang=json*/ """{"access_token":"access-credential-text","token_type":"Bearer","ext":{"note":["\uDC00"]}}""",
+        "note",
+        2,
+        JsonUndecodableMemberPart.Value,
+        DisplayName = "A string an array holds in an extension object")]
+    [DataRow(
+        /*lang=json*/ """{"access_token":"access-credential-text","token_type":"Bearer","\uDC00":"x"}""",
+        "\\uDC00",
+        1,
+        JsonUndecodableMemberPart.Name,
+        DisplayName = "A member name naming an unpaired surrogate, spelled as the body escapes it")]
+    public void ParseTokenResponseRefusesAnUndecodableMemberByItsName(
+        string body,
+        string expectedName,
+        int expectedDepth,
+        JsonUndecodableMemberPart expectedPart)
+    {
+        var result = OAuthResponseParsers.ParseTokenResponse(Respond(body), DateTimeOffset.UnixEpoch);
+
+        Assert.IsFalse(result.IsSuccess, "No token is read from the body.");
+
+        var refused = Assert.IsInstanceOfType<OAuthUndecodableMemberValue>(result.Error, "The undecodable member is the reason.");
+        Assert.AreEqual(expectedName, refused.MemberName, "The member's name as it can be written.");
+        Assert.AreEqual(expectedDepth, refused.ObjectDepth, "The depth of the object carrying it.");
+        Assert.AreEqual(expectedPart, refused.Part, "Which part names no Unicode text.");
+        Assert.AreEqual("RFC 8259 §8.2", refused.Support.SpecificationReference, "The rule broken.");
+        Assert.Contains(expectedName, refused.Support.Summary, "The summary names the member.");
+        Assert.DoesNotContain("credential-text", refused.Support.Summary, "No value the body carries is in the summary.");
+        Assert.DoesNotContain("credential-text", refused.Support.LikelyCause ?? string.Empty, "No value the body carries is in the cause.");
+    }
+
+
+    /// <summary>
+    /// The error a readable response names keeps its precedence over the parameters a success is read from: an error response
+    /// carrying a complete success beside its error is answered as the error it names, at the token and the pushed authorization
+    /// endpoints alike, and under the problem details media type as the problem it names.
+    /// </summary>
+    [TestMethod]
+    public void TheErrorAReadableResponseNamesKeepsItsPrecedenceOverASuccess()
+    {
+        var token = OAuthResponseParsers.ParseTokenResponse(
+            Respond(/*lang=json,strict*/ """{"error":"invalid_grant","access_token":"access-credential-text","token_type":"Bearer"}""", statusCode: 400),
+            DateTimeOffset.UnixEpoch);
+
+        var pushed = OAuthResponseParsers.ParseParResponse(
+            Respond(/*lang=json,strict*/ """{"error":"invalid_request","request_uri":"urn:ietf:params:oauth:request_uri:x","expires_in":60}""", statusCode: 400));
+
+        var problem = OAuthResponseParsers.ParseTokenResponse(
+            Problem(/*lang=json,strict*/ """{"type":"invalid_grant","access_token":"access-credential-text","token_type":"Bearer"}"""),
+            DateTimeOffset.UnixEpoch);
+
+        Assert.AreEqual("invalid_grant", Assert.IsInstanceOfType<OAuthProtocolError>(token.Error).ErrorCode, "The error the token answer names.");
+        Assert.AreEqual("invalid_request", Assert.IsInstanceOfType<OAuthProtocolError>(pushed.Error).ErrorCode, "The error the pushed answer names.");
+        Assert.AreEqual("invalid_grant", Assert.IsInstanceOfType<OAuthProtocolError>(problem.Error).ErrorCode, "The problem the body names.");
+    }
+
+
+    /// <summary>
+    /// An error response one of whose members names no Unicode text is no readable response, so its error has no precedence:
+    /// an <c>error</c> or a problem <c>type</c> beside an <c>access_token</c> naming an unpaired surrogate is refused by the
+    /// <c>access_token</c>, under the token endpoint's own media type and the problem details media type alike, though neither
+    /// reads an access token.
+    /// </summary>
+    [TestMethod]
+    public void AnErrorResponseHoldingAMemberNamingNoUnicodeTextIsRefusedByThatMember()
+    {
+        var error = OAuthResponseParsers.ParseTokenResponse(
+            Respond(/*lang=json*/ """{"error":"invalid_grant","access_token":"\uD800"}""", statusCode: 400),
+            DateTimeOffset.UnixEpoch);
+
+        var problem = OAuthResponseParsers.ParseTokenResponse(
+            Problem(/*lang=json*/ """{"type":"invalid_grant","access_token":"\uD800"}"""),
+            DateTimeOffset.UnixEpoch);
+
+        Assert.AreEqual(
+            OAuthRequestParameterNames.AccessToken,
+            Assert.IsInstanceOfType<OAuthUndecodableMemberValue>(error.Error).MemberName,
+            "The error answer's access_token.");
+
+        Assert.AreEqual(
+            OAuthRequestParameterNames.AccessToken,
+            Assert.IsInstanceOfType<OAuthUndecodableMemberValue>(problem.Error).MemberName,
+            "The problem answer's access_token.");
+    }
+
+
+    /// <summary>
+    /// A member no parser reads, holding a string naming no Unicode text, refuses every answer that holds it, as the reader's one
+    /// rule judges the whole body: an answer carrying a complete token success, a complete pushed authorization success and a
+    /// problem type beside an extension object whose member names no text is refused by that member at the token and the pushed
+    /// authorization endpoints, under their own media type and the problem details media type, naming the member, its depth and
+    /// its part and none of the values the answer holds.
+    /// </summary>
+    [TestMethod]
+    public void AMemberNoParserReadsNamingNoUnicodeTextRefusesEveryAnswer()
+    {
+        var body = /*lang=json*/ """{"access_token":"access-credential-text","token_type":"Bearer","request_uri":"urn:ietf:params:oauth:request_uri:credential-text","expires_in":60,"type":"invalid_grant","ext":{"note":"\uDC00"}}""";
+
+        var refusals = new OAuthParseError?[]
+        {
+            OAuthResponseParsers.ParseTokenResponse(Respond(body), DateTimeOffset.UnixEpoch).Error,
+            OAuthResponseParsers.ParseParResponse(Respond(body)).Error,
+            OAuthResponseParsers.ParseTokenResponse(Problem(body), DateTimeOffset.UnixEpoch).Error,
+            OAuthResponseParsers.ParseParResponse(Problem(body)).Error
+        };
+
+        foreach(var refusal in refusals)
+        {
+            var refused = Assert.IsInstanceOfType<OAuthUndecodableMemberValue>(refusal, "The extension member is the reason.");
+            Assert.AreEqual("note", refused.MemberName, "The member naming no Unicode text.");
+            Assert.AreEqual(2, refused.ObjectDepth, "The extension object carrying it.");
+            Assert.AreEqual(JsonUndecodableMemberPart.Value, refused.Part, "Its value names no Unicode text.");
+            Assert.DoesNotContain("credential-text", refused.Support.Summary, "No value the body carries is in the summary.");
+        }
+    }
+
+
+    /// <summary>
+    /// An error response's own members are read as its error is: an <c>error_description</c> or an <c>error_uri</c> carried as
+    /// a string naming no Unicode text (RFC 8259 §8.2) is refused by its name, at the token and the pushed authorization
+    /// endpoints alike, never answered as an error carrying no description or no location.
+    /// </summary>
+    /// <param name="body">The response body.</param>
+    /// <param name="expectedName">The member carried as such a string.</param>
+    [TestMethod]
+    [DataRow(
+        /*lang=json*/ """{"error":"invalid_grant","error_description":"\uD800"}""",
+        "error_description",
+        DisplayName = "An error_description naming an unpaired surrogate")]
+    [DataRow(
+        /*lang=json*/ """{"error":"invalid_grant","error_uri":"https://as.example.com/\uDC00"}""",
+        "error_uri",
+        DisplayName = "An error_uri naming an unpaired surrogate")]
+    public void AnUndecodableMemberOfAnErrorResponseIsRefusedByItsName(string body, string expectedName)
+    {
+        var token = OAuthResponseParsers.ParseTokenResponse(Respond(body, statusCode: 400), DateTimeOffset.UnixEpoch);
+        var pushed = OAuthResponseParsers.ParseParResponse(Respond(body, statusCode: 400));
+
+        Assert.AreEqual(expectedName, Assert.IsInstanceOfType<OAuthUndecodableMemberValue>(token.Error).MemberName, "The token endpoint's.");
+        Assert.AreEqual(expectedName, Assert.IsInstanceOfType<OAuthUndecodableMemberValue>(pushed.Error).MemberName, "The pushed authorization endpoint's.");
+    }
+
+
+    /// <summary>
+    /// The pushed authorization response's parameters are read as the token response's are: a response repeating its
+    /// <c>request_uri</c> is refused by that name (RFC 8259 §4), and a <c>request_uri</c> naming no Unicode text by its name
+    /// (RFC 8259 §8.2), never answered as a response carrying no <c>request_uri</c> or as no well-formed object.
+    /// </summary>
+    [TestMethod]
+    public void ParseParResponseRefusesARepeatedOrUndecodableRequestUriByItsName()
+    {
+        var repeated = OAuthResponseParsers.ParseParResponse(Respond(
+            /*lang=json*/ """{"request_uri":"urn:ietf:params:oauth:request_uri:one","request_uri":"urn:ietf:params:oauth:request_uri:two","expires_in":60}"""));
+
+        var undecodable = OAuthResponseParsers.ParseParResponse(Respond(
+            /*lang=json*/ """{"request_uri":"urn:ietf:params:oauth:request_uri:\uD800","expires_in":60}"""));
+
+        var repeatedRefusal = Assert.IsInstanceOfType<OAuthRepeatedMemberName>(repeated.Error, "The repetition is the reason.");
+        Assert.AreEqual(OAuthRequestParameterNames.RequestUri, repeatedRefusal.MemberName);
+        Assert.AreEqual(1, repeatedRefusal.ObjectDepth);
+
+        var undecodableRefusal = Assert.IsInstanceOfType<OAuthUndecodableMemberValue>(undecodable.Error, "The undecodable request_uri is the reason.");
+        Assert.AreEqual(OAuthRequestParameterNames.RequestUri, undecodableRefusal.MemberName);
+    }
+
+
+    /// <summary>
+    /// The pushed authorization response is read from the top level alone as the token response is (RFC 9126 §2.2): a
+    /// <c>request_uri</c> and <c>expires_in</c> an extension object carries are no parameters, and the escaped spelling of the
+    /// top-level ones is read decoded.
+    /// </summary>
+    [TestMethod]
+    public void ParseParResponseReadsTheTopLevelParametersAlone()
+    {
+        var nested = OAuthResponseParsers.ParseParResponse(Respond(
+            /*lang=json,strict*/ """{"ext":{"request_uri":"urn:ietf:params:oauth:request_uri:nested","expires_in":60}}"""));
+
+        Assert.IsFalse(nested.IsSuccess, "A request_uri nested in an extension object is no parameter.");
+        _ = Assert.IsInstanceOfType<OAuthMalformedResponse>(nested.Error);
+
+        var escaped = OAuthResponseParsers.ParseParResponse(Respond(
+            /*lang=json,strict*/ """{"ext":{"request_uri":"urn:ietf:params:oauth:request_uri:nested"},"request\u005furi":"urn:ietf:params:oauth:request\u005furi:top","expires_in":60}"""));
+
+        Assert.IsTrue(escaped.IsSuccess, "The escaped top-level request_uri is read.");
+        Assert.AreEqual("urn:ietf:params:oauth:request_uri:top", escaped.Value.RequestUri.OriginalString, "The top-level value is read, decoded.");
+    }
+
+
+    /// <summary>
+    /// A problem details response states its problem through the members of the one JSON object its body is (RFC 9457
+    /// section 3): a token endpoint's body under the problem details media type that is an array of problems or an object
+    /// never closed states no problem, so it is refused as malformed, never read as the problem the media type names.
+    /// </summary>
+    /// <param name="body">The response body.</param>
+    [TestMethod]
+    [DataRow(
+        /*lang=json,strict*/ """[{"type":"invalid_grant","detail":"an array of problems"}]""",
+        DisplayName = "A token answer that is an array of problems")]
+    [DataRow("{\"type\":\"invalid_grant\",\"detail\":\"never closed\"", DisplayName = "A token answer never closed")]
+    public void ATokenProblemDetailsBodyThatIsNoOneObjectIsRefusedAsMalformed(string body)
+    {
+        var result = OAuthResponseParsers.ParseTokenResponse(
+            Respond(body, statusCode: 400, contentType: WellKnownMediaTypes.Application.ProblemJson),
+            DateTimeOffset.UnixEpoch);
+
+        Assert.IsFalse(result.IsSuccess, "The token endpoint's answer is refused.");
+        _ = Assert.IsInstanceOfType<OAuthMalformedResponse>(result.Error, "The token endpoint's answer names no problem.");
+    }
+
+
+    /// <summary>
+    /// The pushed authorization endpoint's problem details response is read as the token endpoint's is (RFC 9457 section 3,
+    /// RFC 9126 section 2.3): a body under the problem details media type that is an array of problems or an object never
+    /// closed is refused as malformed, never read as the problem the media type names.
+    /// </summary>
+    /// <param name="body">The response body.</param>
+    [TestMethod]
+    [DataRow(
+        /*lang=json,strict*/ """[{"type":"invalid_request","detail":"an array of problems"}]""",
+        DisplayName = "A pushed authorization answer that is an array of problems")]
+    [DataRow(
+        "{\"type\":\"invalid_request\",\"detail\":\"never closed\"",
+        DisplayName = "A pushed authorization answer never closed")]
+    public void APushedAuthorizationProblemDetailsBodyThatIsNoOneObjectIsRefusedAsMalformed(string body)
+    {
+        var result = OAuthResponseParsers.ParseParResponse(
+            Respond(body, statusCode: 400, contentType: WellKnownMediaTypes.Application.ProblemJson));
+
+        Assert.IsFalse(result.IsSuccess, "The pushed authorization endpoint's answer is refused.");
+        _ = Assert.IsInstanceOfType<OAuthMalformedResponse>(result.Error, "The pushed authorization endpoint's answer names no problem.");
+    }
+
+
+    /// <summary>
+    /// A problem details response naming a member twice (RFC 8259 section 4) states no problem one way, and one carrying its
+    /// <c>type</c>, <c>detail</c> or <c>instance</c> as a string naming no Unicode text (RFC 8259 section 8.2) states it in
+    /// no text a client can read: each is refused by the member's name, at the token and the pushed authorization endpoints
+    /// alike, never as a body that is not well-formed JSON and never read as the problem the media type names.
+    /// </summary>
+    [TestMethod]
+    public void AProblemDetailsBodyRepeatingOrUndecodableInAMemberIsRefusedByTheName()
+    {
+        var repeatedBody = /*lang=json*/ """{"type":"invalid_grant","type":"invalid_client","detail":"two types"}""";
+        var undecodableBody = /*lang=json*/ """{"type":"invalid_grant","detail":"\uD800"}""";
+
+        var tokenRepeated = OAuthResponseParsers.ParseTokenResponse(Problem(repeatedBody), DateTimeOffset.UnixEpoch);
+        var pushedRepeated = OAuthResponseParsers.ParseParResponse(Problem(repeatedBody));
+        var tokenUndecodable = OAuthResponseParsers.ParseTokenResponse(Problem(undecodableBody), DateTimeOffset.UnixEpoch);
+        var pushedUndecodable = OAuthResponseParsers.ParseParResponse(Problem(undecodableBody));
+
+        Assert.AreEqual(
+            WellKnownProblemDetailsMemberNames.Type,
+            Assert.IsInstanceOfType<OAuthRepeatedMemberName>(tokenRepeated.Error).MemberName,
+            "The token endpoint's answer names its type twice.");
+
+        Assert.AreEqual(
+            WellKnownProblemDetailsMemberNames.Type,
+            Assert.IsInstanceOfType<OAuthRepeatedMemberName>(pushedRepeated.Error).MemberName,
+            "The pushed authorization endpoint's answer names its type twice.");
+
+        Assert.AreEqual(
+            WellKnownProblemDetailsMemberNames.Detail,
+            Assert.IsInstanceOfType<OAuthUndecodableMemberValue>(tokenUndecodable.Error).MemberName,
+            "The token endpoint's answer carries a detail naming no Unicode text.");
+
+        Assert.AreEqual(
+            WellKnownProblemDetailsMemberNames.Detail,
+            Assert.IsInstanceOfType<OAuthUndecodableMemberValue>(pushedUndecodable.Error).MemberName,
+            "The pushed authorization endpoint's answer carries a detail naming no Unicode text.");
+    }
+
+
+    /// <summary>
+    /// A success answer holding a readable credential shorter than any floor beside an extension member naming no Unicode text is
+    /// refused by that member, and the same reading carries the credential it observed: one <c>access_token</c>, readable, the
+    /// length of its text, and nothing of its text in the refusal, its summary or the reading's text.
+    /// </summary>
+    [TestMethod]
+    public void ARefusedAnswerCarriesTheReadableCredentialItObservedWithoutItsText()
+    {
+        var reading = OAuthResponseParsers.ReadTokenResponse(Respond(
+            /*lang=json*/ """{"access_token":"kx7Qz","token_type":"Bearer","ext":"\uD800"}"""));
+
+        Assert.IsFalse(reading.Outcome.IsSuccess, "The answer is refused.");
+
+        var refused = Assert.IsInstanceOfType<OAuthUndecodableMemberValue>(reading.Outcome.Error, "The extension member is the reason.");
+        Assert.AreEqual("ext", refused.MemberName, "The member naming no Unicode text.");
+        Assert.AreSequenceEqual(
+            new JsonValueObservation[] { new JsonReadableString(5) },
+            reading.Credentials.AccessToken.ToArray(),
+            "The readable access token, its length in UTF-16 code units.");
+        Assert.IsEmpty(reading.Credentials.RefreshToken, "No refresh token is carried.");
+        Assert.IsEmpty(reading.Credentials.IdToken, "No ID Token is carried.");
+        Assert.DoesNotContain("kx7Qz", refused.Support.Summary, "The summary carries no credential.");
+        Assert.DoesNotContain("kx7Qz", refused.ToString(), "The refusal's text carries no credential.");
+        Assert.DoesNotContain("kx7Qz", reading.ToString(), "The reading's text carries no credential.");
+    }
+
+
+    /// <summary>
+    /// An answer repeating <c>access_token</c>, both occurrences readable, is refused for the repetition, and the same reading
+    /// observes both occurrences in document order, each with the length of its text and none of its text.
+    /// </summary>
+    [TestMethod]
+    public void ARepeatedAccessTokenIsRefusedWithBothOccurrencesObserved()
+    {
+        var reading = OAuthResponseParsers.ReadTokenResponse(Respond(
+            /*lang=json*/ """{"access_token":"first-credential-text","access_token":"second","token_type":"Bearer"}"""));
+
+        Assert.AreEqual(
+            OAuthRequestParameterNames.AccessToken,
+            Assert.IsInstanceOfType<OAuthRepeatedMemberName>(reading.Outcome.Error, "The repetition is the reason.").MemberName);
+
+        Assert.AreSequenceEqual(
+            new JsonValueObservation[] { new JsonReadableString(21), new JsonReadableString(6) },
+            reading.Credentials.AccessToken.ToArray(),
+            "Both occurrences, in document order.");
+
+        Assert.DoesNotContain("credential-text", reading.ToString(), "The reading's text carries no credential.");
+    }
+
+
+    /// <summary>
+    /// A success carries its one observation of each credential member it holds, read decoded once - an escape decoded, a
+    /// surrogate pair two code units - from the reading its token was read from; a member it does not carry is observed at no
+    /// occurrence.
+    /// </summary>
+    [TestMethod]
+    public void ASuccessCarriesItsOneObservationOfEachCredential()
+    {
+        var reading = OAuthResponseParsers.ReadTokenResponse(Respond(
+            /*lang=json,strict*/ """{"access_token":"tok\/123","token_type":"Bearer","refresh_token":"r😀"}"""));
+
+        Assert.IsTrue(reading.Outcome.IsSuccess, "The answer is a success.");
+        Assert.AreEqual("tok/123", reading.Outcome.Value.AccessToken);
+        Assert.AreSequenceEqual(new JsonValueObservation[] { new JsonReadableString(7) }, reading.Credentials.AccessToken.ToArray(), "The access token, decoded.");
+        Assert.AreSequenceEqual(new JsonValueObservation[] { new JsonReadableString(3) }, reading.Credentials.RefreshToken.ToArray(), "The refresh token, a pair two units.");
+        Assert.IsEmpty(reading.Credentials.IdToken, "No ID Token is carried.");
+
+        Assert.AreEqual(
+            new TokenAnswerCredentialObservations([new JsonReadableString(7)], [new JsonReadableString(3)], []),
+            reading.Credentials,
+            "The observations compare as the occurrences they hold.");
+    }
+
+
+    /// <summary>
+    /// The observation says what each occurrence holds: an access token naming no Unicode text as such, one carried as a number
+    /// by its kind, and an answer that is no one well-formed JSON object observes no occurrence at all.
+    /// </summary>
+    [TestMethod]
+    public void TheObservationSaysWhatEachOccurrenceHolds()
+    {
+        var undecodable = OAuthResponseParsers.ReadTokenResponse(Respond(/*lang=json*/ """{"access_token":"\uD800","token_type":"Bearer"}"""));
+        var number = OAuthResponseParsers.ReadTokenResponse(Respond(/*lang=json,strict*/ """{"access_token":12,"token_type":"Bearer"}"""));
+        var noObject = OAuthResponseParsers.ReadTokenResponse(Respond("{\"access_token\":\"at\",\"token_type\":\"Bearer\""));
+
+        Assert.AreSequenceEqual(new JsonValueObservation[] { new JsonUndecodableString() }, undecodable.Credentials.AccessToken.ToArray());
+        Assert.AreSequenceEqual(new JsonValueObservation[] { new JsonNonStringValue(JsonTopLevelValueKind.Number) }, number.Credentials.AccessToken.ToArray());
+        Assert.IsEmpty(noObject.Credentials.AccessToken, "A body that is no one well-formed object observes nothing.");
+        _ = Assert.IsInstanceOfType<OAuthMalformedResponse>(noObject.Outcome.Error);
+    }
 
 
     [TestMethod]
@@ -411,6 +1013,72 @@ internal sealed class OAuthResponseParsersTests
         }
     }
 
+
+
+    /// <summary>
+    /// The one case of the JSON reader's reading observing nothing is answered as such: a body that is no one well-formed JSON
+    /// object observes no credential. A reading of a type the reader never answers - a subtype a program composes - is refused,
+    /// naming its type, never answered as an answer observing nothing.
+    /// </summary>
+    [TestMethod]
+    public void AReadingTheReaderNeverAnswersIsRefusedRatherThanObservedAsNone()
+    {
+        Assert.AreEqual(
+            TokenAnswerCredentialObservations.None,
+            TokenAnswerCredentialObservations.Of(new JsonNotOneObject()),
+            "A body that is no one well-formed object observes nothing.");
+
+        var refused = Assert.ThrowsExactly<ArgumentException>(
+            () => TokenAnswerCredentialObservations.Of(new ComposedReading()),
+            "A reading the reader never answers establishes no observation.");
+
+        Assert.Contains(nameof(ComposedReading), refused.Message, "The refusal names the reading's type.");
+        Assert.AreEqual("reading", refused.ParamName, "The refusal names the argument.");
+    }
+
+
+    /// <summary>
+    /// Asserts a lifetime refusal: the member's name, the value as the reader answered it, the defect, the clause the response's
+    /// form is given by, and a summary naming the member.
+    /// </summary>
+    /// <param name="refusal">The parser's refusal, or <see langword="null"/> when it answered a success.</param>
+    /// <param name="lifetime">The <c>expires_in</c> value as the body writes it.</param>
+    /// <param name="expectedDefect">The defect the refusal names.</param>
+    /// <param name="expectedSpecificationReference">The clause the response's form is given by.</param>
+    private static void AssertRefusedLifetime(
+        OAuthParseError? refusal,
+        string lifetime,
+        OAuthLifetimeDefect expectedDefect,
+        string expectedSpecificationReference)
+    {
+        var refused = Assert.IsInstanceOfType<OAuthInvalidLifetime>(refusal, $"A present expires_in of {lifetime} is refused as a lifetime.");
+        Assert.AreEqual(OAuthRequestParameterNames.ExpiresIn, refused.MemberName, "The member refused.");
+        Assert.AreEqual(expectedDefect, refused.Defect, "The defect of the spelling.");
+        Assert.AreEqual(expectedSpecificationReference, refused.Support.SpecificationReference, "The clause the response's form is given by.");
+        Assert.Contains(OAuthRequestParameterNames.ExpiresIn, refused.Support.Summary, "The summary names the member.");
+        Assert.DoesNotContain("credential-text", refused.Support.Summary, "No credential the body carries is in the summary.");
+
+        if(expectedDefect is not OAuthLifetimeDefect.NoNumber)
+        {
+            Assert.AreEqual(new JsonMemberNumber(lifetime), refused.Carried, "The number, its spelling as the body writes it.");
+            Assert.Contains(lifetime, refused.Support.Summary, "The summary names the number's spelling.");
+        }
+        else
+        {
+            Assert.IsNotInstanceOfType<JsonMemberNumber>(refused.Carried, "The value carried is no number.");
+        }
+    }
+
+
+    /// <summary>A reading of a type the JSON reader never answers, composed by a program.</summary>
+    private sealed record ComposedReading : JsonTopLevelReading;
+
+
+    /// <summary>An answer of status 400 under the problem details media type.</summary>
+    /// <param name="body">The response body.</param>
+    /// <returns>The response.</returns>
+    private static HttpResponseData Problem(string body) =>
+        Respond(body, statusCode: 400, contentType: WellKnownMediaTypes.Application.ProblemJson);
 
 
     private static HttpResponseData Respond(
