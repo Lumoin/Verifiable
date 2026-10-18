@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using Verifiable.JCose;
 using Verifiable.OAuth;
@@ -54,7 +55,7 @@ internal static class JwsAccessTokenTestSupport
     private static object? ConvertJsonElement(JsonElement element) => element.ValueKind switch
     {
         JsonValueKind.String => element.GetString(),
-        JsonValueKind.Number => element.TryGetInt64(out long l) ? l : element.GetDouble(),
+        JsonValueKind.Number => element.TryGetInt64(out var whole) ? whole : DecimalNumber.FromJsonNumber(JsonMarshal.GetRawUtf8Value(element))!.ToClaimValue(),
         JsonValueKind.True => true,
         JsonValueKind.False => false,
         JsonValueKind.Null => null,

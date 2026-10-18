@@ -47,7 +47,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   `Rfc7523AssertionValidationResult`, `IdJagAssertionValidationResult`, `PrivateKeyJwtClientAuthenticationResult`,
   `FederationClientAuthenticationResult`, `EntityStatement`, `TrustMark`, `TrustMarkDelegation`, `KeyAttestation`,
   `CredentialProofValidationResult`, `SelfIssuedIdTokenValidationResult`, `VpTokenParsed.KbJwtIat`,
-  `ValidationContext.KbJwtIat`, `SecurityEventToken`, `StatusListToken`, and the DIDComm unpack results' `RotationIat`;
+  `ValidationContext.KbJwtIat`, `JwtBearerGrant.Expiration`, `SecurityEventToken`, `StatusListToken`, and the DIDComm unpack
+  results' `RotationIat`;
   `JwtTemporalChecks` and `ClientAssertionClaimRules.AcceptedUntil` take the received date as one.
 - An expiry is exclusive everywhere (RFC 7519 section 4.1.4: the present must be before `exp`): the bearer access token,
   the time-bound checks of `JwtChecks`, the key attestation and the status list token are expired at their `exp`.

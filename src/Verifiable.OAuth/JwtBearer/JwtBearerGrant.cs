@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Verifiable.JCose;
 
 namespace Verifiable.OAuth.JwtBearer;
 
@@ -148,11 +149,12 @@ public sealed record JwtBearerGrant
     public string? Jti { get; init; }
 
     /// <summary>
-    /// The validated assertion's <c>exp</c>, or <see langword="null"/>. Supplied with
+    /// The validated assertion's <c>exp</c>, the NumericDate as written, or <see langword="null"/>. Supplied with
     /// <see cref="Jti"/> so the jwt-bearer endpoint can derive the replay-store entry's expiry —
-    /// this instant plus the exchange's clock-skew tolerance, since this delegate is the trust
+    /// the first instant at or after this date plus the exchange's clock-skew tolerance, the clock's last instant where the
+    /// tolerance carries it past the clock (<see cref="NumericDate.AtOrAfterLaterBy"/>), since this delegate is the trust
     /// authority for the assertion's own timing window (RFC 7523 §3 rules 4–5) and the library
     /// cannot read whatever grace it applies beyond this claim.
     /// </summary>
-    public DateTimeOffset? Expiration { get; init; }
+    public NumericDate? Expiration { get; init; }
 }

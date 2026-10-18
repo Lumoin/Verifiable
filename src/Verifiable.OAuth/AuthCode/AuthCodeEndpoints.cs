@@ -5943,7 +5943,7 @@ public static class AuthCodeEndpoints
                     //shorter than what the JAR and private_key_jwt callers honour.
                     JtiReplayOutcome jtiOutcome = await JtiReplayGuard.ConsultAsync(
                         server, context, registration.TenantId, JtiReplayPurpose.AuthorizationGrantAssertion,
-                        assertionIssuer, assertionJti, assertionExpiry + context.ClockSkewTolerance, ct).ConfigureAwait(false);
+                        assertionIssuer, assertionJti, assertionExpiry.AtOrAfterLaterBy(context.ClockSkewTolerance), ct).ConfigureAwait(false);
 
                     ServerHttpResponse? jtiFailure = jtiOutcome switch
                     {

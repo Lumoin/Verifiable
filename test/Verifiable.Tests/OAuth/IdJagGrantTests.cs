@@ -7088,7 +7088,7 @@ internal sealed class IdJagGrantTests
             RequiredKeyThumbprint = result.ConfirmationKeyThumbprint,
             Issuer = result.Issuer,
             Jti = result.Jti,
-            Expiration = result.Expiration?.AtOrBefore,
+            Expiration = result.Expiration,
             Act = result.Act,
             MayAct = result.MayAct
         };

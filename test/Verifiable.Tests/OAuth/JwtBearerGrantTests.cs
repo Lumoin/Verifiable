@@ -1546,6 +1546,49 @@ internal sealed class JwtBearerGrantTests
 
 
     /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">RFC 7523 Section 3</see> rule 7 under the clock-skew
+    /// tolerance: an assertion whose <c>exp</c> is the clock's last tick, posted over the wire, is valid, and the replay record
+    /// of its <c>jti</c> is kept until the clock's last instant, the tolerance added to its expiry overflowing nothing, so the
+    /// token endpoint answers 200, where adding the tolerance to the expiry threw.
+    /// </summary>
+    [TestMethod]
+    public async Task AnAssertionExpiringAtTheClocksLastTickIsRedeemedWithoutOverflowAsync()
+    {
+        await using var app = new TestHostShell(TimeProvider);
+        using var material = await RegisterJwtBearerClientAsync(app).ConfigureAwait(false);
+        await WireClientAuthenticationAsync(app).ConfigureAwait(false);
+
+        await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
+        var host = app.Host("default");
+        var tokenUrl = new Uri(host.HttpBaseAddress!, $"/connect/{material.Registration.TenantId.Value}/token");
+        var asAudience = material.Registration.IssuerUri!.OriginalString;
+
+        var signingMaterial = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            await WireRfc7523ClaimValidatorAsync(app, signingMaterial.PublicKey, asAudience).ConfigureAwait(false);
+            var assertion = await SignAssertionExpiringAtAsync(
+                signingMaterial.PrivateKey, "user-at-the-clocks-end", asAudience, 253_402_300_799.9999999m).ConfigureAwait(false);
+
+            var form = BuildRequest(new JwtBearerBuilderOptions
+            {
+                Assertion = assertion
+            }).WithClientSecretPost(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+            using var response = await OAuthTestTransport.PostFormAsync(
+                host.SharedHttpClient!, tokenUrl, form, TestContext.CancellationToken).ConfigureAwait(false);
+            var body = await response.Content.ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
+
+            Assert.AreEqual(200, (int)response.StatusCode, body);
+        }
+        finally
+        {
+            signingMaterial.PublicKey.Dispose();
+            signingMaterial.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
     /// <see href="https://www.rfc-editor.org/rfc/rfc7523#section-3.1">RFC 7523 Section 3.1</see>: "The value
     /// of the "error" parameter MUST be the "invalid_grant" error code." for a JWT that is not valid. A
     /// grant the application's <see cref="AuthorizationServerIntegration.ValidateJwtBearerAssertionAsync"/>
@@ -1813,6 +1856,42 @@ internal sealed class JwtBearerGrantTests
 
 
     /// <summary>
+    /// Signs an RFC 7523 Section 3 assertion as <see cref="SignAssertionAsync"/> does, but expiring at the count of seconds
+    /// given, written as it is.
+    /// </summary>
+    /// <param name="signingKey">The private signing material the application's validator trusts.</param>
+    /// <param name="subject">The <c>sub</c> value.</param>
+    /// <param name="audience">The authorization server's own identity the assertion names.</param>
+    /// <param name="expiry">The <c>exp</c>, in seconds since the epoch.</param>
+    /// <returns>The compact JWS.</returns>
+    private async Task<string> SignAssertionExpiringAtAsync(PrivateKeyMemory signingKey, string subject, string audience, decimal expiry)
+    {
+        var algorithm = CryptoFormatConversions.DefaultTagToJwaConverter(signingKey.Tag);
+        var header = JwtHeader.ForSigning(algorithm, WellKnownJwkValues.TypeJwt, "assertion-signing-1");
+        var payload = new JwtPayload(capacity: 6)
+        {
+            [WellKnownJwtClaimNames.Iss] = ClientId,
+            [WellKnownJwtClaimNames.Sub] = subject,
+            [WellKnownJwtClaimNames.Aud] = audience,
+            [WellKnownJwtClaimNames.Jti] = $"assertion-{Guid.NewGuid():N}",
+            [WellKnownJwtClaimNames.Iat] = TimeProvider.GetUtcNow().ToUnixTimeSeconds(),
+            [WellKnownJwtClaimNames.Exp] = expiry
+        };
+
+        var unsigned = new UnsignedJwt(header, payload);
+        using var jws = await unsigned.SignAsync(
+            signingKey,
+            AssertionHeaderSerializer,
+            AssertionPayloadSerializer,
+            TestSetup.Base64UrlEncoder,
+            Pool,
+            TestContext.CancellationToken).ConfigureAwait(false);
+
+        return JwsSerialization.SerializeCompact(jws, TestSetup.Base64UrlEncoder);
+    }
+
+
+    /// <summary>
     /// Wires the application's assertion validator as a generic RFC 7523 deployment writes it: the
     /// signature is verified under <paramref name="verificationKey"/>
     /// (<see href="https://www.rfc-editor.org/rfc/rfc7523#section-3">Section 3 item 9</see>), the claims are
@@ -1851,7 +1930,7 @@ internal sealed class JwtBearerGrantTests
                         Scope = GrantedScope,
                         Issuer = result.Issuer,
                         Jti = payload.TryGetValue(WellKnownJwtClaimNames.Jti, out object? jti) ? jti as string : null,
-                        Expiration = result.Expiration?.AtOrBefore
+                        Expiration = result.Expiration
                     };
                 };
         }).ConfigureAwait(false);
