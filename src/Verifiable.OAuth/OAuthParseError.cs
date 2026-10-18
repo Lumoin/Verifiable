@@ -261,7 +261,11 @@ public enum OAuthLifetimeDefect
     /// <summary>The member is carried as a value that is no JSON number: a string, a literal, an object or an array.</summary>
     NoNumber,
 
-    /// <summary>The number is spelled with a fraction part (RFC 8259 section 6), <c>1.5</c> among them, so it names no integer.</summary>
+    /// <summary>
+    /// The number is spelled with a fraction part (RFC 8259 section 6), <c>1.5</c> and <c>1.0</c> among them: RFC 6749 appendix
+    /// A.14 spells <c>expires_in</c> by digits alone, so a spelling holding a fraction part is no spelling of it, whether or not
+    /// the number it names is an integer.
+    /// </summary>
     Fractional,
 
     /// <summary>

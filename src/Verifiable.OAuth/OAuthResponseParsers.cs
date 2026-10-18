@@ -210,9 +210,13 @@ public static class OAuthResponseParsers
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Which answers carry credential text: the observations carry none; neither do the refusals the shared reading of a
-    /// well-formed object answers, <see cref="OAuthRepeatedMemberName"/> and <see cref="OAuthUndecodableMemberValue"/>, which name
-    /// a member and where it is; and the text of the reading and of the observations names no credential. An
+    /// Which answers carry credential text: the observations carry none, and the text of the reading and of the observations
+    /// names no credential. The refusals the shared reading of a well-formed object answers, <see cref="OAuthRepeatedMemberName"/>
+    /// and <see cref="OAuthUndecodableMemberValue"/>, extract the value of no credential member: they name a member and where it
+    /// is. The name is the one the server wrote, which they copy into their record and their summary as the server chose it, so
+    /// a server whose answer carries a credential's text again as a member name is answered by a refusal naming that text; the
+    /// names a server controls, and the transport metadata a refusal keeps beside them, are no part of what is held
+    /// confidential. An
     /// <see cref="OAuthMalformedResponse"/> carries the whole body as received in <see cref="OAuthMalformedResponse.Body"/>, so it
     /// can carry credential text: it is answered for an empty body, for a body that is no one well-formed JSON object, for an
     /// answer carrying no <c>access_token</c> and for one carrying an access token but no <c>token_type</c>. An
@@ -523,7 +527,7 @@ public static class OAuthResponseParsers
         var cause = defect switch
         {
             OAuthLifetimeDefect.NoNumber => "is no JSON number",
-            OAuthLifetimeDefect.Fractional => "has a fraction part, so it names no integer",
+            OAuthLifetimeDefect.Fractional => "is spelled with a fraction part, where expires_in is spelled by digits alone",
             OAuthLifetimeDefect.Exponent => "is spelled with an exponent, where expires_in is spelled by digits alone",
             OAuthLifetimeDefect.NotPositive => "names no positive integer",
             OAuthLifetimeDefect.OutOfRange => "is past the range of the lifetime the library carries",
